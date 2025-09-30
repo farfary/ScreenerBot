@@ -32,13 +32,17 @@ use screenerbot::{
     about = "Cross-check Solscan swap exports with ScreenerBot transaction analysis"
 )]
 struct Args {
-    /// Path to the Solscan DeFi activities CSV export
+    /// Path to the Solscan DeFi activities CSV export (required for batch mode)
     #[arg(long, value_name = "PATH")]
-    csv: PathBuf,
+    csv: Option<PathBuf>,
 
     /// Maximum number of rows to process (default: all)
     #[arg(long, value_name = "N")]
     limit: Option<usize>,
+
+    /// Only take the last N swap rows from the CSV after filtering
+    #[arg(long, value_name = "N")]
+    tail: Option<usize>,
 
     /// Only display mismatched transactions (default: also show summary of matches)
     #[arg(long)]
@@ -63,6 +67,18 @@ struct Args {
     /// Force refresh raw transactions from RPC even when cache exists.
     #[arg(long)]
     force_refresh: bool,
+
+    /// Inspect a single transaction by signature (bypasses CSV processing)
+    #[arg(long, value_name = "SIGNATURE")]
+    single: Option<String>,
+
+    /// Wallet public key to use for single-transaction analysis (required with --single)
+    #[arg(long, value_name = "PUBKEY")]
+    wallet: Option<String>,
+
+    /// Print full raw transaction JSON when using --single
+    #[arg(long)]
+    raw: bool,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -164,11 +180,116 @@ async fn main() -> Result<()> {
         events::start_maintenance_task().await;
     }
 
-    let rows = load_csv(&args)?;
+    // Single-transaction inspection mode
+    if let Some(sig) = args.single.clone() {
+        let wallet_str = args.wallet
+            .clone()
+            .ok_or_else(|| anyhow!("--wallet <PUBKEY> is required with --single"))?;
+        let wallet_pk = Pubkey::from_str(&wallet_str).context("Invalid --wallet pubkey")?;
+        init_transaction_database().await.map_err(|e|
+            anyhow!("Failed to initialize transactions database: {}", e)
+        )?;
+        let processor = TransactionProcessor::new(wallet_pk);
+
+        let tx = processor
+            .process_transaction(&sig).await
+            .map_err(|e| anyhow!("Processing failed for {}: {}", sig, e))?;
+
+        println!("Single-transaction analysis for {}", sig.bold());
+        println!("Wallet: {}", wallet_str);
+        println!(
+            "Status: {:?} success={} fee_lamports={:?}",
+            tx.status,
+            tx.success,
+            tx.fee_lamports
+        );
+        if let Some(slot) = tx.slot {
+            println!("Slot: {}", slot);
+        }
+        if let Some(bt) = tx.block_time {
+            println!("BlockTime: {}", bt);
+        }
+
+        // Print swap info if available
+        if let Some(ref swap) = tx.token_swap_info {
+            println!(
+                "Swap: type={} router={} input_mint={} output_mint={} input_ui={:.9} output_ui={:.9} (raw in={} out={})",
+                swap.swap_type,
+                swap.router,
+                swap.input_mint,
+                swap.output_mint,
+                swap.input_ui_amount,
+                swap.output_ui_amount,
+                swap.input_amount,
+                swap.output_amount
+            );
+        } else {
+            println!("Swap: <none>");
+        }
+        if let Some(ref pnl) = tx.swap_pnl_info {
+            println!(
+                "PnL: swap_type={} sol_amount={:.9} token_amount={:.9} fees={:.9} ata_rents={:.9}",
+                pnl.swap_type,
+                pnl.sol_amount,
+                pnl.token_amount,
+                pnl.fees_paid_sol,
+                pnl.ata_rents
+            );
+        }
+
+        // Instruction summary
+        if !tx.instructions.is_empty() {
+            println!("Instructions ({}):", tx.instructions.len());
+            for (i, inst) in tx.instructions.iter().enumerate() {
+                println!(
+                    "  {:>3}. program={} type={} accounts={}{}",
+                    i,
+                    inst.program_id,
+                    inst.instruction_type,
+                    inst.accounts.len(),
+                    inst.data
+                        .as_ref()
+                        .map(|_| " data")
+                        .unwrap_or("")
+                );
+            }
+        }
+
+        // Optional raw JSON dump
+        if args.raw {
+            if let Some(raw) = tx.raw_transaction_data {
+                println!("\nRaw transaction JSON:");
+                println!("{}", serde_json::to_string_pretty(&raw)?);
+            } else {
+                println!("No raw transaction data cached.");
+            }
+        }
+
+        return Ok(());
+    }
+
+    let csv_path = args.csv
+        .clone()
+        .ok_or_else(||
+            anyhow!("--csv <PATH> is required for batch verification (omit it when using --single)")
+        )?;
+    let rows = load_csv(&csv_path)?;
     if rows.is_empty() {
         println!("{}", "No rows found in CSV".yellow());
         return Ok(());
     }
+
+    // Optionally tail the last N rows globally (after filtering by action)
+    let rows = if let Some(n) = args.tail {
+        if n >= rows.len() {
+            rows
+        } else {
+            let start = rows.len() - n;
+            rows[start..].to_vec()
+        }
+    } else {
+        rows
+    };
 
     init_transaction_database().await.map_err(|e|
         anyhow!("Failed to initialize transactions database: {}", e)
@@ -278,12 +399,12 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn load_csv(args: &Args) -> Result<Vec<CsvSwapRow>> {
+fn load_csv(csv_path: &PathBuf) -> Result<Vec<CsvSwapRow>> {
     let mut reader = csv::ReaderBuilder
         ::new()
         .has_headers(true)
-        .from_path(&args.csv)
-        .with_context(|| format!("Failed to open CSV at {}", args.csv.display()))?;
+        .from_path(csv_path)
+        .with_context(|| format!("Failed to open CSV at {}", csv_path.display()))?;
 
     let mut rows = Vec::new();
 
@@ -444,6 +565,7 @@ fn verify_swap_amounts(
     let input_diff = ((expected_input_raw as i128) - actual_input_raw).abs();
     let output_diff = ((expected_output_raw as i128) - actual_output_raw).abs();
 
+    // Base tolerances by decimals (strict; no WSOL special-casing)
     let input_allowed = tolerance_for_decimals(decimals1);
     let output_allowed = tolerance_for_decimals(decimals2);
 

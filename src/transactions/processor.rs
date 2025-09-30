@@ -204,9 +204,10 @@ impl TransactionProcessor {
             }
         }
 
-        // Check outer instructions for system transfers to MEV addresses
-        if let Some(instructions) = message.get("instructions").and_then(|v| v.as_array()) {
-            for (idx, instruction) in instructions.iter().enumerate() {
+        // Function to process a single system transfer-like instruction array
+        let mut process_system_instructions = |instructions: &Vec<Value>, idx_offset: usize| {
+            for (i, instruction) in instructions.iter().enumerate() {
+                let idx = idx_offset + i;
                 // Handle both programId (string) and programIdIndex (number) formats like extract_instruction_info does
                 let program_id = instruction
                     .get("programId")
@@ -236,134 +237,187 @@ impl TransactionProcessor {
                             "TIP_DEBUG",
                             &format!("System instruction {}: {:?}", idx, instruction)
                         );
+                    }
 
-                        // Decode accounts and check for MEV transfers
+                    // Decode accounts and check for MEV/priority-fee transfers regardless of debug mode
+                    if
+                        let Some(accounts_array) = instruction
+                            .get("accounts")
+                            .and_then(|v| v.as_array())
+                    {
+                        let mut source_account = None;
+                        let mut dest_account = None;
+
+                        for (acc_idx, acc_val) in accounts_array.iter().enumerate() {
+                            // Support both index (u64) and explicit pubkey string forms
+                            let account_key_str_opt = if let Some(account_index) = acc_val.as_u64() {
+                                account_keys.get(account_index as usize).map(|s| s.as_str())
+                            } else {
+                                acc_val.as_str()
+                            };
+
+                            let account_key_str = account_key_str_opt.unwrap_or("unknown");
+                            let is_mev = Self::is_mev_tip_address(account_key_str);
+
+                            if self.debug_enabled {
+                                log(
+                                    LogTag::Transactions,
+                                    "TIP_DEBUG",
+                                    &format!(
+                                        "  Account {}: key={} is_mev={}",
+                                        acc_idx,
+                                        account_key_str,
+                                        is_mev
+                                    )
+                                );
+                            }
+
+                            if acc_idx == 0 {
+                                source_account = Some(account_key_str.to_string());
+                            } else if acc_idx == 1 {
+                                dest_account = Some(account_key_str.to_string());
+                            }
+                        }
+
+                        // Check if this is a transfer from wallet to MEV/priority-fee address
                         if
-                            let Some(accounts_array) = instruction
-                                .get("accounts")
-                                .and_then(|v| v.as_array())
+                            let (Some(source), Some(dest)) = (
+                                source_account.clone(),
+                                dest_account.clone(),
+                            )
                         {
-                            let mut source_account = None;
-                            let mut dest_account = None;
+                            // Decode lamports amount from raw data when parsed info isn't available
+                            let decode_lamports = || -> Option<u64> {
+                                let data_str = instruction.get("data").and_then(|v| v.as_str())?;
+                                let decoded = bs58::decode(data_str).into_vec().ok()?;
+                                if self.debug_enabled {
+                                    log(
+                                        LogTag::Transactions,
+                                        "TIP_DEBUG",
+                                        &format!(
+                                            "System instruction data: {:?} (len={})",
+                                            decoded,
+                                            decoded.len()
+                                        )
+                                    );
+                                }
+                                if decoded.len() >= 12 && decoded[0] == 2 {
+                                    let lamports_bytes = &decoded[4..12];
+                                    let lamports = u64::from_le_bytes(
+                                        lamports_bytes.try_into().unwrap_or([0; 8])
+                                    );
+                                    Some(lamports)
+                                } else {
+                                    None
+                                }
+                            };
 
-                            for (acc_idx, acc_val) in accounts_array.iter().enumerate() {
-                                if let Some(account_index) = acc_val.as_u64() {
-                                    let account_key = account_keys.get(account_index as usize);
-                                    let account_key_str = account_key
-                                        .map(|s| s.as_str())
-                                        .unwrap_or("unknown");
-                                    let is_mev = Self::is_mev_tip_address(account_key_str);
+                            if source == wallet {
+                                if let Some(lamports) = decode_lamports() {
+                                    let destination_is_mev = Self::is_mev_tip_address(&dest);
+                                    let destination_is_created = created_token_accounts.contains(
+                                        &dest
+                                    );
+                                    let destination_is_wallet_wsol_ata = wallet_wsol_ata
+                                        .as_deref()
+                                        .map(|w| w == dest)
+                                        .unwrap_or(false);
+                                    let destination_is_syncnative = sync_native_accounts.contains(
+                                        &dest
+                                    );
 
-                                    if self.debug_enabled {
-                                        log(
-                                            LogTag::Transactions,
-                                            "TIP_DEBUG",
-                                            &format!(
-                                                "  Account {}: index={} key={} is_mev={}",
-                                                acc_idx,
-                                                account_index,
-                                                account_key_str,
-                                                is_mev
-                                            )
-                                        );
-                                    }
-
-                                    if acc_idx == 0 {
-                                        source_account = account_key.cloned();
-                                    } else if acc_idx == 1 {
-                                        dest_account = account_key.cloned();
+                                    let transfer_key = (source.clone(), dest.clone(), lamports);
+                                    if counted_transfers.insert(transfer_key) {
+                                        let is_small_tip = lamports <= 1_000_000; // <= 0.001 SOL
+                                        if destination_is_mev || is_small_tip {
+                                            let tip_amount = lamports_to_sol(lamports);
+                                            total_tips += tip_amount;
+                                            if self.debug_enabled {
+                                                log(
+                                                    LogTag::Transactions,
+                                                    "TIP_DETECTED",
+                                                    &format!(
+                                                        "{}: {} {} SOL ({} lamports) to {} (system instruction {})",
+                                                        &transaction.signature,
+                                                        if destination_is_mev {
+                                                            "MEV tip"
+                                                        } else {
+                                                            "Priority fee"
+                                                        },
+                                                        tip_amount,
+                                                        lamports,
+                                                        &dest,
+                                                        idx
+                                                    )
+                                                );
+                                            }
+                                        } else if self.debug_enabled {
+                                            log(
+                                                LogTag::Transactions,
+                                                "TIP_DEBUG",
+                                                &format!(
+                                                    "Ignoring system transfer in tip calc: dest_created={} dest_wallet_wsol_ata={} dest_syncnative={}",
+                                                    destination_is_created,
+                                                    destination_is_wallet_wsol_ata,
+                                                    destination_is_syncnative
+                                                )
+                                            );
+                                        }
                                     }
                                 }
                             }
-
-                            // Check if this is a transfer from wallet to MEV address
-                            if let (Some(source), Some(dest)) = (source_account, dest_account) {
-                                // Decode lamports amount from raw data when parsed info isn't available
+                        } else if
+                            // Fallback: destination account unresolved (likely from ALT). If source is wallet and
+                            // lamports is in a small "tip" range, count it as a priority fee tip.
+                            let Some(source) = source_account
+                        {
+                            if source == wallet {
                                 let decode_lamports = || -> Option<u64> {
                                     let data_str = instruction
                                         .get("data")
                                         .and_then(|v| v.as_str())?;
                                     let decoded = bs58::decode(data_str).into_vec().ok()?;
-                                    if self.debug_enabled {
-                                        log(
-                                            LogTag::Transactions,
-                                            "TIP_DEBUG",
-                                            &format!(
-                                                "System instruction data: {:?} (len={})",
-                                                decoded,
-                                                decoded.len()
-                                            )
-                                        );
-                                    }
                                     if decoded.len() >= 12 && decoded[0] == 2 {
                                         let lamports_bytes = &decoded[4..12];
                                         let lamports = u64::from_le_bytes(
-                                            lamports_bytes.try_into().unwrap_or([0; 8])
+                                            lamports_bytes.try_into().ok()?
                                         );
                                         Some(lamports)
                                     } else {
                                         None
                                     }
                                 };
-
-                                if source == wallet {
-                                    if let Some(lamports) = decode_lamports() {
-                                        let destination_is_mev = Self::is_mev_tip_address(&dest);
-                                        let destination_is_created =
-                                            created_token_accounts.contains(&dest);
-                                        let destination_is_wallet_wsol_ata = wallet_wsol_ata
-                                            .as_deref()
-                                            .map(|w| w == dest)
-                                            .unwrap_or(false);
-                                        let destination_is_syncnative =
-                                            sync_native_accounts.contains(&dest);
-
-                                        let transfer_key = (source.clone(), dest.clone(), lamports);
+                                if let Some(lamports) = decode_lamports() {
+                                    // Consider small transfers as tips: between 1 lamport and 1_000_000 lamports (<= 0.001 SOL)
+                                    if lamports > 0 && lamports <= 1_000_000 {
+                                        let dest_label = format!("unknown_alt_dest_{}", idx);
+                                        let transfer_key = (
+                                            source.clone(),
+                                            dest_label.clone(),
+                                            lamports,
+                                        );
                                         if counted_transfers.insert(transfer_key) {
-                                            if
-                                                destination_is_mev ||
-                                                (!destination_is_created &&
-                                                    !destination_is_wallet_wsol_ata &&
-                                                    !destination_is_syncnative)
-                                            {
-                                                let tip_amount = lamports_to_sol(lamports);
-                                                total_tips += tip_amount;
-                                                if self.debug_enabled {
-                                                    log(
-                                                        LogTag::Transactions,
-                                                        if destination_is_mev {
-                                                            "TIP_DETECTED"
-                                                        } else {
-                                                            "TIP_DETECTED"
-                                                        },
-                                                        &format!(
-                                                            "{}: {} {} SOL ({} lamports) to {} (system instruction {})",
-                                                            &transaction.signature,
-                                                            if destination_is_mev {
-                                                                "MEV tip"
-                                                            } else {
-                                                                "Priority fee"
-                                                            },
-                                                            tip_amount,
-                                                            lamports,
-                                                            &dest,
-                                                            idx
-                                                        )
-                                                    );
-                                                }
-                                            } else if self.debug_enabled {
+                                            total_tips += lamports_to_sol(lamports);
+                                            if self.debug_enabled {
                                                 log(
                                                     LogTag::Transactions,
-                                                    "TIP_DEBUG",
+                                                    "TIP_DETECTED",
                                                     &format!(
-                                                        "Ignoring system transfer in tip calc: dest_created={} dest_wallet_wsol_ata={} dest_syncnative={}",
-                                                        destination_is_created,
-                                                        destination_is_wallet_wsol_ata,
-                                                        destination_is_syncnative
+                                                        "{}: Priority fee {} SOL ({} lamports) to <ALT unresolved dest> at system instruction {}",
+                                                        &transaction.signature,
+                                                        lamports_to_sol(lamports),
+                                                        lamports,
+                                                        idx
                                                     )
                                                 );
                                             }
                                         }
+                                    } else if self.debug_enabled {
+                                        log(
+                                            LogTag::Transactions,
+                                            "TIP_DEBUG",
+                                            &format!("Ignoring unresolved-dest system transfer from wallet: lamports={} out of tip range", lamports)
+                                        );
                                     }
                                 }
                             }
@@ -453,8 +507,10 @@ impl TransactionProcessor {
                                         );
                                     }
                                 } else if source_is_wallet && lamports > 0 {
-                                    // Generalize: count non-MEV System transfers as priority fees when they are not ATA/WSOL funding
+                                    // Only treat small non-MEV transfers as priority fee tips when they are not ATA/WSOL funding
+                                    let is_small_tip = lamports <= 1_000_000; // <= 0.001 SOL
                                     if
+                                        is_small_tip &&
                                         !destination_is_created &&
                                         !destination_is_wallet_wsol_ata &&
                                         !destination_is_syncnative
@@ -486,7 +542,8 @@ impl TransactionProcessor {
                                             LogTag::Transactions,
                                             "TIP_DEBUG",
                                             &format!(
-                                                "Ignoring wallet System transfer as non-tip: dest_created={} dest_wallet_wsol_ata={} dest_syncnative={}",
+                                                "Ignoring wallet System transfer as non-tip: is_small_tip={} dest_created={} dest_wallet_wsol_ata={} dest_syncnative={}",
+                                                is_small_tip,
                                                 destination_is_created,
                                                 destination_is_wallet_wsol_ata,
                                                 destination_is_syncnative
@@ -510,6 +567,21 @@ impl TransactionProcessor {
                             }
                         }
                     }
+                }
+            }
+        };
+
+        // Check outer instructions
+        if let Some(instructions) = message.get("instructions").and_then(|v| v.as_array()) {
+            process_system_instructions(&instructions.iter().cloned().collect(), 0);
+        }
+        // Check inner instructions with a high index offset so their log indices don’t collide
+        if let Some(inner) = tx_data.meta.as_ref().and_then(|m| m.inner_instructions.as_ref()) {
+            let mut offset = 10_000; // disambiguate from outer idx
+            for entry in inner {
+                if let Some(instructions) = entry.get("instructions").and_then(|v| v.as_array()) {
+                    process_system_instructions(&instructions.iter().cloned().collect(), offset);
+                    offset += instructions.len();
                 }
             }
         }
@@ -1279,19 +1351,45 @@ fn account_keys_from_message(message: &Value) -> Vec<String> {
             .collect();
     }
 
-    // v0 format: object with static and loaded keys
+    // v0 format: object with staticAccountKeys and loadedAddresses { writable, readonly }
     if let Some(obj) = message.get("accountKeys").and_then(|v| v.as_object()) {
-        let mut keys = Vec::new();
+        let mut keys: Vec<String> = Vec::new();
+
+        // Static keys
         if let Some(static_keys) = obj.get("staticAccountKeys").and_then(|v| v.as_array()) {
-            keys.extend(
-                static_keys.iter().filter_map(|entry| entry.as_str().map(|s| s.to_string()))
-            );
+            for entry in static_keys {
+                if let Some(s) = entry.as_str() {
+                    keys.push(s.to_string());
+                } else if let Some(o) = entry.as_object() {
+                    if let Some(pk) = o.get("pubkey").and_then(|v| v.as_str()) {
+                        keys.push(pk.to_string());
+                    }
+                }
+            }
         }
+
+        // Loaded addresses (from address lookup tables)
+        if let Some(loaded) = obj.get("loadedAddresses").and_then(|v| v.as_object()) {
+            for field in ["writable", "readonly"] {
+                if let Some(arr) = loaded.get(field).and_then(|v| v.as_array()) {
+                    for entry in arr {
+                        if let Some(s) = entry.as_str() {
+                            keys.push(s.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Back-compat: some RPC shapes may include a flat list even in v0 object
         if let Some(loaded_keys) = obj.get("accountKeys").and_then(|v| v.as_array()) {
-            keys.extend(
-                loaded_keys.iter().filter_map(|entry| entry.as_str().map(|s| s.to_string()))
-            );
+            for entry in loaded_keys {
+                if let Some(s) = entry.as_str() {
+                    keys.push(s.to_string());
+                }
+            }
         }
+
         if !keys.is_empty() {
             return keys;
         }
@@ -2435,6 +2533,7 @@ impl TransactionProcessor {
         };
 
         // Precise WSOL extraction overrides (attempt for all routers)
+        let mut used_exact_wsol: bool = false;
         {
             if is_buy {
                 if self.debug_enabled {
@@ -2444,47 +2543,160 @@ impl TransactionProcessor {
                         "Checking WSOL transfer amount detection..."
                     );
                 }
-                if let Some(mut exact) = self.detect_wallet_wsol_transfer_amount(transaction) {
-                    if self.debug_enabled {
+                // Hard short-circuit ONLY for GMGN: use largest inner WSOL transferChecked (authority == wallet)
+                // as the exact buy input and skip any funding/rent heuristics.
+                let router_lc_sc = router.to_ascii_lowercase();
+                if router_lc_sc == "gmgn" {
+                    let wsol_amount = self
+                        .detect_largest_inner_wsol_transferchecked_simple(transaction)
+                        .or_else(|| self.detect_total_inner_wsol_transferchecked(transaction));
+
+                    if let Some(inner_max) = wsol_amount {
+                        sol_spent_effective = inner_max;
+                        used_exact_wsol = true;
+                        if self.debug_enabled {
+                            log(
+                                LogTag::Transactions,
+                                "SWAP_CALC_DEBUG",
+                                &format!(
+                                    "{}: BUY exact WSOL short-circuit (gmgn): {:.9} SOL ({} lamports)",
+                                    &transaction.signature,
+                                    inner_max,
+                                    (inner_max * 1_000_000_000.0) as u64
+                                )
+                            );
+                        }
+                    } else if self.debug_enabled {
                         log(
                             LogTag::Transactions,
-                            "TIP_ADJUSTMENT",
+                            "SWAP_CALC_DEBUG",
                             &format!(
-                                "{}: WSOL exact amount detected: {:.9} SOL ({} lamports)",
-                                &transaction.signature,
-                                exact,
-                                (exact * 1_000_000_000.0) as u64
+                                "{}: GMGN short-circuit failed - no inner WSOL transferChecked found",
+                                &transaction.signature
                             )
                         );
                     }
+                }
+                if !used_exact_wsol {
+                    let mut exact_opt: Option<f64> = None;
+                    // Router-specific WSOL detection
+                    let router_lc = router.to_ascii_lowercase();
+                    if router_lc == "jupiter" {
+                        // For Jupiter, sum all inner WSOL transfers (they split into multiple parts)
+                        exact_opt = self.detect_total_inner_wsol_transferchecked(transaction);
+                        if self.debug_enabled && exact_opt.is_some() {
+                            log(
+                                LogTag::Transactions,
+                                "TIP_ADJUSTMENT",
+                                &format!(
+                                    "{}: Jupiter total WSOL detection: {:.9} SOL ({} lamports)",
+                                    &transaction.signature,
+                                    exact_opt.unwrap(),
+                                    (exact_opt.unwrap() * 1_000_000_000.0) as u64
+                                )
+                            );
+                        }
+                    } else {
+                        // For other routers, prefer the largest single inner WSOL transferChecked
+                        exact_opt =
+                            self.detect_largest_inner_wsol_transferchecked_simple(transaction);
+                    }
+                    if exact_opt.is_none() {
+                        exact_opt = self.detect_wallet_wsol_transfer_amount(transaction);
+                    }
+                    if let Some(mut exact) = exact_opt {
+                        if self.debug_enabled {
+                            log(
+                                LogTag::Transactions,
+                                "TIP_ADJUSTMENT",
+                                &format!(
+                                    "{}: WSOL exact amount detected: {:.9} SOL ({} lamports)",
+                                    &transaction.signature,
+                                    exact,
+                                    (exact * 1_000_000_000.0) as u64
+                                )
+                            );
+                        }
 
-                    // Post-process to remove likely Jito tips that weren't caught by the main detection
-                    let exact_lamports = (exact * 1_000_000_000.0) as u64;
+                        // Router-specific refinement: for GMGN, prefer the largest inner WSOL transferChecked amount
+                        let router_lc = router.to_ascii_lowercase();
+                        if router_lc == "gmgn" {
+                            if
+                                let Some(inner_max) =
+                                    self.detect_largest_inner_wsol_transferchecked_simple(
+                                        transaction
+                                    )
+                            {
+                                if (inner_max - exact).abs() > 0.0 {
+                                    if self.debug_enabled {
+                                        log(
+                                            LogTag::Transactions,
+                                            "TIP_ADJUSTMENT",
+                                            &format!(
+                                                "{}: GMGN refine exact WSOL {:.9} -> inner_max {:.9}",
+                                                &transaction.signature,
+                                                exact,
+                                                inner_max
+                                            )
+                                        );
+                                    }
+                                    exact = inner_max;
+                                }
+                            }
+                        }
 
-                    // Check if removing common tip amounts results in a rounder number
-                    let common_tips = [50_000, 100_000, 150_000];
-                    for &tip in &common_tips {
-                        let adjusted = exact_lamports.saturating_sub(tip);
-                        // Check if the adjusted amount is a round increment of 0.001 SOL (1,000,000 lamports)
-                        if adjusted > 0 && adjusted % 1_000_000 == 0 {
-                            exact = (adjusted as f64) / 1_000_000_000.0;
+                        // Post-process to remove likely Jito tips that weren't caught by the main detection
+                        let exact_lamports = (exact * 1_000_000_000.0) as u64;
+
+                        // Check if removing common tip amounts results in a rounder number
+                        let common_tips = [50_000, 100_000, 150_000];
+                        for &tip in &common_tips {
+                            let adjusted = exact_lamports.saturating_sub(tip);
+                            // Check if the adjusted amount is a round increment of 0.001 SOL (1,000,000 lamports)
+                            if adjusted > 0 && adjusted % 1_000_000 == 0 {
+                                exact = (adjusted as f64) / 1_000_000_000.0;
+                                if self.debug_enabled {
+                                    log(
+                                        LogTag::Transactions,
+                                        "TIP_ADJUSTMENT",
+                                        &format!(
+                                            "{}: Adjusted WSOL amount from {:.9} to {:.9} SOL (removed {} lamport tip)",
+                                            &transaction.signature,
+                                            (exact_lamports as f64) / 1_000_000_000.0,
+                                            exact,
+                                            tip
+                                        )
+                                    );
+                                }
+                                break;
+                            }
+                        }
+                        // Sanity guard: if the detected amount looks like pure ATA rent (~0.00204 SOL),
+                        // prefer the balance-derived value to avoid undercounting buys.
+                        let exact_lamports = (exact * 1_000_000_000.0).round() as u64;
+                        let rent_like = (1_990_000..=2_100_000).contains(&exact_lamports);
+
+                        if rent_like && sol_spent_for_tokens > 0.0 {
                             if self.debug_enabled {
                                 log(
                                     LogTag::Transactions,
                                     "TIP_ADJUSTMENT",
                                     &format!(
-                                        "{}: Adjusted WSOL amount from {:.9} to {:.9} SOL (removed {} lamport tip)",
+                                        "{}: Overriding WSOL exact {:.9} with balance-derived {:.9} (rent_like={})",
                                         &transaction.signature,
-                                        (exact_lamports as f64) / 1_000_000_000.0,
                                         exact,
-                                        tip
+                                        sol_spent_for_tokens,
+                                        rent_like
                                     )
                                 );
                             }
-                            break;
+                            sol_spent_effective = sol_spent_for_tokens;
+                            used_exact_wsol = false;
+                        } else {
+                            sol_spent_effective = exact;
+                            used_exact_wsol = true;
                         }
                     }
-                    sol_spent_effective = exact;
                 }
             } else if is_sell {
                 if let Some(exact) = self.detect_wallet_wsol_receive_amount(transaction) {
@@ -2517,19 +2729,29 @@ impl TransactionProcessor {
         // Note: ATA rent recovery is already included in sol_change, so no need to add it again
         // The sol_change represents the net balance change which includes ATA rent recovery
 
-        // If we couldn't detect the precise WSOL input (fallback path), remove TOTAL ATA rent impact from buy input
-        if is_buy {
-            // Do not adjust buys using ata_analysis (that over-corrects common WSOL-funded flows).
-            // We'll use a conservative fallback only when ata_analysis is None further below.
-            if transaction.ata_analysis.is_some() && self.debug_enabled {
-                log(
-                    LogTag::Transactions,
-                    "ATA_RENT_ADJUST",
-                    &format!(
-                        "{}: ATA analysis present; skipping buy-side rent adjustment (handled by core calc)",
-                        &transaction.signature
-                    )
-                );
+        // If we couldn't detect the precise WSOL input (fallback path), remove ATA rent impact from buy input
+        if is_buy && !used_exact_wsol {
+            // Principled adjustment: subtract token ATA rent spent (minus any token rent recovered)
+            if let Some(ata) = transaction.ata_analysis.as_ref() {
+                let token_rent_delta = (ata.token_rent_spent - ata.token_rent_recovered).max(0.0);
+                if token_rent_delta > 0.0 {
+                    let before = sol_spent_effective;
+                    sol_spent_effective = (sol_spent_effective - token_rent_delta).max(0.0);
+                    if self.debug_enabled {
+                        log(
+                            LogTag::Transactions,
+                            "ATA_RENT_ADJUST",
+                            &format!(
+                                "{}: BUY rent adjust: input={:.9} -> {:.9} (token_rent_spent={:.9}, token_rent_recovered={:.9})",
+                                &transaction.signature,
+                                before,
+                                sol_spent_effective,
+                                ata.token_rent_spent,
+                                ata.token_rent_recovered
+                            )
+                        );
+                    }
+                }
             }
 
             // Fallback for buys: if ATA analysis is missing, detect rent funding from System transfers
@@ -3377,31 +3599,36 @@ impl TransactionProcessor {
 
         // Final adjustments for common issues not detected by other methods
         if is_buy {
-            // Adjustment for likely Jito tips
-            let input_lamports = (sol_spent_effective * 1_000_000_000.0) as u64;
+            // If we already used an exact WSOL amount, do not mutate it with tip rounding heuristics
+            if used_exact_wsol {
+                // skip final tip adjustment when we have precise WSOL spend
+            } else {
+                // Adjustment for likely Jito tips
+                let input_lamports = (sol_spent_effective * 1_000_000_000.0) as u64;
 
-            // Check if removing common tip amounts results in a round number
-            let common_tips = [50_000, 100_000, 150_000];
-            for &tip in &common_tips {
-                let adjusted = input_lamports.saturating_sub(tip);
-                // Check if adjusted amount is a round increment (multiple of 0.001 SOL = 1M lamports)
-                if adjusted > 0 && adjusted % 1_000_000 == 0 {
-                    let adjusted_sol = (adjusted as f64) / 1_000_000_000.0;
-                    if self.debug_enabled {
-                        log(
-                            LogTag::Transactions,
-                            "FINAL_TIP_ADJUSTMENT",
-                            &format!(
-                                "{}: Final tip adjustment: {:.9} -> {:.9} SOL (removed {} lamport tip)",
-                                &transaction.signature,
-                                sol_spent_effective,
-                                adjusted_sol,
-                                tip
-                            )
-                        );
+                // Check if removing common tip amounts results in a round number
+                let common_tips = [50_000, 100_000, 150_000];
+                for &tip in &common_tips {
+                    let adjusted = input_lamports.saturating_sub(tip);
+                    // Check if adjusted amount is a round increment (multiple of 0.001 SOL = 1M lamports)
+                    if adjusted > 0 && adjusted % 1_000_000 == 0 {
+                        let adjusted_sol = (adjusted as f64) / 1_000_000_000.0;
+                        if self.debug_enabled {
+                            log(
+                                LogTag::Transactions,
+                                "FINAL_TIP_ADJUSTMENT",
+                                &format!(
+                                    "{}: Final tip adjustment: {:.9} -> {:.9} SOL (removed {} lamport tip)",
+                                    &transaction.signature,
+                                    sol_spent_effective,
+                                    adjusted_sol,
+                                    tip
+                                )
+                            );
+                        }
+                        sol_spent_effective = adjusted_sol;
+                        break;
                     }
-                    sol_spent_effective = adjusted_sol;
-                    break;
                 }
             }
         } else if is_sell {
@@ -3618,6 +3845,186 @@ impl TransactionProcessor {
         let wallet = self.wallet_pubkey.to_string();
         let raw = transaction.raw_transaction_data.as_ref()?;
 
+        // Resolve account keys (strings or { pubkey }) for potential programIdIndex resolution
+        let account_keys: Vec<String> = raw
+            .get("transaction")
+            .and_then(|tx| tx.get("message"))
+            .and_then(|m| m.get("accountKeys"))
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|k| {
+                        if let Some(s) = k.as_str() {
+                            Some(s.to_string())
+                        } else {
+                            k.get("pubkey")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string())
+                        }
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        // Fast path: return the largest inner transferChecked of WSOL with authority == wallet
+        if
+            let Some(inner) = raw
+                .get("meta")
+                .and_then(|m| m.get("innerInstructions"))
+                .and_then(|v| v.as_array())
+        {
+            let mut best: Option<f64> = None;
+            for entry in inner {
+                if let Some(instructions) = entry.get("instructions").and_then(|v| v.as_array()) {
+                    for instruction in instructions {
+                        let pid = instruction
+                            .get("programId")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string())
+                            .or_else(|| {
+                                instruction
+                                    .get("programIdIndex")
+                                    .and_then(|v| v.as_u64())
+                                    .and_then(|idx| account_keys.get(idx as usize).cloned())
+                            })
+                            .unwrap_or_default();
+                        if pid != TOKEN_PROGRAM_ID {
+                            continue;
+                        }
+                        let parsed = match instruction.get("parsed").and_then(|v| v.as_object()) {
+                            Some(p) => p,
+                            None => {
+                                // Compiled path: decode data and resolve accounts
+                                if
+                                    let Some(data_str) = instruction
+                                        .get("data")
+                                        .and_then(|v| v.as_str())
+                                {
+                                    if let Ok(bytes) = bs58::decode(data_str).into_vec() {
+                                        if !bytes.is_empty() {
+                                            let tag = bytes[0];
+                                            let mut amount_opt: Option<u64> = None;
+                                            if
+                                                (tag == 3 && bytes.len() >= 9) ||
+                                                (tag == 12 && bytes.len() >= 10)
+                                            {
+                                                if let Ok(arr) = <[u8; 8]>::try_from(&bytes[1..9]) {
+                                                    amount_opt = Some(u64::from_le_bytes(arr));
+                                                }
+                                            }
+                                            if tag == 12 {
+                                                let accounts: Vec<String> = instruction
+                                                    .get("accounts")
+                                                    .and_then(|v| v.as_array())
+                                                    .map(|accs| {
+                                                        accs.iter()
+                                                            .filter_map(|acc| {
+                                                                if let Some(s) = acc.as_str() {
+                                                                    Some(s.to_string())
+                                                                } else if
+                                                                    let Some(i) = acc.as_u64()
+                                                                {
+                                                                    account_keys
+                                                                        .get(i as usize)
+                                                                        .cloned()
+                                                                } else if
+                                                                    let Some(obj) = acc.as_object()
+                                                                {
+                                                                    obj.get("pubkey")
+                                                                        .and_then(|v| v.as_str())
+                                                                        .map(|s| s.to_string())
+                                                                } else {
+                                                                    None
+                                                                }
+                                                            })
+                                                            .collect()
+                                                    })
+                                                    .unwrap_or_default();
+                                                let src = accounts.get(0).cloned();
+                                                let mint = accounts.get(1).cloned();
+                                                let dst = accounts.get(2).cloned();
+                                                let auth = accounts.get(3).cloned();
+                                                if
+                                                    let (Some(mint), Some(auth), Some(amount)) = (
+                                                        mint,
+                                                        auth,
+                                                        amount_opt,
+                                                    )
+                                                {
+                                                    if mint == WSOL_MINT && auth == wallet {
+                                                        let val = (amount as f64) / 1_000_000_000.0;
+                                                        if val > 0.0 {
+                                                            best = Some(
+                                                                best.map_or(val, |b| b.max(val))
+                                                            );
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                continue;
+                            }
+                        };
+                        let itype = parsed
+                            .get("type")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_ascii_lowercase();
+                        if itype != "transferchecked" {
+                            continue;
+                        }
+                        let info = match parsed.get("info").and_then(|v| v.as_object()) {
+                            Some(i) => i,
+                            None => {
+                                continue;
+                            }
+                        };
+                        let mint_is_wsol = info
+                            .get("mint")
+                            .and_then(|v| v.as_str())
+                            .map(|m| m == WSOL_MINT)
+                            .unwrap_or(false);
+                        let auth_is_wallet = info
+                            .get("authority")
+                            .and_then(|v| v.as_str())
+                            .map(|a| a == wallet)
+                            .unwrap_or(false);
+                        if !mint_is_wsol || !auth_is_wallet {
+                            continue;
+                        }
+                        let mut amount_ui: Option<f64> = None;
+                        if let Some(ta) = info.get("tokenAmount").and_then(|v| v.as_object()) {
+                            if let Some(ui) = ta.get("uiAmount").and_then(|v| v.as_f64()) {
+                                amount_ui = Some(ui);
+                            } else if
+                                let (Some(amount_str), Some(dec)) = (
+                                    ta.get("amount").and_then(|v| v.as_str()),
+                                    ta.get("decimals").and_then(|v| v.as_u64()),
+                                )
+                            {
+                                if let Ok(raw) = amount_str.parse::<u128>() {
+                                    let scale = (10_f64).powi(dec.min(18) as i32);
+                                    if scale > 0.0 {
+                                        amount_ui = Some((raw as f64) / scale);
+                                    }
+                                }
+                            }
+                        }
+                        if let Some(val) = amount_ui {
+                            if val > 0.0 {
+                                best = Some(best.map_or(val, |b| b.max(val)));
+                            }
+                        }
+                    }
+                }
+            }
+            if best.is_some() {
+                return best;
+            }
+        }
+
         // Build a map of token account -> owner using pre/post token balances for better filtering
         use std::collections::HashMap;
         let mut owner_map: HashMap<String, String> = HashMap::new();
@@ -3681,6 +4088,8 @@ impl TransactionProcessor {
         }
 
         let mut amounts: Vec<f64> = Vec::new();
+        // Track the primary WSOL spend: largest inner transferChecked WSOL with authority == wallet
+        let mut inner_primary_wsol_spend: Option<f64> = None;
 
         // Discover wallet WSOL ATA from AToken createIdempotent (if any)
         let mut wallet_wsol_ata: Option<String> = None;
@@ -3765,7 +4174,10 @@ impl TransactionProcessor {
             }
         }
 
-        // Outer fast path: detect a direct transferChecked WSOL with wallet authority
+        // Make mint_map visible to compiled-instruction decoders below
+        let mint_map = mint_map; // reuse existing map of token account -> mint
+
+        // Outer scan: detect direct transferChecked WSOL with wallet authority and collect amounts
         if
             let Some(outer) = raw
                 .get("transaction")
@@ -3830,7 +4242,8 @@ impl TransactionProcessor {
                     if let Some(ta) = info.get("tokenAmount").and_then(|v| v.as_object()) {
                         if let Some(ui) = ta.get("uiAmount").and_then(|v| v.as_f64()) {
                             if ui > 0.0 {
-                                return Some(ui);
+                                amounts.push(ui);
+                                continue;
                             }
                         }
                         if
@@ -3842,7 +4255,8 @@ impl TransactionProcessor {
                             if let Ok(raw) = amount_str.parse::<u128>() {
                                 let scale = (10_f64).powi(dec.min(18) as i32);
                                 if scale > 0.0 {
-                                    return Some((raw as f64) / scale);
+                                    amounts.push((raw as f64) / scale);
+                                    continue;
                                 }
                             }
                         }
@@ -4006,11 +4420,188 @@ impl TransactionProcessor {
             None
         };
 
-        // Fast path: inner transferChecked WSOL with authority == wallet (or source is a SyncNative'd account)
+        // Inner scan: transferChecked WSOL with authority == wallet (or source is a SyncNative'd account); collect amounts
         if let Some(inner) = meta.get("innerInstructions").and_then(|v| v.as_array()) {
             for entry in inner {
                 if let Some(instructions) = entry.get("instructions").and_then(|v| v.as_array()) {
                     for instruction in instructions {
+                        // Track primary spend (largest WSOL out) from parsed inner instructions
+                        if let Some(parsed) = instruction.get("parsed").and_then(|v| v.as_object()) {
+                            // Resolve program id from either programId or programIdIndex
+                            let pid = instruction
+                                .get("programId")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string())
+                                .or_else(|| {
+                                    instruction
+                                        .get("programIdIndex")
+                                        .and_then(|v| v.as_u64())
+                                        .and_then(|idx| account_keys.get(idx as usize).cloned())
+                                })
+                                .unwrap_or_default();
+                            if pid == TOKEN_PROGRAM_ID {
+                                let itype = parsed
+                                    .get("type")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("")
+                                    .to_ascii_lowercase();
+                                if itype == "transferchecked" {
+                                    if
+                                        let Some(info) = parsed
+                                            .get("info")
+                                            .and_then(|v| v.as_object())
+                                    {
+                                        let mint_is_wsol = info
+                                            .get("mint")
+                                            .and_then(|v| v.as_str())
+                                            .map(|m| m == WSOL_MINT)
+                                            .unwrap_or(false);
+                                        let auth_is_wallet = info
+                                            .get("authority")
+                                            .and_then(|v| v.as_str())
+                                            .map(|a| a == wallet)
+                                            .unwrap_or(false);
+                                        if mint_is_wsol && auth_is_wallet {
+                                            // destination should not be wallet; ignore tips by choosing max later
+                                            if
+                                                let Some(ta) = info
+                                                    .get("tokenAmount")
+                                                    .and_then(|v| v.as_object())
+                                            {
+                                                let mut ui: Option<f64> = ta
+                                                    .get("uiAmount")
+                                                    .and_then(|v| v.as_f64());
+                                                if ui.is_none() {
+                                                    if
+                                                        let (Some(amount_str), Some(dec)) = (
+                                                            ta
+                                                                .get("amount")
+                                                                .and_then(|v| v.as_str()),
+                                                            ta
+                                                                .get("decimals")
+                                                                .and_then(|v| v.as_u64()),
+                                                        )
+                                                    {
+                                                        if let Ok(raw) = amount_str.parse::<u128>() {
+                                                            let scale = (10_f64).powi(
+                                                                dec.min(18) as i32
+                                                            );
+                                                            if scale > 0.0 {
+                                                                ui = Some((raw as f64) / scale);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                if let Some(val) = ui {
+                                                    if val > 0.0 {
+                                                        inner_primary_wsol_spend = Some(
+                                                            inner_primary_wsol_spend.map_or(val, |b|
+                                                                b.max(val)
+                                                            )
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        // First try compiled form (no parsed) for Token transfers
+                        let program_id_v = instruction
+                            .get("programId")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string())
+                            .or_else(||
+                                instruction
+                                    .get("programIdIndex")
+                                    .and_then(|v| v.as_u64())
+                                    .and_then(|idx| account_keys.get(idx as usize).cloned())
+                            )
+                            .unwrap_or_default();
+                        if program_id_v == TOKEN_PROGRAM_ID {
+                            if
+                                let Some(data_str) = instruction
+                                    .get("data")
+                                    .and_then(|v| v.as_str())
+                            {
+                                if let Ok(bytes) = bs58::decode(data_str).into_vec() {
+                                    if !bytes.is_empty() {
+                                        let tag = bytes[0];
+                                        let mut amount_opt: Option<u64> = None;
+                                        if
+                                            (tag == 3 && bytes.len() >= 9) ||
+                                            (tag == 12 && bytes.len() >= 10)
+                                        {
+                                            // u64 amount at bytes[1..9]
+                                            if let Ok(arr) = <[u8; 8]>::try_from(&bytes[1..9]) {
+                                                amount_opt = Some(u64::from_le_bytes(arr));
+                                            }
+                                        }
+                                        if let Some(lamports) = amount_opt {
+                                            // Resolve accounts list
+                                            let accounts: Vec<String> = instruction
+                                                .get("accounts")
+                                                .and_then(|v| v.as_array())
+                                                .map(|accs| {
+                                                    accs.iter()
+                                                        .filter_map(|acc| {
+                                                            if let Some(s) = acc.as_str() {
+                                                                Some(s.to_string())
+                                                            } else if let Some(i) = acc.as_u64() {
+                                                                account_keys
+                                                                    .get(i as usize)
+                                                                    .cloned()
+                                                            } else if
+                                                                let Some(obj) = acc.as_object()
+                                                            {
+                                                                obj.get("pubkey")
+                                                                    .and_then(|v| v.as_str())
+                                                                    .map(|s| s.to_string())
+                                                            } else {
+                                                                None
+                                                            }
+                                                        })
+                                                        .collect()
+                                                })
+                                                .unwrap_or_default();
+                                            // Determine source and mint
+                                            let (src_opt, mint_is_wsol) = if tag == 12 {
+                                                // TransferChecked: [source, mint, dest, authority, ...]
+                                                let src = accounts.get(0).cloned();
+                                                let mint = accounts
+                                                    .get(1)
+                                                    .cloned()
+                                                    .unwrap_or_default();
+                                                (src, mint == WSOL_MINT)
+                                            } else {
+                                                // Transfer: [source, dest, authority]
+                                                let src = accounts.get(0).cloned();
+                                                let is_wsol = src
+                                                    .as_ref()
+                                                    .and_then(|s| mint_map.get(s))
+                                                    .map(|m| m == WSOL_MINT)
+                                                    .unwrap_or(false);
+                                                (src, is_wsol)
+                                            };
+                                            if let Some(src) = src_opt {
+                                                if
+                                                    mint_is_wsol &&
+                                                    sync_native_accounts.contains(&src)
+                                                {
+                                                    if lamports > 0 {
+                                                        amounts.push(
+                                                            (lamports as f64) / 1_000_000_000.0
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         let parsed = match instruction.get("parsed").and_then(|v| v.as_object()) {
                             Some(p) => p,
                             None => {
@@ -4064,7 +4655,8 @@ impl TransactionProcessor {
                             if let Some(ta) = info.get("tokenAmount").and_then(|v| v.as_object()) {
                                 if let Some(ui) = ta.get("uiAmount").and_then(|v| v.as_f64()) {
                                     if ui > 0.0 {
-                                        return Some(ui);
+                                        amounts.push(ui);
+                                        continue;
                                     }
                                 }
                                 if
@@ -4076,7 +4668,8 @@ impl TransactionProcessor {
                                     if let Ok(raw) = amount_str.parse::<u128>() {
                                         let scale = (10_f64).powi(dec.min(18) as i32);
                                         if scale > 0.0 {
-                                            return Some((raw as f64) / scale);
+                                            amounts.push((raw as f64) / scale);
+                                            continue;
                                         }
                                     }
                                 }
@@ -4120,9 +4713,23 @@ impl TransactionProcessor {
             .filter(|a| *a > 0.0 && a.is_finite())
             .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
-        if spl_min_amount.is_none() {
-            if let Some(wsol_ata) = wallet_wsol_ata.clone() {
-                // Find a system transfer to this ATA and take lamports as input amount
+        // If we identified a primary spend explicitly, use it immediately
+        if inner_primary_wsol_spend.is_some() {
+            return inner_primary_wsol_spend;
+        }
+
+        // Robust path: derive funding from any account that is later SyncNative'd.
+        // Sum all SystemProgram lamports funded from the wallet to those accounts (transfer + createAccount)
+        // and, if the account was created in this tx, subtract ONLY the lamports used by createAccount (i.e., rent deposit).
+        // This yields the true WSOL input without rent contamination.
+        if !sync_native_accounts.is_empty() {
+            const SYSTEM_PROGRAM_ID: &str = "11111111111111111111111111111111";
+
+            // Helper to accumulate lamports sent from wallet to a given destination account and track createAccount rent
+            let mut accumulate_for_dest = |dest: &str| -> (u64, u64) {
+                let mut total: u64 = 0;
+                let mut create_lamports_for_dest: u64 = 0;
+                // Outer instructions first
                 if
                     let Some(outer) = raw
                         .get("transaction")
@@ -4130,6 +4737,316 @@ impl TransactionProcessor {
                         .and_then(|message| message.get("instructions"))
                         .and_then(|v| v.as_array())
                 {
+                    for instruction in outer {
+                        // Resolve program id (support v0 programIdIndex)
+                        let program_id = instruction
+                            .get("programId")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string())
+                            .or_else(|| {
+                                instruction
+                                    .get("programIdIndex")
+                                    .and_then(|v| v.as_u64())
+                                    .and_then(|idx| account_keys.get(idx as usize).cloned())
+                            })
+                            .unwrap_or_default();
+                        if let Some(parsed) = instruction.get("parsed").and_then(|v| v.as_object()) {
+                            if program_id != SYSTEM_PROGRAM_ID {
+                                continue;
+                            }
+                            let itype = parsed
+                                .get("type")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_ascii_lowercase();
+                            if let Some(info) = parsed.get("info").and_then(|v| v.as_object()) {
+                                match itype.as_str() {
+                                    "transfer" => {
+                                        let src_matches_wallet = info
+                                            .get("source")
+                                            .and_then(|v| v.as_str())
+                                            .map(|s| s == wallet)
+                                            .unwrap_or(false);
+                                        let dest_matches = info
+                                            .get("destination")
+                                            .and_then(|v| v.as_str())
+                                            .map(|d| d == dest)
+                                            .unwrap_or(false);
+                                        if src_matches_wallet && dest_matches {
+                                            if
+                                                let Some(lamports) = info
+                                                    .get("lamports")
+                                                    .and_then(|v| v.as_u64())
+                                            {
+                                                total = total.saturating_add(lamports);
+                                            }
+                                        }
+                                    }
+                                    "createaccount" => {
+                                        let src_matches_wallet = info
+                                            .get("source")
+                                            .and_then(|v| v.as_str())
+                                            .or_else(|| info.get("from").and_then(|v| v.as_str()))
+                                            .map(|s| s == wallet)
+                                            .unwrap_or(false);
+                                        let new_acc_matches = info
+                                            .get("newAccount")
+                                            .and_then(|v| v.as_str())
+                                            .map(|d| d == dest)
+                                            .unwrap_or(false);
+                                        if src_matches_wallet && new_acc_matches {
+                                            if
+                                                let Some(lamports) = info
+                                                    .get("lamports")
+                                                    .and_then(|v| v.as_u64())
+                                            {
+                                                total = total.saturating_add(lamports);
+                                                // Count only the rent-exempt minimum as non-swap funding from createAccount
+                                                const STANDARD_ATA_RENT: u64 = 2_039_280;
+                                                let rent_component =
+                                                    lamports.min(STANDARD_ATA_RENT);
+                                                create_lamports_for_dest =
+                                                    create_lamports_for_dest.saturating_add(
+                                                        rent_component
+                                                    );
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                }
+                // Also check inner instructions for completeness
+                if
+                    let Some(inner) = raw
+                        .get("meta")
+                        .and_then(|m| m.get("innerInstructions"))
+                        .and_then(|v| v.as_array())
+                {
+                    for entry in inner {
+                        if
+                            let Some(instructions) = entry
+                                .get("instructions")
+                                .and_then(|v| v.as_array())
+                        {
+                            for instruction in instructions {
+                                // Resolve program id (support v0 programIdIndex)
+                                let program_id = instruction
+                                    .get("programId")
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| s.to_string())
+                                    .or_else(|| {
+                                        instruction
+                                            .get("programIdIndex")
+                                            .and_then(|v| v.as_u64())
+                                            .and_then(|idx| account_keys.get(idx as usize).cloned())
+                                    })
+                                    .unwrap_or_default();
+                                if
+                                    let Some(parsed) = instruction
+                                        .get("parsed")
+                                        .and_then(|v| v.as_object())
+                                {
+                                    if program_id != SYSTEM_PROGRAM_ID {
+                                        continue;
+                                    }
+                                    let itype = parsed
+                                        .get("type")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("")
+                                        .to_ascii_lowercase();
+                                    if
+                                        let Some(info) = parsed
+                                            .get("info")
+                                            .and_then(|v| v.as_object())
+                                    {
+                                        match itype.as_str() {
+                                            "transfer" => {
+                                                let src_matches_wallet = info
+                                                    .get("source")
+                                                    .and_then(|v| v.as_str())
+                                                    .map(|s| s == wallet)
+                                                    .unwrap_or(false);
+                                                let dest_matches = info
+                                                    .get("destination")
+                                                    .and_then(|v| v.as_str())
+                                                    .map(|d| d == dest)
+                                                    .unwrap_or(false);
+                                                if src_matches_wallet && dest_matches {
+                                                    if
+                                                        let Some(lamports) = info
+                                                            .get("lamports")
+                                                            .and_then(|v| v.as_u64())
+                                                    {
+                                                        total = total.saturating_add(lamports);
+                                                    }
+                                                }
+                                            }
+                                            "createaccount" => {
+                                                let src_matches_wallet = info
+                                                    .get("source")
+                                                    .and_then(|v| v.as_str())
+                                                    .or_else(||
+                                                        info.get("from").and_then(|v| v.as_str())
+                                                    )
+                                                    .map(|s| s == wallet)
+                                                    .unwrap_or(false);
+                                                let new_acc_matches = info
+                                                    .get("newAccount")
+                                                    .and_then(|v| v.as_str())
+                                                    .map(|d| d == dest)
+                                                    .unwrap_or(false);
+                                                if src_matches_wallet && new_acc_matches {
+                                                    if
+                                                        let Some(lamports) = info
+                                                            .get("lamports")
+                                                            .and_then(|v| v.as_u64())
+                                                    {
+                                                        total = total.saturating_add(lamports);
+                                                        // Count only the rent-exempt minimum as non-swap funding from createAccount
+                                                        const STANDARD_ATA_RENT: u64 = 2_039_280;
+                                                        let rent_component =
+                                                            lamports.min(STANDARD_ATA_RENT);
+                                                        create_lamports_for_dest =
+                                                            create_lamports_for_dest.saturating_add(
+                                                                rent_component
+                                                            );
+                                                    }
+                                                }
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                (total, create_lamports_for_dest)
+            };
+
+            // Compute best candidate as (total_funded - rent_component_of_createAccount)
+            let mut best_candidate_lamports: u64 = 0;
+            for acc in &sync_native_accounts {
+                let (funded, create_lamports) = accumulate_for_dest(acc);
+                if funded == 0 {
+                    continue;
+                }
+                let amount = if create_lamports > 0 {
+                    funded.saturating_sub(create_lamports)
+                } else {
+                    funded
+                };
+                if amount > best_candidate_lamports {
+                    best_candidate_lamports = amount;
+                }
+            }
+            if best_candidate_lamports > 0 {
+                // If we already captured a precise SPL transferChecked amount (e.g., main WSOL to router),
+                // do NOT override it with the larger SyncNative funding sum (which can include micro-fees).
+                // Only override when the existing amount looks like rent-only (≈0.00204 SOL) or when none exists.
+                match spl_min_amount {
+                    Some(existing) => {
+                        let existing_lamports = (existing * 1_000_000_000.0).round() as u64;
+                        let looks_like_rent = (1_990_000..=2_100_000).contains(&existing_lamports);
+                        if looks_like_rent {
+                            spl_min_amount = Some(
+                                (best_candidate_lamports as f64) / 1_000_000_000.0
+                            );
+                        }
+                    }
+                    None => {
+                        spl_min_amount = Some((best_candidate_lamports as f64) / 1_000_000_000.0);
+                    }
+                }
+            } else {
+                // As a weaker fallback, use the largest single transfer to any SyncNative account
+                if
+                    let Some(outer) = raw
+                        .get("transaction")
+                        .and_then(|tx| tx.get("message"))
+                        .and_then(|message| message.get("instructions"))
+                        .and_then(|v| v.as_array())
+                {
+                    let mut best: Option<f64> = None;
+                    for instruction in outer {
+                        if
+                            let (Some(program_id), Some(parsed)) = (
+                                instruction.get("programId").and_then(|v| v.as_str()),
+                                instruction.get("parsed").and_then(|v| v.as_object()),
+                            )
+                        {
+                            if program_id == SYSTEM_PROGRAM_ID {
+                                let itype = parsed
+                                    .get("type")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("")
+                                    .to_ascii_lowercase();
+                                if itype == "transfer" {
+                                    if
+                                        let Some(info) = parsed
+                                            .get("info")
+                                            .and_then(|v| v.as_object())
+                                    {
+                                        let dest = info.get("destination").and_then(|v| v.as_str());
+                                        let src_is_wallet = info
+                                            .get("source")
+                                            .and_then(|v| v.as_str())
+                                            .map(|s| s == wallet)
+                                            .unwrap_or(false);
+                                        if let (Some(dest), true) = (dest, src_is_wallet) {
+                                            if sync_native_accounts.contains(dest) {
+                                                if
+                                                    let Some(lamports) = info
+                                                        .get("lamports")
+                                                        .and_then(|v| v.as_u64())
+                                                {
+                                                    let val = (lamports as f64) / 1_000_000_000.0;
+                                                    best = Some(match best {
+                                                        Some(b) => b.max(val),
+                                                        None => val,
+                                                    });
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    match (spl_min_amount, best) {
+                        (Some(existing), Some(candidate)) => {
+                            // Prefer candidate when existing looks like rent-only
+                            let existing_lamports = (existing * 1_000_000_000.0).round() as u64;
+                            let looks_like_rent = (1_990_000..=2_100_000).contains(
+                                &existing_lamports
+                            );
+                            if looks_like_rent || candidate > existing {
+                                spl_min_amount = Some(candidate);
+                            }
+                        }
+                        (None, Some(candidate)) => {
+                            spl_min_amount = Some(candidate);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        // If still none, use wallet WSOL ATA funding fallback (can be rent-only; syncnative logic above will override if present)
+        if spl_min_amount.is_none() {
+            if let Some(wsol_ata) = wallet_wsol_ata.clone() {
+                if
+                    let Some(outer) = raw
+                        .get("transaction")
+                        .and_then(|tx| tx.get("message"))
+                        .and_then(|message| message.get("instructions"))
+                        .and_then(|v| v.as_array())
+                {
+                    let mut best_lamports: u64 = 0;
                     for instruction in outer {
                         if
                             let (Some(program_id), Some(parsed)) = (
@@ -4165,10 +5082,9 @@ impl TransactionProcessor {
                                                     .get("lamports")
                                                     .and_then(|v| v.as_u64())
                                             {
-                                                spl_min_amount = Some(
-                                                    (lamports as f64) / 1_000_000_000.0
-                                                );
-                                                break;
+                                                if lamports > best_lamports {
+                                                    best_lamports = lamports;
+                                                }
                                             }
                                         }
                                     }
@@ -4176,63 +5092,9 @@ impl TransactionProcessor {
                             }
                         }
                     }
-                }
-            }
-        }
-
-        // Another robust path: derive funding from any account that is later SyncNative'd
-        if spl_min_amount.is_none() && !sync_native_accounts.is_empty() {
-            if
-                let Some(outer) = raw
-                    .get("transaction")
-                    .and_then(|tx| tx.get("message"))
-                    .and_then(|message| message.get("instructions"))
-                    .and_then(|v| v.as_array())
-            {
-                let mut best: Option<f64> = None;
-                for instruction in outer {
-                    if
-                        let (Some(program_id), Some(parsed)) = (
-                            instruction.get("programId").and_then(|v| v.as_str()),
-                            instruction.get("parsed").and_then(|v| v.as_object()),
-                        )
-                    {
-                        if program_id == "11111111111111111111111111111111" {
-                            let itype = parsed
-                                .get("type")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_ascii_lowercase();
-                            if itype == "transfer" {
-                                if let Some(info) = parsed.get("info").and_then(|v| v.as_object()) {
-                                    let dest = info.get("destination").and_then(|v| v.as_str());
-                                    let src_is_wallet = info
-                                        .get("source")
-                                        .and_then(|v| v.as_str())
-                                        .map(|s| s == wallet)
-                                        .unwrap_or(false);
-                                    if let (Some(dest), true) = (dest, src_is_wallet) {
-                                        if sync_native_accounts.contains(dest) {
-                                            if
-                                                let Some(lamports) = info
-                                                    .get("lamports")
-                                                    .and_then(|v| v.as_u64())
-                                            {
-                                                let val = (lamports as f64) / 1_000_000_000.0;
-                                                best = Some(match best {
-                                                    Some(b) => b.min(val),
-                                                    None => val,
-                                                });
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                    if best_lamports > 0 {
+                        spl_min_amount = Some((best_lamports as f64) / 1_000_000_000.0);
                     }
-                }
-                if spl_min_amount.is_none() {
-                    spl_min_amount = best;
                 }
             }
         }
@@ -4242,11 +5104,11 @@ impl TransactionProcessor {
             return Some(val);
         }
 
-        // Heuristic: choose the smallest positive transfer out of wallet-owned WSOL accounts
+        // Heuristic fallback: choose the largest positive transfer amount as the likely WSOL input
         amounts
             .into_iter()
             .filter(|a| *a > 0.0 && a.is_finite())
-            .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
     }
 
     fn detect_wallet_wsol_receive_amount(&self, transaction: &Transaction) -> Option<f64> {
@@ -4620,6 +5482,94 @@ impl TransactionProcessor {
                 .and_then(|v| v.as_array())
         {
             for inst in outer {
+                // Compiled check first
+                let program_id_v = inst
+                    .get("programId")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .or_else(||
+                        inst
+                            .get("programIdIndex")
+                            .and_then(|v| v.as_u64())
+                            .and_then(|idx| account_keys.get(idx as usize).cloned())
+                    )
+                    .unwrap_or_default();
+                if program_id_v == TOKEN_PROGRAM_ID {
+                    if let Some(data_str) = inst.get("data").and_then(|v| v.as_str()) {
+                        if let Ok(bytes) = bs58::decode(data_str).into_vec() {
+                            if !bytes.is_empty() {
+                                let tag = bytes[0];
+                                let mut amount_opt: Option<u64> = None;
+                                if
+                                    (tag == 3 && bytes.len() >= 9) ||
+                                    (tag == 12 && bytes.len() >= 10)
+                                {
+                                    if let Ok(arr) = <[u8; 8]>::try_from(&bytes[1..9]) {
+                                        amount_opt = Some(u64::from_le_bytes(arr));
+                                    }
+                                }
+                                if let Some(lamports) = amount_opt {
+                                    let accounts: Vec<String> = inst
+                                        .get("accounts")
+                                        .and_then(|v| v.as_array())
+                                        .map(|accs| {
+                                            accs.iter()
+                                                .filter_map(|acc| {
+                                                    if let Some(s) = acc.as_str() {
+                                                        Some(s.to_string())
+                                                    } else if let Some(i) = acc.as_u64() {
+                                                        account_keys.get(i as usize).cloned()
+                                                    } else if let Some(obj) = acc.as_object() {
+                                                        obj.get("pubkey")
+                                                            .and_then(|v| v.as_str())
+                                                            .map(|s| s.to_string())
+                                                    } else {
+                                                        None
+                                                    }
+                                                })
+                                                .collect()
+                                        })
+                                        .unwrap_or_default();
+                                    // Only handle TransferChecked (tag 12) here to reliably identify WSOL via mint account
+                                    if tag == 12 {
+                                        // accounts: [source, mint, dest, authority, ...]
+                                        let src = accounts.get(0).cloned();
+                                        let mint = accounts.get(1).cloned();
+                                        let dst = accounts.get(2).cloned();
+                                        if
+                                            let (Some(src), Some(mint), Some(dst)) = (
+                                                src,
+                                                mint,
+                                                dst,
+                                            )
+                                        {
+                                            if mint == WSOL_MINT {
+                                                // destination must be wallet-owned; source must NOT be wallet-owned
+                                                let src_is_wallet_owned = owner_map
+                                                    .get(&src)
+                                                    .map(|o| o == &wallet)
+                                                    .unwrap_or(false);
+                                                let dst_is_wallet_owned = owner_map
+                                                    .get(&dst)
+                                                    .map(|o| o == &wallet)
+                                                    .unwrap_or(false);
+                                                if
+                                                    dst_is_wallet_owned &&
+                                                    !src_is_wallet_owned &&
+                                                    lamports > 0
+                                                {
+                                                    amounts.push(
+                                                        (lamports as f64) / 1_000_000_000.0
+                                                    );
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 let parsed = match inst.get("parsed").and_then(|v| v.as_object()) {
                     Some(p) => p,
                     None => {
@@ -4705,6 +5655,349 @@ impl TransactionProcessor {
         }
 
         "unknown".to_string()
+    }
+
+    // Simple fallback: find largest inner Token transferChecked of WSOL with authority == wallet
+    fn detect_largest_inner_wsol_transferchecked_simple(
+        &self,
+        transaction: &Transaction
+    ) -> Option<f64> {
+        const TOKEN_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+        let raw = transaction.raw_transaction_data.as_ref()?;
+        let wallet = self.wallet_pubkey.to_string();
+        let mut best: Option<f64> = None;
+
+        // Resolve account keys for compiled instruction handling
+        let account_keys: Vec<String> = raw
+            .get("transaction")
+            .and_then(|tx| tx.get("message"))
+            .and_then(|m| m.get("accountKeys"))
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|k| {
+                        if let Some(s) = k.as_str() {
+                            Some(s.to_string())
+                        } else {
+                            k.get("pubkey")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string())
+                        }
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        if
+            let Some(inner) = raw
+                .get("meta")
+                .and_then(|m| m.get("innerInstructions"))
+                .and_then(|v| v.as_array())
+        {
+            for entry in inner {
+                if let Some(instructions) = entry.get("instructions").and_then(|v| v.as_array()) {
+                    for instruction in instructions {
+                        let program_id = instruction
+                            .get("programId")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string())
+                            .or_else(|| {
+                                instruction
+                                    .get("programIdIndex")
+                                    .and_then(|v| v.as_u64())
+                                    .and_then(|idx| account_keys.get(idx as usize).cloned())
+                            })
+                            .unwrap_or_default();
+                        if program_id != TOKEN_PROGRAM_ID {
+                            continue;
+                        }
+
+                        // Handle parsed instructions first
+                        if let Some(parsed) = instruction.get("parsed").and_then(|v| v.as_object()) {
+                            let itype = parsed
+                                .get("type")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_ascii_lowercase();
+                            if itype != "transferchecked" {
+                                continue;
+                            }
+                            let info = match parsed.get("info").and_then(|v| v.as_object()) {
+                                Some(i) => i,
+                                None => {
+                                    continue;
+                                }
+                            };
+                            let mint_is_wsol = info
+                                .get("mint")
+                                .and_then(|v| v.as_str())
+                                .map(|m| m == WSOL_MINT)
+                                .unwrap_or(false);
+                            if !mint_is_wsol {
+                                continue;
+                            }
+                            let auth_is_wallet = info
+                                .get("authority")
+                                .and_then(|v| v.as_str())
+                                .map(|a| a == wallet)
+                                .unwrap_or(false);
+                            if !auth_is_wallet {
+                                continue;
+                            }
+                            // read amount
+                            let mut amount_ui: Option<f64> = None;
+                            if let Some(ta) = info.get("tokenAmount").and_then(|v| v.as_object()) {
+                                if let Some(ui) = ta.get("uiAmount").and_then(|v| v.as_f64()) {
+                                    amount_ui = Some(ui);
+                                } else if
+                                    let (Some(amount_str), Some(dec)) = (
+                                        ta.get("amount").and_then(|v| v.as_str()),
+                                        ta.get("decimals").and_then(|v| v.as_u64()),
+                                    )
+                                {
+                                    if let Ok(raw) = amount_str.parse::<u128>() {
+                                        let scale = (10_f64).powi(dec.min(18) as i32);
+                                        if scale > 0.0 {
+                                            amount_ui = Some((raw as f64) / scale);
+                                        }
+                                    }
+                                }
+                            }
+                            if let Some(val) = amount_ui {
+                                if val > 0.0 {
+                                    best = Some(best.map_or(val, |b| b.max(val)));
+                                }
+                            }
+                        } else if
+                            // Handle compiled instructions (for routers like GMGN that don't provide parsed instructions)
+                            let Some(data_str) = instruction.get("data").and_then(|v| v.as_str())
+                        {
+                            if let Ok(bytes) = bs58::decode(data_str).into_vec() {
+                                if !bytes.is_empty() {
+                                    let tag = bytes[0];
+                                    // Tag 12 = TransferChecked
+                                    if tag == 12 && bytes.len() >= 10 {
+                                        if let Ok(amount_arr) = <[u8; 8]>::try_from(&bytes[1..9]) {
+                                            let amount = u64::from_le_bytes(amount_arr);
+                                            let accounts: Vec<String> = instruction
+                                                .get("accounts")
+                                                .and_then(|v| v.as_array())
+                                                .map(|accs| {
+                                                    accs.iter()
+                                                        .filter_map(|acc| {
+                                                            if let Some(s) = acc.as_str() {
+                                                                Some(s.to_string())
+                                                            } else if let Some(i) = acc.as_u64() {
+                                                                account_keys
+                                                                    .get(i as usize)
+                                                                    .cloned()
+                                                            } else if
+                                                                let Some(obj) = acc.as_object()
+                                                            {
+                                                                obj.get("pubkey")
+                                                                    .and_then(|v| v.as_str())
+                                                                    .map(|s| s.to_string())
+                                                            } else {
+                                                                None
+                                                            }
+                                                        })
+                                                        .collect()
+                                                })
+                                                .unwrap_or_default();
+                                            let mint = accounts.get(1).cloned();
+                                            let auth = accounts.get(3).cloned();
+                                            if let (Some(mint), Some(auth)) = (mint, auth) {
+                                                if mint == WSOL_MINT && auth == wallet {
+                                                    let val = (amount as f64) / 1_000_000_000.0;
+                                                    if val > 0.0 {
+                                                        best = Some(
+                                                            best.map_or(val, |b| b.max(val))
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        best
+    }
+
+    /// Detect total amount of all inner WSOL transferChecked instructions with wallet as authority
+    /// (for routers like Jupiter that split transfers into multiple parts)
+    fn detect_total_inner_wsol_transferchecked(&self, transaction: &Transaction) -> Option<f64> {
+        const TOKEN_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+        let raw = transaction.raw_transaction_data.as_ref()?;
+        let wallet = self.wallet_pubkey.to_string();
+        let mut total: f64 = 0.0;
+
+        // Resolve account keys for compiled instruction handling
+        let account_keys: Vec<String> = raw
+            .get("transaction")
+            .and_then(|tx| tx.get("message"))
+            .and_then(|m| m.get("accountKeys"))
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|k| {
+                        if let Some(s) = k.as_str() {
+                            Some(s.to_string())
+                        } else {
+                            k.get("pubkey")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string())
+                        }
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        if
+            let Some(inner) = raw
+                .get("meta")
+                .and_then(|m| m.get("innerInstructions"))
+                .and_then(|v| v.as_array())
+        {
+            for entry in inner {
+                if let Some(instructions) = entry.get("instructions").and_then(|v| v.as_array()) {
+                    for instruction in instructions {
+                        let program_id = instruction
+                            .get("programId")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string())
+                            .or_else(|| {
+                                instruction
+                                    .get("programIdIndex")
+                                    .and_then(|v| v.as_u64())
+                                    .and_then(|idx| account_keys.get(idx as usize).cloned())
+                            })
+                            .unwrap_or_default();
+                        if program_id != TOKEN_PROGRAM_ID {
+                            continue;
+                        }
+
+                        // Handle parsed instructions
+                        if let Some(parsed) = instruction.get("parsed").and_then(|v| v.as_object()) {
+                            let itype = parsed
+                                .get("type")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_ascii_lowercase();
+                            if itype != "transferchecked" {
+                                continue;
+                            }
+                            let info = match parsed.get("info").and_then(|v| v.as_object()) {
+                                Some(i) => i,
+                                None => {
+                                    continue;
+                                }
+                            };
+                            let mint_is_wsol = info
+                                .get("mint")
+                                .and_then(|v| v.as_str())
+                                .map(|m| m == WSOL_MINT)
+                                .unwrap_or(false);
+                            if !mint_is_wsol {
+                                continue;
+                            }
+                            let auth_is_wallet = info
+                                .get("authority")
+                                .and_then(|v| v.as_str())
+                                .map(|a| a == wallet)
+                                .unwrap_or(false);
+                            if !auth_is_wallet {
+                                continue;
+                            }
+                            // read amount
+                            let mut amount_ui: Option<f64> = None;
+                            if let Some(ta) = info.get("tokenAmount").and_then(|v| v.as_object()) {
+                                if let Some(ui) = ta.get("uiAmount").and_then(|v| v.as_f64()) {
+                                    amount_ui = Some(ui);
+                                } else if
+                                    let (Some(amount_str), Some(dec)) = (
+                                        ta.get("amount").and_then(|v| v.as_str()),
+                                        ta.get("decimals").and_then(|v| v.as_u64()),
+                                    )
+                                {
+                                    if let Ok(raw) = amount_str.parse::<u128>() {
+                                        let scale = (10_f64).powi(dec.min(18) as i32);
+                                        if scale > 0.0 {
+                                            amount_ui = Some((raw as f64) / scale);
+                                        }
+                                    }
+                                }
+                            }
+                            if let Some(val) = amount_ui {
+                                if val > 0.0 {
+                                    total += val;
+                                }
+                            }
+                        } else if
+                            // Handle compiled instructions (like Jupiter often uses)
+                            let Some(data_str) = instruction.get("data").and_then(|v| v.as_str())
+                        {
+                            if let Ok(bytes) = bs58::decode(data_str).into_vec() {
+                                if !bytes.is_empty() {
+                                    let tag = bytes[0];
+                                    // Tag 12 = TransferChecked
+                                    if tag == 12 && bytes.len() >= 10 {
+                                        if let Ok(amount_arr) = <[u8; 8]>::try_from(&bytes[1..9]) {
+                                            let amount = u64::from_le_bytes(amount_arr);
+                                            let accounts: Vec<String> = instruction
+                                                .get("accounts")
+                                                .and_then(|v| v.as_array())
+                                                .map(|accs| {
+                                                    accs.iter()
+                                                        .filter_map(|acc| {
+                                                            if let Some(s) = acc.as_str() {
+                                                                Some(s.to_string())
+                                                            } else if let Some(i) = acc.as_u64() {
+                                                                account_keys
+                                                                    .get(i as usize)
+                                                                    .cloned()
+                                                            } else if
+                                                                let Some(obj) = acc.as_object()
+                                                            {
+                                                                obj.get("pubkey")
+                                                                    .and_then(|v| v.as_str())
+                                                                    .map(|s| s.to_string())
+                                                            } else {
+                                                                None
+                                                            }
+                                                        })
+                                                        .collect()
+                                                })
+                                                .unwrap_or_default();
+                                            let mint = accounts.get(1).cloned();
+                                            let auth = accounts.get(3).cloned();
+                                            if let (Some(mint), Some(auth)) = (mint, auth) {
+                                                if mint == WSOL_MINT && auth == wallet {
+                                                    let val = (amount as f64) / 1_000_000_000.0;
+                                                    if val > 0.0 {
+                                                        total += val;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if total > 0.0 {
+            Some(total)
+        } else {
+            None
+        }
     }
 }
 
