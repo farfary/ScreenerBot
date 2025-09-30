@@ -31,6 +31,8 @@ pub struct TransactionProcessor {
     fetcher: TransactionFetcher,
     analyzer: TransactionAnalyzer,
     debug_enabled: bool,
+    cache_only: bool,
+    force_refresh: bool,
 }
 
 impl TransactionProcessor {
@@ -41,6 +43,24 @@ impl TransactionProcessor {
             fetcher: TransactionFetcher::new(),
             analyzer: TransactionAnalyzer::new(is_debug_transactions_enabled()),
             debug_enabled: is_debug_transactions_enabled(),
+            cache_only: false,
+            force_refresh: false,
+        }
+    }
+
+    /// Create new transaction processor with cache options
+    pub fn new_with_cache_options(
+        wallet_pubkey: Pubkey,
+        cache_only: bool,
+        force_refresh: bool
+    ) -> Self {
+        Self {
+            wallet_pubkey,
+            fetcher: TransactionFetcher::new(),
+            analyzer: TransactionAnalyzer::new(is_debug_transactions_enabled()),
+            debug_enabled: is_debug_transactions_enabled(),
+            cache_only,
+            force_refresh,
         }
     }
 
@@ -99,6 +119,25 @@ impl TransactionProcessor {
             None
         ).await;
 
+        // Store processed transaction in database for future retrieval
+        if let Some(database) = crate::transactions::database::get_transaction_database().await {
+            if let Err(e) = database.store_processed_transaction(&transaction).await {
+                if self.debug_enabled {
+                    log(
+                        LogTag::Transactions,
+                        "WARN",
+                        &format!("Failed to cache processed transaction: {}", e)
+                    );
+                }
+            } else if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "CACHE_PROCESSED",
+                    &format!("Cached processed transaction: {}", signature)
+                );
+            }
+        }
+
         Ok(transaction)
     }
 
@@ -124,13 +163,115 @@ impl TransactionProcessor {
 // =============================================================================
 
 impl TransactionProcessor {
-    /// Fetch transaction data from blockchain
+    /// Fetch transaction data with cache-first strategy
     async fn fetch_transaction_data(
         &self,
         signature: &str
     ) -> Result<crate::rpc::TransactionDetails, String> {
-        // Delegate to fetcher
-        self.fetcher.fetch_transaction_details(signature).await
+        // Import the global database (avoiding multiple instances for now)
+        let database = crate::transactions::database
+            ::get_transaction_database().await
+            .ok_or_else(|| "Transaction database not initialized".to_string())?;
+
+        // Step 1: Handle cache-only mode - only try cache, never fetch from RPC
+        if self.cache_only {
+            if let Some(cached_details) = database.get_raw_transaction_details(signature).await? {
+                if self.debug_enabled {
+                    log(
+                        LogTag::Transactions,
+                        "CACHE_ONLY_HIT",
+                        &format!("Using cached raw transaction data (cache-only mode): {}", signature)
+                    );
+                }
+                return Ok(cached_details);
+            } else {
+                return Err(
+                    format!("Transaction {} not found in cache (cache-only mode)", signature)
+                );
+            }
+        }
+
+        // Step 2: Handle force-refresh mode - skip cache and fetch fresh
+        if self.force_refresh {
+            if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "FORCE_REFRESH",
+                    &format!("Force fetching fresh transaction data: {}", signature)
+                );
+            }
+        } else {
+            // Step 3: Normal mode - try cache first
+            if let Some(cached_details) = database.get_raw_transaction_details(signature).await? {
+                if self.debug_enabled {
+                    log(
+                        LogTag::Transactions,
+                        "CACHE_HIT",
+                        &format!("Using cached raw transaction data for: {}", signature)
+                    );
+                }
+                return Ok(cached_details);
+            }
+
+            if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "CACHE_MISS",
+                    &format!("Fetching fresh transaction data for: {}", signature)
+                );
+            }
+        }
+
+        // Step 4: Fetch from blockchain
+        let tx_details = self.fetcher.fetch_transaction_details(signature).await?;
+
+        // Step 5: Store in cache for future use (unless cache-only mode)
+        if !self.cache_only {
+            // Create a minimal transaction for caching raw data
+            let mut temp_transaction = Transaction::new(signature.to_string());
+            temp_transaction.raw_transaction_data = Some(
+                serde_json
+                    ::to_value(&tx_details)
+                    .map_err(|e| format!("Failed to serialize transaction details: {}", e))?
+            );
+            temp_transaction.slot = Some(tx_details.slot);
+            temp_transaction.block_time = tx_details.block_time;
+            if let Some(block_time) = tx_details.block_time {
+                temp_transaction.timestamp = DateTime::from_timestamp(block_time, 0).unwrap_or_else(
+                    || Utc::now()
+                );
+            }
+            if let Some(meta) = &tx_details.meta {
+                temp_transaction.success = match &meta.err {
+                    None => true,
+                    Some(v) => v.is_null(),
+                };
+                if !temp_transaction.success {
+                    temp_transaction.error_message = meta.err.as_ref().map(|v| v.to_string());
+                }
+                temp_transaction.fee_lamports = Some(meta.fee);
+            }
+            temp_transaction.status = TransactionStatus::Confirmed;
+
+            // Store raw transaction data in cache
+            if let Err(e) = database.store_raw_transaction(&temp_transaction).await {
+                if self.debug_enabled {
+                    log(
+                        LogTag::Transactions,
+                        "WARN",
+                        &format!("Failed to cache raw transaction data for {}: {}", signature, e)
+                    );
+                }
+            } else if self.debug_enabled {
+                log(
+                    LogTag::Transactions,
+                    "CACHE_STORE",
+                    &format!("Cached raw transaction data for: {}", signature)
+                );
+            }
+        }
+
+        Ok(tx_details)
     }
 
     /// Create Transaction structure from raw blockchain data
@@ -140,6 +281,13 @@ impl TransactionProcessor {
         tx_data: &crate::rpc::TransactionDetails
     ) -> Result<Transaction, String> {
         let mut transaction = Transaction::new(signature.to_string());
+
+        // Store raw transaction data for future reference
+        transaction.raw_transaction_data = Some(
+            serde_json
+                ::to_value(tx_data)
+                .map_err(|e| format!("Failed to serialize transaction data: {}", e))?
+        );
 
         // Extract basic data from tx_data
         if let Some(meta) = &tx_data.meta {

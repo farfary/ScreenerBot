@@ -193,7 +193,11 @@ async fn main() -> Result<()> {
         init_transaction_database().await.map_err(|e|
             anyhow!("Failed to initialize transactions database: {}", e)
         )?;
-        let processor = TransactionProcessor::new(wallet_pk);
+        let processor = TransactionProcessor::new_with_cache_options(
+            wallet_pk,
+            args.cache_only,
+            args.force_refresh
+        );
 
         let tx = processor
             .process_transaction(&sig).await
@@ -325,7 +329,11 @@ async fn main() -> Result<()> {
         }
 
         let wallet_pubkey = Pubkey::from_str(&wallet).context("Invalid wallet pubkey in CSV")?;
-        let processor = TransactionProcessor::new(wallet_pubkey);
+        let processor = TransactionProcessor::new_with_cache_options(
+            wallet_pubkey,
+            args.cache_only,
+            args.force_refresh
+        );
 
         for row in wallet_rows {
             if args.limit.is_some() && stats.processed >= args.limit.unwrap() {
