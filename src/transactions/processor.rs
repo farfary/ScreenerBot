@@ -2446,6 +2446,9 @@ impl TransactionProcessor {
 
         // TEMPORARY WORKAROUND: If no tips detected but we have a common Jito tip amount difference
         // This handles cases where the tip address isn't in our known list
+        // Detect router early for heuristic gating
+        let router_hint_early = Self::infer_swap_router(transaction);
+
         if tip_amount == 0.0 {
             let total_sol_spent = (-sol_change).max(0.0);
             let sol_spent_for_tokens_raw = (total_sol_spent - fee_sol).max(0.0);
@@ -2466,30 +2469,44 @@ impl TransactionProcessor {
             }
 
             // Common Jito tip amounts to check for and subtract
+            // IMPORTANT: skip this heuristic for Jupiter where we usually have precise WSOL info
             let common_tip_amounts = [50_000, 100_000, 150_000]; // lamports
 
-            for &tip_lamports in &common_tip_amounts {
-                let adjusted_lamports = sol_spent_lamports.saturating_sub(tip_lamports);
-                let adjusted_sol = (adjusted_lamports as f64) / 1_000_000_000.0;
+            if router_hint_early.to_ascii_lowercase() == "jupiter" {
+                if self.debug_enabled {
+                    log(
+                        LogTag::Transactions,
+                        "TIP_HEURISTIC",
+                        &format!(
+                            "{}: Skipping tip heuristic for router=jupiter",
+                            &transaction.signature
+                        )
+                    );
+                }
+            } else {
+                for &tip_lamports in &common_tip_amounts {
+                    let adjusted_lamports = sol_spent_lamports.saturating_sub(tip_lamports);
+                    let adjusted_sol = (adjusted_lamports as f64) / 1_000_000_000.0;
 
-                // Check if removing this tip amount results in a round number that's more likely to be intentional
-                let remainder = adjusted_lamports % 1_000_000; // Check if close to increments of 0.001 SOL
-                if remainder < 10_000 {
-                    // Within 0.00001 SOL tolerance
-                    tip_amount = (tip_lamports as f64) / 1_000_000_000.0;
-                    if self.debug_enabled {
-                        log(
-                            LogTag::Transactions,
-                            "TIP_HEURISTIC",
-                            &format!(
-                                "{}: Detected likely Jito tip via heuristic: {} SOL ({} lamports)",
-                                &transaction.signature,
-                                tip_amount,
-                                tip_lamports
-                            )
-                        );
+                    // Check if removing this tip amount results in a round number that's more likely to be intentional
+                    let remainder = adjusted_lamports % 1_000_000; // Check if close to increments of 0.001 SOL
+                    if remainder < 10_000 {
+                        // Within 0.00001 SOL tolerance
+                        tip_amount = (tip_lamports as f64) / 1_000_000_000.0;
+                        if self.debug_enabled {
+                            log(
+                                LogTag::Transactions,
+                                "TIP_HEURISTIC",
+                                &format!(
+                                    "{}: Detected likely Jito tip via heuristic: {} SOL ({} lamports)",
+                                    &transaction.signature,
+                                    tip_amount,
+                                    tip_lamports
+                                )
+                            );
+                        }
+                        break;
                     }
-                    break;
                 }
             }
         }
@@ -2693,8 +2710,43 @@ impl TransactionProcessor {
                             sol_spent_effective = sol_spent_for_tokens;
                             used_exact_wsol = false;
                         } else {
-                            sol_spent_effective = exact;
-                            used_exact_wsol = true;
+                            // Jupiter guard: if exact WSOL spend is suspiciously smaller than balance-derived
+                            // by >= 3%, prefer the balance-derived amount to align with CSV expectations.
+                            if
+                                router.to_ascii_lowercase() == "jupiter" &&
+                                sol_spent_for_tokens > 0.0
+                            {
+                                let diff = sol_spent_for_tokens - exact;
+                                let pct = if sol_spent_for_tokens > 0.0 {
+                                    diff / sol_spent_for_tokens
+                                } else {
+                                    0.0
+                                };
+                                if diff > 0.0 && pct >= 0.03 {
+                                    if self.debug_enabled {
+                                        log(
+                                            LogTag::Transactions,
+                                            "SWAP_CALC_DEBUG",
+                                            &format!(
+                                                "{}: Jupiter exact WSOL {:.9} < balance-derived {:.9} (Δ {:.4} = {:.2}%), using balance-derived",
+                                                &transaction.signature,
+                                                exact,
+                                                sol_spent_for_tokens,
+                                                diff,
+                                                pct * 100.0
+                                            )
+                                        );
+                                    }
+                                    sol_spent_effective = sol_spent_for_tokens;
+                                    used_exact_wsol = false;
+                                } else {
+                                    sol_spent_effective = exact;
+                                    used_exact_wsol = true;
+                                }
+                            } else {
+                                sol_spent_effective = exact;
+                                used_exact_wsol = true;
+                            }
                         }
                     }
                 }
@@ -3630,32 +3682,43 @@ impl TransactionProcessor {
             if used_exact_wsol {
                 // skip final tip adjustment when we have precise WSOL spend
             } else {
-                // Adjustment for likely Jito tips
-                let input_lamports = (sol_spent_effective * 1_000_000_000.0) as u64;
+                // Adjustment for likely Jito tips (skip for Jupiter)
+                if router.to_ascii_lowercase() != "jupiter" {
+                    let input_lamports = (sol_spent_effective * 1_000_000_000.0) as u64;
 
-                // Check if removing common tip amounts results in a round number
-                let common_tips = [50_000, 100_000, 150_000];
-                for &tip in &common_tips {
-                    let adjusted = input_lamports.saturating_sub(tip);
-                    // Check if adjusted amount is a round increment (multiple of 0.001 SOL = 1M lamports)
-                    if adjusted > 0 && adjusted % 1_000_000 == 0 {
-                        let adjusted_sol = (adjusted as f64) / 1_000_000_000.0;
-                        if self.debug_enabled {
-                            log(
-                                LogTag::Transactions,
-                                "FINAL_TIP_ADJUSTMENT",
-                                &format!(
-                                    "{}: Final tip adjustment: {:.9} -> {:.9} SOL (removed {} lamport tip)",
-                                    &transaction.signature,
-                                    sol_spent_effective,
-                                    adjusted_sol,
-                                    tip
-                                )
-                            );
+                    // Check if removing common tip amounts results in a round number
+                    let common_tips = [50_000, 100_000, 150_000];
+                    for &tip in &common_tips {
+                        let adjusted = input_lamports.saturating_sub(tip);
+                        // Check if adjusted amount is a round increment (multiple of 0.001 SOL = 1M lamports)
+                        if adjusted > 0 && adjusted % 1_000_000 == 0 {
+                            let adjusted_sol = (adjusted as f64) / 1_000_000_000.0;
+                            if self.debug_enabled {
+                                log(
+                                    LogTag::Transactions,
+                                    "FINAL_TIP_ADJUSTMENT",
+                                    &format!(
+                                        "{}: Final tip adjustment: {:.9} -> {:.9} SOL (removed {} lamport tip)",
+                                        &transaction.signature,
+                                        sol_spent_effective,
+                                        adjusted_sol,
+                                        tip
+                                    )
+                                );
+                            }
+                            sol_spent_effective = adjusted_sol;
+                            break;
                         }
-                        sol_spent_effective = adjusted_sol;
-                        break;
                     }
+                } else if self.debug_enabled {
+                    log(
+                        LogTag::Transactions,
+                        "FINAL_TIP_ADJUSTMENT",
+                        &format!(
+                            "{}: Skipping final tip adjustment for router=jupiter",
+                            &transaction.signature
+                        )
+                    );
                 }
             }
         } else if is_sell {
