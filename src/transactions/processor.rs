@@ -15,23 +15,13 @@ use crate::arguments::{ is_cache_only_enabled, is_force_refresh_enabled };
 use crate::logger::{ log, LogTag };
 
 use crate::tokens::{ decimals::lamports_to_sol, get_token_decimals, get_token_from_db };
-use crate::transactions::{ analyzer, fetcher::TransactionFetcher, program_ids, types::*, utils::* };
-
-// =============================================================================
-// CONSTANTS
-// =============================================================================
-
-/// Known MEV/Jito tip addresses that should be excluded from swap calculations
-const KNOWN_MEV_TIP_ADDRESSES: &[&str] = &[
-    "BB5dnY55FXS1e1NXqZDwCzgdYJdMCj3B92PU6Q5Fb6DT", // Jito tip address
-    "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5", // Jito tip address
-    "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe", // Jito tip address
-    "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY", // Jito tip address
-    "ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49", // Jito tip address
-    "DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh", // Jito tip address
-    "ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt", // Jito tip address
-    "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL", // Jito tip address
-];
+use crate::transactions::{
+    analyzer::{ self, infer_swap_router },
+    fetcher::TransactionFetcher,
+    program_ids::*,
+    types::*,
+    utils::*,
+};
 
 // =============================================================================
 // TRANSACTION PROCESSOR
@@ -52,11 +42,6 @@ impl TransactionProcessor {
             fetcher: TransactionFetcher::new(),
             debug_enabled: is_debug_transactions_enabled(),
         }
-    }
-
-    /// Check if an address is a known MEV/Jito tip address
-    fn is_mev_tip_address(address: &str) -> bool {
-        KNOWN_MEV_TIP_ADDRESSES.contains(&address)
     }
 
     /// Calculate total tip amount from system transfers to MEV addresses
@@ -252,7 +237,7 @@ impl TransactionProcessor {
                             };
 
                             let account_key_str = account_key_str_opt.unwrap_or("unknown");
-                            let is_mev = Self::is_mev_tip_address(account_key_str);
+                            let is_mev = is_mev_tip_address(account_key_str);
 
                             if self.debug_enabled {
                                 log(
@@ -309,7 +294,7 @@ impl TransactionProcessor {
 
                             if source == wallet {
                                 if let Some(lamports) = decode_lamports() {
-                                    let destination_is_mev = Self::is_mev_tip_address(&dest);
+                                    let destination_is_mev = is_mev_tip_address(&dest);
                                     let destination_is_created = created_token_accounts.contains(
                                         &dest
                                     );
@@ -449,7 +434,7 @@ impl TransactionProcessor {
                                     .and_then(|v| v.as_u64())
                                     .unwrap_or(0);
                                 let source_is_wallet = source == wallet;
-                                let destination_is_mev = Self::is_mev_tip_address(destination);
+                                let destination_is_mev = is_mev_tip_address(destination);
                                 let destination_is_created =
                                     created_token_accounts.contains(destination);
                                 let destination_is_wallet_wsol_ata = wallet_wsol_ata
@@ -2414,7 +2399,7 @@ impl TransactionProcessor {
         // those rows without affecting normal sells, detect a near-drain and
         // use the pre-balance as the token input amount.
         if token_amount_ui > epsilon {
-            if let Some(router_str) = Some(Self::infer_swap_router(transaction)) {
+            if let Some(router_str) = Some(infer_swap_router(transaction)) {
                 let router_lc = router_str.to_ascii_lowercase();
                 let is_router_jup_or_pump = router_lc == "jupiter" || router_lc == "pumpfun";
                 if is_router_jup_or_pump && sol_change > epsilon {
@@ -2506,7 +2491,7 @@ impl TransactionProcessor {
             );
         }
 
-        let router = Self::infer_swap_router(transaction);
+        let router = infer_swap_router(transaction);
 
         if self.debug_enabled {
             log(LogTag::Transactions, "SWAP_CALC_DEBUG", &format!("Router detected: {}", router));
@@ -4038,7 +4023,7 @@ impl TransactionProcessor {
                 let destination_is_mev = info
                     .get("destination")
                     .and_then(|v| v.as_str())
-                    .map(|addr| Self::is_mev_tip_address(addr))
+                    .map(|addr| is_mev_tip_address(addr))
                     .unwrap_or(false);
 
                 if mint_is_wsol && authority_is_wallet && !destination_is_mev {
@@ -5438,26 +5423,6 @@ impl TransactionProcessor {
             .into_iter()
             .filter(|a| *a > 0.0 && a.is_finite())
             .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-    }
-
-    fn infer_swap_router(transaction: &Transaction) -> String {
-        // First, try to detect router from program IDs (more reliable)
-        for instruction in &transaction.instructions {
-            if
-                let Some(router) = program_ids::detect_router_from_program_id(
-                    &instruction.program_id
-                )
-            {
-                return router.to_string();
-            }
-        }
-
-        // Fallback to log message detection
-        if let Some(router) = program_ids::detect_router_from_logs(&transaction.log_messages) {
-            return router.to_string();
-        }
-
-        "unknown".to_string()
     }
 
     // Simple fallback: find largest inner Token transferChecked of WSOL with authority == wallet

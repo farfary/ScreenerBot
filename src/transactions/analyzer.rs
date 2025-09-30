@@ -9,9 +9,8 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 
 use crate::logger::{ log, LogTag };
-use crate::pools::types::{ PUMP_FUN_AMM_PROGRAM_ID, PUMP_FUN_LEGACY_PROGRAM_ID };
 use crate::tokens::{ decimals::lamports_to_sol, get_token_decimals_sync };
-use crate::transactions::{ types::*, utils::* };
+use crate::transactions::{ program_ids::*, types::*, utils::* };
 
 // =============================================================================
 // ANALYSIS RESULT STRUCTURES
@@ -298,65 +297,54 @@ async fn analyze_instructions(transaction: &Transaction) -> Result<InstructionAn
 async fn detect_dex_operations(
     transaction: &Transaction
 ) -> Result<Option<DexRouterDetection>, String> {
-    // Check for Jupiter router
-    if let Some(jupiter_detection) = detect_jupiter_swap(transaction).await? {
-        return Ok(Some(jupiter_detection));
+    // Try to detect router from program IDs first (more reliable)
+    for instruction in &transaction.instructions {
+        if let Some(router) = detect_router_from_program_id(&instruction.program_id) {
+            return Ok(
+                Some(DexRouterDetection {
+                    router_name: router.to_string(),
+                    program_id: instruction.program_id.clone(),
+                    confidence: 0.9,
+                    swap_details: None, // Will be populated by swap detection if needed
+                })
+            );
+        }
     }
 
-    // Check for Raydium
-    if let Some(raydium_detection) = detect_raydium_swap(transaction).await? {
-        return Ok(Some(raydium_detection));
-    }
-
-    // Check for Orca
-    if let Some(orca_detection) = detect_orca_swap(transaction).await? {
-        return Ok(Some(orca_detection));
-    }
-
-    // Check for PumpFun
-    if let Some(pumpfun_detection) = detect_pumpfun_swap(transaction).await? {
-        return Ok(Some(pumpfun_detection));
+    // Fallback to log message detection
+    if let Some(router) = detect_router_from_logs(&transaction.log_messages) {
+        return Ok(
+            Some(DexRouterDetection {
+                router_name: router.to_string(),
+                program_id: "unknown".to_string(),
+                confidence: 0.7,
+                swap_details: None,
+            })
+        );
     }
 
     Ok(None)
 }
 
-/// Detect Jupiter swap operations
-async fn detect_jupiter_swap(
-    transaction: &Transaction
-) -> Result<Option<DexRouterDetection>, String> {
-    // Check for Jupiter program ID and swap patterns
-    // This is a placeholder - full implementation would parse instructions and logs
-    Ok(None)
-}
+// =============================================================================
+// ROUTER DETECTION AND INFERENCE
+// =============================================================================
 
-/// Detect Raydium swap operations
-async fn detect_raydium_swap(
-    transaction: &Transaction
-) -> Result<Option<DexRouterDetection>, String> {
-    // Check for Raydium program IDs and swap patterns
-    // This is a placeholder - full implementation would parse instructions and logs
-    Ok(None)
-}
+/// Infer swap router from transaction instructions and logs
+pub fn infer_swap_router(transaction: &Transaction) -> String {
+    // First, try to detect router from program IDs (more reliable)
+    for instruction in &transaction.instructions {
+        if let Some(router) = detect_router_from_program_id(&instruction.program_id) {
+            return router.to_string();
+        }
+    }
 
-/// Detect Orca swap operations
-async fn detect_orca_swap(transaction: &Transaction) -> Result<Option<DexRouterDetection>, String> {
-    // Check for Orca program IDs and swap patterns
-    // This is a placeholder - full implementation would parse instructions and logs
-    Ok(None)
-}
+    // Fallback to log message detection
+    if let Some(router) = detect_router_from_logs(&transaction.log_messages) {
+        return router.to_string();
+    }
 
-/// Detect PumpFun swap operations
-async fn detect_pumpfun_swap(
-    transaction: &Transaction
-) -> Result<Option<DexRouterDetection>, String> {
-    // Check for PumpFun program IDs
-    let program_ids = [PUMP_FUN_AMM_PROGRAM_ID, PUMP_FUN_LEGACY_PROGRAM_ID];
-
-    // This is a placeholder - full implementation would parse instructions and logs
-    // to detect PumpFun-specific swap patterns
-
-    Ok(None)
+    "unknown".to_string()
 }
 
 // =============================================================================

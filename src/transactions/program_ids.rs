@@ -130,3 +130,24 @@ pub fn is_dex_aggregator_program_id(program_id: &str) -> bool {
         JUPITER_V6_PROGRAM_ID | JUPITER_V4_PROGRAM_ID | JUPITER_V3_PROGRAM_ID | GMGN_PROGRAM_ID
     )
 }
+
+// =============================================================================
+// MEV AND PRIORITY FEE ADDRESSES
+// =============================================================================
+
+/// Known MEV/Jito tip addresses that should be excluded from swap calculations
+pub const KNOWN_MEV_TIP_ADDRESSES: &[&str] = &[
+    "BB5dnY55FXS1e1NXqZDwCzgdYJdMCj3B92PU6Q5Fb6DT", // Jito tip address
+    "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5", // Jito tip address
+    "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe", // Jito tip address
+    "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY", // Jito tip address
+    "ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49", // Jito tip address
+    "DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh", // Jito tip address
+    "ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt", // Jito tip address
+    "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL", // Jito tip address
+];
+
+/// Check if an address is a known MEV/Jito tip address
+pub fn is_mev_tip_address(address: &str) -> bool {
+    KNOWN_MEV_TIP_ADDRESSES.contains(&address)
+}
