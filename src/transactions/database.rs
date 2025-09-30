@@ -520,6 +520,43 @@ impl TransactionDatabase {
 // =============================================================================
 
 impl TransactionDatabase {
+    /// Load raw transaction JSON blob and deserialize into TransactionDetails (cache-first path)
+    pub async fn get_raw_transaction_details(
+        &self,
+        signature: &str
+    ) -> Result<Option<crate::rpc::TransactionDetails>, String> {
+        let conn = self.get_connection()?;
+
+        let result: rusqlite::Result<Option<String>> = conn
+            .query_row(
+                "SELECT raw_transaction_data FROM raw_transactions WHERE signature = ?1",
+                params![signature],
+                |row| row.get(0)
+            )
+            .optional();
+
+        match result {
+            Ok(Some(json_str)) => {
+                if json_str.trim().is_empty() {
+                    return Ok(None);
+                }
+                match serde_json::from_str::<crate::rpc::TransactionDetails>(&json_str) {
+                    Ok(details) => Ok(Some(details)),
+                    Err(e) =>
+                        Err(
+                            format!(
+                                "Failed to deserialize cached raw transaction for {}: {}",
+                                signature,
+                                e
+                            )
+                        ),
+                }
+            }
+            Ok(None) => Ok(None),
+            Err(e) => Err(format!("Failed to read cached raw transaction: {}", e)),
+        }
+    }
+
     /// Store raw transaction data
     pub async fn store_raw_transaction(&self, transaction: &Transaction) -> Result<(), String> {
         let debug = is_debug_transactions_enabled();
@@ -738,11 +775,7 @@ impl TransactionDatabase {
                     log(
                         LogTag::Transactions,
                         "DB_HIT",
-                        &format!(
-                            "Cache hit for {} (status={:?})",
-                            signature,
-                            transaction.status
-                        )
+                        &format!("Cache hit for {} (status={:?})", signature, transaction.status)
                     );
                 }
                 Ok(Some(transaction))
