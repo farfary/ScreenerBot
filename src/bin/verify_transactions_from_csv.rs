@@ -79,6 +79,10 @@ struct Args {
     /// Print full raw transaction JSON when using --single
     #[arg(long)]
     raw: bool,
+
+    /// Only show mismatches where difference is greater than this percentage (e.g., 1.0 for 1%)
+    #[arg(long, value_name = "PERCENT", default_value = "0.0")]
+    min_mismatch_percent: f64,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -339,7 +343,11 @@ async fn main() -> Result<()> {
 
             match processor.process_transaction(&row.signature).await {
                 Ok(transaction) => {
-                    let outcome = compare_row_with_transaction(&row, &transaction);
+                    let outcome = compare_row_with_transaction(
+                        &row,
+                        &transaction,
+                        args.min_mismatch_percent
+                    );
                     if outcome.matched {
                         stats.matched += 1;
                         if !args.mismatches_only {
@@ -389,6 +397,10 @@ async fn main() -> Result<()> {
         stats.processing_failures.to_string().red()
     });
 
+    if args.min_mismatch_percent > 0.0 {
+        println!("  Min mismatch threshold: {}%", args.min_mismatch_percent.to_string().cyan());
+    }
+
     if stats.mismatched > 0 {
         println!(
             "\n{}",
@@ -429,7 +441,11 @@ fn group_rows_by_wallet(rows: Vec<CsvSwapRow>) -> HashMap<String, Vec<CsvSwapRow
     grouped
 }
 
-fn compare_row_with_transaction(row: &CsvSwapRow, transaction: &Transaction) -> ComparisonOutcome {
+fn compare_row_with_transaction(
+    row: &CsvSwapRow,
+    transaction: &Transaction,
+    min_mismatch_percent: f64
+) -> ComparisonOutcome {
     let mut issues = Vec::new();
 
     if !transaction.success {
@@ -444,7 +460,7 @@ fn compare_row_with_transaction(row: &CsvSwapRow, transaction: &Transaction) -> 
     let pnl_info = transaction.swap_pnl_info.clone();
 
     if let Some(ref swap) = swap_info {
-        if let Err(err) = verify_swap_amounts(row, swap, &pnl_info) {
+        if let Err(err) = verify_swap_amounts(row, swap, &pnl_info, min_mismatch_percent) {
             issues.push(err);
         }
 
@@ -545,7 +561,8 @@ fn verify_swap_orientation(row: &CsvSwapRow, swap: &TokenSwapInfo) -> Result<(),
 fn verify_swap_amounts(
     row: &CsvSwapRow,
     swap: &TokenSwapInfo,
-    pnl_info: &Option<SwapPnLInfo>
+    pnl_info: &Option<SwapPnLInfo>,
+    min_mismatch_percent: f64
 ) -> Result<(), String> {
     let decimals1 = decimals_or_default(&row.token1, row.token_decimals1)?;
     let decimals2 = decimals_or_default(&row.token2, row.token_decimals2)?;
@@ -565,32 +582,46 @@ fn verify_swap_amounts(
     let input_diff = ((expected_input_raw as i128) - actual_input_raw).abs();
     let output_diff = ((expected_output_raw as i128) - actual_output_raw).abs();
 
+    // Calculate percentage differences
+    let input_percent_diff = if expected_input_raw > 0 {
+        ((input_diff as f64) / (expected_input_raw as f64)) * 100.0
+    } else {
+        0.0
+    };
+    let output_percent_diff = if expected_output_raw > 0 {
+        ((output_diff as f64) / (expected_output_raw as f64)) * 100.0
+    } else {
+        0.0
+    };
+
     // Base tolerances by decimals (strict; no WSOL special-casing)
     let input_allowed = tolerance_for_decimals(decimals1);
     let output_allowed = tolerance_for_decimals(decimals2);
 
-    if input_diff > (input_allowed as i128) {
+    if input_diff > (input_allowed as i128) && input_percent_diff >= min_mismatch_percent {
         return Err(
             format!(
-                "Input amount mismatch: expected {} (raw {}), got {} (raw {}), diff {}",
+                "Input amount mismatch: expected {} (raw {}), got {} (raw {}), diff {} ({:.2}%)",
                 format_ui_amount(expected_input_raw, decimals1),
                 expected_input_raw,
                 format_ui_amount(actual_input_raw as u128, decimals1),
                 actual_input_raw,
-                input_diff
+                input_diff,
+                input_percent_diff
             )
         );
     }
 
-    if output_diff > (output_allowed as i128) {
+    if output_diff > (output_allowed as i128) && output_percent_diff >= min_mismatch_percent {
         return Err(
             format!(
-                "Output amount mismatch: expected {} (raw {}), got {} (raw {}), diff {}",
+                "Output amount mismatch: expected {} (raw {}), got {} (raw {}), diff {} ({:.2}%)",
                 format_ui_amount(expected_output_raw, decimals2),
                 expected_output_raw,
                 format_ui_amount(actual_output_raw as u128, decimals2),
                 actual_output_raw,
-                output_diff
+                output_diff,
+                output_percent_diff
             )
         );
     }
