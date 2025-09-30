@@ -17,6 +17,7 @@ use std::collections::HashMap;
 
 use crate::logger::{ log, LogTag };
 use crate::tokens::{ decimals::lamports_to_sol, get_token_decimals_sync };
+use crate::utils::sol_to_lamports;
 use crate::transactions::{ types::*, utils::* };
 
 // =============================================================================
@@ -360,7 +361,9 @@ async fn filter_noise_transfers(
 
     // Process SOL changes
     for change in sol_changes.values() {
-        if is_rent_amount(change.change.abs() as u64) {
+        // Convert SOL amount back to lamports for rent pattern matching
+        let change_lamports = sol_to_lamports(change.change.abs());
+        if is_rent_amount(change_lamports) {
             total_rent += change.change.abs();
             continue;
         }
@@ -414,7 +417,14 @@ async fn filter_noise_transfers(
 
 /// Check if amount matches known rent patterns
 fn is_rent_amount(lamports: u64) -> bool {
-    COMMON_RENT_AMOUNTS.contains(&lamports)
+    // Consider close matches around known rent amounts to account for rent param variance and residuals
+    const TOLERANCE: i64 = 150_000; // ~0.00015 SOL
+    for known in COMMON_RENT_AMOUNTS {
+        if ((lamports as i64) - (*known as i64)).abs() <= TOLERANCE {
+            return true;
+        }
+    }
+    false
 }
 
 /// Check if transfer is likely a tip to MEV/Jito

@@ -451,14 +451,40 @@ impl TransactionProcessor {
                         input_raw = (token_abs * scale).round().clamp(0.0, u64::MAX as f64) as u64;
 
                         let sol_abs = sol_change_wallet.or(sol_change_any).unwrap_or(0.0).abs();
-                        output_ui = sol_abs;
-                        output_raw = (sol_abs * 1_000_000_000.0)
+                        // Wallet SOL delta for sells = swap_output - base_fee - priority_fee - tips + rent_recovered
+                        // To get pure swap output, add fees back and subtract rent recovered.
+                        let fb = &analysis.pnl.fee_breakdown;
+                        let rent_recovered = analysis.ata.rent_summary.total_rent_recovered;
+                        let sol_from_swap = (
+                            sol_abs +
+                            fb.base_fee +
+                            fb.priority_fee +
+                            fb.mev_tips -
+                            rent_recovered
+                        ).max(0.0);
+                        output_ui = sol_from_swap;
+                        output_raw = (sol_from_swap * 1_000_000_000.0)
                             .round()
                             .clamp(0.0, u64::MAX as f64) as u64;
+
+                        if self.debug_enabled {
+                            log(
+                                LogTag::Transactions,
+                                "MAP_SWAP_TOKEN_TO_SOL_DETAIL",
+                                &format!(
+                                    "sol_change_wallet={:.9} + fees({:.9}+{:.9}+{:.9}) - rent_recovered({:.9}) => output_ui={:.9}",
+                                    sol_abs,
+                                    fb.base_fee,
+                                    fb.priority_fee,
+                                    fb.mev_tips,
+                                    rent_recovered,
+                                    output_ui
+                                )
+                            );
+                        }
                     }
                     crate::transactions::analyzer::classify::SwapDirection::TokenToToken => {
                         swap_type_str = "token_to_token";
-                        // For token-to-token, use primary as input and try to infer secondary from classification
                         input_mint = primary_mint.clone();
                         output_mint = analysis.classification.secondary_token
                             .clone()
@@ -470,6 +496,7 @@ impl TransactionProcessor {
                         input_raw = (token_abs * scale_in)
                             .round()
                             .clamp(0.0, u64::MAX as f64) as u64;
+
                         // Output side unknown without deeper decoding; leave zeros
                         output_ui = 0.0;
                         output_raw = 0;

@@ -210,35 +210,65 @@ async fn extract_from_balance_changes(
         .as_ref()
         .and_then(|m| Some(m.post_balances.as_ref()))
         .unwrap_or(&empty_post_balances);
-    if account_keys.len() != pre_balances.len() || account_keys.len() != post_balances.len() {
-        return Ok(operations); // Skip if lengths don't match
-    }
+    // Align to minimum length to handle LUT keys present in balances
+    let min_len = std::cmp::min(
+        account_keys.len(),
+        std::cmp::min(pre_balances.len(), post_balances.len())
+    );
+    let account_keys = account_keys.into_iter().take(min_len).collect::<Vec<_>>();
+    let pre_balances = pre_balances.into_iter().take(min_len).cloned().collect::<Vec<_>>();
+    let post_balances = post_balances.into_iter().take(min_len).cloned().collect::<Vec<_>>();
 
     for (i, account_key) in account_keys.iter().enumerate() {
         let pre_balance = pre_balances[i];
         let post_balance = post_balances[i];
         let change_lamports = (post_balance as i64) - (pre_balance as i64);
 
-        // Check for rent patterns
-        if let Some(rent_type) = identify_rent_pattern(change_lamports.abs() as u64) {
-            let operation_type = if change_lamports > 0 {
-                if pre_balance == 0 {
-                    AtaOperationType::Create
-                } else {
-                    AtaOperationType::Close // Rent recovery
-                }
-            } else {
-                AtaOperationType::Create // Rent payment
-            };
+        // Check for rent patterns - restrict to ATA accounts by lifecycle heuristics
+        if let Some(_rent_type) = identify_rent_pattern(change_lamports.abs() as u64) {
+            // Classify as Create only when the account was zero before (new account funded with rent)
+            if change_lamports > 0 && pre_balance == 0 {
+                operations.push(AtaOperation {
+                    operation_type: AtaOperationType::Create,
+                    account_address: account_key.clone(),
+                    mint: None,
+                    owner: None,
+                    rent_amount: lamports_to_sol(change_lamports.abs() as u64),
+                    success: true,
+                });
+                log(
+                    LogTag::Transactions,
+                    "ATA_RENT_DETECTED",
+                    &format!(
+                        "account={} change_lamports={} type=Create",
+                        account_key,
+                        change_lamports
+                    )
+                );
+                continue;
+            }
 
-            operations.push(AtaOperation {
-                operation_type,
-                account_address: account_key.clone(),
-                mint: None, // Will be filled from token balance analysis
-                owner: None,
-                rent_amount: lamports_to_sol(change_lamports.abs() as u64),
-                success: true,
-            });
+            // Classify as Close only when the account goes to zero (rent reclaimed on close)
+            if change_lamports < 0 && post_balance == 0 {
+                operations.push(AtaOperation {
+                    operation_type: AtaOperationType::Close,
+                    account_address: account_key.clone(),
+                    mint: None,
+                    owner: None,
+                    rent_amount: lamports_to_sol(change_lamports.abs() as u64),
+                    success: true,
+                });
+                log(
+                    LogTag::Transactions,
+                    "ATA_RENT_DETECTED",
+                    &format!(
+                        "account={} change_lamports={} type=Close",
+                        account_key,
+                        change_lamports
+                    )
+                );
+                continue;
+            }
         }
     }
 
@@ -407,9 +437,9 @@ fn identify_rent_pattern(lamports: u64) -> Option<&'static str> {
         }
     }
 
-    // Check for close matches (within 1000 lamports)
+    // Check for close matches (within ~150k lamports ≈ 0.00015 SOL)
     for (rent_amount, description) in STANDARD_RENTS {
-        if ((lamports as i64) - (*rent_amount as i64)).abs() < 1000 {
+        if ((lamports as i64) - (*rent_amount as i64)).abs() <= 150_000 {
             return Some(description);
         }
     }
@@ -510,19 +540,37 @@ fn calculate_ata_confidence(operations: &[AtaOperation], rent_summary: &RentSumm
 
 /// Extract account keys from transaction message
 fn extract_account_keys(message: &Value) -> Vec<String> {
-    // Legacy format
+    // accountKeys can be:
+    // - array of strings
+    // - array of objects { pubkey, signer, writable, source }
+    // - object { staticAccountKeys, loadedAddresses { writable, readonly } }
     if let Some(array) = message.get("accountKeys").and_then(|v| v.as_array()) {
-        return array
+        // Try strings first
+        let mut keys: Vec<String> = array
             .iter()
-            .filter_map(|v| v.as_str())
-            .map(|s| s.to_string())
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
             .collect();
+        if !keys.is_empty() {
+            return keys;
+        }
+        // Fallback: array of objects with pubkey field
+        keys = array
+            .iter()
+            .filter_map(|v|
+                v
+                    .get("pubkey")
+                    .and_then(|p| p.as_str())
+                    .map(|s| s.to_string())
+            )
+            .collect();
+        return keys;
     }
 
-    // v0 format
+    // v0 format: object with staticAccountKeys and loadedAddresses
     if let Some(obj) = message.get("accountKeys").and_then(|v| v.as_object()) {
         let mut keys = Vec::new();
 
+        // Static account keys
         if let Some(static_keys) = obj.get("staticAccountKeys").and_then(|v| v.as_array()) {
             keys.extend(
                 static_keys
@@ -532,6 +580,7 @@ fn extract_account_keys(message: &Value) -> Vec<String> {
             );
         }
 
+        // Loaded addresses
         if let Some(loaded) = obj.get("loadedAddresses").and_then(|v| v.as_object()) {
             if let Some(writable) = loaded.get("writable").and_then(|v| v.as_array()) {
                 keys.extend(
