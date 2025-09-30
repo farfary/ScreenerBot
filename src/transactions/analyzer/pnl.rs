@@ -117,7 +117,11 @@ pub async fn calculate_pnl(
     classification: &TransactionClass,
     ata_analysis: &AtaAnalysis
 ) -> Result<PnLAnalysis, String> {
-    log(LogTag::PnLAnalyzer, &format!("Calculating P&L for tx: {}", transaction.signature));
+    log(
+        LogTag::Transactions,
+        "PNL_CALCULATE",
+        &format!("Calculating P&L for tx: {}", transaction.signature)
+    );
 
     // Step 1: Calculate fee breakdown
     let fee_breakdown = calculate_fee_breakdown(tx_data, balance_analysis, ata_analysis).await?;
@@ -156,7 +160,7 @@ async fn calculate_fee_breakdown(
     // Base transaction fee
     let base_fee = tx_data.meta
         .as_ref()
-        .map(|m| (m.fee.unwrap_or(0) as f64) / 1_000_000_000.0)
+        .map(|m| (m.fee as f64) / 1_000_000_000.0)
         .unwrap_or(0.0);
 
     // Priority fee and MEV tips from balance analysis
@@ -288,12 +292,19 @@ fn find_corresponding_sol_change(
     balance_analysis: &BalanceAnalysis,
     token_change: &TokenBalanceChange
 ) -> Result<f64, String> {
-    // Find SOL change for the same account
-    if let Some(sol_change) = balance_analysis.sol_changes.get(&token_change.account) {
-        return Ok(sol_change.change);
+    // TODO: Implement proper SOL-token change correlation
+    // For now, use the largest SOL change (heuristic)
+    if
+        let Some(largest_change) = balance_analysis.sol_changes
+            .values()
+            .max_by(|a, b|
+                a.change.abs().partial_cmp(&b.change.abs()).unwrap_or(std::cmp::Ordering::Equal)
+            )
+    {
+        return Ok(largest_change.change);
+    } else {
+        return Err("No SOL changes found".to_string());
     }
-
-    // If not found, use the largest SOL change (heuristic)
     let largest_sol_change = balance_analysis.sol_changes
         .values()
         .max_by(|a, b|

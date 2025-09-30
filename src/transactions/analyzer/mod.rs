@@ -1,14 +1,19 @@
-// Transaction analyzer module - Main coordination and interface
+// Transaction analyzer submodule - Main coordination and interface
 //
-// This module coordinates all transaction analysis components following industry standards:
+// This module provides comprehensive transaction analysis following industry standards:
 // - Balance change extraction (DexScreener methodology)
 // - DEX/router detection (program ID mapping)
 // - Transaction classification (graph-based flow analysis)
-// - ATA operations tracking
+// - ATA operations tracking and rent calculation
 // - P&L calculation with fee adjustments
 // - Pattern detection and risk assessment
 //
-// Architecture: Each analyzer is focused and <400 LOC, with clear interfaces
+// Public API:
+// - TransactionAnalyzer::analyze_transaction() -> CompleteAnalysis (full 6-step pipeline)
+// - TransactionAnalyzer::quick_classify() -> TransactionClass (lightweight for high-frequency)
+//
+// All analysis returns Result<T, String> with structured logging via LogTag.
+// Confidence scoring ranges from Unknown (<0.4) to High (≥0.8).
 
 pub mod balance;
 pub mod dex;
@@ -17,54 +22,59 @@ pub mod ata;
 pub mod pnl;
 pub mod patterns;
 
-use serde_json::Value;
+// Re-export public types for external use
+pub use balance::BalanceAnalysis;
+pub use dex::DexAnalysis;
+pub use classify::TransactionClass;
+pub use ata::AtaAnalysis;
+pub use pnl::PnLAnalysis;
+pub use patterns::PatternAnalysis;
+
+use serde::{ Serialize, Deserialize };
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 
 use crate::logger::{ log, LogTag };
 use crate::transactions::types::*;
 
-use self::{
-    balance::BalanceAnalysis,
-    dex::DexAnalysis,
-    classify::{ TransactionClass, classify_transaction },
-    ata::AtaAnalysis,
-    pnl::PnlAnalysis,
-    patterns::PatternAnalysis,
-};
+use self::{ classify::classify_transaction };
 
 // =============================================================================
-// CORE ANALYZER RESULT TYPES
+// PUBLIC API TYPES
 // =============================================================================
 
-/// Complete transaction analysis result
-#[derive(Debug, Clone)]
+/// Complete transaction analysis result containing all analysis components
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompleteAnalysis {
-    /// Balance change analysis
+    /// Balance change analysis (SOL/SPL transfers, MEV tips, rent filtering)
     pub balance: BalanceAnalysis,
-    /// DEX/router detection
+    /// DEX/router detection (program ID mapping, confidence scoring)
     pub dex: DexAnalysis,
-    /// Transaction classification
+    /// Transaction classification (Buy/Sell/Transfer/AddLiquidity/etc)
     pub classification: TransactionClass,
-    /// ATA operations analysis
+    /// ATA operations analysis (creation/close, rent tracking)
     pub ata: AtaAnalysis,
-    /// Profit/loss calculation
-    pub pnl: PnlAnalysis,
-    /// Pattern detection and risk assessment
+    /// Profit/loss calculation (fee-adjusted, net cost analysis)
+    pub pnl: PnLAnalysis,
+    /// Pattern detection and risk assessment (MEV, wash trading, etc)
     pub patterns: PatternAnalysis,
-    /// Overall analysis confidence
+    /// Overall analysis confidence (weighted across all components)
     pub confidence: AnalysisConfidence,
-    /// Analysis timestamp
+    /// Analysis timestamp (UTC unix timestamp)
     pub analyzed_at: i64,
 }
 
-/// Analysis confidence levels
-#[derive(Debug, Clone, PartialEq)]
+/// Analysis confidence levels with clear thresholds
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AnalysisConfidence {
-    High, // ≥0.8: Strong program ID match + balance validation
-    Medium, // ≥0.6: Program ID or balance match with supporting evidence
-    Low, // ≥0.4: Partial matches or fallback detection
-    Unknown, // <0.4: Insufficient data for reliable classification
+    /// ≥85% weighted confidence: Strong program ID match + balance validation + clear patterns
+    High,
+    /// ≥65% weighted confidence: Program ID or balance match with supporting evidence
+    Medium,
+    /// ≥40% weighted confidence: Partial matches or fallback detection methods
+    Low,
+    /// <40% weighted confidence: Insufficient data for reliable classification
+    Unknown,
 }
 
 // =============================================================================
@@ -89,7 +99,8 @@ impl TransactionAnalyzer {
         tx_data: &crate::rpc::TransactionDetails
     ) -> Result<CompleteAnalysis, String> {
         log(
-            LogTag::TransactionAnalyzer,
+            LogTag::Transactions,
+            "ANALYZE_START",
             &format!("Starting complete analysis for tx: {}", transaction.signature)
         );
 
@@ -106,24 +117,21 @@ impl TransactionAnalyzer {
         // Step 3: Classify transaction
         let classification = classify_transaction(
             transaction,
+            tx_data,
             &balance_analysis,
             &dex_analysis
         ).await?;
 
         // Step 4: Analyze ATA operations
-        let ata_analysis = ata::analyze_ata_operations(
-            transaction,
-            tx_data,
-            &balance_analysis
-        ).await?;
+        let ata_analysis = ata::analyze_ata_operations(transaction, tx_data).await?;
 
         // Step 5: Calculate P&L
         let pnl_analysis = pnl::calculate_pnl(
             transaction,
             tx_data,
             &balance_analysis,
-            &dex_analysis,
-            &classification
+            &classification,
+            &ata_analysis
         ).await?;
 
         // Step 6: Detect patterns and assess risk
@@ -148,7 +156,8 @@ impl TransactionAnalyzer {
         let analyzed_at = chrono::Utc::now().timestamp();
 
         log(
-            LogTag::TransactionAnalyzer,
+            LogTag::Transactions,
+            "ANALYZE_COMPLETE",
             &format!(
                 "Analysis complete for {}: confidence={:?}, patterns={}, classification={:?}",
                 transaction.signature,
@@ -177,14 +186,14 @@ impl TransactionAnalyzer {
         dex_analysis: &DexAnalysis,
         classification: &TransactionClass,
         ata_analysis: &AtaAnalysis,
-        pnl_analysis: &PnlAnalysis,
+        pnl_analysis: &PnLAnalysis,
         pattern_analysis: &PatternAnalysis
     ) -> AnalysisConfidence {
         // Weight each component confidence
         let weights = [
             (balance_analysis.confidence, 0.25),
             (dex_analysis.confidence, 0.2),
-            (classification.confidence, 0.2),
+            (confidence_to_score(&classification.confidence), 0.2),
             (ata_analysis.confidence, 0.1),
             (pnl_analysis.confidence, 0.15),
             (pattern_analysis.confidence, 0.1),
@@ -195,13 +204,7 @@ impl TransactionAnalyzer {
             .map(|(conf, weight)| conf * weight)
             .sum();
 
-        if weighted_sum >= 0.85 {
-            AnalysisConfidence::High
-        } else if weighted_sum >= 0.65 {
-            AnalysisConfidence::Medium
-        } else {
-            AnalysisConfidence::Low
-        }
+        score_to_confidence(weighted_sum)
     }
 
     /// Quick classification for performance-critical paths
@@ -218,7 +221,7 @@ impl TransactionAnalyzer {
             &balance_changes
         ).await?;
 
-        classify::classify_transaction(transaction, &balance_changes, &dex_detection).await
+        classify::classify_transaction(transaction, tx_data, &balance_changes, &dex_detection).await
     }
 }
 
@@ -231,7 +234,7 @@ pub fn is_analysis_reliable(confidence: &AnalysisConfidence) -> bool {
     matches!(confidence, AnalysisConfidence::High | AnalysisConfidence::Medium)
 }
 
-/// Convert confidence to numeric score for comparison
+/// Convert confidence to numeric score for comparison and weighting
 pub fn confidence_to_score(confidence: &AnalysisConfidence) -> f64 {
     match confidence {
         AnalysisConfidence::High => 0.9,
@@ -241,19 +244,13 @@ pub fn confidence_to_score(confidence: &AnalysisConfidence) -> f64 {
     }
 }
 
-/// Combine multiple confidence scores into overall confidence
-pub fn combine_confidence_scores(scores: &[f64]) -> AnalysisConfidence {
-    if scores.is_empty() {
-        return AnalysisConfidence::Unknown;
-    }
-
-    let average = scores.iter().sum::<f64>() / (scores.len() as f64);
-
-    if average >= 0.8 {
+/// Convert numeric confidence score to AnalysisConfidence enum
+pub fn score_to_confidence(score: f64) -> AnalysisConfidence {
+    if score >= 0.85 {
         AnalysisConfidence::High
-    } else if average >= 0.6 {
+    } else if score >= 0.65 {
         AnalysisConfidence::Medium
-    } else if average >= 0.4 {
+    } else if score >= 0.4 {
         AnalysisConfidence::Low
     } else {
         AnalysisConfidence::Unknown

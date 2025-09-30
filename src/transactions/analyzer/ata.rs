@@ -140,7 +140,8 @@ pub async fn analyze_ata_operations(
     tx_data: &crate::rpc::TransactionDetails
 ) -> Result<AtaAnalysis, String> {
     log(
-        LogTag::AtaAnalyzer,
+        LogTag::Transactions,
+        "ATA_ANALYZE",
         &format!("Analyzing ATA operations for tx: {}", transaction.signature)
     );
 
@@ -198,16 +199,17 @@ async fn extract_from_balance_changes(
     let message = &tx_data.transaction.message;
     let account_keys = extract_account_keys(message);
 
+    let empty_pre_balances = Vec::new();
+    let empty_post_balances = Vec::new();
     let pre_balances = tx_data.meta
         .as_ref()
-        .and_then(|m| m.pre_balances.as_ref())
-        .unwrap_or(&Vec::new());
+        .and_then(|m| Some(m.pre_balances.as_ref()))
+        .unwrap_or(&empty_pre_balances);
 
     let post_balances = tx_data.meta
         .as_ref()
-        .and_then(|m| m.post_balances.as_ref())
-        .unwrap_or(&Vec::new());
-
+        .and_then(|m| Some(m.post_balances.as_ref()))
+        .unwrap_or(&empty_post_balances);
     if account_keys.len() != pre_balances.len() || account_keys.len() != post_balances.len() {
         return Ok(operations); // Skip if lengths don't match
     }
@@ -265,14 +267,20 @@ async fn extract_from_instructions(
     if let Some(meta) = &tx_data.meta {
         if let Some(inner_instructions) = &meta.inner_instructions {
             for inner_ix_group in inner_instructions {
-                for inner_ix in &inner_ix_group.instructions {
-                    if
-                        let Some(operation) = analyze_instruction_for_ata(
-                            inner_ix,
-                            &account_keys
-                        ).await?
-                    {
-                        operations.push(operation);
+                if
+                    let Some(instructions) = inner_ix_group
+                        .get("instructions")
+                        .and_then(|v| v.as_array())
+                {
+                    for inner_ix in instructions {
+                        if
+                            let Some(operation) = analyze_instruction_for_ata(
+                                inner_ix,
+                                &account_keys
+                            ).await?
+                        {
+                            operations.push(operation);
+                        }
                     }
                 }
             }

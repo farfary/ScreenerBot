@@ -60,14 +60,6 @@ name = "debug_decimals"
 path = "src/bin/debug_decimals.rs"
 
 [[bin]]
-name = "debug_token_patterns"
-path = "src/bin/debug_token_patterns.rs"
-
-[[bin]]
-name = "validate_transactions_system"
-path = "src/bin/validate_transactions_system.rs"
-
-[[bin]]
 name = "verify_transactions_from_csv"
 path = "src/bin/verify_transactions_from_csv.rs"
 

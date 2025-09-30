@@ -175,7 +175,11 @@ pub async fn detect_patterns(
     dex_analysis: &DexAnalysis,
     classification: &TransactionClass
 ) -> Result<PatternAnalysis, String> {
-    log(LogTag::PatternAnalyzer, &format!("Detecting patterns for tx: {}", transaction.signature));
+    log(
+        LogTag::Transactions,
+        "PATTERNS_DETECT",
+        &format!("Detecting patterns for tx: {}", transaction.signature)
+    );
 
     // Step 1: Detect specific patterns
     let detected_patterns = detect_specific_patterns(
@@ -330,7 +334,7 @@ async fn detect_fee_anomalies(
 
     let base_fee = tx_data.meta
         .as_ref()
-        .map(|m| (m.fee.unwrap_or(0) as f64) / 1_000_000_000.0)
+        .map(|m| (m.fee as f64) / 1_000_000_000.0)
         .unwrap_or(0.0);
 
     // Check for unusually high fees

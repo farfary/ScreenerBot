@@ -118,6 +118,17 @@ fn get_log_patterns() -> HashMap<&'static str, DetectedDex> {
 // =============================================================================
 // MAIN DETECTION FUNCTIONS
 // =============================================================================
+// MAIN PUBLIC FUNCTIONS
+// =============================================================================
+
+/// Main public function for detecting DEX interactions
+pub async fn detect_dex_interactions(
+    transaction: &Transaction,
+    tx_data: &crate::rpc::TransactionDetails,
+    balance_analysis: &BalanceAnalysis
+) -> Result<DexAnalysis, String> {
+    detect_dex_and_router(transaction, tx_data, balance_analysis).await
+}
 
 /// Comprehensive DEX detection with confidence scoring
 pub async fn detect_dex_and_router(
@@ -125,7 +136,11 @@ pub async fn detect_dex_and_router(
     tx_data: &crate::rpc::TransactionDetails,
     balance_analysis: &BalanceAnalysis
 ) -> Result<DexAnalysis, String> {
-    log(LogTag::DexAnalyzer, &format!("Detecting DEX/router for tx: {}", transaction.signature));
+    log(
+        LogTag::Transactions,
+        "DEX_DETECT",
+        &format!("Detecting DEX/router for tx: {}", transaction.signature)
+    );
 
     // Step 1: Extract all program IDs from instructions
     let program_ids = extract_program_ids(tx_data)?;
@@ -204,10 +219,11 @@ fn detect_by_log_parsing(
 ) -> Result<(Option<DetectedDex>, f64), String> {
     let log_patterns = get_log_patterns();
 
+    let empty_logs = Vec::new();
     let logs = tx_data.meta
         .as_ref()
         .and_then(|m| m.log_messages.as_ref())
-        .unwrap_or(&Vec::new());
+        .unwrap_or(&empty_logs);
 
     for log in logs {
         for (pattern, dex) in &log_patterns {
@@ -307,14 +323,20 @@ fn extract_program_ids(tx_data: &crate::rpc::TransactionDetails) -> Result<Vec<S
     if let Some(meta) = &tx_data.meta {
         if let Some(inner_instructions) = &meta.inner_instructions {
             for inner_ix_group in inner_instructions {
-                for inner_ix in &inner_ix_group.instructions {
-                    if
-                        let Some(program_id_index) = inner_ix
-                            .get("programIdIndex")
-                            .and_then(|v| v.as_u64())
-                    {
-                        if let Some(program_id) = account_keys.get(program_id_index as usize) {
-                            program_ids.push(program_id.clone());
+                if
+                    let Some(instructions) = inner_ix_group
+                        .get("instructions")
+                        .and_then(|v| v.as_array())
+                {
+                    for inner_ix in instructions {
+                        if
+                            let Some(program_id_index) = inner_ix
+                                .get("programIdIndex")
+                                .and_then(|v| v.as_u64())
+                        {
+                            if let Some(program_id) = account_keys.get(program_id_index as usize) {
+                                program_ids.push(program_id.clone());
+                            }
                         }
                     }
                 }

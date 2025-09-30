@@ -152,7 +152,8 @@ pub async fn classify_transaction(
     dex_analysis: &DexAnalysis
 ) -> Result<TransactionClass, String> {
     log(
-        LogTag::TransactionClassifier,
+        LogTag::Transactions,
+        "CLASSIFY",
         &format!("Classifying transaction: {}", transaction.signature)
     );
 

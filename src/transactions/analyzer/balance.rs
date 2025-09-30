@@ -92,7 +92,8 @@ pub async fn analyze_balance_changes(
     tx_data: &crate::rpc::TransactionDetails
 ) -> Result<BalanceAnalysis, String> {
     log(
-        LogTag::BalanceAnalyzer,
+        LogTag::Transactions,
+        "BALANCE_ANALYZE",
         &format!("Analyzing balance changes for tx: {}", transaction.signature)
     );
 
@@ -105,6 +106,39 @@ pub async fn analyze_balance_changes(
         &sol_changes,
         &token_changes
     ).await?;
+
+    // Calculate confidence based on data quality
+    let confidence = calculate_balance_confidence(&sol_changes, &token_changes, &clean_transfers);
+
+    Ok(BalanceAnalysis {
+        sol_changes,
+        token_changes,
+        clean_transfers,
+        total_tips,
+        total_rent,
+        confidence,
+    })
+}
+
+/// Main public function for extracting balance changes
+pub async fn extract_balance_changes(
+    transaction: &Transaction,
+    tx_data: &crate::rpc::TransactionDetails
+) -> Result<BalanceAnalysis, String> {
+    log(
+        LogTag::Transactions,
+        "BALANCE_ANALYZE",
+        &format!("Analyzing balance changes for tx: {}", transaction.signature)
+    );
+
+    // Extract all balance changes
+    let sol_changes = extract_sol_balance_changes(transaction, tx_data).await?;
+    let token_changes = extract_token_balance_changes(transaction, tx_data).await?;
+
+    // Simple implementations for now - TODO: Implement proper logic
+    let clean_transfers = Vec::new(); // TODO: Implement transfer extraction
+    let total_tips = 0.0; // TODO: Implement MEV tip calculation
+    let total_rent = 0.0; // TODO: Implement rent calculation
 
     // Calculate confidence based on data quality
     let confidence = calculate_balance_confidence(&sol_changes, &token_changes, &clean_transfers);
@@ -152,18 +186,34 @@ async fn extract_sol_balance_changes(
     let message = &tx_data.transaction.message;
     let account_keys = account_keys_from_message(message);
 
+    log(
+        LogTag::Transactions,
+        "BALANCE_DEBUG",
+        &format!("Extracted {} account keys from message", account_keys.len())
+    );
+
     // Get balance arrays
-    let pre_balances = tx_data.meta
+    let pre_balances: &Vec<u64> = tx_data.meta
         .as_ref()
-        .and_then(|m| m.pre_balances.as_ref())
+        .and_then(|m| Some(m.pre_balances.as_ref()))
         .ok_or("Missing pre_balances in transaction meta")?;
 
-    let post_balances = tx_data.meta
+    let post_balances: &Vec<u64> = tx_data.meta
         .as_ref()
-        .and_then(|m| m.post_balances.as_ref())
+        .and_then(|m| Some(m.post_balances.as_ref()))
         .ok_or("Missing post_balances in transaction meta")?;
 
     if account_keys.len() != pre_balances.len() || account_keys.len() != post_balances.len() {
+        log(
+            LogTag::Transactions,
+            "BALANCE_ERROR",
+            &format!(
+                "Length mismatch - account_keys: {}, pre_balances: {}, post_balances: {}",
+                account_keys.len(),
+                pre_balances.len(),
+                post_balances.len()
+            )
+        );
         return Err("Account keys and balance arrays length mismatch".to_string());
     }
 
@@ -181,7 +231,6 @@ async fn extract_sol_balance_changes(
                 pre_balance: lamports_to_sol(pre_balance),
                 post_balance: lamports_to_sol(post_balance),
                 change: change_sol * (if change_lamports < 0 { -1.0 } else { 1.0 }),
-                change_lamports,
             });
         }
     }
@@ -203,8 +252,10 @@ async fn extract_token_balance_changes(
     let meta = tx_data.meta.as_ref().ok_or("Missing transaction meta")?;
 
     // Process pre/post token balances
-    let pre_token_balances = meta.pre_token_balances.as_ref().unwrap_or(&Vec::new());
-    let post_token_balances = meta.post_token_balances.as_ref().unwrap_or(&Vec::new());
+    let empty_pre_balances = Vec::new();
+    let empty_post_balances = Vec::new();
+    let pre_token_balances = meta.pre_token_balances.as_ref().unwrap_or(&empty_pre_balances);
+    let post_token_balances = meta.post_token_balances.as_ref().unwrap_or(&empty_post_balances);
 
     // Create lookup maps for efficient matching
     let mut pre_map: HashMap<(u32, String), &crate::rpc::UiTokenAmount> = HashMap::new();
@@ -222,8 +273,8 @@ async fn extract_token_balance_changes(
 
     // Find all unique (account_index, mint) combinations
     let mut all_keys: std::collections::HashSet<(u32, String)> = std::collections::HashSet::new();
-    all_keys.extend(pre_map.keys());
-    all_keys.extend(post_map.keys());
+    all_keys.extend(pre_map.keys().cloned());
+    all_keys.extend(post_map.keys().cloned());
 
     let message = &tx_data.transaction.message;
     let account_keys = account_keys_from_message(message);
@@ -246,12 +297,12 @@ async fn extract_token_balance_changes(
             let decimals = get_token_decimals_sync(&mint).unwrap_or(9);
 
             let token_change = TokenBalanceChange {
-                account: account_key.clone(),
                 mint: mint.clone(),
-                pre_balance: pre_ui,
-                post_balance: post_ui,
-                change,
                 decimals,
+                pre_balance: Some(pre_ui),
+                post_balance: Some(post_ui),
+                change,
+                usd_value: None, // Will be calculated later if needed
             };
 
             token_changes.entry(account_key.clone()).or_insert_with(Vec::new).push(token_change);
@@ -276,7 +327,7 @@ async fn filter_noise_transfers(
 
     // Process SOL changes
     for change in sol_changes.values() {
-        if is_rent_amount(change.change_lamports.abs() as u64) {
+        if is_rent_amount(change.change.abs() as u64) {
             total_rent += change.change.abs();
             continue;
         }

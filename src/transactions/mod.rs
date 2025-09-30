@@ -83,11 +83,11 @@ pub use types::ANALYSIS_CACHE_VERSION;
 
 // Public API exports - Analysis and verification
 pub use analyzer::{
-    analyze_transaction,
-    calculate_swap_pnl,
-    classify_transaction_type,
-    detect_swap_operations,
-    infer_swap_router,
+    TransactionAnalyzer,
+    CompleteAnalysis,
+    AnalysisConfidence,
+    is_analysis_reliable,
+    confidence_to_score,
 };
 
 pub use verifier::{
