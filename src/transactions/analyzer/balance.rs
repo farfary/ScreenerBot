@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use crate::logger::{ log, LogTag };
 use crate::tokens::{ decimals::lamports_to_sol, get_token_decimals_sync };
 use crate::utils::sol_to_lamports;
-use crate::transactions::{ types::*, utils::* };
+use crate::transactions::{ types::*, utils::*, program_ids };
 
 // =============================================================================
 // BALANCE ANALYSIS TYPES
@@ -70,15 +70,7 @@ const COMMON_RENT_AMOUNTS: &[u64] = &[
     890880, // Mint account rent
 ];
 
-/// MEV/Jito tip addresses (exclude from swap amounts)
-const MEV_TIP_ADDRESSES: &[&str] = &[
-    "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5", // Jito tip
-    "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe", // Jito tip 2
-    "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY", // Jito tip 3
-    "ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49", // Jito tip 4
-    "DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh", // MEV tip
-    "ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt", // MEV tip 2
-];
+// MEV/Jito tip addresses are centralized in program_ids; reuse that list via helper.
 
 /// Maximum tip amount to consider valid (larger amounts are likely swaps)
 const MAX_TIP_AMOUNT: f64 = 0.01; // 0.01 SOL
@@ -103,10 +95,16 @@ pub async fn analyze_balance_changes(
     let token_changes = extract_token_balance_changes(transaction, tx_data).await?;
 
     // Filter out noise (tips, rent, etc.)
-    let (clean_transfers, total_tips, total_rent) = filter_noise_transfers(
+    let (clean_transfers, total_tips_filtered, total_rent) = filter_noise_transfers(
         &sol_changes,
         &token_changes
     ).await?;
+
+    // Extra safety: detect MEV/Jito tips directly from parsed instructions as well.
+    // Take the max of the two methods to avoid double counting while ensuring we don't miss tips
+    // when balance arrays don't capture destination keys properly.
+    let instr_tips_sol = detect_mev_tips_from_instructions(tx_data).await;
+    let total_tips = total_tips_filtered.max(instr_tips_sol);
 
     // Calculate confidence based on data quality
     let confidence = calculate_balance_confidence(&sol_changes, &token_changes, &clean_transfers);
@@ -429,7 +427,7 @@ fn is_rent_amount(lamports: u64) -> bool {
 
 /// Check if transfer is likely a tip to MEV/Jito
 fn is_tip_transfer(account: &str, amount: f64) -> bool {
-    MEV_TIP_ADDRESSES.contains(&account) && amount <= MAX_TIP_AMOUNT
+    program_ids::is_mev_tip_address(account) && amount <= MAX_TIP_AMOUNT
 }
 
 // =============================================================================
@@ -546,4 +544,55 @@ fn account_keys_from_message(message: &Value) -> Vec<String> {
     }
 
     Vec::new()
+}
+
+// =============================================================================
+// INSTRUCTION-BASED TIP DETECTION (robust)
+// =============================================================================
+
+/// Detect total MEV/Jito tips by scanning parsed outer and inner instructions
+async fn detect_mev_tips_from_instructions(tx_data: &crate::rpc::TransactionDetails) -> f64 {
+    use crate::transactions::program_ids::is_mev_tip_address;
+
+    let mut total_lamports: u64 = 0;
+
+    let mut consider_ix = |ix: &serde_json::Value| {
+        if let Some(parsed) = ix.get("parsed") {
+            if parsed.get("type").and_then(|v| v.as_str()) == Some("transfer") {
+                if let Some(info) = parsed.get("info") {
+                    let dest = info
+                        .get("destination")
+                        .and_then(|v| v.as_str())
+                        .or_else(|| info.get("to").and_then(|v| v.as_str()))
+                        .unwrap_or("");
+                    if is_mev_tip_address(dest) {
+                        if let Some(lamports) = info.get("lamports").and_then(|v| v.as_u64()) {
+                            total_lamports = total_lamports.saturating_add(lamports);
+                        } else if let Some(amount) = info.get("amount").and_then(|v| v.as_u64()) {
+                            total_lamports = total_lamports.saturating_add(amount);
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    if let Some(ixs) = tx_data.transaction.message.get("instructions").and_then(|v| v.as_array()) {
+        for ix in ixs {
+            consider_ix(ix);
+        }
+    }
+    if let Some(meta) = &tx_data.meta {
+        if let Some(inner) = &meta.inner_instructions {
+            for group in inner {
+                if let Some(ixs) = group.get("instructions").and_then(|v| v.as_array()) {
+                    for ix in ixs {
+                        consider_ix(ix);
+                    }
+                }
+            }
+        }
+    }
+
+    (total_lamports as f64) / 1_000_000_000.0
 }

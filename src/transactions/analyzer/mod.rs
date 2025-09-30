@@ -104,8 +104,8 @@ impl TransactionAnalyzer {
             &format!("Starting complete analysis for tx: {}", transaction.signature)
         );
 
-        // Step 1: Extract balance changes
-        let balance_analysis = balance::extract_balance_changes(transaction, tx_data).await?;
+        // Step 1: Extract balance changes (full analyzer for tips/rent detection)
+        let balance_analysis = balance::analyze_balance_changes(transaction, tx_data).await?;
 
         // Step 2: Detect DEX interactions
         let dex_analysis = dex::detect_dex_interactions(

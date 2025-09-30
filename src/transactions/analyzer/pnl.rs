@@ -157,15 +157,140 @@ async fn calculate_fee_breakdown(
     balance_analysis: &BalanceAnalysis,
     ata_analysis: &AtaAnalysis
 ) -> Result<FeeBreakdown, String> {
-    // Base transaction fee
-    let base_fee = tx_data.meta
-        .as_ref()
-        .map(|m| (m.fee as f64) / 1_000_000_000.0)
-        .unwrap_or(0.0);
+    // Base signature fee and priority fee split from meta.fee, with override from ComputeBudget parsing
+    let (mut base_fee, mut priority_fee) = if let Some(meta) = &tx_data.meta {
+        const SIGNATURE_FEE_LAMPORTS: u64 = 5_000; // per-signature base fee
+        let sig_count = tx_data.transaction.signatures.len() as u64;
+        let base_sig_lamports = SIGNATURE_FEE_LAMPORTS.saturating_mul(sig_count);
+        if meta.fee >= base_sig_lamports {
+            let priority_lamports = meta.fee - base_sig_lamports;
+            (
+                (base_sig_lamports as f64) / 1_000_000_000.0,
+                (priority_lamports as f64) / 1_000_000_000.0,
+            )
+        } else {
+            ((meta.fee as f64) / 1_000_000_000.0, 0.0)
+        }
+    } else {
+        (0.0, 0.0)
+    };
 
-    // Priority fee and MEV tips from balance analysis
-    let priority_fee = 0.0; // Would extract from compute budget instructions
-    let mev_tips = balance_analysis.total_tips;
+    // Try to parse ComputeBudget instructions (both parsed and raw) for precise priority fee
+    let mut cu_limit: Option<u64> = None;
+    let mut cu_price_micro_lamports: Option<u64> = None;
+
+    let mut consider_ix = |ix: &serde_json::Value| {
+        // Prefer parsed form if available
+        if let Some(parsed) = ix.get("parsed") {
+            if let Some(ix_type) = parsed.get("type").and_then(|v| v.as_str()) {
+                if let Some(info) = parsed.get("info") {
+                    match ix_type {
+                        "setComputeUnitLimit" => {
+                            if let Some(units) = info.get("units").and_then(|v| v.as_u64()) {
+                                cu_limit = Some(units);
+                            }
+                        }
+                        "setComputeUnitPrice" => {
+                            if let Some(price) = info.get("microLamports").and_then(|v| v.as_u64()) {
+                                cu_price_micro_lamports = Some(price);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            return;
+        }
+
+        // Fall back to raw data decoding when parsed is absent
+        let program_id = ix
+            .get("programId")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if program_id == "ComputeBudget111111111111111111111111111111" {
+            if let Some(data_b58) = ix.get("data").and_then(|v| v.as_str()) {
+                if let Ok(bytes) = bs58::decode(data_b58).into_vec() {
+                    // Tags based on Solana ComputeBudget program:
+                    // 2 = SetComputeUnitLimit { units: u32 }
+                    // 3 = SetComputeUnitPrice { micro_lamports: u64 }
+                    if let Some((&tag, rest)) = bytes.split_first() {
+                        match tag {
+                            2 => {
+                                if rest.len() >= 4 {
+                                    let units = u32::from_le_bytes([
+                                        rest[0],
+                                        rest[1],
+                                        rest[2],
+                                        rest[3],
+                                    ]) as u64;
+                                    cu_limit = Some(units);
+                                }
+                            }
+                            3 => {
+                                if rest.len() >= 8 {
+                                    let price = u64::from_le_bytes([
+                                        rest[0],
+                                        rest[1],
+                                        rest[2],
+                                        rest[3],
+                                        rest[4],
+                                        rest[5],
+                                        rest[6],
+                                        rest[7],
+                                    ]);
+                                    cu_price_micro_lamports = Some(price);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    if let Some(ixs) = tx_data.transaction.message.get("instructions").and_then(|v| v.as_array()) {
+        for ix in ixs {
+            consider_ix(ix);
+        }
+    }
+    if let Some(meta) = &tx_data.meta {
+        if let Some(inner) = &meta.inner_instructions {
+            for group in inner {
+                if let Some(ixs) = group.get("instructions").and_then(|v| v.as_array()) {
+                    for ix in ixs {
+                        consider_ix(ix);
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(price_micro) = cu_price_micro_lamports {
+        // Use computeUnitsConsumed if available; else fall back to set limit
+        let units = tx_data.meta
+            .as_ref()
+            .and_then(|m| m.compute_units_consumed)
+            .or(cu_limit)
+            .unwrap_or(0);
+        let prio_lamports = price_micro.saturating_mul(units) / 1_000_000; // micro-lamports -> lamports
+        priority_fee = (prio_lamports as f64) / 1_000_000_000.0;
+        // Recompute base fee from total meta.fee if available
+        if let Some(meta) = &tx_data.meta {
+            let total = (meta.fee as f64) / 1_000_000_000.0;
+            // Ensure non-negative base
+            base_fee = (total - priority_fee).max(0.0);
+        }
+    }
+    // MEV tips detected from explicit system transfers to known tip accounts
+    // Prefer balance analysis value; if zero, fall back to instruction scan
+    let mut mev_tips = balance_analysis.total_tips;
+    if mev_tips <= f64::EPSILON {
+        let scanned = detect_mev_tips_from_instructions(tx_data);
+        if scanned > 0.0 {
+            mev_tips = scanned;
+        }
+    }
 
     // DEX swap fees (estimated based on platform)
     let swap_fees = estimate_swap_fees(balance_analysis, tx_data).await?;
@@ -173,7 +298,7 @@ async fn calculate_fee_breakdown(
     // ATA rent costs
     let rent_costs = ata_analysis.rent_summary.net_rent_cost;
 
-    let total_fees = base_fee + priority_fee + mev_tips + swap_fees + rent_costs;
+    let total_fees = base_fee + priority_fee + mev_tips + rent_costs + swap_fees;
 
     Ok(FeeBreakdown {
         base_fee,
@@ -183,6 +308,49 @@ async fn calculate_fee_breakdown(
         rent_costs,
         total_fees,
     })
+}
+
+/// Detect total MEV/Jito tips by scanning parsed outer and inner instructions (dup from balance)
+fn detect_mev_tips_from_instructions(tx_data: &crate::rpc::TransactionDetails) -> f64 {
+    use crate::transactions::program_ids::is_mev_tip_address;
+    let mut total_lamports: u64 = 0;
+    let mut consider_ix = |ix: &serde_json::Value| {
+        if let Some(parsed) = ix.get("parsed") {
+            if parsed.get("type").and_then(|v| v.as_str()) == Some("transfer") {
+                if let Some(info) = parsed.get("info") {
+                    let dest = info
+                        .get("destination")
+                        .and_then(|v| v.as_str())
+                        .or_else(|| info.get("to").and_then(|v| v.as_str()))
+                        .unwrap_or("");
+                    if is_mev_tip_address(dest) {
+                        if let Some(lamports) = info.get("lamports").and_then(|v| v.as_u64()) {
+                            total_lamports = total_lamports.saturating_add(lamports);
+                        } else if let Some(amount) = info.get("amount").and_then(|v| v.as_u64()) {
+                            total_lamports = total_lamports.saturating_add(amount);
+                        }
+                    }
+                }
+            }
+        }
+    };
+    if let Some(ixs) = tx_data.transaction.message.get("instructions").and_then(|v| v.as_array()) {
+        for ix in ixs {
+            consider_ix(ix);
+        }
+    }
+    if let Some(meta) = &tx_data.meta {
+        if let Some(inner) = &meta.inner_instructions {
+            for group in inner {
+                if let Some(ixs) = group.get("instructions").and_then(|v| v.as_array()) {
+                    for ix in ixs {
+                        consider_ix(ix);
+                    }
+                }
+            }
+        }
+    }
+    (total_lamports as f64) / 1_000_000_000.0
 }
 
 /// Estimate swap fees based on DEX and transaction patterns

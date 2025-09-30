@@ -108,6 +108,8 @@ pub struct TransactionMeta {
     #[serde(rename = "postTokenBalances")]
     pub post_token_balances: Option<Vec<TokenBalance>>,
     pub fee: u64,
+    #[serde(rename = "computeUnitsConsumed")]
+    pub compute_units_consumed: Option<u64>,
     #[serde(rename = "logMessages")]
     pub log_messages: Option<Vec<String>>,
     #[serde(rename = "innerInstructions")]
@@ -3415,6 +3417,9 @@ impl RpcClient {
                             .get("fee")
                             .and_then(|f| f.as_u64())
                             .unwrap_or(0),
+                        compute_units_consumed: meta_value
+                            .get("computeUnitsConsumed")
+                            .and_then(|v| v.as_u64()),
                         pre_balances: meta_value
                             .get("preBalances")
                             .and_then(|pb| pb.as_array())
