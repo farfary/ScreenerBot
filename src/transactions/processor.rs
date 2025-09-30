@@ -3599,6 +3599,33 @@ impl TransactionProcessor {
 
         // Final adjustments for common issues not detected by other methods
         if is_buy {
+            // If the detected WSOL input includes the standard ATA rent tail, strip it.
+            // This triggers only when removing 2,039,280 lamports results in a clean multiple
+            // of 0.001 SOL (1,000,000 lamports), matching common intention (e.g., 0.005 SOL).
+            {
+                const STANDARD_ATA_RENT: u64 = 2_039_280;
+                let input_lamports = (sol_spent_effective * 1_000_000_000.0).round() as u64;
+                if input_lamports > STANDARD_ATA_RENT {
+                    let adjusted = input_lamports.saturating_sub(STANDARD_ATA_RENT);
+                    if adjusted % 1_000_000 == 0 {
+                        let before = sol_spent_effective;
+                        sol_spent_effective = (adjusted as f64) / 1_000_000_000.0;
+                        if self.debug_enabled {
+                            log(
+                                LogTag::Transactions,
+                                "RENT_TAIL_ADJUST",
+                                &format!(
+                                    "{}: Stripped ATA rent tail: {:.9} -> {:.9} SOL (removed {} lamports)",
+                                    &transaction.signature,
+                                    before,
+                                    sol_spent_effective,
+                                    STANDARD_ATA_RENT
+                                )
+                            );
+                        }
+                    }
+                }
+            }
             // If we already used an exact WSOL amount, do not mutate it with tip rounding heuristics
             if used_exact_wsol {
                 // skip final tip adjustment when we have precise WSOL spend
@@ -4724,6 +4751,7 @@ impl TransactionProcessor {
         // This yields the true WSOL input without rent contamination.
         if !sync_native_accounts.is_empty() {
             const SYSTEM_PROGRAM_ID: &str = "11111111111111111111111111111111";
+            const STANDARD_ATA_RENT: u64 = 2_039_280;
 
             // Helper to accumulate lamports sent from wallet to a given destination account and track createAccount rent
             let mut accumulate_for_dest = |dest: &str| -> (u64, u64) {
@@ -4934,10 +4962,59 @@ impl TransactionProcessor {
                 if funded == 0 {
                     continue;
                 }
-                let amount = if create_lamports > 0 {
-                    funded.saturating_sub(create_lamports)
-                } else {
-                    funded
+                // If the SyncNative account had zero pre-balance this tx, the wallet likely funded
+                // both the intended WSOL amount and the rent-exempt minimum via System transfers.
+                // In that case subtract the standard rent to get the pure swap input, even when
+                // no createAccount lamports were observed (allocate+assign+transfer path).
+                let amount = {
+                    // Resolve account index to inspect pre/post lamports
+                    let mut resolved = None;
+                    if
+                        let Some(account_keys_arr) = raw
+                            .get("transaction")
+                            .and_then(|tx| tx.get("message"))
+                            .and_then(|m| m.get("accountKeys"))
+                            .and_then(|v| v.as_array())
+                    {
+                        for (idx, entry) in account_keys_arr.iter().enumerate() {
+                            let key_opt = if let Some(s) = entry.as_str() {
+                                Some(s.to_string())
+                            } else {
+                                entry
+                                    .get("pubkey")
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| s.to_string())
+                            };
+                            if let Some(k) = key_opt {
+                                if &k == acc {
+                                    resolved = Some(idx);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if let Some(idx) = resolved {
+                        let pre = raw
+                            .get("meta")
+                            .and_then(|m| m.get("preBalances"))
+                            .and_then(|v| v.as_array())
+                            .and_then(|arr| arr.get(idx))
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0);
+
+                        if pre == 0 && funded > STANDARD_ATA_RENT {
+                            funded.saturating_sub(STANDARD_ATA_RENT)
+                        } else if create_lamports > 0 {
+                            funded.saturating_sub(create_lamports)
+                        } else {
+                            funded
+                        }
+                    } else if create_lamports > 0 {
+                        funded.saturating_sub(create_lamports)
+                    } else {
+                        funded
+                    }
                 };
                 if amount > best_candidate_lamports {
                     best_candidate_lamports = amount;
@@ -5003,7 +5080,63 @@ impl TransactionProcessor {
                                                         .get("lamports")
                                                         .and_then(|v| v.as_u64())
                                                 {
-                                                    let val = (lamports as f64) / 1_000_000_000.0;
+                                                    // If the destination account had zero pre-balance, subtract rent minimum
+                                                    let adjusted_lamports = {
+                                                        // Resolve index for destination
+                                                        let mut idx_opt = None;
+                                                        if
+                                                            let Some(keys_arr) = raw
+                                                                .get("transaction")
+                                                                .and_then(|tx| tx.get("message"))
+                                                                .and_then(|m| m.get("accountKeys"))
+                                                                .and_then(|v| v.as_array())
+                                                        {
+                                                            for (i, entry) in keys_arr
+                                                                .iter()
+                                                                .enumerate() {
+                                                                let key_opt = if
+                                                                    let Some(s) = entry.as_str()
+                                                                {
+                                                                    Some(s.to_string())
+                                                                } else {
+                                                                    entry
+                                                                        .get("pubkey")
+                                                                        .and_then(|v| v.as_str())
+                                                                        .map(|s| s.to_string())
+                                                                };
+                                                                if let Some(k) = key_opt {
+                                                                    if k == dest {
+                                                                        idx_opt = Some(i);
+                                                                        break;
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                        if let Some(idx) = idx_opt {
+                                                            let pre = raw
+                                                                .get("meta")
+                                                                .and_then(|m| m.get("preBalances"))
+                                                                .and_then(|v| v.as_array())
+                                                                .and_then(|arr| arr.get(idx))
+                                                                .and_then(|v| v.as_u64())
+                                                                .unwrap_or(0);
+                                                            if
+                                                                pre == 0 &&
+                                                                lamports > STANDARD_ATA_RENT
+                                                            {
+                                                                lamports.saturating_sub(
+                                                                    STANDARD_ATA_RENT
+                                                                )
+                                                            } else {
+                                                                lamports
+                                                            }
+                                                        } else {
+                                                            lamports
+                                                        }
+                                                    };
+                                                    let val =
+                                                        (adjusted_lamports as f64) /
+                                                        1_000_000_000.0;
                                                     best = Some(match best {
                                                         Some(b) => b.max(val),
                                                         None => val,
