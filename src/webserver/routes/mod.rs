@@ -11,6 +11,10 @@ pub mod status;
 pub mod tokens;
 pub mod events;
 pub mod positions;
+pub mod dashboard;
+pub mod wallet;
+pub mod blacklist;
+pub mod config;
 
 /// Create the main API router with all routes
 pub fn create_router(state: Arc<AppState>) -> Router {
@@ -73,7 +77,11 @@ async fn api_info() -> Json<serde_json::Value> {
             "events": "GET /api/v1/events",
             "events_categories": "GET /api/v1/events/categories",
             "positions": "GET /api/v1/positions",
-            "positions_stats": "GET /api/v1/positions/stats"
+            "positions_stats": "GET /api/v1/positions/stats",
+            "dashboard_overview": "GET /api/v1/dashboard/overview",
+            "wallet_current": "GET /api/v1/wallet/current",
+            "blacklist_stats": "GET /api/v1/blacklist/stats",
+            "trading_config": "GET /api/v1/trading/config"
         },
         "documentation": "See docs/webserver-dashboard-api.md for full API documentation",
         "timestamp": chrono::Utc::now().to_rfc3339()
@@ -88,4 +96,8 @@ fn api_v1_routes() -> Router<Arc<AppState>> {
         .merge(tokens::routes())
         .merge(events::routes())
         .merge(positions::routes())
+        .merge(dashboard::routes())
+        .merge(wallet::routes())
+        .merge(blacklist::routes())
+        .merge(config::routes())
 }

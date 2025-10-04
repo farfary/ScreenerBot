@@ -1427,60 +1427,143 @@ fn theme_scripts() -> &'static str {
 pub fn home_content() -> String {
     r#"
     <div class="grid">
+        <!-- Trading Overview Card -->
         <div class="card">
             <div class="card-header">
-                <span class="card-icon">📊</span>
-                <span class="card-title">Quick Stats</span>
+                <span class="card-icon">�</span>
+                <span class="card-title">Trading Overview</span>
             </div>
             <div class="metric-row">
-                <span class="metric-label">Version</span>
-                <span class="metric-value">0.1.0</span>
+                <span class="metric-label">Open Positions</span>
+                <span class="metric-value loading-text" id="openPositions">--</span>
             </div>
             <div class="metric-row">
-                <span class="metric-label">Phase</span>
-                <span class="metric-value">Phase 1 - Status</span>
+                <span class="metric-label">Total Invested</span>
+                <span class="metric-value loading-text" id="totalInvested">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Total P&L</span>
+                <span class="metric-value loading-text" id="totalPnl">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Win Rate</span>
+                <span class="metric-value loading-text" id="winRate">--</span>
+            </div>
+        </div>
+        
+        <!-- Wallet Status Card -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-icon">�</span>
+                <span class="card-title">Wallet Status</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">SOL Balance</span>
+                <span class="metric-value loading-text" id="solBalance">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Token Holdings</span>
+                <span class="metric-value loading-text" id="tokenCount">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Last Updated</span>
+                <span class="metric-value loading-text" id="walletUpdated">--</span>
+            </div>
+        </div>
+        
+        <!-- System Health Card -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-icon">⚙️</span>
+                <span class="card-title">System Health</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Services</span>
+                <span class="metric-value loading-text" id="servicesStatus">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">RPC Calls/sec</span>
+                <span class="metric-value loading-text" id="rpcRate">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Memory</span>
+                <span class="metric-value loading-text" id="memoryUsage">--</span>
             </div>
             <div class="metric-row">
                 <span class="metric-label">Uptime</span>
-                <span class="metric-value loading-text" id="homeUptime">Loading...</span>
+                <span class="metric-value loading-text" id="systemUptime">--</span>
             </div>
         </div>
         
+        <!-- Performance Summary Card -->
         <div class="card">
             <div class="card-header">
-                <span class="card-icon">🔌</span>
-                <span class="card-title">API Endpoints</span>
+                <span class="card-icon">📊</span>
+                <span class="card-title">All-Time Performance</span>
             </div>
             <div class="metric-row">
-                <span class="metric-label">Health Check</span>
-                <a href="/api/v1/health" target="_blank" class="metric-value">GET /health</a>
+                <span class="metric-label">Total Positions</span>
+                <span class="metric-value loading-text" id="totalPositions">--</span>
             </div>
             <div class="metric-row">
-                <span class="metric-label">System Status</span>
-                <a href="/api/v1/status" target="_blank" class="metric-value">GET /status</a>
+                <span class="metric-label">Closed Positions</span>
+                <span class="metric-value loading-text" id="closedPositions">--</span>
             </div>
             <div class="metric-row">
-                <span class="metric-label">Metrics</span>
-                <a href="/api/v1/status/metrics" target="_blank" class="metric-value">GET /metrics</a>
+                <span class="metric-label">All-Time P&L</span>
+                <span class="metric-value loading-text" id="allTimePnl">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Overall Win Rate</span>
+                <span class="metric-value loading-text" id="overallWinRate">--</span>
             </div>
         </div>
         
+        <!-- Monitoring Status Card -->
         <div class="card">
             <div class="card-header">
-                <span class="card-icon">📚</span>
-                <span class="card-title">Documentation</span>
+                <span class="card-icon">�</span>
+                <span class="card-title">Monitoring</span>
             </div>
             <div class="metric-row">
-                <span class="metric-label">Architecture</span>
-                <span class="metric-value">docs/</span>
+                <span class="metric-label">Tokens Tracked</span>
+                <span class="metric-value loading-text" id="tokensTracked">--</span>
             </div>
             <div class="metric-row">
-                <span class="metric-label">API Reference</span>
-                <a href="/api" target="_blank" class="metric-value">JSON</a>
+                <span class="metric-label">Blacklisted</span>
+                <span class="metric-value loading-text" id="blacklisted">--</span>
             </div>
             <div class="metric-row">
-                <span class="metric-label">Quick Start</span>
-                <span class="metric-value">DASHBOARD_QUICKSTART.md</span>
+                <span class="metric-label">Entry Check</span>
+                <span class="metric-value loading-text" id="entryInterval">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Position Check</span>
+                <span class="metric-value loading-text" id="positionInterval">--</span>
+            </div>
+        </div>
+        
+        <!-- Trading Config Card -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-icon">⚡</span>
+                <span class="card-title">Trading Config</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Max Positions</span>
+                <span class="metric-value loading-text" id="maxPositions">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Trade Size</span>
+                <span class="metric-value loading-text" id="tradeSize">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Stop Loss</span>
+                <span class="metric-value loading-text" id="stopLoss">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Min Profit</span>
+                <span class="metric-value loading-text" id="minProfit">--</span>
             </div>
         </div>
     </div>
@@ -1488,17 +1571,106 @@ pub fn home_content() -> String {
     <script>
         async function loadHomeData() {
             try {
-                const res = await fetch('/api/v1/status');
+                const res = await fetch('/api/v1/dashboard/overview');
                 const data = await res.json();
-                document.getElementById('homeUptime').textContent = formatUptime(data.uptime_seconds);
-                document.getElementById('homeUptime').classList.remove('loading-text');
+                
+                // Trading Overview
+                const openPos = data.positions.open_positions;
+                const maxPos = 2; // Will be fetched from config
+                document.getElementById('openPositions').textContent = `${openPos}/${maxPos}`;
+                document.getElementById('openPositions').classList.remove('loading-text');
+                
+                document.getElementById('totalInvested').textContent = `${data.positions.total_invested_sol.toFixed(4)} SOL`;
+                document.getElementById('totalInvested').classList.remove('loading-text');
+                
+                const pnl = data.positions.total_pnl;
+                const pnlEl = document.getElementById('totalPnl');
+                pnlEl.textContent = `${pnl >= 0 ? '+' : ''}${pnl.toFixed(4)} SOL`;
+                pnlEl.style.color = pnl >= 0 ? '#00ff00' : '#ff4444';
+                pnlEl.classList.remove('loading-text');
+                
+                document.getElementById('winRate').textContent = `${data.positions.win_rate.toFixed(1)}%`;
+                document.getElementById('winRate').classList.remove('loading-text');
+                
+                // Wallet Status
+                document.getElementById('solBalance').textContent = `${data.wallet.sol_balance.toFixed(4)} SOL`;
+                document.getElementById('solBalance').classList.remove('loading-text');
+                
+                document.getElementById('tokenCount').textContent = `${data.wallet.total_tokens_count} tokens`;
+                document.getElementById('tokenCount').classList.remove('loading-text');
+                
+                const walletTime = data.wallet.last_updated ? new Date(data.wallet.last_updated).toLocaleTimeString() : 'N/A';
+                document.getElementById('walletUpdated').textContent = walletTime;
+                document.getElementById('walletUpdated').classList.remove('loading-text');
+                
+                // System Health
+                const allReady = data.system.all_services_ready;
+                const servicesEl = document.getElementById('servicesStatus');
+                servicesEl.textContent = allReady ? '●●●●● All Ready' : '○ Starting...';
+                servicesEl.style.color = allReady ? '#00ff00' : '#ffaa00';
+                servicesEl.classList.remove('loading-text');
+                
+                document.getElementById('rpcRate').textContent = `${data.rpc.calls_per_second.toFixed(1)}/sec`;
+                document.getElementById('rpcRate').classList.remove('loading-text');
+                
+                document.getElementById('memoryUsage').textContent = `${data.system.memory_mb.toFixed(0)} MB`;
+                document.getElementById('memoryUsage').classList.remove('loading-text');
+                
+                document.getElementById('systemUptime').textContent = data.system.uptime_formatted;
+                document.getElementById('systemUptime').classList.remove('loading-text');
+                
+                // Performance Summary
+                document.getElementById('totalPositions').textContent = data.positions.total_positions;
+                document.getElementById('totalPositions').classList.remove('loading-text');
+                
+                document.getElementById('closedPositions').textContent = data.positions.closed_positions;
+                document.getElementById('closedPositions').classList.remove('loading-text');
+                
+                const allTimePnl = data.positions.total_pnl;
+                const allTimePnlEl = document.getElementById('allTimePnl');
+                allTimePnlEl.textContent = `${allTimePnl >= 0 ? '+' : ''}${allTimePnl.toFixed(4)} SOL`;
+                allTimePnlEl.style.color = allTimePnl >= 0 ? '#00ff00' : '#ff4444';
+                allTimePnlEl.classList.remove('loading-text');
+                
+                document.getElementById('overallWinRate').textContent = `${data.positions.win_rate.toFixed(1)}%`;
+                document.getElementById('overallWinRate').classList.remove('loading-text');
+                
+                // Monitoring
+                document.getElementById('tokensTracked').textContent = data.monitoring.tokens_tracked;
+                document.getElementById('tokensTracked').classList.remove('loading-text');
+                
+                document.getElementById('blacklisted').textContent = data.blacklist.total_blacklisted;
+                document.getElementById('blacklisted').classList.remove('loading-text');
+                
+                document.getElementById('entryInterval').textContent = `Every ${data.monitoring.entry_check_interval_secs}s`;
+                document.getElementById('entryInterval').classList.remove('loading-text');
+                
+                document.getElementById('positionInterval').textContent = `Every ${data.monitoring.position_monitor_interval_secs}s`;
+                document.getElementById('positionInterval').classList.remove('loading-text');
+                
+                // Load trading config
+                const configRes = await fetch('/api/v1/trading/config');
+                const config = await configRes.json();
+                
+                document.getElementById('maxPositions').textContent = config.trading_limits.max_open_positions;
+                document.getElementById('maxPositions').classList.remove('loading-text');
+                
+                document.getElementById('tradeSize').textContent = `${config.trading_limits.trade_size_sol} SOL`;
+                document.getElementById('tradeSize').classList.remove('loading-text');
+                
+                document.getElementById('stopLoss').textContent = `${config.risk_management.stop_loss_percent}%`;
+                document.getElementById('stopLoss').classList.remove('loading-text');
+                
+                document.getElementById('minProfit').textContent = `${config.profit_targets.base_min_profit_percent}%`;
+                document.getElementById('minProfit').classList.remove('loading-text');
+                
             } catch (error) {
                 console.error('Failed to load home data:', error);
             }
         }
         
         loadHomeData();
-        setInterval(loadHomeData, 5000);
+        setInterval(loadHomeData, 1000);
     </script>
     "#.to_string()
 }
