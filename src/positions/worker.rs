@@ -145,6 +145,7 @@ async fn verification_worker(shutdown: Arc<Notify>) {
     log(LogTag::Positions, "STARTUP", "🔍 Starting verification worker");
 
     // Wait for Transactions and Pool services to be ready before starting verification
+    let mut last_log = std::time::Instant::now();
     loop {
         let tx_ready = crate::global::TRANSACTIONS_SYSTEM_READY.load(
             std::sync::atomic::Ordering::SeqCst
@@ -164,11 +165,19 @@ async fn verification_worker(shutdown: Arc<Notify>) {
             break;
         }
 
-        log(
-            LogTag::Positions,
-            "STARTUP",
-            &format!("⏳ Waiting for dependencies: tx_ready={} pool_ready={}", tx_ready, pool_ready)
-        );
+        // Log only every 15 seconds
+        if last_log.elapsed() >= Duration::from_secs(15) {
+            log(
+                LogTag::Positions,
+                "STARTUP",
+                &format!(
+                    "⏳ Waiting for dependencies: tx_ready={} pool_ready={}",
+                    tx_ready,
+                    pool_ready
+                )
+            );
+            last_log = std::time::Instant::now();
+        }
 
         tokio::select! {
             _ = shutdown.notified() => {

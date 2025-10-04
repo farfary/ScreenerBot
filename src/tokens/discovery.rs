@@ -1951,9 +1951,43 @@ pub async fn start_token_discovery(
             }
         };
 
-        if is_debug_discovery_enabled() {
-            log(LogTag::Discovery, "READY", "Starting discovery loop");
+        // Wait for Transactions system to be ready before starting discovery
+        let mut last_log = std::time::Instant::now();
+        loop {
+            let tx_ready = crate::global::TRANSACTIONS_SYSTEM_READY.load(
+                std::sync::atomic::Ordering::SeqCst
+            );
+
+            if tx_ready {
+                if is_debug_discovery_enabled() {
+                    log(
+                        LogTag::Discovery,
+                        "READY",
+                        "✅ Transactions ready. Starting discovery loop"
+                    );
+                }
+                break;
+            }
+
+            // Log only every 15 seconds
+            if last_log.elapsed() >= std::time::Duration::from_secs(15) {
+                log(
+                    LogTag::Discovery,
+                    "READY",
+                    "⏳ Waiting for Transactions system to be ready..."
+                );
+                last_log = std::time::Instant::now();
+            }
+
+            tokio::select! {
+                _ = shutdown.notified() => {
+                    log(LogTag::Discovery, "EXIT", "Discovery exiting during dependency wait");
+                    return;
+                }
+                _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {}
+            }
         }
+
         discovery.start_discovery_loop(shutdown).await;
         if is_debug_discovery_enabled() {
             log(LogTag::Discovery, "EXIT", "Discovery task ended");
