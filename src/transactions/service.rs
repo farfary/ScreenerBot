@@ -327,7 +327,6 @@ async fn perform_initial_transaction_bootstrap(
     let processor = TransactionProcessor::new(wallet_pubkey);
 
     let mut stats = BootstrapStats::default();
-    let mut before: Option<String> = None;
     let batch_limit = RPC_BATCH_SIZE;
 
     log(
@@ -340,6 +339,19 @@ async fn perform_initial_transaction_bootstrap(
         )
     );
 
+    // =========================================================================
+    // PHASE 1: COLLECT ALL SIGNATURES (lightweight, just signature strings)
+    // =========================================================================
+    log(
+        LogTag::Transactions,
+        "BOOTSTRAP_PHASE1",
+        "📥 Phase 1: Collecting all signatures from blockchain..."
+    );
+
+    let mut all_signatures: Vec<String> = Vec::new();
+    let mut before: Option<String> = None;
+    let phase1_timer = std::time::Instant::now();
+
     loop {
         let signatures = fetcher.fetch_signatures_page(
             wallet_pubkey,
@@ -351,31 +363,75 @@ async fn perform_initial_transaction_bootstrap(
             if debug {
                 log(
                     LogTag::Transactions,
-                    "BOOTSTRAP",
-                    "No additional signatures returned from RPC; bootstrap complete"
+                    "BOOTSTRAP_PHASE1",
+                    "No additional signatures returned from RPC"
                 );
             }
             break;
         }
 
         stats.total_rpc_pages += 1;
-        stats.total_signatures_fetched += signatures.len();
+        let page_count = signatures.len();
+        all_signatures.extend(signatures.clone());
 
         if stats.newest_signature.is_none() {
             stats.newest_signature = signatures.first().cloned();
         }
         stats.oldest_signature = signatures.last().cloned();
 
-        for signature in &signatures {
-            let mut signature_is_known = is_signature_known_globally(signature).await;
+        log(
+            LogTag::Transactions,
+            "BOOTSTRAP_PHASE1",
+            &format!(
+                "📄 Fetched page {}: {} signatures | total collected: {} | elapsed: {}s",
+                stats.total_rpc_pages,
+                page_count,
+                all_signatures.len(),
+                phase1_timer.elapsed().as_secs()
+            )
+        );
 
-            if signature_is_known {
-                stats.known_signatures_skipped += 1;
-            } else if let Some(db) = transaction_db.as_ref() {
+        before = signatures.last().cloned();
+
+        if signatures.len() < batch_limit {
+            break;
+        }
+    }
+
+    stats.total_signatures_fetched = all_signatures.len();
+
+    log(
+        LogTag::Transactions,
+        "BOOTSTRAP_PHASE1",
+        &format!(
+            "✅ Phase 1 complete: collected {} signatures in {}s across {} pages",
+            all_signatures.len(),
+            phase1_timer.elapsed().as_secs(),
+            stats.total_rpc_pages
+        )
+    );
+
+    // =========================================================================
+    // PHASE 2: FILTER AND PROCESS NEW SIGNATURES
+    // =========================================================================
+    log(
+        LogTag::Transactions,
+        "BOOTSTRAP_PHASE2",
+        "⚙️  Phase 2: Filtering and processing new transactions..."
+    );
+
+    let phase2_timer = std::time::Instant::now();
+    let mut signatures_to_process: Vec<String> = Vec::new();
+
+    // Filter out already known signatures
+    for signature in &all_signatures {
+        let mut signature_is_known = is_signature_known_globally(signature).await;
+
+        if !signature_is_known {
+            if let Some(db) = transaction_db.as_ref() {
                 match db.is_signature_known(signature).await {
                     Ok(true) => {
                         signature_is_known = true;
-                        stats.known_signatures_skipped += 1;
                     }
                     Ok(false) => {}
                     Err(e) => {
@@ -388,90 +444,99 @@ async fn perform_initial_transaction_bootstrap(
                     }
                 }
             }
-
-            if signature_is_known {
-                add_signature_to_known_globally(signature.clone()).await;
-                if let Ok(mut mgr) = manager_arc.try_lock() {
-                    mgr.known_signatures.insert(signature.clone());
-                }
-                continue;
-            }
-
-            match processor.process_transaction(signature).await {
-                Ok(_) => {
-                    if let Some(db) = transaction_db.as_ref() {
-                        if let Err(e) = db.add_known_signature(signature).await {
-                            log(
-                                LogTag::Transactions,
-                                "WARN",
-                                &format!("Failed to persist known signature {}: {}", signature, e)
-                            );
-                            stats.errors += 1;
-                        }
-                    }
-
-                    add_signature_to_known_globally(signature.clone()).await;
-                    if let Ok(mut mgr) = manager_arc.try_lock() {
-                        mgr.known_signatures.insert(signature.clone());
-                        mgr.total_transactions += 1;
-                    }
-                    stats.newly_processed += 1;
-
-                    // Show progress summary every 10 transactions
-                    if stats.newly_processed % 10 == 0 {
-                        let total_completed =
-                            stats.newly_processed + stats.known_signatures_skipped;
-                        let remaining = stats.total_signatures_fetched - total_completed;
-                        log(
-                            LogTag::Transactions,
-                            "BOOTSTRAP_PROGRESS",
-                            &format!(
-                                "📊 Progress: processed={} (new={}, skipped={}) | remaining={} | errors={} | elapsed={}s",
-                                total_completed,
-                                stats.newly_processed,
-                                stats.known_signatures_skipped,
-                                remaining,
-                                stats.errors,
-                                bootstrap_timer.elapsed().as_secs()
-                            )
-                        );
-                    }
-                }
-                Err(e) => {
-                    log(
-                        LogTag::Transactions,
-                        "WARN",
-                        &format!("Failed to process bootstrap transaction {}: {}", signature, e)
-                    );
-                    stats.errors += 1;
-                }
-            }
         }
 
-        // Show page summary after processing each batch
-        let total_completed = stats.newly_processed + stats.known_signatures_skipped;
-        log(
-            LogTag::Transactions,
-            "BOOTSTRAP_PAGE",
-            &format!(
-                "📄 Page {} complete: fetched={} | processed={} (new={}, skipped={}) | errors={} | elapsed={}s",
-                stats.total_rpc_pages,
-                signatures.len(),
-                total_completed,
-                stats.newly_processed,
-                stats.known_signatures_skipped,
-                stats.errors,
-                bootstrap_timer.elapsed().as_secs()
-            )
-        );
-
-        before = signatures.last().cloned();
-
-        if signatures.len() < batch_limit {
-            break;
+        if signature_is_known {
+            stats.known_signatures_skipped += 1;
+            add_signature_to_known_globally(signature.clone()).await;
+            if let Ok(mut mgr) = manager_arc.try_lock() {
+                mgr.known_signatures.insert(signature.clone());
+            }
+        } else {
+            signatures_to_process.push(signature.clone());
         }
     }
 
+    let total_to_process = signatures_to_process.len();
+    log(
+        LogTag::Transactions,
+        "BOOTSTRAP_PHASE2",
+        &format!(
+            "📊 Filtering complete: {} new to process | {} already known | elapsed: {}s",
+            total_to_process,
+            stats.known_signatures_skipped,
+            phase2_timer.elapsed().as_secs()
+        )
+    );
+
+    // Process all new signatures with accurate progress tracking
+    for (idx, signature) in signatures_to_process.iter().enumerate() {
+        match processor.process_transaction(signature).await {
+            Ok(_) => {
+                if let Some(db) = transaction_db.as_ref() {
+                    if let Err(e) = db.add_known_signature(signature).await {
+                        log(
+                            LogTag::Transactions,
+                            "WARN",
+                            &format!("Failed to persist known signature {}: {}", signature, e)
+                        );
+                        stats.errors += 1;
+                    }
+                }
+
+                add_signature_to_known_globally(signature.clone()).await;
+                if let Ok(mut mgr) = manager_arc.try_lock() {
+                    mgr.known_signatures.insert(signature.clone());
+                    mgr.total_transactions += 1;
+                }
+                stats.newly_processed += 1;
+
+                // Show progress summary every 10 transactions
+                if (idx + 1) % 10 == 0 || idx + 1 == total_to_process {
+                    let processed = idx + 1;
+                    let remaining = total_to_process - processed;
+                    let progress_pct = ((processed as f64) / (total_to_process as f64)) * 100.0;
+
+                    log(
+                        LogTag::Transactions,
+                        "BOOTSTRAP_PROGRESS",
+                        &format!(
+                            "📊 Progress: {}/{} ({:.1}%) | new={} | errors={} | remaining={} | elapsed={}s",
+                            processed,
+                            total_to_process,
+                            progress_pct,
+                            stats.newly_processed,
+                            stats.errors,
+                            remaining,
+                            bootstrap_timer.elapsed().as_secs()
+                        )
+                    );
+                }
+            }
+            Err(e) => {
+                log(
+                    LogTag::Transactions,
+                    "WARN",
+                    &format!("Failed to process bootstrap transaction {}: {}", signature, e)
+                );
+                stats.errors += 1;
+            }
+        }
+    }
+
+    log(
+        LogTag::Transactions,
+        "BOOTSTRAP_PHASE2",
+        &format!(
+            "✅ Phase 2 complete: processed {}/{} new transactions | errors={} | elapsed={}s",
+            stats.newly_processed,
+            total_to_process,
+            stats.errors,
+            phase2_timer.elapsed().as_secs()
+        )
+    );
+
+    // Update manager with final count from database
     if let Some(db) = transaction_db.as_ref() {
         match db.get_known_signatures_count().await {
             Ok(count) => {
@@ -491,6 +556,29 @@ async fn perform_initial_transaction_bootstrap(
     }
 
     stats.duration_ms = bootstrap_timer.elapsed().as_millis();
+
+    // Final summary
+    log(
+        LogTag::Transactions,
+        "BOOTSTRAP_COMPLETE",
+        &format!(
+            "✨ Bootstrap complete!\n\
+            ═══════════════════════════════════════════════════════════════\n\
+            📊 Total signatures found: {}\n\
+            ✅ New transactions processed: {}\n\
+            ⏭️  Already known (skipped): {}\n\
+            ❌ Errors: {}\n\
+            📄 RPC pages fetched: {}\n\
+            ⏱️  Total time: {:.1}s\n\
+            ═══════════════════════════════════════════════════════════════",
+            stats.total_signatures_fetched,
+            stats.newly_processed,
+            stats.known_signatures_skipped,
+            stats.errors,
+            stats.total_rpc_pages,
+            bootstrap_timer.elapsed().as_secs_f64()
+        )
+    );
 
     if debug {
         log(LogTag::Transactions, "DEBUG", &format!("Bootstrap stats: {:?}", stats));
