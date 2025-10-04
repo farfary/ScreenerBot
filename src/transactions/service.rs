@@ -1614,29 +1614,3 @@ async fn should_perform_fallback_check(metrics: &ServiceMetrics) -> bool {
         }
     }
 }
-
-// =============================================================================
-// COMPATIBILITY FUNCTIONS (for migration period)
-// =============================================================================
-
-/// Legacy function for compatibility during migration
-pub async fn start_transaction_service_legacy(
-    wallet_pubkey: solana_sdk::pubkey::Pubkey
-) -> Result<(), String> {
-    log(
-        LogTag::Transactions,
-        "WARN",
-        "Using legacy transaction service start function - please migrate to new API"
-    );
-    start_global_transaction_service(wallet_pubkey).await
-}
-
-/// Legacy function for compatibility during migration
-pub async fn stop_transaction_service_legacy() -> Result<(), String> {
-    log(
-        LogTag::Transactions,
-        "WARN",
-        "Using legacy transaction service stop function - please migrate to new API"
-    );
-    stop_global_transaction_service().await
-}
