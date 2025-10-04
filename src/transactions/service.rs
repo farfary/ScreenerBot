@@ -1098,49 +1098,11 @@ async fn run_transaction_service(config: ServiceConfig) -> Result<(), String> {
                 metrics.update_websocket_health_check();
                 
                 if config.enable_websocket {
-                    // Check if WebSocket exists and is healthy
                     let ws_exists = websocket_receiver.is_some();
-                    let ws_healthy = metrics.is_websocket_healthy();
                     
-                    if ws_exists && !ws_healthy {
-                        // WebSocket exists but is unhealthy (no messages for 30s)
-                        log(
-                            LogTag::Transactions,
-                            "WARN",
-                            &format!(
-                                "⚠️ WebSocket unhealthy (no messages for >30s) - reconnecting... (attempt #{})",
-                                metrics.websocket_reconnect_count + 1
-                            )
-                        );
-                        
-                        // Drop the old receiver to close the connection
-                        websocket_receiver = None;
-                        
-                        // Attempt reconnection
-                        match initialize_websocket_monitoring(config.wallet_pubkey).await {
-                            Ok(new_receiver) => {
-                                websocket_receiver = new_receiver;
-                                metrics.increment_websocket_reconnect();
-                                metrics.update_websocket_activity();
-                                log(
-                                    LogTag::Transactions,
-                                    "INFO",
-                                    &format!(
-                                        "✅ WebSocket reconnected successfully (total reconnects: {})",
-                                        metrics.websocket_reconnect_count
-                                    )
-                                );
-                            }
-                            Err(e) => {
-                                log(
-                                    LogTag::Transactions,
-                                    "ERROR",
-                                    &format!("❌ WebSocket reconnection failed: {} - will retry in 15s", e)
-                                );
-                            }
-                        }
-                    } else if !ws_exists {
+                    if !ws_exists {
                         // WebSocket doesn't exist - try to establish it
+                        // This is the ONLY case where we reconnect
                         log(
                             LogTag::Transactions,
                             "INFO",
@@ -1166,8 +1128,9 @@ async fn run_transaction_service(config: ServiceConfig) -> Result<(), String> {
                                 );
                             }
                         }
-                    } else if ws_exists && ws_healthy {
-                        // WebSocket is healthy - just log debug info
+                    } else {
+                        // WebSocket exists - it's healthy (receiver is open means loop is running)
+                        // Log debug info about connection state
                         if is_debug_transactions_enabled() {
                             let last_msg_ago = if let Some(last_msg) = metrics.last_websocket_message {
                                 (Utc::now() - last_msg).num_seconds()
@@ -1178,7 +1141,7 @@ async fn run_transaction_service(config: ServiceConfig) -> Result<(), String> {
                                 LogTag::Transactions,
                                 "DEBUG",
                                 &format!(
-                                    "WebSocket health check: HEALTHY (last message: {}s ago, reconnects: {})",
+                                    "WebSocket health check: HEALTHY (connection open, last tx message: {}s ago, reconnects: {})",
                                     last_msg_ago,
                                     metrics.websocket_reconnect_count
                                 )
@@ -1275,16 +1238,16 @@ async fn perform_fallback_transaction_check(
     processor: &Arc<TransactionProcessor>
 ) -> Result<usize, String> {
     let debug = is_debug_transactions_enabled();
-    let positions_count = crate::positions::get_open_positions_count().await;
-    let pending_count = get_pending_transactions_count().await;
+    let pending_txs_count = get_pending_transactions_count().await;
+    let (pending_verification_count, _) = crate::positions::queue::get_queue_status().await;
 
     log(
         LogTag::Transactions,
         "FALLBACK",
         &format!(
-            "Performing fallback transaction check (WebSocket inactive) - Open positions: {}, Pending txs: {}",
-            positions_count,
-            pending_count
+            "Performing fallback transaction check (WebSocket inactive) - Pending txs: {}, Pending verifications: {}",
+            pending_txs_count,
+            pending_verification_count
         )
     );
 
@@ -1501,18 +1464,23 @@ impl ServiceMetrics {
     }
 
     fn is_websocket_healthy(&self) -> bool {
-        // WebSocket is considered healthy if we've received any message in the last 30 seconds
+        // WebSocket health is determined by whether the receiver channel is still open
+        // If the WebSocket loop crashes or connection fails, the channel closes
+        // This method is called only when receiver exists, so if we get here, it's healthy
+        //
+        // We use a conservative timeout (5 minutes) for transaction message silence
+        // to avoid false positives during idle periods when no transactions occur
         if let Some(last_msg) = self.last_websocket_message {
             let silence_duration = (Utc::now() - last_msg).num_seconds();
-            silence_duration < 30
+            silence_duration < 300 // 5 minutes instead of 30 seconds
         } else {
-            // No messages received yet - check if we're still in startup grace period
+            // No transaction messages yet - connection is healthy if recently initialized
             if let Some(activity) = self.last_websocket_activity {
                 let since_activity = (Utc::now() - activity).num_seconds();
-                since_activity < 30
+                since_activity < 300 // 5 minutes grace period
             } else {
-                // No activity at all yet
-                false
+                // No activity at all yet - assume healthy
+                true
             }
         }
     }
@@ -1567,20 +1535,23 @@ async fn perform_health_check(metrics: &mut ServiceMetrics) -> Result<(), String
 /// Determine if fallback check should be performed
 ///
 /// Fallback is only performed when:
-/// 1. There are open positions OR pending transactions to monitor
+/// 1. There are pending transactions OR pending position verifications to monitor
 /// 2. WebSocket has been silent for >10 seconds (or never connected with >10s uptime)
 async fn should_perform_fallback_check(metrics: &ServiceMetrics) -> bool {
     // Step 1: Check if there's anything to monitor
-    let has_open_positions = crate::positions::get_open_positions_count().await > 0;
     let has_pending_txs = get_pending_transactions_count().await > 0;
 
-    if !has_open_positions && !has_pending_txs {
+    // Check positions verification queue for pending work
+    let (pending_verification_count, _) = crate::positions::queue::get_queue_status().await;
+    let has_pending_verifications = pending_verification_count > 0;
+
+    if !has_pending_txs && !has_pending_verifications {
         // Idle state - no need for fallback
         if is_debug_transactions_enabled() {
             log(
                 LogTag::Transactions,
                 "DEBUG",
-                "Skipping fallback: no open positions or pending transactions (idle state)"
+                "Skipping fallback: no pending transactions or verifications (idle state)"
             );
         }
         return false;
@@ -1597,10 +1568,10 @@ async fn should_perform_fallback_check(metrics: &ServiceMetrics) -> bool {
                     LogTag::Transactions,
                     "DEBUG",
                     &format!(
-                        "Fallback triggered: WebSocket silent for {}s (positions: {}, pending: {})",
+                        "Fallback triggered: WebSocket silent for {}s (pending txs: {}, pending verifications: {})",
                         silence_duration,
-                        has_open_positions,
-                        has_pending_txs
+                        has_pending_txs,
+                        has_pending_verifications
                     )
                 );
             }
@@ -1619,10 +1590,10 @@ async fn should_perform_fallback_check(metrics: &ServiceMetrics) -> bool {
                         LogTag::Transactions,
                         "DEBUG",
                         &format!(
-                            "Fallback triggered: WebSocket never connected, uptime {}s (positions: {}, pending: {})",
+                            "Fallback triggered: WebSocket never connected, uptime {}s (pending txs: {}, pending verifications: {})",
                             uptime,
-                            has_open_positions,
-                            has_pending_txs
+                            has_pending_txs,
+                            has_pending_verifications
                         )
                     );
                 }
