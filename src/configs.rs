@@ -13,6 +13,7 @@ use serde::{ Deserialize, Serialize };
 use solana_sdk::signature::{ Keypair, Signer };
 use std::fs;
 use std::path::Path;
+use std::collections::HashMap;
 
 // Import the CONFIG_FILE constant from global.rs for the default path
 use crate::global::CONFIG_FILE;
@@ -31,6 +32,49 @@ pub struct Configs {
     /// Webserver dashboard configuration
     #[serde(default)]
     pub webserver: WebserverConfig,
+    /// Service configuration
+    #[serde(default)]
+    pub services: ServicesConfig,
+    /// Monitoring configuration
+    #[serde(default)]
+    pub monitoring: MonitoringConfig,
+}
+
+/// Configuration for individual services
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ServicesConfig {
+    #[serde(default)]
+    pub services: HashMap<String, ServiceConfig>,
+}
+
+/// Configuration for a single service
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceConfig {
+    pub enabled: bool,
+    #[serde(default = "default_priority")]
+    pub priority: i32,
+}
+
+fn default_priority() -> i32 {
+    100
+}
+
+/// Monitoring system configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MonitoringConfig {
+    pub enabled: bool,
+    pub metrics_interval_secs: u64,
+    pub health_check_interval_secs: u64,
+}
+
+impl Default for MonitoringConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            metrics_interval_secs: 30,
+            health_check_interval_secs: 60,
+        }
+    }
 }
 
 /// Reads the configs.json file from the default data directory and returns a Configs object
@@ -258,6 +302,8 @@ pub fn create_default_config() -> Configs {
             "https://fallback2.com".to_string()
         ],
         webserver: WebserverConfig::default(),
+        services: ServicesConfig::default(),
+        monitoring: MonitoringConfig::default(),
     }
 }
 

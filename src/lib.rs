@@ -16,6 +16,7 @@ pub mod positions;
 pub mod profit;
 pub mod rpc;
 pub mod run;
+pub mod services; // Service manager for orchestrating all services
 pub mod sol_price; // SOL price service
 pub mod summary;
 pub mod swaps;

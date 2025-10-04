@@ -101,6 +101,10 @@ unicode-width = "0.1"
 # Concurrency
 dashmap = "5.5"
 
+# Service management dependencies
+async-trait = "0.1"
+tokio-metrics = "0.4"
+
 # Solana dependencies - with full features needed for trading
 solana-sdk = { version = "2.3.1", features = ["full"] }
 solana-client = { version = "2.1.0" }
