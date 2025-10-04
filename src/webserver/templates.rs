@@ -38,9 +38,183 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         {content}
     </main>
     
-    <footer class="footer">
-        <p>ScreenerBot v0.1.0 | <a href="/api">API Docs</a> | Built with Rust & Axum</p>
-    </footer>
+    <!-- Debug Modal -->
+    <div id="debugModal" class="modal-overlay" onclick="if(event.target === this) closeDebugModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <span class="modal-title">🐛 Debug Information</span>
+                <button class="modal-close" onclick="closeDebugModal()" aria-label="Close">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-tabs">
+                    <button class="modal-tab active" onclick="switchDebugTab('token')">Token Info</button>
+                    <button class="modal-tab" onclick="switchDebugTab('price')">Price & Market</button>
+                    <button class="modal-tab" onclick="switchDebugTab('pool')">Pool Data</button>
+                    <button class="modal-tab" onclick="switchDebugTab('security')">Security</button>
+                    <button class="modal-tab" onclick="switchDebugTab('position')">Position History</button>
+                </div>
+                
+                <!-- Token Info Tab -->
+                <div id="tab-token" class="modal-tab-content active">
+                    <div class="debug-section">
+                        <h3 class="debug-section-title">Token Information</h3>
+                        <div class="debug-row">
+                            <span class="debug-label">Mint Address:</span>
+                            <span class="debug-value" id="debugMintAddress">Loading...</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Symbol:</span>
+                            <span class="debug-value" id="tokenSymbol">Loading...</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Name:</span>
+                            <span class="debug-value" id="tokenName">Loading...</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Decimals:</span>
+                            <span class="debug-value" id="tokenDecimals">Loading...</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Website:</span>
+                            <span class="debug-value" id="tokenWebsite">Loading...</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Verified:</span>
+                            <span class="debug-value" id="tokenVerified">Loading...</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Tags:</span>
+                            <span class="debug-value" id="tokenTags">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Price & Market Tab -->
+                <div id="tab-price" class="modal-tab-content">
+                    <div class="debug-section">
+                        <h3 class="debug-section-title">Current Price</h3>
+                        <div class="debug-row">
+                            <span class="debug-label">Price (SOL):</span>
+                            <span class="debug-value" id="priceSol">Loading...</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Confidence:</span>
+                            <span class="debug-value" id="priceConfidence">Loading...</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Last Updated:</span>
+                            <span class="debug-value" id="priceUpdated">Loading...</span>
+                        </div>
+                    </div>
+                    <div class="debug-section">
+                        <h3 class="debug-section-title">Market Data</h3>
+                        <div class="debug-row">
+                            <span class="debug-label">Market Cap:</span>
+                            <span class="debug-value" id="marketCap">Loading...</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">FDV:</span>
+                            <span class="debug-value" id="fdv">Loading...</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Liquidity:</span>
+                            <span class="debug-value" id="liquidity">Loading...</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">24h Volume:</span>
+                            <span class="debug-value" id="volume24h">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Pool Data Tab -->
+                <div id="tab-pool" class="modal-tab-content">
+                    <div id="poolsList">
+                        <p>Loading pool data...</p>
+                    </div>
+                </div>
+                
+                <!-- Security Tab -->
+                <div id="tab-security" class="modal-tab-content">
+                    <div class="debug-section">
+                        <h3 class="debug-section-title">Security Overview</h3>
+                        <div class="debug-row">
+                            <span class="debug-label">Security Score:</span>
+                            <span class="debug-value" id="securityScore">Loading...</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Rugged:</span>
+                            <span class="debug-value" id="securityRugged">Loading...</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Total Holders:</span>
+                            <span class="debug-value" id="securityHolders">Loading...</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Top 10 Concentration:</span>
+                            <span class="debug-value" id="securityTop10">Loading...</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Mint Authority:</span>
+                            <span class="debug-value" id="securityMintAuth">Loading...</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Freeze Authority:</span>
+                            <span class="debug-value" id="securityFreezeAuth">Loading...</span>
+                        </div>
+                    </div>
+                    <div class="debug-section">
+                        <h3 class="debug-section-title">Risk Factors</h3>
+                        <div id="securityRisks">
+                            <p>Loading risks...</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Position History Tab -->
+                <div id="tab-position" class="modal-tab-content">
+                    <div class="debug-section">
+                        <h3 class="debug-section-title">Position Summary</h3>
+                        <div class="debug-row">
+                            <span class="debug-label">Open Positions:</span>
+                            <span class="debug-value" id="positionOpenPositions">Loading...</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Closed Positions:</span>
+                            <span class="debug-value" id="positionClosedCount">Loading...</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Total P&L:</span>
+                            <span class="debug-value" id="positionTotalPnL">Loading...</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Win Rate:</span>
+                            <span class="debug-value" id="positionWinRate">Loading...</span>
+                        </div>
+                    </div>
+                    <div class="debug-section">
+                        <h3 class="debug-section-title">Current Position</h3>
+                        <div class="debug-row">
+                            <span class="debug-label">Entry Price:</span>
+                            <span class="debug-value" id="positionEntryPrice">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Entry Size:</span>
+                            <span class="debug-value" id="positionEntrySize">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Current Price:</span>
+                            <span class="debug-value" id="positionCurrentPrice">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Unrealized P&L:</span>
+                            <span class="debug-value" id="positionUnrealizedPnL">N/A</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     
     <script>
         {common_scripts}
@@ -123,12 +297,15 @@ fn common_styles() -> &'static str {
             background: var(--bg-primary);
             color: var(--text-primary);
             line-height: 1.6;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
         
         .header {
             background: var(--header-bg);
             color: var(--header-text);
-            padding: 20px 30px;
+            padding: 8px 14px;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -136,14 +313,14 @@ fn common_styles() -> &'static str {
         }
         
         .header h1 {
-            font-size: 1.8em;
+            font-size: 1.1em;
             font-weight: 600;
         }
         
         .header-controls {
             display: flex;
             align-items: center;
-            gap: 20px;
+            gap: 10px;
         }
         
         .status-indicator {
@@ -157,10 +334,10 @@ fn common_styles() -> &'static str {
             background: rgba(255,255,255,0.2);
             border: none;
             color: var(--header-text);
-            padding: 8px 16px;
-            border-radius: 20px;
+            padding: 4px 10px;
+            border-radius: 14px;
             cursor: pointer;
-            font-size: 1em;
+            font-size: 0.9em;
             display: flex;
             align-items: center;
             gap: 8px;
@@ -176,9 +353,9 @@ fn common_styles() -> &'static str {
         }
         
         .badge {
-            padding: 6px 16px;
-            border-radius: 20px;
-            font-size: 0.85em;
+            padding: 4px 10px;
+            border-radius: 14px;
+            font-size: 0.8em;
             font-weight: 600;
             display: inline-flex;
             align-items: center;
@@ -208,20 +385,21 @@ fn common_styles() -> &'static str {
         
         .tabs {
             background: var(--bg-secondary);
-            padding: 0;
+            padding: 0 4px;
             box-shadow: 0 1px 3px var(--shadow-md);
             display: flex;
             overflow-x: auto;
         }
         
         .tab {
-            padding: 15px 25px;
+            padding: 8px 12px;
             text-decoration: none;
             color: var(--text-secondary);
             font-weight: 500;
             border-bottom: 3px solid transparent;
             transition: all 0.3s ease;
             white-space: nowrap;
+            font-size: 0.95em;
         }
         
         .tab:hover {
@@ -236,9 +414,11 @@ fn common_styles() -> &'static str {
         }
         
         .content {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 20px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0; /* allow child to size/scroll */
+            padding: 10px;
         }
         
         .grid {
@@ -381,24 +561,7 @@ fn common_styles() -> &'static str {
             background: #059669;
         }
         
-        .footer {
-            background: var(--bg-secondary);
-            padding: 15px;
-            text-align: center;
-            color: var(--text-secondary);
-            font-size: 0.85em;
-            margin-top: 20px;
-            box-shadow: 0 -1px 3px var(--shadow-md);
-        }
-        
-        .footer a {
-            color: var(--link-color);
-            text-decoration: none;
-        }
-        
-        .footer a:hover {
-            text-decoration: underline;
-        }
+
         
         .loading-text {
             color: var(--badge-loading);
@@ -414,6 +577,326 @@ fn common_styles() -> &'static str {
         .empty-state-icon {
             font-size: 3em;
             margin-bottom: 10px;
+        }
+        
+        /* Dropdown Menu Styles */
+        .dropdown-container {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .dropdown-btn {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 1.2em;
+            font-weight: bold;
+            cursor: pointer;
+            color: var(--text-primary);
+            transition: all 0.2s ease;
+        }
+        
+        .dropdown-btn:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--link-color);
+        }
+        
+        .dropdown-menu {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: 100%;
+            margin-top: 4px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            box-shadow: 0 4px 12px var(--shadow-lg);
+            min-width: 200px;
+            z-index: 1000;
+            overflow: hidden;
+        }
+        
+        .dropdown-menu.show {
+            display: block;
+        }
+        
+        .dropdown-item {
+            display: block;
+            width: 100%;
+            padding: 10px 16px;
+            text-align: left;
+            background: var(--bg-card);
+            border: none;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background 0.2s ease;
+        }
+        
+        .dropdown-item:last-child {
+            border-bottom: none;
+        }
+        
+        .dropdown-item:hover {
+            background: var(--bg-card-hover);
+            color: var(--link-color);
+        }
+        
+        /* Modal Styles */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 2000;
+            backdrop-filter: blur(4px);
+        }
+        
+        .modal-overlay.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background: var(--bg-card);
+            border-radius: 12px;
+            width: 90%;
+            max-width: 900px;
+            max-height: 90vh;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: modalSlideIn 0.3s ease-out;
+        }
+        
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 24px;
+            border-bottom: 2px solid var(--border-color);
+            background: var(--table-header-bg);
+        }
+        
+        .modal-title {
+            font-size: 1.4em;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.8em;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+        
+        .modal-close:hover {
+            background: var(--bg-card-hover);
+            color: var(--text-primary);
+        }
+        
+        .modal-body {
+            padding: 24px;
+            max-height: calc(90vh - 140px);
+            overflow-y: auto;
+        }
+        
+        .modal-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid var(--border-color);
+        }
+        
+        .modal-tab {
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 0.95em;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        
+        .modal-tab:hover {
+            color: var(--text-primary);
+            background: var(--bg-card-hover);
+        }
+        
+        .modal-tab.active {
+            color: var(--link-color);
+            border-bottom-color: var(--link-color);
+        }
+        
+        .modal-tab-content {
+            display: none;
+        }
+        
+        .modal-tab-content.active {
+            display: block;
+        }
+        
+        .debug-section {
+            margin-bottom: 24px;
+        }
+        
+        .debug-section-title {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .debug-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .debug-row:last-child {
+            border-bottom: none;
+        }
+        
+        .debug-label {
+            font-weight: 500;
+            color: var(--text-secondary);
+            flex: 0 0 40%;
+        }
+        
+        .debug-value {
+            color: var(--text-primary);
+            font-family: 'Courier New', monospace;
+            flex: 1;
+            text-align: right;
+            word-break: break-all;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+        
+        .debug-value-text {
+            flex: 1;
+            text-align: right;
+        }
+        
+        .copy-btn-small {
+            background: var(--bg-card-hover);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 0.75em;
+            cursor: pointer;
+            color: var(--text-secondary);
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        
+        .copy-btn-small:hover {
+            background: var(--link-color);
+            color: white;
+            border-color: var(--link-color);
+        }
+        
+        /* Toast Notification Styles */
+        .toast-container {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            z-index: 3000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .toast {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-left: 4px solid var(--badge-online);
+            border-radius: 6px;
+            padding: 12px 16px;
+            box-shadow: 0 4px 12px var(--shadow-lg);
+            min-width: 300px;
+            animation: toastSlideIn 0.3s ease-out;
+        }
+        
+        .toast.error {
+            border-left-color: var(--badge-error);
+        }
+        
+        @keyframes toastSlideIn {
+            from {
+                opacity: 0;
+                transform: translateX(100px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        .toast-message {
+            color: var(--text-primary);
+            font-size: 0.9em;
+        }
+
+        /* Full-height page utilities */
+        .page-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0; /* allow child scrolling */
+        }
+        .toolbar {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+            padding: 6px 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-secondary);
+            margin-bottom: 8px;
+        }
+        .toolbar .spacer { flex: 1; }
+        .table-scroll {
+            flex: 1;
+            overflow: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--bg-card);
         }
     "#
 }
@@ -528,6 +1011,311 @@ fn common_scripts() -> &'static str {
         // Initialize
         updateStatusBadge();
         setInterval(updateStatusBadge, 5000);
+        
+        // Dropdown Menu Functions
+        function toggleDropdown(event) {
+            event.stopPropagation();
+            const btn = event.currentTarget;
+            const menu = btn.nextElementSibling;
+            
+            // Close all other dropdowns
+            document.querySelectorAll('.dropdown-menu.show').forEach(m => {
+                if (m !== menu) {
+                    m.classList.remove('show');
+                    m.style.position = '';
+                    m.style.top = '';
+                    m.style.left = '';
+                    m.style.right = '';
+                    m.style.width = '';
+                }
+            });
+            
+            // Toggle visibility
+            const willShow = !menu.classList.contains('show');
+            if (!willShow) {
+                menu.classList.remove('show');
+                return;
+            }
+            
+            // Compute viewport position for fixed menu to avoid clipping
+            const rect = btn.getBoundingClientRect();
+            const menuWidth = Math.max(200, menu.offsetWidth || 200);
+            const viewportWidth = window.innerWidth;
+            const rightSpace = viewportWidth - rect.right;
+            
+            menu.classList.add('show');
+            menu.style.position = 'fixed';
+            menu.style.top = `${Math.round(rect.bottom + 4)}px`;
+            if (rightSpace < menuWidth) {
+                // Align to right edge of button when near viewport edge
+                menu.style.left = `${Math.max(8, Math.round(rect.right - menuWidth))}px`;
+                menu.style.right = '';
+            } else {
+                // Default align to button's left
+                menu.style.left = `${Math.round(rect.left)}px`;
+                menu.style.right = '';
+            }
+            menu.style.width = `${menuWidth}px`;
+        }
+        
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', () => {
+            document.querySelectorAll('.dropdown-menu.show').forEach(m => {
+                m.classList.remove('show');
+                m.style.position = '';
+                m.style.top = '';
+                m.style.left = '';
+                m.style.right = '';
+                m.style.width = '';
+            });
+        });
+        // Also close on scroll/resize to avoid desync
+        ['scroll','resize'].forEach(evt => {
+            window.addEventListener(evt, () => {
+                document.querySelectorAll('.dropdown-menu.show').forEach(m => {
+                    m.classList.remove('show');
+                    m.style.position = '';
+                    m.style.top = '';
+                    m.style.left = '';
+                    m.style.right = '';
+                    m.style.width = '';
+                });
+            }, { passive: true });
+        });
+        
+        // Copy Mint Address Function
+        function copyMint(mint) {
+            navigator.clipboard.writeText(mint).then(() => {
+                showToast('✅ Mint address copied to clipboard!');
+            }).catch(err => {
+                showToast('❌ Failed to copy: ' + err, 'error');
+            });
+        }
+        
+        // Copy any debug value to clipboard
+        function copyDebugValue(value, label) {
+            navigator.clipboard.writeText(value).then(() => {
+                showToast(`✅ ${label} copied to clipboard!`);
+            }).catch(err => {
+                showToast('❌ Failed to copy: ' + err, 'error');
+            });
+        }
+        
+        // Helper function to create copyable value HTML
+        function createCopyableValue(value, label) {
+            if (!value || value === 'N/A' || value === 'None') {
+                return `<span class="debug-value-text">${value || 'N/A'}</span>`;
+            }
+            return `
+                <span class="debug-value-text">${value}</span>
+                <button class="copy-btn-small" onclick="copyDebugValue('${value}', '${label}')" title="Copy ${label}">
+                    📋
+                </button>
+            `;
+        }
+        
+        // Open External Links
+        function openGMGN(mint) {
+            window.open(`https://gmgn.ai/sol/token/${mint}`, '_blank');
+        }
+        
+        function openDexScreener(mint) {
+            window.open(`https://dexscreener.com/solana/${mint}`, '_blank');
+        }
+        
+        function openSolscan(mint) {
+            window.open(`https://solscan.io/token/${mint}`, '_blank');
+        }
+        
+        // Show Debug Modal
+        async function showDebugModal(mint, type) {
+            const modal = document.getElementById('debugModal');
+            const endpoint = type === 'position' ? 
+                `/api/v1/positions/${mint}/debug` : 
+                `/api/v1/tokens/${mint}/debug`;
+            
+            modal.classList.add('show');
+            
+            try {
+                const response = await fetch(endpoint);
+                const data = await response.json();
+                populateDebugModal(data, type);
+            } catch (error) {
+                showToast('❌ Failed to load debug info: ' + error, 'error');
+                console.error('Debug modal error:', error);
+            }
+        }
+        
+        // Close Debug Modal
+        function closeDebugModal() {
+            document.getElementById('debugModal').classList.remove('show');
+        }
+        
+        // Switch Debug Modal Tabs
+        function switchDebugTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.modal-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.currentTarget.classList.add('active');
+            
+            // Update tab content
+            document.querySelectorAll('.modal-tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+        }
+        
+        // Populate Debug Modal with Data
+        function populateDebugModal(data, type) {
+            // Store mint for copying
+            const mintAddress = data.mint;
+            
+            // Token Info Tab
+            const tokenInfo = data.token_info || {};
+            document.getElementById('tokenSymbol').innerHTML = createCopyableValue(tokenInfo.symbol, 'Symbol');
+            document.getElementById('tokenName').innerHTML = createCopyableValue(tokenInfo.name, 'Name');
+            document.getElementById('tokenDecimals').textContent = tokenInfo.decimals || 'N/A';
+            document.getElementById('tokenWebsite').innerHTML = tokenInfo.website ? 
+                `<a href="${tokenInfo.website}" target="_blank" style="color: var(--link-color);">${tokenInfo.website}</a>
+                 <button class="copy-btn-small" onclick="copyDebugValue('${tokenInfo.website}', 'Website')" title="Copy Website">📋</button>` : 
+                '<span class="debug-value-text">N/A</span>';
+            document.getElementById('tokenVerified').textContent = tokenInfo.is_verified ? '✅ Yes' : '❌ No';
+            document.getElementById('tokenTags').textContent = tokenInfo.tags?.join(', ') || 'None';
+            
+            // Add mint address display at the top
+            document.getElementById('debugMintAddress').innerHTML = createCopyableValue(mintAddress, 'Mint Address');
+            
+            // Price Data Tab
+            const priceData = data.price_data || {};
+            document.getElementById('priceSol').innerHTML = priceData.pool_price_sol ? 
+                createCopyableValue(priceData.pool_price_sol.toFixed(9), 'Price (SOL)') : 
+                '<span class="debug-value-text">N/A</span>';
+            document.getElementById('priceConfidence').innerHTML = priceData.confidence ? 
+                createCopyableValue((priceData.confidence * 100).toFixed(1) + '%', 'Confidence') : 
+                '<span class="debug-value-text">N/A</span>';
+            document.getElementById('priceUpdated').textContent = priceData.last_updated ? 
+                new Date(priceData.last_updated * 1000).toLocaleString() : 'N/A';
+            
+            // Market Data
+            const marketData = data.market_data || {};
+            document.getElementById('marketCap').innerHTML = marketData.market_cap ? 
+                createCopyableValue('$' + marketData.market_cap.toLocaleString(), 'Market Cap') : 
+                '<span class="debug-value-text">N/A</span>';
+            document.getElementById('fdv').innerHTML = marketData.fdv ? 
+                createCopyableValue('$' + marketData.fdv.toLocaleString(), 'FDV') : 
+                '<span class="debug-value-text">N/A</span>';
+            document.getElementById('liquidity').innerHTML = marketData.liquidity_usd ? 
+                createCopyableValue('$' + marketData.liquidity_usd.toLocaleString(), 'Liquidity') : 
+                '<span class="debug-value-text">N/A</span>';
+            document.getElementById('volume24h').innerHTML = marketData.volume_24h ? 
+                createCopyableValue('$' + marketData.volume_24h.toLocaleString(), '24h Volume') : 
+                '<span class="debug-value-text">N/A</span>';
+            
+            // Pool Data Tab
+            const poolsHtml = (data.pools || []).map(pool => `
+                <div class="debug-section">
+                    <div class="debug-row">
+                        <span class="debug-label">Pool Address:</span>
+                        <span class="debug-value">
+                            <span class="debug-value-text">${pool.pool_address}</span>
+                            <button class="copy-btn-small" onclick="copyDebugValue('${pool.pool_address}', 'Pool Address')" title="Copy Pool Address">📋</button>
+                        </span>
+                    </div>
+                    <div class="debug-row">
+                        <span class="debug-label">DEX:</span>
+                        <span class="debug-value"><span class="debug-value-text">${pool.dex_name}</span></span>
+                    </div>
+                    <div class="debug-row">
+                        <span class="debug-label">SOL Reserves:</span>
+                        <span class="debug-value">
+                            <span class="debug-value-text">${pool.sol_reserves.toFixed(2)}</span>
+                            <button class="copy-btn-small" onclick="copyDebugValue('${pool.sol_reserves}', 'SOL Reserves')" title="Copy SOL Reserves">📋</button>
+                        </span>
+                    </div>
+                    <div class="debug-row">
+                        <span class="debug-label">Token Reserves:</span>
+                        <span class="debug-value">
+                            <span class="debug-value-text">${pool.token_reserves.toFixed(2)}</span>
+                            <button class="copy-btn-small" onclick="copyDebugValue('${pool.token_reserves}', 'Token Reserves')" title="Copy Token Reserves">📋</button>
+                        </span>
+                    </div>
+                    <div class="debug-row">
+                        <span class="debug-label">Price (SOL):</span>
+                        <span class="debug-value">
+                            <span class="debug-value-text">${pool.price_sol.toFixed(9)}</span>
+                            <button class="copy-btn-small" onclick="copyDebugValue('${pool.price_sol}', 'Price')" title="Copy Price">📋</button>
+                        </span>
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('poolsList').innerHTML = poolsHtml || '<p>No pool data available</p>';
+            
+            // Security Tab
+            const security = data.security || {};
+            document.getElementById('securityScore').innerHTML = createCopyableValue(security.score, 'Security Score');
+            document.getElementById('securityRugged').textContent = security.rugged ? '❌ Yes' : '✅ No';
+            document.getElementById('securityHolders').innerHTML = createCopyableValue(security.total_holders, 'Total Holders');
+            document.getElementById('securityTop10').innerHTML = security.top_10_concentration ? 
+                createCopyableValue(security.top_10_concentration.toFixed(2) + '%', 'Top 10 Concentration') : 
+                '<span class="debug-value-text">N/A</span>';
+            document.getElementById('securityMintAuth').innerHTML = security.mint_authority ? 
+                createCopyableValue(security.mint_authority, 'Mint Authority') : 
+                '<span class="debug-value-text">None</span>';
+            document.getElementById('securityFreezeAuth').innerHTML = security.freeze_authority ? 
+                createCopyableValue(security.freeze_authority, 'Freeze Authority') : 
+                '<span class="debug-value-text">None</span>';
+            
+            const risksHtml = (security.risks || []).map(risk => `
+                <div class="debug-row">
+                    <span class="debug-label">${risk.name}:</span>
+                    <span class="debug-value">${risk.level} (${risk.description})</span>
+                </div>
+            `).join('');
+            document.getElementById('securityRisks').innerHTML = risksHtml || '<p>No risks detected</p>';
+            
+            // Position-specific data
+            if (type === 'position' && data.position_data) {
+                const posData = data.position_data;
+                document.getElementById('positionOpenPositions').textContent = posData.open_position ? '1 Open' : 'None';
+                document.getElementById('positionClosedCount').textContent = posData.closed_positions_count;
+                document.getElementById('positionTotalPnL').textContent = posData.total_pnl.toFixed(4) + ' SOL';
+                document.getElementById('positionWinRate').textContent = posData.win_rate.toFixed(1) + '%';
+                
+                if (posData.open_position) {
+                    const open = posData.open_position;
+                    document.getElementById('positionEntryPrice').textContent = open.entry_price.toFixed(9);
+                    document.getElementById('positionEntrySize').textContent = open.entry_size_sol.toFixed(4) + ' SOL';
+                    document.getElementById('positionCurrentPrice').textContent = open.current_price ? 
+                        open.current_price.toFixed(9) : 'N/A';
+                    document.getElementById('positionUnrealizedPnL').textContent = open.unrealized_pnl ? 
+                        open.unrealized_pnl.toFixed(4) + ' SOL (' + open.unrealized_pnl_percent.toFixed(2) + '%)' : 'N/A';
+                }
+            }
+        }
+        
+        // Toast Notification
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer') || createToastContainer();
+            const toast = document.createElement('div');
+            toast.className = 'toast' + (type === 'error' ? ' error' : '');
+            toast.innerHTML = `<div class="toast-message">${message}</div>`;
+            
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+        
+        function createToastContainer() {
+            const container = document.createElement('div');
+            container.id = 'toastContainer';
+            container.className = 'toast-container';
+            document.body.appendChild(container);
+            return container;
+        }
     "#
 }
 
@@ -772,59 +1560,22 @@ pub fn positions_content() -> String {
         .status-closed { background: #64748b20; color: #64748b; }
         .status-synthetic { background: #f59e0b20; color: #f59e0b; }
     </style>
-
-    <!-- Statistics Cards -->
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;" id="statsCards">
-        <div class="card">
-            <div style="font-size: 0.85em; color: #64748b; margin-bottom: 5px;">Total Positions</div>
-            <div style="font-size: 1.5em; font-weight: 700;" id="totalPositions">-</div>
-        </div>
-        <div class="card">
-            <div style="font-size: 0.85em; color: #10b981; margin-bottom: 5px;">Open Positions</div>
-            <div style="font-size: 1.5em; font-weight: 700; color: #10b981;" id="openPositions">-</div>
-        </div>
-        <div class="card">
-            <div style="font-size: 0.85em; color: #64748b; margin-bottom: 5px;">Closed Positions</div>
-            <div style="font-size: 1.5em; font-weight: 700;" id="closedPositions">-</div>
-        </div>
-        <div class="card">
-            <div style="font-size: 0.85em; color: #64748b; margin-bottom: 5px;">Total Invested</div>
-            <div style="font-size: 1.5em; font-weight: 700;" id="totalInvested">-</div>
-        </div>
-        <div class="card">
-            <div style="font-size: 0.85em; color: #64748b; margin-bottom: 5px;">Total P&L</div>
-            <div style="font-size: 1.5em; font-weight: 700;" id="totalPnl">-</div>
-        </div>
-    </div>
-
-    <!-- Filters and Search -->
-    <div class="card" style="margin-bottom: 15px;">
-        <div class="card-header">
-            <span class="card-icon">💰</span>
-            <span class="card-title">Trading Positions</span>
-        </div>
-        <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
-            <select id="statusFilter" onchange="loadPositions()" 
-                    style="padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.9em; background: var(--card-background);">
-                <option value="all">All Positions</option>
-                <option value="open" selected>Open Only</option>
-                <option value="closed">Closed Only</option>
+    <div class="page-section">
+        <div class="toolbar">
+            <span style="font-weight:600;">💰 Positions</span>
+            <select id="statusFilter" onchange="loadPositions()" style="padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9em; background: var(--bg-primary); color: var(--text-primary);">
+                <option value="all">All</option>
+                <option value="open" selected>Open</option>
+                <option value="closed">Closed</option>
             </select>
-            <input type="text" id="searchInput" placeholder="Search by symbol, name, or mint..." 
-                   style="flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.9em;">
-            <button onclick="loadPositions()" class="btn btn-primary">
-                🔄 Refresh
-            </button>
+            <input type="text" id="searchInput" placeholder="Search symbol, name, or mint" 
+                   style="flex: 1; min-width: 200px; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9em; background: var(--bg-primary); color: var(--text-primary);">
+            <div class="spacer"></div>
+            <span id="positionCount" style="color: var(--text-secondary); font-size: 0.9em;">Loading...</span>
+            <span style="color: var(--text-secondary); font-size: 0.9em;">| Auto-refresh: <span id="countdown">30</span>s</span>
+            <button onclick="loadPositions()" class="btn btn-primary">🔄 Refresh</button>
         </div>
-        <div style="font-size: 0.85em; color: #64748b; margin-bottom: 10px;">
-            <span id="positionCount">Loading...</span> | 
-            <span>Auto-refresh: <span id="countdown">30</span>s</span>
-        </div>
-    </div>
-    
-    <!-- Positions Table -->
-    <div class="card">
-        <div style="overflow-x: auto;">
+        <div class="table-scroll">
             <table class="table" id="positionsTable">
                 <thead>
                     <tr>
@@ -837,7 +1588,7 @@ pub fn positions_content() -> String {
                         <th style="min-width: 120px;">P&L</th>
                         <th style="min-width: 120px;">P&L %</th>
                         <th style="min-width: 150px;">Entry Time</th>
-                        <th style="min-width: 300px;">Mint</th>
+                        <th style="min-width: 100px;">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="positionsTableBody">
@@ -910,30 +1661,7 @@ pub fn positions_content() -> String {
             return address.substring(0, 8) + '...' + address.substring(address.length - 6);
         }
 
-        // Load statistics
-        async function loadStats() {
-            try {
-                const response = await fetch('/api/v1/positions/stats');
-                const data = await response.json();
-                
-                document.getElementById('totalPositions').textContent = data.total;
-                document.getElementById('openPositions').textContent = data.open;
-                document.getElementById('closedPositions').textContent = data.closed;
-                document.getElementById('totalInvested').textContent = formatSOL(data.total_invested_sol);
-                
-                const pnlElement = document.getElementById('totalPnl');
-                pnlElement.textContent = formatSOL(data.total_pnl);
-                if (data.total_pnl > 0) {
-                    pnlElement.style.color = '#10b981';
-                } else if (data.total_pnl < 0) {
-                    pnlElement.style.color = '#ef4444';
-                } else {
-                    pnlElement.style.color = '#6b7280';
-                }
-            } catch (error) {
-                console.error('Failed to load stats:', error);
-            }
-        }
+        // Stats removed in compact layout
 
         // Load positions
         async function loadPositions() {
@@ -992,8 +1720,29 @@ pub fn positions_content() -> String {
                             <td>${formatPnL(pnl)}</td>
                             <td>${formatPercent(pnlPercent)}</td>
                             <td style="font-size: 0.85em;">${formatTime(pos.entry_time)}</td>
-                            <td style="font-family: monospace; font-size: 0.75em;" title="${pos.mint}">
-                                ${truncateAddress(pos.mint)}
+                            <td>
+                                <div class="dropdown-container">
+                                    <button class="dropdown-btn" onclick="toggleDropdown(event)" aria-label="Actions">
+                                        ⋮
+                                    </button>
+                                    <div class="dropdown-menu">
+                                        <button onclick="copyMint('${pos.mint}')" class="dropdown-item">
+                                            📋 Copy Mint
+                                        </button>
+                                        <button onclick="openGMGN('${pos.mint}')" class="dropdown-item">
+                                            🔗 Open GMGN
+                                        </button>
+                                        <button onclick="openDexScreener('${pos.mint}')" class="dropdown-item">
+                                            📊 Open DexScreener
+                                        </button>
+                                        <button onclick="openSolscan('${pos.mint}')" class="dropdown-item">
+                                            🔍 Open Solscan
+                                        </button>
+                                        <button onclick="showDebugModal('${pos.mint}', 'position')" class="dropdown-item">
+                                            🐛 Debug Info
+                                        </button>
+                                    </div>
+                                </div>
                             </td>
                         </tr>
                     `;
@@ -1044,7 +1793,6 @@ pub fn positions_content() -> String {
             
             autoRefreshInterval = setInterval(() => {
                 loadPositions();
-                loadStats();
             }, 30000); // 30 seconds
         }
 
@@ -1056,7 +1804,6 @@ pub fn positions_content() -> String {
             });
 
             // Initial load
-            loadStats();
             loadPositions();
             setupAutoRefresh();
             startCountdown();
@@ -1068,39 +1815,29 @@ pub fn positions_content() -> String {
 /// Tokens page content
 pub fn tokens_content() -> String {
     r#"
-    <div class="card" style="margin-bottom: 15px;">
-        <div class="card-header">
-            <span class="card-icon">🪙</span>
-            <span class="card-title">Tokens with Available Prices</span>
+    <div class="page-section">
+        <div class="toolbar">
+            <span style="font-weight:600;">🪙 Tokens</span>
+            <input type="text" id="searchInput" placeholder="Search by symbol or mint" 
+                   style="flex: 1; min-width: 200px; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9em; background: var(--bg-primary); color: var(--text-primary);">
+            <div class="spacer"></div>
+            <span id="tokenCount" style="color: var(--text-secondary); font-size: 0.9em;">Loading...</span>
+            <span style="color: var(--text-secondary); font-size: 0.9em;">| Auto-refresh: <span id="countdown">30</span>s</span>
+            <button onclick="loadTokens()" class="btn btn-primary">🔄 Refresh</button>
         </div>
-        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-            <input type="text" id="searchInput" placeholder="Search by symbol or mint..." 
-                   style="flex: 1; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.9em;">
-            <button onclick="loadTokens()" class="btn btn-primary">
-                🔄 Refresh
-            </button>
-        </div>
-        <div style="font-size: 0.85em; color: #64748b; margin-bottom: 10px;">
-            <span id="tokenCount">Loading...</span> | 
-            <span>Auto-refresh: <span id="countdown">30</span>s</span>
-        </div>
-    </div>
-    
-    <div class="card">
-        <div style="overflow-x: auto;">
+        <div class="table-scroll">
             <table class="table" id="tokensTable">
                 <thead>
                     <tr>
                         <th style="min-width: 80px;">Symbol</th>
-                        <th style="min-width: 120px;">Price (SOL)</th>
-                        <th style="min-width: 100px;">Pool</th>
-                        <th style="min-width: 100px;">Updated</th>
-                        <th style="min-width: 300px;">Mint Address</th>
+                        <th style="min-width: 160px;">Price (SOL)</th>
+                        <th style="min-width: 120px;">Updated</th>
+                        <th style="min-width: 100px;">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="tokensTableBody">
                     <tr>
-                        <td colspan="5" style="text-align: center; padding: 40px; color: #94a3b8;">
+                        <td colspan="4" style="text-align: center; padding: 20px; color: #94a3b8;">
                             <div class="loading-text">Loading tokens...</div>
                         </td>
                     </tr>
@@ -1132,7 +1869,7 @@ pub fn tokens_content() -> String {
             } catch (error) {
                 console.error('Failed to load tokens:', error);
                 document.getElementById('tokensTableBody').innerHTML = 
-                    '<tr><td colspan="5" style="text-align: center; padding: 40px; color: #ef4444;">Failed to load tokens</td></tr>';
+                    '<tr><td colspan="4" style="text-align: center; padding: 20px; color: #ef4444;">Failed to load tokens</td></tr>';
             }
         }
         
@@ -1141,15 +1878,11 @@ pub fn tokens_content() -> String {
             
             if (tokens.length === 0) {
                 tbody.innerHTML = 
-                    '<tr><td colspan="5" style="text-align: center; padding: 40px; color: #94a3b8;">No tokens with available prices</td></tr>';
+                    '<tr><td colspan="4" style="text-align: center; padding: 20px; color: #94a3b8;">No tokens with available prices</td></tr>';
                 return;
             }
             
             tbody.innerHTML = tokens.map(token => {
-                const shortMint = token.mint.substring(0, 8) + '...' + token.mint.substring(token.mint.length - 6);
-                const shortPool = token.pool_address ? 
-                    (token.pool_address.substring(0, 6) + '...' + token.pool_address.substring(token.pool_address.length - 4)) : 
-                    'N/A';
                 const timeAgo = formatTimeAgo(token.updated_at);
                 const priceDisplay = token.price_sol < 0.000001 ? 
                     token.price_sol.toExponential(4) : 
@@ -1159,16 +1892,29 @@ pub fn tokens_content() -> String {
                     <tr>
                         <td style="font-weight: 600; color: #667eea;">${escapeHtml(token.symbol)}</td>
                         <td style="font-family: 'Courier New', monospace; font-weight: 600;">${priceDisplay}</td>
-                        <td style="font-family: 'Courier New', monospace; font-size: 0.85em;">${shortPool}</td>
                         <td style="font-size: 0.85em; color: #64748b;">${timeAgo}</td>
                         <td>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <code style="font-size: 0.85em;">${shortMint}</code>
-                                <button onclick="copyToClipboard('${token.mint}')" 
-                                        class="btn btn-success" 
-                                        style="padding: 3px 8px; font-size: 0.75em;">
-                                    📋 Copy
+                            <div class="dropdown-container">
+                                <button class="dropdown-btn" onclick="toggleDropdown(event)" aria-label="Actions">
+                                    ⋮
                                 </button>
+                                <div class="dropdown-menu">
+                                    <button onclick="copyMint('${token.mint}')" class="dropdown-item">
+                                        📋 Copy Mint
+                                    </button>
+                                    <button onclick="openGMGN('${token.mint}')" class="dropdown-item">
+                                        🔗 Open GMGN
+                                    </button>
+                                    <button onclick="openDexScreener('${token.mint}')" class="dropdown-item">
+                                        📊 Open DexScreener
+                                    </button>
+                                    <button onclick="openSolscan('${token.mint}')" class="dropdown-item">
+                                        🔍 Open Solscan
+                                    </button>
+                                    <button onclick="showDebugModal('${token.mint}', 'token')" class="dropdown-item">
+                                        🐛 Debug Info
+                                    </button>
+                                </div>
                             </div>
                         </td>
                     </tr>
