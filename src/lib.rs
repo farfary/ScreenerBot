@@ -3,7 +3,6 @@
 pub mod arguments;
 pub mod ata_cleanup;
 pub mod configs;
-pub mod dashboard;
 pub mod entry; // New improved entry system
 pub mod errors; // New structured error handling
 pub mod events; // Event recording system for analytics and debugging

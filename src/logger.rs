@@ -62,7 +62,6 @@ const TOTAL_PREFIX_WIDTH: usize = TAG_WIDTH + LOG_TYPE_WIDTH + BRACKET_SPACE_WID
 /// Maximum line length before wrapping
 const MAX_LINE_LENGTH: usize = 145;
 
-use crate::arguments::is_dashboard_enabled;
 use chrono::Local;
 use colored::*;
 use once_cell::sync::Lazy;
@@ -210,9 +209,7 @@ static FILE_LOGGER: Lazy<Arc<Mutex<Option<FileLogger>>>> = Lazy::new(|| {
             Ok(logger) => Arc::new(Mutex::new(Some(logger))),
             Err(e) => {
                 // Can't use file logger yet; last resort stderr print
-                if !crate::arguments::is_dashboard_enabled() {
-                    eprintln!("Failed to initialize file logger: {}", e);
-                }
+                eprintln!("Failed to initialize file logger: {}", e);
                 Arc::new(Mutex::new(None))
             }
         }
@@ -601,9 +598,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
 
     // Print first line with full prefix (console output)
     let console_line = format!("{}{}", base_line, message_color);
-    if !is_dashboard_enabled() {
-        print_stdout_safe(&console_line);
-    }
+    print_stdout_safe(&console_line);
 
     // Write to file (clean version without color codes)
     let timestamp = now.format("%Y-%m-%d %H:%M:%S").to_string();
@@ -647,11 +642,6 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
     let file_line = format!("{} [{}] [{}] {}", timestamp, tag_clean, log_type, message_chunks[0]);
     write_to_file(&file_line);
 
-    // Send to dashboard if dashboard mode is active
-    if is_dashboard_enabled() {
-        crate::dashboard::dashboard_log(tag_clean, log_type, &message_chunks[0]);
-    }
-
     // Print continuation lines with proper indentation (console)
     if message_chunks.len() > 1 {
         let continuation_prefix = format!(
@@ -664,9 +654,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
             let chunk_color = chunk.to_string();
 
             let console_continuation = format!("{}{}", continuation_prefix, chunk_color);
-            if !is_dashboard_enabled() {
-                print_stdout_safe(&console_continuation);
-            }
+            print_stdout_safe(&console_continuation);
 
             // Write continuation lines to file as well
             let file_continuation = format!(

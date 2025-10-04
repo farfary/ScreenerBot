@@ -272,11 +272,6 @@ pub fn is_summary_enabled() -> bool {
     has_arg("--summary")
 }
 
-/// Dashboard mode - enables terminal UI and disables all console logging
-pub fn is_dashboard_enabled() -> bool {
-    has_arg("--dashboard")
-}
-
 /// Run mode - enables actual bot execution (required to start services)
 pub fn is_run_enabled() -> bool {
     has_arg("--run")
@@ -320,7 +315,6 @@ pub fn print_help() {
     println!("    --add-to-blacklist <mint> Add a token mint address to blacklist");
     println!("    --help, -h                Show this help message");
     println!("    --dry-run                 Simulate trading without executing transactions");
-    println!("    --dashboard               Enable terminal UI mode");
     println!("    --summary                 Enable console output from summary module");
     println!();
     println!("DEBUG FLAGS:");
@@ -355,7 +349,6 @@ pub fn print_help() {
     println!("EXAMPLES:");
     println!("    screenerbot --run                           # Start bot normally");
     println!("    screenerbot --run --dry-run                 # Start bot in simulation mode");
-    println!("    screenerbot --run --dashboard               # Start bot with terminal UI");
     println!("    screenerbot --run --summary                 # Start bot with console summary");
     println!("    screenerbot --run --debug-trader --dry-run  # Debug trader with simulation");
     println!("    screenerbot --clear-all                     # Clear all data and reset");
@@ -504,9 +497,6 @@ pub fn get_enabled_debug_modes() -> Vec<&'static str> {
     if is_summary_enabled() {
         modes.push("summary");
     }
-    if is_dashboard_enabled() {
-        modes.push("dashboard");
-    }
     if is_clear_all_enabled() {
         modes.push("clear-all");
     }
@@ -520,17 +510,13 @@ pub fn get_enabled_debug_modes() -> Vec<&'static str> {
 /// Prints debug information about current arguments and enabled debug modes
 pub fn print_debug_info() {
     let args = get_cmd_args();
-    if !is_dashboard_enabled() {
-        log(LogTag::System, "DEBUG", &format!("Command-line arguments: {:?}", args));
-    }
+    log(LogTag::System, "DEBUG", &format!("Command-line arguments: {:?}", args));
 
     let enabled_modes = get_enabled_debug_modes();
-    if !is_dashboard_enabled() {
-        if enabled_modes.is_empty() {
-            log(LogTag::System, "DEBUG", "No debug modes enabled");
-        } else {
-            log(LogTag::System, "DEBUG", &format!("Enabled debug modes: {:?}", enabled_modes));
-        }
+    if enabled_modes.is_empty() {
+        log(LogTag::System, "DEBUG", "No debug modes enabled");
+    } else {
+        log(LogTag::System, "DEBUG", &format!("Enabled debug modes: {:?}", enabled_modes));
     }
 }
 

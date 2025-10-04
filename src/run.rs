@@ -65,24 +65,13 @@ fn register_all_services(manager: &mut ServiceManager) {
     log(LogTag::System, "INFO", "All services registered");
 }
 
-/// Wait for shutdown signal (Ctrl+C or dashboard exit)
+/// Wait for shutdown signal (Ctrl+C)
 async fn wait_for_shutdown_signal() -> Result<(), String> {
-    // Check if dashboard mode is enabled
-    let dashboard_mode = crate::arguments::is_dashboard_enabled();
+    log(LogTag::System, "INFO", "Waiting for Ctrl+C to shutdown");
 
-    if dashboard_mode {
-        log(LogTag::System, "INFO", "Dashboard mode - waiting for user exit (q/Esc/Ctrl+C)");
-        // Dashboard service handles its own shutdown signaling
-        // We just wait for Ctrl+C as fallback
-        tokio::signal
-            ::ctrl_c().await
-            .map_err(|e| format!("Failed to listen for shutdown signal: {}", e))?;
-    } else {
-        log(LogTag::System, "INFO", "Waiting for Ctrl+C to shutdown");
-        tokio::signal
-            ::ctrl_c().await
-            .map_err(|e| format!("Failed to listen for shutdown signal: {}", e))?;
-    }
+    tokio::signal
+        ::ctrl_c().await
+        .map_err(|e| format!("Failed to listen for shutdown signal: {}", e))?;
 
     log(LogTag::System, "INFO", "Shutdown signal received");
     Ok(())
