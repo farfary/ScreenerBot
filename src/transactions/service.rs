@@ -1179,10 +1179,17 @@ async fn perform_fallback_transaction_check(
     processor: &Arc<TransactionProcessor>
 ) -> Result<usize, String> {
     let debug = is_debug_transactions_enabled();
+    let positions_count = crate::positions::get_open_positions_count().await;
+    let pending_count = get_pending_transactions_count().await;
+
     log(
         LogTag::Transactions,
         "FALLBACK",
-        "Performing fallback transaction check (WebSocket inactive)"
+        &format!(
+            "Performing fallback transaction check (WebSocket inactive) - Open positions: {}, Pending txs: {}",
+            positions_count,
+            pending_count
+        )
     );
 
     // Fetch recent transactions
@@ -1330,6 +1337,7 @@ async fn handle_websocket_transaction(
 /// Service performance metrics
 #[derive(Debug)]
 struct ServiceMetrics {
+    service_start_time: Option<DateTime<Utc>>,
     last_periodic_check: Option<DateTime<Utc>>,
     last_websocket_activity: Option<DateTime<Utc>>,
     periodic_check_count: u64,
@@ -1341,6 +1349,7 @@ struct ServiceMetrics {
 impl ServiceMetrics {
     fn new() -> Self {
         Self {
+            service_start_time: Some(Utc::now()),
             last_periodic_check: None,
             last_websocket_activity: None,
             periodic_check_count: 0,
@@ -1423,14 +1432,82 @@ async fn perform_health_check(metrics: &mut ServiceMetrics) -> Result<(), String
 }
 
 /// Determine if fallback check should be performed
+///
+/// Fallback is only performed when:
+/// 1. There are open positions OR pending transactions to monitor
+/// 2. WebSocket has been silent for >10 seconds (or never connected with >10s uptime)
 async fn should_perform_fallback_check(metrics: &ServiceMetrics) -> bool {
-    // Perform fallback if no WebSocket activity in the last 5 minutes
+    // Step 1: Check if there's anything to monitor
+    let has_open_positions = crate::positions::get_open_positions_count().await > 0;
+    let has_pending_txs = get_pending_transactions_count().await > 0;
+
+    if !has_open_positions && !has_pending_txs {
+        // Idle state - no need for fallback
+        if is_debug_transactions_enabled() {
+            log(
+                LogTag::Transactions,
+                "DEBUG",
+                "Skipping fallback: no open positions or pending transactions (idle state)"
+            );
+        }
+        return false;
+    }
+
+    // Step 2: Check WebSocket activity with grace period
     if let Some(last_activity) = metrics.last_websocket_activity {
-        let time_since_activity = (Utc::now() - last_activity).num_seconds();
-        time_since_activity > 300
+        let silence_duration = (Utc::now() - last_activity).num_seconds();
+
+        // Only fallback if WS has been silent for >10 seconds
+        if silence_duration > 10 {
+            if is_debug_transactions_enabled() {
+                log(
+                    LogTag::Transactions,
+                    "DEBUG",
+                    &format!(
+                        "Fallback triggered: WebSocket silent for {}s (positions: {}, pending: {})",
+                        silence_duration,
+                        has_open_positions,
+                        has_pending_txs
+                    )
+                );
+            }
+            true
+        } else {
+            false
+        }
     } else {
-        // No WebSocket activity recorded yet, perform fallback
-        true
+        // WebSocket never connected or failed
+        // Only fallback if we've been running for >10 seconds (startup grace)
+        if let Some(service_start) = metrics.service_start_time {
+            let uptime = (Utc::now() - service_start).num_seconds();
+            if uptime > 10 {
+                if is_debug_transactions_enabled() {
+                    log(
+                        LogTag::Transactions,
+                        "DEBUG",
+                        &format!(
+                            "Fallback triggered: WebSocket never connected, uptime {}s (positions: {}, pending: {})",
+                            uptime,
+                            has_open_positions,
+                            has_pending_txs
+                        )
+                    );
+                }
+                true
+            } else {
+                if is_debug_transactions_enabled() {
+                    log(
+                        LogTag::Transactions,
+                        "DEBUG",
+                        &format!("Waiting for WebSocket to connect (uptime: {}s)", uptime)
+                    );
+                }
+                false
+            }
+        } else {
+            // Just started, give WS time to connect
+            false
+        }
     }
 }
 
