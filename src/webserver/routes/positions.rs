@@ -62,7 +62,9 @@ pub struct PositionsStatsResponse {
 }
 
 pub fn routes() -> Router<Arc<AppState>> {
-    Router::new().route("/", get(get_positions)).route("/stats", get(get_positions_stats))
+    Router::new()
+        .route("/positions", get(get_positions))
+        .route("/positions/stats", get(get_positions_stats))
 }
 
 async fn get_positions(Query(params): Query<PositionsQuery>) -> Json<Vec<PositionResponse>> {
