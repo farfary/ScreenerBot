@@ -51,6 +51,7 @@ fn register_all_services(manager: &mut ServiceManager) {
     manager.register(Box::new(BlacklistService));
     manager.register(Box::new(WebserverService));
     manager.register(Box::new(TokensService));
+    manager.register(Box::new(OhlcvService));
     manager.register(Box::new(PositionsService));
     manager.register(Box::new(PoolsService));
     manager.register(Box::new(SecurityService));
@@ -61,6 +62,7 @@ fn register_all_services(manager: &mut ServiceManager) {
     manager.register(Box::new(SolPriceService));
     manager.register(Box::new(LearningService));
     manager.register(Box::new(TraderService));
+    manager.register(Box::new(SummaryService));
 
     log(LogTag::System, "INFO", "All services registered");
 }
