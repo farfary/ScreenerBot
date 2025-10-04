@@ -1036,76 +1036,172 @@ async fn run_transaction_service(config: ServiceConfig) -> Result<(), String> {
     // Track performance metrics
     let mut metrics = ServiceMetrics::new();
 
-    // If WebSocket is available, include it in the select loop; otherwise run without it
-    if let Some(ref mut rx) = websocket_receiver {
-        loop {
-            tokio::select! {
-                // Periodic transaction checking
-                _ = check_interval.tick() => {
-                    if let Err(e) = perform_periodic_check(&config, &processor, &fetcher, &mut metrics).await {
-                        log(
-                            LogTag::Transactions,
-                            "ERROR",
-                            &format!("Periodic check failed: {}", e)
-                        );
-                    }
-                }
+    // If WebSocket was successfully initialized, mark it as active immediately
+    // This prevents unnecessary fallback checks during the initial period when
+    // no transactions have occurred yet
+    if websocket_receiver.is_some() {
+        metrics.update_websocket_activity();
+        log(LogTag::Transactions, "INFO", "WebSocket initialized successfully - marking as active");
+    }
 
-                // WebSocket transaction notifications
-                sig_opt = rx.recv() => {
-                    match sig_opt {
-                        Some(sig) => {
-                            metrics.update_websocket_activity();
-                            if let Err(e) = handle_websocket_transaction(&config, &processor, sig).await {
-                                log(
-                                    LogTag::Transactions,
-                                    "ERROR",
-                                    &format!("WebSocket transaction handling failed: {}", e)
-                                );
-                            }
+    // Create WebSocket health check interval (every 15 seconds)
+    let mut ws_health_check_interval = interval(Duration::from_secs(15));
+    ws_health_check_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    // Main service loop with WebSocket health monitoring and reconnection
+    loop {
+        tokio::select! {
+            // Periodic transaction checking (every 3 seconds by default)
+            _ = check_interval.tick() => {
+                if let Err(e) = perform_periodic_check(&config, &processor, &fetcher, &mut metrics).await {
+                    log(
+                        LogTag::Transactions,
+                        "ERROR",
+                        &format!("Periodic check failed: {}", e)
+                    );
+                }
+            }
+
+            // WebSocket transaction notifications (if WebSocket is active)
+            sig_opt = async {
+                if let Some(ref mut rx) = websocket_receiver {
+                    rx.recv().await
+                } else {
+                    // No WebSocket - return pending (never resolves)
+                    std::future::pending::<Option<String>>().await
+                }
+            } => {
+                match sig_opt {
+                    Some(sig) => {
+                        metrics.update_websocket_activity();
+                        if let Err(e) = handle_websocket_transaction(&config, &processor, sig).await {
+                            log(
+                                LogTag::Transactions,
+                                "ERROR",
+                                &format!("WebSocket transaction handling failed: {}", e)
+                            );
                         }
-                        None => {
-                            log(LogTag::Transactions, "WARN", "WebSocket channel closed - continuing without WS");
-                            break; // Fall through to no-WS loop
-                        }
                     }
-                }
-
-                // Shutdown signal
-                _ = SHUTDOWN_NOTIFY.notified() => {
-                    log(LogTag::Transactions, "INFO", "Received shutdown signal");
-                    return Ok(());
-                }
-
-                // Service health check (every 5 minutes)
-                _ = tokio::time::sleep(Duration::from_secs(300)) => {
-                    if let Err(e) = perform_health_check(&mut metrics).await {
+                    None => {
                         log(
                             LogTag::Transactions,
                             "WARN",
-                            &format!("Health check failed: {}", e)
+                            "WebSocket channel closed - will attempt reconnection on next health check"
                         );
+                        websocket_receiver = None;
                     }
                 }
             }
-        }
-    }
 
-    // Fallback loop without WebSocket
-    loop {
-        tokio::select! {
-            _ = check_interval.tick() => {
-                if let Err(e) = perform_periodic_check(&config, &processor, &fetcher, &mut metrics).await {
-                    log(LogTag::Transactions, "ERROR", &format!("Periodic check failed: {}", e));
+            // WebSocket health check (every 15 seconds)
+            _ = ws_health_check_interval.tick() => {
+                metrics.update_websocket_health_check();
+                
+                if config.enable_websocket {
+                    // Check if WebSocket exists and is healthy
+                    let ws_exists = websocket_receiver.is_some();
+                    let ws_healthy = metrics.is_websocket_healthy();
+                    
+                    if ws_exists && !ws_healthy {
+                        // WebSocket exists but is unhealthy (no messages for 30s)
+                        log(
+                            LogTag::Transactions,
+                            "WARN",
+                            &format!(
+                                "⚠️ WebSocket unhealthy (no messages for >30s) - reconnecting... (attempt #{})",
+                                metrics.websocket_reconnect_count + 1
+                            )
+                        );
+                        
+                        // Drop the old receiver to close the connection
+                        websocket_receiver = None;
+                        
+                        // Attempt reconnection
+                        match initialize_websocket_monitoring(config.wallet_pubkey).await {
+                            Ok(new_receiver) => {
+                                websocket_receiver = new_receiver;
+                                metrics.increment_websocket_reconnect();
+                                metrics.update_websocket_activity();
+                                log(
+                                    LogTag::Transactions,
+                                    "INFO",
+                                    &format!(
+                                        "✅ WebSocket reconnected successfully (total reconnects: {})",
+                                        metrics.websocket_reconnect_count
+                                    )
+                                );
+                            }
+                            Err(e) => {
+                                log(
+                                    LogTag::Transactions,
+                                    "ERROR",
+                                    &format!("❌ WebSocket reconnection failed: {} - will retry in 15s", e)
+                                );
+                            }
+                        }
+                    } else if !ws_exists {
+                        // WebSocket doesn't exist - try to establish it
+                        log(
+                            LogTag::Transactions,
+                            "INFO",
+                            "🔌 No WebSocket connection - attempting to establish..."
+                        );
+                        
+                        match initialize_websocket_monitoring(config.wallet_pubkey).await {
+                            Ok(new_receiver) => {
+                                websocket_receiver = new_receiver;
+                                metrics.increment_websocket_reconnect();
+                                metrics.update_websocket_activity();
+                                log(
+                                    LogTag::Transactions,
+                                    "INFO",
+                                    "✅ WebSocket connection established successfully"
+                                );
+                            }
+                            Err(e) => {
+                                log(
+                                    LogTag::Transactions,
+                                    "WARN",
+                                    &format!("WebSocket connection failed: {} - will retry in 15s", e)
+                                );
+                            }
+                        }
+                    } else if ws_exists && ws_healthy {
+                        // WebSocket is healthy - just log debug info
+                        if is_debug_transactions_enabled() {
+                            let last_msg_ago = if let Some(last_msg) = metrics.last_websocket_message {
+                                (Utc::now() - last_msg).num_seconds()
+                            } else {
+                                -1
+                            };
+                            log(
+                                LogTag::Transactions,
+                                "DEBUG",
+                                &format!(
+                                    "WebSocket health check: HEALTHY (last message: {}s ago, reconnects: {})",
+                                    last_msg_ago,
+                                    metrics.websocket_reconnect_count
+                                )
+                            );
+                        }
+                    }
                 }
             }
+
+            // Shutdown signal
             _ = SHUTDOWN_NOTIFY.notified() => {
                 log(LogTag::Transactions, "INFO", "Received shutdown signal");
-                break;
+                return Ok(());
             }
+
+            // General service health check (every 5 minutes)
             _ = tokio::time::sleep(Duration::from_secs(300)) => {
                 if let Err(e) = perform_health_check(&mut metrics).await {
-                    log(LogTag::Transactions, "WARN", &format!("Health check failed: {}", e));
+                    log(
+                        LogTag::Transactions,
+                        "WARN",
+                        &format!("Health check failed: {}", e)
+                    );
                 }
             }
         }
@@ -1340,6 +1436,9 @@ struct ServiceMetrics {
     service_start_time: Option<DateTime<Utc>>,
     last_periodic_check: Option<DateTime<Utc>>,
     last_websocket_activity: Option<DateTime<Utc>>,
+    last_websocket_message: Option<DateTime<Utc>>, // Track ANY WebSocket message (pings, pongs, etc)
+    last_websocket_health_check: Option<DateTime<Utc>>,
+    websocket_reconnect_count: u64,
     periodic_check_count: u64,
     websocket_transaction_count: u64,
     error_count: u64,
@@ -1352,6 +1451,9 @@ impl ServiceMetrics {
             service_start_time: Some(Utc::now()),
             last_periodic_check: None,
             last_websocket_activity: None,
+            last_websocket_message: None,
+            last_websocket_health_check: None,
+            websocket_reconnect_count: 0,
             periodic_check_count: 0,
             websocket_transaction_count: 0,
             error_count: 0,
@@ -1380,8 +1482,39 @@ impl ServiceMetrics {
     }
 
     fn update_websocket_activity(&mut self) {
-        self.last_websocket_activity = Some(Utc::now());
+        let now = Utc::now();
+        self.last_websocket_activity = Some(now);
+        self.last_websocket_message = Some(now);
         self.websocket_transaction_count += 1;
+    }
+
+    fn update_websocket_message(&mut self) {
+        self.last_websocket_message = Some(Utc::now());
+    }
+
+    fn update_websocket_health_check(&mut self) {
+        self.last_websocket_health_check = Some(Utc::now());
+    }
+
+    fn increment_websocket_reconnect(&mut self) {
+        self.websocket_reconnect_count += 1;
+    }
+
+    fn is_websocket_healthy(&self) -> bool {
+        // WebSocket is considered healthy if we've received any message in the last 30 seconds
+        if let Some(last_msg) = self.last_websocket_message {
+            let silence_duration = (Utc::now() - last_msg).num_seconds();
+            silence_duration < 30
+        } else {
+            // No messages received yet - check if we're still in startup grace period
+            if let Some(activity) = self.last_websocket_activity {
+                let since_activity = (Utc::now() - activity).num_seconds();
+                since_activity < 30
+            } else {
+                // No activity at all yet
+                false
+            }
+        }
     }
 
     fn increment_error(&mut self) {
