@@ -9,6 +9,7 @@ use crate::webserver::{ state::AppState, templates };
 
 pub mod status;
 pub mod tokens;
+pub mod events;
 
 /// Create the main API router with all routes
 pub fn create_router(state: Arc<AppState>) -> Router {
@@ -67,7 +68,9 @@ async fn api_info() -> Json<serde_json::Value> {
             "status": "GET /api/v1/status",
             "services": "GET /api/v1/status/services",
             "metrics": "GET /api/v1/status/metrics",
-            "tokens": "GET /api/v1/tokens"
+            "tokens": "GET /api/v1/tokens",
+            "events": "GET /api/v1/events",
+            "events_categories": "GET /api/v1/events/categories"
         },
         "documentation": "See docs/webserver-dashboard-api.md for full API documentation",
         "timestamp": chrono::Utc::now().to_rfc3339()
@@ -77,5 +80,5 @@ async fn api_info() -> Json<serde_json::Value> {
 
 /// API v1 routes
 fn api_v1_routes() -> Router<Arc<AppState>> {
-    Router::new().merge(status::routes()).merge(tokens::routes())
+    Router::new().merge(status::routes()).merge(tokens::routes()).merge(events::routes())
 }

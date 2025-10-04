@@ -7,7 +7,7 @@
 pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     format!(
         r#"<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -19,8 +19,14 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
 <body>
     <div class="header">
         <h1>🤖 ScreenerBot Dashboard</h1>
-        <div class="status-indicator">
-            <span id="statusBadge" class="badge loading">⏳ Loading...</span>
+        <div class="header-controls">
+            <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+                <span id="themeIcon">🌙</span>
+                <span id="themeText">Dark</span>
+            </button>
+            <div class="status-indicator">
+                <span id="statusBadge" class="badge loading">⏳ Loading...</span>
+            </div>
         </div>
     </div>
     
@@ -38,6 +44,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     
     <script>
         {common_scripts}
+        {theme_scripts}
     </script>
 </body>
 </html>"#,
@@ -45,34 +52,87 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         common_styles = common_styles(),
         nav_tabs = nav_tabs(active_tab),
         content = content,
-        common_scripts = common_scripts()
+        common_scripts = common_scripts(),
+        theme_scripts = theme_scripts()
     )
 }
 
 /// Common CSS styles
 fn common_styles() -> &'static str {
     r#"
+        /* CSS Variables for Theming */
+        :root {
+            /* Light mode (default) */
+            --bg-primary: #f5f7fa;
+            --bg-secondary: #ffffff;
+            --bg-card: #ffffff;
+            --bg-card-hover: #f8fafc;
+            --text-primary: #2d3748;
+            --text-secondary: #718096;
+            --text-muted: #a0aec0;
+            --border-color: #e2e8f0;
+            --header-bg: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --header-text: #ffffff;
+            --link-color: #667eea;
+            --link-hover: #5568d3;
+            --badge-online: #10b981;
+            --badge-error: #ef4444;
+            --badge-loading: #f59e0b;
+            --shadow-sm: rgba(0,0,0,0.05);
+            --shadow-md: rgba(0,0,0,0.1);
+            --shadow-lg: rgba(0,0,0,0.2);
+            --table-header-bg: #f8fafc;
+            --table-header-text: #475569;
+            --service-item-bg: #f8fafc;
+        }
+        
+        /* Dark mode */
+        [data-theme="dark"] {
+            --bg-primary: #1a202c;
+            --bg-secondary: #2d3748;
+            --bg-card: #2d3748;
+            --bg-card-hover: #374151;
+            --text-primary: #e2e8f0;
+            --text-secondary: #cbd5e0;
+            --text-muted: #718096;
+            --border-color: #4a5568;
+            --header-bg: linear-gradient(135deg, #4c51bf 0%, #553c9a 100%);
+            --header-text: #ffffff;
+            --link-color: #818cf8;
+            --link-hover: #a5b4fc;
+            --badge-online: #34d399;
+            --badge-error: #f87171;
+            --badge-loading: #fbbf24;
+            --shadow-sm: rgba(0,0,0,0.2);
+            --shadow-md: rgba(0,0,0,0.3);
+            --shadow-lg: rgba(0,0,0,0.5);
+            --table-header-bg: #374151;
+            --table-header-text: #cbd5e0;
+            --service-item-bg: #374151;
+        }
+        
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
         }
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f5f7fa;
-            color: #2d3748;
+            background: var(--bg-primary);
+            color: var(--text-primary);
             line-height: 1.6;
         }
         
         .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+            background: var(--header-bg);
+            color: var(--header-text);
             padding: 20px 30px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 10px var(--shadow-md);
         }
         
         .header h1 {
@@ -80,10 +140,39 @@ fn common_styles() -> &'static str {
             font-weight: 600;
         }
         
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        
         .status-indicator {
             display: flex;
             align-items: center;
             gap: 10px;
+        }
+        
+        /* Theme Toggle Button */
+        .theme-toggle {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: var(--header-text);
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 1em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.3s ease;
+        }
+        
+        .theme-toggle:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        .theme-toggle:active {
+            transform: scale(0.95);
         }
         
         .badge {
@@ -97,18 +186,18 @@ fn common_styles() -> &'static str {
         }
         
         .badge.online {
-            background: #10b981;
+            background: var(--badge-online);
             color: white;
         }
         
         .badge.loading {
-            background: #f59e0b;
+            background: var(--badge-loading);
             color: white;
             animation: pulse 2s ease-in-out infinite;
         }
         
         .badge.error {
-            background: #ef4444;
+            background: var(--badge-error);
             color: white;
         }
         
@@ -118,9 +207,9 @@ fn common_styles() -> &'static str {
         }
         
         .tabs {
-            background: white;
+            background: var(--bg-secondary);
             padding: 0;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            box-shadow: 0 1px 3px var(--shadow-md);
             display: flex;
             overflow-x: auto;
         }
@@ -128,7 +217,7 @@ fn common_styles() -> &'static str {
         .tab {
             padding: 15px 25px;
             text-decoration: none;
-            color: #64748b;
+            color: var(--text-secondary);
             font-weight: 500;
             border-bottom: 3px solid transparent;
             transition: all 0.3s ease;
@@ -136,14 +225,14 @@ fn common_styles() -> &'static str {
         }
         
         .tab:hover {
-            background: #f8fafc;
-            color: #667eea;
+            background: var(--bg-card-hover);
+            color: var(--link-color);
         }
         
         .tab.active {
-            color: #667eea;
-            border-bottom-color: #667eea;
-            background: #f8fafc;
+            color: var(--link-color);
+            border-bottom-color: var(--link-color);
+            background: var(--bg-card-hover);
         }
         
         .content {
@@ -160,15 +249,16 @@ fn common_styles() -> &'static str {
         }
         
         .card {
-            background: white;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
             border-radius: 8px;
             padding: 20px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            box-shadow: 0 1px 3px var(--shadow-sm);
             transition: box-shadow 0.3s ease;
         }
         
         .card:hover {
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            box-shadow: 0 4px 12px var(--shadow-md);
         }
         
         .card-header {
@@ -177,13 +267,13 @@ fn common_styles() -> &'static str {
             gap: 8px;
             margin-bottom: 15px;
             padding-bottom: 10px;
-            border-bottom: 2px solid #e2e8f0;
+            border-bottom: 2px solid var(--border-color);
         }
         
         .card-title {
             font-size: 1.1em;
             font-weight: 600;
-            color: #1e293b;
+            color: var(--text-primary);
         }
         
         .card-icon {
@@ -198,12 +288,12 @@ fn common_styles() -> &'static str {
         }
         
         .metric-label {
-            color: #64748b;
+            color: var(--text-secondary);
         }
         
         .metric-value {
             font-weight: 600;
-            color: #1e293b;
+            color: var(--text-primary);
         }
         
         .service-list {
@@ -217,7 +307,7 @@ fn common_styles() -> &'static str {
             justify-content: space-between;
             align-items: center;
             padding: 10px;
-            background: #f8fafc;
+            background: var(--service-item-bg);
             border-radius: 6px;
             font-size: 0.9em;
         }
@@ -230,12 +320,12 @@ fn common_styles() -> &'static str {
         }
         
         .status-dot.ready {
-            background: #10b981;
+            background: var(--badge-online);
             box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
         }
         
         .status-dot.not-ready {
-            background: #ef4444;
+            background: var(--badge-error);
             box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
         }
         
@@ -246,21 +336,21 @@ fn common_styles() -> &'static str {
         }
         
         .table th {
-            background: #f8fafc;
+            background: var(--table-header-bg);
             padding: 10px;
             text-align: left;
             font-weight: 600;
-            color: #475569;
-            border-bottom: 2px solid #e2e8f0;
+            color: var(--table-header-text);
+            border-bottom: 2px solid var(--border-color);
         }
         
         .table td {
             padding: 10px;
-            border-bottom: 1px solid #e2e8f0;
+            border-bottom: 1px solid var(--border-color);
         }
         
         .table tr:hover {
-            background: #f8fafc;
+            background: var(--bg-card-hover);
         }
         
         .btn {
@@ -274,16 +364,16 @@ fn common_styles() -> &'static str {
         }
         
         .btn-primary {
-            background: #667eea;
+            background: var(--link-color);
             color: white;
         }
         
         .btn-primary:hover {
-            background: #5568d3;
+            background: var(--link-hover);
         }
         
         .btn-success {
-            background: #10b981;
+            background: var(--badge-online);
             color: white;
         }
         
@@ -292,17 +382,17 @@ fn common_styles() -> &'static str {
         }
         
         .footer {
-            background: white;
+            background: var(--bg-secondary);
             padding: 15px;
             text-align: center;
-            color: #64748b;
+            color: var(--text-secondary);
             font-size: 0.85em;
             margin-top: 20px;
-            box-shadow: 0 -1px 3px rgba(0,0,0,0.1);
+            box-shadow: 0 -1px 3px var(--shadow-md);
         }
         
         .footer a {
-            color: #667eea;
+            color: var(--link-color);
             text-decoration: none;
         }
         
@@ -311,14 +401,14 @@ fn common_styles() -> &'static str {
         }
         
         .loading-text {
-            color: #f59e0b;
+            color: var(--badge-loading);
             font-style: italic;
         }
         
         .empty-state {
             text-align: center;
             padding: 40px;
-            color: #94a3b8;
+            color: var(--text-muted);
         }
         
         .empty-state-icon {
@@ -350,6 +440,52 @@ fn nav_tabs(active: &str) -> String {
 /// Common JavaScript functions
 fn common_scripts() -> &'static str {
     r#"
+        // State Manager - Browser Storage
+        const AppState = {
+            save(key, value) {
+                try {
+                    localStorage.setItem(`screenerbot_${key}`, JSON.stringify(value));
+                } catch (e) {
+                    console.warn('Failed to save state:', key, e);
+                }
+            },
+            
+            load(key, defaultValue = null) {
+                try {
+                    const item = localStorage.getItem(`screenerbot_${key}`);
+                    return item ? JSON.parse(item) : defaultValue;
+                } catch (e) {
+                    console.warn('Failed to load state:', key, e);
+                    return defaultValue;
+                }
+            },
+            
+            remove(key) {
+                try {
+                    localStorage.removeItem(`screenerbot_${key}`);
+                } catch (e) {
+                    console.warn('Failed to remove state:', key, e);
+                }
+            },
+            
+            clearAll() {
+                try {
+                    Object.keys(localStorage)
+                        .filter(key => key.startsWith('screenerbot_'))
+                        .forEach(key => localStorage.removeItem(key));
+                } catch (e) {
+                    console.warn('Failed to clear state:', e);
+                }
+            }
+        };
+        
+        // Save active tab on navigation
+        document.addEventListener('DOMContentLoaded', () => {
+            const currentPath = window.location.pathname;
+            const tab = currentPath === '/' ? 'home' : currentPath.substring(1);
+            AppState.save('lastTab', tab);
+        });
+        
         // Update status badge
         async function updateStatusBadge() {
             try {
@@ -392,6 +528,42 @@ fn common_scripts() -> &'static str {
         // Initialize
         updateStatusBadge();
         setInterval(updateStatusBadge, 5000);
+    "#
+}
+
+/// Theme management JavaScript
+fn theme_scripts() -> &'static str {
+    r#"
+        // Theme Management
+        (function() {
+            const html = document.documentElement;
+            const themeToggle = document.getElementById('themeToggle');
+            const themeIcon = document.getElementById('themeIcon');
+            const themeText = document.getElementById('themeText');
+            
+            // Load saved theme or default to light
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            setTheme(savedTheme);
+            
+            // Theme toggle click handler
+            themeToggle.addEventListener('click', () => {
+                const currentTheme = html.getAttribute('data-theme');
+                const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+                setTheme(newTheme);
+                localStorage.setItem('theme', newTheme);
+            });
+            
+            function setTheme(theme) {
+                html.setAttribute('data-theme', theme);
+                if (theme === 'dark') {
+                    themeIcon.textContent = '☀️';
+                    themeText.textContent = 'Light';
+                } else {
+                    themeIcon.textContent = '🌙';
+                    themeText.textContent = 'Dark';
+                }
+            }
+        })();
     "#
 }
 
@@ -779,14 +951,237 @@ pub fn events_content() -> String {
         <div class="card-header">
             <span class="card-icon">📡</span>
             <span class="card-title">System Events</span>
+            <span id="eventsCount" class="badge loading">Loading...</span>
         </div>
-        <div class="empty-state">
-            <div class="empty-state-icon">📋</div>
-            <p>Event logs and monitoring coming in Phase 2</p>
-            <p style="font-size: 0.85em; margin-top: 10px;">
-                This section will show real-time events, trades, and system notifications.
-            </p>
+        
+        <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+            <input type="text" 
+                   id="eventSearch" 
+                   placeholder="🔍 Search events..." 
+                   style="flex: 1; min-width: 200px; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary);">
+            
+            <select id="categoryFilter" 
+                    style="padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary);">
+                <option value="">All Categories</option>
+                <option value="swap">Swap</option>
+                <option value="transaction">Transaction</option>
+                <option value="pool">Pool</option>
+                <option value="token">Token</option>
+                <option value="position">Position</option>
+                <option value="security">Security</option>
+                <option value="entry">Entry</option>
+                <option value="system">System</option>
+            </select>
+            
+            <select id="severityFilter" 
+                    style="padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary);">
+                <option value="">All Severity</option>
+                <option value="info">Info</option>
+                <option value="warn">Warning</option>
+                <option value="error">Error</option>
+                <option value="debug">Debug</option>
+            </select>
+            
+            <button id="refreshEvents" 
+                    style="padding: 8px 16px; background: var(--link-color); color: white; border: none; border-radius: 4px; cursor: pointer;">
+                🔄 Refresh
+            </button>
+        </div>
+        
+        <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="border-bottom: 2px solid var(--border-color); text-align: left;">
+                        <th style="padding: 10px;">Time</th>
+                        <th style="padding: 10px;">Category</th>
+                        <th style="padding: 10px;">Subtype</th>
+                        <th style="padding: 10px;">Severity</th>
+                        <th style="padding: 10px;">Message</th>
+                        <th style="padding: 10px;">Reference</th>
+                    </tr>
+                </thead>
+                <tbody id="eventsTableBody">
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                            Loading events...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <div style="margin-top: 15px; text-align: center; color: var(--text-secondary); font-size: 0.9em;">
+            Auto-refresh: <span id="eventsCountdown">30</span>s
         </div>
     </div>
+    
+    <script>
+        let allEventsData = [];
+        let eventsCountdownSeconds = 30;
+        let eventsCountdownInterval = null;
+        
+        // Load events from API
+        async function loadEvents() {
+            try {
+                const category = document.getElementById('categoryFilter').value;
+                const severity = document.getElementById('severityFilter').value;
+                
+                let url = '/api/v1/events?limit=200';
+                if (category) url += `&category=${category}`;
+                if (severity) url += `&severity=${severity}`;
+                
+                const res = await fetch(url);
+                const data = await res.json();
+                
+                allEventsData = data.events;
+                renderEvents(allEventsData);
+                
+                document.getElementById('eventsCount').textContent = `${data.count} events`;
+                document.getElementById('eventsCount').className = 'badge online';
+                
+                // Save filter state
+                AppState.save('events_category', category);
+                AppState.save('events_severity', severity);
+                
+            } catch (error) {
+                console.error('Failed to load events:', error);
+                document.getElementById('eventsTableBody').innerHTML = `
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 40px; color: var(--badge-error);">
+                            ❌ Failed to load events
+                        </td>
+                    </tr>
+                `;
+                document.getElementById('eventsCount').className = 'badge error';
+            }
+        }
+        
+        // Render events in table
+        function renderEvents(events) {
+            const tbody = document.getElementById('eventsTableBody');
+            
+            if (events.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                            📋 No events found
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            tbody.innerHTML = events.map(event => {
+                const time = formatTimeAgo(new Date(event.event_time));
+                const severityColor = getSeverityColor(event.severity);
+                const shortRef = event.reference_id 
+                    ? event.reference_id.substring(0, 8) + '...' 
+                    : '-';
+                
+                return `
+                    <tr style="border-bottom: 1px solid var(--border-color);">
+                        <td style="padding: 10px; white-space: nowrap;">${time}</td>
+                        <td style="padding: 10px;">
+                            <span style="background: var(--badge-loading); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85em;">
+                                ${event.category}
+                            </span>
+                        </td>
+                        <td style="padding: 10px; font-size: 0.9em;">${event.subtype || '-'}</td>
+                        <td style="padding: 10px;">
+                            <span style="background: ${severityColor}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85em;">
+                                ${event.severity}
+                            </span>
+                        </td>
+                        <td style="padding: 10px; max-width: 400px; overflow: hidden; text-overflow: ellipsis;">
+                            ${escapeHtml(event.message)}
+                        </td>
+                        <td style="padding: 10px; font-family: monospace; font-size: 0.85em;">${shortRef}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        // Get color for severity
+        function getSeverityColor(severity) {
+            const colors = {
+                'Info': 'var(--badge-online)',
+                'Warn': 'var(--badge-loading)',
+                'Error': 'var(--badge-error)',
+                'Debug': '#6b7280'
+            };
+            return colors[severity] || '#6b7280';
+        }
+        
+        // Search events
+        document.getElementById('eventSearch').addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            AppState.save('events_search', searchTerm);
+            
+            const filtered = allEventsData.filter(event => 
+                event.category.toLowerCase().includes(searchTerm) ||
+                (event.subtype && event.subtype.toLowerCase().includes(searchTerm)) ||
+                event.message.toLowerCase().includes(searchTerm) ||
+                (event.reference_id && event.reference_id.toLowerCase().includes(searchTerm))
+            );
+            renderEvents(filtered);
+        });
+        
+        // Filter by category
+        document.getElementById('categoryFilter').addEventListener('change', loadEvents);
+        
+        // Filter by severity
+        document.getElementById('severityFilter').addEventListener('change', loadEvents);
+        
+        // Refresh button
+        document.getElementById('refreshEvents').addEventListener('click', () => {
+            loadEvents();
+            eventsCountdownSeconds = 30;
+        });
+        
+        // Time formatting
+        function formatTimeAgo(date) {
+            const seconds = Math.floor((new Date() - date) / 1000);
+            if (seconds < 60) return `${seconds}s ago`;
+            const minutes = Math.floor(seconds / 60);
+            if (minutes < 60) return `${minutes}m ago`;
+            const hours = Math.floor(minutes / 60);
+            if (hours < 24) return `${hours}h ago`;
+            const days = Math.floor(hours / 24);
+            return `${days}d ago`;
+        }
+        
+        // HTML escape
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Auto-refresh countdown
+        function startEventsCountdown() {
+            eventsCountdownInterval = setInterval(() => {
+                eventsCountdownSeconds--;
+                document.getElementById('eventsCountdown').textContent = eventsCountdownSeconds;
+                
+                if (eventsCountdownSeconds <= 0) {
+                    loadEvents();
+                    eventsCountdownSeconds = 30;
+                }
+            }, 1000);
+        }
+        
+        // Restore saved filters
+        const savedCategory = AppState.load('events_category', '');
+        const savedSeverity = AppState.load('events_severity', '');
+        const savedSearch = AppState.load('events_search', '');
+        
+        if (savedCategory) document.getElementById('categoryFilter').value = savedCategory;
+        if (savedSeverity) document.getElementById('severityFilter').value = savedSeverity;
+        if (savedSearch) document.getElementById('eventSearch').value = savedSearch;
+        
+        // Initial load
+        loadEvents();
+        startEventsCountdown();
+    </script>
     "#.to_string()
 }
