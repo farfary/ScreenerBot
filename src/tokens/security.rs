@@ -852,6 +852,10 @@ pub fn start_security_summary_task() {
         let mut interval = tokio::time::interval(Duration::from_secs(30));
         loop {
             interval.tick().await;
+            // Suppress summary output until Transactions system is fully ready
+            if !crate::global::TRANSACTIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst) {
+                continue;
+            }
 
             if let Some(analyzer) = get_security_analyzer() {
                 let summary = analyzer.get_security_summary().await;
@@ -859,7 +863,11 @@ pub fn start_security_summary_task() {
             }
         }
     });
-    log(LogTag::Security, "SUMMARY_TASK", "Started 30-second security summary task");
+    log(
+        LogTag::Security,
+        "SUMMARY_TASK",
+        "Started 30-second security summary task (will print after Transactions ready)"
+    );
 }
 
 fn log_security_summary(summary: &SecuritySummary) {
