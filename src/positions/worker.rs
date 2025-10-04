@@ -2,42 +2,39 @@ use super::db::initialize_positions_database;
 use super::{
     apply::apply_transition,
     queue::{
-        enqueue_verification, gc_expired_verifications, poll_verification_batch,
-        queue_has_items_with_expiry, remove_verification, requeue_verification, VerificationItem,
+        enqueue_verification,
+        gc_expired_verifications,
+        poll_verification_batch,
+        queue_has_items_with_expiry,
+        remove_verification,
+        requeue_verification,
+        VerificationItem,
         VerificationKind,
     },
     state::{
-        reconcile_global_position_semaphore, MINT_TO_POSITION_INDEX, POSITIONS, SIG_TO_MINT_INDEX,
+        reconcile_global_position_semaphore,
+        MINT_TO_POSITION_INDEX,
+        POSITIONS,
+        SIG_TO_MINT_INDEX,
     },
-    verifier::{verify_transaction, VerificationOutcome},
+    verifier::{ verify_transaction, VerificationOutcome },
 };
-use crate::{
-    arguments::is_debug_positions_enabled,
-    logger::{log, LogTag},
-    rpc::get_rpc_client,
-};
+use crate::{ arguments::is_debug_positions_enabled, logger::{ log, LogTag }, rpc::get_rpc_client };
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::{
-    sync::Notify,
-    time::{sleep, Duration},
-};
+use tokio::{ sync::Notify, time::{ sleep, Duration } };
 
 const VERIFICATION_BATCH_SIZE: usize = 10;
 
 /// Initialize positions system
 pub async fn initialize_positions_system() -> Result<(), String> {
-    log(
-        LogTag::Positions,
-        "STARTUP",
-        "🚀 Initializing positions system",
-    );
+    log(LogTag::Positions, "STARTUP", "🚀 Initializing positions system");
 
     // Initialize database
-    initialize_positions_database()
-        .await
-        .map_err(|e| format!("Failed to initialize positions database: {}", e))?;
+    initialize_positions_database().await.map_err(|e|
+        format!("Failed to initialize positions database: {}", e)
+    )?;
 
     // Load existing positions from database
     match crate::positions::load_all_positions().await {
@@ -58,7 +55,7 @@ pub async fn initialize_positions_system() -> Result<(), String> {
                             position.mint.clone(),
                             position.id,
                             VerificationKind::Entry,
-                            None,
+                            None
                         );
                         enqueue_verification(item).await;
                         unverified_count += 1;
@@ -73,7 +70,7 @@ pub async fn initialize_positions_system() -> Result<(), String> {
                             position.mint.clone(),
                             position.id,
                             VerificationKind::Exit,
-                            None,
+                            None
                         );
                         enqueue_verification(item).await;
                         unverified_count += 1;
@@ -108,14 +105,14 @@ pub async fn initialize_positions_system() -> Result<(), String> {
                     "✅ Loaded {} positions, {} pending verification",
                     global_positions.len(),
                     unverified_count
-                ),
+                )
             );
         }
         Err(e) => {
             log(
                 LogTag::Positions,
                 "WARNING",
-                &format!("Failed to load positions from database: {}", e),
+                &format!("Failed to load positions from database: {}", e)
             );
         }
     }
@@ -126,25 +123,14 @@ pub async fn initialize_positions_system() -> Result<(), String> {
         reconcile_global_position_semaphore(MAX_OPEN_POSITIONS).await;
     }
 
-    log(
-        LogTag::Positions,
-        "STARTUP",
-        "✅ Positions system initialized",
-    );
-
-    // Signal that positions system is ready
-    crate::global::POSITIONS_SYSTEM_READY.store(true, std::sync::atomic::Ordering::SeqCst);
+    log(LogTag::Positions, "STARTUP", "✅ Positions system initialized");
 
     Ok(())
 }
 
 /// Start positions manager service
 pub async fn start_positions_manager_service(shutdown: Arc<Notify>) -> Result<(), String> {
-    log(
-        LogTag::Positions,
-        "STARTUP",
-        "🚀 Starting positions manager service",
-    );
+    log(LogTag::Positions, "STARTUP", "🚀 Starting positions manager service");
 
     initialize_positions_system().await?;
 
@@ -156,11 +142,42 @@ pub async fn start_positions_manager_service(shutdown: Arc<Notify>) -> Result<()
 
 /// Verification worker loop
 async fn verification_worker(shutdown: Arc<Notify>) {
-    log(
-        LogTag::Positions,
-        "STARTUP",
-        "🔍 Starting verification worker",
-    );
+    log(LogTag::Positions, "STARTUP", "🔍 Starting verification worker");
+
+    // Wait for Transactions and Pool services to be ready before starting verification
+    loop {
+        let tx_ready = crate::global::TRANSACTIONS_SYSTEM_READY.load(
+            std::sync::atomic::Ordering::SeqCst
+        );
+        let pool_ready = crate::global::POOL_SERVICE_READY.load(
+            std::sync::atomic::Ordering::SeqCst
+        );
+
+        if tx_ready && pool_ready {
+            log(
+                LogTag::Positions,
+                "STARTUP",
+                "✅ Dependencies ready (Transactions + Pool). Starting verification loop"
+            );
+            // Signal that positions system is ready now that dependencies are met
+            crate::global::POSITIONS_SYSTEM_READY.store(true, std::sync::atomic::Ordering::SeqCst);
+            break;
+        }
+
+        log(
+            LogTag::Positions,
+            "STARTUP",
+            &format!("⏳ Waiting for dependencies: tx_ready={} pool_ready={}", tx_ready, pool_ready)
+        );
+
+        tokio::select! {
+            _ = shutdown.notified() => {
+                log(LogTag::Positions, "SHUTDOWN", "🛑 Verification worker exiting during dependency wait");
+                return;
+            }
+            _ = tokio::time::sleep(Duration::from_secs(1)) => {}
+        }
+    }
 
     let mut cycle_count = 0;
     let mut last_summary = chrono::Utc::now();
