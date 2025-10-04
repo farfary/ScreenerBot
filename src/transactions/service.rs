@@ -416,6 +416,26 @@ async fn perform_initial_transaction_bootstrap(
                         mgr.total_transactions += 1;
                     }
                     stats.newly_processed += 1;
+
+                    // Show progress summary every 10 transactions
+                    if stats.newly_processed % 10 == 0 {
+                        let total_completed =
+                            stats.newly_processed + stats.known_signatures_skipped;
+                        let remaining = stats.total_signatures_fetched - total_completed;
+                        log(
+                            LogTag::Transactions,
+                            "BOOTSTRAP_PROGRESS",
+                            &format!(
+                                "📊 Progress: processed={} (new={}, skipped={}) | remaining={} | errors={} | elapsed={}s",
+                                total_completed,
+                                stats.newly_processed,
+                                stats.known_signatures_skipped,
+                                remaining,
+                                stats.errors,
+                                bootstrap_timer.elapsed().as_secs()
+                            )
+                        );
+                    }
                 }
                 Err(e) => {
                     log(
@@ -427,6 +447,23 @@ async fn perform_initial_transaction_bootstrap(
                 }
             }
         }
+
+        // Show page summary after processing each batch
+        let total_completed = stats.newly_processed + stats.known_signatures_skipped;
+        log(
+            LogTag::Transactions,
+            "BOOTSTRAP_PAGE",
+            &format!(
+                "📄 Page {} complete: fetched={} | processed={} (new={}, skipped={}) | errors={} | elapsed={}s",
+                stats.total_rpc_pages,
+                signatures.len(),
+                total_completed,
+                stats.newly_processed,
+                stats.known_signatures_skipped,
+                stats.errors,
+                bootstrap_timer.elapsed().as_secs()
+            )
+        );
 
         before = signatures.last().cloned();
 
