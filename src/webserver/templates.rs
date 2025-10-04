@@ -2019,21 +2019,13 @@ pub fn tokens_content() -> String {
 /// Events page content
 pub fn events_content() -> String {
     r#"
-    <div class="card">
-        <div class="card-header">
-            <span class="card-icon">📡</span>
-            <span class="card-title">System Events</span>
-            <span id="eventsCount" class="badge loading">Loading...</span>
-        </div>
-        
-        <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
-            <input type="text" 
-                   id="eventSearch" 
-                   placeholder="🔍 Search events..." 
-                   style="flex: 1; min-width: 200px; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary);">
-            
+    <div class="page-section">
+        <div class="toolbar">
+            <span style="font-weight:600;">📡 Events</span>
+            <input type="text" id="eventSearch" placeholder="🔍 Search events..." 
+                   style="flex: 1; min-width: 200px; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary);">
             <select id="categoryFilter" 
-                    style="padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary);">
+                    style="padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary);">
                 <option value="">All Categories</option>
                 <option value="swap">Swap</option>
                 <option value="transaction">Transaction</option>
@@ -2044,50 +2036,44 @@ pub fn events_content() -> String {
                 <option value="entry">Entry</option>
                 <option value="system">System</option>
             </select>
-            
             <select id="severityFilter" 
-                    style="padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary);">
+                    style="padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary);">
                 <option value="">All Severity</option>
                 <option value="info">Info</option>
                 <option value="warn">Warning</option>
                 <option value="error">Error</option>
                 <option value="debug">Debug</option>
             </select>
-            
-            <button id="refreshEvents" 
-                    style="padding: 8px 16px; background: var(--link-color); color: white; border: none; border-radius: 4px; cursor: pointer;">
-                🔄 Refresh
-            </button>
+            <div class="spacer"></div>
+            <span id="eventsCountText" style="color: var(--text-secondary); font-size: 0.9em;">Loading...</span>
+            <button id="refreshEvents" class="btn btn-primary">🔄 Refresh</button>
         </div>
-        
-        <div style="overflow-x: auto;">
-            <table style="width: 100%; border-collapse: collapse;">
+        <div class="table-scroll">
+            <table class="table" id="eventsTable">
                 <thead>
-                    <tr style="border-bottom: 2px solid var(--border-color); text-align: left;">
-                        <th style="padding: 10px;">Time</th>
-                        <th style="padding: 10px;">Category</th>
-                        <th style="padding: 10px;">Subtype</th>
-                        <th style="padding: 10px;">Severity</th>
-                        <th style="padding: 10px;">Message</th>
-                        <th style="padding: 10px;">Reference</th>
+                    <tr>
+                        <th>Time</th>
+                        <th>Category</th>
+                        <th>Subtype</th>
+                        <th>Severity</th>
+                        <th>Message</th>
+                        <th>Reference</th>
                     </tr>
                 </thead>
                 <tbody id="eventsTableBody">
                     <tr>
-                        <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                        <td colspan="6" style="text-align: center; padding: 20px; color: var(--text-muted);">
                             Loading events...
                         </td>
                     </tr>
                 </tbody>
             </table>
         </div>
-        
-        
     </div>
     
     <script>
         let allEventsData = [];
-    let eventsRefreshInterval = null;
+        let eventsRefreshInterval = null;
         
         // Load events from API
         async function loadEvents() {
@@ -2105,8 +2091,7 @@ pub fn events_content() -> String {
                 allEventsData = data.events;
                 renderEvents(allEventsData);
                 
-                document.getElementById('eventsCount').textContent = `${data.count} events`;
-                document.getElementById('eventsCount').className = 'badge online';
+                document.getElementById('eventsCountText').textContent = `${data.count} events`;
                 
                 // Save filter state
                 AppState.save('events_category', category);
@@ -2121,7 +2106,7 @@ pub fn events_content() -> String {
                         </td>
                     </tr>
                 `;
-                document.getElementById('eventsCount').className = 'badge error';
+                document.getElementById('eventsCountText').textContent = 'Error loading events';
             }
         }
         
