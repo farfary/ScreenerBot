@@ -97,7 +97,7 @@ const MIN_PUMPFUN_LP_LOCK_PCT: f64 = 50.0;
 /// Minimum LP lock percentage for regular tokens (very relaxed)
 const MIN_REGULAR_LP_LOCK_PCT: f64 = 50.0;
 /// Minimum unique holders required (based on Rugcheck cached DB)
-const MIN_UNIQUE_HOLDERS: u32 = 1000;
+const MIN_UNIQUE_HOLDERS: u32 = 500;
 
 // =============================================================================
 // MAIN FILTERING FUNCTION

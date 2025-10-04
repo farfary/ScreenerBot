@@ -604,19 +604,171 @@ pub fn positions_content() -> String {
 /// Tokens page content
 pub fn tokens_content() -> String {
     r#"
-    <div class="card">
+    <div class="card" style="margin-bottom: 15px;">
         <div class="card-header">
             <span class="card-icon">🪙</span>
-            <span class="card-title">Token Database</span>
+            <span class="card-title">Tokens with Available Prices</span>
         </div>
-        <div class="empty-state">
-            <div class="empty-state-icon">🔍</div>
-            <p>Token search and analysis coming in Phase 2</p>
-            <p style="font-size: 0.85em; margin-top: 10px;">
-                This section will show token information, security scores, and market data.
-            </p>
+        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+            <input type="text" id="searchInput" placeholder="Search by symbol or mint..." 
+                   style="flex: 1; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.9em;">
+            <button onclick="loadTokens()" class="btn btn-primary">
+                🔄 Refresh
+            </button>
+        </div>
+        <div style="font-size: 0.85em; color: #64748b; margin-bottom: 10px;">
+            <span id="tokenCount">Loading...</span> | 
+            <span>Auto-refresh: <span id="countdown">30</span>s</span>
         </div>
     </div>
+    
+    <div class="card">
+        <div style="overflow-x: auto;">
+            <table class="table" id="tokensTable">
+                <thead>
+                    <tr>
+                        <th style="min-width: 80px;">Symbol</th>
+                        <th style="min-width: 120px;">Price (SOL)</th>
+                        <th style="min-width: 100px;">Pool</th>
+                        <th style="min-width: 100px;">Updated</th>
+                        <th style="min-width: 300px;">Mint Address</th>
+                    </tr>
+                </thead>
+                <tbody id="tokensTableBody">
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 40px; color: #94a3b8;">
+                            <div class="loading-text">Loading tokens...</div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <script>
+        let allTokensData = [];
+        let countdownInterval = null;
+        let countdownSeconds = 30;
+        
+        async function loadTokens() {
+            try {
+                const res = await fetch('/api/v1/tokens');
+                const data = await res.json();
+                
+                allTokensData = data.tokens || [];
+                
+                document.getElementById('tokenCount').textContent = 
+                    `${allTokensData.length} tokens with available prices`;
+                
+                renderTokens(allTokensData);
+                
+                // Reset countdown
+                countdownSeconds = 30;
+                
+            } catch (error) {
+                console.error('Failed to load tokens:', error);
+                document.getElementById('tokensTableBody').innerHTML = 
+                    '<tr><td colspan="5" style="text-align: center; padding: 40px; color: #ef4444;">Failed to load tokens</td></tr>';
+            }
+        }
+        
+        function renderTokens(tokens) {
+            const tbody = document.getElementById('tokensTableBody');
+            
+            if (tokens.length === 0) {
+                tbody.innerHTML = 
+                    '<tr><td colspan="5" style="text-align: center; padding: 40px; color: #94a3b8;">No tokens with available prices</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = tokens.map(token => {
+                const shortMint = token.mint.substring(0, 8) + '...' + token.mint.substring(token.mint.length - 6);
+                const shortPool = token.pool_address ? 
+                    (token.pool_address.substring(0, 6) + '...' + token.pool_address.substring(token.pool_address.length - 4)) : 
+                    'N/A';
+                const timeAgo = formatTimeAgo(token.updated_at);
+                const priceDisplay = token.price_sol < 0.000001 ? 
+                    token.price_sol.toExponential(4) : 
+                    token.price_sol.toFixed(9);
+                
+                return `
+                    <tr>
+                        <td style="font-weight: 600; color: #667eea;">${escapeHtml(token.symbol)}</td>
+                        <td style="font-family: 'Courier New', monospace; font-weight: 600;">${priceDisplay}</td>
+                        <td style="font-family: 'Courier New', monospace; font-size: 0.85em;">${shortPool}</td>
+                        <td style="font-size: 0.85em; color: #64748b;">${timeAgo}</td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <code style="font-size: 0.85em;">${shortMint}</code>
+                                <button onclick="copyToClipboard('${token.mint}')" 
+                                        class="btn btn-success" 
+                                        style="padding: 3px 8px; font-size: 0.75em;">
+                                    📋 Copy
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        function formatTimeAgo(timestamp) {
+            const seconds = Math.floor(Date.now() / 1000) - timestamp;
+            
+            if (seconds < 60) return `${seconds}s ago`;
+            if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+            if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+            return `${Math.floor(seconds / 86400)}d ago`;
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                // Could show a toast notification here
+                console.log('Copied:', text);
+            });
+        }
+        
+        // Search functionality
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            
+            if (searchTerm === '') {
+                renderTokens(allTokensData);
+            } else {
+                const filtered = allTokensData.filter(token => 
+                    token.symbol.toLowerCase().includes(searchTerm) ||
+                    token.mint.toLowerCase().includes(searchTerm)
+                );
+                renderTokens(filtered);
+            }
+        });
+        
+        // Countdown and auto-refresh
+        function startCountdown() {
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+            }
+            
+            countdownInterval = setInterval(() => {
+                countdownSeconds--;
+                document.getElementById('countdown').textContent = countdownSeconds;
+                
+                if (countdownSeconds <= 0) {
+                    loadTokens();
+                }
+            }, 1000);
+        }
+        
+        // Initial load
+        loadTokens();
+        startCountdown();
+    </script>
     "#.to_string()
 }
 
