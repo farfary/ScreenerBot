@@ -16,6 +16,7 @@ use std::path::Path;
 
 // Import the CONFIG_FILE constant from global.rs for the default path
 use crate::global::CONFIG_FILE;
+use crate::webserver::config::WebserverConfig;
 
 /// Represents the runtime configuration loaded from configs.json
 ///
@@ -27,6 +28,9 @@ pub struct Configs {
     pub main_wallet_private: String,
     /// List of RPC URLs for round-robin usage - each call cycles through these URLs
     pub rpc_urls: Vec<String>,
+    /// Webserver dashboard configuration
+    #[serde(default)]
+    pub webserver: WebserverConfig,
 }
 
 /// Reads the configs.json file from the default data directory and returns a Configs object
@@ -253,6 +257,7 @@ pub fn create_default_config() -> Configs {
             "https://fallback1.com".to_string(),
             "https://fallback2.com".to_string(),
         ],
+        webserver: WebserverConfig::default(),
     }
 }
 

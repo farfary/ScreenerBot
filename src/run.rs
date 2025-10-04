@@ -416,6 +416,37 @@ pub async fn run_bot() -> Result<(), String> {
         );
     }
 
+    // Start webserver dashboard (after all core services are ready)
+    // This ensures status endpoints show accurate service states
+    if let Ok(configs) = global::read_configs() {
+        if configs.webserver.enabled {
+            log(LogTag::System, "INFO", "🌐 Starting webserver dashboard...");
+            
+            let webserver_config = configs.webserver.clone();
+            tokio::spawn(async move {
+                if let Err(e) = crate::webserver::start_server(webserver_config).await {
+                    log(
+                        LogTag::System,
+                        "ERROR",
+                        &format!("Webserver failed to start: {}", e),
+                    );
+                }
+            });
+            
+            // Brief delay to let server initialize
+            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+            
+            log(
+                LogTag::System,
+                "SUCCESS",
+                &format!(
+                    "✅ Webserver started on http://{}:{}",
+                    configs.webserver.host, configs.webserver.port
+                ),
+            );
+        }
+    }
+
     let shutdown_entries = shutdown.clone();
     let entries_handle = tokio::spawn(async move {
         log(LogTag::Trader, "INFO", "New entries monitor task started");
@@ -597,6 +628,13 @@ pub async fn run_bot() -> Result<(), String> {
                     "Pool service not running during cleanup",
                 );
             }
+
+            debug_log(LogTag::System, "INFO", "Starting cleanup operations...");
+
+            // Shutdown webserver gracefully
+            log(LogTag::System, "INFO", "Stopping webserver...");
+            crate::webserver::shutdown();
+            tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
 
             // Decimals are now automatically saved to database
             debug_log(
