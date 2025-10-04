@@ -30,7 +30,7 @@ use crate::websocket;
 
 /// Number of transactions to process concurrently during bootstrap
 /// Change this value to adjust parallel processing batch size
-const CONCURRENT_BATCH_SIZE: usize = 5;
+const CONCURRENT_BATCH_SIZE: usize = 10;
 
 /// Timeout for individual transaction processing during bootstrap (in seconds)
 /// Transactions taking longer than this will be timed out and retried later
