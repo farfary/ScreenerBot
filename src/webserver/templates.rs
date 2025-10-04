@@ -1101,17 +1101,116 @@ fn common_scripts() -> &'static str {
             });
         }
         
-        // Helper function to create copyable value HTML
-        function createCopyableValue(value, label) {
-            if (!value || value === 'N/A' || value === 'None') {
-                return `<span class="debug-value-text">${value || 'N/A'}</span>`;
+        // Build and copy full debug info (single action)
+        async function copyDebugInfo(mint, type) {
+            try {
+                const endpoint = type === 'position' ? `/api/v1/positions/${mint}/debug` : `/api/v1/tokens/${mint}/debug`;
+                const res = await fetch(endpoint);
+                const data = await res.json();
+                const text = generateDebugText(data, type);
+                await navigator.clipboard.writeText(text);
+                showToast('✅ Debug info copied to clipboard!');
+            } catch (err) {
+                console.error('copyDebugInfo error:', err);
+                showToast('❌ Failed to copy debug info: ' + err, 'error');
             }
-            return `
-                <span class="debug-value-text">${value}</span>
-                <button class="copy-btn-small" onclick="copyDebugValue('${value}', '${label}')" title="Copy ${label}">
-                    📋
-                </button>
-            `;
+        }
+
+        function generateDebugText(data, type) {
+            const lines = [];
+            const tokenInfo = data.token_info || {};
+            const price = data.price_data || {};
+            const market = data.market_data || {};
+            const pools = Array.isArray(data.pools) ? data.pools : [];
+            const security = data.security || {};
+            const pos = data.position_data || {};
+
+            // Header
+            lines.push('ScreenerBot Debug Info');
+            lines.push(`Mint: ${data.mint || 'N/A'}`);
+            if (tokenInfo.symbol || tokenInfo.name) {
+                lines.push(`Token: ${tokenInfo.symbol || 'N/A'} ${tokenInfo.name ? '(' + tokenInfo.name + ')' : ''}`);
+            }
+            lines.push('');
+
+            // Token Info
+            lines.push('[Token]');
+            lines.push(`Symbol: ${tokenInfo.symbol ?? 'N/A'}`);
+            lines.push(`Name: ${tokenInfo.name ?? 'N/A'}`);
+            lines.push(`Decimals: ${tokenInfo.decimals ?? 'N/A'}`);
+            lines.push(`Website: ${tokenInfo.website ?? 'N/A'}`);
+            lines.push(`Verified: ${tokenInfo.is_verified ? 'Yes' : 'No'}`);
+            const tags = Array.isArray(tokenInfo.tags) ? tokenInfo.tags.join(', ') : 'None';
+            lines.push(`Tags: ${tags}`);
+            lines.push('');
+
+            // Price & Market
+            lines.push('[Price & Market]');
+            lines.push(`Price (SOL): ${price.pool_price_sol != null ? Number(price.pool_price_sol).toPrecision(10) : 'N/A'}`);
+            lines.push(`Confidence: ${price.confidence != null ? (Number(price.confidence) * 100).toFixed(1) + '%' : 'N/A'}`);
+            lines.push(`Last Updated: ${price.last_updated ? new Date(price.last_updated * 1000).toISOString() : 'N/A'}`);
+            lines.push(`Market Cap: ${market.market_cap != null ? '$' + Number(market.market_cap).toLocaleString() : 'N/A'}`);
+            lines.push(`FDV: ${market.fdv != null ? '$' + Number(market.fdv).toLocaleString() : 'N/A'}`);
+            lines.push(`Liquidity: ${market.liquidity_usd != null ? '$' + Number(market.liquidity_usd).toLocaleString() : 'N/A'}`);
+            lines.push(`24h Volume: ${market.volume_24h != null ? '$' + Number(market.volume_24h).toLocaleString() : 'N/A'}`);
+            lines.push('');
+
+            // Pools
+            lines.push('[Pools]');
+            if (pools.length === 0) {
+                lines.push('None');
+            } else {
+                pools.forEach((p, idx) => {
+                    lines.push(`Pool #${idx + 1}`);
+                    lines.push(`  Address: ${p.pool_address ?? 'N/A'}`);
+                    lines.push(`  DEX: ${p.dex_name ?? 'N/A'}`);
+                    lines.push(`  SOL Reserves: ${p.sol_reserves != null ? Number(p.sol_reserves).toFixed(2) : 'N/A'}`);
+                    lines.push(`  Token Reserves: ${p.token_reserves != null ? Number(p.token_reserves).toFixed(2) : 'N/A'}`);
+                    lines.push(`  Price (SOL): ${p.price_sol != null ? Number(p.price_sol).toPrecision(10) : 'N/A'}`);
+                });
+            }
+            lines.push('');
+
+            // Security
+            lines.push('[Security]');
+            lines.push(`Score: ${security.score ?? 'N/A'}`);
+            lines.push(`Rugged: ${security.rugged ? 'Yes' : 'No'}`);
+            lines.push(`Total Holders: ${security.total_holders ?? 'N/A'}`);
+            lines.push(`Top 10 Concentration: ${security.top_10_concentration != null ? Number(security.top_10_concentration).toFixed(2) + '%' : 'N/A'}`);
+            lines.push(`Mint Authority: ${security.mint_authority ?? 'None'}`);
+            lines.push(`Freeze Authority: ${security.freeze_authority ?? 'None'}`);
+            const risks = Array.isArray(security.risks) ? security.risks : [];
+            if (risks.length) {
+                lines.push('Risks:');
+                risks.forEach(r => lines.push(`  - ${r.name || 'Unknown'}: ${r.level || 'N/A'} (${r.description || ''})`));
+            } else {
+                lines.push('Risks: None');
+            }
+            lines.push('');
+
+            // Position
+            if (type === 'position') {
+                lines.push('[Position]');
+                if (pos && Object.keys(pos).length) {
+                    lines.push(`Open Positions: ${pos.open_position ? '1' : '0'}`);
+                    lines.push(`Closed Positions: ${pos.closed_positions_count ?? '0'}`);
+                    lines.push(`Total P&L: ${pos.total_pnl != null ? Number(pos.total_pnl).toFixed(4) + ' SOL' : 'N/A'}`);
+                    lines.push(`Win Rate: ${pos.win_rate != null ? Number(pos.win_rate).toFixed(1) + '%' : 'N/A'}`);
+                    if (pos.open_position) {
+                        const o = pos.open_position;
+                        lines.push('Open Position:');
+                        lines.push(`  Entry Price: ${o.entry_price != null ? Number(o.entry_price).toPrecision(10) : 'N/A'}`);
+                        lines.push(`  Entry Size: ${o.entry_size_sol != null ? Number(o.entry_size_sol).toFixed(4) + ' SOL' : 'N/A'}`);
+                        lines.push(`  Current Price: ${o.current_price != null ? Number(o.current_price).toPrecision(10) : 'N/A'}`);
+                        lines.push(`  Unrealized P&L: ${o.unrealized_pnl != null ? Number(o.unrealized_pnl).toFixed(4) + ' SOL' : 'N/A'}`);
+                        lines.push(`  Unrealized P&L %: ${o.unrealized_pnl_percent != null ? Number(o.unrealized_pnl_percent).toFixed(2) + '%' : 'N/A'}`);
+                    }
+                } else {
+                    lines.push('No position data available');
+                }
+            }
+
+            return lines.join('\n');
         }
         
         // Open External Links
@@ -1166,61 +1265,45 @@ fn common_scripts() -> &'static str {
             document.getElementById(`tab-${tabName}`).classList.add('active');
         }
         
-        // Populate Debug Modal with Data
+        // Populate Debug Modal with Data (no per-field copy buttons)
         function populateDebugModal(data, type) {
             // Store mint for copying
             const mintAddress = data.mint;
             
             // Token Info Tab
             const tokenInfo = data.token_info || {};
-            document.getElementById('tokenSymbol').innerHTML = createCopyableValue(tokenInfo.symbol, 'Symbol');
-            document.getElementById('tokenName').innerHTML = createCopyableValue(tokenInfo.name, 'Name');
+            document.getElementById('tokenSymbol').textContent = tokenInfo.symbol || 'N/A';
+            document.getElementById('tokenName').textContent = tokenInfo.name || 'N/A';
             document.getElementById('tokenDecimals').textContent = tokenInfo.decimals || 'N/A';
             document.getElementById('tokenWebsite').innerHTML = tokenInfo.website ? 
-                `<a href="${tokenInfo.website}" target="_blank" style="color: var(--link-color);">${tokenInfo.website}</a>
-                 <button class="copy-btn-small" onclick="copyDebugValue('${tokenInfo.website}', 'Website')" title="Copy Website">📋</button>` : 
+                `<a href="${tokenInfo.website}" target="_blank" style="color: var(--link-color);">${tokenInfo.website}</a>` : 
                 '<span class="debug-value-text">N/A</span>';
             document.getElementById('tokenVerified').textContent = tokenInfo.is_verified ? '✅ Yes' : '❌ No';
             document.getElementById('tokenTags').textContent = tokenInfo.tags?.join(', ') || 'None';
             
             // Add mint address display at the top
-            document.getElementById('debugMintAddress').innerHTML = createCopyableValue(mintAddress, 'Mint Address');
+            document.getElementById('debugMintAddress').textContent = mintAddress || 'N/A';
             
             // Price Data Tab
             const priceData = data.price_data || {};
-            document.getElementById('priceSol').innerHTML = priceData.pool_price_sol ? 
-                createCopyableValue(priceData.pool_price_sol.toFixed(9), 'Price (SOL)') : 
-                '<span class="debug-value-text">N/A</span>';
-            document.getElementById('priceConfidence').innerHTML = priceData.confidence ? 
-                createCopyableValue((priceData.confidence * 100).toFixed(1) + '%', 'Confidence') : 
-                '<span class="debug-value-text">N/A</span>';
+            document.getElementById('priceSol').textContent = priceData.pool_price_sol ? priceData.pool_price_sol.toFixed(9) : 'N/A';
+            document.getElementById('priceConfidence').textContent = priceData.confidence ? (priceData.confidence * 100).toFixed(1) + '%' : 'N/A';
             document.getElementById('priceUpdated').textContent = priceData.last_updated ? 
                 new Date(priceData.last_updated * 1000).toLocaleString() : 'N/A';
             
             // Market Data
             const marketData = data.market_data || {};
-            document.getElementById('marketCap').innerHTML = marketData.market_cap ? 
-                createCopyableValue('$' + marketData.market_cap.toLocaleString(), 'Market Cap') : 
-                '<span class="debug-value-text">N/A</span>';
-            document.getElementById('fdv').innerHTML = marketData.fdv ? 
-                createCopyableValue('$' + marketData.fdv.toLocaleString(), 'FDV') : 
-                '<span class="debug-value-text">N/A</span>';
-            document.getElementById('liquidity').innerHTML = marketData.liquidity_usd ? 
-                createCopyableValue('$' + marketData.liquidity_usd.toLocaleString(), 'Liquidity') : 
-                '<span class="debug-value-text">N/A</span>';
-            document.getElementById('volume24h').innerHTML = marketData.volume_24h ? 
-                createCopyableValue('$' + marketData.volume_24h.toLocaleString(), '24h Volume') : 
-                '<span class="debug-value-text">N/A</span>';
+            document.getElementById('marketCap').textContent = marketData.market_cap ? ('$' + marketData.market_cap.toLocaleString()) : 'N/A';
+            document.getElementById('fdv').textContent = marketData.fdv ? ('$' + marketData.fdv.toLocaleString()) : 'N/A';
+            document.getElementById('liquidity').textContent = marketData.liquidity_usd ? ('$' + marketData.liquidity_usd.toLocaleString()) : 'N/A';
+            document.getElementById('volume24h').textContent = marketData.volume_24h ? ('$' + marketData.volume_24h.toLocaleString()) : 'N/A';
             
             // Pool Data Tab
             const poolsHtml = (data.pools || []).map(pool => `
                 <div class="debug-section">
                     <div class="debug-row">
                         <span class="debug-label">Pool Address:</span>
-                        <span class="debug-value">
-                            <span class="debug-value-text">${pool.pool_address}</span>
-                            <button class="copy-btn-small" onclick="copyDebugValue('${pool.pool_address}', 'Pool Address')" title="Copy Pool Address">📋</button>
-                        </span>
+                        <span class="debug-value"><span class="debug-value-text">${pool.pool_address}</span></span>
                     </div>
                     <div class="debug-row">
                         <span class="debug-label">DEX:</span>
@@ -1228,24 +1311,15 @@ fn common_scripts() -> &'static str {
                     </div>
                     <div class="debug-row">
                         <span class="debug-label">SOL Reserves:</span>
-                        <span class="debug-value">
-                            <span class="debug-value-text">${pool.sol_reserves.toFixed(2)}</span>
-                            <button class="copy-btn-small" onclick="copyDebugValue('${pool.sol_reserves}', 'SOL Reserves')" title="Copy SOL Reserves">📋</button>
-                        </span>
+                        <span class="debug-value"><span class="debug-value-text">${pool.sol_reserves.toFixed(2)}</span></span>
                     </div>
                     <div class="debug-row">
                         <span class="debug-label">Token Reserves:</span>
-                        <span class="debug-value">
-                            <span class="debug-value-text">${pool.token_reserves.toFixed(2)}</span>
-                            <button class="copy-btn-small" onclick="copyDebugValue('${pool.token_reserves}', 'Token Reserves')" title="Copy Token Reserves">📋</button>
-                        </span>
+                        <span class="debug-value"><span class="debug-value-text">${pool.token_reserves.toFixed(2)}</span></span>
                     </div>
                     <div class="debug-row">
                         <span class="debug-label">Price (SOL):</span>
-                        <span class="debug-value">
-                            <span class="debug-value-text">${pool.price_sol.toFixed(9)}</span>
-                            <button class="copy-btn-small" onclick="copyDebugValue('${pool.price_sol}', 'Price')" title="Copy Price">📋</button>
-                        </span>
+                        <span class="debug-value"><span class="debug-value-text">${pool.price_sol.toFixed(9)}</span></span>
                     </div>
                 </div>
             `).join('');
@@ -1253,18 +1327,12 @@ fn common_scripts() -> &'static str {
             
             // Security Tab
             const security = data.security || {};
-            document.getElementById('securityScore').innerHTML = createCopyableValue(security.score, 'Security Score');
+            document.getElementById('securityScore').textContent = security.score ?? 'N/A';
             document.getElementById('securityRugged').textContent = security.rugged ? '❌ Yes' : '✅ No';
-            document.getElementById('securityHolders').innerHTML = createCopyableValue(security.total_holders, 'Total Holders');
-            document.getElementById('securityTop10').innerHTML = security.top_10_concentration ? 
-                createCopyableValue(security.top_10_concentration.toFixed(2) + '%', 'Top 10 Concentration') : 
-                '<span class="debug-value-text">N/A</span>';
-            document.getElementById('securityMintAuth').innerHTML = security.mint_authority ? 
-                createCopyableValue(security.mint_authority, 'Mint Authority') : 
-                '<span class="debug-value-text">None</span>';
-            document.getElementById('securityFreezeAuth').innerHTML = security.freeze_authority ? 
-                createCopyableValue(security.freeze_authority, 'Freeze Authority') : 
-                '<span class="debug-value-text">None</span>';
+            document.getElementById('securityHolders').textContent = security.total_holders ?? 'N/A';
+            document.getElementById('securityTop10').textContent = security.top_10_concentration != null ? (security.top_10_concentration.toFixed(2) + '%') : 'N/A';
+            document.getElementById('securityMintAuth').textContent = security.mint_authority ?? 'None';
+            document.getElementById('securityFreezeAuth').textContent = security.freeze_authority ?? 'None';
             
             const risksHtml = (security.risks || []).map(risk => `
                 <div class="debug-row">
@@ -1726,6 +1794,9 @@ pub fn positions_content() -> String {
                                         ⋮
                                     </button>
                                     <div class="dropdown-menu">
+                                        <button onclick="copyDebugInfo('${pos.mint}', 'position')" class="dropdown-item">
+                                            📋 Copy Debug Info
+                                        </button>
                                         <button onclick="copyMint('${pos.mint}')" class="dropdown-item">
                                             📋 Copy Mint
                                         </button>
@@ -1899,6 +1970,9 @@ pub fn tokens_content() -> String {
                                     ⋮
                                 </button>
                                 <div class="dropdown-menu">
+                                    <button onclick="copyDebugInfo('${token.mint}', 'token')" class="dropdown-item">
+                                        📋 Copy Debug Info
+                                    </button>
                                     <button onclick="copyMint('${token.mint}')" class="dropdown-item">
                                         📋 Copy Mint
                                     </button>
