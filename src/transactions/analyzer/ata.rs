@@ -338,17 +338,9 @@ async fn analyze_instruction_for_ata(
 
     // Check for ATA program
     if program_id == "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" {
-        // This is an ATA instruction
-        return Ok(
-            Some(AtaOperation {
-                operation_type: AtaOperationType::Create,
-                account_address: "unknown".to_string(), // Would extract from accounts
-                mint: None,
-                owner: None,
-                rent_amount: lamports_to_sol(2039280), // Standard ATA rent
-                success: true,
-            })
-        );
+        // ATA operations are better detected from balance changes (more accurate account info)
+        // Skip instruction-based detection to avoid duplicates
+        return Ok(None);
     }
 
     // Check for Token program operations
@@ -377,11 +369,20 @@ async fn parse_token_instruction(
 /// Consolidate and deduplicate ATA operations
 fn consolidate_operations(operations: Vec<AtaOperation>) -> Vec<AtaOperation> {
     let mut consolidated = Vec::new();
-    let mut seen_accounts: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut seen_keys: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for operation in operations {
-        if !seen_accounts.contains(&operation.account_address) {
-            seen_accounts.insert(operation.account_address.clone());
+        // Create a unique key from account + operation type + rent amount
+        // This prevents duplicates from balance analysis + instruction parsing
+        let key = format!(
+            "{}::{:?}::{}",
+            operation.account_address,
+            operation.operation_type,
+            (operation.rent_amount * 1_000_000_000.0).round() as u64
+        );
+
+        if !seen_keys.contains(&key) {
+            seen_keys.insert(key);
             consolidated.push(operation);
         }
     }

@@ -586,10 +586,21 @@ impl TransactionProcessor {
                 // Helper to get wallet key string
                 let wallet_key = self.wallet_pubkey.to_string();
 
-                // Fetch token decimals once
-                let token_decimals: u8 = crate::tokens
-                    ::get_token_decimals(primary_mint).await
-                    .unwrap_or(9) as u8;
+                // CRITICAL FIX: Fetch token decimals with RPC metadata as primary source
+                // This prevents 1000x errors from wrong decimals (e.g., USDC 6 decimals)
+                let token_decimals: u8 = extract_token_decimals_from_rpc(
+                    &tx_data,
+                    primary_mint
+                ).unwrap_or_else(|| {
+                    // Fallback to DB lookup only if RPC doesn't have it
+                    tokio::task::block_in_place(|| {
+                        tokio::runtime::Handle
+                            ::current()
+                            .block_on(async {
+                                crate::tokens::get_token_decimals(primary_mint).await.unwrap_or(9)
+                            })
+                    })
+                }) as u8;
 
                 // Locate token balance change for the wallet and mint
                 let token_ui_change: Option<f64> = analysis.balance.token_changes
@@ -744,9 +755,10 @@ impl TransactionProcessor {
                             }
                         }
 
-                        // For Jupiter SOL-to-token, check for gross outflow from wallet (similar to how Pumpfun sells track intermediary flows)
-                        if router_str == "jupiter" {
-                            // Look for total SOL outflow from user wallet to get gross amount (before Jupiter fees)
+                        // For SOL-to-token, check for gross outflow from wallet (aggregator or direct)
+                        // This captures cases where wrapping/fees obscure the pure swap input.
+                        {
+                            // Look for total SOL outflow from user wallet to get gross amount (before protocol fees)
                             for sol_change in &analysis.balance.sol_changes {
                                 let account = sol_change.1.account.clone();
                                 let change = sol_change.1.change;
@@ -759,63 +771,62 @@ impl TransactionProcessor {
                                         fb.base_fee + fb.priority_fee + fb.mev_tips + fb.rent_costs;
 
                                     // The pure swap amount should be total outflow minus transaction costs
-                                    let jupiter_gross_input = total_outflow - transaction_costs;
+                                    let gross_input_ui = (total_outflow - transaction_costs).max(
+                                        0.0
+                                    );
 
-                                    if jupiter_gross_input > 0.0 {
-                                        let jupiter_gross_raw = (
-                                            jupiter_gross_input * 1_000_000_000.0
-                                        )
+                                    if gross_input_ui > 0.0 {
+                                        let gross_input_raw = (gross_input_ui * 1_000_000_000.0)
                                             .round()
                                             .clamp(0.0, u64::MAX as f64) as u64;
 
-                                        if jupiter_gross_raw > input_raw {
+                                        if gross_input_raw > input_raw {
                                             log(
                                                 LogTag::Transactions,
-                                                "MAP_SWAP_JUPITER_GROSS_INFLOW",
+                                                "MAP_SWAP_GROSS_INFLOW",
                                                 &format!(
-                                                    "Found Jupiter wallet gross outflow: total={:.9} SOL tx_costs={:.9} SOL gross_swap={:.9} SOL (raw={})",
+                                                    "Found wallet gross outflow: total={:.9} SOL tx_costs={:.9} SOL gross_swap={:.9} SOL (raw={})",
                                                     total_outflow,
                                                     transaction_costs,
-                                                    jupiter_gross_input,
-                                                    jupiter_gross_raw
+                                                    gross_input_ui,
+                                                    gross_input_raw
                                                 )
                                             );
-                                            input_raw = jupiter_gross_raw;
-                                            input_ui = jupiter_gross_input;
+                                            input_raw = gross_input_raw;
+                                            input_ui = gross_input_ui;
                                         }
                                     }
                                     break;
                                 }
                             }
+                        }
 
-                            // Apply DEX-specific corrections based on instruction analysis and program patterns
-                            if
-                                let Some(corrected_amount) = self.apply_dex_specific_corrections(
-                                    &router_str,
-                                    input_raw,
-                                    &tx_data,
-                                    &analysis.balance
-                                )
-                            {
-                                if corrected_amount != input_raw {
-                                    log(
-                                        LogTag::Transactions,
-                                        "MAP_SWAP_DEX_CORRECTION",
-                                        &format!(
-                                            "Applied {router} correction: {} -> {} ({:.2}% diff)",
-                                            input_raw,
-                                            corrected_amount,
-                                            ((
-                                                (input_raw as f64) - (corrected_amount as f64)
-                                            ).abs() /
-                                                (corrected_amount as f64)) *
-                                                100.0,
-                                            router = router_str
-                                        )
-                                    );
-                                    input_raw = corrected_amount;
-                                    input_ui = (corrected_amount as f64) / 1_000_000_000.0;
-                                }
+                        // Apply DEX-specific corrections based on instruction analysis and program patterns
+                        if
+                            let Some(corrected_amount) = self.apply_dex_specific_corrections(
+                                &router_str,
+                                input_raw,
+                                &tx_data,
+                                &analysis.balance,
+                                direction
+                            )
+                        {
+                            if corrected_amount != input_raw {
+                                log(
+                                    LogTag::Transactions,
+                                    "MAP_SWAP_DEX_CORRECTION",
+                                    &format!(
+                                        "Applied {router} correction: {} -> {} ({:.2}% diff)",
+                                        input_raw,
+                                        corrected_amount,
+                                        (((input_raw as f64) - (corrected_amount as f64)).abs() /
+                                            (corrected_amount as f64)) *
+                                            100.0,
+                                        router = router_str
+                                    )
+                                );
+                                input_raw = corrected_amount;
+                                input_ui = (corrected_amount as f64) / 1_000_000_000.0;
                             }
                         }
 
@@ -834,42 +845,61 @@ impl TransactionProcessor {
                         let scale = (10f64).powi(token_decimals as i32);
                         input_raw = (token_abs * scale).round().clamp(0.0, u64::MAX as f64) as u64;
 
-                        // For sells (token-to-SOL), we need to track SOL flows to intermediary accounts
-                        // rather than just the wallet's final SOL change, as CSV data tracks these flows
-                        let mut sol_from_swap = 0.0;
-
-                        // Look for SOL outflows from non-wallet accounts that match the token sale
-                        for sol_change in &analysis.balance.sol_changes {
-                            let account = sol_change.1.account.clone();
-                            let change = sol_change.1.change;
-
-                            // Skip wallet account - we want intermediary accounts
-                            if account == wallet_key {
-                                continue;
+                        // For sells (token-to-SOL), prefer instruction-derived WSOL credits to the wallet's WSOL ATAs
+                        // to avoid counting rent-like artifacts or unrelated WSOL flows.
+                        let mut sol_from_swap = {
+                            let ui = sum_inner_wsol_transfers_ui_to_wallet(&tx_data, &wallet_key);
+                            if ui > 0.0 {
+                                ui
+                            } else {
+                                0.0
                             }
+                        };
 
-                            // Look for accounts that lost SOL (negative change)
-                            // These are likely intermediary accounts paying out SOL for the token sale
-                            if change < 0.0 {
-                                let outflow_amount = change.abs();
+                        // If not found, look for SOL outflows from non-wallet accounts that match the token sale
+                        if sol_from_swap == 0.0 {
+                            for sol_change in &analysis.balance.sol_changes {
+                                let account = sol_change.1.account.clone();
+                                let change = sol_change.1.change;
 
-                                // The outflow should be in a reasonable range relative to the token amount
-                                // Usually between 0.001 and 1.0 SOL for typical swaps
-                                if outflow_amount >= 0.001 && outflow_amount <= 1.0 {
-                                    // Use the largest reasonable outflow as our swap amount
-                                    if outflow_amount > sol_from_swap {
-                                        sol_from_swap = outflow_amount;
+                                // Skip wallet account - we want intermediary accounts
+                                if account == wallet_key {
+                                    continue;
+                                }
 
-                                        if self.debug_enabled {
-                                            log(
-                                                LogTag::Transactions,
-                                                "MAP_SWAP_INTERMEDIARY_FLOW",
-                                                &format!(
-                                                    "Found intermediary SOL outflow: account={} amount={:.9} SOL",
-                                                    account,
-                                                    outflow_amount
-                                                )
-                                            );
+                                // Negative change = outflow paying user
+                                if change < 0.0 {
+                                    let outflow_amount = change.abs();
+
+                                    // Skip rent-pattern outflows (e.g., ATA close rent ~0.00203928 SOL)
+                                    let outflow_lamports = (outflow_amount * 1_000_000_000.0)
+                                        .round()
+                                        .clamp(0.0, u64::MAX as f64) as u64;
+                                    if
+                                        crate::transactions::analyzer::balance::is_rent_amount(
+                                            outflow_lamports
+                                        )
+                                    {
+                                        continue;
+                                    }
+
+                                    // Accept any positive outflow up to a sane upper bound to avoid
+                                    // capturing unrelated large transfers. This avoids hardcoded
+                                    // micro-thresholds and preserves very small aggregator payouts.
+                                    if outflow_amount > 0.0 && outflow_amount <= 1.0 {
+                                        if outflow_amount > sol_from_swap {
+                                            sol_from_swap = outflow_amount;
+                                            if self.debug_enabled {
+                                                log(
+                                                    LogTag::Transactions,
+                                                    "MAP_SWAP_INTERMEDIARY_FLOW",
+                                                    &format!(
+                                                        "Found intermediary SOL outflow: account={} amount={:.9} SOL",
+                                                        account,
+                                                        outflow_amount
+                                                    )
+                                                );
+                                            }
                                         }
                                     }
                                 }
@@ -915,7 +945,8 @@ impl TransactionProcessor {
                                 &router_str,
                                 output_raw,
                                 &tx_data,
-                                &analysis.balance
+                                &analysis.balance,
+                                direction
                             )
                         {
                             if corrected_amount != output_raw {
@@ -1048,7 +1079,10 @@ impl TransactionProcessor {
                         signature: transaction.signature.clone(),
                         router: router_str.clone(),
                         fee_sol: analysis.pnl.fee_breakdown.base_fee,
-                        ata_rents: analysis.pnl.fee_breakdown.rent_costs,
+                        // CRITICAL FIX: Use total_rent_paid for all swap types
+                        // ATAs can be created in any swap (e.g., WSOL ATA during sells)
+                        // The verifier expects this value to normalize CSV amounts that include rent
+                        ata_rents: analysis.ata.rent_summary.total_rent_paid,
                         effective_sol_spent: if
                             matches!(
                                 direction,
@@ -1285,6 +1319,35 @@ fn parse_ui_amount(amount: &crate::rpc::UiTokenAmount) -> f64 {
     }
 
     0.0
+}
+
+/// Extract token decimals from RPC transaction metadata (authoritative source)
+/// Returns None if the token is not found in pre/post token balances
+fn extract_token_decimals_from_rpc(
+    tx_data: &crate::rpc::TransactionDetails,
+    mint: &str
+) -> Option<u8> {
+    let meta = tx_data.meta.as_ref()?;
+
+    // Check post token balances first (most recent state)
+    if let Some(post_balances) = &meta.post_token_balances {
+        for balance in post_balances {
+            if balance.mint == mint {
+                return Some(balance.ui_token_amount.decimals);
+            }
+        }
+    }
+
+    // Fallback to pre token balances
+    if let Some(pre_balances) = &meta.pre_token_balances {
+        for balance in pre_balances {
+            if balance.mint == mint {
+                return Some(balance.ui_token_amount.decimals);
+            }
+        }
+    }
+
+    None
 }
 
 /// Find the largest parsed system transfer amount from the wallet in inner/outer instructions
@@ -1892,6 +1955,139 @@ fn find_wrap_deposit_via_transfer_to_sync_account(
     sum_system_transfers_to_account_from_wallet(tx_data, wallet_key, &sync_account)
 }
 
+/// Sum uiAmount across all inner instructions where the parsed info indicates a
+/// transferChecked of WSOL (So1111...), returning SOL units. Robust to split/referral fees.
+fn sum_inner_wsol_transferchecked_ui(tx_data: &crate::rpc::TransactionDetails) -> f64 {
+    let meta = match tx_data.meta.as_ref() {
+        Some(m) => m,
+        None => {
+            return 0.0;
+        }
+    };
+    let inner = match meta.inner_instructions.as_ref() {
+        Some(v) => v,
+        None => {
+            return 0.0;
+        }
+    };
+    let mut total_ui: f64 = 0.0;
+    for group in inner {
+        if let Some(ixs) = group.get("instructions").and_then(|v| v.as_array()) {
+            for ix in ixs {
+                if let Some(parsed) = ix.get("parsed") {
+                    if let Some(info) = parsed.get("info") {
+                        let mint = info
+                            .get("mint")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        if mint == crate::transactions::utils::WSOL_MINT {
+                            if let Some(token_amount) = info.get("tokenAmount") {
+                                if
+                                    let Some(ui) = token_amount
+                                        .get("uiAmount")
+                                        .and_then(|v| v.as_f64())
+                                {
+                                    if ui > 0.0 {
+                                        total_ui += ui;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    total_ui
+}
+
+/// Sum WSOL inner transfers (transfer or transferChecked) that credit the wallet's WSOL ATAs, returning SOL units
+fn sum_inner_wsol_transfers_ui_to_wallet(
+    tx_data: &crate::rpc::TransactionDetails,
+    wallet_key: &str
+) -> f64 {
+    let meta = match tx_data.meta.as_ref() {
+        Some(m) => m,
+        None => {
+            return 0.0;
+        }
+    };
+    let inner = match meta.inner_instructions.as_ref() {
+        Some(v) => v,
+        None => {
+            return 0.0;
+        }
+    };
+    // Resolve wallet's WSOL ATA addresses within this tx context
+    let wallet_wsol_atas = get_wallet_wsol_ata_addresses(tx_data, wallet_key);
+    if wallet_wsol_atas.is_empty() {
+        return 0.0;
+    }
+
+    let mut total_ui: f64 = 0.0;
+    for group in inner {
+        if let Some(ixs) = group.get("instructions").and_then(|v| v.as_array()) {
+            for ix in ixs {
+                if let Some(parsed) = ix.get("parsed") {
+                    let ix_type = parsed
+                        .get("type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    if ix_type == "transfer" || ix_type == "transferChecked" {
+                        if let Some(info) = parsed.get("info") {
+                            let mint = info
+                                .get("mint")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            if mint == crate::transactions::utils::WSOL_MINT {
+                                let dest = info
+                                    .get("destination")
+                                    .and_then(|v| v.as_str())
+                                    .or_else(|| info.get("to").and_then(|v| v.as_str()))
+                                    .unwrap_or("");
+                                if !dest.is_empty() && wallet_wsol_atas.iter().any(|a| a == dest) {
+                                    // Prefer tokenAmount.uiAmount (transferChecked). Fallback to amount lamports (transfer)
+                                    let mut ui_amount = 0.0f64;
+                                    if let Some(token_amount) = info.get("tokenAmount") {
+                                        if
+                                            let Some(ui) = token_amount
+                                                .get("uiAmount")
+                                                .and_then(|v| v.as_f64())
+                                        {
+                                            ui_amount = ui;
+                                        }
+                                    }
+                                    if ui_amount == 0.0 {
+                                        if
+                                            let Some(raw) = info
+                                                .get("amount")
+                                                .and_then(|v| v.as_str())
+                                        {
+                                            if let Ok(lamports) = raw.parse::<u64>() {
+                                                ui_amount = (lamports as f64) / 1_000_000_000.0;
+                                            }
+                                        } else if
+                                            let Some(raw_num) = info
+                                                .get("amount")
+                                                .and_then(|v| v.as_u64())
+                                        {
+                                            ui_amount = (raw_num as f64) / 1_000_000_000.0;
+                                        }
+                                    }
+                                    if ui_amount > 0.0 {
+                                        total_ui += ui_amount;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    total_ui
+}
+
 impl TransactionProcessor {
     /// Apply DEX-specific corrections based on instruction analysis and program patterns
     fn apply_dex_specific_corrections(
@@ -1899,13 +2095,24 @@ impl TransactionProcessor {
         router: &str,
         calculated_amount: u64,
         tx_data: &crate::rpc::TransactionDetails,
-        balance_analysis: &crate::transactions::analyzer::balance::BalanceAnalysis
+        balance_analysis: &crate::transactions::analyzer::balance::BalanceAnalysis,
+        direction: &crate::transactions::analyzer::classify::SwapDirection
     ) -> Option<u64> {
         match router {
             "jupiter" =>
-                self.apply_jupiter_corrections(calculated_amount, tx_data, balance_analysis),
+                self.apply_jupiter_corrections(
+                    calculated_amount,
+                    tx_data,
+                    balance_analysis,
+                    direction
+                ),
             "pumpfun" =>
-                self.apply_pumpfun_corrections(calculated_amount, tx_data, balance_analysis),
+                self.apply_pumpfun_corrections(
+                    calculated_amount,
+                    tx_data,
+                    balance_analysis,
+                    direction
+                ),
             "raydium" =>
                 self.apply_raydium_corrections(calculated_amount, tx_data, balance_analysis),
             _ => None,
@@ -1917,120 +2124,39 @@ impl TransactionProcessor {
         &self,
         calculated_amount: u64,
         tx_data: &crate::rpc::TransactionDetails,
-        _balance_analysis: &crate::transactions::analyzer::balance::BalanceAnalysis
+        _balance_analysis: &crate::transactions::analyzer::balance::BalanceAnalysis,
+        direction: &crate::transactions::analyzer::classify::SwapDirection
     ) -> Option<u64> {
-        // Jupiter often has a platform fee pattern: exact amount - small fee = calculated amount
-        // Look for the pattern where calculated is close to a round number minus fee
-        let jupiter_program_ids = [
-            "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4", // Jupiter v6
-            "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB", // Jupiter v4
-        ];
-
-        // Check if this transaction involves Jupiter by analyzing instructions
-        let has_jupiter = if
-            let Some(instructions) = tx_data.transaction.message.get("instructions")
-        {
-            if let Some(instructions_array) = instructions.as_array() {
-                instructions_array.iter().any(|ix| {
-                    if let Some(program_id) = ix.get("programId").and_then(|p| p.as_str()) {
-                        jupiter_program_ids.contains(&program_id)
-                    } else {
-                        false
+        // Direction-aware correction policy for Jupiter:
+        // - Buy (SOL -> Token): prefer authoritative deposit amount from wallet to WSOL ATA(s).
+        //   If detected, set calculated amount to that deposit (instruction truth). Do not add fee legs.
+        // - Sell (Token -> SOL): do not adjust; output is derived from WSOL credits/unwrapped SOL and should be net of fees.
+        match direction {
+            crate::transactions::analyzer::classify::SwapDirection::SolToToken => {
+                // Find the authoritative deposit (largest non-tip system transfer from wallet)
+                if
+                    let Some(deposit_raw) = find_largest_system_transfer_from_wallet_excluding_tips(
+                        tx_data,
+                        &self.wallet_pubkey.to_string()
+                    )
+                {
+                    if deposit_raw > 0 {
+                        // Only replace when it differs meaningfully (>0.05%) to avoid churn
+                        let rel = if calculated_amount > 0 {
+                            (((calculated_amount as i128) - (deposit_raw as i128)).abs() as f64) /
+                                (calculated_amount as f64)
+                        } else {
+                            1.0
+                        };
+                        if rel > 0.0005 {
+                            return Some(deposit_raw);
+                        }
                     }
-                })
-            } else {
-                false
+                }
+                None
             }
-        } else {
-            false
-        };
-
-        if !has_jupiter {
-            return None;
+            _ => None,
         }
-
-        // Common Jupiter platform fee is ~5000 lamports (0.000005 SOL)
-        // Check if adding the fee gets us to a round number
-        let potential_gross_amounts = [
-            calculated_amount + 5000, // Most common Jupiter fee
-            calculated_amount + 5030, // Observed pattern
-            calculated_amount + 4970, // Fee variation
-        ];
-
-        for gross_amount in potential_gross_amounts {
-            // Check if gross amount is close to a round number or makes sense
-            if self.is_likely_jupiter_gross_amount(gross_amount, calculated_amount) {
-                return Some(gross_amount);
-            }
-        }
-
-        None
-    }
-
-    /// Apply Pumpfun-specific corrections based on instruction analysis
-    fn apply_pumpfun_corrections(
-        &self,
-        calculated_amount: u64,
-        tx_data: &crate::rpc::TransactionDetails,
-        balance_analysis: &crate::transactions::analyzer::balance::BalanceAnalysis
-    ) -> Option<u64> {
-        let pumpfun_program_id = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
-
-        // Check if this transaction involves Pumpfun by analyzing instructions
-        let has_pumpfun = if
-            let Some(instructions) = tx_data.transaction.message.get("instructions")
-        {
-            if let Some(instructions_array) = instructions.as_array() {
-                instructions_array.iter().any(|ix| {
-                    if let Some(program_id) = ix.get("programId").and_then(|p| p.as_str()) {
-                        program_id == pumpfun_program_id
-                    } else {
-                        false
-                    }
-                })
-            } else {
-                false
-            }
-        } else {
-            false
-        };
-
-        if !has_pumpfun {
-            return None;
-        }
-
-        // Pumpfun often has small discrepancies due to intermediary account selection
-        // Look for patterns in the percentage difference
-        let percentage_adjustment_patterns = [
-            0.998, // ~0.2% reduction
-            0.999, // ~0.1% reduction
-            1.001, // ~0.1% increase
-            1.002, // ~0.2% increase
-        ];
-
-        for &adjustment in &percentage_adjustment_patterns {
-            let adjusted_amount = ((calculated_amount as f64) * adjustment).round() as u64;
-
-            // Only apply if the adjustment is small (< 0.5% as requested)
-            let percentage_diff =
-                (((calculated_amount as f64) - (adjusted_amount as f64)).abs() /
-                    (calculated_amount as f64)) *
-                100.0;
-
-            if
-                percentage_diff < 0.5 &&
-                self.is_likely_pumpfun_pattern(
-                    calculated_amount,
-                    adjusted_amount,
-                    tx_data,
-                    balance_analysis
-                )
-            {
-                return Some(adjusted_amount);
-            }
-        }
-
-        None
     }
 
     /// Apply Raydium-specific corrections
@@ -2073,29 +2199,75 @@ impl TransactionProcessor {
         None
     }
 
-    /// Check if a gross amount is likely for Jupiter based on patterns
-    fn is_likely_jupiter_gross_amount(&self, gross_amount: u64, calculated_amount: u64) -> bool {
-        // Jupiter typically has round input amounts (like 0.005 SOL = 5,000,000 lamports)
-        // Check if gross amount is close to common round numbers
-        let common_round_amounts = [
-            5_000_000, // 0.005 SOL
-            10_000_000, // 0.01 SOL
-            1_000_000, // 0.001 SOL
-            50_000_000, // 0.05 SOL
+    /// Apply Pumpfun-specific corrections (placeholder: keep micro-adjustments strictly <0.5%)
+    fn apply_pumpfun_corrections(
+        &self,
+        calculated_amount: u64,
+        tx_data: &crate::rpc::TransactionDetails,
+        balance_analysis: &crate::transactions::analyzer::balance::BalanceAnalysis,
+        direction: &crate::transactions::analyzer::classify::SwapDirection
+    ) -> Option<u64> {
+        // Detect PumpFun by presence of legacy or AMM program IDs among outer instructions
+        let pumpfun_programs = [
+            crate::pools::types::PUMP_FUN_LEGACY_PROGRAM_ID,
+            crate::pools::types::PUMP_FUN_AMM_PROGRAM_ID,
         ];
 
-        for &round_amount in &common_round_amounts {
-            if ((gross_amount as i64) - (round_amount as i64)).abs() < 100 {
-                return true;
-            }
+        let has_pumpfun = if
+            let Some(ixs) = tx_data.transaction.message
+                .get("instructions")
+                .and_then(|v| v.as_array())
+        {
+            ixs.iter().any(|ix|
+                ix
+                    .get("programId")
+                    .and_then(|v| v.as_str())
+                    .map(|pid| pumpfun_programs.contains(&pid))
+                    .unwrap_or(false)
+            )
+        } else {
+            false
+        };
+        if !has_pumpfun {
+            return None;
         }
 
-        // Check if the fee percentage is reasonable (typically < 0.2%)
-        let fee = gross_amount.saturating_sub(calculated_amount);
-        let fee_percentage = ((fee as f64) / (gross_amount as f64)) * 100.0;
-
-        fee_percentage < 0.2 && fee > 0
+        // Direction-aware selection of instruction-truth candidates
+        match direction {
+            crate::transactions::analyzer::classify::SwapDirection::TokenToSol => {
+                // SELL: prefer exact WSOL inner credits to wallet ATAs
+                let candidate_sell_ui = sum_inner_wsol_transfers_ui_to_wallet(
+                    tx_data,
+                    &self.wallet_pubkey.to_string()
+                );
+                let candidate_sell_raw = (candidate_sell_ui * 1_000_000_000.0)
+                    .round()
+                    .clamp(0.0, u64::MAX as f64) as u64;
+                if candidate_sell_raw > 0 {
+                    return Some(candidate_sell_raw);
+                }
+                // Fallback: keep original
+                None
+            }
+            crate::transactions::analyzer::classify::SwapDirection::SolToToken => {
+                // BUY: prefer largest non-tip system transfer from wallet (authoritative deposit)
+                if
+                    let Some(deposit_raw) = find_largest_system_transfer_from_wallet_excluding_tips(
+                        tx_data,
+                        &self.wallet_pubkey.to_string()
+                    )
+                {
+                    if deposit_raw > 0 {
+                        return Some(deposit_raw);
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
     }
+
+    // Removed magic-number based heuristic; rely on explicit instruction-derived adjustments only.
 
     /// Check if adjustment pattern is likely for Pumpfun
     fn is_likely_pumpfun_pattern(

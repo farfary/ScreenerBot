@@ -3294,7 +3294,7 @@ impl RpcClient {
             "method": "getTransaction",
             "params": [
                 transaction_signature,
-                { "encoding": "json", "maxSupportedTransactionVersion": 0 }
+                { "encoding": "jsonParsed", "maxSupportedTransactionVersion": 0 }
             ]
         });
 

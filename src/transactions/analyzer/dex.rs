@@ -204,6 +204,12 @@ pub async fn quick_dex_detection(
 fn detect_by_program_id(program_ids: &[String]) -> (Option<DetectedDex>, f64) {
     let dex_map = get_dex_program_map();
 
+    // First, prioritize Jupiter (aggregator) when present to avoid mislabeling as a pool DEX
+    if program_ids.iter().any(|pid| pid == JUPITER_V6_PROGRAM_ID) {
+        return (Some(DetectedDex::Jupiter), 0.95);
+    }
+
+    // Otherwise, pick the first matching known program
     for program_id in program_ids {
         if let Some(dex) = dex_map.get(program_id.as_str()) {
             return (Some(dex.clone()), 0.9); // High confidence for direct match
@@ -307,7 +313,10 @@ fn extract_program_ids(tx_data: &crate::rpc::TransactionDetails) -> Result<Vec<S
     // Extract from outer instructions
     if let Some(instructions) = message.get("instructions").and_then(|v| v.as_array()) {
         for instruction in instructions {
-            if
+            // Prefer direct programId string when available
+            if let Some(pid) = instruction.get("programId").and_then(|v| v.as_str()) {
+                program_ids.push(pid.to_string());
+            } else if
                 let Some(program_id_index) = instruction
                     .get("programIdIndex")
                     .and_then(|v| v.as_u64())
@@ -329,7 +338,10 @@ fn extract_program_ids(tx_data: &crate::rpc::TransactionDetails) -> Result<Vec<S
                         .and_then(|v| v.as_array())
                 {
                     for inner_ix in instructions {
-                        if
+                        // Prefer direct programId string when available
+                        if let Some(pid) = inner_ix.get("programId").and_then(|v| v.as_str()) {
+                            program_ids.push(pid.to_string());
+                        } else if
                             let Some(program_id_index) = inner_ix
                                 .get("programIdIndex")
                                 .and_then(|v| v.as_u64())

@@ -314,7 +314,12 @@ async fn extract_token_balance_changes(
 
         if (pre_ui - post_ui).abs() > f64::EPSILON {
             let change = post_ui - pre_ui;
-            let decimals = get_token_decimals_sync(&mint).unwrap_or(9);
+            // CRITICAL FIX: Use RPC-provided decimals as primary source (authoritative)
+            // Fallback to DB lookup only if RPC doesn't provide it
+            let decimals = post_amount
+                .map(|a| a.decimals)
+                .or_else(|| pre_amount.map(|a| a.decimals))
+                .unwrap_or_else(|| get_token_decimals_sync(&mint).unwrap_or(9));
 
             let token_change = TokenBalanceChange {
                 mint: mint.clone(),
@@ -414,7 +419,7 @@ async fn filter_noise_transfers(
 }
 
 /// Check if amount matches known rent patterns
-fn is_rent_amount(lamports: u64) -> bool {
+pub(crate) fn is_rent_amount(lamports: u64) -> bool {
     // Consider close matches around known rent amounts to account for rent param variance and residuals
     const TOLERANCE: i64 = 150_000; // ~0.00015 SOL
     for known in COMMON_RENT_AMOUNTS {

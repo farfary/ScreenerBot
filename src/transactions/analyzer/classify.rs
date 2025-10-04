@@ -162,7 +162,7 @@ pub async fn classify_transaction(
     let flow_analysis = build_flow_graph(balance_analysis, dex_analysis).await?;
 
     // Step 2: Detect flow patterns
-    let flow_patterns = detect_flow_patterns(&flow_analysis).await?;
+    let flow_patterns = detect_flow_patterns(&flow_analysis, tx_data, dex_analysis).await?;
 
     // Step 3: Classify based on dominant pattern
     let classification = classify_from_patterns(&flow_patterns, dex_analysis).await?;
@@ -306,7 +306,11 @@ fn classify_node_type(account: &str, dex_analysis: &DexAnalysis) -> NodeType {
 // =============================================================================
 
 /// Detect flow patterns from the constructed graph
-async fn detect_flow_patterns(flow_analysis: &FlowAnalysis) -> Result<Vec<FlowPattern>, String> {
+async fn detect_flow_patterns(
+    flow_analysis: &FlowAnalysis,
+    tx_data: &crate::rpc::TransactionDetails,
+    dex_analysis: &DexAnalysis
+) -> Result<Vec<FlowPattern>, String> {
     let mut patterns = Vec::new();
 
     // Look for swap patterns: SOL out + Token in (buy) or Token out + SOL in (sell)
@@ -317,6 +321,146 @@ async fn detect_flow_patterns(flow_analysis: &FlowAnalysis) -> Result<Vec<FlowPa
 
     // Look for liquidity patterns: Multiple tokens in/out to pool
     patterns.extend(detect_liquidity_patterns(flow_analysis).await?);
+
+    // Instruction-aware fallback: if no clear swap patterns were found yet, but we
+    // observe inner transferChecked credits of WSOL, infer a token->SOL sell by
+    // pairing the largest negative non-WSOL token change with SOL out.
+    if !patterns.iter().any(|p| matches!(p.pattern_type, PatternType::SimpleSwap)) {
+        let wsol_ui = sum_inner_wsol_transferchecked_ui(tx_data);
+        if wsol_ui > 0.0 {
+            let sol_mint = WSOL_MINT;
+            // Find the most likely sold token: largest-magnitude negative change (non-WSOL)
+            let mut best_token: Option<(String, f64)> = None;
+            for node in &flow_analysis.nodes {
+                for (token_mint, token_change) in &node.token_changes {
+                    if token_mint == sol_mint {
+                        continue;
+                    }
+                    if *token_change < 0.0 {
+                        let cand = (*token_mint).to_string();
+                        let amt = token_change.abs();
+                        if let Some((_, best_amt)) = &best_token {
+                            if amt > *best_amt {
+                                best_token = Some((cand, amt));
+                            }
+                        } else {
+                            best_token = Some((cand, amt));
+                        }
+                    }
+                }
+            }
+            if let Some((mint, amt)) = best_token {
+                patterns.push(FlowPattern {
+                    pattern_type: PatternType::SimpleSwap,
+                    from_token: mint,
+                    to_token: sol_mint.to_string(),
+                    amount: amt, // amount field is informational; direction is what matters here
+                    confidence: 0.75,
+                });
+            }
+        }
+    }
+
+    // Aggregator-aware fallback: if still no SimpleSwap pattern and a known aggregator
+    // (e.g., Jupiter) is present among program IDs, infer a token->SOL sell by pairing the
+    // largest negative non-WSOL token change with SOL, even if no WSOL credits are visible.
+    if !patterns.iter().any(|p| matches!(p.pattern_type, PatternType::SimpleSwap)) {
+        let has_aggregator = {
+            // Prioritize explicit detected Jupiter, otherwise check program IDs
+            let jup_detected = matches!(
+                dex_analysis.detected_dex,
+                Some(super::dex::DetectedDex::Jupiter)
+            );
+            let jup_in_programs = dex_analysis.program_ids
+                .iter()
+                .any(|pid| pid == crate::transactions::program_ids::JUPITER_V6_PROGRAM_ID);
+            jup_detected || jup_in_programs
+        };
+
+        if has_aggregator {
+            let sol_mint = WSOL_MINT;
+            // Select the dominant sold token by magnitude of negative change
+            let mut best_token: Option<(String, f64)> = None;
+            for node in &flow_analysis.nodes {
+                for (token_mint, token_change) in &node.token_changes {
+                    if token_mint == sol_mint {
+                        continue;
+                    }
+                    if *token_change < 0.0 {
+                        let cand = (*token_mint).to_string();
+                        let amt = token_change.abs();
+                        if let Some((_, best_amt)) = &best_token {
+                            if amt > *best_amt {
+                                best_token = Some((cand, amt));
+                            }
+                        } else {
+                            best_token = Some((cand, amt));
+                        }
+                    }
+                }
+            }
+
+            if let Some((mint, amt)) = best_token {
+                patterns.push(FlowPattern {
+                    pattern_type: PatternType::SimpleSwap,
+                    from_token: mint,
+                    to_token: sol_mint.to_string(),
+                    amount: amt,
+                    confidence: 0.65, // Lower than instruction-backed fallback
+                });
+            }
+        }
+    }
+
+    // Aggregator-aware buy fallback: if still no SimpleSwap pattern and a known aggregator
+    // is present among program IDs, infer a SOL->token buy by selecting the dominant positive
+    // non-WSOL token change even when SOL leg signals are weak or ambiguous.
+    if !patterns.iter().any(|p| matches!(p.pattern_type, PatternType::SimpleSwap)) {
+        let has_aggregator = {
+            let jup_detected = matches!(
+                dex_analysis.detected_dex,
+                Some(super::dex::DetectedDex::Jupiter)
+            );
+            let jup_in_programs = dex_analysis.program_ids
+                .iter()
+                .any(|pid| pid == crate::transactions::program_ids::JUPITER_V6_PROGRAM_ID);
+            jup_detected || jup_in_programs
+        };
+
+        if has_aggregator {
+            let sol_mint = WSOL_MINT;
+            // Select the dominant bought token by magnitude of positive change
+            let mut best_token_in: Option<(String, f64)> = None;
+            for node in &flow_analysis.nodes {
+                for (token_mint, token_change) in &node.token_changes {
+                    if token_mint == sol_mint {
+                        continue;
+                    }
+                    if *token_change > 0.0 {
+                        let cand = (*token_mint).to_string();
+                        let amt = (*token_change).abs();
+                        if let Some((_, best_amt)) = &best_token_in {
+                            if amt > *best_amt {
+                                best_token_in = Some((cand, amt));
+                            }
+                        } else {
+                            best_token_in = Some((cand, amt));
+                        }
+                    }
+                }
+            }
+
+            if let Some((mint, amt)) = best_token_in {
+                patterns.push(FlowPattern {
+                    pattern_type: PatternType::SimpleSwap,
+                    from_token: sol_mint.to_string(),
+                    to_token: mint,
+                    amount: amt,
+                    confidence: 0.6, // Conservative confidence for aggregator-only buy inference
+                });
+            }
+        }
+    }
 
     Ok(patterns)
 }
@@ -593,4 +737,54 @@ fn calculate_flow_confidence(nodes: &[FlowNode], edges: &[FlowEdge]) -> f64 {
     } else {
         0.0
     }
+}
+
+// =============================================================================
+// INSTRUCTION-AWARE HELPERS (local, lightweight)
+// =============================================================================
+
+/// Sum uiAmount across all inner instructions where the parsed info indicates a
+/// transferChecked of WSOL (So1111...), returning SOL units.
+fn sum_inner_wsol_transferchecked_ui(tx_data: &crate::rpc::TransactionDetails) -> f64 {
+    let meta = match tx_data.meta.as_ref() {
+        Some(m) => m,
+        None => {
+            return 0.0;
+        }
+    };
+    let inner = match meta.inner_instructions.as_ref() {
+        Some(v) => v,
+        None => {
+            return 0.0;
+        }
+    };
+    let mut total_ui: f64 = 0.0;
+    for group in inner {
+        if let Some(ixs) = group.get("instructions").and_then(|v| v.as_array()) {
+            for ix in ixs {
+                if let Some(parsed) = ix.get("parsed") {
+                    if let Some(info) = parsed.get("info") {
+                        let mint = info
+                            .get("mint")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        if mint == WSOL_MINT {
+                            if let Some(token_amount) = info.get("tokenAmount") {
+                                if
+                                    let Some(ui) = token_amount
+                                        .get("uiAmount")
+                                        .and_then(|v| v.as_f64())
+                                {
+                                    if ui > 0.0 {
+                                        total_ui += ui;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    total_ui
 }
