@@ -4,6 +4,7 @@
 // real-time transaction monitoring, WebSocket integration, and periodic processing.
 
 use chrono::{ DateTime, Utc };
+use futures::stream::{ StreamExt, FuturesUnordered };
 use once_cell::sync::Lazy;
 use std::collections::{ HashMap, HashSet };
 use std::sync::Arc;
@@ -22,6 +23,14 @@ use crate::transactions::{
     utils::*,
 };
 use crate::websocket;
+
+// =============================================================================
+// BOOTSTRAP CONFIGURATION
+// =============================================================================
+
+/// Number of transactions to process concurrently during bootstrap
+/// Change this value to adjust parallel processing batch size
+const CONCURRENT_BATCH_SIZE: usize = 5;
 
 // =============================================================================
 // GLOBAL SERVICE STATE
@@ -324,7 +333,7 @@ async fn perform_initial_transaction_bootstrap(
         (mgr.wallet_pubkey, mgr.debug_enabled, mgr.transaction_database.clone())
     };
     let fetcher = TransactionFetcher::new();
-    let processor = TransactionProcessor::new(wallet_pubkey);
+    let processor = Arc::new(TransactionProcessor::new(wallet_pubkey));
 
     let mut stats = BootstrapStats::default();
     let batch_limit = RPC_BATCH_SIZE;
@@ -462,67 +471,96 @@ async fn perform_initial_transaction_bootstrap(
         LogTag::Transactions,
         "BOOTSTRAP_PHASE2",
         &format!(
-            "📊 Filtering complete: {} new to process | {} already known | elapsed: {}s",
+            "📊 Filtering complete: {} new to process | {} already known | batch_size={} | elapsed: {}s",
             total_to_process,
             stats.known_signatures_skipped,
+            CONCURRENT_BATCH_SIZE,
             phase2_timer.elapsed().as_secs()
         )
     );
 
-    // Process all new signatures with accurate progress tracking
-    for (idx, signature) in signatures_to_process.iter().enumerate() {
-        match processor.process_transaction(signature).await {
-            Ok(_) => {
-                if let Some(db) = transaction_db.as_ref() {
-                    if let Err(e) = db.add_known_signature(signature).await {
-                        log(
-                            LogTag::Transactions,
-                            "WARN",
-                            &format!("Failed to persist known signature {}: {}", signature, e)
-                        );
-                        stats.errors += 1;
+    // Process all new signatures in parallel batches with accurate progress tracking
+    let mut processed_count = 0;
+    let mut newly_processed = 0;
+    let mut errors = 0;
+
+    // Split into batches and process in parallel
+    for batch_start in (0..signatures_to_process.len()).step_by(CONCURRENT_BATCH_SIZE) {
+        let batch_end = std::cmp::min(
+            batch_start + CONCURRENT_BATCH_SIZE,
+            signatures_to_process.len()
+        );
+        let batch = &signatures_to_process[batch_start..batch_end];
+
+        // Create futures for parallel processing
+        let mut futures = FuturesUnordered::new();
+
+        for signature in batch {
+            let sig = signature.clone();
+            let proc = processor.clone();
+            futures.push(async move { (sig.clone(), proc.process_transaction(&sig).await) });
+        }
+
+        // Process batch in parallel
+        while let Some((signature, result)) = futures.next().await {
+            match result {
+                Ok(_) => {
+                    if let Some(db) = transaction_db.as_ref() {
+                        if let Err(e) = db.add_known_signature(&signature).await {
+                            log(
+                                LogTag::Transactions,
+                                "WARN",
+                                &format!("Failed to persist known signature {}: {}", signature, e)
+                            );
+                            errors += 1;
+                        }
                     }
+
+                    add_signature_to_known_globally(signature.clone()).await;
+                    if let Ok(mut mgr) = manager_arc.try_lock() {
+                        mgr.known_signatures.insert(signature.clone());
+                        mgr.total_transactions += 1;
+                    }
+                    newly_processed += 1;
                 }
-
-                add_signature_to_known_globally(signature.clone()).await;
-                if let Ok(mut mgr) = manager_arc.try_lock() {
-                    mgr.known_signatures.insert(signature.clone());
-                    mgr.total_transactions += 1;
-                }
-                stats.newly_processed += 1;
-
-                // Show progress summary every 10 transactions
-                if (idx + 1) % 10 == 0 || idx + 1 == total_to_process {
-                    let processed = idx + 1;
-                    let remaining = total_to_process - processed;
-                    let progress_pct = ((processed as f64) / (total_to_process as f64)) * 100.0;
-
+                Err(e) => {
                     log(
                         LogTag::Transactions,
-                        "BOOTSTRAP_PROGRESS",
-                        &format!(
-                            "📊 Progress: {}/{} ({:.1}%) | new={} | errors={} | remaining={} | elapsed={}s",
-                            processed,
-                            total_to_process,
-                            progress_pct,
-                            stats.newly_processed,
-                            stats.errors,
-                            remaining,
-                            bootstrap_timer.elapsed().as_secs()
-                        )
+                        "WARN",
+                        &format!("Failed to process bootstrap transaction {}: {}", signature, e)
                     );
+                    errors += 1;
                 }
             }
-            Err(e) => {
+
+            processed_count += 1;
+
+            // Show progress summary every 10 transactions or at the end
+            if processed_count % 10 == 0 || processed_count == total_to_process {
+                let remaining = total_to_process - processed_count;
+                let progress_pct = ((processed_count as f64) / (total_to_process as f64)) * 100.0;
+
                 log(
                     LogTag::Transactions,
-                    "WARN",
-                    &format!("Failed to process bootstrap transaction {}: {}", signature, e)
+                    "BOOTSTRAP_PROGRESS",
+                    &format!(
+                        "📊 Progress: {}/{} ({:.1}%) | new={} | errors={} | remaining={} | elapsed={}s",
+                        processed_count,
+                        total_to_process,
+                        progress_pct,
+                        newly_processed,
+                        errors,
+                        remaining,
+                        bootstrap_timer.elapsed().as_secs()
+                    )
                 );
-                stats.errors += 1;
             }
         }
     }
+
+    // Update stats with final counts
+    stats.newly_processed = newly_processed;
+    stats.errors += errors;
 
     log(
         LogTag::Transactions,
