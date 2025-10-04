@@ -67,6 +67,34 @@ pub async fn run_bot() -> Result<(), String> {
     // Initialize system and stable tokens in blacklist
     crate::tokens::blacklist::initialize_system_stable_blacklist();
 
+    // Start webserver dashboard EARLY (after basic services like events/blacklist)
+    // This allows monitoring the bot startup progress via the web interface
+    if let Ok(configs) = global::read_configs() {
+        if configs.webserver.enabled {
+            log(LogTag::System, "INFO", "🌐 Starting webserver dashboard (early startup)...");
+
+            let webserver_config = configs.webserver.clone();
+            tokio::spawn(async move {
+                if let Err(e) = crate::webserver::start_server(webserver_config).await {
+                    log(LogTag::System, "ERROR", &format!("Webserver failed to start: {}", e));
+                }
+            });
+
+            // Brief delay to let server initialize
+            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+            log(
+                LogTag::System,
+                "SUCCESS",
+                &format!(
+                    "✅ Webserver started on http://{}:{} (services still initializing)",
+                    configs.webserver.host,
+                    configs.webserver.port
+                )
+            );
+        }
+    }
+
     // Check for dry-run mode and log it prominently
     if is_dry_run_enabled() {
         log(LogTag::System, "CRITICAL", "🚫 DRY-RUN MODE ENABLED - NO ACTUAL TRADING WILL OCCUR");
@@ -351,33 +379,8 @@ pub async fn run_bot() -> Result<(), String> {
         debug_log(LogTag::System, "INFO", "Learning system initialized successfully");
     }
 
-    // Start webserver dashboard (after all core services are ready)
-    // This ensures status endpoints show accurate service states
-    if let Ok(configs) = global::read_configs() {
-        if configs.webserver.enabled {
-            log(LogTag::System, "INFO", "🌐 Starting webserver dashboard...");
-
-            let webserver_config = configs.webserver.clone();
-            tokio::spawn(async move {
-                if let Err(e) = crate::webserver::start_server(webserver_config).await {
-                    log(LogTag::System, "ERROR", &format!("Webserver failed to start: {}", e));
-                }
-            });
-
-            // Brief delay to let server initialize
-            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-
-            log(
-                LogTag::System,
-                "SUCCESS",
-                &format!(
-                    "✅ Webserver started on http://{}:{}",
-                    configs.webserver.host,
-                    configs.webserver.port
-                )
-            );
-        }
-    }
+    // Webserver was already started early in startup sequence (after events/blacklist init)
+    // This allows monitoring bot initialization progress via web interface
 
     let shutdown_entries = shutdown.clone();
     let entries_handle = tokio::spawn(async move {
