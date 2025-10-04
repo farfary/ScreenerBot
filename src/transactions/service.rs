@@ -348,15 +348,16 @@ async fn perform_initial_transaction_bootstrap(
     let mut stats = BootstrapStats::default();
     let batch_limit = RPC_BATCH_SIZE;
 
-    // Check if we have a checkpoint (newest known signature) for incremental fetching
+    // Check if we have a checkpoint (oldest known signature) for incremental fetching
+    // We fetch backwards (newest→oldest), so we stop when we hit the oldest we already have
     let checkpoint_signature = if let Some(db) = transaction_db.as_ref() {
-        match db.get_newest_known_signature().await {
+        match db.get_oldest_known_signature().await {
             Ok(sig) => sig,
             Err(e) => {
                 log(
                     LogTag::Transactions,
                     "WARN",
-                    &format!("Failed to get newest known signature: {}", e)
+                    &format!("Failed to get oldest known signature: {}", e)
                 );
                 None
             }
@@ -383,7 +384,7 @@ async fn perform_initial_transaction_bootstrap(
             LogTag::Transactions,
             "BOOTSTRAP",
             &format!(
-                "📌 Checkpoint found: {}... (will fetch only newer signatures)",
+                "📌 Checkpoint found: {}... (oldest known - will fetch until we reach it)",
                 &checkpoint[..8]
             )
         );
@@ -398,7 +399,7 @@ async fn perform_initial_transaction_bootstrap(
         &format!("📥 Phase 1: Collecting {} signatures from blockchain...", if
             checkpoint_signature.is_some()
         {
-            "NEW"
+            "MISSING (until checkpoint)"
         } else {
             "ALL"
         })

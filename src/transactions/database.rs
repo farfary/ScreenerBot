@@ -411,19 +411,22 @@ impl TransactionDatabase {
         Ok(count as u64)
     }
 
-    /// Get the newest (most recent) known signature for incremental fetching
+    /// Get the oldest known signature for incremental fetching checkpoint
     /// Returns None if no signatures are known yet (first run)
-    pub async fn get_newest_known_signature(&self) -> Result<Option<String>, String> {
+    ///
+    /// When fetching backwards from blockchain (newest→oldest), we stop when we hit
+    /// the oldest signature we already have, ensuring we only fetch missing history.
+    pub async fn get_oldest_known_signature(&self) -> Result<Option<String>, String> {
         let conn = self.get_connection()?;
 
         let result: Option<String> = conn
             .query_row(
-                "SELECT signature FROM known_signatures ORDER BY added_at DESC LIMIT 1",
+                "SELECT signature FROM known_signatures ORDER BY added_at ASC LIMIT 1",
                 [],
                 |row| row.get(0)
             )
             .optional()
-            .map_err(|e| format!("Failed to get newest known signature: {}", e))?;
+            .map_err(|e| format!("Failed to get oldest known signature: {}", e))?;
 
         Ok(result)
     }
