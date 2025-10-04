@@ -10,7 +10,7 @@ use std::collections::{ HashMap, HashSet };
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{ Mutex, Notify };
-use tokio::time::{ interval, timeout };
+use tokio::time::{ interval, timeout, sleep };
 
 use crate::configs::read_configs;
 use crate::global::is_debug_transactions_enabled;
@@ -31,6 +31,10 @@ use crate::websocket;
 /// Number of transactions to process concurrently during bootstrap
 /// Change this value to adjust parallel processing batch size
 const CONCURRENT_BATCH_SIZE: usize = 5;
+
+/// Timeout for individual transaction processing during bootstrap (in seconds)
+/// Transactions taking longer than this will be skipped with an error
+const TRANSACTION_TIMEOUT_SECS: u64 = 15;
 
 // =============================================================================
 // GLOBAL SERVICE STATE
@@ -492,13 +496,29 @@ async fn perform_initial_transaction_bootstrap(
         );
         let batch = &signatures_to_process[batch_start..batch_end];
 
-        // Create futures for parallel processing
+        // Create futures for parallel processing with timeout
         let mut futures = FuturesUnordered::new();
 
         for signature in batch {
             let sig = signature.clone();
             let proc = processor.clone();
-            futures.push(async move { (sig.clone(), proc.process_transaction(&sig).await) });
+            futures.push(async move {
+                let result = timeout(
+                    Duration::from_secs(TRANSACTION_TIMEOUT_SECS),
+                    proc.process_transaction(&sig)
+                ).await;
+
+                match result {
+                    Ok(inner_result) => (sig.clone(), inner_result),
+                    Err(_) =>
+                        (
+                            sig.clone(),
+                            Err(
+                                format!("Transaction processing timed out after {}s", TRANSACTION_TIMEOUT_SECS)
+                            ),
+                        ),
+                }
+            });
         }
 
         // Process batch in parallel
