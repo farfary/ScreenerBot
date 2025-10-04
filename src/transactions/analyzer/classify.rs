@@ -16,6 +16,7 @@ use std::collections::HashMap;
 use crate::logger::{ log, LogTag };
 use crate::transactions::types::*;
 use crate::transactions::utils::WSOL_MINT;
+use crate::global::is_debug_transactions_enabled;
 use super::{ balance::BalanceAnalysis, dex::DexAnalysis, AnalysisConfidence };
 
 // =============================================================================
@@ -152,11 +153,13 @@ pub async fn classify_transaction(
     balance_analysis: &BalanceAnalysis,
     dex_analysis: &DexAnalysis
 ) -> Result<TransactionClass, String> {
-    log(
-        LogTag::Transactions,
-        "CLASSIFY",
-        &format!("Classifying transaction: {}", transaction.signature)
-    );
+    if is_debug_transactions_enabled() {
+        log(
+            LogTag::Transactions,
+            "CLASSIFY",
+            &format!("Classifying transaction: {}", transaction.signature)
+        );
+    }
 
     // Step 1: Build flow graph from balance changes
     let flow_analysis = build_flow_graph(balance_analysis, dex_analysis).await?;
@@ -175,30 +178,32 @@ pub async fn classify_transaction(
     );
 
     // Decision summary
-    log(
-        LogTag::Transactions,
-        "CLASSIFY_DECISION",
-        &format!(
-            "classification={:?} direction={:?} primary_token={:?} confidence={:?}",
-            classification.0,
-            classification.1,
-            classification.2,
-            confidence
-        )
-    );
+    if is_debug_transactions_enabled() {
+        log(
+            LogTag::Transactions,
+            "CLASSIFY_DECISION",
+            &format!(
+                "classification={:?} direction={:?} primary_token={:?} confidence={:?}",
+                classification.0,
+                classification.1,
+                classification.2,
+                confidence
+            )
+        );
 
-    // Debug: summarize nodes, edges, and patterns
-    log(
-        LogTag::Transactions,
-        "CLASSIFY_DEBUG",
-        &format!(
-            "Flow graph: nodes={} edges={} patterns={} dex_conf={:.2}",
-            flow_analysis.nodes.len(),
-            flow_analysis.edges.len(),
-            flow_patterns.len(),
-            dex_analysis.confidence
-        )
-    );
+        // Debug: summarize nodes, edges, and patterns
+        log(
+            LogTag::Transactions,
+            "CLASSIFY_DEBUG",
+            &format!(
+                "Flow graph: nodes={} edges={} patterns={} dex_conf={:.2}",
+                flow_analysis.nodes.len(),
+                flow_analysis.edges.len(),
+                flow_patterns.len(),
+                dex_analysis.confidence
+            )
+        );
+    }
 
     Ok(TransactionClass {
         transaction_type: classification.0,

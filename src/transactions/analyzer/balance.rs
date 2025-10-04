@@ -19,6 +19,7 @@ use crate::logger::{ log, LogTag };
 use crate::tokens::{ decimals::lamports_to_sol, get_token_decimals_sync };
 use crate::utils::sol_to_lamports;
 use crate::transactions::{ types::*, utils::*, program_ids };
+use crate::global::is_debug_transactions_enabled;
 
 // =============================================================================
 // BALANCE ANALYSIS TYPES
@@ -84,11 +85,13 @@ pub async fn analyze_balance_changes(
     transaction: &Transaction,
     tx_data: &crate::rpc::TransactionDetails
 ) -> Result<BalanceAnalysis, String> {
-    log(
-        LogTag::Transactions,
-        "BALANCE_ANALYZE",
-        &format!("Analyzing balance changes for tx: {}", transaction.signature)
-    );
+    if is_debug_transactions_enabled() {
+        log(
+            LogTag::Transactions,
+            "BALANCE_ANALYZE",
+            &format!("Analyzing balance changes for tx: {}", transaction.signature)
+        );
+    }
 
     // Extract raw balance changes
     let sol_changes = extract_sol_balance_changes(transaction, tx_data).await?;
@@ -185,11 +188,13 @@ async fn extract_sol_balance_changes(
     let message = &tx_data.transaction.message;
     let account_keys = account_keys_from_message(message);
 
-    log(
-        LogTag::Transactions,
-        "BALANCE_DEBUG",
-        &format!("Extracted {} account keys from message", account_keys.len())
-    );
+    if is_debug_transactions_enabled() {
+        log(
+            LogTag::Transactions,
+            "BALANCE_DEBUG",
+            &format!("Extracted {} account keys from message", account_keys.len())
+        );
+    }
 
     // Get balance arrays
     let pre_balances: &Vec<u64> = tx_data.meta
@@ -335,16 +340,18 @@ async fn extract_token_balance_changes(
     }
 
     // Diagnostic: summarize aggregation distribution
-    log(
-        LogTag::Transactions,
-        "BALANCE_DEBUG",
-        &format!(
-            "Token changes aggregated across {} owners/accounts (pre={} post={})",
-            token_changes.len(),
-            pre_token_balances.len(),
-            post_token_balances.len()
-        )
-    );
+    if is_debug_transactions_enabled() {
+        log(
+            LogTag::Transactions,
+            "BALANCE_DEBUG",
+            &format!(
+                "Token changes aggregated across {} owners/accounts (pre={} post={})",
+                token_changes.len(),
+                pre_token_balances.len(),
+                post_token_balances.len()
+            )
+        );
+    }
 
     Ok(token_changes)
 }

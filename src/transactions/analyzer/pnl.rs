@@ -14,6 +14,7 @@ use std::collections::HashMap;
 
 use crate::logger::{ log, LogTag };
 use crate::transactions::types::*;
+use crate::global::is_debug_transactions_enabled;
 use super::{
     balance::BalanceAnalysis,
     classify::{ ClassifiedType, SwapDirection, TransactionClass },
@@ -117,11 +118,13 @@ pub async fn calculate_pnl(
     classification: &TransactionClass,
     ata_analysis: &AtaAnalysis
 ) -> Result<PnLAnalysis, String> {
-    log(
-        LogTag::Transactions,
-        "PNL_CALCULATE",
-        &format!("Calculating P&L for tx: {}", transaction.signature)
-    );
+    if is_debug_transactions_enabled() {
+        log(
+            LogTag::Transactions,
+            "PNL_CALCULATE",
+            &format!("Calculating P&L for tx: {}", transaction.signature)
+        );
+    }
 
     // Step 1: Calculate fee breakdown
     let fee_breakdown = calculate_fee_breakdown(tx_data, balance_analysis, ata_analysis).await?;

@@ -98,11 +98,13 @@ impl TransactionAnalyzer {
         transaction: &Transaction,
         tx_data: &crate::rpc::TransactionDetails
     ) -> Result<CompleteAnalysis, String> {
-        log(
-            LogTag::Transactions,
-            "ANALYZE_START",
-            &format!("Starting complete analysis for tx: {}", transaction.signature)
-        );
+        if self.debug_enabled {
+            log(
+                LogTag::Transactions,
+                "ANALYZE_START",
+                &format!("Starting complete analysis for tx: {}", transaction.signature)
+            );
+        }
 
         // Step 1: Extract balance changes (full analyzer for tips/rent detection)
         let balance_analysis = balance::analyze_balance_changes(transaction, tx_data).await?;
@@ -155,17 +157,19 @@ impl TransactionAnalyzer {
 
         let analyzed_at = chrono::Utc::now().timestamp();
 
-        log(
-            LogTag::Transactions,
-            "ANALYZE_COMPLETE",
-            &format!(
-                "Analysis complete for {}: confidence={:?}, patterns={}, classification={:?}",
-                transaction.signature,
-                confidence,
-                pattern_analysis.detected_patterns.len(),
-                classification.transaction_type
-            )
-        );
+        if self.debug_enabled {
+            log(
+                LogTag::Transactions,
+                "ANALYZE_COMPLETE",
+                &format!(
+                    "Analysis complete for {}: confidence={:?}, patterns={}, classification={:?}",
+                    transaction.signature,
+                    confidence,
+                    pattern_analysis.detected_patterns.len(),
+                    classification.transaction_type
+                )
+            );
+        }
 
         Ok(CompleteAnalysis {
             balance: balance_analysis,

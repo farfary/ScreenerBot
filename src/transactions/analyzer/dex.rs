@@ -16,6 +16,7 @@ use std::collections::HashMap;
 
 use crate::logger::{ log, LogTag };
 use crate::transactions::{ program_ids::*, types::*, utils::* };
+use crate::global::is_debug_transactions_enabled;
 use super::balance::BalanceAnalysis;
 
 // =============================================================================
@@ -136,11 +137,13 @@ pub async fn detect_dex_and_router(
     tx_data: &crate::rpc::TransactionDetails,
     balance_analysis: &BalanceAnalysis
 ) -> Result<DexAnalysis, String> {
-    log(
-        LogTag::Transactions,
-        "DEX_DETECT",
-        &format!("Detecting DEX/router for tx: {}", transaction.signature)
-    );
+    if is_debug_transactions_enabled() {
+        log(
+            LogTag::Transactions,
+            "DEX_DETECT",
+            &format!("Detecting DEX/router for tx: {}", transaction.signature)
+        );
+    }
 
     // Step 1: Extract all program IDs from instructions
     let program_ids = extract_program_ids(tx_data)?;

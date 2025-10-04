@@ -15,6 +15,7 @@ use std::collections::HashMap;
 
 use crate::logger::{ log, LogTag };
 use crate::transactions::types::*;
+use crate::global::is_debug_transactions_enabled;
 use super::{ balance::BalanceAnalysis, dex::DexAnalysis, classify::TransactionClass };
 
 // =============================================================================
@@ -175,11 +176,13 @@ pub async fn detect_patterns(
     dex_analysis: &DexAnalysis,
     classification: &TransactionClass
 ) -> Result<PatternAnalysis, String> {
-    log(
-        LogTag::Transactions,
-        "PATTERNS_DETECT",
-        &format!("Detecting patterns for tx: {}", transaction.signature)
-    );
+    if is_debug_transactions_enabled() {
+        log(
+            LogTag::Transactions,
+            "PATTERNS_DETECT",
+            &format!("Detecting patterns for tx: {}", transaction.signature)
+        );
+    }
 
     // Step 1: Detect specific patterns
     let detected_patterns = detect_specific_patterns(
