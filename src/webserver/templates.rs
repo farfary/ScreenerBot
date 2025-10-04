@@ -2244,26 +2244,39 @@ pub fn events_content() -> String {
     </div>
     
     <script>
-        let allEventsData = [];
-        let eventsRefreshInterval = null;
+    let allEventsData = [];
+    let eventsRefreshInterval = null;
+    let maxEventId = 0;
+    let ws = { conn: null, enabled: true, attempts: 0 };
         
         // Load events from API
         async function loadEvents() {
             try {
                 const category = document.getElementById('categoryFilter').value;
                 const severity = document.getElementById('severityFilter').value;
-                
-                let url = '/api/v1/events?limit=200';
-                if (category) url += `&category=${category}`;
-                if (severity) url += `&severity=${severity}`;
-                
+                const params = new URLSearchParams();
+                params.set('limit', '200');
+                if (category) params.set('category', category);
+                if (severity) params.set('severity', severity);
+
+                let url = '';
+                if (maxEventId === 0) {
+                    url = `/api/v1/events/head?${params.toString()}`;
+                } else {
+                    params.set('after_id', String(maxEventId));
+                    url = `/api/v1/events/since?${params.toString()}`;
+                }
+
                 const res = await fetch(url);
                 const data = await res.json();
-                
-                allEventsData = data.events;
+                if (maxEventId === 0) {
+                    allEventsData = data.events;
+                } else {
+                    allEventsData = data.events.concat(allEventsData);
+                }
+                maxEventId = Math.max(maxEventId, data.max_id || 0);
                 renderEvents(allEventsData);
-                
-                document.getElementById('eventsCountText').textContent = `${data.count} events`;
+                document.getElementById('eventsCountText').textContent = `${allEventsData.length} events`;
                 
                 // Save filter state
                 AppState.save('events_category', category);
@@ -2387,6 +2400,50 @@ pub fn events_content() -> String {
                 loadEvents();
             }, 1000);
         }
+
+        function startEventsWebSocket() {
+            if (!ws.enabled || ws.conn) return;
+            const params = new URLSearchParams();
+            const category = document.getElementById('categoryFilter').value;
+            const severity = document.getElementById('severityFilter').value;
+            if (category) params.set('category', category);
+            if (severity) params.set('severity', severity);
+            if (maxEventId > 0) params.set('last_id', String(maxEventId));
+            const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+            const url = `${proto}://${location.host}/api/v1/ws/events?${params.toString()}`;
+            try {
+                ws.conn = new WebSocket(url);
+                ws.conn.onopen = () => {
+                    ws.attempts = 0;
+                    if (eventsRefreshInterval) { clearInterval(eventsRefreshInterval); eventsRefreshInterval = null; }
+                };
+                ws.conn.onmessage = (ev) => {
+                    try {
+                        const e = JSON.parse(ev.data);
+                        if (e && typeof e.id === 'number') {
+                            maxEventId = Math.max(maxEventId, e.id);
+                            allEventsData.unshift(e);
+                            if (allEventsData.length > 1000) allEventsData.pop();
+                            renderEvents(allEventsData);
+                            document.getElementById('eventsCountText').textContent = `${allEventsData.length} events`;
+                        }
+                    } catch {}
+                };
+                ws.conn.onclose = () => { ws.conn = null; reconnectWS(); };
+                ws.conn.onerror = () => { try { ws.conn && ws.conn.close(); } catch {}; ws.conn = null; reconnectWS(); };
+            } catch { reconnectWS(); }
+        }
+
+        function reconnectWS() {
+            ws.attempts++;
+            const delay = Math.min(1000 * Math.pow(2, ws.attempts), 15000);
+            if (ws.attempts > 5) {
+                ws.enabled = false;
+                startEventsRefresh();
+                return;
+            }
+            setTimeout(() => startEventsWebSocket(), delay);
+        }
         
         // Restore saved filters
         const savedCategory = AppState.load('events_category', '');
@@ -2397,9 +2454,10 @@ pub fn events_content() -> String {
         if (savedSeverity) document.getElementById('severityFilter').value = savedSeverity;
         if (savedSearch) document.getElementById('eventSearch').value = savedSearch;
         
-        // Initial load
-        loadEvents();
-        startEventsRefresh();
+    // Initial load
+    loadEvents();
+    startEventsWebSocket();
+    if (ws.enabled === false) startEventsRefresh();
     </script>
     "#.to_string()
 }

@@ -15,6 +15,7 @@ pub mod dashboard;
 pub mod wallet;
 pub mod blacklist;
 pub mod config;
+pub mod ws;
 
 /// Create the main API router with all routes
 pub fn create_router(state: Arc<AppState>) -> Router {
@@ -27,6 +28,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/events", axum::routing::get(events_page))
         .route("/api", axum::routing::get(api_info))
         .nest("/api/v1", api_v1_routes())
+        .merge(ws::routes())
         .with_state(state)
 }
 
@@ -100,4 +102,5 @@ fn api_v1_routes() -> Router<Arc<AppState>> {
         .merge(wallet::routes())
         .merge(blacklist::routes())
         .merge(config::routes())
+        .merge(ws::routes())
 }

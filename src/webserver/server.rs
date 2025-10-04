@@ -3,6 +3,7 @@
 /// Main server lifecycle management including startup, shutdown, and graceful termination
 
 use axum::Router;
+use tower_http::compression::CompressionLayer;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -79,7 +80,7 @@ fn build_app(state: Arc<AppState>) -> Router {
     let app = routes::create_router(state);
 
     // Add middleware layers (future)
-    // app.layer(...)
+    let app = app.layer(CompressionLayer::new());
 
     app
 }
