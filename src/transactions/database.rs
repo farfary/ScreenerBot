@@ -24,7 +24,7 @@ use crate::transactions::{ types::*, utils::* };
 // =============================================================================
 
 /// Database schema version for migration management
-const DATABASE_SCHEMA_VERSION: u32 = 3;
+const DATABASE_SCHEMA_VERSION: u32 = 4;
 
 /// Static flag to track if database has been initialized (to reduce log noise)
 static DATABASE_INITIALIZED: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
@@ -131,6 +131,17 @@ const SCHEMA_METADATA: &str =
 CREATE TABLE IF NOT EXISTS db_metadata (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+"#;
+
+/// Bootstrap state table to persist resume cursor and completion flag across restarts
+const SCHEMA_BOOTSTRAP_STATE: &str =
+    r#"
+CREATE TABLE IF NOT EXISTS bootstrap_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    backfill_before_cursor TEXT,
+    full_history_completed INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 "#;
@@ -286,6 +297,7 @@ impl TransactionDatabase {
             SCHEMA_DEFERRED_RETRIES,
             SCHEMA_PENDING_TRANSACTIONS,
             SCHEMA_METADATA,
+            SCHEMA_BOOTSTRAP_STATE,
         ];
 
         for table_sql in &tables {
@@ -339,6 +351,19 @@ impl TransactionDatabase {
                 )
                 .map_err(|e| format!("Failed to add fee_sol column: {}", e))?;
         }
+
+        // Ensure bootstrap_state table exists (idempotent)
+        conn
+            .execute(SCHEMA_BOOTSTRAP_STATE, [])
+            .map_err(|e| format!("Failed to ensure bootstrap_state table: {}", e))?;
+
+        // Ensure the single row exists
+        conn
+            .execute(
+                "INSERT OR IGNORE INTO bootstrap_state (id, full_history_completed) VALUES (1, 0)",
+                []
+            )
+            .map_err(|e| format!("Failed to initialize bootstrap_state row: {}", e))?;
         Ok(())
     }
 
@@ -409,6 +434,22 @@ impl TransactionDatabase {
             .map_err(|e| format!("Failed to get known signatures count: {}", e))?;
 
         Ok(count as u64)
+    }
+
+    /// Get the newest known signature (most recently added)
+    pub async fn get_newest_known_signature(&self) -> Result<Option<String>, String> {
+        let conn = self.get_connection()?;
+
+        let result: Option<String> = conn
+            .query_row(
+                "SELECT signature FROM known_signatures ORDER BY added_at DESC LIMIT 1",
+                [],
+                |row| row.get(0)
+            )
+            .optional()
+            .map_err(|e| format!("Failed to get newest known signature: {}", e))?;
+
+        Ok(result)
     }
 
     /// Get the oldest known signature for incremental fetching checkpoint
@@ -968,6 +1009,94 @@ impl TransactionDatabase {
             index_integrity_ok: true, // Would require index check
             pending_transactions_count: pending_count as u64,
         })
+    }
+}
+
+// =============================================================================
+// IMPLEMENTATION - BOOTSTRAP STATE AND RECONCILIATION
+// =============================================================================
+
+/// Bootstrap state structure for resuming backfill across restarts
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct BootstrapState {
+    pub backfill_before_cursor: Option<String>,
+    pub full_history_completed: bool,
+}
+
+impl TransactionDatabase {
+    /// Get the current bootstrap state
+    pub async fn get_bootstrap_state(&self) -> Result<BootstrapState, String> {
+        let conn = self.get_connection()?;
+        let mut state = BootstrapState::default();
+
+        let result = conn
+            .query_row(
+                "SELECT backfill_before_cursor, full_history_completed FROM bootstrap_state WHERE id = 1",
+                [],
+                |row| {
+                    let cursor: Option<String> = row.get(0)?;
+                    let completed_i: i64 = row.get(1)?;
+                    Ok((cursor, completed_i))
+                }
+            )
+            .optional()
+            .map_err(|e| format!("Failed to load bootstrap_state: {}", e))?;
+
+        if let Some((cursor, completed_i)) = result {
+            state.backfill_before_cursor = cursor;
+            state.full_history_completed = completed_i != 0;
+        }
+
+        Ok(state)
+    }
+
+    /// Update the backfill cursor (the `before` parameter for next page)
+    pub async fn set_backfill_cursor(&self, cursor: Option<&str>) -> Result<(), String> {
+        let conn = self.get_connection()?;
+        conn
+            .execute(
+                "INSERT OR IGNORE INTO bootstrap_state (id, full_history_completed) VALUES (1, 0)",
+                []
+            )
+            .map_err(|e| format!("Failed to ensure bootstrap_state row: {}", e))?;
+
+        conn
+            .execute(
+                "UPDATE bootstrap_state SET backfill_before_cursor = ?1, updated_at = datetime('now') WHERE id = 1",
+                params![cursor]
+            )
+            .map_err(|e| format!("Failed to update backfill cursor: {}", e))?;
+        Ok(())
+    }
+
+    /// Clear the backfill cursor
+    pub async fn clear_backfill_cursor(&self) -> Result<(), String> {
+        self.set_backfill_cursor(None).await
+    }
+
+    /// Mark the full history as completed
+    pub async fn mark_full_history_completed(&self) -> Result<(), String> {
+        let conn = self.get_connection()?;
+        conn
+            .execute(
+                "UPDATE bootstrap_state SET full_history_completed = 1, updated_at = datetime('now') WHERE id = 1",
+                []
+            )
+            .map_err(|e| format!("Failed to mark full history completed: {}", e))?;
+        Ok(())
+    }
+
+    /// Reconcile known_signatures with already processed transactions
+    /// Ensures no processed transaction is missing from known_signatures
+    pub async fn reconcile_known_with_processed(&self) -> Result<usize, String> {
+        let conn = self.get_connection()?;
+        let affected = conn
+            .execute(
+                "INSERT OR IGNORE INTO known_signatures(signature) SELECT signature FROM processed_transactions",
+                []
+            )
+            .map_err(|e| format!("Failed to reconcile known signatures: {}", e))?;
+        Ok(affected as usize)
     }
 }
 

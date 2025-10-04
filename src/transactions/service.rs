@@ -30,7 +30,7 @@ use crate::websocket;
 
 /// Number of transactions to process concurrently during bootstrap
 /// Change this value to adjust parallel processing batch size
-const CONCURRENT_BATCH_SIZE: usize = 2;
+const CONCURRENT_BATCH_SIZE: usize = 5;
 
 /// Timeout for individual transaction processing during bootstrap (in seconds)
 /// Transactions taking longer than this will be timed out and retried later
@@ -348,25 +348,51 @@ async fn perform_initial_transaction_bootstrap(
     let mut stats = BootstrapStats::default();
     let batch_limit = RPC_BATCH_SIZE;
 
-    // Check if we have a checkpoint (oldest known signature) for incremental fetching
-    // We fetch backwards (newest→oldest), so we stop when we hit the oldest we already have
-    let checkpoint_signature = if let Some(db) = transaction_db.as_ref() {
-        match db.get_oldest_known_signature().await {
-            Ok(sig) => sig,
+    // Reconcile known_signatures from already processed at start (safety)
+    if let Some(db) = transaction_db.as_ref() {
+        if let Ok(added) = db.reconcile_known_with_processed().await {
+            if added > 0 {
+                log(
+                    LogTag::Transactions,
+                    "BOOTSTRAP",
+                    &format!("Reconciled {} processed->known signatures", added)
+                );
+            }
+        }
+    }
+
+    // Determine bootstrap mode using persistent bootstrap_state
+    // Backfill mode: full history not completed yet → page newest→oldest using backfill_before_cursor
+    // Forward incremental: once full history completed → fetch only newer than newest known
+    let mut bootstrap_mode = "FULL".to_string();
+    let mut backfill_cursor: Option<String> = None;
+    let mut checkpoint_signature: Option<String> = None;
+    if let Some(db) = transaction_db.as_ref() {
+        match db.get_bootstrap_state().await {
+            Ok(state) => {
+                if state.full_history_completed {
+                    // Forward incremental mode
+                    bootstrap_mode = "INCREMENTAL".to_string();
+                    checkpoint_signature = db.get_newest_known_signature().await.unwrap_or(None);
+                } else {
+                    // Backfill mode not completed
+                    bootstrap_mode = "FULL".to_string();
+                    backfill_cursor = state.backfill_before_cursor;
+                    // In FULL/backfill mode we do NOT stop at oldest-known; we continue until chain end.
+                    checkpoint_signature = None;
+                }
+            }
             Err(e) => {
                 log(
                     LogTag::Transactions,
                     "WARN",
-                    &format!("Failed to get oldest known signature: {}", e)
+                    &format!("Failed to load bootstrap state: {}", e)
                 );
-                None
+                // Fallback to default behavior (FULL with checkpoint on oldest-known if any)
+                checkpoint_signature = None;
             }
         }
-    } else {
-        None
-    };
-
-    let bootstrap_mode = if checkpoint_signature.is_some() { "INCREMENTAL" } else { "FULL" };
+    }
 
     log(
         LogTag::Transactions,
@@ -374,41 +400,39 @@ async fn perform_initial_transaction_bootstrap(
         &format!(
             "Bootstrapping transaction cache for wallet: {} (mode={}, batch_limit={})",
             &wallet_pubkey.to_string(),
-            bootstrap_mode,
+            &bootstrap_mode,
             batch_limit
         )
     );
 
     if let Some(ref checkpoint) = checkpoint_signature {
-        log(
-            LogTag::Transactions,
-            "BOOTSTRAP",
-            &format!(
-                "📌 Checkpoint found: {}... (oldest known - will fetch until we reach it)",
-                &checkpoint[..8]
-            )
-        );
+        log(LogTag::Transactions, "BOOTSTRAP", &format!("📌 Checkpoint: {}...", &checkpoint[..8]));
     }
 
     // =========================================================================
     // PHASE 1: COLLECT SIGNATURES (incremental from checkpoint or full history)
     // =========================================================================
+    let phase1_label = match (bootstrap_mode.as_str(), checkpoint_signature.is_some()) {
+        ("INCREMENTAL", true) => "NEWER than newest-known",
+        ("INCREMENTAL", false) => "RECENT (no checkpoint)",
+        ("FULL", true) => "MISSING (until oldest-known)",
+        ("FULL", false) => "ALL",
+        _ => "ALL",
+    };
     log(
         LogTag::Transactions,
         "BOOTSTRAP_PHASE1",
-        &format!("📥 Phase 1: Collecting {} signatures from blockchain...", if
-            checkpoint_signature.is_some()
-        {
-            "MISSING (until checkpoint)"
-        } else {
-            "ALL"
-        })
+        &format!("📥 Phase 1: Collecting {} signatures...", phase1_label)
     );
 
     let mut all_signatures: Vec<String> = Vec::new();
+    // Start collection:
+    // - FULL/backfill: always start from latest (before=None) to re-collect the full window; we'll page until chain end
+    // - INCREMENTAL: start from latest as well; we will stop at checkpoint (newest-known)
     let mut before: Option<String> = None;
     let phase1_timer = std::time::Instant::now();
     let mut hit_checkpoint = false;
+    let mut reached_chain_end = false;
 
     loop {
         let signatures = fetcher.fetch_signatures_page(
@@ -425,13 +449,14 @@ async fn perform_initial_transaction_bootstrap(
                     "No additional signatures returned from RPC"
                 );
             }
+            reached_chain_end = true;
             break;
         }
 
         stats.total_rpc_pages += 1;
         let page_count = signatures.len();
 
-        // Check if we hit the checkpoint (incremental mode)
+        // Check if we hit the checkpoint
         if let Some(ref checkpoint) = checkpoint_signature {
             let mut signatures_to_add = Vec::new();
 
@@ -457,8 +482,15 @@ async fn perform_initial_transaction_bootstrap(
                 break;
             }
         } else {
-            // Full mode: collect all signatures
-            all_signatures.extend(signatures.clone());
+            // No checkpoint: in FULL mode collect all; in INCREMENTAL collect just this page
+            if bootstrap_mode == "INCREMENTAL" {
+                all_signatures.extend(signatures.clone());
+                // Only one page needed in forward incremental
+                if signatures.len() < batch_limit {/* done anyway */}
+                break;
+            } else {
+                all_signatures.extend(signatures.clone());
+            }
         }
 
         if stats.newest_signature.is_none() {
@@ -480,14 +512,37 @@ async fn perform_initial_transaction_bootstrap(
 
         before = signatures.last().cloned();
 
+        // Persist backfill cursor every page (only in FULL/backfill mode)
+        if bootstrap_mode == "FULL" {
+            if let Some(db) = transaction_db.as_ref() {
+                if let Err(e) = db.set_backfill_cursor(before.as_deref()).await {
+                    log(
+                        LogTag::Transactions,
+                        "WARN",
+                        &format!("Failed to persist backfill cursor: {}", e)
+                    );
+                }
+            }
+        }
+
         if signatures.len() < batch_limit {
+            if bootstrap_mode == "FULL" {
+                reached_chain_end = true;
+            }
             break;
         }
     }
 
     stats.total_signatures_fetched = all_signatures.len();
 
-    let phase1_summary = if hit_checkpoint {
+    let phase1_summary = if bootstrap_mode == "INCREMENTAL" {
+        format!(
+            "✅ Phase 1 complete (INCREMENTAL): collected {} signatures in {}s across {} pages",
+            all_signatures.len(),
+            phase1_timer.elapsed().as_secs(),
+            stats.total_rpc_pages
+        )
+    } else if hit_checkpoint {
         format!(
             "✅ Phase 1 complete (INCREMENTAL): collected {} NEW signatures in {}s across {} pages (stopped at checkpoint)",
             all_signatures.len(),
@@ -858,6 +913,44 @@ async fn perform_initial_transaction_bootstrap(
     }
 
     stats.duration_ms = bootstrap_timer.elapsed().as_millis();
+
+    // If FULL/backfill completed to chain-end (no more pages), mark full history completed so next run uses forward-only incremental
+    if bootstrap_mode == "FULL" {
+        if let Some(db) = transaction_db.as_ref() {
+            if reached_chain_end {
+                if let Err(e) = db.mark_full_history_completed().await {
+                    log(
+                        LogTag::Transactions,
+                        "WARN",
+                        &format!("Failed to mark full history completed: {}", e)
+                    );
+                } else {
+                    // Clear cursor since we reached chain end
+                    if let Err(e) = db.clear_backfill_cursor().await {
+                        log(
+                            LogTag::Transactions,
+                            "WARN",
+                            &format!("Failed to clear backfill cursor: {}", e)
+                        );
+                    }
+                    log(
+                        LogTag::Transactions,
+                        "BOOTSTRAP",
+                        "Full history backfill completed. Switching to forward incremental on next start."
+                    );
+                }
+            } else {
+                // Persist last cursor already done per-page; ensure it's saved for resume
+                if let Err(e) = db.set_backfill_cursor(before.as_deref()).await {
+                    log(
+                        LogTag::Transactions,
+                        "WARN",
+                        &format!("Failed to persist final backfill cursor: {}", e)
+                    );
+                }
+            }
+        }
+    }
 
     // Final summary
     let summary = if retry_successful > 0 || permanently_failed > 0 {
