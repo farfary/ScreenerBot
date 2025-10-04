@@ -1,6 +1,3 @@
-/// Trading Config API routes
-///
-/// Provides read-only access to trading configuration constants
 
 use axum::{ extract::State, response::Json, routing::get, Router };
 use serde::{ Deserialize, Serialize };

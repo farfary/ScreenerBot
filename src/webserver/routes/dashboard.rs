@@ -1,6 +1,3 @@
-/// Dashboard API routes
-///
-/// Provides aggregated data for the home page dashboard
 
 use axum::{ extract::State, response::Json, routing::get, Router };
 use serde::{ Deserialize, Serialize };

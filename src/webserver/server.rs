@@ -46,11 +46,7 @@ pub async fn start_server(config: WebserverConfig) -> Result<(), String> {
     )?;
 
     log(LogTag::Webserver, "INFO", &format!("✅ Webserver listening on http://{}", addr));
-    log(
-        LogTag::Webserver,
-        "INFO",
-        &format!("📊 API endpoints available at http://{}/api/v1", addr)
-    );
+    log(LogTag::Webserver, "INFO", &format!("📊 API endpoints available at http://{}/api", addr));
 
     // Run the server with graceful shutdown
     let shutdown_signal = async {

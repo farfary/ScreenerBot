@@ -1,7 +1,3 @@
-/// Events API routes
-///
-/// Provides endpoints for accessing system events from the events database
-
 use axum::{ extract::Query, routing::get, Json, Router };
 use serde::{ Deserialize, Serialize };
 use std::sync::Arc;

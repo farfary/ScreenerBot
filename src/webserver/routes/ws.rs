@@ -1,5 +1,3 @@
-/// WebSocket routes for realtime streaming
-
 use std::sync::Arc;
 
 use axum::{

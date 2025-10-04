@@ -972,7 +972,7 @@ fn common_scripts() -> &'static str {
         // Update status badge
         async function updateStatusBadge() {
             try {
-                const res = await fetch('/api/v1/status');
+                const res = await fetch('/api/status');
                 const data = await res.json();
                 const badge = document.getElementById('statusBadge');
                 
@@ -1104,7 +1104,7 @@ fn common_scripts() -> &'static str {
         // Build and copy full debug info (single action)
         async function copyDebugInfo(mint, type) {
             try {
-                const endpoint = type === 'position' ? `/api/v1/positions/${mint}/debug` : `/api/v1/tokens/${mint}/debug`;
+                const endpoint = type === 'position' ? `/api/positions/${mint}/debug` : `/api/tokens/${mint}/debug`;
                 const res = await fetch(endpoint);
                 const data = await res.json();
                 const text = generateDebugText(data, type);
@@ -1230,8 +1230,8 @@ fn common_scripts() -> &'static str {
         async function showDebugModal(mint, type) {
             const modal = document.getElementById('debugModal');
             const endpoint = type === 'position' ? 
-                `/api/v1/positions/${mint}/debug` : 
-                `/api/v1/tokens/${mint}/debug`;
+                `/api/positions/${mint}/debug` : 
+                `/api/tokens/${mint}/debug`;
             
             modal.classList.add('show');
             
@@ -1571,7 +1571,7 @@ pub fn home_content() -> String {
     <script>
         async function loadHomeData() {
             try {
-                const res = await fetch('/api/v1/dashboard/overview');
+                const res = await fetch('/api/dashboard/overview');
                 const data = await res.json();
                 
                 // Trading Overview
@@ -1649,7 +1649,7 @@ pub fn home_content() -> String {
                 document.getElementById('positionInterval').classList.remove('loading-text');
                 
                 // Load trading config
-                const configRes = await fetch('/api/v1/trading/config');
+                const configRes = await fetch('/api/trading/config');
                 const config = await configRes.json();
                 
                 document.getElementById('maxPositions').textContent = config.trading_limits.max_open_positions;
@@ -1732,8 +1732,8 @@ pub fn status_content() -> String {
         async function loadStatusData() {
             try {
                 const [statusRes, metricsRes] = await Promise.all([
-                    fetch('/api/v1/status'),
-                    fetch('/api/v1/status/metrics')
+                    fetch('/api/status'),
+                    fetch('/api/status/metrics')
                 ]);
                 
                 const status = await statusRes.json();
@@ -1906,7 +1906,7 @@ pub fn positions_content() -> String {
             const searchInput = document.getElementById('searchInput').value.toLowerCase();
             
             try {
-                const response = await fetch(`/api/v1/positions?status=${statusFilter}&limit=1000`);
+                const response = await fetch(`/api/positions?status=${statusFilter}&limit=1000`);
                 const positions = await response.json();
                 
                 // Filter by search input
@@ -2068,7 +2068,7 @@ pub fn tokens_content() -> String {
         
         async function loadTokens() {
             try {
-                const res = await fetch('/api/v1/tokens');
+                const res = await fetch('/api/tokens');
                 const data = await res.json();
                 
                 allTokensData = data.tokens || [];
@@ -2284,11 +2284,11 @@ pub fn events_content() -> String {
 
                 let url = '';
                 if (maxEventId === 0) {
-                    url = `/api/v1/events/head?${params.toString()}`;
+                    url = `/api/events/head?${params.toString()}`;
                     updateConnectionStatus('connecting', 'Loading events...');
                 } else {
                     params.set('after_id', String(maxEventId));
-                    url = `/api/v1/events/since?${params.toString()}`;
+                    url = `/api/events/since?${params.toString()}`;
                 }
 
                 const res = await fetch(url);
@@ -2479,7 +2479,7 @@ pub fn events_content() -> String {
             if (severity) params.set('severity', severity);
             if (maxEventId > 0) params.set('last_id', String(maxEventId));
             const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-            const url = `${proto}://${location.host}/api/v1/ws/events?${params.toString()}`;
+            const url = `${proto}://${location.host}/api/ws/events?${params.toString()}`;
             
             console.log('Connecting WebSocket:', url);
             updateConnectionStatus('connecting', 'Connecting WebSocket...');

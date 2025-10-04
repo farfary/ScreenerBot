@@ -1,6 +1,3 @@
-/// Wallet API routes
-///
-/// Provides wallet balance and monitoring endpoints
 
 use axum::{ extract::State, response::Json, routing::get, Router };
 use serde::{ Deserialize, Serialize };

@@ -1,6 +1,3 @@
-/// Tokens API routes
-///
-/// Provides endpoints for accessing tokens with available prices from the pool service
 
 use axum::{ extract::Path, routing::get, Json, Router };
 use serde::{ Deserialize, Serialize };

@@ -1,7 +1,3 @@
-/// System status route handlers (Phase 1)
-///
-/// Endpoints for monitoring ScreenerBot system status and health
-
 use axum::{
     extract::State,
     http::StatusCode,
