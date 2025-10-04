@@ -13,6 +13,7 @@
 /// See docs/webserver-dashboard-architecture.md for full design
 
 // Core modules
+
 pub mod config;
 pub mod server;
 pub mod state;
@@ -38,10 +39,10 @@ pub mod websocket {
 
 // Data models
 pub mod models {
-    pub mod events;    // WebSocket event types
-    pub mod requests;  // API request types
+    pub mod events; // WebSocket event types
+    pub mod requests; // API request types
     pub mod responses; // API response types
 }
 
 // Public API for starting/stopping the webserver
-pub use server::{shutdown, start_server};
+pub use server::{ shutdown, start_server };

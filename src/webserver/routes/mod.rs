@@ -2,10 +2,7 @@
 ///
 /// Combines all route modules into the main API router
 
-use axum::{
-    response::{Html, Json},
-    Router,
-};
+use axum::{ response::{ Html, Json }, Router };
 use serde_json::json;
 use std::sync::Arc;
 
@@ -34,7 +31,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
 
 /// Home page handler - HTML dashboard
 async fn home_page() -> Html<String> {
-    Html(r#"<!DOCTYPE html>
+    Html(
+        r#"<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -416,12 +414,14 @@ async fn home_page() -> Html<String> {
         setInterval(fetchData, 5000);
     </script>
 </body>
-</html>"#.to_string())
+</html>"#.to_string()
+    )
 }
 
 /// API info page - JSON format for programmatic access
 async fn api_info() -> Json<serde_json::Value> {
-    Json(json!({
+    Json(
+        json!({
         "name": "ScreenerBot API",
         "version": "0.1.0",
         "description": "Automated Solana DeFi trading bot dashboard API",
@@ -434,7 +434,8 @@ async fn api_info() -> Json<serde_json::Value> {
         },
         "documentation": "See docs/webserver-dashboard-api.md for full API documentation",
         "timestamp": chrono::Utc::now().to_rfc3339()
-    }))
+    })
+    )
 }
 
 /// API v1 routes

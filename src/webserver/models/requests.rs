@@ -2,7 +2,7 @@
 ///
 /// Standard request structures for REST API endpoints
 
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
 
 // ================================================================================================
 // Phase 2: Query Parameters (Future)
@@ -143,7 +143,7 @@ impl Default for PaginationParams {
 impl PaginationParams {
     /// Calculate offset for SQL queries
     pub fn offset(&self) -> usize {
-        (self.page.saturating_sub(1)) * self.page_size
+        self.page.saturating_sub(1) * self.page_size
     }
 
     /// Validate parameters

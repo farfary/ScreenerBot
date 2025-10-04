@@ -2,8 +2,8 @@
 ///
 /// Event structures for real-time WebSocket updates
 
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use chrono::{ DateTime, Utc };
+use serde::{ Deserialize, Serialize };
 
 /// Base WebSocket message envelope
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,16 +19,26 @@ pub struct WebSocketMessage {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum WsMessageType {
     /// Subscription confirmation
-    Subscribed { channels: Vec<String> },
+    Subscribed {
+        channels: Vec<String>,
+    },
 
     /// Unsubscribe confirmation
-    Unsubscribed { channels: Vec<String> },
+    Unsubscribed {
+        channels: Vec<String>,
+    },
 
     /// Data update
-    Update { channel: String, data: serde_json::Value },
+    Update {
+        channel: String,
+        data: serde_json::Value,
+    },
 
     /// Error message
-    Error { code: String, message: String },
+    Error {
+        code: String,
+        message: String,
+    },
 
     /// Ping/pong for keep-alive
     Ping,
@@ -195,7 +205,7 @@ impl WebSocketMessage {
             serde_json::json!({
                 "code": code,
                 "message": message
-            }),
+            })
         )
     }
 
@@ -206,7 +216,7 @@ impl WebSocketMessage {
             "system".to_string(),
             serde_json::json!({
                 "channels": channels
-            }),
+            })
         )
     }
 }

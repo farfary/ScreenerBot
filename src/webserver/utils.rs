@@ -2,11 +2,7 @@
 ///
 /// Helper functions for common webserver operations
 
-use axum::{
-    http::StatusCode,
-    response::{IntoResponse, Response},
-    Json,
-};
+use axum::{ http::StatusCode, response::{ IntoResponse, Response }, Json };
 use serde_json::json;
 
 /// Format error response with consistent structure
@@ -14,9 +10,10 @@ pub fn error_response(
     status: StatusCode,
     code: &str,
     message: &str,
-    details: Option<&str>,
+    details: Option<&str>
 ) -> Response {
-    let error = json!({
+    let error =
+        json!({
         "error": {
             "code": code,
             "message": message,

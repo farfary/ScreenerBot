@@ -3,7 +3,7 @@
 /// Handles loading, validation, and runtime configuration for the webserver dashboard.
 /// Configuration can come from environment variables or the main configs.json file.
 
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
 
 /// Complete webserver configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -118,12 +118,7 @@ fn default_allowed_origins() -> Vec<String> {
 }
 
 fn default_allowed_methods() -> Vec<String> {
-    vec![
-        "GET".to_string(),
-        "POST".to_string(),
-        "PUT".to_string(),
-        "DELETE".to_string(),
-    ]
+    vec!["GET".to_string(), "POST".to_string(), "PUT".to_string(), "DELETE".to_string()]
 }
 
 fn default_max_age() -> u64 {

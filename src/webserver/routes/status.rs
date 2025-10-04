@@ -5,26 +5,35 @@
 use axum::{
     extract::State,
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::{ IntoResponse, Response },
     routing::get,
-    Json, Router,
+    Json,
+    Router,
 };
 use std::sync::Arc;
 
 use crate::{
     global::{
-        are_core_services_ready, get_pending_services, POOL_SERVICE_READY, POSITIONS_SYSTEM_READY,
-        SECURITY_ANALYZER_READY, TOKENS_SYSTEM_READY, TRANSACTIONS_SYSTEM_READY,
+        are_core_services_ready,
+        get_pending_services,
+        POOL_SERVICE_READY,
+        POSITIONS_SYSTEM_READY,
+        SECURITY_ANALYZER_READY,
+        TOKENS_SYSTEM_READY,
+        TRANSACTIONS_SYSTEM_READY,
     },
-    logger::{log, LogTag},
+    logger::{ log, LogTag },
     rpc::get_global_rpc_stats,
     webserver::{
         models::responses::{
-            HealthResponse, ServiceState, ServiceStatusResponse, SystemMetricsResponse,
+            HealthResponse,
+            ServiceState,
+            ServiceStatusResponse,
+            SystemMetricsResponse,
             SystemStatusResponse,
         },
         state::AppState,
-        utils::{format_duration, success_response},
+        utils::{ format_duration, success_response },
     },
 };
 use chrono::Utc;
@@ -54,11 +63,7 @@ async fn health_check() -> Response {
 /// GET /api/v1/status
 /// Complete system status including services and metrics
 async fn system_status(State(state): State<Arc<AppState>>) -> Response {
-    log(
-        LogTag::Webserver,
-        "DEBUG",
-        "Fetching complete system status",
-    );
+    log(LogTag::Webserver, "DEBUG", "Fetching complete system status");
 
     let uptime = state.uptime_seconds();
     let services = get_service_status_internal();
@@ -137,7 +142,11 @@ fn get_service_status_internal() -> ServiceStatusResponse {
         pool_service: ServiceState {
             ready: pool_ready,
             last_check: now,
-            error: if !pool_ready { error_msg.clone() } else { None },
+            error: if !pool_ready {
+                error_msg.clone()
+            } else {
+                None
+            },
         },
         security_analyzer: ServiceState {
             ready: security_ready,
@@ -151,7 +160,11 @@ fn get_service_status_internal() -> ServiceStatusResponse {
         transactions_system: ServiceState {
             ready: transactions_ready,
             last_check: now,
-            error: if !transactions_ready { error_msg } else { None },
+            error: if !transactions_ready {
+                error_msg
+            } else {
+                None
+            },
         },
         all_ready,
     }
@@ -186,7 +199,8 @@ async fn get_system_metrics_internal(state: &AppState) -> SystemMetricsResponse 
     };
 
     // Count active threads (approximate)
-    let thread_count = std::thread::available_parallelism()
+    let thread_count = std::thread
+        ::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(1);
 

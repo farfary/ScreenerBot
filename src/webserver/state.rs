@@ -57,8 +57,6 @@ impl AppState {
 
     /// Get server uptime in seconds
     pub fn uptime_seconds(&self) -> u64 {
-        (chrono::Utc::now() - self.startup_time)
-            .num_seconds()
-            .max(0) as u64
+        (chrono::Utc::now() - self.startup_time).num_seconds().max(0) as u64
     }
 }
