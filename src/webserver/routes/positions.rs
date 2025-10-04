@@ -238,6 +238,7 @@ pub struct PositionDebugResponse {
     pub pools: Vec<PoolInfo>,
     pub security: Option<SecurityInfo>,
     pub social: Option<SocialInfo>,
+    pub position_debug: Option<PositionDebugDetails>,
 }
 
 #[derive(Debug, Serialize)]
@@ -326,6 +327,69 @@ pub struct SocialInfo {
     pub website: Option<String>,
     pub twitter: Option<String>,
     pub telegram: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PositionDebugDetails {
+    pub transaction_details: TransactionDetails,
+    pub fee_details: FeeDetails,
+    pub profit_targets: ProfitTargets,
+    pub price_tracking: PriceTracking,
+    pub phantom_details: Option<PhantomDetails>,
+    pub proceeds_metrics: ProceedsMetrics,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TransactionDetails {
+    pub entry_signature: Option<String>,
+    pub entry_verified: bool,
+    pub exit_signature: Option<String>,
+    pub exit_verified: bool,
+    pub synthetic_exit: bool,
+    pub closed_reason: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FeeDetails {
+    pub entry_fee_lamports: Option<u64>,
+    pub entry_fee_sol: Option<f64>,
+    pub exit_fee_lamports: Option<u64>,
+    pub exit_fee_sol: Option<f64>,
+    pub total_fees_sol: f64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProfitTargets {
+    pub min_target_percent: Option<f64>,
+    pub max_target_percent: Option<f64>,
+    pub liquidity_tier: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PriceTracking {
+    pub price_highest: f64,
+    pub price_lowest: f64,
+    pub current_price: Option<f64>,
+    pub current_price_updated: Option<String>,
+    pub drawdown_from_high: Option<f64>,
+    pub gain_from_low: Option<f64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PhantomDetails {
+    pub phantom_remove: bool,
+    pub phantom_confirmations: u32,
+    pub phantom_first_seen: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProceedsMetrics {
+    pub accepted_quotes: u64,
+    pub rejected_quotes: u64,
+    pub accepted_profit_quotes: u64,
+    pub accepted_loss_quotes: u64,
+    pub average_shortfall_bps: f64,
+    pub worst_shortfall_bps: u64,
 }
 
 /// Get comprehensive debug information for a position
@@ -530,6 +594,109 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
         })
     });
 
+    // 8. Get position debug data
+    let position_debug = if
+        position_data
+            .as_ref()
+            .and_then(|pd| pd.open_position.as_ref())
+            .is_some()
+    {
+        // Get full position details
+        let full_position = positions::db
+            ::get_open_positions().await
+            .ok()
+            .and_then(|positions| positions.into_iter().find(|p| p.mint == mint));
+
+        if let Some(pos) = full_position {
+            // Transaction details
+            let transaction_details = TransactionDetails {
+                entry_signature: pos.entry_transaction_signature.clone(),
+                entry_verified: pos.transaction_entry_verified,
+                exit_signature: pos.exit_transaction_signature.clone(),
+                exit_verified: pos.transaction_exit_verified,
+                synthetic_exit: pos.synthetic_exit,
+                closed_reason: pos.closed_reason.clone(),
+            };
+
+            // Fee details
+            let entry_fee_sol = pos.entry_fee_lamports.map(|l| (l as f64) / 1_000_000_000.0);
+            let exit_fee_sol = pos.exit_fee_lamports.map(|l| (l as f64) / 1_000_000_000.0);
+            let total_fees_sol = entry_fee_sol.unwrap_or(0.0) + exit_fee_sol.unwrap_or(0.0);
+
+            let fee_details = FeeDetails {
+                entry_fee_lamports: pos.entry_fee_lamports,
+                entry_fee_sol,
+                exit_fee_lamports: pos.exit_fee_lamports,
+                exit_fee_sol,
+                total_fees_sol,
+            };
+
+            // Profit targets
+            let profit_targets = ProfitTargets {
+                min_target_percent: pos.profit_target_min,
+                max_target_percent: pos.profit_target_max,
+                liquidity_tier: pos.liquidity_tier.clone(),
+            };
+
+            // Price tracking
+            let current = pos.current_price.unwrap_or(pos.entry_price);
+            let drawdown_from_high = if pos.price_highest > 0.0 {
+                Some(((current - pos.price_highest) / pos.price_highest) * 100.0)
+            } else {
+                None
+            };
+            let gain_from_low = if pos.price_lowest > 0.0 {
+                Some(((current - pos.price_lowest) / pos.price_lowest) * 100.0)
+            } else {
+                None
+            };
+
+            let price_tracking = PriceTracking {
+                price_highest: pos.price_highest,
+                price_lowest: pos.price_lowest,
+                current_price: pos.current_price,
+                current_price_updated: pos.current_price_updated.map(|dt| dt.to_rfc3339()),
+                drawdown_from_high,
+                gain_from_low,
+            };
+
+            // Phantom details
+            let phantom_details = if pos.phantom_remove || pos.phantom_confirmations > 0 {
+                Some(PhantomDetails {
+                    phantom_remove: pos.phantom_remove,
+                    phantom_confirmations: pos.phantom_confirmations,
+                    phantom_first_seen: pos.phantom_first_seen.map(|dt| dt.to_rfc3339()),
+                })
+            } else {
+                None
+            };
+
+            // Proceeds metrics
+            let proceeds_metrics = crate::positions::metrics::get_proceeds_metrics_snapshot().await;
+            let proceeds = ProceedsMetrics {
+                accepted_quotes: proceeds_metrics.accepted_quotes,
+                rejected_quotes: proceeds_metrics.rejected_quotes,
+                accepted_profit_quotes: proceeds_metrics.accepted_profit_quotes,
+                accepted_loss_quotes: proceeds_metrics.accepted_loss_quotes,
+                average_shortfall_bps: proceeds_metrics.average_shortfall_bps,
+                worst_shortfall_bps: proceeds_metrics.worst_shortfall_bps,
+            };
+
+            Some(PositionDebugDetails {
+                transaction_details,
+                fee_details,
+                profit_targets,
+                price_tracking,
+                phantom_details,
+                proceeds_metrics: proceeds,
+            })
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     Json(PositionDebugResponse {
         mint,
         timestamp,
@@ -540,5 +707,6 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
         pools: pools_vec,
         security,
         social,
+        position_debug,
     })
 }

@@ -50,8 +50,11 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
                     <button class="modal-tab active" onclick="switchDebugTab('token')">Token Info</button>
                     <button class="modal-tab" onclick="switchDebugTab('price')">Price & Market</button>
                     <button class="modal-tab" onclick="switchDebugTab('pool')">Pool Data</button>
+                    <button class="modal-tab" onclick="switchDebugTab('pool-debug')">Pool Debug</button>
+                    <button class="modal-tab" onclick="switchDebugTab('token-debug')">Token Debug</button>
                     <button class="modal-tab" onclick="switchDebugTab('security')">Security</button>
                     <button class="modal-tab" onclick="switchDebugTab('position')">Position History</button>
+                    <button class="modal-tab" onclick="switchDebugTab('position-debug')">Position Debug</button>
                 </div>
                 
                 <!-- Token Info Tab -->
@@ -209,6 +212,257 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
                         <div class="debug-row">
                             <span class="debug-label">Unrealized P&L:</span>
                             <span class="debug-value" id="positionUnrealizedPnL">N/A</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Pool Debug Tab -->
+                <div id="tab-pool-debug" class="modal-tab-content">
+                    <div class="debug-section">
+                        <h3 class="debug-section-title">Price History (Last 100)</h3>
+                        <div id="priceHistoryChart" style="height: 200px; overflow-y: auto;">
+                            <pre id="priceHistoryData">Loading...</pre>
+                        </div>
+                    </div>
+                    <div class="debug-section">
+                        <h3 class="debug-section-title">Price Statistics</h3>
+                        <div class="debug-row">
+                            <span class="debug-label">Min Price:</span>
+                            <span class="debug-value" id="statsMinPrice">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Max Price:</span>
+                            <span class="debug-value" id="statsMaxPrice">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Avg Price:</span>
+                            <span class="debug-value" id="statsAvgPrice">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Volatility:</span>
+                            <span class="debug-value" id="statsVolatility">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Data Points:</span>
+                            <span class="debug-value" id="statsDataPoints">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Time Span:</span>
+                            <span class="debug-value" id="statsTimeSpan">N/A</span>
+                        </div>
+                    </div>
+                    <div class="debug-section">
+                        <h3 class="debug-section-title">All Discovered Pools</h3>
+                        <div id="allPoolsList">Loading...</div>
+                    </div>
+                    <div class="debug-section">
+                        <h3 class="debug-section-title">Cache Statistics</h3>
+                        <div class="debug-row">
+                            <span class="debug-label">Total Cached:</span>
+                            <span class="debug-value" id="cacheTotal">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Fresh Prices:</span>
+                            <span class="debug-value" id="cacheFresh">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">History Entries:</span>
+                            <span class="debug-value" id="cacheHistory">N/A</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Token Debug Tab -->
+                <div id="tab-token-debug" class="modal-tab-content">
+                    <div class="debug-section">
+                        <h3 class="debug-section-title">Blacklist Status</h3>
+                        <div class="debug-row">
+                            <span class="debug-label">Blacklisted:</span>
+                            <span class="debug-value" id="blacklistStatus">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Reason:</span>
+                            <span class="debug-value" id="blacklistReason">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Occurrences:</span>
+                            <span class="debug-value" id="blacklistCount">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">First Occurrence:</span>
+                            <span class="debug-value" id="blacklistFirstOccurrence">N/A</span>
+                        </div>
+                    </div>
+                    <div class="debug-section">
+                        <h3 class="debug-section-title">OHLCV Availability</h3>
+                        <div class="debug-row">
+                            <span class="debug-label">1m Data:</span>
+                            <span class="debug-value" id="ohlcv1m">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">5m Data:</span>
+                            <span class="debug-value" id="ohlcv5m">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">15m Data:</span>
+                            <span class="debug-value" id="ohlcv15m">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">1h Data:</span>
+                            <span class="debug-value" id="ohlcv1h">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Total Candles:</span>
+                            <span class="debug-value" id="ohlcvTotal">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Oldest Timestamp:</span>
+                            <span class="debug-value" id="ohlcvOldest">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Newest Timestamp:</span>
+                            <span class="debug-value" id="ohlcvNewest">N/A</span>
+                        </div>
+                    </div>
+                    <div class="debug-section">
+                        <h3 class="debug-section-title">Decimals Cache</h3>
+                        <div class="debug-row">
+                            <span class="debug-label">Decimals:</span>
+                            <span class="debug-value" id="decimalsValue">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Cached:</span>
+                            <span class="debug-value" id="decimalsCached">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Source:</span>
+                            <span class="debug-value" id="decimalsSource">N/A</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Position Debug Tab -->
+                <div id="tab-position-debug" class="modal-tab-content">
+                    <div class="debug-section">
+                        <h3 class="debug-section-title">Transaction Details</h3>
+                        <div class="debug-row">
+                            <span class="debug-label">Entry Signature:</span>
+                            <span class="debug-value" id="entrySignature" style="word-break: break-all; font-size: 0.8em;">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Entry Verified:</span>
+                            <span class="debug-value" id="entryVerified">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Exit Signature:</span>
+                            <span class="debug-value" id="exitSignature" style="word-break: break-all; font-size: 0.8em;">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Exit Verified:</span>
+                            <span class="debug-value" id="exitVerified">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Synthetic Exit:</span>
+                            <span class="debug-value" id="syntheticExit">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Closed Reason:</span>
+                            <span class="debug-value" id="closedReason">N/A</span>
+                        </div>
+                    </div>
+                    <div class="debug-section">
+                        <h3 class="debug-section-title">Fee Details</h3>
+                        <div class="debug-row">
+                            <span class="debug-label">Entry Fee:</span>
+                            <span class="debug-value" id="entryFee">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Exit Fee:</span>
+                            <span class="debug-value" id="exitFee">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Total Fees:</span>
+                            <span class="debug-value" id="totalFees">N/A</span>
+                        </div>
+                    </div>
+                    <div class="debug-section">
+                        <h3 class="debug-section-title">Profit Targets</h3>
+                        <div class="debug-row">
+                            <span class="debug-label">Min Target:</span>
+                            <span class="debug-value" id="minTarget">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Max Target:</span>
+                            <span class="debug-value" id="maxTarget">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Liquidity Tier:</span>
+                            <span class="debug-value" id="liquidityTier">N/A</span>
+                        </div>
+                    </div>
+                    <div class="debug-section">
+                        <h3 class="debug-section-title">Price Tracking</h3>
+                        <div class="debug-row">
+                            <span class="debug-label">Highest:</span>
+                            <span class="debug-value" id="priceHighest">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Lowest:</span>
+                            <span class="debug-value" id="priceLowest">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Drawdown from High:</span>
+                            <span class="debug-value" id="drawdown">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Gain from Low:</span>
+                            <span class="debug-value" id="gainFromLow">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Current Price Updated:</span>
+                            <span class="debug-value" id="currentPriceUpdated">N/A</span>
+                        </div>
+                    </div>
+                    <div class="debug-section">
+                        <h3 class="debug-section-title">Phantom Details</h3>
+                        <div class="debug-row">
+                            <span class="debug-label">Phantom Remove:</span>
+                            <span class="debug-value" id="phantomRemove">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Confirmations:</span>
+                            <span class="debug-value" id="phantomConfirmations">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">First Seen:</span>
+                            <span class="debug-value" id="phantomFirstSeen">N/A</span>
+                        </div>
+                    </div>
+                    <div class="debug-section">
+                        <h3 class="debug-section-title">Proceeds Metrics</h3>
+                        <div class="debug-row">
+                            <span class="debug-label">Accepted Quotes:</span>
+                            <span class="debug-value" id="acceptedQuotes">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Rejected Quotes:</span>
+                            <span class="debug-value" id="rejectedQuotes">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Profit Quotes:</span>
+                            <span class="debug-value" id="profitQuotes">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Loss Quotes:</span>
+                            <span class="debug-value" id="lossQuotes">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Avg Shortfall:</span>
+                            <span class="debug-value" id="avgShortfall">N/A</span>
+                        </div>
+                        <div class="debug-row">
+                            <span class="debug-label">Worst Shortfall:</span>
+                            <span class="debug-value" id="worstShortfall">N/A</span>
                         </div>
                     </div>
                 </div>
@@ -1208,6 +1462,146 @@ fn common_scripts() -> &'static str {
                 } else {
                     lines.push('No position data available');
                 }
+                lines.push('');
+            }
+
+            // Pool Debug
+            if (data.pool_debug) {
+                const pd = data.pool_debug;
+                lines.push('[Pool Debug]');
+                
+                // Price history
+                if (pd.price_history && pd.price_history.length > 0) {
+                    lines.push(`Price History Points: ${pd.price_history.length}`);
+                    lines.push('Recent Prices (last 10):');
+                    pd.price_history.slice(0, 10).forEach((p, i) => {
+                        const date = new Date(p.timestamp * 1000).toISOString();
+                        lines.push(`  ${i + 1}. ${date} - ${Number(p.price_sol).toPrecision(10)} SOL (conf: ${(p.confidence * 100).toFixed(1)}%)`);
+                    });
+                }
+                
+                // Price stats
+                if (pd.price_stats) {
+                    const ps = pd.price_stats;
+                    lines.push(`Min Price: ${Number(ps.min_price).toPrecision(10)} SOL`);
+                    lines.push(`Max Price: ${Number(ps.max_price).toPrecision(10)} SOL`);
+                    lines.push(`Avg Price: ${Number(ps.avg_price).toPrecision(10)} SOL`);
+                    lines.push(`Volatility: ${Number(ps.price_volatility).toFixed(2)}%`);
+                    lines.push(`Data Points: ${ps.data_points}`);
+                    lines.push(`Time Span: ${ps.time_span_seconds}s (${(ps.time_span_seconds / 60).toFixed(0)} min)`);
+                }
+                
+                // All pools
+                if (pd.all_pools && pd.all_pools.length > 0) {
+                    lines.push(`All Pools (${pd.all_pools.length}):`);
+                    pd.all_pools.forEach((pool, i) => {
+                        lines.push(`  Pool #${i + 1}: ${pool.pool_address}`);
+                        lines.push(`    DEX: ${pool.dex_name}`);
+                    });
+                }
+                
+                // Cache stats
+                if (pd.cache_stats) {
+                    lines.push(`Cache - Total: ${pd.cache_stats.total_tokens_cached}, Fresh: ${pd.cache_stats.fresh_prices}, History: ${pd.cache_stats.history_entries}`);
+                }
+                
+                lines.push('');
+            }
+
+            // Token Debug
+            if (data.token_debug) {
+                const td = data.token_debug;
+                lines.push('[Token Debug]');
+                
+                if (td.blacklist_status) {
+                    lines.push(`Blacklisted: ${td.blacklist_status.is_blacklisted ? 'Yes' : 'No'}`);
+                    if (td.blacklist_status.is_blacklisted && td.blacklist_status.reason) {
+                        lines.push(`  Reason: ${td.blacklist_status.reason}`);
+                        lines.push(`  Occurrences: ${td.blacklist_status.occurrence_count}`);
+                        lines.push(`  First Occurrence: ${td.blacklist_status.first_occurrence || 'N/A'}`);
+                    }
+                }
+                
+                if (td.ohlcv_availability) {
+                    const oa = td.ohlcv_availability;
+                    lines.push(`OHLCV: 1m=${oa.has_1m_data}, 5m=${oa.has_5m_data}, 15m=${oa.has_15m_data}, 1h=${oa.has_1h_data}`);
+                    lines.push(`Total Candles: ${oa.total_candles}`);
+                    if (oa.oldest_timestamp) {
+                        lines.push(`  Oldest: ${new Date(oa.oldest_timestamp * 1000).toISOString()}`);
+                    }
+                    if (oa.newest_timestamp) {
+                        lines.push(`  Newest: ${new Date(oa.newest_timestamp * 1000).toISOString()}`);
+                    }
+                }
+                
+                if (td.decimals_info) {
+                    lines.push(`Decimals: ${td.decimals_info.decimals ?? 'N/A'} (${td.decimals_info.source}, cached: ${td.decimals_info.cached})`);
+                }
+                
+                lines.push('');
+            }
+
+            // Position Debug
+            if (data.position_debug) {
+                const pd = data.position_debug;
+                lines.push('[Position Debug]');
+                
+                if (pd.transaction_details) {
+                    lines.push('Transactions:');
+                    lines.push(`  Entry: ${pd.transaction_details.entry_signature || 'N/A'} (verified: ${pd.transaction_details.entry_verified})`);
+                    lines.push(`  Exit: ${pd.transaction_details.exit_signature || 'N/A'} (verified: ${pd.transaction_details.exit_verified})`);
+                    if (pd.transaction_details.synthetic_exit) {
+                        lines.push(`  Synthetic Exit: Yes`);
+                    }
+                    if (pd.transaction_details.closed_reason) {
+                        lines.push(`  Closed Reason: ${pd.transaction_details.closed_reason}`);
+                    }
+                }
+                
+                if (pd.fee_details) {
+                    lines.push(`Fees:`);
+                    lines.push(`  Entry: ${pd.fee_details.entry_fee_sol?.toFixed(6) || 'N/A'} SOL (${pd.fee_details.entry_fee_lamports || 0} lamports)`);
+                    lines.push(`  Exit: ${pd.fee_details.exit_fee_sol?.toFixed(6) || 'N/A'} SOL (${pd.fee_details.exit_fee_lamports || 0} lamports)`);
+                    lines.push(`  Total: ${pd.fee_details.total_fees_sol.toFixed(6)} SOL`);
+                }
+                
+                if (pd.profit_targets) {
+                    lines.push(`Profit Targets: Min ${pd.profit_targets.min_target_percent || 'N/A'}%, Max ${pd.profit_targets.max_target_percent || 'N/A'}%`);
+                    lines.push(`Liquidity Tier: ${pd.profit_targets.liquidity_tier || 'N/A'}`);
+                }
+                
+                if (pd.price_tracking) {
+                    lines.push(`Price Tracking:`);
+                    lines.push(`  High: ${pd.price_tracking.price_highest}`);
+                    lines.push(`  Low: ${pd.price_tracking.price_lowest}`);
+                    lines.push(`  Current: ${pd.price_tracking.current_price || 'N/A'}`);
+                    if (pd.price_tracking.drawdown_from_high) {
+                        lines.push(`  Drawdown from High: ${pd.price_tracking.drawdown_from_high.toFixed(2)}%`);
+                    }
+                    if (pd.price_tracking.gain_from_low) {
+                        lines.push(`  Gain from Low: ${pd.price_tracking.gain_from_low.toFixed(2)}%`);
+                    }
+                }
+                
+                if (pd.phantom_details) {
+                    lines.push(`Phantom:`);
+                    lines.push(`  Remove Flag: ${pd.phantom_details.phantom_remove}`);
+                    lines.push(`  Confirmations: ${pd.phantom_details.phantom_confirmations}`);
+                    if (pd.phantom_details.phantom_first_seen) {
+                        lines.push(`  First Seen: ${pd.phantom_details.phantom_first_seen}`);
+                    }
+                }
+                
+                if (pd.proceeds_metrics) {
+                    const pm = pd.proceeds_metrics;
+                    lines.push(`Proceeds Metrics:`);
+                    lines.push(`  Accepted: ${pm.accepted_quotes} (${pm.accepted_profit_quotes} profit, ${pm.accepted_loss_quotes} loss)`);
+                    lines.push(`  Rejected: ${pm.rejected_quotes}`);
+                    lines.push(`  Avg Shortfall: ${pm.average_shortfall_bps.toFixed(2)} bps`);
+                    lines.push(`  Worst Shortfall: ${pm.worst_shortfall_bps} bps`);
+                }
+                
+                lines.push('');
             }
 
             return lines.join('\n');

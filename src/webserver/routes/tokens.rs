@@ -1,4 +1,3 @@
-
 use axum::{ extract::Path, routing::get, Json, Router };
 use serde::{ Deserialize, Serialize };
 use std::sync::Arc;
@@ -107,6 +106,8 @@ pub struct TokenDebugResponse {
     pub pools: Vec<PoolInfo>,
     pub security: Option<SecurityInfo>,
     pub social: Option<SocialInfo>,
+    pub pool_debug: Option<PoolDebugInfo>,
+    pub token_debug: Option<TokenDebugInfo>,
 }
 
 #[derive(Debug, Serialize)]
@@ -137,7 +138,7 @@ pub struct MarketData {
     pub volume_24h: Option<f64>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PoolInfo {
     pub pool_address: String,
     pub program_kind: String,
@@ -176,6 +177,71 @@ pub struct SocialInfo {
     pub website: Option<String>,
     pub twitter: Option<String>,
     pub telegram: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PoolDebugInfo {
+    pub price_history: Vec<PricePoint>,
+    pub price_stats: PriceStats,
+    pub all_pools: Vec<PoolInfo>,
+    pub cache_stats: CacheStatsInfo,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PricePoint {
+    pub timestamp: i64,
+    pub price_sol: f64,
+    pub confidence: f32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PriceStats {
+    pub min_price: f64,
+    pub max_price: f64,
+    pub avg_price: f64,
+    pub price_volatility: f64,
+    pub data_points: usize,
+    pub time_span_seconds: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CacheStatsInfo {
+    pub total_tokens_cached: usize,
+    pub fresh_prices: usize,
+    pub history_entries: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TokenDebugInfo {
+    pub blacklist_status: Option<BlacklistStatus>,
+    pub ohlcv_availability: OhlcvAvailability,
+    pub decimals_info: DecimalsInfo,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BlacklistStatus {
+    pub is_blacklisted: bool,
+    pub reason: Option<String>,
+    pub first_occurrence: Option<String>,
+    pub occurrence_count: u32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct OhlcvAvailability {
+    pub has_1m_data: bool,
+    pub has_5m_data: bool,
+    pub has_15m_data: bool,
+    pub has_1h_data: bool,
+    pub total_candles: usize,
+    pub oldest_timestamp: Option<i64>,
+    pub newest_timestamp: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DecimalsInfo {
+    pub decimals: Option<u8>,
+    pub cached: bool,
+    pub source: String,
 }
 
 /// Get comprehensive debug information for a token
@@ -322,6 +388,164 @@ async fn get_token_debug_info(Path(mint): Path<String>) -> Json<TokenDebugRespon
         })
     });
 
+    // 7. Get pool debug data
+    let pool_debug = {
+        // Get price history (last 100 points)
+        let price_history: Vec<PricePoint> = pools
+            ::get_price_history(&mint)
+            .iter()
+            .rev()
+            .take(100)
+            .map(|p| {
+                let age_seconds = p.timestamp.elapsed().as_secs();
+                let now_unix = std::time::SystemTime
+                    ::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs() as i64;
+                let price_unix_time = now_unix - (age_seconds as i64);
+
+                PricePoint {
+                    timestamp: price_unix_time,
+                    price_sol: p.price_sol,
+                    confidence: p.confidence,
+                }
+            })
+            .collect();
+
+        // Get price statistics
+        let price_stats = pools
+            ::get_price_history_stats(&mint)
+            .ok()
+            .map(|stats| {
+                let (min_price, max_price) = stats.price_range_sol;
+                let time_span = (stats.age_oldest_seconds - stats.age_newest_seconds) as i64;
+                PriceStats {
+                    min_price,
+                    max_price,
+                    avg_price: (min_price + max_price) / 2.0, // Simple average
+                    price_volatility: if max_price > 0.0 {
+                        ((max_price - min_price) / max_price) * 100.0
+                    } else {
+                        0.0
+                    },
+                    data_points: stats.total_points,
+                    time_span_seconds: time_span,
+                }
+            })
+            .unwrap_or_else(|| PriceStats {
+                min_price: 0.0,
+                max_price: 0.0,
+                avg_price: 0.0,
+                price_volatility: 0.0,
+                data_points: 0,
+                time_span_seconds: 0,
+            });
+
+        // Get all discovered pools (not just highest liquidity)
+        // Note: Skipping detailed pool enumeration to keep changes minimal
+        // The pools_vec already contains the main pool info
+        let all_pools: Vec<PoolInfo> = pools_vec.clone();
+
+        // Get cache stats
+        let cache_stats = pools::get_cache_stats();
+        let cache_stats_info = CacheStatsInfo {
+            total_tokens_cached: cache_stats.total_prices,
+            fresh_prices: cache_stats.fresh_prices,
+            history_entries: cache_stats.history_entries,
+        };
+
+        Some(PoolDebugInfo {
+            price_history,
+            price_stats,
+            all_pools,
+            cache_stats: cache_stats_info,
+        })
+    };
+
+    // 8. Get token debug data
+    let token_debug = {
+        // Get blacklist status
+        let blacklist_status = {
+            use crate::tokens::blacklist;
+            let mints = blacklist::get_blacklisted_mints();
+            if mints.contains(&mint) {
+                BlacklistStatus {
+                    is_blacklisted: true,
+                    reason: Some("Token is blacklisted".to_string()),
+                    first_occurrence: None,
+                    occurrence_count: 0,
+                }
+            } else {
+                BlacklistStatus {
+                    is_blacklisted: false,
+                    reason: None,
+                    first_occurrence: None,
+                    occurrence_count: 0,
+                }
+            }
+        };
+
+        // Get OHLCV availability
+        let ohlcv_availability = {
+            use crate::tokens::ohlcv_db;
+            let db = ohlcv_db::get_ohlcv_database().ok();
+
+            if let Some(db) = db {
+                // Get OHLCV data (database stores 1m data only currently)
+                let all_data = db.get_ohlcv_data(&mint, Some(1000)).ok().unwrap_or_default();
+                let has_data = !all_data.is_empty();
+                let oldest = all_data.last().map(|d| d.timestamp);
+                let newest = all_data.first().map(|d| d.timestamp);
+
+                OhlcvAvailability {
+                    has_1m_data: has_data,
+                    has_5m_data: false, // Not stored separately
+                    has_15m_data: false, // Not stored separately
+                    has_1h_data: false, // Not stored separately
+                    total_candles: all_data.len(),
+                    oldest_timestamp: oldest,
+                    newest_timestamp: newest,
+                }
+            } else {
+                OhlcvAvailability {
+                    has_1m_data: false,
+                    has_5m_data: false,
+                    has_15m_data: false,
+                    has_1h_data: false,
+                    total_candles: 0,
+                    oldest_timestamp: None,
+                    newest_timestamp: None,
+                }
+            }
+        };
+
+        // Get decimals info
+        let decimals_info = {
+            use crate::tokens::decimals;
+            let cached_decimals = decimals::get_cached_decimals(&mint);
+            let source = if cached_decimals.is_some() {
+                "cache"
+            } else if decimals.is_some() {
+                "rpc_fetch"
+            } else {
+                "failed"
+            };
+
+            DecimalsInfo {
+                decimals,
+                cached: cached_decimals.is_some(),
+                source: source.to_string(),
+            }
+        };
+
+        Some(TokenDebugInfo {
+            blacklist_status: Some(blacklist_status),
+            ohlcv_availability,
+            decimals_info,
+        })
+    };
+
     Json(TokenDebugResponse {
         mint,
         timestamp,
@@ -331,5 +555,7 @@ async fn get_token_debug_info(Path(mint): Path<String>) -> Json<TokenDebugRespon
         pools: pools_vec,
         security,
         social,
+        pool_debug,
+        token_debug,
     })
 }
