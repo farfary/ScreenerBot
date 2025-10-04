@@ -2248,6 +2248,29 @@ pub fn events_content() -> String {
     let eventsRefreshInterval = null;
     let maxEventId = 0;
     let ws = { conn: null, enabled: true, attempts: 0 };
+    let connectionStatus = 'connecting'; // 'connecting', 'connected', 'disconnected', 'error'
+        
+        // Update connection status indicator
+        function updateConnectionStatus(status, message) {
+            connectionStatus = status;
+            const indicator = document.getElementById('eventsCountText');
+            const colors = {
+                connecting: 'var(--text-secondary)',
+                connected: 'var(--badge-online)',
+                disconnected: 'var(--badge-loading)',
+                error: 'var(--badge-error)'
+            };
+            const icons = {
+                connecting: '⏳',
+                connected: '✅',
+                disconnected: '⚠️',
+                error: '❌'
+            };
+            if (indicator) {
+                indicator.style.color = colors[status] || 'var(--text-secondary)';
+                indicator.textContent = `${icons[status]} ${message}`;
+            }
+        }
         
         // Load events from API
         async function loadEvents() {
@@ -2262,21 +2285,32 @@ pub fn events_content() -> String {
                 let url = '';
                 if (maxEventId === 0) {
                     url = `/api/v1/events/head?${params.toString()}`;
+                    updateConnectionStatus('connecting', 'Loading events...');
                 } else {
                     params.set('after_id', String(maxEventId));
                     url = `/api/v1/events/since?${params.toString()}`;
                 }
 
                 const res = await fetch(url);
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
+                
                 const data = await res.json();
                 if (maxEventId === 0) {
-                    allEventsData = data.events;
+                    allEventsData = data.events || [];
                 } else {
-                    allEventsData = data.events.concat(allEventsData);
+                    allEventsData = (data.events || []).concat(allEventsData);
                 }
                 maxEventId = Math.max(maxEventId, data.max_id || 0);
                 renderEvents(allEventsData);
-                document.getElementById('eventsCountText').textContent = `${allEventsData.length} events`;
+                
+                // Update status based on WebSocket state
+                if (ws.conn && ws.conn.readyState === WebSocket.OPEN) {
+                    updateConnectionStatus('connected', `${allEventsData.length} events (realtime)`);
+                } else {
+                    updateConnectionStatus('connected', `${allEventsData.length} events (polling)`);
+                }
                 
                 // Save filter state
                 AppState.save('events_category', category);
@@ -2284,14 +2318,25 @@ pub fn events_content() -> String {
                 
             } catch (error) {
                 console.error('Failed to load events:', error);
+                
+                let errorMsg = 'Failed to connect to server';
+                if (error.message.includes('Failed to fetch')) {
+                    errorMsg = 'Server not responding - check if bot is running';
+                } else if (error.message.includes('HTTP')) {
+                    errorMsg = `Server error: ${error.message}`;
+                }
+                
                 document.getElementById('eventsTableBody').innerHTML = `
                     <tr>
-                        <td colspan="6" style="text-align: center; padding: 40px; color: var(--badge-error);">
-                            ❌ Failed to load events
+                        <td colspan="6" style="text-align: center; padding: 40px;">
+                            <div style="color: var(--badge-error); margin-bottom: 10px;">❌ ${errorMsg}</div>
+                            <div style="color: var(--text-muted); font-size: 0.9em;">
+                                Retrying automatically... or click Refresh to try again
+                            </div>
                         </td>
                     </tr>
                 `;
-                document.getElementById('eventsCountText').textContent = 'Error loading events';
+                updateConnectionStatus('error', errorMsg);
             }
         }
         
@@ -2299,11 +2344,17 @@ pub fn events_content() -> String {
         function renderEvents(events) {
             const tbody = document.getElementById('eventsTableBody');
             
-            if (events.length === 0) {
+            if (!events || events.length === 0) {
+                const message = connectionStatus === 'error' 
+                    ? '⚠️ Error loading events. Please check server status.' 
+                    : connectionStatus === 'connecting'
+                    ? '🔄 Connecting to server...'
+                    : '📋 No events found. Events will appear here as they occur.';
+                    
                 tbody.innerHTML = `
                     <tr>
                         <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">
-                            📋 No events found
+                            ${message}
                         </td>
                     </tr>
                 `;
@@ -2366,10 +2417,28 @@ pub fn events_content() -> String {
         });
         
         // Filter by category
-        document.getElementById('categoryFilter').addEventListener('change', loadEvents);
+        document.getElementById('categoryFilter').addEventListener('change', () => {
+            maxEventId = 0; // Reset to get fresh data with new filter
+            allEventsData = [];
+            if (ws.conn) {
+                ws.conn.close();
+                ws.conn = null;
+            }
+            loadEvents();
+            if (ws.enabled) startEventsWebSocket();
+        });
         
         // Filter by severity
-        document.getElementById('severityFilter').addEventListener('change', loadEvents);
+        document.getElementById('severityFilter').addEventListener('change', () => {
+            maxEventId = 0; // Reset to get fresh data with new filter
+            allEventsData = [];
+            if (ws.conn) {
+                ws.conn.close();
+                ws.conn = null;
+            }
+            loadEvents();
+            if (ws.enabled) startEventsWebSocket();
+        });
         
         // Refresh button
         document.getElementById('refreshEvents').addEventListener('click', loadEvents);
@@ -2411,37 +2480,77 @@ pub fn events_content() -> String {
             if (maxEventId > 0) params.set('last_id', String(maxEventId));
             const proto = location.protocol === 'https:' ? 'wss' : 'ws';
             const url = `${proto}://${location.host}/api/v1/ws/events?${params.toString()}`;
+            
+            console.log('Connecting WebSocket:', url);
+            updateConnectionStatus('connecting', 'Connecting WebSocket...');
+            
             try {
                 ws.conn = new WebSocket(url);
+                
                 ws.conn.onopen = () => {
+                    console.log('WebSocket connected');
                     ws.attempts = 0;
-                    if (eventsRefreshInterval) { clearInterval(eventsRefreshInterval); eventsRefreshInterval = null; }
+                    updateConnectionStatus('connected', `${allEventsData.length} events (realtime)`);
+                    if (eventsRefreshInterval) { 
+                        clearInterval(eventsRefreshInterval); 
+                        eventsRefreshInterval = null; 
+                    }
                 };
+                
                 ws.conn.onmessage = (ev) => {
                     try {
                         const e = JSON.parse(ev.data);
+                        if (e.warning === 'lagged') {
+                            console.warn('WebSocket lagged, recommend HTTP catch-up');
+                            updateConnectionStatus('disconnected', 'Connection lagged, catching up...');
+                            loadEvents();
+                            return;
+                        }
                         if (e && typeof e.id === 'number') {
                             maxEventId = Math.max(maxEventId, e.id);
                             allEventsData.unshift(e);
                             if (allEventsData.length > 1000) allEventsData.pop();
                             renderEvents(allEventsData);
-                            document.getElementById('eventsCountText').textContent = `${allEventsData.length} events`;
+                            updateConnectionStatus('connected', `${allEventsData.length} events (realtime)`);
                         }
-                    } catch {}
+                    } catch (err) {
+                        console.error('WebSocket message parse error:', err);
+                    }
                 };
-                ws.conn.onclose = () => { ws.conn = null; reconnectWS(); };
-                ws.conn.onerror = () => { try { ws.conn && ws.conn.close(); } catch {}; ws.conn = null; reconnectWS(); };
-            } catch { reconnectWS(); }
+                
+                ws.conn.onclose = () => { 
+                    console.log('WebSocket closed');
+                    ws.conn = null; 
+                    updateConnectionStatus('disconnected', 'Reconnecting...');
+                    reconnectWS(); 
+                };
+                
+                ws.conn.onerror = (err) => { 
+                    console.error('WebSocket error:', err);
+                    try { ws.conn && ws.conn.close(); } catch {};
+                    ws.conn = null; 
+                    reconnectWS(); 
+                };
+            } catch (err) { 
+                console.error('WebSocket creation failed:', err);
+                reconnectWS(); 
+            }
         }
 
         function reconnectWS() {
             ws.attempts++;
             const delay = Math.min(1000 * Math.pow(2, ws.attempts), 15000);
+            
+            console.log(`WebSocket reconnect attempt ${ws.attempts}, delay: ${delay}ms`);
+            
             if (ws.attempts > 5) {
+                console.warn('WebSocket reconnect failed after 5 attempts, falling back to HTTP polling');
                 ws.enabled = false;
+                updateConnectionStatus('disconnected', `${allEventsData.length} events (polling)`);
                 startEventsRefresh();
                 return;
             }
+            
             setTimeout(() => startEventsWebSocket(), delay);
         }
         

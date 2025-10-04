@@ -55,27 +55,6 @@ impl EventsDatabase {
 
         let database_path = data_dir.join("events.db");
         let database_path_str = database_path.to_string_lossy().to_string();
-        // Reset database: remove any previous file to start fresh schema
-        if database_path.exists() {
-            match std::fs::remove_file(&database_path) {
-                Ok(_) =>
-                    log(
-                        LogTag::System,
-                        "DB_RESET",
-                        &format!("Removed previous events database at {}", database_path_str)
-                    ),
-                Err(e) =>
-                    log(
-                        LogTag::System,
-                        "WARN",
-                        &format!(
-                            "Failed to remove old events database ({}), continuing: {}",
-                            database_path_str,
-                            e
-                        )
-                    ),
-            }
-        }
 
         // Configure connection managers (same file for both pools)
         let write_manager = SqliteConnectionManager::file(&database_path);
