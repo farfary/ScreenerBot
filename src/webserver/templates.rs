@@ -1902,6 +1902,11 @@ pub fn positions_content() -> String {
 
         // Load positions
         async function loadPositions() {
+            // Skip refresh if dropdown is currently open to prevent it from disappearing
+            if (document.querySelector('.dropdown-menu.show')) {
+                return;
+            }
+            
             const statusFilter = document.getElementById('statusFilter').value;
             const searchInput = document.getElementById('searchInput').value.toLowerCase();
             
@@ -2067,6 +2072,11 @@ pub fn tokens_content() -> String {
     let tokensRefreshInterval = null;
         
         async function loadTokens() {
+            // Skip refresh if dropdown is currently open to prevent it from disappearing
+            if (document.querySelector('.dropdown-menu.show')) {
+                return;
+            }
+            
             try {
                 const res = await fetch('/api/tokens');
                 const data = await res.json();
