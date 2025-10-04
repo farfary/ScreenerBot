@@ -757,19 +757,311 @@ pub fn status_content() -> String {
 /// Positions page content
 pub fn positions_content() -> String {
     r#"
-    <div class="card">
-        <div class="card-header">
-            <span class="card-icon">💰</span>
-            <span class="card-title">Active Positions</span>
+    <style>
+        .pnl-positive { color: #10b981; font-weight: 600; }
+        .pnl-negative { color: #ef4444; font-weight: 600; }
+        .pnl-neutral { color: #6b7280; }
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: 600;
+            display: inline-block;
+        }
+        .status-open { background: #10b98120; color: #10b981; }
+        .status-closed { background: #64748b20; color: #64748b; }
+        .status-synthetic { background: #f59e0b20; color: #f59e0b; }
+    </style>
+
+    <!-- Statistics Cards -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;" id="statsCards">
+        <div class="card">
+            <div style="font-size: 0.85em; color: #64748b; margin-bottom: 5px;">Total Positions</div>
+            <div style="font-size: 1.5em; font-weight: 700;" id="totalPositions">-</div>
         </div>
-        <div class="empty-state">
-            <div class="empty-state-icon">📊</div>
-            <p>Positions tracking coming in Phase 2</p>
-            <p style="font-size: 0.85em; margin-top: 10px;">
-                This section will show active trading positions, P&L, and position management.
-            </p>
+        <div class="card">
+            <div style="font-size: 0.85em; color: #10b981; margin-bottom: 5px;">Open Positions</div>
+            <div style="font-size: 1.5em; font-weight: 700; color: #10b981;" id="openPositions">-</div>
+        </div>
+        <div class="card">
+            <div style="font-size: 0.85em; color: #64748b; margin-bottom: 5px;">Closed Positions</div>
+            <div style="font-size: 1.5em; font-weight: 700;" id="closedPositions">-</div>
+        </div>
+        <div class="card">
+            <div style="font-size: 0.85em; color: #64748b; margin-bottom: 5px;">Total Invested</div>
+            <div style="font-size: 1.5em; font-weight: 700;" id="totalInvested">-</div>
+        </div>
+        <div class="card">
+            <div style="font-size: 0.85em; color: #64748b; margin-bottom: 5px;">Total P&L</div>
+            <div style="font-size: 1.5em; font-weight: 700;" id="totalPnl">-</div>
         </div>
     </div>
+
+    <!-- Filters and Search -->
+    <div class="card" style="margin-bottom: 15px;">
+        <div class="card-header">
+            <span class="card-icon">💰</span>
+            <span class="card-title">Trading Positions</span>
+        </div>
+        <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+            <select id="statusFilter" onchange="loadPositions()" 
+                    style="padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.9em; background: var(--card-background);">
+                <option value="all">All Positions</option>
+                <option value="open" selected>Open Only</option>
+                <option value="closed">Closed Only</option>
+            </select>
+            <input type="text" id="searchInput" placeholder="Search by symbol, name, or mint..." 
+                   style="flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.9em;">
+            <button onclick="loadPositions()" class="btn btn-primary">
+                🔄 Refresh
+            </button>
+        </div>
+        <div style="font-size: 0.85em; color: #64748b; margin-bottom: 10px;">
+            <span id="positionCount">Loading...</span> | 
+            <span>Auto-refresh: <span id="countdown">30</span>s</span>
+        </div>
+    </div>
+    
+    <!-- Positions Table -->
+    <div class="card">
+        <div style="overflow-x: auto;">
+            <table class="table" id="positionsTable">
+                <thead>
+                    <tr>
+                        <th style="min-width: 80px;">Status</th>
+                        <th style="min-width: 100px;">Symbol</th>
+                        <th style="min-width: 150px;">Name</th>
+                        <th style="min-width: 120px;">Entry Price</th>
+                        <th style="min-width: 120px;">Current/Exit</th>
+                        <th style="min-width: 100px;">Size (SOL)</th>
+                        <th style="min-width: 120px;">P&L</th>
+                        <th style="min-width: 120px;">P&L %</th>
+                        <th style="min-width: 150px;">Entry Time</th>
+                        <th style="min-width: 300px;">Mint</th>
+                    </tr>
+                </thead>
+                <tbody id="positionsTableBody">
+                    <tr>
+                        <td colspan="10" style="text-align: center; padding: 20px; color: #64748b;">
+                            Loading positions...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let autoRefreshInterval = null;
+        let countdownInterval = null;
+        let countdown = 30;
+
+        // Format number with decimals
+        function formatNumber(num, decimals = 2) {
+            if (num === null || num === undefined) return '-';
+            return Number(num).toFixed(decimals);
+        }
+
+        // Format SOL amount
+        function formatSOL(amount) {
+            if (amount === null || amount === undefined) return '-';
+            return formatNumber(amount, 4) + ' SOL';
+        }
+
+        // Format percentage
+        function formatPercent(percent) {
+            if (percent === null || percent === undefined) return '-';
+            const formatted = formatNumber(percent, 2) + '%';
+            if (percent > 0) {
+                return '<span class="pnl-positive">+' + formatted + '</span>';
+            } else if (percent < 0) {
+                return '<span class="pnl-negative">' + formatted + '</span>';
+            }
+            return '<span class="pnl-neutral">' + formatted + '</span>';
+        }
+
+        // Format P&L with color
+        function formatPnL(pnl) {
+            if (pnl === null || pnl === undefined) return '-';
+            const formatted = formatSOL(pnl);
+            if (pnl > 0) {
+                return '<span class="pnl-positive">+' + formatted + '</span>';
+            } else if (pnl < 0) {
+                return '<span class="pnl-negative">' + formatted + '</span>';
+            }
+            return '<span class="pnl-neutral">' + formatted + '</span>';
+        }
+
+        // Format timestamp
+        function formatTime(timestamp) {
+            if (!timestamp) return '-';
+            const date = new Date(timestamp * 1000);
+            return date.toLocaleString('en-US', { 
+                month: 'short', 
+                day: 'numeric', 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+        }
+
+        // Truncate address
+        function truncateAddress(address) {
+            if (!address) return '-';
+            return address.substring(0, 8) + '...' + address.substring(address.length - 6);
+        }
+
+        // Load statistics
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/v1/positions/stats');
+                const data = await response.json();
+                
+                document.getElementById('totalPositions').textContent = data.total;
+                document.getElementById('openPositions').textContent = data.open;
+                document.getElementById('closedPositions').textContent = data.closed;
+                document.getElementById('totalInvested').textContent = formatSOL(data.total_invested_sol);
+                
+                const pnlElement = document.getElementById('totalPnl');
+                pnlElement.textContent = formatSOL(data.total_pnl);
+                if (data.total_pnl > 0) {
+                    pnlElement.style.color = '#10b981';
+                } else if (data.total_pnl < 0) {
+                    pnlElement.style.color = '#ef4444';
+                } else {
+                    pnlElement.style.color = '#6b7280';
+                }
+            } catch (error) {
+                console.error('Failed to load stats:', error);
+            }
+        }
+
+        // Load positions
+        async function loadPositions() {
+            const statusFilter = document.getElementById('statusFilter').value;
+            const searchInput = document.getElementById('searchInput').value.toLowerCase();
+            
+            try {
+                const response = await fetch(`/api/v1/positions?status=${statusFilter}&limit=1000`);
+                const positions = await response.json();
+                
+                // Filter by search input
+                const filteredPositions = positions.filter(pos => {
+                    if (!searchInput) return true;
+                    return pos.symbol.toLowerCase().includes(searchInput) ||
+                           pos.name.toLowerCase().includes(searchInput) ||
+                           pos.mint.toLowerCase().includes(searchInput);
+                });
+
+                const tbody = document.getElementById('positionsTableBody');
+                
+                if (filteredPositions.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="10" style="text-align: center; padding: 20px; color: #64748b;">
+                                No positions found
+                            </td>
+                        </tr>
+                    `;
+                    document.getElementById('positionCount').textContent = '0 positions';
+                    return;
+                }
+
+                tbody.innerHTML = filteredPositions.map(pos => {
+                    const isOpen = !pos.transaction_exit_verified;
+                    const statusBadge = pos.synthetic_exit 
+                        ? '<span class="status-badge status-synthetic">SYNTHETIC</span>'
+                        : (isOpen 
+                            ? '<span class="status-badge status-open">OPEN</span>'
+                            : '<span class="status-badge status-closed">CLOSED</span>');
+                    
+                    const currentOrExitPrice = isOpen 
+                        ? (pos.current_price ? formatNumber(pos.current_price, 8) : '-')
+                        : (pos.effective_exit_price || pos.exit_price ? formatNumber(pos.effective_exit_price || pos.exit_price, 8) : '-');
+                    
+                    const pnl = isOpen ? pos.unrealized_pnl : pos.pnl;
+                    const pnlPercent = isOpen ? pos.unrealized_pnl_percent : pos.pnl_percent;
+                    
+                    return `
+                        <tr>
+                            <td>${statusBadge}</td>
+                            <td><strong>${pos.symbol}</strong></td>
+                            <td style="font-size: 0.85em;">${pos.name}</td>
+                            <td>${formatNumber(pos.effective_entry_price || pos.entry_price, 8)}</td>
+                            <td>${currentOrExitPrice}</td>
+                            <td>${formatSOL(pos.entry_size_sol)}</td>
+                            <td>${formatPnL(pnl)}</td>
+                            <td>${formatPercent(pnlPercent)}</td>
+                            <td style="font-size: 0.85em;">${formatTime(pos.entry_time)}</td>
+                            <td style="font-family: monospace; font-size: 0.75em;" title="${pos.mint}">
+                                ${truncateAddress(pos.mint)}
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+
+                document.getElementById('positionCount').textContent = `${filteredPositions.length} positions`;
+                
+            } catch (error) {
+                console.error('Failed to load positions:', error);
+                const tbody = document.getElementById('positionsTableBody');
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="10" style="text-align: center; padding: 20px; color: #ef4444;">
+                            ⚠️ Failed to load positions
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        // Reset countdown
+        function resetCountdown() {
+            countdown = 30;
+            document.getElementById('countdown').textContent = countdown;
+        }
+
+        // Start countdown
+        function startCountdown() {
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+            }
+            
+            countdownInterval = setInterval(() => {
+                countdown--;
+                document.getElementById('countdown').textContent = countdown;
+                
+                if (countdown <= 0) {
+                    resetCountdown();
+                }
+            }, 1000);
+        }
+
+        // Setup auto-refresh
+        function setupAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+            }
+            
+            autoRefreshInterval = setInterval(() => {
+                loadPositions();
+                loadStats();
+            }, 30000); // 30 seconds
+        }
+
+        // Search on input
+        document.addEventListener('DOMContentLoaded', () => {
+            const searchInput = document.getElementById('searchInput');
+            searchInput.addEventListener('input', () => {
+                loadPositions();
+            });
+
+            // Initial load
+            loadStats();
+            loadPositions();
+            setupAutoRefresh();
+            startCountdown();
+        });
+    </script>
     "#.to_string()
 }
 
