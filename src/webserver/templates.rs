@@ -1008,9 +1008,9 @@ fn common_scripts() -> &'static str {
             return num.toLocaleString();
         }
         
-        // Initialize
-        updateStatusBadge();
-        setInterval(updateStatusBadge, 5000);
+    // Initialize (refresh silently every 1s)
+    updateStatusBadge();
+    setInterval(updateStatusBadge, 1000);
         
         // Dropdown Menu Functions
         function toggleDropdown(event) {
@@ -1640,7 +1640,6 @@ pub fn positions_content() -> String {
                    style="flex: 1; min-width: 200px; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9em; background: var(--bg-primary); color: var(--text-primary);">
             <div class="spacer"></div>
             <span id="positionCount" style="color: var(--text-secondary); font-size: 0.9em;">Loading...</span>
-            <span style="color: var(--text-secondary); font-size: 0.9em;">| Auto-refresh: <span id="countdown">30</span>s</span>
             <button onclick="loadPositions()" class="btn btn-primary">🔄 Refresh</button>
         </div>
         <div class="table-scroll">
@@ -1671,9 +1670,7 @@ pub fn positions_content() -> String {
     </div>
 
     <script>
-        let autoRefreshInterval = null;
-        let countdownInterval = null;
-        let countdown = 30;
+    let autoRefreshInterval = null;
 
         // Format number with decimals
         function formatNumber(num, decimals = 2) {
@@ -1834,28 +1831,6 @@ pub fn positions_content() -> String {
             }
         }
 
-        // Reset countdown
-        function resetCountdown() {
-            countdown = 30;
-            document.getElementById('countdown').textContent = countdown;
-        }
-
-        // Start countdown
-        function startCountdown() {
-            if (countdownInterval) {
-                clearInterval(countdownInterval);
-            }
-            
-            countdownInterval = setInterval(() => {
-                countdown--;
-                document.getElementById('countdown').textContent = countdown;
-                
-                if (countdown <= 0) {
-                    resetCountdown();
-                }
-            }, 1000);
-        }
-
         // Setup auto-refresh
         function setupAutoRefresh() {
             if (autoRefreshInterval) {
@@ -1864,7 +1839,7 @@ pub fn positions_content() -> String {
             
             autoRefreshInterval = setInterval(() => {
                 loadPositions();
-            }, 30000); // 30 seconds
+            }, 1000);
         }
 
         // Search on input
@@ -1874,10 +1849,9 @@ pub fn positions_content() -> String {
                 loadPositions();
             });
 
-            // Initial load
+            // Initial load and silent refresh
             loadPositions();
             setupAutoRefresh();
-            startCountdown();
         });
     </script>
     "#.to_string()
@@ -1893,7 +1867,6 @@ pub fn tokens_content() -> String {
                    style="flex: 1; min-width: 200px; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9em; background: var(--bg-primary); color: var(--text-primary);">
             <div class="spacer"></div>
             <span id="tokenCount" style="color: var(--text-secondary); font-size: 0.9em;">Loading...</span>
-            <span style="color: var(--text-secondary); font-size: 0.9em;">| Auto-refresh: <span id="countdown">30</span>s</span>
             <button onclick="loadTokens()" class="btn btn-primary">🔄 Refresh</button>
         </div>
         <div class="table-scroll">
@@ -1919,8 +1892,7 @@ pub fn tokens_content() -> String {
     
     <script>
         let allTokensData = [];
-        let countdownInterval = null;
-        let countdownSeconds = 30;
+    let tokensRefreshInterval = null;
         
         async function loadTokens() {
             try {
@@ -1933,9 +1905,6 @@ pub fn tokens_content() -> String {
                     `${allTokensData.length} tokens with available prices`;
                 
                 renderTokens(allTokensData);
-                
-                // Reset countdown
-                countdownSeconds = 30;
                 
             } catch (error) {
                 console.error('Failed to load tokens:', error);
@@ -2033,25 +2002,16 @@ pub fn tokens_content() -> String {
             }
         });
         
-        // Countdown and auto-refresh
-        function startCountdown() {
-            if (countdownInterval) {
-                clearInterval(countdownInterval);
-            }
-            
-            countdownInterval = setInterval(() => {
-                countdownSeconds--;
-                document.getElementById('countdown').textContent = countdownSeconds;
-                
-                if (countdownSeconds <= 0) {
-                    loadTokens();
-                }
+        // Silent auto-refresh every second
+        function startTokensRefresh() {
+            if (tokensRefreshInterval) clearInterval(tokensRefreshInterval);
+            tokensRefreshInterval = setInterval(() => {
+                loadTokens();
             }, 1000);
         }
         
-        // Initial load
         loadTokens();
-        startCountdown();
+        startTokensRefresh();
     </script>
     "#.to_string()
 }
@@ -2122,15 +2082,12 @@ pub fn events_content() -> String {
             </table>
         </div>
         
-        <div style="margin-top: 15px; text-align: center; color: var(--text-secondary); font-size: 0.9em;">
-            Auto-refresh: <span id="eventsCountdown">30</span>s
-        </div>
+        
     </div>
     
     <script>
         let allEventsData = [];
-        let eventsCountdownSeconds = 30;
-        let eventsCountdownInterval = null;
+    let eventsRefreshInterval = null;
         
         // Load events from API
         async function loadEvents() {
@@ -2245,10 +2202,7 @@ pub fn events_content() -> String {
         document.getElementById('severityFilter').addEventListener('change', loadEvents);
         
         // Refresh button
-        document.getElementById('refreshEvents').addEventListener('click', () => {
-            loadEvents();
-            eventsCountdownSeconds = 30;
-        });
+        document.getElementById('refreshEvents').addEventListener('click', loadEvents);
         
         // Time formatting
         function formatTimeAgo(date) {
@@ -2269,16 +2223,11 @@ pub fn events_content() -> String {
             return div.innerHTML;
         }
         
-        // Auto-refresh countdown
-        function startEventsCountdown() {
-            eventsCountdownInterval = setInterval(() => {
-                eventsCountdownSeconds--;
-                document.getElementById('eventsCountdown').textContent = eventsCountdownSeconds;
-                
-                if (eventsCountdownSeconds <= 0) {
-                    loadEvents();
-                    eventsCountdownSeconds = 30;
-                }
+        // Silent refresh every second
+        function startEventsRefresh() {
+            if (eventsRefreshInterval) clearInterval(eventsRefreshInterval);
+            eventsRefreshInterval = setInterval(() => {
+                loadEvents();
             }, 1000);
         }
         
@@ -2293,7 +2242,7 @@ pub fn events_content() -> String {
         
         // Initial load
         loadEvents();
-        startEventsCountdown();
+        startEventsRefresh();
     </script>
     "#.to_string()
 }
