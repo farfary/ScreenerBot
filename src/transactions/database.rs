@@ -411,6 +411,23 @@ impl TransactionDatabase {
         Ok(count as u64)
     }
 
+    /// Get the newest (most recent) known signature for incremental fetching
+    /// Returns None if no signatures are known yet (first run)
+    pub async fn get_newest_known_signature(&self) -> Result<Option<String>, String> {
+        let conn = self.get_connection()?;
+
+        let result: Option<String> = conn
+            .query_row(
+                "SELECT signature FROM known_signatures ORDER BY added_at DESC LIMIT 1",
+                [],
+                |row| row.get(0)
+            )
+            .optional()
+            .map_err(|e| format!("Failed to get newest known signature: {}", e))?;
+
+        Ok(result)
+    }
+
     /// Remove old known signatures (cleanup)
     pub async fn cleanup_old_known_signatures(&self, days: i64) -> Result<usize, String> {
         let conn = self.get_connection()?;

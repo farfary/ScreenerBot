@@ -30,11 +30,17 @@ use crate::websocket;
 
 /// Number of transactions to process concurrently during bootstrap
 /// Change this value to adjust parallel processing batch size
-const CONCURRENT_BATCH_SIZE: usize = 5;
+const CONCURRENT_BATCH_SIZE: usize = 2;
 
 /// Timeout for individual transaction processing during bootstrap (in seconds)
-/// Transactions taking longer than this will be skipped with an error
+/// Transactions taking longer than this will be timed out and retried later
 const TRANSACTION_TIMEOUT_SECS: u64 = 15;
+
+/// Maximum retry attempts for failed/timed-out transactions
+const MAX_RETRY_ATTEMPTS: usize = 3;
+
+/// Base delay between retry attempts (increases exponentially)
+const RETRY_BASE_DELAY_SECS: u64 = 2;
 
 // =============================================================================
 // GLOBAL SERVICE STATE
@@ -342,28 +348,66 @@ async fn perform_initial_transaction_bootstrap(
     let mut stats = BootstrapStats::default();
     let batch_limit = RPC_BATCH_SIZE;
 
+    // Check if we have a checkpoint (newest known signature) for incremental fetching
+    let checkpoint_signature = if let Some(db) = transaction_db.as_ref() {
+        match db.get_newest_known_signature().await {
+            Ok(sig) => sig,
+            Err(e) => {
+                log(
+                    LogTag::Transactions,
+                    "WARN",
+                    &format!("Failed to get newest known signature: {}", e)
+                );
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    let bootstrap_mode = if checkpoint_signature.is_some() { "INCREMENTAL" } else { "FULL" };
+
     log(
         LogTag::Transactions,
         "BOOTSTRAP",
         &format!(
-            "Bootstrapping transaction cache for wallet: {} (batch_limit={})",
+            "Bootstrapping transaction cache for wallet: {} (mode={}, batch_limit={})",
             &wallet_pubkey.to_string(),
+            bootstrap_mode,
             batch_limit
         )
     );
 
+    if let Some(ref checkpoint) = checkpoint_signature {
+        log(
+            LogTag::Transactions,
+            "BOOTSTRAP",
+            &format!(
+                "📌 Checkpoint found: {}... (will fetch only newer signatures)",
+                &checkpoint[..8]
+            )
+        );
+    }
+
     // =========================================================================
-    // PHASE 1: COLLECT ALL SIGNATURES (lightweight, just signature strings)
+    // PHASE 1: COLLECT SIGNATURES (incremental from checkpoint or full history)
     // =========================================================================
     log(
         LogTag::Transactions,
         "BOOTSTRAP_PHASE1",
-        "📥 Phase 1: Collecting all signatures from blockchain..."
+        &format!("📥 Phase 1: Collecting {} signatures from blockchain...", if
+            checkpoint_signature.is_some()
+        {
+            "NEW"
+        } else {
+            "ALL"
+        })
     );
 
     let mut all_signatures: Vec<String> = Vec::new();
     let mut before: Option<String> = None;
     let phase1_timer = std::time::Instant::now();
+    let mut hit_checkpoint = false;
 
     loop {
         let signatures = fetcher.fetch_signatures_page(
@@ -385,7 +429,36 @@ async fn perform_initial_transaction_bootstrap(
 
         stats.total_rpc_pages += 1;
         let page_count = signatures.len();
-        all_signatures.extend(signatures.clone());
+
+        // Check if we hit the checkpoint (incremental mode)
+        if let Some(ref checkpoint) = checkpoint_signature {
+            let mut signatures_to_add = Vec::new();
+
+            for sig in &signatures {
+                if sig == checkpoint {
+                    hit_checkpoint = true;
+                    log(
+                        LogTag::Transactions,
+                        "BOOTSTRAP_PHASE1",
+                        &format!(
+                            "✅ Hit checkpoint signature - stopping at page {}",
+                            stats.total_rpc_pages
+                        )
+                    );
+                    break;
+                }
+                signatures_to_add.push(sig.clone());
+            }
+
+            all_signatures.extend(signatures_to_add);
+
+            if hit_checkpoint {
+                break;
+            }
+        } else {
+            // Full mode: collect all signatures
+            all_signatures.extend(signatures.clone());
+        }
 
         if stats.newest_signature.is_none() {
             stats.newest_signature = signatures.first().cloned();
@@ -413,16 +486,30 @@ async fn perform_initial_transaction_bootstrap(
 
     stats.total_signatures_fetched = all_signatures.len();
 
-    log(
-        LogTag::Transactions,
-        "BOOTSTRAP_PHASE1",
-        &format!(
-            "✅ Phase 1 complete: collected {} signatures in {}s across {} pages",
+    let phase1_summary = if hit_checkpoint {
+        format!(
+            "✅ Phase 1 complete (INCREMENTAL): collected {} NEW signatures in {}s across {} pages (stopped at checkpoint)",
             all_signatures.len(),
             phase1_timer.elapsed().as_secs(),
             stats.total_rpc_pages
         )
-    );
+    } else if checkpoint_signature.is_some() {
+        format!(
+            "✅ Phase 1 complete (INCREMENTAL): collected {} signatures in {}s across {} pages (checkpoint not found - fetched all)",
+            all_signatures.len(),
+            phase1_timer.elapsed().as_secs(),
+            stats.total_rpc_pages
+        )
+    } else {
+        format!(
+            "✅ Phase 1 complete (FULL): collected {} signatures in {}s across {} pages",
+            all_signatures.len(),
+            phase1_timer.elapsed().as_secs(),
+            stats.total_rpc_pages
+        )
+    };
+
+    log(LogTag::Transactions, "BOOTSTRAP_PHASE1", &phase1_summary);
 
     // =========================================================================
     // PHASE 2: FILTER AND PROCESS NEW SIGNATURES
@@ -487,6 +574,7 @@ async fn perform_initial_transaction_bootstrap(
     let mut processed_count = 0;
     let mut newly_processed = 0;
     let mut errors = 0;
+    let mut failed_signatures: Vec<(String, String)> = Vec::new(); // (signature, error_reason)
 
     // Split into batches and process in parallel
     for batch_start in (0..signatures_to_process.len()).step_by(CONCURRENT_BATCH_SIZE) {
@@ -547,9 +635,14 @@ async fn perform_initial_transaction_bootstrap(
                     log(
                         LogTag::Transactions,
                         "WARN",
-                        &format!("Failed to process bootstrap transaction {}: {}", signature, e)
+                        &format!(
+                            "Failed to process bootstrap transaction {}: {} (will retry)",
+                            signature,
+                            e
+                        )
                     );
                     errors += 1;
+                    failed_signatures.push((signature.clone(), e));
                 }
             }
 
@@ -578,21 +671,171 @@ async fn perform_initial_transaction_bootstrap(
         }
     }
 
-    // Update stats with final counts
-    stats.newly_processed = newly_processed;
-    stats.errors += errors;
-
     log(
         LogTag::Transactions,
         "BOOTSTRAP_PHASE2",
         &format!(
             "✅ Phase 2 complete: processed {}/{} new transactions | errors={} | elapsed={}s",
-            stats.newly_processed,
+            newly_processed,
             total_to_process,
-            stats.errors,
+            errors,
             phase2_timer.elapsed().as_secs()
         )
     );
+
+    // =========================================================================
+    // PHASE 3: RETRY FAILED TRANSACTIONS
+    // =========================================================================
+    let mut retry_successful = 0;
+    let mut permanently_failed = 0;
+
+    if !failed_signatures.is_empty() {
+        log(
+            LogTag::Transactions,
+            "BOOTSTRAP_RETRY",
+            &format!(
+                "🔄 Phase 3: Retrying {} failed transactions (max {} attempts per transaction)",
+                failed_signatures.len(),
+                MAX_RETRY_ATTEMPTS
+            )
+        );
+
+        for attempt in 1..=MAX_RETRY_ATTEMPTS {
+            if failed_signatures.is_empty() {
+                break;
+            }
+
+            let delay_secs = RETRY_BASE_DELAY_SECS * (2_u64).pow((attempt as u32) - 1);
+
+            log(
+                LogTag::Transactions,
+                "BOOTSTRAP_RETRY",
+                &format!(
+                    "🔄 Retry attempt {}/{}: {} signatures remaining | delay={}s",
+                    attempt,
+                    MAX_RETRY_ATTEMPTS,
+                    failed_signatures.len(),
+                    delay_secs
+                )
+            );
+
+            // Wait before retrying (exponential backoff)
+            if attempt > 1 {
+                sleep(Duration::from_secs(delay_secs)).await;
+            }
+
+            let mut still_failed: Vec<(String, String)> = Vec::new();
+
+            // Process failed signatures in batches
+            for batch_start in (0..failed_signatures.len()).step_by(CONCURRENT_BATCH_SIZE) {
+                let batch_end = std::cmp::min(
+                    batch_start + CONCURRENT_BATCH_SIZE,
+                    failed_signatures.len()
+                );
+                let batch = &failed_signatures[batch_start..batch_end];
+
+                let mut futures = FuturesUnordered::new();
+
+                for (signature, _) in batch {
+                    let sig = signature.clone();
+                    let proc = processor.clone();
+                    futures.push(async move {
+                        let result = timeout(
+                            Duration::from_secs(TRANSACTION_TIMEOUT_SECS),
+                            proc.process_transaction(&sig)
+                        ).await;
+
+                        match result {
+                            Ok(inner_result) => (sig.clone(), inner_result),
+                            Err(_) =>
+                                (
+                                    sig.clone(),
+                                    Err(
+                                        format!("Transaction processing timed out after {}s", TRANSACTION_TIMEOUT_SECS)
+                                    ),
+                                ),
+                        }
+                    });
+                }
+
+                while let Some((signature, result)) = futures.next().await {
+                    match result {
+                        Ok(_) => {
+                            if let Some(db) = transaction_db.as_ref() {
+                                if let Err(e) = db.add_known_signature(&signature).await {
+                                    log(
+                                        LogTag::Transactions,
+                                        "WARN",
+                                        &format!(
+                                            "Failed to persist known signature {}: {}",
+                                            signature,
+                                            e
+                                        )
+                                    );
+                                }
+                            }
+
+                            add_signature_to_known_globally(signature.clone()).await;
+                            if let Ok(mut mgr) = manager_arc.try_lock() {
+                                mgr.known_signatures.insert(signature.clone());
+                                mgr.total_transactions += 1;
+                            }
+                            retry_successful += 1;
+                        }
+                        Err(e) => {
+                            still_failed.push((signature.clone(), e));
+                        }
+                    }
+                }
+            }
+
+            failed_signatures = still_failed;
+
+            log(
+                LogTag::Transactions,
+                "BOOTSTRAP_RETRY",
+                &format!(
+                    "✅ Retry attempt {} complete: {} recovered | {} still failing",
+                    attempt,
+                    retry_successful,
+                    failed_signatures.len()
+                )
+            );
+        }
+
+        permanently_failed = failed_signatures.len();
+
+        if permanently_failed > 0 {
+            log(
+                LogTag::Transactions,
+                "BOOTSTRAP_RETRY",
+                &format!(
+                    "⚠️  {} transactions permanently failed after {} retry attempts",
+                    permanently_failed,
+                    MAX_RETRY_ATTEMPTS
+                )
+            );
+
+            if debug {
+                log(
+                    LogTag::Transactions,
+                    "DEBUG",
+                    &format!(
+                        "Permanently failed signatures: {:?}",
+                        failed_signatures
+                            .iter()
+                            .map(|(sig, _)| sig)
+                            .take(10)
+                            .collect::<Vec<_>>()
+                    )
+                );
+            }
+        }
+    }
+
+    // Update stats with final counts
+    stats.newly_processed = newly_processed + retry_successful;
+    stats.errors = permanently_failed;
 
     // Update manager with final count from database
     if let Some(db) = transaction_db.as_ref() {
@@ -616,10 +859,29 @@ async fn perform_initial_transaction_bootstrap(
     stats.duration_ms = bootstrap_timer.elapsed().as_millis();
 
     // Final summary
-    log(
-        LogTag::Transactions,
-        "BOOTSTRAP_COMPLETE",
-        &format!(
+    let summary = if retry_successful > 0 || permanently_failed > 0 {
+        format!(
+            "✨ Bootstrap complete!\n\
+            ═══════════════════════════════════════════════════════════════\n\
+            📊 Total signatures found: {}\n\
+            ✅ New transactions processed: {} (initial: {} + retried: {})\n\
+            ⏭️  Already known (skipped): {}\n\
+            🔄 Retry statistics: {} recovered | {} permanently failed\n\
+            📄 RPC pages fetched: {}\n\
+            ⏱️  Total time: {:.1}s\n\
+            ═══════════════════════════════════════════════════════════════",
+            stats.total_signatures_fetched,
+            stats.newly_processed,
+            newly_processed,
+            retry_successful,
+            stats.known_signatures_skipped,
+            retry_successful,
+            permanently_failed,
+            stats.total_rpc_pages,
+            bootstrap_timer.elapsed().as_secs_f64()
+        )
+    } else {
+        format!(
             "✨ Bootstrap complete!\n\
             ═══════════════════════════════════════════════════════════════\n\
             📊 Total signatures found: {}\n\
@@ -636,7 +898,9 @@ async fn perform_initial_transaction_bootstrap(
             stats.total_rpc_pages,
             bootstrap_timer.elapsed().as_secs_f64()
         )
-    );
+    };
+
+    log(LogTag::Transactions, "BOOTSTRAP_COMPLETE", &summary);
 
     if debug {
         log(LogTag::Transactions, "DEBUG", &format!("Bootstrap stats: {:?}", stats));
