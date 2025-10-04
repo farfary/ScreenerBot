@@ -1,8 +1,10 @@
-use axum::{ extract::Query, routing::get, Json, Router };
+use axum::{ extract::{ Path, Query }, routing::get, Json, Router };
 use serde::{ Deserialize, Serialize };
 use std::sync::Arc;
 
 use crate::positions;
+use crate::tokens::cache::TokenDatabase;
+use crate::tokens::security_db::SecurityDatabase;
 use crate::webserver::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -65,6 +67,7 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/positions", get(get_positions))
         .route("/positions/stats", get(get_positions_stats))
+        .route("/positions/:mint/debug", get(get_position_debug_info))
 }
 
 async fn get_positions(Query(params): Query<PositionsQuery>) -> Json<Vec<PositionResponse>> {
@@ -217,5 +220,325 @@ async fn get_positions_stats() -> Json<PositionsStatsResponse> {
         closed,
         total_invested_sol,
         total_pnl,
+    })
+}
+
+// =============================================================================
+// DEBUG INFO ENDPOINT FOR POSITIONS
+// =============================================================================
+
+#[derive(Debug, Serialize)]
+pub struct PositionDebugResponse {
+    pub mint: String,
+    pub timestamp: String,
+    pub position_data: Option<PositionData>,
+    pub token_info: Option<TokenInfo>,
+    pub price_data: Option<PriceData>,
+    pub market_data: Option<MarketData>,
+    pub pools: Vec<PoolInfo>,
+    pub security: Option<SecurityInfo>,
+    pub social: Option<SocialInfo>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PositionData {
+    pub open_position: Option<PositionSummary>,
+    pub closed_positions_count: usize,
+    pub total_pnl: f64,
+    pub win_rate: f64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PositionSummary {
+    pub id: Option<i64>,
+    pub entry_price: f64,
+    pub entry_time: i64,
+    pub entry_size_sol: f64,
+    pub current_price: Option<f64>,
+    pub unrealized_pnl: Option<f64>,
+    pub unrealized_pnl_percent: Option<f64>,
+    pub phantom_confirmations: u32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TokenInfo {
+    pub symbol: String,
+    pub name: String,
+    pub decimals: Option<u8>,
+    pub logo_url: Option<String>,
+    pub website: Option<String>,
+    pub tags: Vec<String>,
+    pub is_verified: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PriceData {
+    pub pool_price_sol: f64,
+    pub pool_price_usd: Option<f64>,
+    pub confidence: f32,
+    pub last_updated: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MarketData {
+    pub market_cap: Option<f64>,
+    pub fdv: Option<f64>,
+    pub liquidity_usd: Option<f64>,
+    pub volume_24h: Option<f64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PoolInfo {
+    pub pool_address: String,
+    pub program_kind: String,
+    pub dex_name: String,
+    pub sol_reserves: f64,
+    pub token_reserves: f64,
+    pub price_sol: f64,
+    pub confidence: f32,
+    pub last_updated: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SecurityInfo {
+    pub score: i32,
+    pub score_normalised: i32,
+    pub rugged: bool,
+    pub mint_authority: Option<String>,
+    pub freeze_authority: Option<String>,
+    pub creator: Option<String>,
+    pub total_holders: i32,
+    pub top_10_concentration: Option<f64>,
+    pub risks: Vec<RiskInfo>,
+    pub analyzed_at: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RiskInfo {
+    pub name: String,
+    pub level: String,
+    pub description: String,
+    pub score: i32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SocialInfo {
+    pub website: Option<String>,
+    pub twitter: Option<String>,
+    pub telegram: Option<String>,
+}
+
+/// Get comprehensive debug information for a position
+async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebugResponse> {
+    let timestamp = chrono::Utc::now().to_rfc3339();
+
+    // Load decimals from cache
+    let decimals = crate::tokens::get_token_decimals(&mint).await;
+
+    // 1. Get position data
+    let open_position = positions::db
+        ::get_open_positions().await
+        .ok()
+        .and_then(|positions| {
+            positions
+                .into_iter()
+                .find(|p| p.mint == mint)
+                .map(|p| {
+                    let unrealized_pnl = p.current_price.map(|current| {
+                        let current_value = current * p.entry_size_sol;
+                        current_value - p.entry_size_sol
+                    });
+
+                    let unrealized_pnl_percent = unrealized_pnl.map(
+                        |pnl| (pnl / p.entry_size_sol) * 100.0
+                    );
+
+                    PositionSummary {
+                        id: p.id,
+                        entry_price: p.entry_price,
+                        entry_time: p.entry_time.timestamp(),
+                        entry_size_sol: p.entry_size_sol,
+                        current_price: p.current_price,
+                        unrealized_pnl,
+                        unrealized_pnl_percent,
+                        phantom_confirmations: p.phantom_confirmations,
+                    }
+                })
+        });
+
+    let closed_positions = positions::db
+        ::get_closed_positions().await
+        .ok()
+        .map(|positions| {
+            let matching_positions: Vec<_> = positions
+                .into_iter()
+                .filter(|p| p.mint == mint)
+                .collect();
+            let count = matching_positions.len();
+            let total_pnl: f64 = matching_positions
+                .iter()
+                .filter_map(|p| { p.sol_received.map(|received| received - p.entry_size_sol) })
+                .sum();
+            let wins = matching_positions
+                .iter()
+                .filter(|p| { p.sol_received.map(|r| r > p.entry_size_sol).unwrap_or(false) })
+                .count();
+            let win_rate = if count > 0 { ((wins as f64) / (count as f64)) * 100.0 } else { 0.0 };
+            (count, total_pnl, win_rate)
+        })
+        .unwrap_or((0, 0.0, 0.0));
+
+    let position_data = Some(PositionData {
+        open_position,
+        closed_positions_count: closed_positions.0,
+        total_pnl: closed_positions.1,
+        win_rate: closed_positions.2,
+    });
+
+    // 2. Get token info from database
+    let api_token = TokenDatabase::new()
+        .ok()
+        .and_then(|db| db.get_token_by_mint(&mint).ok().flatten());
+
+    let token_info = api_token.as_ref().map(|token| TokenInfo {
+        symbol: token.symbol.clone(),
+        name: token.name.clone(),
+        decimals,
+        logo_url: token.info.as_ref().and_then(|i| i.image_url.clone()),
+        website: token.info
+            .as_ref()
+            .and_then(|i| i.websites.as_ref())
+            .and_then(|w| w.first())
+            .map(|w| w.url.clone()),
+        tags: token.labels.clone().unwrap_or_default(),
+        is_verified: token.labels
+            .as_ref()
+            .map(|l| l.iter().any(|label| label.to_lowercase() == "verified"))
+            .unwrap_or(false),
+    });
+
+    // 3. Get current price from pool service
+    let price_data = crate::pools::get_pool_price(&mint).map(|price_result| {
+        let age_seconds = price_result.timestamp.elapsed().as_secs();
+        let now_unix = std::time::SystemTime
+            ::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        let price_unix_time = now_unix - (age_seconds as i64);
+
+        PriceData {
+            pool_price_sol: price_result.price_sol,
+            pool_price_usd: None,
+            confidence: price_result.confidence,
+            last_updated: price_unix_time,
+        }
+    });
+
+    // 4. Get market data from token database
+    let market_data = api_token.as_ref().map(|token| MarketData {
+        market_cap: token.market_cap,
+        fdv: token.fdv,
+        liquidity_usd: token.liquidity.as_ref().and_then(|l| l.usd),
+        volume_24h: token.volume.as_ref().and_then(|v| v.h24),
+    });
+
+    // 5. Get pool info
+    let mut pools_vec = Vec::new();
+    if let Some(price_result) = crate::pools::get_pool_price(&mint) {
+        let age_seconds = price_result.timestamp.elapsed().as_secs();
+        let now_unix = std::time::SystemTime
+            ::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        let price_unix_time = now_unix - (age_seconds as i64);
+
+        pools_vec.push(PoolInfo {
+            pool_address: price_result.pool_address.clone(),
+            program_kind: format!(
+                "{:?}",
+                price_result.source_pool.as_ref().unwrap_or(&"Unknown".to_string())
+            ),
+            dex_name: price_result.source_pool.as_ref().unwrap_or(&"Unknown".to_string()).clone(),
+            sol_reserves: price_result.sol_reserves,
+            token_reserves: price_result.token_reserves,
+            price_sol: price_result.price_sol,
+            confidence: price_result.confidence,
+            last_updated: price_unix_time,
+        });
+    }
+
+    // 6. Get security info from security database
+    let security = SecurityDatabase::new("data/security.db")
+        .ok()
+        .and_then(|db| db.get_security_info(&mint).ok().flatten())
+        .map(|sec| {
+            let top_10_concentration = if sec.top_holders.len() >= 10 {
+                Some(
+                    sec.top_holders
+                        .iter()
+                        .take(10)
+                        .map(|h| h.pct)
+                        .sum::<f64>()
+                )
+            } else {
+                None
+            };
+
+            SecurityInfo {
+                score: sec.score,
+                score_normalised: sec.score_normalised,
+                rugged: sec.rugged,
+                mint_authority: sec.mint_authority,
+                freeze_authority: sec.freeze_authority,
+                creator: sec.creator,
+                total_holders: sec.total_holders,
+                top_10_concentration,
+                risks: sec.risks
+                    .iter()
+                    .map(|r| RiskInfo {
+                        name: r.name.clone(),
+                        level: r.level.clone(),
+                        description: r.description.clone(),
+                        score: r.score,
+                    })
+                    .collect(),
+                analyzed_at: sec.analyzed_at,
+            }
+        });
+
+    // 7. Get social info from token database
+    let social = api_token.as_ref().and_then(|token| {
+        token.info.as_ref().map(|info| SocialInfo {
+            website: info.websites
+                .as_ref()
+                .and_then(|w| w.first())
+                .map(|w| w.url.clone()),
+            twitter: info.socials.as_ref().and_then(|socials|
+                socials
+                    .iter()
+                    .find(|s| s.platform.to_lowercase().contains("twitter"))
+                    .map(|s| format!("https://twitter.com/{}", s.handle))
+            ),
+            telegram: info.socials.as_ref().and_then(|socials|
+                socials
+                    .iter()
+                    .find(|s| s.platform.to_lowercase().contains("telegram"))
+                    .map(|s| format!("https://t.me/{}", s.handle))
+            ),
+        })
+    });
+
+    Json(PositionDebugResponse {
+        mint,
+        timestamp,
+        position_data,
+        token_info,
+        price_data,
+        market_data,
+        pools: pools_vec,
+        security,
+        social,
     })
 }
