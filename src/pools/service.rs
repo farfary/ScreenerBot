@@ -425,19 +425,12 @@ async fn initialize_service_components() -> Result<(), String> {
         }
     }
 
-    // Get the global RPC client and create an Arc reference
-    // Note: This creates a new Arc wrapping the global client reference
+    // Get the global RPC client and clone it for sharing with pool components
+    // This ensures all RPC stats are aggregated in the global instance
     let rpc_client_ref = get_rpc_client();
+    let shared_rpc_client = Arc::new(rpc_client_ref.clone());
 
-    // We need to create an owned RpcClient to wrap in Arc for sharing
-    // For now, we'll create a clone or work around this design issue
-    let rpc_urls = rpc_client_ref.get_all_urls();
-    let rpc_urls_count = rpc_urls.len(); // Store count before moving
-    let owned_rpc_client = Arc::new(
-        crate::rpc::RpcClient
-            ::new_with_urls(rpc_urls)
-            .map_err(|e| format!("Failed to create owned RPC client: {}", e))?
-    );
+    let rpc_urls_count = rpc_client_ref.get_all_urls().len();
 
     // Initialize pool directory (shared between components)
     let pool_directory = Arc::new(RwLock::new(HashMap::new()));
@@ -445,10 +438,10 @@ async fn initialize_service_components() -> Result<(), String> {
     // Initialize components in dependency order
     let pool_discovery = Arc::new(PoolDiscovery::new());
     let pool_analyzer = Arc::new(
-        PoolAnalyzer::new(owned_rpc_client.clone(), pool_directory.clone())
+        PoolAnalyzer::new(shared_rpc_client.clone(), pool_directory.clone())
     );
     let account_fetcher = Arc::new(
-        AccountFetcher::new(owned_rpc_client.clone(), pool_directory.clone())
+        AccountFetcher::new(shared_rpc_client.clone(), pool_directory.clone())
     );
     let price_calculator = Arc::new(PriceCalculator::new(pool_directory.clone()));
 

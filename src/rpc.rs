@@ -828,6 +828,19 @@ pub struct RpcClient {
     rate_limiter: Arc<tokio::sync::Mutex<RpcRateLimiter>>,
 }
 
+impl Clone for RpcClient {
+    fn clone(&self) -> Self {
+        Self {
+            client: self.client.clone(),
+            rpc_urls: self.rpc_urls.clone(),
+            current_url_index: self.current_url_index.clone(),
+            current_url: self.current_url.clone(),
+            stats: self.stats.clone(),
+            rate_limiter: self.rate_limiter.clone(),
+        }
+    }
+}
+
 impl RpcClient {
     /// Create new RPC client with configuration from configs.json
     pub fn new() -> Self {
