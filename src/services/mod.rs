@@ -69,6 +69,7 @@ pub struct ServiceManager {
     handles: HashMap<&'static str, Vec<JoinHandle<()>>>,
     shutdown: Arc<Notify>,
     metrics_collector: MetricsCollector,
+    task_monitors: HashMap<&'static str, tokio_metrics::TaskMonitor>,
 }
 
 impl ServiceManager {
@@ -78,7 +79,16 @@ impl ServiceManager {
             handles: HashMap::new(),
             shutdown: Arc::new(Notify::new()),
             metrics_collector: MetricsCollector::new(),
+            task_monitors: HashMap::new(),
         })
+    }
+
+    /// Get TaskMonitor for a service (creates if doesn't exist)
+    pub fn get_task_monitor(&mut self, service_name: &'static str) -> tokio_metrics::TaskMonitor {
+        self.task_monitors
+            .entry(service_name)
+            .or_insert_with(|| tokio_metrics::TaskMonitor::new())
+            .clone()
     }
 
     /// Register a service
@@ -115,8 +125,9 @@ impl ServiceManager {
                 let handles = service.start(self.shutdown.clone()).await?;
                 self.handles.insert(service_name, handles);
 
-                // Start monitoring
-                self.metrics_collector.start_monitoring(service_name);
+                // Start monitoring with TaskMonitor
+                let monitor = self.get_task_monitor(service_name);
+                self.metrics_collector.start_monitoring(service_name, monitor);
 
                 log(LogTag::System, "SUCCESS", &format!("✅ Service started: {}", service_name));
             }

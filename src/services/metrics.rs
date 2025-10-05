@@ -5,16 +5,30 @@ use std::collections::HashMap;
 use std::sync::{ Arc, Mutex };
 use std::time::Instant;
 
-/// Service resource metrics
+/// Service resource metrics with accurate per-service tracking
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ServiceMetrics {
-    pub cpu_usage_percent: f32,
-    pub memory_usage_bytes: u64,
-    pub network_rx_bytes: u64,
-    pub network_tx_bytes: u64,
+    /// Process-wide CPU usage (all services share this)
+    pub process_cpu_percent: f32,
+    /// Process-wide memory usage (all services share this)
+    pub process_memory_bytes: u64,
+
+    /// Per-service task metrics
     pub task_count: usize,
-    pub task_avg_poll_time_ns: u64,
+    pub total_polls: u64,
+    pub total_poll_duration_ns: u64,
+    pub mean_poll_duration_ns: u64,
+    pub total_idle_duration_ns: u64,
+    pub mean_idle_duration_ns: u64,
+
+    /// Service uptime
     pub uptime_seconds: u64,
+
+    /// Service-specific operational metrics (populated by individual services)
+    pub operations_total: u64,
+    pub operations_per_second: f32,
+    pub errors_total: u64,
+    pub custom_metrics: HashMap<String, f64>,
 }
 
 pub struct MetricsCollector {
@@ -32,23 +46,21 @@ impl MetricsCollector {
         }
     }
 
-    /// Start monitoring a service
-    pub fn start_monitoring(&mut self, service_name: &'static str) -> TaskMonitor {
-        let monitor = TaskMonitor::new();
-        self.task_monitors.insert(service_name, monitor.clone());
+    /// Start monitoring a service with provided TaskMonitor
+    pub fn start_monitoring(&mut self, service_name: &'static str, monitor: TaskMonitor) {
+        self.task_monitors.insert(service_name, monitor);
         self.service_start_times.insert(service_name, Instant::now());
-        monitor
     }
 
     /// Collect metrics for a specific service
     pub async fn collect_for_service(&mut self, name: &str) -> ServiceMetrics {
-        // Refresh system info
+        // Refresh system info (process-wide metrics)
         {
             let mut sys = self.system.lock().unwrap();
             sys.refresh_all();
         }
 
-        // Get current process
+        // Get current process (shared across all services)
         let pid = Pid::from_u32(std::process::id());
         let sys = self.system.lock().unwrap();
 
@@ -58,12 +70,26 @@ impl MetricsCollector {
             (0.0, 0)
         };
 
-        // Get task metrics if available
-        let (task_count, avg_poll_time) = if let Some(monitor) = self.task_monitors.get(name) {
+        // Get task metrics if available (per-service)
+        let (
+            task_count,
+            total_polls,
+            total_poll_duration,
+            mean_poll_duration,
+            total_idle_duration,
+            mean_idle_duration,
+        ) = if let Some(monitor) = self.task_monitors.get(name) {
             let metrics = monitor.cumulative();
-            (metrics.instrumented_count as usize, metrics.mean_poll_duration().as_nanos() as u64)
+            (
+                metrics.instrumented_count as usize,
+                metrics.instrumented_count, // Use instrumented_count as proxy for total polls
+                metrics.total_poll_duration.as_nanos() as u64,
+                metrics.mean_poll_duration().as_nanos() as u64,
+                metrics.total_idle_duration.as_nanos() as u64,
+                metrics.mean_idle_duration().as_nanos() as u64,
+            )
         } else {
-            (0, 0)
+            (0, 0, 0, 0, 0, 0)
         };
 
         // Calculate uptime
@@ -73,13 +99,19 @@ impl MetricsCollector {
             .unwrap_or(0);
 
         ServiceMetrics {
-            cpu_usage_percent: cpu,
-            memory_usage_bytes: memory,
-            network_rx_bytes: 0,
-            network_tx_bytes: 0,
+            process_cpu_percent: cpu,
+            process_memory_bytes: memory,
             task_count,
-            task_avg_poll_time_ns: avg_poll_time,
+            total_polls,
+            total_poll_duration_ns: total_poll_duration,
+            mean_poll_duration_ns: mean_poll_duration,
+            total_idle_duration_ns: total_idle_duration,
+            mean_idle_duration_ns: mean_idle_duration,
             uptime_seconds: uptime,
+            operations_total: 0,
+            operations_per_second: 0.0,
+            errors_total: 0,
+            custom_metrics: HashMap::new(),
         }
     }
 }

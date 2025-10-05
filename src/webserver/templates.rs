@@ -3054,14 +3054,15 @@ pub fn services_content() -> String {
                         <th style="min-width: 80px;">Priority</th>
                         <th style="min-width: 90px;">Enabled</th>
                         <th style="min-width: 120px;">Uptime</th>
-                        <th style="min-width: 110px;">CPU</th>
-                        <th style="min-width: 120px;">Memory</th>
+                        <th style="min-width: 110px;" title="Process-wide CPU (shared)">CPU</th>
+                        <th style="min-width: 120px;" title="Process-wide memory (shared)">Memory</th>
+                        <th style="min-width: 100px;">Tasks</th>
                         <th style="min-width: 220px;">Dependencies</th>
                     </tr>
                 </thead>
                 <tbody id="servicesTableBody">
                     <tr>
-                        <td colspan="7" style="text-align:center; padding: 20px; color: var(--text-muted);">
+                        <td colspan="9" style="text-align:center; padding: 20px; color: var(--text-muted);">
                             Loading services...
                         </td>
                     </tr>
@@ -3232,6 +3233,12 @@ pub fn services_content() -> String {
                 const deps = service.dependencies && service.dependencies.length
                     ? service.dependencies.map(dep => `<span class=\"dependency-badge\">${dep}</span>`).join(' ')
                     : '<span class="detail-value">None</span>';
+                
+                const m = service.metrics;
+                const taskInfo = m.task_count > 0 
+                    ? `${m.task_count} tasks, ${formatDuration(m.mean_poll_duration_ns)} poll, ${formatDuration(m.mean_idle_duration_ns)} idle`
+                    : 'No instrumented tasks';
+                
                 return `
                     <tr>
                         <td style="font-weight:600;">${service.name}</td>
@@ -3239,8 +3246,9 @@ pub fn services_content() -> String {
                         <td>${service.priority}</td>
                         <td>${service.enabled ? '✅ Enabled' : '❌ Disabled'}</td>
                         <td>${formatUptime(service.uptime_seconds)}</td>
-                        <td>${(service.metrics.cpu_usage_percent || 0).toFixed(1)}%</td>
-                        <td>${formatBytes(service.metrics.memory_usage_bytes)}</td>
+                        <td title="Process-wide CPU (shared across all services)">${(m.process_cpu_percent || 0).toFixed(1)}%</td>
+                        <td title="Process-wide memory (shared across all services)">${formatBytes(m.process_memory_bytes)}</td>
+                        <td title="${taskInfo}">${m.task_count} tasks</td>
                         <td>${deps}</td>
                     </tr>
                 `;
@@ -3281,6 +3289,13 @@ pub fn services_content() -> String {
             if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
             if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(1)} MB`;
             return `${(bytes / 1073741824).toFixed(2)} GB`;
+        }
+        
+        function formatDuration(nanos) {
+            if (nanos < 1000) return `${nanos}ns`;
+            if (nanos < 1000000) return `${(nanos / 1000).toFixed(1)}µs`;
+            if (nanos < 1000000000) return `${(nanos / 1000000).toFixed(1)}ms`;
+            return `${(nanos / 1000000000).toFixed(2)}s`;
         }
         
         function refreshServices() {
