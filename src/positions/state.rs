@@ -1,7 +1,7 @@
 use super::types::Position;
 use crate::{ arguments::is_debug_positions_enabled, logger::{ log, LogTag } };
 use chrono::{ DateTime, Utc };
-use std::{ collections::HashMap, sync::{ Arc, LazyLock } };
+use std::{ collections::HashMap, sync::{ Arc, LazyLock, OnceLock } };
 use tokio::sync::{ Mutex, OwnedMutexGuard, RwLock };
 
 // Global state containers
@@ -28,10 +28,22 @@ static PENDING_OPEN_SWAPS: LazyLock<RwLock<HashMap<String, DateTime<Utc>>>> = La
 );
 
 // Global position creation semaphore to enforce max_open_positions atomically
-static GLOBAL_POSITION_SEMAPHORE: LazyLock<tokio::sync::Semaphore> = LazyLock::new(|| {
-    let max_positions = crate::config::with_config(|cfg| cfg.trader.max_open_positions);
-    tokio::sync::Semaphore::new(max_positions)
-});
+// NOTE: Uses OnceLock because initialization requires config which isn't available at static init time
+static GLOBAL_POSITION_SEMAPHORE: OnceLock<tokio::sync::Semaphore> = OnceLock::new();
+
+/// Initialize the global position semaphore with the configured max open positions
+/// MUST be called during positions system initialization, after config is loaded
+pub fn init_global_position_semaphore(max_positions: usize) {
+    GLOBAL_POSITION_SEMAPHORE.get_or_init(|| tokio::sync::Semaphore::new(max_positions));
+}
+
+/// Get a reference to the global position semaphore
+/// Panics if not initialized - must call init_global_position_semaphore first
+fn get_global_position_semaphore() -> &'static tokio::sync::Semaphore {
+    GLOBAL_POSITION_SEMAPHORE.get().expect(
+        "Global position semaphore not initialized. Call init_global_position_semaphore first."
+    )
+}
 
 // Optional: global last open timestamp (cooldown)
 pub static LAST_OPEN_TIME: LazyLock<RwLock<Option<DateTime<Utc>>>> = LazyLock::new(||
@@ -106,7 +118,8 @@ pub async fn acquire_global_position_permit() -> Result<
     tokio::sync::SemaphorePermit<'static>,
     String
 > {
-    match GLOBAL_POSITION_SEMAPHORE.try_acquire() {
+    let semaphore = get_global_position_semaphore();
+    match semaphore.try_acquire() {
         Ok(permit) => {
             if is_debug_positions_enabled() {
                 log(
@@ -114,14 +127,14 @@ pub async fn acquire_global_position_permit() -> Result<
                     "DEBUG",
                     &format!(
                         "🟢 Acquired global position permit (available: {})",
-                        GLOBAL_POSITION_SEMAPHORE.available_permits()
+                        semaphore.available_permits()
                     )
                 );
             }
             Ok(permit)
         }
         Err(_) => {
-            let available = GLOBAL_POSITION_SEMAPHORE.available_permits();
+            let available = semaphore.available_permits();
             Err(format!("No position slots available (permits: {})", available))
         }
     }
@@ -130,14 +143,15 @@ pub async fn acquire_global_position_permit() -> Result<
 /// Release a global position permit when a position is closed
 /// This should be called after a position is successfully closed and verified
 pub fn release_global_position_permit() {
-    GLOBAL_POSITION_SEMAPHORE.add_permits(1);
+    let semaphore = get_global_position_semaphore();
+    semaphore.add_permits(1);
     if is_debug_positions_enabled() {
         log(
             LogTag::Positions,
             "DEBUG",
             &format!(
                 "🔴 Released global position permit (available: {})",
-                GLOBAL_POSITION_SEMAPHORE.available_permits()
+                semaphore.available_permits()
             )
         );
     }
@@ -406,9 +420,10 @@ pub async fn reconcile_global_position_semaphore(max_open: usize) {
     use crate::arguments::is_debug_positions_enabled;
     use crate::logger::{ log, LogTag };
 
+    let semaphore = get_global_position_semaphore();
     let open_positions = get_open_positions().await; // clones but infrequent (startup)
     let open_count = open_positions.len();
-    let available_before = GLOBAL_POSITION_SEMAPHORE.available_permits();
+    let available_before = semaphore.available_permits();
 
     if open_count == 0 {
         if is_debug_positions_enabled() {
@@ -419,7 +434,7 @@ pub async fn reconcile_global_position_semaphore(max_open: usize) {
 
     let mut consumed = 0usize;
     for _ in 0..open_count {
-        match GLOBAL_POSITION_SEMAPHORE.try_acquire() {
+        match semaphore.try_acquire() {
             Ok(permit) => {
                 permit.forget(); // keep slot consumed for lifetime of position
                 consumed += 1;
@@ -430,7 +445,7 @@ pub async fn reconcile_global_position_semaphore(max_open: usize) {
         }
     }
 
-    let available_after = GLOBAL_POSITION_SEMAPHORE.available_permits();
+    let available_after = semaphore.available_permits();
     if consumed < open_count {
         log(
             LogTag::Positions,

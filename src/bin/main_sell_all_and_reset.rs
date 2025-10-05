@@ -35,7 +35,8 @@ use screenerbot::arguments::{ is_debug_ata_enabled, is_debug_swaps_enabled, set_
 use screenerbot::errors::ScreenerBotError;
 use screenerbot::logger::{ log, LogTag };
 use screenerbot::rpc::{ get_rpc_client, init_rpc_client, TokenAccountInfo };
-use screenerbot::swaps::config::{ QUOTE_SLIPPAGE_PERCENT, SOL_MINT };
+use screenerbot::config::with_config;
+use screenerbot::constants::SOL_MINT;
 use screenerbot::swaps::{ execute_best_swap, get_best_quote };
 use screenerbot::tokens::Token;
 use screenerbot::utils::{
@@ -1232,12 +1233,13 @@ async fn attempt_single_sell(account: &TokenAccountInfo) -> Result<String, Strin
     };
 
     // Get quote and execute swap
+    let quote_slippage = with_config(|cfg| cfg.swaps.slippage_quote_default_pct);
     let best_quote = get_best_quote(
         &token.mint,
         SOL_MINT,
         actual_balance,
         &wallet_address,
-        QUOTE_SLIPPAGE_PERCENT,
+        quote_slippage,
         "ExactIn" // Use ExactOut for selling to completely liquidate tokens
     ).await.map_err(|e| format!("Failed to get quote: {}", e))?;
 

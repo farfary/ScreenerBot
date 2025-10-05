@@ -1,15 +1,9 @@
-use super::config::{
-    API_TIMEOUT_SECS,
-    JUPITER_DEFAULT_PRIORITY_FEE,
-    JUPITER_DEFAULT_SWAP_MODE,
-    JUPITER_DYNAMIC_COMPUTE_UNIT_LIMIT,
-    JUPITER_QUOTE_API,
-    JUPITER_SWAP_API,
-    QUOTE_TIMEOUT_SECS,
-    SOL_MINT,
-    TRANSACTION_CONFIRMATION_MAX_ATTEMPTS,
-    TRANSACTION_CONFIRMATION_RETRY_DELAY_MS,
-};
+/// Jupiter Router Implementation
+/// Handles swap quotes and execution via Jupiter DEX router
+/// Based on official Jupiter API documentation: https://dev.jup.ag/docs/swap-api/
+
+use crate::config::with_config;
+use crate::constants::SOL_MINT;
 use crate::errors::ScreenerBotError;
 use crate::global::{ is_debug_api_enabled, is_debug_swaps_enabled };
 use crate::logger::{ log, LogTag };
@@ -21,9 +15,6 @@ use crate::swaps::types::{
     SwapQuote,
 };
 use crate::tokens::decimals::{ get_token_decimals_from_chain, SOL_DECIMALS };
-/// Jupiter Router Implementation
-/// Handles swap quotes and execution via Jupiter DEX router
-/// Based on official Jupiter API documentation: https://dev.jup.ag/docs/swap-api/
 use crate::tokens::Token;
 
 use reqwest;
@@ -133,9 +124,10 @@ pub async fn get_jupiter_quote(
         ("swapMode".to_string(), swap_mode.to_string())
     ];
 
+    let jupiter_quote_api = with_config(|cfg| cfg.swaps.jupiter_quote_api.clone());
     let url = format!(
         "{}?{}",
-        JUPITER_QUOTE_API,
+        jupiter_quote_api,
         params
             .iter()
             .map(|(k, v)| format!("{}={}", k, v))
@@ -157,6 +149,8 @@ pub async fn get_jupiter_quote(
         log(LogTag::Swap, "JUPITER_API", &format!("Jupiter Quote URL: {}", url));
     }
 
+    let quote_timeout_secs = with_config(|cfg| cfg.swaps.quote_timeout_secs);
+
     if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
@@ -170,7 +164,7 @@ pub async fn get_jupiter_quote(
                 url,
                 input_amount,
                 slippage_bps,
-                QUOTE_TIMEOUT_SECS
+                quote_timeout_secs
             )
         );
     }
@@ -200,7 +194,7 @@ pub async fn get_jupiter_quote(
         );
     }
 
-    let response = timeout(Duration::from_secs(QUOTE_TIMEOUT_SECS), client.get(&url).send()).await
+    let response = timeout(Duration::from_secs(quote_timeout_secs), client.get(&url).send()).await
         .map_err(|_| {
             if is_debug_swaps_enabled() {
                 log(LogTag::Swap, "JUPITER_TIMEOUT", "⏰ Jupiter quote request timeout");
@@ -370,18 +364,20 @@ pub async fn get_jupiter_swap_transaction(
     }
 
     let client = reqwest::Client::new();
+    let jupiter_swap_api = with_config(|cfg| cfg.swaps.jupiter_swap_api.clone());
+    let api_timeout_secs = with_config(|cfg| cfg.swaps.api_timeout_secs);
 
     if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "JUPITER_BUILD_SENDING",
-            &format!("📡 Jupiter: Sending transaction build request to {}", JUPITER_SWAP_API)
+            &format!("📡 Jupiter: Sending transaction build request to {}", jupiter_swap_api)
         );
     }
 
     let response = timeout(
-        Duration::from_secs(API_TIMEOUT_SECS),
-        client.post(JUPITER_SWAP_API).json(&request_body).send()
+        Duration::from_secs(api_timeout_secs),
+        client.post(&jupiter_swap_api).json(&request_body).send()
     ).await
         .map_err(|_| {
             if is_debug_swaps_enabled() {
@@ -486,12 +482,17 @@ pub async fn execute_jupiter_swap(
 
     let start_time = std::time::Instant::now();
 
+    let jupiter_dynamic_compute_unit_limit = with_config(
+        |cfg| cfg.swaps.jupiter_dynamic_compute_unit_limit
+    );
+    let jupiter_default_priority_fee = with_config(|cfg| cfg.swaps.jupiter_default_priority_fee);
+
     // Get swap transaction from Jupiter
     let jupiter_tx = get_jupiter_swap_transaction(
         &swap_data,
         &wallet_address,
-        JUPITER_DYNAMIC_COMPUTE_UNIT_LIMIT,
-        Some(JUPITER_DEFAULT_PRIORITY_FEE) // default priority fee
+        jupiter_dynamic_compute_unit_limit,
+        Some(jupiter_default_priority_fee) // default priority fee
     ).await?;
 
     // Sign and send transaction using Jupiter-specific method

@@ -17,10 +17,11 @@ use super::{ db::save_position, types::Position };
 use crate::{
     arguments::{ is_debug_positions_enabled, is_dry_run_enabled },
     config::with_config,
+    constants::SOL_MINT,
     logger::{ log, LogTag },
     pools::get_pool_price,
     rpc::{ get_rpc_client, sol_to_lamports },
-    swaps::{ config::SOL_MINT, execute_best_swap, get_best_quote, get_best_quote_for_opening },
+    swaps::{ execute_best_swap, get_best_quote, get_best_quote_for_opening },
     tokens::{ get_token_from_db, PriceResult },
     utils::{ get_token_balance, get_total_token_balance, get_wallet_address },
 };

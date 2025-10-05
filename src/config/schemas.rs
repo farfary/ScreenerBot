@@ -155,7 +155,7 @@ config_struct! {
         api_timeout_secs: u64 = 30,
         retry_attempts: u32 = 3,
 
-        // Transaction confirmation
+        // Transaction confirmation timeouts
         transaction_confirmation_timeout_secs: u64 = 300,
         priority_confirmation_timeout_secs: u64 = 30,
         transaction_confirmation_max_attempts: u32 = 20,
@@ -163,6 +163,21 @@ config_struct! {
         transaction_confirmation_retry_delay_ms: u64 = 3000,
         priority_confirmation_retry_delay_ms: u64 = 1000,
         fast_failure_threshold_attempts: u32 = 10,
+
+        // Confirmation delay configuration
+        initial_confirmation_delay_ms: u64 = 5000,
+        max_confirmation_delay_secs: u64 = 8,
+        confirmation_backoff_multiplier: f64 = 1.5,
+        confirmation_timeout_secs: u64 = 60,
+        priority_confirmation_timeout_secs_mod: u64 = 5,
+        
+        // Rate limit handling
+        rate_limit_base_delay_secs: u64 = 5,
+        rate_limit_increment_secs: u64 = 2,
+        
+        // Early attempt delays
+        early_attempt_delay_ms: u64 = 1000,
+        early_attempts_count: u32 = 3,
 
         // GMGN specific
         gmgn_quote_api: String = "https://gmgn.ai/defi/router/v1/sol/tx/get_swap_route".to_string(),

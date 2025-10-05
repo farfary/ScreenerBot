@@ -25,15 +25,9 @@ pub struct SwapResult {
     pub error: Option<String>,
 }
 
-/// Configuration constants for swap operations (re-exported from config)
-pub use super::config::{
-    GMGN_ANTI_MEV as ANTI_MEV,
-    GMGN_DEFAULT_SWAP_MODE,
-    GMGN_FEE_SOL,
-    GMGN_PARTNER as PARTNER,
-    JUPITER_DEFAULT_SWAP_MODE,
-    SOL_MINT,
-};
+/// Configuration constants for swap operations
+/// Use crate::constants::SOL_MINT for SOL mint address
+/// Use crate::config::with_config() for runtime configuration values
 
 /// Custom deserializer for fields that can be either string or number
 pub fn deserialize_string_or_number<'de, D>(deserializer: D) -> Result<String, D::Error>
@@ -259,12 +253,15 @@ pub struct SwapRequest {
 impl Default for JupiterQuoteRequest {
     fn default() -> Self {
         let slippage = crate::config::with_config(|cfg| cfg.swaps.slippage_quote_default_pct);
+        let jupiter_swap_mode = crate::config::with_config(|cfg|
+            cfg.swaps.jupiter_default_swap_mode.clone()
+        );
         Self {
-            input_mint: SOL_MINT.to_string(),
+            input_mint: crate::constants::SOL_MINT.to_string(),
             output_mint: String::new(),
             amount: 0,
             slippage,
-            swap_mode: Some(JUPITER_DEFAULT_SWAP_MODE.to_string()),
+            swap_mode: Some(jupiter_swap_mode),
             only_direct_routes: false,
         }
     }
