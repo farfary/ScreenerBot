@@ -42,24 +42,30 @@ static mut POOL_ANALYZER: Option<Arc<PoolAnalyzer>> = None;
 static mut ACCOUNT_FETCHER: Option<Arc<AccountFetcher>> = None;
 static mut PRICE_CALCULATOR: Option<Arc<PriceCalculator>> = None;
 
-// Internal accessors (used within module graph to avoid exposing statics directly)
-pub(super) fn get_account_fetcher() -> Option<Arc<AccountFetcher>> {
+// Public accessors for service manager (used by individual service implementations)
+pub fn get_pool_discovery() -> Option<Arc<PoolDiscovery>> {
+    unsafe { POOL_DISCOVERY.clone() }
+}
+
+pub fn get_account_fetcher() -> Option<Arc<AccountFetcher>> {
     unsafe { ACCOUNT_FETCHER.clone() }
 }
-pub(super) fn get_price_calculator() -> Option<Arc<PriceCalculator>> {
+
+pub fn get_price_calculator() -> Option<Arc<PriceCalculator>> {
     unsafe { PRICE_CALCULATOR.clone() }
 }
-pub(super) fn get_pool_analyzer() -> Option<Arc<PoolAnalyzer>> {
+
+pub fn get_pool_analyzer() -> Option<Arc<PoolAnalyzer>> {
     unsafe { POOL_ANALYZER.clone() }
 }
 
-/// Start the pool service with all background tasks
+/// Initialize pool components only (no background tasks)
 ///
-/// This function initializes and starts all the necessary background tasks for
-/// pool discovery, price calculation, and caching.
+/// This function initializes the pool service components (database, cache, RPC client, components)
+/// without starting any background tasks. Background tasks are now managed by separate services.
 ///
-/// Returns an error if the service is already running or if initialization fails.
-pub async fn start_pool_service() -> Result<(), PoolError> {
+/// Returns an error if already initialized or if initialization fails.
+pub async fn initialize_pool_components() -> Result<(), PoolError> {
     // Record service start attempt
     record_safe(
         Event::info(
@@ -179,24 +185,18 @@ pub async fn start_pool_service() -> Result<(), PoolError> {
         );
     }
 
-    // Start background tasks
-    start_background_tasks(shutdown).await;
-
-    log(LogTag::PoolService, "SUCCESS", "Pool service started successfully");
-
-    // Signal that pool service is ready
-    crate::global::POOL_SERVICE_READY.store(true, std::sync::atomic::Ordering::SeqCst);
+    log(LogTag::PoolService, "SUCCESS", "Pool components initialized successfully");
 
     record_safe(
         Event::info(
             EventCategory::System,
-            Some("pool_service_started".to_string()),
+            Some("pool_components_initialized".to_string()),
             None,
             None,
             serde_json::json!({
-            "status": "started",
+            "status": "initialized",
             "single_pool_mode": ENABLE_SINGLE_POOL_MODE,
-            "components_initialized": true
+            "components_ready": true
         })
         )
     ).await;
@@ -341,6 +341,34 @@ pub fn get_debug_token_override() -> Option<Vec<String>> {
     unsafe { DEBUG_TOKEN_OVERRIDE.clone() }
 }
 
+/// Start helper background tasks (health monitor, database cleanup, gap cleanup)
+///
+/// These are utility tasks that don't need to be separate services.
+/// Called by PoolsService after all pool sub-services are started.
+pub async fn start_helper_tasks(shutdown: Arc<Notify>) {
+    // Start service health monitor
+    let shutdown_monitor = shutdown.clone();
+    tokio::spawn(async move {
+        run_service_health_monitor(shutdown_monitor).await;
+    });
+
+    // Start database cleanup task
+    let shutdown_cleanup = shutdown.clone();
+    tokio::spawn(async move {
+        run_database_cleanup_task(shutdown_cleanup).await;
+    });
+
+    // Start gap detection and cleanup task
+    let shutdown_gap_cleanup = shutdown.clone();
+    tokio::spawn(async move {
+        run_gap_cleanup_task(shutdown_gap_cleanup).await;
+    });
+
+    // Set readiness flag
+    crate::global::POOL_SERVICE_READY.store(true, std::sync::atomic::Ordering::SeqCst);
+    log(LogTag::PoolService, "SUCCESS", "Pool helper tasks started");
+}
+
 /// Initialize all service components
 async fn initialize_service_components() -> Result<(), String> {
     if is_debug_pool_service_enabled() {
@@ -473,225 +501,11 @@ async fn initialize_service_components() -> Result<(), String> {
     Ok(())
 }
 
-/// Get the list of tokens to monitor from the database
-async fn get_tokens_to_monitor() -> Result<Vec<String>, String> {
-    // Check for debug override first
-    if let Some(override_tokens) = get_debug_token_override() {
-        if is_debug_pool_service_enabled() {
-            log(
-                LogTag::PoolService,
-                "DEBUG",
-                &format!("Using debug token override: {} tokens", override_tokens.len())
-            );
-        }
-        return Ok(override_tokens);
-    }
-
-    // Use centralized filtering function - all database access and filtering logic is now in filtering.rs
-    crate::filtering::get_filtered_tokens().await
-}
-
-/// Start all background tasks for the pool service
-async fn start_background_tasks(shutdown: Arc<Notify>) {
-    if is_debug_pool_service_enabled() {
-        log(LogTag::PoolService, "DEBUG", "Starting background tasks...");
-    }
-
-    // Helper task: wait for Transactions system readiness once, then mark pool service ready
-    // This ensures trader readiness reflects that pool service can actually operate
-    let shutdown_ready = shutdown.clone();
-    tokio::spawn(async move {
-        if let Err(e) = wait_for_transactions_ready(&shutdown_ready, "pool_service").await {
-            if is_debug_pool_service_enabled() {
-                log(
-                    LogTag::PoolService,
-                    "INFO",
-                    &format!("Pool service readiness gate ended early due to shutdown: {}", e)
-                );
-            }
-            return;
-        }
-
-        // Signal that pool service is ready only after TX bootstrap completed
-        crate::global::POOL_SERVICE_READY.store(true, std::sync::atomic::Ordering::SeqCst);
-        log(
-            LogTag::PoolService,
-            "SUCCESS",
-            "Pool service is ready (transactions bootstrap complete)"
-        );
-    });
-
-    // Start discovery task (now the primary source of pools → analyzer)
-    if let Some(discovery) = (unsafe { POOL_DISCOVERY.as_ref() }) {
-        let shutdown_discovery = shutdown.clone();
-        let discovery = discovery.clone();
-        tokio::spawn(async move {
-            // Gate discovery on Transactions readiness
-            if
-                let Err(_) = wait_for_transactions_ready(
-                    &shutdown_discovery,
-                    "pool_discovery"
-                ).await
-            {
-                return;
-            }
-            discovery.start_discovery_task(shutdown_discovery).await;
-        });
-    }
-
-    // Start pool monitoring supervisor task
-    let shutdown_supervisor = shutdown.clone();
-    tokio::spawn(async move {
-        // Gate supervisor on Transactions readiness
-        if let Err(_) = wait_for_transactions_ready(&shutdown_supervisor, "pool_supervisor").await {
-            return;
-        }
-        run_pool_monitoring_supervisor(shutdown_supervisor).await;
-    });
-
-    // Start price calculation pipeline
-    let shutdown_pipeline = shutdown.clone();
-    tokio::spawn(async move {
-        // Gate price pipeline on Transactions readiness
-        if let Err(_) = wait_for_transactions_ready(&shutdown_pipeline, "price_pipeline").await {
-            return;
-        }
-        run_price_calculation_pipeline(shutdown_pipeline).await;
-    });
-
-    // Start service health monitor
-    let shutdown_monitor = shutdown.clone();
-    tokio::spawn(async move {
-        run_service_health_monitor(shutdown_monitor).await;
-    });
-
-    // Start database cleanup task
-    let shutdown_cleanup = shutdown.clone();
-    tokio::spawn(async move {
-        run_database_cleanup_task(shutdown_cleanup).await;
-    });
-
-    // Start gap detection and cleanup task
-    let shutdown_gap_cleanup = shutdown.clone();
-    tokio::spawn(async move {
-        run_gap_cleanup_task(shutdown_gap_cleanup).await;
-    });
-
-    if is_debug_pool_service_enabled() {
-        log(LogTag::PoolService, "DEBUG", "Background tasks started");
-    }
-}
-
-/// Main pool monitoring supervisor task
-async fn run_pool_monitoring_supervisor(shutdown: Arc<Notify>) {
-    if is_debug_pool_service_enabled() {
-        log(LogTag::PoolService, "INFO", "Starting pool monitoring supervisor");
-    }
-
-    let mut interval = tokio::time::interval(Duration::from_secs(POOL_REFRESH_INTERVAL_SECONDS));
-
-    loop {
-        tokio::select! {
-            _ = shutdown.notified() => {
-                if is_debug_pool_service_enabled() {
-                    log(LogTag::PoolService, "INFO", "Pool monitoring supervisor shutting down");
-                }
-                break;
-            }
-            _ = interval.tick() => {
-                if let Err(e) = run_monitoring_cycle().await {
-                    log(LogTag::PoolService, "ERROR", &format!("Pool monitoring cycle failed: {}", e));
-                }
-            }
-        }
-    }
-}
-
-/// Run a single pool monitoring cycle
-async fn run_monitoring_cycle() -> Result<(), String> {
-    // Discovery is now handled by the dedicated discovery task (batch APIs → analyzer)
-    // Keep this cycle lightweight for future health checks or adaptive tuning.
-    if is_debug_pool_service_enabled() {
-        log(
-            LogTag::PoolService,
-            "DEBUG",
-            "Supervisor tick: discovery handled asynchronously; no per-token discovery here"
-        );
-    }
-    Ok(())
-}
-
-/// Price calculation pipeline coordinator
-async fn run_price_calculation_pipeline(shutdown: Arc<Notify>) {
-    if is_debug_pool_service_enabled() {
-        log(LogTag::PoolService, "INFO", "Starting price calculation pipeline");
-    }
-
-    // Start individual component tasks
-    if let Some(analyzer) = (unsafe { POOL_ANALYZER.as_ref() }) {
-        analyzer.start_analyzer_task(shutdown.clone()).await;
-    }
-
-    if let Some(fetcher) = (unsafe { ACCOUNT_FETCHER.as_ref() }) {
-        fetcher.start_fetcher_task(shutdown.clone()).await;
-    }
-
-    if let Some(calculator) = (unsafe { PRICE_CALCULATOR.as_ref() }) {
-        calculator.start_calculator_task(shutdown.clone()).await;
-    }
-
-    // Wait for shutdown
-    shutdown.notified().await;
-
-    if is_debug_pool_service_enabled() {
-        log(LogTag::PoolService, "INFO", "Price calculation pipeline shutting down");
-    }
-}
-
-/// Wait for Transactions system to be ready (shutdown-aware)
-async fn wait_for_transactions_ready(shutdown: &Arc<Notify>, context: &str) -> Result<(), String> {
-    // Fast-path: if already ready, return immediately
-    if crate::global::TRANSACTIONS_SYSTEM_READY.load(Ordering::SeqCst) {
-        return Ok(());
-    }
-
-    if is_debug_pool_service_enabled() {
-        log(
-            LogTag::PoolService,
-            "INFO",
-            &format!("⏳ Waiting for Transactions system to be ready before starting {}...", context)
-        );
-    }
-
-    loop {
-        if crate::global::TRANSACTIONS_SYSTEM_READY.load(Ordering::SeqCst) {
-            if is_debug_pool_service_enabled() {
-                log(
-                    LogTag::PoolService,
-                    "INFO",
-                    &format!("✅ Transactions system ready — continuing {}", context)
-                );
-            }
-            return Ok(());
-        }
-
-        tokio::select! {
-            _ = shutdown.notified() => {
-                return Err("shutdown".to_string());
-            }
-            _ = tokio::time::sleep(Duration::from_secs(1)) => {
-                // periodic wait log throttled by is_debug flag
-                if is_debug_pool_service_enabled() {
-                    log(
-                        LogTag::PoolService,
-                        "DEBUG",
-                        &format!("Waiting for Transactions readiness (context={})", context),
-                    );
-                }
-            }
-        }
-    }
-}
+// REMOVED: start_background_tasks() - background tasks are now managed by separate services
+// REMOVED: run_pool_monitoring_supervisor() - no longer needed (empty supervisor)
+// REMOVED: run_monitoring_cycle() - no longer needed
+// REMOVED: run_price_calculation_pipeline() - components now started by separate services
+// REMOVED: wait_for_transactions_ready() - handled by service dependencies
 
 /// Service health monitor
 async fn run_service_health_monitor(shutdown: Arc<Notify>) {

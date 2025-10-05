@@ -15,11 +15,19 @@ impl Service for TraderService {
     }
 
     fn priority(&self) -> i32 {
-        140
+        150
     }
 
     fn dependencies(&self) -> Vec<&'static str> {
-        vec!["pools", "positions", "tokens"]
+        // Depend on actual working services, not empty coordinator services
+        vec![
+            "positions",
+            "pool_discovery",
+            "pool_fetcher",
+            "pool_calculator",
+            "token_discovery",
+            "token_monitoring"
+        ]
     }
 
     async fn initialize(&mut self) -> Result<(), String> {

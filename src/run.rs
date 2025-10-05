@@ -76,24 +76,37 @@ fn register_all_services(manager: &mut ServiceManager) {
     log(LogTag::System, "INFO", "Registering services...");
 
     // Register all services (order doesn't matter - manager handles dependencies and priority)
+
+    // Core infrastructure services
     manager.register(Box::new(EventsService));
+    manager.register(Box::new(TransactionsService));
     manager.register(Box::new(BlacklistService));
-    manager.register(Box::new(WebserverService));
-    manager.register(Box::new(TokensService));
+    manager.register(Box::new(SolPriceService));
+
+    // Pool services (4 sub-services + 1 helper coordinator)
+    manager.register(Box::new(PoolDiscoveryService)); // 31
+    manager.register(Box::new(PoolFetcherService)); // 32
+    manager.register(Box::new(PoolCalculatorService)); // 33
+    manager.register(Box::new(PoolAnalyzerService)); // 34
+    manager.register(Box::new(PoolsService)); // 35 - helper tasks (health, cleanup)
+
+    // Token services (2 sub-services, no empty coordinator)
+    manager.register(Box::new(TokenDiscoveryService)); // 41 - includes initialization
+    manager.register(Box::new(TokenMonitoringService)); // 42
+
+    // Other application services
+    manager.register(Box::new(SecurityService));
     manager.register(Box::new(OhlcvService));
     manager.register(Box::new(PositionsService));
-    manager.register(Box::new(PoolsService));
-    manager.register(Box::new(SecurityService));
-    manager.register(Box::new(TransactionsService));
     manager.register(Box::new(WalletService));
     manager.register(Box::new(RpcStatsService));
     manager.register(Box::new(AtaCleanupService));
-    manager.register(Box::new(SolPriceService));
     manager.register(Box::new(LearningService));
-    manager.register(Box::new(TraderService));
     manager.register(Box::new(SummaryService));
+    manager.register(Box::new(TraderService));
+    manager.register(Box::new(WebserverService));
 
-    log(LogTag::System, "INFO", "All services registered");
+    log(LogTag::System, "INFO", "All services registered (22 total - removed empty TokensService)");
 }
 
 /// Wait for shutdown signal (Ctrl+C)

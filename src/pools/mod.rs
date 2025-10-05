@@ -20,19 +20,37 @@ pub mod utils; // Utility functions for SOL detection and vault pairing
 
 // Re-export only the public API
 pub use api::{
-    check_price_history_quality, get_available_tokens, get_cache_stats, get_extended_price_history,
-    get_pool_price, get_price_history, get_price_history_stats, load_token_history_into_cache,
+    check_price_history_quality,
+    get_available_tokens,
+    get_cache_stats,
+    get_extended_price_history,
+    get_pool_price,
+    get_price_history,
+    get_price_history_stats,
+    load_token_history_into_cache,
     PriceHistoryStats,
 };
 pub use discovery::{
-    get_canonical_pool_address, PoolDiscovery, ENABLE_DEXSCREENER_DISCOVERY,
-    ENABLE_GECKOTERMINAL_DISCOVERY, ENABLE_RAYDIUM_DISCOVERY,
+    get_canonical_pool_address,
+    PoolDiscovery,
+    ENABLE_DEXSCREENER_DISCOVERY,
+    ENABLE_GECKOTERMINAL_DISCOVERY,
+    ENABLE_RAYDIUM_DISCOVERY,
 };
 pub use service::{
-    get_debug_token_override, is_pool_service_running, set_debug_token_override,
-    start_pool_service, stop_pool_service,
+    get_debug_token_override,
+    is_pool_service_running,
+    set_debug_token_override,
+    stop_pool_service,
+    // New functions for ServiceManager integration
+    initialize_pool_components,
+    start_helper_tasks,
+    get_pool_discovery,
+    get_account_fetcher,
+    get_price_calculator,
+    get_pool_analyzer,
 };
-pub use types::{PoolError, PriceResult}; // Expose for configuration access
+pub use types::{ PoolError, PriceResult }; // Expose for configuration access
 
 // Internal modules (not exposed)
 mod analyzer;
@@ -49,16 +67,16 @@ pub use fetcher::AccountData;
 
 /// Initialize the pool service - this is the main entry point
 ///
-/// This function starts all background tasks for pool monitoring and price calculation.
-/// It's idempotent and can be called multiple times safely.
+/// DEPRECATED: Use ServiceManager instead. This function is kept for compatibility only.
 ///
-/// Returns a handle that can be used to monitor the service lifecycle.
+/// This function initializes pool components only (no background tasks).
+/// Background tasks are now managed by separate services via ServiceManager.
 pub async fn init_pool_service(
-    shutdown: Arc<Notify>,
+    shutdown: Arc<Notify>
 ) -> Result<tokio::task::JoinHandle<()>, PoolError> {
-    start_pool_service().await?;
+    initialize_pool_components().await?;
 
-    // Return a dummy handle for now - this will be improved later
+    // Return a dummy handle for compatibility - ServiceManager handles lifecycle
     let handle = tokio::spawn(async move {
         shutdown.notified().await;
     });
