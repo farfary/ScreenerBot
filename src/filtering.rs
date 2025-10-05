@@ -91,7 +91,7 @@ const MIN_SECURITY_SCORE: i32 = 10;
 /// Maximum acceptable top holder percentage (very permissive)
 const MAX_TOP_HOLDER_PCT: f64 = 15.0;
 /// Maximum acceptable top 3 holders percentage (very permissive)
-const MAX_TOP_3_HOLDERS_PCT: f64 = 30.0;
+const MAX_TOP_3_HOLDERS_PCT: f64 = 5.0;
 /// Minimum LP lock percentage for pump.fun tokens (relaxed)
 const MIN_PUMPFUN_LP_LOCK_PCT: f64 = 50.0;
 /// Minimum LP lock percentage for regular tokens (very relaxed)
