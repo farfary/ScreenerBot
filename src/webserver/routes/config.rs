@@ -274,76 +274,108 @@ async fn patch_any_config<T>(Json(updates): Json<serde_json::Value>) -> Response
         let section_json = section_json; // Make immutable for the closure
         let section_name = section_name; // Capture for closure
 
-        config::update_config_section(
-            |cfg| {
-                // Deserialize and update the appropriate section
-                // We ignore errors here, they're returned from the outer closure
-                let _ = match section_name {
-                    "TraderConfig" => {
-                        cfg.trader = serde_json
-                            ::from_value(section_json.clone())
-                            .unwrap_or(cfg.trader.clone());
-                    }
-                    "PositionsConfig" => {
-                        cfg.positions = serde_json
-                            ::from_value(section_json.clone())
-                            .unwrap_or(cfg.positions.clone());
-                    }
-                    "FilteringConfig" => {
-                        cfg.filtering = serde_json
-                            ::from_value(section_json.clone())
-                            .unwrap_or(cfg.filtering.clone());
-                    }
-                    "SwapsConfig" => {
-                        cfg.swaps = serde_json
-                            ::from_value(section_json.clone())
-                            .unwrap_or(cfg.swaps.clone());
-                    }
-                    "TokensConfig" => {
-                        cfg.tokens = serde_json
-                            ::from_value(section_json.clone())
-                            .unwrap_or(cfg.tokens.clone());
-                    }
-                    "RpcConfig" => {
-                        cfg.rpc = serde_json
-                            ::from_value(section_json.clone())
-                            .unwrap_or(cfg.rpc.clone());
-                    }
-                    "SolPriceConfig" => {
-                        cfg.sol_price = serde_json
-                            ::from_value(section_json.clone())
-                            .unwrap_or(cfg.sol_price.clone());
-                    }
-                    "SummaryConfig" => {
-                        cfg.summary = serde_json
-                            ::from_value(section_json.clone())
-                            .unwrap_or(cfg.summary.clone());
-                    }
-                    "EventsConfig" => {
-                        cfg.events = serde_json
-                            ::from_value(section_json.clone())
-                            .unwrap_or(cfg.events.clone());
-                    }
-                    "WebserverConfig" => {
-                        cfg.webserver = serde_json
-                            ::from_value(section_json.clone())
-                            .unwrap_or(cfg.webserver.clone());
-                    }
-                    "ServicesConfig" => {
-                        cfg.services = serde_json
-                            ::from_value(section_json.clone())
-                            .unwrap_or(cfg.services.clone());
-                    }
-                    "MonitoringConfig" => {
-                        cfg.monitoring = serde_json
-                            ::from_value(section_json.clone())
-                            .unwrap_or(cfg.monitoring.clone());
-                    }
-                    _ => {}
-                };
-            },
-            true // save_to_disk
-        )?;
+        // Validate and deserialize before updating (fail fast on errors)
+        match section_name {
+            "TraderConfig" => {
+                let new_config: config::TraderConfig = serde_json
+                    ::from_value(section_json)
+                    .map_err(|e| format!("Invalid TraderConfig: {}", e))?;
+                config::update_config_section(|cfg| {
+                    cfg.trader = new_config;
+                }, true)?;
+            }
+            "PositionsConfig" => {
+                let new_config: config::PositionsConfig = serde_json
+                    ::from_value(section_json)
+                    .map_err(|e| format!("Invalid PositionsConfig: {}", e))?;
+                config::update_config_section(|cfg| {
+                    cfg.positions = new_config;
+                }, true)?;
+            }
+            "FilteringConfig" => {
+                let new_config: config::FilteringConfig = serde_json
+                    ::from_value(section_json)
+                    .map_err(|e| format!("Invalid FilteringConfig: {}", e))?;
+                config::update_config_section(|cfg| {
+                    cfg.filtering = new_config;
+                }, true)?;
+            }
+            "SwapsConfig" => {
+                let new_config: config::SwapsConfig = serde_json
+                    ::from_value(section_json)
+                    .map_err(|e| format!("Invalid SwapsConfig: {}", e))?;
+                config::update_config_section(|cfg| {
+                    cfg.swaps = new_config;
+                }, true)?;
+            }
+            "TokensConfig" => {
+                let new_config: config::TokensConfig = serde_json
+                    ::from_value(section_json)
+                    .map_err(|e| format!("Invalid TokensConfig: {}", e))?;
+                config::update_config_section(|cfg| {
+                    cfg.tokens = new_config;
+                }, true)?;
+            }
+            "RpcConfig" => {
+                let new_config: config::RpcConfig = serde_json
+                    ::from_value(section_json)
+                    .map_err(|e| format!("Invalid RpcConfig: {}", e))?;
+                config::update_config_section(|cfg| {
+                    cfg.rpc = new_config;
+                }, true)?;
+            }
+            "SolPriceConfig" => {
+                let new_config: config::SolPriceConfig = serde_json
+                    ::from_value(section_json)
+                    .map_err(|e| format!("Invalid SolPriceConfig: {}", e))?;
+                config::update_config_section(|cfg| {
+                    cfg.sol_price = new_config;
+                }, true)?;
+            }
+            "SummaryConfig" => {
+                let new_config: config::SummaryConfig = serde_json
+                    ::from_value(section_json)
+                    .map_err(|e| format!("Invalid SummaryConfig: {}", e))?;
+                config::update_config_section(|cfg| {
+                    cfg.summary = new_config;
+                }, true)?;
+            }
+            "EventsConfig" => {
+                let new_config: config::EventsConfig = serde_json
+                    ::from_value(section_json)
+                    .map_err(|e| format!("Invalid EventsConfig: {}", e))?;
+                config::update_config_section(|cfg| {
+                    cfg.events = new_config;
+                }, true)?;
+            }
+            "WebserverConfig" => {
+                let new_config: config::WebserverConfig = serde_json
+                    ::from_value(section_json)
+                    .map_err(|e| format!("Invalid WebserverConfig: {}", e))?;
+                config::update_config_section(|cfg| {
+                    cfg.webserver = new_config;
+                }, true)?;
+            }
+            "ServicesConfig" => {
+                let new_config: config::ServicesConfig = serde_json
+                    ::from_value(section_json)
+                    .map_err(|e| format!("Invalid ServicesConfig: {}", e))?;
+                config::update_config_section(|cfg| {
+                    cfg.services = new_config;
+                }, true)?;
+            }
+            "MonitoringConfig" => {
+                let new_config: config::MonitoringConfig = serde_json
+                    ::from_value(section_json)
+                    .map_err(|e| format!("Invalid MonitoringConfig: {}", e))?;
+                config::update_config_section(|cfg| {
+                    cfg.monitoring = new_config;
+                }, true)?;
+            }
+            _ => {
+                return Err(format!("Unknown config section: {}", section_name));
+            }
+        }
 
         Ok(())
     })();
@@ -443,8 +475,15 @@ async fn get_config_diff() -> Response {
         Ok(contents) => {
             match toml::from_str::<config::Config>(&contents) {
                 Ok(disk_config) => {
-                    let has_changes =
-                        format!("{:?}", memory_config) != format!("{:?}", disk_config);
+                    // Compare using JSON serialization for accurate comparison
+                    let memory_json = serde_json
+                        ::to_value(&memory_config)
+                        .unwrap_or_else(|_| serde_json::Value::Null);
+                    let disk_json = serde_json
+                        ::to_value(&disk_config)
+                        .unwrap_or_else(|_| serde_json::Value::Null);
+
+                    let has_changes = memory_json != disk_json;
 
                     #[derive(Serialize)]
                     struct DiffResponse {
