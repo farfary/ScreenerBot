@@ -9,13 +9,15 @@
 /// - Wallet keypair loading with multiple format support
 /// - Path-based configuration loading for backwards compatibility
 /// - Comprehensive error handling and validation
-use serde::{Deserialize, Serialize};
-use solana_sdk::signature::{Keypair, Signer};
+use serde::{ Deserialize, Serialize };
+use solana_sdk::signature::{ Keypair, Signer };
 use std::fs;
 use std::path::Path;
+use std::collections::HashMap;
 
 // Import the CONFIG_FILE constant from global.rs for the default path
 use crate::global::CONFIG_FILE;
+use crate::webserver::config::WebserverConfig;
 
 /// Represents the runtime configuration loaded from configs.json
 ///
@@ -27,6 +29,52 @@ pub struct Configs {
     pub main_wallet_private: String,
     /// List of RPC URLs for round-robin usage - each call cycles through these URLs
     pub rpc_urls: Vec<String>,
+    /// Webserver dashboard configuration
+    #[serde(default)]
+    pub webserver: WebserverConfig,
+    /// Service configuration
+    #[serde(default)]
+    pub services: ServicesConfig,
+    /// Monitoring configuration
+    #[serde(default)]
+    pub monitoring: MonitoringConfig,
+}
+
+/// Configuration for individual services
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ServicesConfig {
+    #[serde(default)]
+    pub services: HashMap<String, ServiceConfig>,
+}
+
+/// Configuration for a single service
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceConfig {
+    pub enabled: bool,
+    #[serde(default = "default_priority")]
+    pub priority: i32,
+}
+
+fn default_priority() -> i32 {
+    100
+}
+
+/// Monitoring system configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MonitoringConfig {
+    pub enabled: bool,
+    pub metrics_interval_secs: u64,
+    pub health_check_interval_secs: u64,
+}
+
+impl Default for MonitoringConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            metrics_interval_secs: 30,
+            health_check_interval_secs: 60,
+        }
+    }
 }
 
 /// Reads the configs.json file from the default data directory and returns a Configs object
@@ -74,7 +122,7 @@ pub fn read_configs() -> Result<Configs, Box<dyn std::error::Error>> {
 /// let configs = read_configs_from_path("custom/path/configs.json")?;
 /// ```
 pub fn read_configs_from_path<P: AsRef<Path>>(
-    path: P,
+    path: P
 ) -> Result<Configs, Box<dyn std::error::Error>> {
     let data = fs::read_to_string(path)?;
     let configs: Configs = serde_json::from_str(&data)?;
@@ -107,8 +155,9 @@ pub fn read_configs_from_path<P: AsRef<Path>>(
 /// ```
 pub fn load_wallet_from_config(configs: &Configs) -> Result<Keypair, Box<dyn std::error::Error>> {
     // Parse the private key from base58 string or array format
-    let keypair = if configs.main_wallet_private.starts_with('[')
-        && configs.main_wallet_private.ends_with(']')
+    let keypair = if
+        configs.main_wallet_private.starts_with('[') &&
+        configs.main_wallet_private.ends_with(']')
     {
         // Handle array format like [1,2,3,4,...]
         load_keypair_from_array_format(&configs.main_wallet_private)?
@@ -132,11 +181,9 @@ pub fn load_wallet_from_config(configs: &Configs) -> Result<Keypair, Box<dyn std
 /// - `Ok(Keypair)` - Successfully parsed keypair
 /// - `Err(Box<dyn std::error::Error>)` - Parsing or validation error
 fn load_keypair_from_array_format(
-    private_key_str: &str,
+    private_key_str: &str
 ) -> Result<Keypair, Box<dyn std::error::Error>> {
-    let private_key_str = private_key_str
-        .trim_start_matches('[')
-        .trim_end_matches(']');
+    let private_key_str = private_key_str.trim_start_matches('[').trim_end_matches(']');
 
     let private_key_bytes: Result<Vec<u8>, _> = private_key_str
         .split(',')
@@ -146,14 +193,16 @@ fn load_keypair_from_array_format(
     match private_key_bytes {
         Ok(bytes) => {
             if bytes.len() != 64 {
-                return Err(format!(
-                    "Invalid private key length: expected 64 bytes, got {}",
-                    bytes.len()
-                )
-                .into());
+                return Err(
+                    format!(
+                        "Invalid private key length: expected 64 bytes, got {}",
+                        bytes.len()
+                    ).into()
+                );
             }
-            Keypair::try_from(&bytes[..])
-                .map_err(|e| format!("Failed to create keypair from array: {}", e).into())
+            Keypair::try_from(&bytes[..]).map_err(|e|
+                format!("Failed to create keypair from array: {}", e).into()
+            )
         }
         Err(e) => Err(format!("Failed to parse private key array: {}", e).into()),
     }
@@ -171,20 +220,19 @@ fn load_keypair_from_array_format(
 /// - `Ok(Keypair)` - Successfully parsed keypair
 /// - `Err(Box<dyn std::error::Error>)` - Decoding or validation error
 fn load_keypair_from_base58_format(
-    private_key_str: &str,
+    private_key_str: &str
 ) -> Result<Keypair, Box<dyn std::error::Error>> {
     let decoded = bs58::decode(private_key_str).into_vec()?;
 
     if decoded.len() != 64 {
-        return Err(format!(
-            "Invalid private key length: expected 64 bytes, got {}",
-            decoded.len()
-        )
-        .into());
+        return Err(
+            format!("Invalid private key length: expected 64 bytes, got {}", decoded.len()).into()
+        );
     }
 
-    Keypair::try_from(&decoded[..])
-        .map_err(|e| format!("Failed to create keypair from base58: {}", e).into())
+    Keypair::try_from(&decoded[..]).map_err(|e|
+        format!("Failed to create keypair from base58: {}", e).into()
+    )
 }
 
 /// Validates that a Configs struct contains all required fields
@@ -251,8 +299,11 @@ pub fn create_default_config() -> Configs {
             "https://your-premium-rpc-url-1.com".to_string(),
             "https://your-premium-rpc-url-2.com".to_string(),
             "https://fallback1.com".to_string(),
-            "https://fallback2.com".to_string(),
+            "https://fallback2.com".to_string()
         ],
+        webserver: WebserverConfig::default(),
+        services: ServicesConfig::default(),
+        monitoring: MonitoringConfig::default(),
     }
 }
 
@@ -271,7 +322,7 @@ pub fn create_default_config() -> Configs {
 /// - `Err(Box<dyn std::error::Error>)` - File write or serialization error
 pub fn save_configs_to_path<P: AsRef<Path>>(
     configs: &Configs,
-    path: P,
+    path: P
 ) -> Result<(), Box<dyn std::error::Error>> {
     let json_data = serde_json::to_string_pretty(configs)?;
     fs::write(path, json_data)?;

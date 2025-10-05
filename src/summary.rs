@@ -1,8 +1,4 @@
-use crate::arguments::{
-    is_dashboard_enabled,
-    is_debug_summary_logging_enabled,
-    is_summary_enabled,
-};
+use crate::arguments::{ is_debug_summary_logging_enabled, is_summary_enabled };
 use crate::ata_cleanup::{ get_ata_cleanup_statistics, get_failed_ata_count };
 use crate::global::{ is_debug_summary_enabled, STARTUP_TIME };
 use crate::logger::{ log, LogTag };
@@ -424,7 +420,7 @@ pub struct TransactionFinalizationDisplay {
 /// Background task to display positions table every 10 seconds
 /// Periodic loop that renders the positions & summary snapshot
 pub async fn summary_loop(shutdown: Arc<Notify>) {
-    if is_debug_summary_enabled() && !is_dashboard_enabled() {
+    if is_debug_summary_enabled() {
         log(LogTag::Summary, "DEBUG", "Starting positions display monitor");
     }
 
@@ -480,7 +476,7 @@ pub async fn summary_loop(shutdown: Arc<Notify>) {
 /// Collects data and assembles a full positions + summary snapshot, printing to stdout
 pub async fn print_positions_snapshot() {
     let fn_start = Instant::now();
-    if is_debug_summary_enabled() && !is_dashboard_enabled() {
+    if is_debug_summary_enabled() {
         log(LogTag::Summary, "DEBUG", "Starting positions table display generation");
     }
 
@@ -732,7 +728,7 @@ pub async fn print_positions_snapshot() {
             );
         }
 
-        if is_debug_summary_enabled() && !is_dashboard_enabled() {
+        if is_debug_summary_enabled() {
             log(LogTag::Summary, "DEBUG", "Open positions table built");
         }
     }
@@ -748,11 +744,11 @@ pub async fn print_positions_snapshot() {
             )
         );
     }
-    if is_summary_enabled() && !is_dashboard_enabled() {
+    if is_summary_enabled() {
         print!("{}", positions_output);
     }
 
-    if is_debug_summary_enabled() && !is_dashboard_enabled() {
+    if is_debug_summary_enabled() {
         log(
             LogTag::Summary,
             "DEBUG",

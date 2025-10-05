@@ -1,13 +1,13 @@
 use crate::arguments::is_debug_security_enabled;
-use crate::logger::{log, LogTag};
-use crate::tokens::security_db::{parse_rugcheck_response, SecurityDatabase, SecurityInfo};
+use crate::logger::{ log, LogTag };
+use crate::tokens::security_db::{ parse_rugcheck_response, SecurityDatabase, SecurityInfo };
 use once_cell::sync::Lazy;
-use reqwest::{Client, StatusCode};
+use reqwest::{ Client, StatusCode };
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
-use tokio::sync::{Notify, RwLock};
-use tokio::time::{sleep, Duration, Instant};
+use std::sync::atomic::{ AtomicU64, Ordering };
+use std::sync::{ Arc, Mutex };
+use tokio::sync::{ Notify, RwLock };
+use tokio::time::{ sleep, Duration, Instant };
 
 const RUGCHECK_API_BASE: &str = "https://api.rugcheck.xyz/v1/tokens";
 const MAX_CACHE_AGE_HOURS: i64 = 24;
@@ -77,17 +77,18 @@ pub struct SecurityAnalysis {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RiskLevel {
-    Safe,    // score >= 70
+    Safe, // score >= 70
     Warning, // 40-69
-    Danger,  // < 40
+    Danger, // < 40
     Unknown, // No data
 }
 
 impl SecurityAnalyzer {
     pub fn new(db_path: &str) -> Result<Self, String> {
         // Test database connection to ensure it works
-        let _test_db = SecurityDatabase::new(db_path)
-            .map_err(|e| format!("Failed to initialize security database: {}", e))?;
+        let _test_db = SecurityDatabase::new(db_path).map_err(|e|
+            format!("Failed to initialize security database: {}", e)
+        )?;
 
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(10))
@@ -138,7 +139,7 @@ impl SecurityAnalyzer {
             log(
                 LogTag::Security,
                 "ANALYZE",
-                &format!("Starting security analysis for mint={}", mint),
+                &format!("Starting security analysis for mint={}", mint)
             );
         }
 
@@ -150,7 +151,7 @@ impl SecurityAnalyzer {
                     log(
                         LogTag::Security,
                         "CACHE_HIT",
-                        &format!("Using cached security data for mint={}", mint),
+                        &format!("Using cached security data for mint={}", mint)
                     );
                 }
                 let analysis = self.calculate_security_analysis(info);
@@ -164,7 +165,7 @@ impl SecurityAnalyzer {
                         analysis.score_normalized,
                         analysis.risks.len(),
                         analysis.pump_fun_token
-                    ),
+                    )
                 );
                 return analysis;
             }
@@ -179,10 +180,7 @@ impl SecurityAnalyzer {
                                 log(
                                     LogTag::Security,
                                     "DB_HIT",
-                                    &format!(
-                                        "Using fresh database security data for mint={}",
-                                        mint
-                                    ),
+                                    &format!("Using fresh database security data for mint={}", mint)
                                 );
                             }
                             // Add to cache
@@ -210,10 +208,7 @@ impl SecurityAnalyzer {
                                 log(
                                     LogTag::Security,
                                     "DB_STALE",
-                                    &format!(
-                                        "Database security data is stale for mint={}, refreshing",
-                                        mint
-                                    ),
+                                    &format!("Database security data is stale for mint={}, refreshing", mint)
                                 );
                             }
                         }
@@ -222,7 +217,7 @@ impl SecurityAnalyzer {
                                 log(
                                     LogTag::Security,
                                     "DB_ERROR",
-                                    &format!("Error checking staleness for mint={}: {}", mint, e),
+                                    &format!("Error checking staleness for mint={}: {}", mint, e)
                                 );
                             }
                         }
@@ -233,7 +228,7 @@ impl SecurityAnalyzer {
                         log(
                             LogTag::Security,
                             "DB_MISS",
-                            &format!("No security data in database for mint={}", mint),
+                            &format!("No security data in database for mint={}", mint)
                         );
                     }
                 }
@@ -242,7 +237,7 @@ impl SecurityAnalyzer {
                         log(
                             LogTag::Security,
                             "DB_ERROR",
-                            &format!("Database error for mint={}: {}", mint, e),
+                            &format!("Database error for mint={}: {}", mint, e)
                         );
                     }
                 }
@@ -254,15 +249,16 @@ impl SecurityAnalyzer {
             Ok(info) => {
                 self.metrics.record_api_call(true).await;
                 // Store in database
-                if let Err(e) = self
-                    .get_db()
-                    .and_then(|db| db.store_security_info(&info).map_err(|e| e.to_string()))
+                if
+                    let Err(e) = self
+                        .get_db()
+                        .and_then(|db| db.store_security_info(&info).map_err(|e| e.to_string()))
                 {
                     if is_debug_security_enabled() {
                         log(
                             LogTag::Security,
                             "DB_STORE_ERROR",
-                            &format!("Failed to store security data for mint={}: {}", mint, e),
+                            &format!("Failed to store security data for mint={}: {}", mint, e)
                         );
                     }
                 }
@@ -284,7 +280,7 @@ impl SecurityAnalyzer {
                         analysis.score_normalized,
                         analysis.risks.len(),
                         analysis.pump_fun_token
-                    ),
+                    )
                 );
                 analysis
             }
@@ -294,7 +290,7 @@ impl SecurityAnalyzer {
                     log(
                         LogTag::Security,
                         "API_ERROR",
-                        &format!("Failed to fetch security data for mint={}: {}", mint, e),
+                        &format!("Failed to fetch security data for mint={}: {}", mint, e)
                     );
                 }
                 // Return conservative analysis for unknown tokens
@@ -320,7 +316,7 @@ impl SecurityAnalyzer {
                         analysis.score_normalized,
                         analysis.risks.len(),
                         analysis.pump_fun_token
-                    ),
+                    )
                 );
                 analysis
             }
@@ -329,8 +325,7 @@ impl SecurityAnalyzer {
 
     async fn fetch_rugcheck_data(&self, mint: &str) -> Result<SecurityInfo, String> {
         // Add a base delay between all API calls to prevent rate limiting
-        static LAST_API_CALL: std::sync::OnceLock<std::sync::Mutex<Option<Instant>>> =
-            std::sync::OnceLock::new();
+        static LAST_API_CALL: std::sync::OnceLock<std::sync::Mutex<Option<Instant>>> = std::sync::OnceLock::new();
         let last_call_mutex = LAST_API_CALL.get_or_init(|| std::sync::Mutex::new(None));
 
         // Rate limit: minimum 500ms between API calls to respect Rugcheck limits
@@ -363,7 +358,7 @@ impl SecurityAnalyzer {
                         "Rate limiting: waiting {}ms before API call for mint={}",
                         delay.as_millis(),
                         mint
-                    ),
+                    )
                 );
             }
             sleep(delay).await;
@@ -373,7 +368,7 @@ impl SecurityAnalyzer {
             log(
                 LogTag::Security,
                 "API_FETCH",
-                &format!("Fetching Rugcheck data for mint={}", mint),
+                &format!("Fetching Rugcheck data for mint={}", mint)
             );
         }
 
@@ -392,11 +387,11 @@ impl SecurityAnalyzer {
                     let status = resp.status();
                     if status.is_success() {
                         let raw_json = resp
-                            .text()
-                            .await
+                            .text().await
                             .map_err(|e| format!("Failed to read response body: {}", e))?;
-                        return parse_rugcheck_response(&raw_json)
-                            .map_err(|e| format!("Failed to parse Rugcheck response: {}", e));
+                        return parse_rugcheck_response(&raw_json).map_err(|e|
+                            format!("Failed to parse Rugcheck response: {}", e)
+                        );
                     }
 
                     // For rate limit errors, use longer delays specifically
@@ -453,7 +448,7 @@ impl SecurityAnalyzer {
                                     delay.as_millis(),
                                     attempt,
                                     max_attempts
-                                ),
+                                )
                             );
                         }
                         sleep(delay).await;
@@ -472,30 +467,44 @@ impl SecurityAnalyzer {
         let mut risks = Vec::new();
 
         // Check if it's a Pump.Fun token
-        let pump_fun_token = info.markets.iter().any(|m| {
-            m.market_type.to_lowercase().contains("pump_fun")
-                || m.market_type.to_lowercase().contains("pump.fun")
-        });
+        let pump_fun_token = info.markets
+            .iter()
+            .any(|m| {
+                m.market_type.to_lowercase().contains("pump_fun") ||
+                    m.market_type.to_lowercase().contains("pump.fun")
+            });
 
         // Analyze authorities
-        let mint_authority_safe = info.mint_authority.is_none()
-            || info.mint_authority.as_deref() == Some("11111111111111111111111111111111");
-        let freeze_authority_safe = info.freeze_authority.is_none()
-            || info.freeze_authority.as_deref() == Some("11111111111111111111111111111111");
+        let mint_authority_safe =
+            info.mint_authority.is_none() ||
+            info.mint_authority.as_deref() == Some("11111111111111111111111111111111");
+        let freeze_authority_safe =
+            info.freeze_authority.is_none() ||
+            info.freeze_authority.as_deref() == Some("11111111111111111111111111111111");
         let authorities_safe = mint_authority_safe && freeze_authority_safe;
 
         // Get LP lock percentage (raw data, no thresholds)
-        let max_lp_locked = info
-            .markets
+        let max_lp_locked = info.markets
             .iter()
             .map(|m| m.lp_locked_pct)
             .fold(0.0, f64::max);
         let lp_safe = max_lp_locked > 0.0; // Just check if any LP is locked
 
         // Get holder concentration data (raw percentages, no thresholds)
-        let top_holder_pct = info.top_holders.first().map(|h| h.pct).unwrap_or(0.0);
-        let top_3_pct: f64 = info.top_holders.iter().take(3).map(|h| h.pct).sum();
-        let top_10_pct: f64 = info.top_holders.iter().take(10).map(|h| h.pct).sum();
+        let top_holder_pct = info.top_holders
+            .first()
+            .map(|h| h.pct)
+            .unwrap_or(0.0);
+        let top_3_pct: f64 = info.top_holders
+            .iter()
+            .take(3)
+            .map(|h| h.pct)
+            .sum();
+        let top_10_pct: f64 = info.top_holders
+            .iter()
+            .take(10)
+            .map(|h| h.pct)
+            .sum();
         let holders_safe = !info.top_holders.is_empty(); // Just check if we have holder data
 
         // Basic liquidity check (just verify data exists)
@@ -519,7 +528,10 @@ impl SecurityAnalyzer {
         // Create summary
         let summary = format!(
             "Token analysis: score={}/100, LP={:.1}%, top_holder={:.1}%, liquidity=${:.0}",
-            info.score_normalised, max_lp_locked, top_holder_pct, info.total_market_liquidity
+            info.score_normalised,
+            max_lp_locked,
+            top_holder_pct,
+            info.total_market_liquidity
         );
 
         SecurityAnalysis {
@@ -681,26 +693,23 @@ pub async fn get_token_risk_level(analyzer: &SecurityAnalyzer, mint: &str) -> Ri
 
 pub async fn get_token_security_analysis(
     analyzer: &SecurityAnalyzer,
-    mint: &str,
+    mint: &str
 ) -> SecurityAnalysis {
     analyzer.analyze_token(mint).await
 }
 
 // Global security analyzer singleton
-static GLOBAL_SECURITY_ANALYZER: Lazy<Mutex<Option<Arc<SecurityAnalyzer>>>> =
-    Lazy::new(|| Mutex::new(None));
+static GLOBAL_SECURITY_ANALYZER: Lazy<Mutex<Option<Arc<SecurityAnalyzer>>>> = Lazy::new(||
+    Mutex::new(None)
+);
 
 pub fn initialize_security_analyzer() -> Result<(), String> {
     let analyzer = Arc::new(SecurityAnalyzer::new("data/security.db")?);
-    let mut global_analyzer = GLOBAL_SECURITY_ANALYZER
-        .lock()
-        .map_err(|e| format!("Failed to lock global analyzer: {}", e))?;
+    let mut global_analyzer = GLOBAL_SECURITY_ANALYZER.lock().map_err(|e|
+        format!("Failed to lock global analyzer: {}", e)
+    )?;
     *global_analyzer = Some(analyzer);
-    log(
-        LogTag::Security,
-        "INIT",
-        "Global security analyzer initialized",
-    );
+    log(LogTag::Security, "INIT", "Global security analyzer initialized");
 
     // Signal that security analyzer is ready
     crate::global::SECURITY_ANALYZER_READY.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -715,16 +724,47 @@ pub fn get_security_analyzer() -> Option<Arc<SecurityAnalyzer>> {
 
 // Start background security monitoring task that fetches security info for unprocessed tokens
 pub async fn start_security_monitoring(
-    shutdown: Arc<Notify>,
+    shutdown: Arc<Notify>
 ) -> Result<tokio::task::JoinHandle<()>, String> {
     let analyzer = get_security_analyzer().ok_or_else(|| "Security analyzer not initialized")?;
 
     let handle = tokio::spawn(async move {
-        log(
-            LogTag::Security,
-            "MONITOR_START",
-            "Starting background security monitoring task",
-        );
+        log(LogTag::Security, "MONITOR_START", "Starting background security monitoring task");
+
+        // Wait for Transactions system to be ready before starting monitoring
+        let mut last_log = std::time::Instant::now();
+        loop {
+            let tx_ready = crate::global::TRANSACTIONS_SYSTEM_READY.load(
+                std::sync::atomic::Ordering::SeqCst
+            );
+
+            if tx_ready {
+                log(
+                    LogTag::Security,
+                    "MONITOR_START",
+                    "✅ Transactions ready. Starting security monitoring"
+                );
+                break;
+            }
+
+            // Log only every 15 seconds
+            if last_log.elapsed() >= std::time::Duration::from_secs(15) {
+                log(
+                    LogTag::Security,
+                    "MONITOR_START",
+                    "⏳ Waiting for Transactions system to be ready..."
+                );
+                last_log = std::time::Instant::now();
+            }
+
+            tokio::select! {
+                _ = shutdown.notified() => {
+                    log(LogTag::Security, "MONITOR_SHUTDOWN", "Security monitoring exiting during dependency wait");
+                    return;
+                }
+                _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {}
+            }
+        }
 
         let mut interval = tokio::time::interval(Duration::from_secs(10)); // Check every 10 seconds
         let mut last_fetch = Instant::now() - Duration::from_secs(600); // Start immediately
@@ -812,6 +852,10 @@ pub fn start_security_summary_task() {
         let mut interval = tokio::time::interval(Duration::from_secs(30));
         loop {
             interval.tick().await;
+            // Suppress summary output until Transactions system is fully ready
+            if !crate::global::TRANSACTIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst) {
+                continue;
+            }
 
             if let Some(analyzer) = get_security_analyzer() {
                 let summary = analyzer.get_security_summary().await;
@@ -822,7 +866,7 @@ pub fn start_security_summary_task() {
     log(
         LogTag::Security,
         "SUMMARY_TASK",
-        "Started 30-second security summary task",
+        "Started 30-second security summary task (will print after Transactions ready)"
     );
 }
 
@@ -883,9 +927,7 @@ mod tests {
         let analyzer = SecurityAnalyzer::new(":memory:").unwrap();
 
         // Test with a known token
-        let analysis = analyzer
-            .analyze_token("So11111111111111111111111111111111111111112")
-            .await;
+        let analysis = analyzer.analyze_token("So11111111111111111111111111111111111111112").await;
         println!("SOL analysis: {:?}", analysis);
     }
 }

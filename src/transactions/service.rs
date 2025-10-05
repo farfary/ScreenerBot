@@ -4,12 +4,13 @@
 // real-time transaction monitoring, WebSocket integration, and periodic processing.
 
 use chrono::{ DateTime, Utc };
+use futures::stream::{ StreamExt, FuturesUnordered };
 use once_cell::sync::Lazy;
 use std::collections::{ HashMap, HashSet };
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{ Mutex, Notify };
-use tokio::time::{ interval, timeout };
+use tokio::time::{ interval, timeout, sleep };
 
 use crate::configs::read_configs;
 use crate::global::is_debug_transactions_enabled;
@@ -20,8 +21,26 @@ use crate::transactions::{
     processor::TransactionProcessor,
     types::*,
     utils::*,
+    websocket,
 };
-use crate::websocket;
+
+// =============================================================================
+// BOOTSTRAP CONFIGURATION
+// =============================================================================
+
+/// Number of transactions to process concurrently during bootstrap
+/// Change this value to adjust parallel processing batch size
+const CONCURRENT_BATCH_SIZE: usize = 10;
+
+/// Timeout for individual transaction processing during bootstrap (in seconds)
+/// Transactions taking longer than this will be timed out and retried later
+const TRANSACTION_TIMEOUT_SECS: u64 = 15;
+
+/// Maximum retry attempts for failed/timed-out transactions
+const MAX_RETRY_ATTEMPTS: usize = 3;
+
+/// Base delay between retry attempts (increases exponentially)
+const RETRY_BASE_DELAY_SECS: u64 = 2;
 
 // =============================================================================
 // GLOBAL SERVICE STATE
@@ -75,9 +94,11 @@ impl Default for ServiceConfig {
 // =============================================================================
 
 /// Start the global transaction service
+///
+/// Returns JoinHandle so ServiceManager can wait for graceful shutdown.
 pub async fn start_global_transaction_service(
     wallet_pubkey: solana_sdk::pubkey::Pubkey
-) -> Result<(), String> {
+) -> Result<tokio::task::JoinHandle<()>, String> {
     let mut running = SERVICE_RUNNING.lock().await;
     if *running {
         return Err("Transaction service is already running".to_string());
@@ -143,7 +164,7 @@ pub async fn start_global_transaction_service(
     *running = true;
     drop(running);
 
-    // Start service task
+    // Start service task and return handle so ServiceManager can wait for graceful shutdown
     let service_handle = tokio::spawn(async move {
         if let Err(e) = run_transaction_service(config).await {
             log(LogTag::Transactions, "ERROR", &format!("Transaction service error: {}", e));
@@ -160,10 +181,7 @@ pub async fn start_global_transaction_service(
     crate::global::TRANSACTIONS_SYSTEM_READY.store(true, std::sync::atomic::Ordering::SeqCst);
     log(LogTag::Transactions, "INFO", "🟢 Transactions system ready");
 
-    // Don't await the service_handle here - let it run in background
-    // The service will run until shutdown is requested
-
-    Ok(())
+    Ok(service_handle)
 }
 
 /// Stop the global transaction service
@@ -324,21 +342,96 @@ async fn perform_initial_transaction_bootstrap(
         (mgr.wallet_pubkey, mgr.debug_enabled, mgr.transaction_database.clone())
     };
     let fetcher = TransactionFetcher::new();
-    let processor = TransactionProcessor::new(wallet_pubkey);
+    let processor = Arc::new(TransactionProcessor::new(wallet_pubkey));
 
     let mut stats = BootstrapStats::default();
-    let mut before: Option<String> = None;
     let batch_limit = RPC_BATCH_SIZE;
+
+    // Reconcile known_signatures from already processed at start (safety)
+    if let Some(db) = transaction_db.as_ref() {
+        if let Ok(added) = db.reconcile_known_with_processed().await {
+            if added > 0 {
+                log(
+                    LogTag::Transactions,
+                    "BOOTSTRAP",
+                    &format!("Reconciled {} processed->known signatures", added)
+                );
+            }
+        }
+    }
+
+    // Determine bootstrap mode using persistent bootstrap_state
+    // Backfill mode: full history not completed yet → page newest→oldest using backfill_before_cursor
+    // Forward incremental: once full history completed → fetch only newer than newest known
+    let mut bootstrap_mode = "FULL".to_string();
+    let mut backfill_cursor: Option<String> = None;
+    let mut checkpoint_signature: Option<String> = None;
+    if let Some(db) = transaction_db.as_ref() {
+        match db.get_bootstrap_state().await {
+            Ok(state) => {
+                if state.full_history_completed {
+                    // Forward incremental mode
+                    bootstrap_mode = "INCREMENTAL".to_string();
+                    checkpoint_signature = db.get_newest_known_signature().await.unwrap_or(None);
+                } else {
+                    // Backfill mode not completed
+                    bootstrap_mode = "FULL".to_string();
+                    backfill_cursor = state.backfill_before_cursor;
+                    // In FULL/backfill mode we do NOT stop at oldest-known; we continue until chain end.
+                    checkpoint_signature = None;
+                }
+            }
+            Err(e) => {
+                log(
+                    LogTag::Transactions,
+                    "WARN",
+                    &format!("Failed to load bootstrap state: {}", e)
+                );
+                // Fallback to default behavior (FULL with checkpoint on oldest-known if any)
+                checkpoint_signature = None;
+            }
+        }
+    }
 
     log(
         LogTag::Transactions,
         "BOOTSTRAP",
         &format!(
-            "Bootstrapping transaction cache for wallet: {} (batch_limit={})",
+            "Bootstrapping transaction cache for wallet: {} (mode={}, batch_limit={})",
             &wallet_pubkey.to_string(),
+            &bootstrap_mode,
             batch_limit
         )
     );
+
+    if let Some(ref checkpoint) = checkpoint_signature {
+        log(LogTag::Transactions, "BOOTSTRAP", &format!("📌 Checkpoint: {}...", &checkpoint[..8]));
+    }
+
+    // =========================================================================
+    // PHASE 1: COLLECT SIGNATURES (incremental from checkpoint or full history)
+    // =========================================================================
+    let phase1_label = match (bootstrap_mode.as_str(), checkpoint_signature.is_some()) {
+        ("INCREMENTAL", true) => "NEWER than newest-known",
+        ("INCREMENTAL", false) => "RECENT (no checkpoint)",
+        ("FULL", true) => "MISSING (until oldest-known)",
+        ("FULL", false) => "ALL",
+        _ => "ALL",
+    };
+    log(
+        LogTag::Transactions,
+        "BOOTSTRAP_PHASE1",
+        &format!("📥 Phase 1: Collecting {} signatures...", phase1_label)
+    );
+
+    let mut all_signatures: Vec<String> = Vec::new();
+    // Start collection:
+    // - FULL/backfill: always start from latest (before=None) to re-collect the full window; we'll page until chain end
+    // - INCREMENTAL: start from latest as well; we will stop at checkpoint (newest-known)
+    let mut before: Option<String> = None;
+    let phase1_timer = std::time::Instant::now();
+    let mut hit_checkpoint = false;
+    let mut reached_chain_end = false;
 
     loop {
         let signatures = fetcher.fetch_signatures_page(
@@ -351,31 +444,149 @@ async fn perform_initial_transaction_bootstrap(
             if debug {
                 log(
                     LogTag::Transactions,
-                    "BOOTSTRAP",
-                    "No additional signatures returned from RPC; bootstrap complete"
+                    "BOOTSTRAP_PHASE1",
+                    "No additional signatures returned from RPC"
                 );
             }
+            reached_chain_end = true;
             break;
         }
 
         stats.total_rpc_pages += 1;
-        stats.total_signatures_fetched += signatures.len();
+        let page_count = signatures.len();
+
+        // Check if we hit the checkpoint
+        if let Some(ref checkpoint) = checkpoint_signature {
+            let mut signatures_to_add = Vec::new();
+
+            for sig in &signatures {
+                if sig == checkpoint {
+                    hit_checkpoint = true;
+                    log(
+                        LogTag::Transactions,
+                        "BOOTSTRAP_PHASE1",
+                        &format!(
+                            "✅ Hit checkpoint signature - stopping at page {}",
+                            stats.total_rpc_pages
+                        )
+                    );
+                    break;
+                }
+                signatures_to_add.push(sig.clone());
+            }
+
+            all_signatures.extend(signatures_to_add);
+
+            if hit_checkpoint {
+                break;
+            }
+        } else {
+            // No checkpoint: in FULL mode collect all; in INCREMENTAL collect just this page
+            if bootstrap_mode == "INCREMENTAL" {
+                all_signatures.extend(signatures.clone());
+                // Only one page needed in forward incremental
+                if signatures.len() < batch_limit {/* done anyway */}
+                break;
+            } else {
+                all_signatures.extend(signatures.clone());
+            }
+        }
 
         if stats.newest_signature.is_none() {
             stats.newest_signature = signatures.first().cloned();
         }
         stats.oldest_signature = signatures.last().cloned();
 
-        for signature in &signatures {
-            let mut signature_is_known = is_signature_known_globally(signature).await;
+        log(
+            LogTag::Transactions,
+            "BOOTSTRAP_PHASE1",
+            &format!(
+                "📄 Fetched page {}: {} signatures | total collected: {} | elapsed: {}s",
+                stats.total_rpc_pages,
+                page_count,
+                all_signatures.len(),
+                phase1_timer.elapsed().as_secs()
+            )
+        );
 
-            if signature_is_known {
-                stats.known_signatures_skipped += 1;
-            } else if let Some(db) = transaction_db.as_ref() {
+        before = signatures.last().cloned();
+
+        // Persist backfill cursor every page (only in FULL/backfill mode)
+        if bootstrap_mode == "FULL" {
+            if let Some(db) = transaction_db.as_ref() {
+                if let Err(e) = db.set_backfill_cursor(before.as_deref()).await {
+                    log(
+                        LogTag::Transactions,
+                        "WARN",
+                        &format!("Failed to persist backfill cursor: {}", e)
+                    );
+                }
+            }
+        }
+
+        if signatures.len() < batch_limit {
+            if bootstrap_mode == "FULL" {
+                reached_chain_end = true;
+            }
+            break;
+        }
+    }
+
+    stats.total_signatures_fetched = all_signatures.len();
+
+    let phase1_summary = if bootstrap_mode == "INCREMENTAL" {
+        format!(
+            "✅ Phase 1 complete (INCREMENTAL): collected {} signatures in {}s across {} pages",
+            all_signatures.len(),
+            phase1_timer.elapsed().as_secs(),
+            stats.total_rpc_pages
+        )
+    } else if hit_checkpoint {
+        format!(
+            "✅ Phase 1 complete (INCREMENTAL): collected {} NEW signatures in {}s across {} pages (stopped at checkpoint)",
+            all_signatures.len(),
+            phase1_timer.elapsed().as_secs(),
+            stats.total_rpc_pages
+        )
+    } else if checkpoint_signature.is_some() {
+        format!(
+            "✅ Phase 1 complete (INCREMENTAL): collected {} signatures in {}s across {} pages (checkpoint not found - fetched all)",
+            all_signatures.len(),
+            phase1_timer.elapsed().as_secs(),
+            stats.total_rpc_pages
+        )
+    } else {
+        format!(
+            "✅ Phase 1 complete (FULL): collected {} signatures in {}s across {} pages",
+            all_signatures.len(),
+            phase1_timer.elapsed().as_secs(),
+            stats.total_rpc_pages
+        )
+    };
+
+    log(LogTag::Transactions, "BOOTSTRAP_PHASE1", &phase1_summary);
+
+    // =========================================================================
+    // PHASE 2: FILTER AND PROCESS NEW SIGNATURES
+    // =========================================================================
+    log(
+        LogTag::Transactions,
+        "BOOTSTRAP_PHASE2",
+        "⚙️  Phase 2: Filtering and processing new transactions..."
+    );
+
+    let phase2_timer = std::time::Instant::now();
+    let mut signatures_to_process: Vec<String> = Vec::new();
+
+    // Filter out already known signatures
+    for signature in &all_signatures {
+        let mut signature_is_known = is_signature_known_globally(signature).await;
+
+        if !signature_is_known {
+            if let Some(db) = transaction_db.as_ref() {
                 match db.is_signature_known(signature).await {
                     Ok(true) => {
                         signature_is_known = true;
-                        stats.known_signatures_skipped += 1;
                     }
                     Ok(false) => {}
                     Err(e) => {
@@ -388,25 +599,83 @@ async fn perform_initial_transaction_bootstrap(
                     }
                 }
             }
+        }
 
-            if signature_is_known {
-                add_signature_to_known_globally(signature.clone()).await;
-                if let Ok(mut mgr) = manager_arc.try_lock() {
-                    mgr.known_signatures.insert(signature.clone());
-                }
-                continue;
+        if signature_is_known {
+            stats.known_signatures_skipped += 1;
+            add_signature_to_known_globally(signature.clone()).await;
+            if let Ok(mut mgr) = manager_arc.try_lock() {
+                mgr.known_signatures.insert(signature.clone());
             }
+        } else {
+            signatures_to_process.push(signature.clone());
+        }
+    }
 
-            match processor.process_transaction(signature).await {
+    let total_to_process = signatures_to_process.len();
+    log(
+        LogTag::Transactions,
+        "BOOTSTRAP_PHASE2",
+        &format!(
+            "📊 Filtering complete: {} new to process | {} already known | batch_size={} | elapsed: {}s",
+            total_to_process,
+            stats.known_signatures_skipped,
+            CONCURRENT_BATCH_SIZE,
+            phase2_timer.elapsed().as_secs()
+        )
+    );
+
+    // Process all new signatures in parallel batches with accurate progress tracking
+    let mut processed_count = 0;
+    let mut newly_processed = 0;
+    let mut errors = 0;
+    let mut failed_signatures: Vec<(String, String)> = Vec::new(); // (signature, error_reason)
+
+    // Split into batches and process in parallel
+    for batch_start in (0..signatures_to_process.len()).step_by(CONCURRENT_BATCH_SIZE) {
+        let batch_end = std::cmp::min(
+            batch_start + CONCURRENT_BATCH_SIZE,
+            signatures_to_process.len()
+        );
+        let batch = &signatures_to_process[batch_start..batch_end];
+
+        // Create futures for parallel processing with timeout
+        let mut futures = FuturesUnordered::new();
+
+        for signature in batch {
+            let sig = signature.clone();
+            let proc = processor.clone();
+            futures.push(async move {
+                let result = timeout(
+                    Duration::from_secs(TRANSACTION_TIMEOUT_SECS),
+                    proc.process_transaction(&sig)
+                ).await;
+
+                match result {
+                    Ok(inner_result) => (sig.clone(), inner_result),
+                    Err(_) =>
+                        (
+                            sig.clone(),
+                            Err(
+                                format!("Transaction processing timed out after {}s", TRANSACTION_TIMEOUT_SECS)
+                            ),
+                        ),
+                }
+            });
+        }
+
+        // Process batch in parallel
+        while let Some((signature, result)) = futures.next().await {
+            match result {
                 Ok(_) => {
                     if let Some(db) = transaction_db.as_ref() {
-                        if let Err(e) = db.add_known_signature(signature).await {
+                        if let Err(e) = db.add_known_signature(&signature).await {
                             log(
                                 LogTag::Transactions,
                                 "WARN",
                                 &format!("Failed to persist known signature {}: {}", signature, e)
                             );
-                            stats.errors += 1;
+                            errors += 1;
                         }
                     }
 
@@ -415,26 +684,215 @@ async fn perform_initial_transaction_bootstrap(
                         mgr.known_signatures.insert(signature.clone());
                         mgr.total_transactions += 1;
                     }
-                    stats.newly_processed += 1;
+                    newly_processed += 1;
                 }
                 Err(e) => {
                     log(
                         LogTag::Transactions,
                         "WARN",
-                        &format!("Failed to process bootstrap transaction {}: {}", signature, e)
+                        &format!(
+                            "Failed to process bootstrap transaction {}: {} (will retry)",
+                            signature,
+                            e
+                        )
                     );
-                    stats.errors += 1;
+                    errors += 1;
+                    failed_signatures.push((signature.clone(), e));
                 }
             }
-        }
 
-        before = signatures.last().cloned();
+            processed_count += 1;
 
-        if signatures.len() < batch_limit {
-            break;
+            // Show progress summary every 10 transactions or at the end
+            if processed_count % 10 == 0 || processed_count == total_to_process {
+                let remaining = total_to_process - processed_count;
+                let progress_pct = ((processed_count as f64) / (total_to_process as f64)) * 100.0;
+
+                log(
+                    LogTag::Transactions,
+                    "BOOTSTRAP_PROGRESS",
+                    &format!(
+                        "📊 Progress: {}/{} ({:.1}%) | new={} | errors={} | remaining={} | elapsed={}s",
+                        processed_count,
+                        total_to_process,
+                        progress_pct,
+                        newly_processed,
+                        errors,
+                        remaining,
+                        bootstrap_timer.elapsed().as_secs()
+                    )
+                );
+            }
         }
     }
 
+    log(
+        LogTag::Transactions,
+        "BOOTSTRAP_PHASE2",
+        &format!(
+            "✅ Phase 2 complete: processed {}/{} new transactions | errors={} | elapsed={}s",
+            newly_processed,
+            total_to_process,
+            errors,
+            phase2_timer.elapsed().as_secs()
+        )
+    );
+
+    // =========================================================================
+    // PHASE 3: RETRY FAILED TRANSACTIONS
+    // =========================================================================
+    let mut retry_successful = 0;
+    let mut permanently_failed = 0;
+
+    if !failed_signatures.is_empty() {
+        log(
+            LogTag::Transactions,
+            "BOOTSTRAP_RETRY",
+            &format!(
+                "🔄 Phase 3: Retrying {} failed transactions (max {} attempts per transaction)",
+                failed_signatures.len(),
+                MAX_RETRY_ATTEMPTS
+            )
+        );
+
+        for attempt in 1..=MAX_RETRY_ATTEMPTS {
+            if failed_signatures.is_empty() {
+                break;
+            }
+
+            let delay_secs = RETRY_BASE_DELAY_SECS * (2_u64).pow((attempt as u32) - 1);
+
+            log(
+                LogTag::Transactions,
+                "BOOTSTRAP_RETRY",
+                &format!(
+                    "🔄 Retry attempt {}/{}: {} signatures remaining | delay={}s",
+                    attempt,
+                    MAX_RETRY_ATTEMPTS,
+                    failed_signatures.len(),
+                    delay_secs
+                )
+            );
+
+            // Wait before retrying (exponential backoff)
+            if attempt > 1 {
+                sleep(Duration::from_secs(delay_secs)).await;
+            }
+
+            let mut still_failed: Vec<(String, String)> = Vec::new();
+
+            // Process failed signatures in batches
+            for batch_start in (0..failed_signatures.len()).step_by(CONCURRENT_BATCH_SIZE) {
+                let batch_end = std::cmp::min(
+                    batch_start + CONCURRENT_BATCH_SIZE,
+                    failed_signatures.len()
+                );
+                let batch = &failed_signatures[batch_start..batch_end];
+
+                let mut futures = FuturesUnordered::new();
+
+                for (signature, _) in batch {
+                    let sig = signature.clone();
+                    let proc = processor.clone();
+                    futures.push(async move {
+                        let result = timeout(
+                            Duration::from_secs(TRANSACTION_TIMEOUT_SECS),
+                            proc.process_transaction(&sig)
+                        ).await;
+
+                        match result {
+                            Ok(inner_result) => (sig.clone(), inner_result),
+                            Err(_) =>
+                                (
+                                    sig.clone(),
+                                    Err(
+                                        format!("Transaction processing timed out after {}s", TRANSACTION_TIMEOUT_SECS)
+                                    ),
+                                ),
+                        }
+                    });
+                }
+
+                while let Some((signature, result)) = futures.next().await {
+                    match result {
+                        Ok(_) => {
+                            if let Some(db) = transaction_db.as_ref() {
+                                if let Err(e) = db.add_known_signature(&signature).await {
+                                    log(
+                                        LogTag::Transactions,
+                                        "WARN",
+                                        &format!(
+                                            "Failed to persist known signature {}: {}",
+                                            signature,
+                                            e
+                                        )
+                                    );
+                                }
+                            }
+
+                            add_signature_to_known_globally(signature.clone()).await;
+                            if let Ok(mut mgr) = manager_arc.try_lock() {
+                                mgr.known_signatures.insert(signature.clone());
+                                mgr.total_transactions += 1;
+                            }
+                            retry_successful += 1;
+                        }
+                        Err(e) => {
+                            still_failed.push((signature.clone(), e));
+                        }
+                    }
+                }
+            }
+
+            failed_signatures = still_failed;
+
+            log(
+                LogTag::Transactions,
+                "BOOTSTRAP_RETRY",
+                &format!(
+                    "✅ Retry attempt {} complete: {} recovered | {} still failing",
+                    attempt,
+                    retry_successful,
+                    failed_signatures.len()
+                )
+            );
+        }
+
+        permanently_failed = failed_signatures.len();
+
+        if permanently_failed > 0 {
+            log(
+                LogTag::Transactions,
+                "BOOTSTRAP_RETRY",
+                &format!(
+                    "⚠️  {} transactions permanently failed after {} retry attempts",
+                    permanently_failed,
+                    MAX_RETRY_ATTEMPTS
+                )
+            );
+
+            if debug {
+                log(
+                    LogTag::Transactions,
+                    "DEBUG",
+                    &format!(
+                        "Permanently failed signatures: {:?}",
+                        failed_signatures
+                            .iter()
+                            .map(|(sig, _)| sig)
+                            .take(10)
+                            .collect::<Vec<_>>()
+                    )
+                );
+            }
+        }
+    }
+
+    // Update stats with final counts
+    stats.newly_processed = newly_processed + retry_successful;
+    stats.errors = permanently_failed;
+
+    // Update manager with final count from database
     if let Some(db) = transaction_db.as_ref() {
         match db.get_known_signatures_count().await {
             Ok(count) => {
@@ -454,6 +912,88 @@ async fn perform_initial_transaction_bootstrap(
     }
 
     stats.duration_ms = bootstrap_timer.elapsed().as_millis();
+
+    // If FULL/backfill completed to chain-end (no more pages), mark full history completed so next run uses forward-only incremental
+    if bootstrap_mode == "FULL" {
+        if let Some(db) = transaction_db.as_ref() {
+            if reached_chain_end {
+                if let Err(e) = db.mark_full_history_completed().await {
+                    log(
+                        LogTag::Transactions,
+                        "WARN",
+                        &format!("Failed to mark full history completed: {}", e)
+                    );
+                } else {
+                    // Clear cursor since we reached chain end
+                    if let Err(e) = db.clear_backfill_cursor().await {
+                        log(
+                            LogTag::Transactions,
+                            "WARN",
+                            &format!("Failed to clear backfill cursor: {}", e)
+                        );
+                    }
+                    log(
+                        LogTag::Transactions,
+                        "BOOTSTRAP",
+                        "Full history backfill completed. Switching to forward incremental on next start."
+                    );
+                }
+            } else {
+                // Persist last cursor already done per-page; ensure it's saved for resume
+                if let Err(e) = db.set_backfill_cursor(before.as_deref()).await {
+                    log(
+                        LogTag::Transactions,
+                        "WARN",
+                        &format!("Failed to persist final backfill cursor: {}", e)
+                    );
+                }
+            }
+        }
+    }
+
+    // Final summary
+    let summary = if retry_successful > 0 || permanently_failed > 0 {
+        format!(
+            "✨ Bootstrap complete!\n\
+            ═══════════════════════════════════════════════════════════════\n\
+            📊 Total signatures found: {}\n\
+            ✅ New transactions processed: {} (initial: {} + retried: {})\n\
+            ⏭️  Already known (skipped): {}\n\
+            🔄 Retry statistics: {} recovered | {} permanently failed\n\
+            📄 RPC pages fetched: {}\n\
+            ⏱️  Total time: {:.1}s\n\
+            ═══════════════════════════════════════════════════════════════",
+            stats.total_signatures_fetched,
+            stats.newly_processed,
+            newly_processed,
+            retry_successful,
+            stats.known_signatures_skipped,
+            retry_successful,
+            permanently_failed,
+            stats.total_rpc_pages,
+            bootstrap_timer.elapsed().as_secs_f64()
+        )
+    } else {
+        format!(
+            "✨ Bootstrap complete!\n\
+            ═══════════════════════════════════════════════════════════════\n\
+            📊 Total signatures found: {}\n\
+            ✅ New transactions processed: {}\n\
+            ⏭️  Already known (skipped): {}\n\
+            ❌ Errors: {}\n\
+            📄 RPC pages fetched: {}\n\
+            ⏱️  Total time: {:.1}s\n\
+            ═══════════════════════════════════════════════════════════════",
+            stats.total_signatures_fetched,
+            stats.newly_processed,
+            stats.known_signatures_skipped,
+            stats.errors,
+            stats.total_rpc_pages,
+            bootstrap_timer.elapsed().as_secs_f64()
+        )
+    };
+
+    log(LogTag::Transactions, "BOOTSTRAP_COMPLETE", &summary);
 
     if debug {
         log(LogTag::Transactions, "DEBUG", &format!("Bootstrap stats: {:?}", stats));
@@ -495,76 +1035,135 @@ async fn run_transaction_service(config: ServiceConfig) -> Result<(), String> {
     // Track performance metrics
     let mut metrics = ServiceMetrics::new();
 
-    // If WebSocket is available, include it in the select loop; otherwise run without it
-    if let Some(ref mut rx) = websocket_receiver {
-        loop {
-            tokio::select! {
-                // Periodic transaction checking
-                _ = check_interval.tick() => {
-                    if let Err(e) = perform_periodic_check(&config, &processor, &fetcher, &mut metrics).await {
-                        log(
-                            LogTag::Transactions,
-                            "ERROR",
-                            &format!("Periodic check failed: {}", e)
-                        );
-                    }
-                }
+    // If WebSocket was successfully initialized, mark it as active immediately
+    // This prevents unnecessary fallback checks during the initial period when
+    // no transactions have occurred yet
+    if websocket_receiver.is_some() {
+        metrics.update_websocket_activity();
+        log(LogTag::Transactions, "INFO", "WebSocket initialized successfully - marking as active");
+    }
 
-                // WebSocket transaction notifications
-                sig_opt = rx.recv() => {
-                    match sig_opt {
-                        Some(sig) => {
-                            metrics.update_websocket_activity();
-                            if let Err(e) = handle_websocket_transaction(&config, &processor, sig).await {
-                                log(
-                                    LogTag::Transactions,
-                                    "ERROR",
-                                    &format!("WebSocket transaction handling failed: {}", e)
-                                );
-                            }
+    // Create WebSocket health check interval (every 15 seconds)
+    let mut ws_health_check_interval = interval(Duration::from_secs(15));
+    ws_health_check_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    // Main service loop with WebSocket health monitoring and reconnection
+    loop {
+        tokio::select! {
+            // Periodic transaction checking (every 3 seconds by default)
+            _ = check_interval.tick() => {
+                if let Err(e) = perform_periodic_check(&config, &processor, &fetcher, &mut metrics).await {
+                    log(
+                        LogTag::Transactions,
+                        "ERROR",
+                        &format!("Periodic check failed: {}", e)
+                    );
+                }
+            }
+
+            // WebSocket transaction notifications (if WebSocket is active)
+            sig_opt = async {
+                if let Some(ref mut rx) = websocket_receiver {
+                    rx.recv().await
+                } else {
+                    // No WebSocket - return pending (never resolves)
+                    std::future::pending::<Option<String>>().await
+                }
+            } => {
+                match sig_opt {
+                    Some(sig) => {
+                        metrics.update_websocket_activity();
+                        if let Err(e) = handle_websocket_transaction(&config, &processor, sig).await {
+                            log(
+                                LogTag::Transactions,
+                                "ERROR",
+                                &format!("WebSocket transaction handling failed: {}", e)
+                            );
                         }
-                        None => {
-                            log(LogTag::Transactions, "WARN", "WebSocket channel closed - continuing without WS");
-                            break; // Fall through to no-WS loop
-                        }
                     }
-                }
-
-                // Shutdown signal
-                _ = SHUTDOWN_NOTIFY.notified() => {
-                    log(LogTag::Transactions, "INFO", "Received shutdown signal");
-                    return Ok(());
-                }
-
-                // Service health check (every 5 minutes)
-                _ = tokio::time::sleep(Duration::from_secs(300)) => {
-                    if let Err(e) = perform_health_check(&mut metrics).await {
+                    None => {
                         log(
                             LogTag::Transactions,
                             "WARN",
-                            &format!("Health check failed: {}", e)
+                            "WebSocket channel closed - will attempt reconnection on next health check"
                         );
+                        websocket_receiver = None;
                     }
                 }
             }
-        }
-    }
 
-    // Fallback loop without WebSocket
-    loop {
-        tokio::select! {
-            _ = check_interval.tick() => {
-                if let Err(e) = perform_periodic_check(&config, &processor, &fetcher, &mut metrics).await {
-                    log(LogTag::Transactions, "ERROR", &format!("Periodic check failed: {}", e));
+            // WebSocket health check (every 15 seconds)
+            _ = ws_health_check_interval.tick() => {
+                metrics.update_websocket_health_check();
+                
+                if config.enable_websocket {
+                    let ws_exists = websocket_receiver.is_some();
+                    
+                    if !ws_exists {
+                        // WebSocket doesn't exist - try to establish it
+                        // This is the ONLY case where we reconnect
+                        log(
+                            LogTag::Transactions,
+                            "INFO",
+                            "🔌 No WebSocket connection - attempting to establish..."
+                        );
+                        
+                        match initialize_websocket_monitoring(config.wallet_pubkey).await {
+                            Ok(new_receiver) => {
+                                websocket_receiver = new_receiver;
+                                metrics.increment_websocket_reconnect();
+                                metrics.update_websocket_activity();
+                                log(
+                                    LogTag::Transactions,
+                                    "INFO",
+                                    "✅ WebSocket connection established successfully"
+                                );
+                            }
+                            Err(e) => {
+                                log(
+                                    LogTag::Transactions,
+                                    "WARN",
+                                    &format!("WebSocket connection failed: {} - will retry in 15s", e)
+                                );
+                            }
+                        }
+                    } else {
+                        // WebSocket exists - it's healthy (receiver is open means loop is running)
+                        // Log debug info about connection state
+                        if is_debug_transactions_enabled() {
+                            let last_msg_ago = if let Some(last_msg) = metrics.last_websocket_message {
+                                (Utc::now() - last_msg).num_seconds()
+                            } else {
+                                -1
+                            };
+                            log(
+                                LogTag::Transactions,
+                                "DEBUG",
+                                &format!(
+                                    "WebSocket health check: HEALTHY (connection open, last tx message: {}s ago, reconnects: {})",
+                                    last_msg_ago,
+                                    metrics.websocket_reconnect_count
+                                )
+                            );
+                        }
+                    }
                 }
             }
+
+            // Shutdown signal
             _ = SHUTDOWN_NOTIFY.notified() => {
                 log(LogTag::Transactions, "INFO", "Received shutdown signal");
-                break;
+                return Ok(());
             }
+
+            // General service health check (every 5 minutes)
             _ = tokio::time::sleep(Duration::from_secs(300)) => {
                 if let Err(e) = perform_health_check(&mut metrics).await {
-                    log(LogTag::Transactions, "WARN", &format!("Health check failed: {}", e));
+                    log(
+                        LogTag::Transactions,
+                        "WARN",
+                        &format!("Health check failed: {}", e)
+                    );
                 }
             }
         }
@@ -638,10 +1237,17 @@ async fn perform_fallback_transaction_check(
     processor: &Arc<TransactionProcessor>
 ) -> Result<usize, String> {
     let debug = is_debug_transactions_enabled();
+    let pending_txs_count = get_pending_transactions_count().await;
+    let (pending_verification_count, _) = crate::positions::queue::get_queue_status().await;
+
     log(
         LogTag::Transactions,
         "FALLBACK",
-        "Performing fallback transaction check (WebSocket inactive)"
+        &format!(
+            "Performing fallback transaction check (WebSocket inactive) - Pending txs: {}, Pending verifications: {}",
+            pending_txs_count,
+            pending_verification_count
+        )
     );
 
     // Fetch recent transactions
@@ -789,8 +1395,12 @@ async fn handle_websocket_transaction(
 /// Service performance metrics
 #[derive(Debug)]
 struct ServiceMetrics {
+    service_start_time: Option<DateTime<Utc>>,
     last_periodic_check: Option<DateTime<Utc>>,
     last_websocket_activity: Option<DateTime<Utc>>,
+    last_websocket_message: Option<DateTime<Utc>>, // Track ANY WebSocket message (pings, pongs, etc)
+    last_websocket_health_check: Option<DateTime<Utc>>,
+    websocket_reconnect_count: u64,
     periodic_check_count: u64,
     websocket_transaction_count: u64,
     error_count: u64,
@@ -800,8 +1410,12 @@ struct ServiceMetrics {
 impl ServiceMetrics {
     fn new() -> Self {
         Self {
+            service_start_time: Some(Utc::now()),
             last_periodic_check: None,
             last_websocket_activity: None,
+            last_websocket_message: None,
+            last_websocket_health_check: None,
+            websocket_reconnect_count: 0,
             periodic_check_count: 0,
             websocket_transaction_count: 0,
             error_count: 0,
@@ -830,8 +1444,44 @@ impl ServiceMetrics {
     }
 
     fn update_websocket_activity(&mut self) {
-        self.last_websocket_activity = Some(Utc::now());
+        let now = Utc::now();
+        self.last_websocket_activity = Some(now);
+        self.last_websocket_message = Some(now);
         self.websocket_transaction_count += 1;
+    }
+
+    fn update_websocket_message(&mut self) {
+        self.last_websocket_message = Some(Utc::now());
+    }
+
+    fn update_websocket_health_check(&mut self) {
+        self.last_websocket_health_check = Some(Utc::now());
+    }
+
+    fn increment_websocket_reconnect(&mut self) {
+        self.websocket_reconnect_count += 1;
+    }
+
+    fn is_websocket_healthy(&self) -> bool {
+        // WebSocket health is determined by whether the receiver channel is still open
+        // If the WebSocket loop crashes or connection fails, the channel closes
+        // This method is called only when receiver exists, so if we get here, it's healthy
+        //
+        // We use a conservative timeout (5 minutes) for transaction message silence
+        // to avoid false positives during idle periods when no transactions occur
+        if let Some(last_msg) = self.last_websocket_message {
+            let silence_duration = (Utc::now() - last_msg).num_seconds();
+            silence_duration < 300 // 5 minutes instead of 30 seconds
+        } else {
+            // No transaction messages yet - connection is healthy if recently initialized
+            if let Some(activity) = self.last_websocket_activity {
+                let since_activity = (Utc::now() - activity).num_seconds();
+                since_activity < 300 // 5 minutes grace period
+            } else {
+                // No activity at all yet - assume healthy
+                true
+            }
+        }
     }
 
     fn increment_error(&mut self) {
@@ -882,39 +1532,84 @@ async fn perform_health_check(metrics: &mut ServiceMetrics) -> Result<(), String
 }
 
 /// Determine if fallback check should be performed
+///
+/// Fallback is only performed when:
+/// 1. There are pending transactions OR pending position verifications to monitor
+/// 2. WebSocket has been silent for >10 seconds (or never connected with >10s uptime)
 async fn should_perform_fallback_check(metrics: &ServiceMetrics) -> bool {
-    // Perform fallback if no WebSocket activity in the last 5 minutes
-    if let Some(last_activity) = metrics.last_websocket_activity {
-        let time_since_activity = (Utc::now() - last_activity).num_seconds();
-        time_since_activity > 300
-    } else {
-        // No WebSocket activity recorded yet, perform fallback
-        true
+    // Step 1: Check if there's anything to monitor
+    let has_pending_txs = get_pending_transactions_count().await > 0;
+
+    // Check positions verification queue for pending work
+    let (pending_verification_count, _) = crate::positions::queue::get_queue_status().await;
+    let has_pending_verifications = pending_verification_count > 0;
+
+    if !has_pending_txs && !has_pending_verifications {
+        // Idle state - no need for fallback
+        if is_debug_transactions_enabled() {
+            log(
+                LogTag::Transactions,
+                "DEBUG",
+                "Skipping fallback: no pending transactions or verifications (idle state)"
+            );
+        }
+        return false;
     }
-}
 
-// =============================================================================
-// COMPATIBILITY FUNCTIONS (for migration period)
-// =============================================================================
+    // Step 2: Check WebSocket activity with grace period
+    if let Some(last_activity) = metrics.last_websocket_activity {
+        let silence_duration = (Utc::now() - last_activity).num_seconds();
 
-/// Legacy function for compatibility during migration
-pub async fn start_transaction_service_legacy(
-    wallet_pubkey: solana_sdk::pubkey::Pubkey
-) -> Result<(), String> {
-    log(
-        LogTag::Transactions,
-        "WARN",
-        "Using legacy transaction service start function - please migrate to new API"
-    );
-    start_global_transaction_service(wallet_pubkey).await
-}
-
-/// Legacy function for compatibility during migration
-pub async fn stop_transaction_service_legacy() -> Result<(), String> {
-    log(
-        LogTag::Transactions,
-        "WARN",
-        "Using legacy transaction service stop function - please migrate to new API"
-    );
-    stop_global_transaction_service().await
+        // Only fallback if WS has been silent for >10 seconds
+        if silence_duration > 10 {
+            if is_debug_transactions_enabled() {
+                log(
+                    LogTag::Transactions,
+                    "DEBUG",
+                    &format!(
+                        "Fallback triggered: WebSocket silent for {}s (pending txs: {}, pending verifications: {})",
+                        silence_duration,
+                        has_pending_txs,
+                        has_pending_verifications
+                    )
+                );
+            }
+            true
+        } else {
+            false
+        }
+    } else {
+        // WebSocket never connected or failed
+        // Only fallback if we've been running for >10 seconds (startup grace)
+        if let Some(service_start) = metrics.service_start_time {
+            let uptime = (Utc::now() - service_start).num_seconds();
+            if uptime > 10 {
+                if is_debug_transactions_enabled() {
+                    log(
+                        LogTag::Transactions,
+                        "DEBUG",
+                        &format!(
+                            "Fallback triggered: WebSocket never connected, uptime {}s (pending txs: {}, pending verifications: {})",
+                            uptime,
+                            has_pending_txs,
+                            has_pending_verifications
+                        )
+                    );
+                }
+                true
+            } else {
+                if is_debug_transactions_enabled() {
+                    log(
+                        LogTag::Transactions,
+                        "DEBUG",
+                        &format!("Waiting for WebSocket to connect (uptime: {}s)", uptime)
+                    );
+                }
+                false
+            }
+        } else {
+            // Just started, give WS time to connect
+            false
+        }
+    }
 }

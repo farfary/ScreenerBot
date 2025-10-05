@@ -47,6 +47,7 @@ pub mod service;
 pub mod types;
 pub mod utils;
 pub mod verifier;
+pub mod websocket;
 
 // Public API exports - Core functionality
 pub use manager::TransactionsManager;
@@ -83,10 +84,11 @@ pub use types::ANALYSIS_CACHE_VERSION;
 
 // Public API exports - Analysis and verification
 pub use analyzer::{
-    analyze_transaction,
-    calculate_swap_pnl,
-    classify_transaction_type,
-    detect_swap_operations,
+    TransactionAnalyzer,
+    CompleteAnalysis,
+    AnalysisConfidence,
+    is_analysis_reliable,
+    confidence_to_score,
 };
 
 pub use verifier::{
@@ -97,6 +99,18 @@ pub use verifier::{
 
 // Public API exports - Database operations
 pub use database::{ get_transaction_database, init_transaction_database, TransactionDatabase };
+
+// Public API exports - Program IDs and router detection
+pub use program_ids::{
+    detect_router_from_program_id,
+    detect_router_from_logs,
+    is_dex_aggregator_program_id,
+    is_jupiter_program_id,
+    is_mev_tip_address,
+    JUPITER_V6_PROGRAM_ID,
+    PUMP_FUN_AMM_PROGRAM_ID,
+    PUMP_FUN_LEGACY_PROGRAM_ID,
+};
 
 // Public API exports - Utilities
 pub use utils::{

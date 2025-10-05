@@ -108,6 +108,8 @@ pub struct TransactionMeta {
     #[serde(rename = "postTokenBalances")]
     pub post_token_balances: Option<Vec<TokenBalance>>,
     pub fee: u64,
+    #[serde(rename = "computeUnitsConsumed")]
+    pub compute_units_consumed: Option<u64>,
     #[serde(rename = "logMessages")]
     pub log_messages: Option<Vec<String>>,
     #[serde(rename = "innerInstructions")]
@@ -824,6 +826,19 @@ pub struct RpcClient {
     current_url: Arc<std::sync::Mutex<String>>,
     stats: Arc<std::sync::Mutex<RpcStats>>,
     rate_limiter: Arc<tokio::sync::Mutex<RpcRateLimiter>>,
+}
+
+impl Clone for RpcClient {
+    fn clone(&self) -> Self {
+        Self {
+            client: self.client.clone(),
+            rpc_urls: self.rpc_urls.clone(),
+            current_url_index: self.current_url_index.clone(),
+            current_url: self.current_url.clone(),
+            stats: self.stats.clone(),
+            rate_limiter: self.rate_limiter.clone(),
+        }
+    }
 }
 
 impl RpcClient {
@@ -3292,7 +3307,7 @@ impl RpcClient {
             "method": "getTransaction",
             "params": [
                 transaction_signature,
-                { "encoding": "json", "maxSupportedTransactionVersion": 0 }
+                { "encoding": "jsonParsed", "maxSupportedTransactionVersion": 0 }
             ]
         });
 
@@ -3415,6 +3430,9 @@ impl RpcClient {
                             .get("fee")
                             .and_then(|f| f.as_u64())
                             .unwrap_or(0),
+                        compute_units_consumed: meta_value
+                            .get("computeUnitsConsumed")
+                            .and_then(|v| v.as_u64()),
                         pre_balances: meta_value
                             .get("preBalances")
                             .and_then(|pb| pb.as_array())

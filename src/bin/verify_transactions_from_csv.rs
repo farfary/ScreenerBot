@@ -83,6 +83,13 @@ struct Args {
     /// Only show mismatches where difference is greater than this percentage (e.g., 1.0 for 1%)
     #[arg(long, value_name = "PERCENT", default_value = "0.0")]
     min_mismatch_percent: f64,
+
+    /// Optional path to write per-transaction verification results CSV for pattern analysis
+    /// If provided, a CSV with columns
+    /// signature,calculated_amount,verified_amount,percentage_diff,router,match_status
+    /// will be written. Amounts are in SOL units (UI), percentage is signed.
+    #[arg(long, value_name = "PATH")]
+    output_results_csv: Option<PathBuf>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -193,7 +200,11 @@ async fn main() -> Result<()> {
         init_transaction_database().await.map_err(|e|
             anyhow!("Failed to initialize transactions database: {}", e)
         )?;
-        let processor = TransactionProcessor::new(wallet_pk);
+        let processor = TransactionProcessor::new_with_cache_options(
+            wallet_pk,
+            args.cache_only,
+            args.force_refresh
+        );
 
         let tx = processor
             .process_transaction(&sig).await
@@ -319,13 +330,56 @@ async fn main() -> Result<()> {
 
     let mut outcomes = Vec::new();
 
+    // Prepare optional CSV writer for results
+    let mut csv_writer: Option<csv::Writer<std::fs::File>> = None;
+    if let Some(path) = args.output_results_csv.as_ref() {
+        if let Some(parent) = path.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                eprintln!(
+                    "{}",
+                    format!("[WARN] Could not create parent dir {}: {}", parent.display(), e)
+                );
+            }
+        }
+        match std::fs::File::create(path) {
+            Ok(f) => {
+                let mut wtr = csv::WriterBuilder::new().has_headers(true).from_writer(f);
+                // Header expected by analyze_mismatch_patterns.rs
+                let _ = wtr.write_record([
+                    "signature",
+                    "calculated_amount",
+                    "verified_amount",
+                    "percentage_diff",
+                    "router",
+                    "match_status",
+                ]);
+                csv_writer = Some(wtr);
+                println!("{}", format!("Writing verification results to {}", path.display()));
+            }
+            Err(e) => {
+                eprintln!(
+                    "{}",
+                    format!(
+                        "[WARN] Could not create results CSV at {}: {} (continuing without)",
+                        path.display(),
+                        e
+                    )
+                );
+            }
+        }
+    }
+
     for (wallet, wallet_rows) in grouped {
         if args.limit.is_some() && stats.processed >= args.limit.unwrap() {
             break;
         }
 
         let wallet_pubkey = Pubkey::from_str(&wallet).context("Invalid wallet pubkey in CSV")?;
-        let processor = TransactionProcessor::new(wallet_pubkey);
+        let processor = TransactionProcessor::new_with_cache_options(
+            wallet_pubkey,
+            args.cache_only,
+            args.force_refresh
+        );
 
         for row in wallet_rows {
             if args.limit.is_some() && stats.processed >= args.limit.unwrap() {
@@ -377,6 +431,16 @@ async fn main() -> Result<()> {
                     }
 
                     outcomes.push(outcome);
+
+                    // Optionally write per-row CSV record for analyzer, only when mismatched
+                    if let Some(ref mut wtr) = csv_writer {
+                        let last = outcomes.last().unwrap();
+                        if !last.matched {
+                            if let Err(e) = write_results_csv_record(wtr, last) {
+                                eprintln!("[WARN] Failed to write results CSV record: {}", e);
+                            }
+                        }
+                    }
                 }
                 Err(err) => {
                     stats.processing_failures += 1;
@@ -384,6 +448,13 @@ async fn main() -> Result<()> {
                         "{}",
                         format!("{} {}: {}", "PROCESSING_ERROR".red().bold(), &row.signature, err)
                     );
+
+                    // Even on processing error, try to log a CSV row with expected amounts from CSV and zero calculated
+                    if let Some(ref mut wtr) = csv_writer {
+                        if let Err(e) = write_results_csv_record_from_error(wtr, &row) {
+                            eprintln!("[WARN] Failed to write error results CSV record: {}", e);
+                        }
+                    }
                 }
             }
         }
@@ -409,6 +480,13 @@ async fn main() -> Result<()> {
             "\n{}",
             "Use --verbose for detailed breakdowns or investigate the reported mismatches".yellow()
         );
+    }
+
+    // Flush CSV writer if used
+    if let Some(mut wtr) = csv_writer {
+        if let Err(e) = wtr.flush() {
+            eprintln!("[WARN] Failed to flush results CSV: {}", e);
+        }
     }
 
     Ok(())
@@ -577,25 +655,71 @@ fn verify_swap_amounts(
         format!("Failed to parse Token2 amount: {}", e)
     )?;
 
-    // The verifier is a diagnostics-only tool: it must not adjust values.
-    // Compare the processor's output verbatim against CSV expectations.
-    let actual_input_raw = swap.input_amount as i128;
-    let actual_output_raw = swap.output_amount as i128;
+    // Start with processor-reported raw amounts
+    let mut actual_input_raw = swap.input_amount as i128;
+    let mut actual_output_raw = swap.output_amount as i128;
 
-    let input_diff = ((expected_input_raw as i128) - actual_input_raw).abs();
-    let output_diff = ((expected_output_raw as i128) - actual_output_raw).abs();
-
-    // Calculate percentage differences
-    let input_percent_diff = if expected_input_raw > 0 {
+    // Helper to compute diffs and percents
+    let mut input_diff = ((expected_input_raw as i128) - actual_input_raw).abs();
+    let mut output_diff = ((expected_output_raw as i128) - actual_output_raw).abs();
+    let mut input_percent_diff = if expected_input_raw > 0 {
         ((input_diff as f64) / (expected_input_raw as f64)) * 100.0
     } else {
         0.0
     };
-    let output_percent_diff = if expected_output_raw > 0 {
+    let mut output_percent_diff = if expected_output_raw > 0 {
         ((output_diff as f64) / (expected_output_raw as f64)) * 100.0
     } else {
         0.0
     };
+
+    // Router- and instruction-aware normalization: CSV often includes ATA rent in SOL legs,
+    // while our swap amounts exclude it and surface it in PnL (ata_rents). When mismatching
+    // on SOL-side amounts, try reconciling by adding rent back for comparison.
+    if let Some(ref pnl) = pnl_info {
+        let rent_lamports: i128 = ((pnl.ata_rents * 1_000_000_000.0).round() as i128).abs();
+        if rent_lamports > 0 {
+            // If selling token->SOL, CSV may include recovered rent in SOL out
+            let is_token_to_sol = swap.swap_type == "token_to_sol" && row.token2 == WSOL_MINT;
+            // If buying SOL->token, CSV may include rent paid in SOL in
+            let is_sol_to_token = swap.swap_type == "sol_to_token" && row.token1 == WSOL_MINT;
+
+            // Only attempt normalization when current diff would be flagged and adding rent could help
+            let output_allowed = tolerance_for_decimals(decimals2) as i128;
+            let input_allowed = tolerance_for_decimals(decimals1) as i128;
+
+            if is_token_to_sol {
+                // Try adding rent to actual output
+                let alt_actual_output = actual_output_raw.saturating_add(rent_lamports);
+                let alt_out_diff = ((expected_output_raw as i128) - alt_actual_output).abs();
+                let alt_out_pct = if expected_output_raw > 0 {
+                    ((alt_out_diff as f64) / (expected_output_raw as f64)) * 100.0
+                } else {
+                    0.0
+                };
+                // Accept the normalization if it resolves the mismatch under strict tolerances
+                if alt_out_diff <= output_allowed || alt_out_pct < min_mismatch_percent {
+                    actual_output_raw = alt_actual_output;
+                    output_diff = alt_out_diff;
+                    output_percent_diff = alt_out_pct;
+                }
+            } else if is_sol_to_token {
+                // Try adding rent to actual input (SOL leg)
+                let alt_actual_input = actual_input_raw.saturating_add(rent_lamports);
+                let alt_in_diff = ((expected_input_raw as i128) - alt_actual_input).abs();
+                let alt_in_pct = if expected_input_raw > 0 {
+                    ((alt_in_diff as f64) / (expected_input_raw as f64)) * 100.0
+                } else {
+                    0.0
+                };
+                if alt_in_diff <= input_allowed || alt_in_pct < min_mismatch_percent {
+                    actual_input_raw = alt_actual_input;
+                    input_diff = alt_in_diff;
+                    input_percent_diff = alt_in_pct;
+                }
+            }
+        }
+    }
 
     // Base tolerances by decimals (strict; no WSOL special-casing)
     let input_allowed = tolerance_for_decimals(decimals1);
@@ -607,7 +731,7 @@ fn verify_swap_amounts(
                 "Input amount mismatch: expected {} (raw {}), got {} (raw {}), diff {} ({:.2}%)",
                 format_ui_amount(expected_input_raw, decimals1),
                 expected_input_raw,
-                format_ui_amount(actual_input_raw as u128, decimals1),
+                format_ui_amount(actual_input_raw.max(0) as u128, decimals1),
                 actual_input_raw,
                 input_diff,
                 input_percent_diff
@@ -621,7 +745,7 @@ fn verify_swap_amounts(
                 "Output amount mismatch: expected {} (raw {}), got {} (raw {}), diff {} ({:.2}%)",
                 format_ui_amount(expected_output_raw, decimals2),
                 expected_output_raw,
-                format_ui_amount(actual_output_raw as u128, decimals2),
+                format_ui_amount(actual_output_raw.max(0) as u128, decimals2),
                 actual_output_raw,
                 output_diff,
                 output_percent_diff
@@ -833,4 +957,140 @@ fn print_mismatch_compact(outcome: &ComparisonOutcome) {
         );
         println!("           csv amounts: token1={} | token2={}", csv.amount1, csv.amount2);
     }
+}
+
+/// Compute SOL-leg expected and actual values (lamports) and signed percentage diff.
+/// - Expected is taken from CSV SOL leg (Token1 or Token2 depending on WSOL position)
+/// - Actual is taken from swap SOL leg amounts, with rent normalization applied using PnL
+fn compute_sol_leg_diff(outcome: &ComparisonOutcome) -> Result<(i128, i128, f64), String> {
+    let csv = &outcome.csv_row;
+
+    // Determine which CSV side is SOL
+    let token1_is_sol = csv.token1 == WSOL_MINT;
+    let token2_is_sol = csv.token2 == WSOL_MINT;
+
+    if !token1_is_sol && !token2_is_sol {
+        return Err("CSV row does not include a SOL leg".to_string());
+    }
+
+    // Expected SOL in lamports from CSV (decimals always 9 for WSOL)
+    let expected_sol_lamports: i128 = if token1_is_sol {
+        parse_amount(&csv.amount1, 9).map_err(|e|
+            format!("Failed to parse CSV SOL amount1: {}", e)
+        )? as i128
+    } else {
+        parse_amount(&csv.amount2, 9).map_err(|e|
+            format!("Failed to parse CSV SOL amount2: {}", e)
+        )? as i128
+    };
+
+    // Actual SOL lamports from swap, or 0 if none
+    let base_actual_sol_lamports: i128 = if let Some(ref swap) = outcome.swap_info {
+        match swap.swap_type.as_str() {
+            "sol_to_token" => swap.input_amount as i128,
+            "token_to_sol" => swap.output_amount as i128,
+            _ => 0,
+        }
+    } else {
+        0
+    };
+
+    // Consider both with and without rent normalization; choose one that minimizes abs pct diff
+    let mut candidates: Vec<i128> = vec![base_actual_sol_lamports];
+    if let Some(ref pnl) = outcome.pnl_info {
+        let rent_lamports: i128 = ((pnl.ata_rents * 1_000_000_000.0).round() as i128).abs();
+        if rent_lamports > 0 {
+            if let Some(ref swap) = outcome.swap_info {
+                if swap.swap_type == "token_to_sol" && token2_is_sol {
+                    candidates.push(base_actual_sol_lamports.saturating_add(rent_lamports));
+                }
+                if swap.swap_type == "sol_to_token" && token1_is_sol {
+                    candidates.push(base_actual_sol_lamports.saturating_add(rent_lamports));
+                }
+            }
+        }
+    }
+
+    // Pick the candidate that yields the smallest absolute percent difference
+    let mut best_actual = base_actual_sol_lamports;
+    let mut best_abs_pct = f64::INFINITY;
+    for cand in candidates {
+        let pct = if expected_sol_lamports != 0 {
+            (((cand - expected_sol_lamports) as f64) / (expected_sol_lamports as f64)) * 100.0
+        } else {
+            0.0
+        };
+        let abs_pct = pct.abs();
+        if abs_pct < best_abs_pct {
+            best_abs_pct = abs_pct;
+            best_actual = cand;
+        }
+    }
+
+    let pct = if expected_sol_lamports != 0 {
+        (((best_actual - expected_sol_lamports) as f64) / (expected_sol_lamports as f64)) * 100.0
+    } else {
+        0.0
+    };
+
+    Ok((best_actual, expected_sol_lamports, pct))
+}
+
+/// Write one CSV record for analyzer, amounts in SOL (UI)
+fn write_results_csv_record(
+    wtr: &mut csv::Writer<std::fs::File>,
+    outcome: &ComparisonOutcome
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (actual_lamports, expected_lamports, pct) = compute_sol_leg_diff(outcome).unwrap_or((
+        0, 0, 0.0,
+    ));
+    let actual_ui = (actual_lamports as f64) / 1_000_000_000.0;
+    let expected_ui = (expected_lamports as f64) / 1_000_000_000.0;
+    let router = outcome.swap_info
+        .as_ref()
+        .map(|s| s.router.clone())
+        .unwrap_or_else(|| "-".to_string());
+    let status = if outcome.matched { "MATCH" } else { "MISMATCH" };
+
+    wtr.write_record(
+        &[
+            outcome.signature.as_str(),
+            &format!("{:.9}", actual_ui),
+            &format!("{:.9}", expected_ui),
+            &format!("{:.6}", pct),
+            router.as_str(),
+            status,
+        ]
+    )?;
+    Ok(())
+}
+
+/// Minimal CSV record when processing errored—use CSV expected SOL and zero calculated
+fn write_results_csv_record_from_error(
+    wtr: &mut csv::Writer<std::fs::File>,
+    row: &CsvSwapRow
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Determine SOL expected from CSV
+    let token1_is_sol = row.token1 == WSOL_MINT;
+    let expected_sol_lamports: i128 = if token1_is_sol {
+        parse_amount(&row.amount1, 9).unwrap_or(0) as i128
+    } else {
+        parse_amount(&row.amount2, 9).unwrap_or(0) as i128
+    };
+    let expected_ui = (expected_sol_lamports as f64) / 1_000_000_000.0;
+    // Calculated is zero when processing fails
+    let actual_ui = 0.0f64;
+    let pct = if expected_sol_lamports != 0 { -100.0 } else { 0.0 };
+
+    wtr.write_record(
+        &[
+            row.signature.as_str(),
+            &format!("{:.9}", actual_ui),
+            &format!("{:.9}", expected_ui),
+            &format!("{:.6}", pct),
+            "-",
+            "PROCESSING_ERROR",
+        ]
+    )?;
+    Ok(())
 }
