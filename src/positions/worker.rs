@@ -129,15 +129,19 @@ pub async fn initialize_positions_system() -> Result<(), String> {
 }
 
 /// Start positions manager service
-pub async fn start_positions_manager_service(shutdown: Arc<Notify>) -> Result<(), String> {
+///
+/// Returns JoinHandle so ServiceManager can wait for graceful shutdown.
+pub async fn start_positions_manager_service(
+    shutdown: Arc<Notify>
+) -> Result<tokio::task::JoinHandle<()>, String> {
     log(LogTag::Positions, "STARTUP", "🚀 Starting positions manager service");
 
     initialize_positions_system().await?;
 
-    // Start verification worker
-    tokio::spawn(verification_worker(shutdown));
+    // Start verification worker and return handle
+    let handle = tokio::spawn(verification_worker(shutdown));
 
-    Ok(())
+    Ok(handle)
 }
 
 /// Verification worker loop

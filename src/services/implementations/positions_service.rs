@@ -31,17 +31,16 @@ impl Service for PositionsService {
     }
 
     async fn start(&mut self, shutdown: Arc<Notify>) -> Result<Vec<JoinHandle<()>>, String> {
-        log(LogTag::System, "INFO", "Starting positions manager...");
+        log(LogTag::System, "INFO", "Starting positions manager service...");
 
-        // Start positions manager service
-        crate::positions
+        let handle = crate::positions
             ::start_positions_manager_service(shutdown.clone()).await
             .map_err(|e| format!("Failed to start positions service: {}", e))?;
 
-        log(LogTag::System, "SUCCESS", "✅ Positions service started");
+        log(LogTag::System, "SUCCESS", "✅ Positions service started (1 handle)");
 
-        // Positions service manages its own tasks internally
-        Ok(vec![])
+        // Return verification_worker handle so ServiceManager can wait for graceful shutdown
+        Ok(vec![handle])
     }
 
     async fn health(&self) -> ServiceHealth {

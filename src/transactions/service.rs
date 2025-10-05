@@ -94,9 +94,11 @@ impl Default for ServiceConfig {
 // =============================================================================
 
 /// Start the global transaction service
+///
+/// Returns JoinHandle so ServiceManager can wait for graceful shutdown.
 pub async fn start_global_transaction_service(
     wallet_pubkey: solana_sdk::pubkey::Pubkey
-) -> Result<(), String> {
+) -> Result<tokio::task::JoinHandle<()>, String> {
     let mut running = SERVICE_RUNNING.lock().await;
     if *running {
         return Err("Transaction service is already running".to_string());
@@ -162,7 +164,7 @@ pub async fn start_global_transaction_service(
     *running = true;
     drop(running);
 
-    // Start service task
+    // Start service task and return handle so ServiceManager can wait for graceful shutdown
     let service_handle = tokio::spawn(async move {
         if let Err(e) = run_transaction_service(config).await {
             log(LogTag::Transactions, "ERROR", &format!("Transaction service error: {}", e));
@@ -179,10 +181,7 @@ pub async fn start_global_transaction_service(
     crate::global::TRANSACTIONS_SYSTEM_READY.store(true, std::sync::atomic::Ordering::SeqCst);
     log(LogTag::Transactions, "INFO", "🟢 Transactions system ready");
 
-    // Don't await the service_handle here - let it run in background
-    // The service will run until shutdown is requested
-
-    Ok(())
+    Ok(service_handle)
 }
 
 /// Stop the global transaction service

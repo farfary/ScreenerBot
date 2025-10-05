@@ -40,15 +40,15 @@ impl Service for TransactionsService {
             .map_err(|e| format!("Failed to load wallet: {:?}", e))?;
         let wallet_pubkey = wallet.pubkey();
 
-        // Start global transaction service
-        crate::transactions::service
+        // Start global transaction service and capture handle
+        let handle = crate::transactions::service
             ::start_global_transaction_service(wallet_pubkey).await
             .map_err(|e| format!("Failed to start transactions service: {}", e))?;
 
-        log(LogTag::System, "SUCCESS", "✅ Transactions service started");
+        log(LogTag::System, "SUCCESS", "✅ Transactions service started (1 handle)");
 
-        // Transactions service manages its own tasks
-        Ok(vec![])
+        // Return service handle so ServiceManager can wait for graceful shutdown
+        Ok(vec![handle])
     }
 
     async fn health(&self) -> ServiceHealth {

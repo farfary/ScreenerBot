@@ -40,12 +40,16 @@ impl Service for PoolsService {
 
         // Start helper background tasks (health monitor, database cleanup, gap cleanup)
         // Note: Main pool tasks (discovery, fetcher, calculator, analyzer) are started by separate services
-        crate::pools::start_helper_tasks(shutdown).await;
+        let handles = crate::pools::start_helper_tasks(shutdown).await;
 
-        log(LogTag::PoolService, "SUCCESS", "✅ Pool helper tasks started");
+        log(
+            LogTag::PoolService,
+            "SUCCESS",
+            &format!("✅ Pool helper tasks started ({} handles)", handles.len())
+        );
 
-        // Helper tasks are fire-and-forget (no handles returned)
-        Ok(vec![])
+        // Return handles so ServiceManager can wait for graceful shutdown
+        Ok(handles)
     }
 
     async fn stop(&mut self) -> Result<(), String> {

@@ -157,13 +157,54 @@ impl ServiceManager {
                     );
                 }
 
-                // Wait for handles
+                // Wait for handles with increased timeout for cleanup tasks
                 if let Some(handles) = self.handles.remove(service_name) {
-                    for handle in handles {
-                        let _ = tokio::time::timeout(
-                            tokio::time::Duration::from_secs(5),
-                            handle
-                        ).await;
+                    let timeout_duration = tokio::time::Duration::from_secs(10);
+                    let handle_count = handles.len();
+
+                    for (idx, handle) in handles.into_iter().enumerate() {
+                        match tokio::time::timeout(timeout_duration, handle).await {
+                            Ok(Ok(_)) => {
+                                if handle_count > 1 {
+                                    log(
+                                        LogTag::System,
+                                        "DEBUG",
+                                        &format!(
+                                            "Service {} task {}/{} stopped cleanly",
+                                            service_name,
+                                            idx + 1,
+                                            handle_count
+                                        )
+                                    );
+                                }
+                            }
+                            Ok(Err(e)) => {
+                                log(
+                                    LogTag::System,
+                                    "WARN",
+                                    &format!(
+                                        "Service {} task {}/{} panicked: {:?}",
+                                        service_name,
+                                        idx + 1,
+                                        handle_count,
+                                        e
+                                    )
+                                );
+                            }
+                            Err(_) => {
+                                log(
+                                    LogTag::System,
+                                    "WARN",
+                                    &format!(
+                                        "Service {} task {}/{} shutdown timed out after {}s",
+                                        service_name,
+                                        idx + 1,
+                                        handle_count,
+                                        timeout_duration.as_secs()
+                                    )
+                                );
+                            }
+                        }
                     }
                 }
 

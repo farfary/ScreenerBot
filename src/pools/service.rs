@@ -345,28 +345,40 @@ pub fn get_debug_token_override() -> Option<Vec<String>> {
 ///
 /// These are utility tasks that don't need to be separate services.
 /// Called by PoolsService after all pool sub-services are started.
-pub async fn start_helper_tasks(shutdown: Arc<Notify>) {
+///
+/// Returns JoinHandles so ServiceManager can wait for graceful shutdown.
+pub async fn start_helper_tasks(shutdown: Arc<Notify>) -> Vec<tokio::task::JoinHandle<()>> {
+    let mut handles = Vec::new();
+
     // Start service health monitor
     let shutdown_monitor = shutdown.clone();
-    tokio::spawn(async move {
-        run_service_health_monitor(shutdown_monitor).await;
-    });
+    handles.push(
+        tokio::spawn(async move {
+            run_service_health_monitor(shutdown_monitor).await;
+        })
+    );
 
     // Start database cleanup task
     let shutdown_cleanup = shutdown.clone();
-    tokio::spawn(async move {
-        run_database_cleanup_task(shutdown_cleanup).await;
-    });
+    handles.push(
+        tokio::spawn(async move {
+            run_database_cleanup_task(shutdown_cleanup).await;
+        })
+    );
 
     // Start gap detection and cleanup task
     let shutdown_gap_cleanup = shutdown.clone();
-    tokio::spawn(async move {
-        run_gap_cleanup_task(shutdown_gap_cleanup).await;
-    });
+    handles.push(
+        tokio::spawn(async move {
+            run_gap_cleanup_task(shutdown_gap_cleanup).await;
+        })
+    );
 
     // Set readiness flag
     crate::global::POOL_SERVICE_READY.store(true, std::sync::atomic::Ordering::SeqCst);
-    log(LogTag::PoolService, "SUCCESS", "Pool helper tasks started");
+    log(LogTag::PoolService, "SUCCESS", "Pool helper tasks started (3 handles returned)");
+
+    handles
 }
 
 /// Initialize all service components
