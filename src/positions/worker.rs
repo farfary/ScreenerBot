@@ -119,8 +119,8 @@ pub async fn initialize_positions_system() -> Result<(), String> {
 
     // Reconcile semaphore capacity with existing open positions AFTER loading state
     {
-        use crate::trader::MAX_OPEN_POSITIONS;
-        reconcile_global_position_semaphore(MAX_OPEN_POSITIONS).await;
+        let max_open_positions = crate::config::with_config(|cfg| cfg.trader.max_open_positions);
+        reconcile_global_position_semaphore(max_open_positions).await;
     }
 
     log(LogTag::Positions, "STARTUP", "✅ Positions system initialized");

@@ -31,151 +31,17 @@
 /// - Graceful shutdown with proper cleanup
 ///
 /// **Debug Features:**
-/// - `DEBUG_FORCE_SELL_MODE` - Automatically sell positions after timeout
-/// - `DEBUG_FORCE_BUY_MODE` - Automatically buy tokens on price drops (≥3% by default)
+/// - `debug_force_sell_mode` - Automatically sell positions after timeout
+/// - `debug_force_buy_mode` - Automatically buy tokens on price drops (≥3% by default)
 /// - Both debug modes can be independently enabled/disabled for testing
-
-// =============================================================================
-// TRADING SYSTEM CONFIGURATION CONSTANTS
-// =============================================================================
-
-// -----------------------------------------------------------------------------
-// Core Trading Parameters
-// -----------------------------------------------------------------------------
-
-/// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 2;
-
-/// Trade size in SOL for each position
-pub const TRADE_SIZE_SOL: f64 = 0.005;
-
-/// Enable minimum profit threshold requirement before allowing sells
-pub const MIN_PROFIT_THRESHOLD_ENABLED: bool = true;
-
-/// Minimum profit threshold percentage (e.g., 5.0 for 5%, -5.0 for -5%)
-/// Positions below this P&L will not be sold regardless of other exit conditions
-pub const MIN_PROFIT_THRESHOLD_PERCENT: f64 = 2.0;
-
-/// Time-based override: Allow sell decisions after this duration (hours)
-/// Positions held longer than this can bypass profit threshold if in significant loss
-/// This prevents positions from being held indefinitely when they're clearly failing
-pub const TIME_OVERRIDE_DURATION_HOURS: f64 = 7.0 * 24.0;
-
-/// Loss threshold for time-based override (negative percentage, e.g., -20.0 for -20%)
-/// Positions with losses worse than this threshold can bypass profit requirements after time override
-/// This allows cutting losses on positions that have been failing for extended periods
-pub const TIME_OVERRIDE_LOSS_THRESHOLD_PERCENT: f64 = -40.0;
-
-pub const PROFIT_EXTRA_NEEDED_SOL: f64 = 0.00005;
-
-/// ================= Slippage Configuration (Exit) =================
-/// Unified slippage & proceeds policy
-/// Naming pattern:
-///   SLIPPAGE_QUOTE_DEFAULT_PCT        -> default quote slippage tolerance for routers
-///   SLIPPAGE_EXIT_PROFIT_SHORTFALL_PCT -> max allowed shortfall vs required proceeds (profit exits)
-///   SLIPPAGE_EXIT_LOSS_SHORTFALL_PCT   -> max allowed shortfall (loss / emergency exits)
-///   SLIPPAGE_EXIT_RETRY_STEPS_PCT      -> progressive retry slippage attempts (filtered by shortfall caps)
 ///
-/// ONLY these constants should be referenced by other modules; duplicates elsewhere should be removed.
-pub const SLIPPAGE_QUOTE_DEFAULT_PCT: f64 = 3.0;
-pub const SLIPPAGE_EXIT_PROFIT_SHORTFALL_PCT: f64 = 8.0; // Increased from 3.0% - profit exits need more flexibility
-pub const SLIPPAGE_EXIT_LOSS_SHORTFALL_PCT: f64 = 15.0; // Increased from 12.0% - stop losses need maximum flexibility
-pub const SLIPPAGE_EXIT_RETRY_STEPS_PCT: &[f64] = &[3.0, 5.0, 8.0, 12.0, 15.0]; // Added 15.0% for maximum flexibility
-
-// -----------------------------------------------------------------------------
-// Debug Mode Configuration
-// -----------------------------------------------------------------------------
-
-/// Debug mode: Force sell all positions after a timeout (for testing)
-pub const DEBUG_FORCE_SELL_MODE: bool = false;
-
-/// Debug mode: Force sell timeout in seconds
-pub const DEBUG_FORCE_SELL_TIMEOUT_SECS: f64 = 45.0;
-
-/// Debug mode: Force buy tokens when they have a simple price drop (for testing)
-pub const DEBUG_FORCE_BUY_MODE: bool = false;
-
-/// Debug mode: Price drop threshold percentage to trigger force buy (e.g., 3.0 for 3% drop)
-pub const DEBUG_FORCE_BUY_DROP_THRESHOLD_PERCENT: f64 = 0.5;
-
-// -----------------------------------------------------------------------------
-// Position Timing Configuration - Improved for longer holding
-// -----------------------------------------------------------------------------
-
-/// Per-token re-entry cooldown after closing a position (minutes) - prevents immediate re-buy of same token
-/// This is applied in apply_cooldown_filter() and is separate from:
-/// - Global position open cooldown (5s between any opens) - in positions.rs
-/// - Frozen account cooldowns (account-specific) - in positions.rs
-pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 15;
-
-// -----------------------------------------------------------------------------
-// Trading Logic Configuration
-// -----------------------------------------------------------------------------
-// Monitoring & Display Configuration
-// -----------------------------------------------------------------------------
-
-/// New entry signals check interval (seconds) - optimized for fastest price checking
-pub const ENTRY_MONITOR_INTERVAL_SECS: u64 = 3;
-
-/// Open positions monitoring interval (seconds) - maximum priority price checking every 2 seconds for faster profit capture
-pub const POSITION_MONITOR_INTERVAL_SECS: u64 = 2;
-
-// -----------------------------------------------------------------------------
-// Task Timeout Configuration
-// -----------------------------------------------------------------------------
-
-/// Semaphore acquire timeout for token processing tasks (seconds) - reduced for faster failure detection
-pub const SEMAPHORE_ACQUIRE_TIMEOUT_SECS: u64 = 60;
-
-/// Individual token check task timeout (seconds)
-/// Reduced to prevent individual tasks from blocking the cycle
-pub const TOKEN_CHECK_TASK_TIMEOUT_SECS: u64 = 20;
-
-/// Token check result collection timeout (seconds)
-/// Reduced to prevent the 116s cycle timeout issue
-pub const TOKEN_CHECK_COLLECTION_TIMEOUT_SECS: u64 = 30;
-
-/// Individual token check handle timeout (seconds)
-/// Reduced to match shorter collection timeout
-pub const TOKEN_CHECK_HANDLE_TIMEOUT_SECS: u64 = 25;
-
-/// Sell operations collection timeout (seconds) - must accommodate multiple 3-min operations
-pub const SELL_OPERATIONS_COLLECTION_TIMEOUT_SECS: u64 = 240;
-
-/// Individual sell operation timeout (seconds)
-/// Now using step-based timeout detection instead of total operation timeout
-pub const SELL_OPERATION_SMART_TIMEOUT_SECS: u64 = 600; // 10 minutes total allowance for complex operations
-
-/// Sell semaphore acquire timeout (seconds) - increased for safety
-pub const SELL_SEMAPHORE_ACQUIRE_TIMEOUT_SECS: u64 = 30;
-
-/// Individual sell task handle timeout (seconds) - must be longer than operation timeout
-pub const SELL_TASK_HANDLE_TIMEOUT_SECS: u64 = 200;
-
-/// Entry monitor cycle minimum wait time (milliseconds)
-pub const ENTRY_CYCLE_MIN_WAIT_MS: u64 = 100;
-
-/// Token processing shutdown check delay (milliseconds)
-pub const TOKEN_PROCESSING_SHUTDOWN_CHECK_MS: u64 = 10;
-
-/// Task shutdown check delay (milliseconds)
-pub const TASK_SHUTDOWN_CHECK_MS: u64 = 1;
-
-/// Sell operation shutdown check delay (milliseconds)
-pub const SELL_OPERATION_SHUTDOWN_CHECK_MS: u64 = 1;
-
-/// Collection shutdown check delay (milliseconds)
-pub const COLLECTION_SHUTDOWN_CHECK_MS: u64 = 1;
-
-// -----------------------------------------------------------------------------
-// Concurrency Configuration
-// -----------------------------------------------------------------------------
-
-/// Number of concurrent token checks during entry scanning
-/// Reduced from 24 to prevent overwhelming pool services and API endpoints
-/// This prevents the 116s cycle timeout issue by reducing service contention
-pub const ENTRY_CHECK_CONCURRENCY: usize = 4; // Reduced from 24 to fix performance
-
+/// **Configuration:**
+/// All trading parameters are now loaded from the centralized config system.
+/// See `src/config/schemas.rs` for TraderConfig structure and defaults.
+// NOTE: All trading configuration parameters are now in src/config/schemas.rs
+// Access via: with_config(|cfg| cfg.trader.parameter_name)
+// =============================================================================
+use crate::config::with_config;
 use crate::global::is_debug_trader_enabled;
 use crate::logger::{ log, LogTag };
 use crate::pools::{ get_pool_price, PriceResult };
@@ -697,7 +563,8 @@ async fn get_recently_closed_mints_set() -> HashSet<String> {
 
     // Load from DB: fetch closed positions and keep those within cooldown
     let now = Utc::now();
-    let cutoff = now - ChronoDuration::minutes(POSITION_CLOSE_COOLDOWN_MINUTES);
+    let cooldown_minutes = with_config(|cfg| cfg.trader.position_close_cooldown_minutes);
+    let cutoff = now - ChronoDuration::minutes(cooldown_minutes);
     let mut mints: HashSet<String> = HashSet::new();
 
     match db::get_closed_positions().await {
@@ -801,7 +668,8 @@ impl Drop for CriticalOperationGuard {
 
 /// Debug function: Check if a position should be force-sold due to debug timeout
 pub fn should_debug_force_sell(position: &crate::positions::Position) -> bool {
-    if !DEBUG_FORCE_SELL_MODE {
+    let debug_force_sell_mode = with_config(|cfg| cfg.trader.debug_force_sell_mode);
+    if !debug_force_sell_mode {
         return false;
     }
 
@@ -809,7 +677,8 @@ pub fn should_debug_force_sell(position: &crate::positions::Position) -> bool {
         .signed_duration_since(position.entry_time)
         .num_seconds() as f64;
 
-    if position_age_secs >= DEBUG_FORCE_SELL_TIMEOUT_SECS {
+    let timeout_secs = with_config(|cfg| cfg.trader.debug_force_sell_timeout_secs);
+    if position_age_secs >= timeout_secs {
         log(
             LogTag::Trader,
             "DEBUG_FORCE_SELL",
@@ -817,7 +686,7 @@ pub fn should_debug_force_sell(position: &crate::positions::Position) -> bool {
                 "🚨 DEBUG MODE: Force selling {} after {:.1}s (timeout: {:.1}s)",
                 position.symbol,
                 position_age_secs,
-                DEBUG_FORCE_SELL_TIMEOUT_SECS
+                timeout_secs
             )
         );
         return true;
@@ -832,7 +701,8 @@ pub fn should_debug_force_buy(
     previous_price: Option<f64>,
     symbol: &str
 ) -> bool {
-    if !DEBUG_FORCE_BUY_MODE {
+    let debug_force_buy_mode = with_config(|cfg| cfg.trader.debug_force_buy_mode);
+    if !debug_force_buy_mode {
         return false;
     }
 
@@ -840,7 +710,10 @@ pub fn should_debug_force_buy(
         if prev_price > 0.0 && current_price > 0.0 {
             let drop_percent = ((prev_price - current_price) / prev_price) * 100.0;
 
-            if drop_percent >= DEBUG_FORCE_BUY_DROP_THRESHOLD_PERCENT {
+            let threshold_percent = with_config(
+                |cfg| cfg.trader.debug_force_buy_drop_threshold_percent
+            );
+            if drop_percent >= threshold_percent {
                 log(
                     LogTag::Trader,
                     "DEBUG_FORCE_BUY",
@@ -848,7 +721,7 @@ pub fn should_debug_force_buy(
                         "🚨 DEBUG MODE: Force buying {} - {:.2}% drop detected (threshold: {:.1}%)",
                         symbol,
                         drop_percent,
-                        DEBUG_FORCE_BUY_DROP_THRESHOLD_PERCENT
+                        threshold_percent
                     )
                 );
                 return true;
@@ -995,6 +868,7 @@ async fn apply_cooldown_filter(tokens: Vec<Token>) -> Vec<Token> {
 
     let removed_for_cooldown = before_cooldown.saturating_sub(tokens_after_cooldown.len());
     if removed_for_cooldown > 0 {
+        let cooldown_minutes = with_config(|cfg| cfg.trader.position_close_cooldown_minutes);
         log(
             LogTag::Trader,
             "COOLDOWN_FILTER",
@@ -1002,7 +876,7 @@ async fn apply_cooldown_filter(tokens: Vec<Token>) -> Vec<Token> {
                 "⏳ Excluded {} tokens (sample: [{}]) within {}m cooldown; {} remain",
                 removed_for_cooldown,
                 removed.join(","),
-                POSITION_CLOSE_COOLDOWN_MINUTES,
+                cooldown_minutes,
                 tokens_after_cooldown.len()
             )
         );
@@ -1020,6 +894,7 @@ pub async fn get_cooldown_status(sample: usize) -> String {
     mints.sort();
     let total = mints.len();
     let sample_list = mints.into_iter().take(sample).collect::<Vec<_>>().join(",");
+    let cooldown_minutes = with_config(|cfg| cfg.trader.position_close_cooldown_minutes);
     format!(
         "Cooldown: {} mints (showing {}): [{}] (window={}m)",
         total,
@@ -1028,7 +903,7 @@ pub async fn get_cooldown_status(sample: usize) -> String {
             .filter(|s| !s.is_empty())
             .count(),
         sample_list,
-        POSITION_CLOSE_COOLDOWN_MINUTES
+        cooldown_minutes
     )
 }
 
@@ -1140,10 +1015,12 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
             // Calculate how long we've spent in this cycle
             let cycle_duration = cycle_start.elapsed();
-            let wait_time = if cycle_duration >= Duration::from_secs(ENTRY_MONITOR_INTERVAL_SECS) {
-                Duration::from_millis(ENTRY_CYCLE_MIN_WAIT_MS)
+            let entry_monitor_interval = with_config(|cfg| cfg.trader.entry_monitor_interval_secs);
+            let entry_cycle_min_wait = with_config(|cfg| cfg.trader.entry_cycle_min_wait_ms);
+            let wait_time = if cycle_duration >= Duration::from_secs(entry_monitor_interval) {
+                Duration::from_millis(entry_cycle_min_wait)
             } else {
-                Duration::from_secs(ENTRY_MONITOR_INTERVAL_SECS) - cycle_duration
+                Duration::from_secs(entry_monitor_interval) - cycle_duration
             };
 
             if is_debug_trader_enabled() {
@@ -1167,7 +1044,8 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
         // Limit concurrent token checks to avoid overwhelming services
         use tokio::sync::Semaphore;
-        let semaphore = Arc::new(Semaphore::new(ENTRY_CHECK_CONCURRENCY));
+        let entry_check_concurrency = with_config(|cfg| cfg.trader.entry_check_concurrency);
+        let semaphore = Arc::new(Semaphore::new(entry_check_concurrency));
 
         // Process all available tokens in parallel
         let total_tokens = price_infos.len();
@@ -1178,6 +1056,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
         let mut handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
 
+        let token_check_task_timeout = with_config(|cfg| cfg.trader.token_check_task_timeout_secs);
         if is_debug_trader_enabled() {
             log(
                 LogTag::Trader,
@@ -1188,8 +1067,8 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                      - Task timeout: {}s per token\n  \
                      - First 10 tokens: [{}]",
                     total_tokens,
-                    ENTRY_CHECK_CONCURRENCY,
-                    TOKEN_CHECK_TASK_TIMEOUT_SECS,
+                    entry_check_concurrency,
+                    token_check_task_timeout,
                     price_infos
                         .iter()
                         .take(10)
@@ -1200,12 +1079,19 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             );
         }
 
+        let token_processing_shutdown_check = with_config(
+            |cfg| cfg.trader.token_processing_shutdown_check_ms
+        );
+        let semaphore_acquire_timeout = with_config(
+            |cfg| cfg.trader.semaphore_acquire_timeout_secs
+        );
+
         for price_info in price_infos.iter() {
             // Check for shutdown before spawning tasks (short, responsive wait)
             if
                 check_shutdown_or_delay(
                     &shutdown,
-                    Duration::from_millis(TOKEN_PROCESSING_SHUTDOWN_CHECK_MS)
+                    Duration::from_millis(token_processing_shutdown_check)
                 ).await
             {
                 log(LogTag::Trader, "INFO", "new entries monitor shutting down...");
@@ -1215,7 +1101,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             // Get permit from semaphore to limit concurrency with timeout
             let permit = match
                 tokio::time::timeout(
-                    Duration::from_secs(SEMAPHORE_ACQUIRE_TIMEOUT_SECS),
+                    Duration::from_secs(semaphore_acquire_timeout),
                     semaphore.clone().acquire_owned()
                 ).await
             {
@@ -1232,7 +1118,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                     log(
                         LogTag::Trader,
                         "WARN",
-                        &format!("Semaphore acquire timed out after {} seconds", SEMAPHORE_ACQUIRE_TIMEOUT_SECS)
+                        &format!("Semaphore acquire timed out after {} seconds", semaphore_acquire_timeout)
                     );
                     continue;
                 }
@@ -1248,11 +1134,16 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 // Keep the permit alive for the duration of this task
                 let _permit = permit; // This will be automatically dropped when the task completes
 
+                let task_shutdown_check = with_config(|cfg| cfg.trader.task_shutdown_check_ms);
+                let token_check_task_timeout = with_config(
+                    |cfg| cfg.trader.token_check_task_timeout_secs
+                );
+
                 // Check for shutdown before starting task
                 if
                     check_shutdown_or_delay(
                         &shutdown_clone,
-                        Duration::from_millis(TASK_SHUTDOWN_CHECK_MS)
+                        Duration::from_millis(task_shutdown_check)
                     ).await
                 {
                     return;
@@ -1260,7 +1151,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
                 // Wrap the entire task logic in a timeout to prevent hanging
                 match
-                    tokio::time::timeout(Duration::from_secs(TOKEN_CHECK_TASK_TIMEOUT_SECS), async {
+                    tokio::time::timeout(Duration::from_secs(token_check_task_timeout), async {
                         // Get current price from PriceResult
                         let current_price = if
                             price_info.price_sol > 0.0 &&
@@ -1315,7 +1206,10 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
                         // Check for debug force buy (overrides normal entry logic)
                         let mut force_buy_triggered = false;
-                        if DEBUG_FORCE_BUY_MODE {
+                        let debug_force_buy_mode = with_config(
+                            |cfg| cfg.trader.debug_force_buy_mode
+                        );
+                        if debug_force_buy_mode {
                             // Get previous price from token tracker
                             let previous_price = {
                                 if let Ok(tracker) = TOKEN_CHECK_TRACKER.read() {
@@ -1372,6 +1266,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         }
 
                         // Open position directly with PriceResult
+                        let trade_size_sol = with_config(|cfg| cfg.trader.trade_size_sol);
                         if is_debug_trader_enabled() {
                             log(
                                 LogTag::Trader,
@@ -1380,7 +1275,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     "📈 Opening position for {} at {:.9} SOL (size: {} SOL)",
                                     price_info.mint,
                                     current_price,
-                                    TRADE_SIZE_SOL
+                                    trade_size_sol
                                 )
                             );
                         }
@@ -1480,6 +1375,14 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
         // Wait for tasks to finish with overall timeout (best-effort)
         let handles_count = handles.len();
+        let token_check_collection_timeout = with_config(
+            |cfg| cfg.trader.token_check_collection_timeout_secs
+        );
+        let collection_shutdown_check = with_config(|cfg| cfg.trader.collection_shutdown_check_ms);
+        let token_check_handle_timeout = with_config(
+            |cfg| cfg.trader.token_check_handle_timeout_secs
+        );
+
         if is_debug_trader_enabled() {
             log(
                 LogTag::Trader,
@@ -1487,24 +1390,24 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 &format!(
                     "⏳ Collecting {} token tasks with {}s overall timeout",
                     handles_count,
-                    TOKEN_CHECK_COLLECTION_TIMEOUT_SECS
+                    token_check_collection_timeout
                 )
             );
         }
         let collection_result = tokio::time::timeout(
-            Duration::from_secs(TOKEN_CHECK_COLLECTION_TIMEOUT_SECS),
+            Duration::from_secs(token_check_collection_timeout),
             async {
                 for handle in handles {
                     if
                         check_shutdown_or_delay(
                             &shutdown,
-                            Duration::from_millis(COLLECTION_SHUTDOWN_CHECK_MS)
+                            Duration::from_millis(collection_shutdown_check)
                         ).await
                     {
                         return;
                     }
                     let _ = tokio::time::timeout(
-                        Duration::from_secs(TOKEN_CHECK_HANDLE_TIMEOUT_SECS),
+                        Duration::from_secs(token_check_handle_timeout),
                         handle
                     ).await;
                 }
@@ -1514,11 +1417,12 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             log(
                 LogTag::Trader,
                 "ERROR",
-                &format!("Token check collection timed out after {} seconds", TOKEN_CHECK_COLLECTION_TIMEOUT_SECS)
+                &format!("Token check collection timed out after {} seconds", token_check_collection_timeout)
             );
         }
 
         // Add cycle summary logging
+        let max_open_positions = with_config(|cfg| cfg.trader.max_open_positions);
         if is_debug_trader_enabled() {
             let final_positions_count = crate::positions::get_open_positions_count().await;
             log(
@@ -1530,14 +1434,16 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                     total_tokens,
                     handles_count,
                     final_positions_count,
-                    MAX_OPEN_POSITIONS
+                    max_open_positions
                 )
             );
         }
 
         // Calculate how long we've spent in this cycle
         let cycle_duration = cycle_start.elapsed();
-        let wait_time = if cycle_duration >= Duration::from_secs(ENTRY_MONITOR_INTERVAL_SECS) {
+        let entry_monitor_interval = with_config(|cfg| cfg.trader.entry_monitor_interval_secs);
+        let entry_cycle_min_wait = with_config(|cfg| cfg.trader.entry_cycle_min_wait_ms);
+        let wait_time = if cycle_duration >= Duration::from_secs(entry_monitor_interval) {
             // If we've already spent more time than the interval, just wait a short time
             log(
                 LogTag::Trader,
@@ -1545,13 +1451,13 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 &format!(
                     "⚠️ Token checking cycle took longer than interval: {:.3}s > {}s",
                     cycle_duration.as_secs_f32(),
-                    ENTRY_MONITOR_INTERVAL_SECS
+                    entry_monitor_interval
                 )
             );
-            Duration::from_millis(ENTRY_CYCLE_MIN_WAIT_MS)
+            Duration::from_millis(entry_cycle_min_wait)
         } else {
             // Otherwise wait for the remaining interval time
-            let remaining = Duration::from_secs(ENTRY_MONITOR_INTERVAL_SECS) - cycle_duration;
+            let remaining = Duration::from_secs(entry_monitor_interval) - cycle_duration;
             if is_debug_trader_enabled() {
                 log(
                     LogTag::Trader,
@@ -1789,19 +1695,32 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                         crate::profit::should_sell(&position, current_price).await;
 
                     // Apply minimum profit threshold check if enabled
-                    let should_exit = if MIN_PROFIT_THRESHOLD_ENABLED && !debug_force_sell {
+                    let min_profit_threshold_enabled = with_config(
+                        |cfg| cfg.trader.min_profit_threshold_enabled
+                    );
+                    let time_override_duration_hours = with_config(
+                        |cfg| cfg.trader.time_override_duration_hours
+                    );
+                    let time_override_loss_threshold_percent = with_config(
+                        |cfg| cfg.trader.time_override_loss_threshold_percent
+                    );
+                    let min_profit_threshold_percent = with_config(
+                        |cfg| cfg.trader.min_profit_threshold_percent
+                    );
+
+                    let should_exit = if min_profit_threshold_enabled && !debug_force_sell {
                         // Check if position qualifies for time-based override
                         let position_age_hours =
                             (now.signed_duration_since(position.entry_time).num_seconds() as f64) /
                             3600.0;
                         let time_override_applies =
-                            position_age_hours >= TIME_OVERRIDE_DURATION_HOURS &&
-                            pnl_percent <= TIME_OVERRIDE_LOSS_THRESHOLD_PERCENT;
+                            position_age_hours >= time_override_duration_hours &&
+                            pnl_percent <= time_override_loss_threshold_percent;
 
                         if time_override_applies {
                             // Time override: Allow should_sell to decide for old positions with significant losses
                             should_exit_base
-                        } else if pnl_percent >= MIN_PROFIT_THRESHOLD_PERCENT {
+                        } else if pnl_percent >= min_profit_threshold_percent {
                             // Normal case: Only allow exit if P&L meets minimum threshold
                             should_exit_base
                         } else {
@@ -1816,8 +1735,8 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                             (now.signed_duration_since(position.entry_time).num_seconds() as f64) /
                             3600.0;
                         let time_override_applies =
-                            position_age_hours >= TIME_OVERRIDE_DURATION_HOURS &&
-                            pnl_percent <= TIME_OVERRIDE_LOSS_THRESHOLD_PERCENT;
+                            position_age_hours >= time_override_duration_hours &&
+                            pnl_percent <= time_override_loss_threshold_percent;
 
                         debug_trader_log(
                             "SELL_ANALYSIS",
@@ -1829,8 +1748,8 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                                 pnl_percent,
                                 pnl_sol,
                                 position_age_hours,
-                                MIN_PROFIT_THRESHOLD_PERCENT,
-                                MIN_PROFIT_THRESHOLD_ENABLED,
+                                min_profit_threshold_percent,
+                                min_profit_threshold_enabled,
                                 if time_override_applies {
                                     "YES"
                                 } else {
@@ -2007,6 +1926,13 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 
             let mut handles = Vec::new();
 
+            let sell_operation_shutdown_check = with_config(
+                |cfg| cfg.trader.sell_operation_shutdown_check_ms
+            );
+            let sell_semaphore_acquire_timeout = with_config(
+                |cfg| cfg.trader.sell_semaphore_acquire_timeout_secs
+            );
+
             // Process all sell orders concurrently
             for (
                 position,
@@ -2019,7 +1945,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                 if
                     check_shutdown_or_delay(
                         &shutdown,
-                        Duration::from_millis(SELL_OPERATION_SHUTDOWN_CHECK_MS)
+                        Duration::from_millis(sell_operation_shutdown_check)
                     ).await
                 {
                     log(
@@ -2033,7 +1959,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                 // Get permit from semaphore to limit concurrency with timeout
                 let permit = match
                     tokio::time::timeout(
-                        Duration::from_secs(SELL_SEMAPHORE_ACQUIRE_TIMEOUT_SECS),
+                        Duration::from_secs(sell_semaphore_acquire_timeout),
                         semaphore.clone().acquire_owned()
                     ).await
                 {
@@ -2062,9 +1988,16 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                         position.entry_time.timestamp()
                     );
 
+                    let sell_operation_shutdown_check = with_config(
+                        |cfg| cfg.trader.sell_operation_shutdown_check_ms
+                    );
+                    let sell_operation_smart_timeout = with_config(
+                        |cfg| cfg.trader.sell_operation_smart_timeout_secs
+                    );
+
                     // Check for shutdown before starting sell operation (non-blocking check)
                     let shutdown_check = tokio::time::timeout(
-                        Duration::from_millis(SELL_OPERATION_SHUTDOWN_CHECK_MS),
+                        Duration::from_millis(sell_operation_shutdown_check),
                         shutdown_for_task.notified()
                     ).await;
                     if shutdown_check.is_ok() {
@@ -2074,7 +2007,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     // Wrap the sell operation in a timeout
                     match
                         tokio::time::timeout(
-                            Duration::from_secs(SELL_OPERATION_SMART_TIMEOUT_SECS),
+                            Duration::from_secs(sell_operation_smart_timeout),
                             async {
                                 crate::positions
                                     ::close_position_direct(
@@ -2120,9 +2053,19 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                 handles.push(handle);
             }
 
+            let sell_operations_collection_timeout = with_config(
+                |cfg| cfg.trader.sell_operations_collection_timeout_secs
+            );
+            let collection_shutdown_check = with_config(
+                |cfg| cfg.trader.collection_shutdown_check_ms
+            );
+            let sell_task_handle_timeout = with_config(
+                |cfg| cfg.trader.sell_task_handle_timeout_secs
+            );
+
             // Collect results from all concurrent sell operations
             let collection_result = tokio::time::timeout(
-                Duration::from_secs(SELL_OPERATIONS_COLLECTION_TIMEOUT_SECS),
+                Duration::from_secs(sell_operations_collection_timeout),
                 async {
                     let mut completed = 0usize;
                     let mut successful = 0usize;
@@ -2132,7 +2075,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                         if
                             check_shutdown_or_delay(
                                 &shutdown,
-                                Duration::from_millis(COLLECTION_SHUTDOWN_CHECK_MS)
+                                Duration::from_millis(collection_shutdown_check)
                             ).await
                         {
                             break;
@@ -2141,7 +2084,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                         // Add timeout for each handle
                         match
                             tokio::time::timeout(
-                                Duration::from_secs(SELL_TASK_HANDLE_TIMEOUT_SECS),
+                                Duration::from_secs(sell_task_handle_timeout),
                                 handle
                             ).await
                         {
@@ -2199,12 +2142,10 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             }
         }
 
-        if
-            check_shutdown_or_delay(
-                &shutdown,
-                Duration::from_secs(POSITION_MONITOR_INTERVAL_SECS)
-            ).await
-        {
+        let position_monitor_interval = with_config(
+            |cfg| cfg.trader.position_monitor_interval_secs
+        );
+        if check_shutdown_or_delay(&shutdown, Duration::from_secs(position_monitor_interval)).await {
             log(LogTag::Trader, "INFO", "open positions monitor shutting down...");
             break;
         }

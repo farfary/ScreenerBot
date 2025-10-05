@@ -1,6 +1,6 @@
 use screenerbot::{
     arguments,
-    logger::{init_file_logging, log, LogTag},
+    logger::{ init_file_logging, log, LogTag },
     positions::get_open_positions_count,
 };
 
@@ -11,23 +11,17 @@ async fn main() -> Result<(), String> {
 
     let open = get_open_positions_count().await;
     // Access semaphore via internal module (unsafe to expose globally) using reflection-like hack not desired; instead we report open vs configured.
-    let max = screenerbot::trader::MAX_OPEN_POSITIONS;
+    let max = screenerbot::config::with_config(|cfg| cfg.trader.max_open_positions);
     log(
         LogTag::Positions,
         "INFO",
-        &format!(
-            "Open positions: {} / {} (semaphore reconciliation implicit)",
-            open, max
-        ),
+        &format!("Open positions: {} / {} (semaphore reconciliation implicit)", open, max)
     );
     if arguments::is_debug_positions_enabled() {
         log(
             LogTag::Positions,
             "DEBUG",
-            &format!(
-                "Enabled debug modes: {:?}",
-                arguments::get_enabled_debug_modes()
-            ),
+            &format!("Enabled debug modes: {:?}", arguments::get_enabled_debug_modes())
         );
     }
     Ok(())

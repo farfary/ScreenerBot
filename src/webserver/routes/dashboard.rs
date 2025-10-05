@@ -1,4 +1,3 @@
-
 use axum::{ extract::State, response::Json, routing::get, Router };
 use serde::{ Deserialize, Serialize };
 use std::sync::Arc;
@@ -282,11 +281,15 @@ async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<Dash
             },
     };
 
-    // Get monitoring info (from trader constants)
+    // Get monitoring info (from config system)
     let monitoring_info = MonitoringInfo {
         tokens_tracked: crate::pools::get_available_tokens().len(),
-        entry_check_interval_secs: crate::trader::ENTRY_MONITOR_INTERVAL_SECS,
-        position_monitor_interval_secs: crate::trader::POSITION_MONITOR_INTERVAL_SECS,
+        entry_check_interval_secs: crate::config::with_config(
+            |cfg| cfg.trader.entry_monitor_interval_secs
+        ),
+        position_monitor_interval_secs: crate::config::with_config(
+            |cfg| cfg.trader.position_monitor_interval_secs
+        ),
     };
 
     Json(DashboardOverview {

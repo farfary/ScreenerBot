@@ -2,10 +2,10 @@ use crate::arguments::{ is_debug_summary_logging_enabled, is_summary_enabled };
 use crate::ata_cleanup::{ get_ata_cleanup_statistics, get_failed_ata_count };
 use crate::global::{ is_debug_summary_enabled, STARTUP_TIME };
 use crate::logger::{ log, LogTag };
+use crate::config::with_config;
 use crate::positions::*;
 use crate::rpc::get_global_rpc_stats;
 use crate::tokens::get_token_from_db;
-use crate::trader::PROFIT_EXTRA_NEEDED_SOL;
 use crate::trader::*;
 use crate::transactions::{ SwapPnLInfo, Transaction, TransactionType, TransactionsManager };
 use check_shutdown_or_delay;
@@ -1497,7 +1497,8 @@ impl ClosedPositionDisplay {
         let is_verified = position.transaction_entry_verified && position.transaction_exit_verified;
 
         // Calculate total fees for the position including profit buffer for display
-        let total_fees = calculate_position_total_fees(position) + PROFIT_EXTRA_NEEDED_SOL;
+        let profit_extra_needed = with_config(|cfg| cfg.positions.profit_extra_needed_sol);
+        let total_fees = calculate_position_total_fees(position) + profit_extra_needed;
 
         if !is_verified {
             // For unverified positions, hide sensitive data
@@ -1600,7 +1601,8 @@ impl OpenPositionDisplay {
         let is_verified = position.transaction_entry_verified;
 
         // Calculate total fees for the position including profit buffer for display (for open positions, only entry fees + manual adjustment)
-        let total_fees = calculate_position_total_fees(position) + PROFIT_EXTRA_NEEDED_SOL;
+        let profit_extra_needed = with_config(|cfg| cfg.positions.profit_extra_needed_sol);
+        let total_fees = calculate_position_total_fees(position) + profit_extra_needed;
 
         let duration = format_duration_compact(position.entry_time, Utc::now());
 

@@ -27,10 +27,10 @@ static PENDING_OPEN_SWAPS: LazyLock<RwLock<HashMap<String, DateTime<Utc>>>> = La
     RwLock::new(HashMap::new())
 );
 
-// Global position creation semaphore to enforce MAX_OPEN_POSITIONS atomically
+// Global position creation semaphore to enforce max_open_positions atomically
 static GLOBAL_POSITION_SEMAPHORE: LazyLock<tokio::sync::Semaphore> = LazyLock::new(|| {
-    use crate::trader::MAX_OPEN_POSITIONS;
-    tokio::sync::Semaphore::new(MAX_OPEN_POSITIONS)
+    let max_positions = crate::config::with_config(|cfg| cfg.trader.max_open_positions);
+    tokio::sync::Semaphore::new(max_positions)
 });
 
 // Optional: global last open timestamp (cooldown)
@@ -467,11 +467,13 @@ pub async fn get_active_frozen_cooldowns() -> Vec<(String, i64)> {
 /// Check if a token was recently closed and is in cooldown period
 /// Returns true if the token should be blocked from re-entry
 pub async fn is_token_in_cooldown(mint: &str) -> bool {
-    use crate::trader::POSITION_CLOSE_COOLDOWN_MINUTES;
     use chrono::{ Duration as ChronoDuration, Utc };
 
     let now = Utc::now();
-    let cutoff = now - ChronoDuration::minutes(POSITION_CLOSE_COOLDOWN_MINUTES);
+    let cooldown_minutes = crate::config::with_config(
+        |cfg| cfg.trader.position_close_cooldown_minutes
+    );
+    let cutoff = now - ChronoDuration::minutes(cooldown_minutes);
 
     let positions = POSITIONS.read().await;
     positions

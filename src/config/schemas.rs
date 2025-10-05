@@ -71,6 +71,10 @@ config_struct! {
         sell_task_handle_timeout_secs: u64 = 200,
         entry_cycle_min_wait_ms: u64 = 100,
         token_processing_shutdown_check_ms: u64 = 10,
+        task_shutdown_check_ms: u64 = 10,
+        sell_operation_shutdown_check_ms: u64 = 10,
+        collection_shutdown_check_ms: u64 = 50,
+        entry_check_concurrency: usize = 10,
     }
 }
 
@@ -86,6 +90,9 @@ config_struct! {
         
         /// TTL for pending open swaps (seconds)
         pending_open_ttl_secs: i64 = 120,
+        
+        /// Extra SOL needed for profit calculations (accounts for priority fees, etc.)
+        profit_extra_needed_sol: f64 = 0.0002,
     }
 }
 
@@ -170,6 +177,12 @@ config_struct! {
         jupiter_dynamic_compute_unit_limit: bool = false,
         jupiter_default_priority_fee: u64 = 1000,
         jupiter_default_swap_mode: String = "ExactIn".to_string(),
+        
+        // Slippage configuration
+        slippage_quote_default_pct: f64 = 1.0,
+        slippage_exit_profit_shortfall_pct: f64 = 3.0,
+        slippage_exit_loss_shortfall_pct: f64 = 5.0,
+        slippage_exit_retry_steps_pct: Vec<f64> = vec![3.0, 10.0, 25.0],
     }
 }
 

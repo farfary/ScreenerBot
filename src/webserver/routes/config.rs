@@ -1,4 +1,3 @@
-
 use axum::{ extract::State, response::Json, routing::get, Router };
 use serde::{ Deserialize, Serialize };
 use std::sync::Arc;
@@ -85,19 +84,29 @@ pub fn routes() -> Router<Arc<AppState>> {
 
 /// Get current trading configuration
 async fn get_trading_config() -> Json<TradingConfigResponse> {
+    use crate::config::with_config;
+
     Json(TradingConfigResponse {
         trading_limits: TradingLimits {
-            max_open_positions: trader::MAX_OPEN_POSITIONS,
-            trade_size_sol: trader::TRADE_SIZE_SOL,
-            entry_check_concurrency: trader::ENTRY_CHECK_CONCURRENCY,
+            max_open_positions: with_config(|cfg| cfg.trader.max_open_positions),
+            trade_size_sol: with_config(|cfg| cfg.trader.trade_size_sol),
+            entry_check_concurrency: with_config(|cfg| cfg.trader.entry_check_concurrency),
         },
         risk_management: RiskManagement {
             stop_loss_percent: profit::STOP_LOSS_PERCENT,
             extreme_loss_percent: profit::EXTREME_LOSS_PERCENT,
-            min_profit_threshold_percent: trader::MIN_PROFIT_THRESHOLD_PERCENT,
-            min_profit_threshold_enabled: trader::MIN_PROFIT_THRESHOLD_ENABLED,
-            time_override_duration_hours: trader::TIME_OVERRIDE_DURATION_HOURS,
-            time_override_loss_threshold_percent: trader::TIME_OVERRIDE_LOSS_THRESHOLD_PERCENT,
+            min_profit_threshold_percent: with_config(
+                |cfg| cfg.trader.min_profit_threshold_percent
+            ),
+            min_profit_threshold_enabled: with_config(
+                |cfg| cfg.trader.min_profit_threshold_enabled
+            ),
+            time_override_duration_hours: with_config(
+                |cfg| cfg.trader.time_override_duration_hours
+            ),
+            time_override_loss_threshold_percent: with_config(
+                |cfg| cfg.trader.time_override_loss_threshold_percent
+            ),
         },
         profit_targets: ProfitTargets {
             base_min_profit_percent: profit::BASE_MIN_PROFIT_PERCENT,
@@ -109,26 +118,40 @@ async fn get_trading_config() -> Json<TradingConfigResponse> {
         },
         timing: TimingConfig {
             max_hold_minutes: profit::MAX_HOLD_MINUTES,
-            position_close_cooldown_minutes: trader::POSITION_CLOSE_COOLDOWN_MINUTES,
-            entry_monitor_interval_secs: trader::ENTRY_MONITOR_INTERVAL_SECS,
-            position_monitor_interval_secs: trader::POSITION_MONITOR_INTERVAL_SECS,
+            position_close_cooldown_minutes: with_config(
+                |cfg| cfg.trader.position_close_cooldown_minutes
+            ),
+            entry_monitor_interval_secs: with_config(|cfg| cfg.trader.entry_monitor_interval_secs),
+            position_monitor_interval_secs: with_config(
+                |cfg| cfg.trader.position_monitor_interval_secs
+            ),
         },
         slippage: SlippageConfig {
-            quote_default_pct: trader::SLIPPAGE_QUOTE_DEFAULT_PCT,
-            exit_profit_shortfall_pct: trader::SLIPPAGE_EXIT_PROFIT_SHORTFALL_PCT,
-            exit_loss_shortfall_pct: trader::SLIPPAGE_EXIT_LOSS_SHORTFALL_PCT,
-            exit_retry_steps_pct: trader::SLIPPAGE_EXIT_RETRY_STEPS_PCT.to_vec(),
+            quote_default_pct: with_config(|cfg| cfg.swaps.slippage_quote_default_pct),
+            exit_profit_shortfall_pct: with_config(
+                |cfg| cfg.swaps.slippage_exit_profit_shortfall_pct
+            ),
+            exit_loss_shortfall_pct: with_config(|cfg| cfg.swaps.slippage_exit_loss_shortfall_pct),
+            exit_retry_steps_pct: with_config(|cfg|
+                cfg.swaps.slippage_exit_retry_steps_pct.clone()
+            ),
         },
         monitoring: MonitoringConfig {
-            entry_check_interval_secs: trader::ENTRY_MONITOR_INTERVAL_SECS,
-            position_monitor_interval_secs: trader::POSITION_MONITOR_INTERVAL_SECS,
-            token_check_task_timeout_secs: trader::TOKEN_CHECK_TASK_TIMEOUT_SECS,
+            entry_check_interval_secs: with_config(|cfg| cfg.trader.entry_monitor_interval_secs),
+            position_monitor_interval_secs: with_config(
+                |cfg| cfg.trader.position_monitor_interval_secs
+            ),
+            token_check_task_timeout_secs: with_config(
+                |cfg| cfg.trader.token_check_task_timeout_secs
+            ),
         },
         debug_modes: DebugModes {
-            force_sell_mode: trader::DEBUG_FORCE_SELL_MODE,
-            force_sell_timeout_secs: trader::DEBUG_FORCE_SELL_TIMEOUT_SECS,
-            force_buy_mode: trader::DEBUG_FORCE_BUY_MODE,
-            force_buy_drop_threshold_percent: trader::DEBUG_FORCE_BUY_DROP_THRESHOLD_PERCENT,
+            force_sell_mode: with_config(|cfg| cfg.trader.debug_force_sell_mode),
+            force_sell_timeout_secs: with_config(|cfg| cfg.trader.debug_force_sell_timeout_secs),
+            force_buy_mode: with_config(|cfg| cfg.trader.debug_force_buy_mode),
+            force_buy_drop_threshold_percent: with_config(
+                |cfg| cfg.trader.debug_force_buy_drop_threshold_percent
+            ),
         },
         timestamp: chrono::Utc::now().to_rfc3339(),
     })

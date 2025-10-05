@@ -52,13 +52,12 @@ pub const FAST_FAILURE_THRESHOLD_ATTEMPTS: u32 = 10;
 pub const PRIORITY_CONFIRMATION_RETRY_DELAY_MS: u64 = 1000;
 
 // =============================================================================
-// SLIPPAGE CONFIGURATION (Unified - sourced from trader)
+// SLIPPAGE CONFIGURATION (Now loaded from centralized config)
 // =============================================================================
-pub use crate::trader::{
-    SLIPPAGE_EXIT_RETRY_STEPS_PCT as SELL_RETRY_SLIPPAGES,
-    SLIPPAGE_QUOTE_DEFAULT_PCT as QUOTE_SLIPPAGE_PERCENT,
-    SLIPPAGE_QUOTE_DEFAULT_PCT as INTERNAL_SLIPPAGE_PERCENT, // kept for legacy naming
-};
+// NOTE: Slippage values are now loaded from config system via:
+// - with_config(|cfg| cfg.swaps.slippage_quote_default_pct)
+// - with_config(|cfg| cfg.swaps.slippage_exit_retry_steps_pct)
+// Legacy re-exports removed - use config access directly where needed
 
 // =============================================================================
 // GMGN ROUTER SPECIFIC CONFIGURATION
