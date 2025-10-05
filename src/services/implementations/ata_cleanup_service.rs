@@ -3,7 +3,6 @@ use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 use crate::services::{ Service, ServiceHealth, ServiceMetrics };
-use crate::configs::Configs;
 use crate::logger::{ log, LogTag };
 
 pub struct AtaCleanupService;

@@ -3,7 +3,6 @@ use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 use crate::services::{ Service, ServiceHealth, ServiceMetrics };
-use crate::configs::Configs;
 use crate::logger::{ log, LogTag };
 
 pub struct WebserverService;
@@ -22,8 +21,8 @@ impl Service for WebserverService {
         vec![]
     }
 
-    fn is_enabled(&self, config: &Configs) -> bool {
-        config.webserver.enabled
+    fn is_enabled(&self) -> bool {
+        crate::config::with_config(|cfg| cfg.webserver.enabled)
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
@@ -34,13 +33,21 @@ impl Service for WebserverService {
     async fn start(&mut self, shutdown: Arc<Notify>) -> Result<Vec<JoinHandle<()>>, String> {
         log(LogTag::System, "INFO", "🌐 Starting webserver dashboard...");
 
-        let config = crate::global
-            ::read_configs()
-            .map_err(|e| format!("Failed to read config: {:?}", e))?;
+        // Get config values from new config system
+        let (host, port) = crate::config::with_config(|cfg| {
+            (cfg.webserver.host.clone(), cfg.webserver.port)
+        });
 
-        let webserver_config = config.webserver.clone();
-        let host = webserver_config.host.clone();
-        let port = webserver_config.port;
+        // Build webserver config using webserver module's type
+        let webserver_config = crate::webserver::config::WebserverConfig {
+            enabled: true,
+            host: host.clone(),
+            port,
+            cors: crate::webserver::config::CorsConfig::default(),
+            rate_limit: crate::webserver::config::RateLimitConfig::default(),
+            auth: crate::webserver::config::AuthConfig::default(),
+            websocket: crate::webserver::config::WebSocketConfig::default(),
+        };
 
         let handle = tokio::spawn(async move {
             if let Err(e) = crate::webserver::start_server(webserver_config).await {

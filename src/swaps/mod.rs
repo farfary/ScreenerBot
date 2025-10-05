@@ -433,14 +433,8 @@ pub async fn execute_best_swap(
             );
 
             // Get fallback quote from the other router
-            let wallet_address = match crate::configs::read_configs() {
-                Ok(configs) =>
-                    match crate::configs::get_wallet_pubkey_string(&configs) {
-                        Ok(addr) => addr,
-                        Err(_) => {
-                            return primary_result;
-                        } // If can't get wallet, return original error
-                    }
+            let wallet_address = match crate::config::get_wallet_pubkey_string() {
+                Ok(addr) => addr,
                 Err(_) => {
                     return primary_result;
                 } // If can't get wallet, return original error

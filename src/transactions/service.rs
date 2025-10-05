@@ -12,7 +12,6 @@ use std::time::Duration;
 use tokio::sync::{ Mutex, Notify };
 use tokio::time::{ interval, timeout, sleep };
 
-use crate::configs::read_configs;
 use crate::global::is_debug_transactions_enabled;
 use crate::logger::{ log, LogTag };
 use crate::transactions::{
@@ -1305,27 +1304,26 @@ async fn perform_fallback_transaction_check(
 async fn initialize_websocket_monitoring(
     wallet_pubkey: solana_sdk::pubkey::Pubkey
 ) -> Result<Option<tokio::sync::mpsc::UnboundedReceiver<String>>, String> {
-    // Determine WS URL: prefer Helius if API key is present in configs; else default
-    let ws_url = match read_configs() {
-        Ok(cfg) => {
-            // Try to find a Helius API key in the configured RPC URLs
-            let mut api_key: Option<String> = None;
-            for url in cfg.rpc_urls.iter() {
-                if url.contains("helius-rpc.com") {
-                    if let Some(pos) = url.find("api-key=") {
-                        let key_start = pos + "api-key=".len();
-                        let end = url[key_start..]
-                            .find('&')
-                            .map(|i| key_start + i)
-                            .unwrap_or(url.len());
-                        api_key = Some(url[key_start..end].to_string());
-                        break;
-                    }
+    // Determine WS URL: prefer Helius if API key is present in config; else default
+    let ws_url = {
+        let rpc_urls = crate::config::with_config(|cfg| cfg.rpc.urls.clone());
+
+        // Try to find a Helius API key in the configured RPC URLs
+        let mut api_key: Option<String> = None;
+        for url in rpc_urls.iter() {
+            if url.contains("helius-rpc.com") {
+                if let Some(pos) = url.find("api-key=") {
+                    let key_start = pos + "api-key=".len();
+                    let end = url[key_start..]
+                        .find('&')
+                        .map(|i| key_start + i)
+                        .unwrap_or(url.len());
+                    api_key = Some(url[key_start..end].to_string());
+                    break;
                 }
             }
-            api_key.map(|k| websocket::SolanaWebSocketClient::get_helius_ws_url(&k))
         }
-        Err(_) => None,
+        api_key.map(|k| websocket::SolanaWebSocketClient::get_helius_ws_url(&k))
     };
 
     let ws_url_log = ws_url

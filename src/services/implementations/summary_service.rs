@@ -22,7 +22,7 @@ impl Service for SummaryService {
         vec!["positions", "transactions", "tokens", "wallet"]
     }
 
-    fn is_enabled(&self, _config: &crate::configs::Configs) -> bool {
+    fn is_enabled(&self) -> bool {
         // Only enable if --summary flag is present
         is_summary_enabled()
     }

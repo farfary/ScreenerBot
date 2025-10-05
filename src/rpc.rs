@@ -35,7 +35,6 @@ use crate::global::{
     is_debug_rpc_enabled,
     is_debug_transactions_enabled,
     is_debug_wallet_enabled,
-    read_configs,
     RPC_STATS,
 };
 use crate::logger::{ log, LogTag };
@@ -233,13 +232,9 @@ pub async fn get_ata_rent_lamports() -> Result<u64, ScreenerBotError> {
     });
 
     let client = reqwest::Client::new();
-    let configs = read_configs().map_err(|e| {
-        ScreenerBotError::Configuration(crate::errors::ConfigurationError::Generic {
-            message: format!("Failed to read configs: {}", e),
-        })
-    })?;
+    let rpc_urls = crate::config::with_config(|cfg| cfg.rpc.urls.clone());
 
-    if configs.rpc_urls.is_empty() {
+    if rpc_urls.is_empty() {
         return Err(
             ScreenerBotError::Configuration(crate::errors::ConfigurationError::Generic {
                 message: "No RPC URLs configured".to_string(),
@@ -350,14 +345,10 @@ pub fn spl_token_program_id() -> &'static str {
 ///  - https://api.mainnet-beta.solana.com -> wss://api.mainnet-beta.solana.com
 ///  - http://localhost:8899 -> ws://localhost:8899
 pub fn get_websocket_url() -> Result<String, ScreenerBotError> {
-    let cfg = read_configs().map_err(|e| {
-        ScreenerBotError::Configuration(crate::errors::ConfigurationError::Generic {
-            message: format!("Failed to read configs: {}", e),
-        })
-    })?;
+    let rpc_urls = crate::config::with_config(|cfg| cfg.rpc.urls.clone());
 
     // Use the first RPC URL from the list for websocket derivation
-    let http = cfg.rpc_urls.get(0).ok_or_else(|| {
+    let http = rpc_urls.get(0).ok_or_else(|| {
         ScreenerBotError::Configuration(crate::errors::ConfigurationError::Generic {
             message: "No RPC URLs configured".to_string(),
         })
@@ -855,11 +846,11 @@ impl RpcClient {
         })
     }
 
-    /// Create new RPC client from configs.json
+    /// Create new RPC client from config
     pub fn from_config() -> Result<Self, String> {
-        let configs = read_configs().map_err(|e| format!("Failed to read configs: {}", e))?;
+        let rpc_urls = crate::config::with_config(|cfg| cfg.rpc.urls.clone());
 
-        if configs.rpc_urls.is_empty() {
+        if rpc_urls.is_empty() {
             return Err("No RPC URLs configured".to_string());
         }
 
@@ -869,18 +860,18 @@ impl RpcClient {
                 "INIT",
                 &format!(
                     "Initializing RPC client with {} URLs for round-robin rotation",
-                    configs.rpc_urls.len()
+                    rpc_urls.len()
                 )
             );
         }
 
         if is_debug_rpc_enabled() {
-            for (i, url) in configs.rpc_urls.iter().enumerate() {
+            for (i, url) in rpc_urls.iter().enumerate() {
                 log(LogTag::Rpc, "RPC_URL", &format!("RPC URL {}: {}", i + 1, url));
             }
         }
 
-        Self::new_with_urls(configs.rpc_urls)
+        Self::new_with_urls(rpc_urls)
     }
 
     /// Create new RPC client with a list of URLs for round-robin rotation
@@ -2210,12 +2201,6 @@ impl RpcClient {
         &self,
         swap_transaction_base64: &str
     ) -> Result<String, ScreenerBotError> {
-        let configs = read_configs().map_err(|e| {
-            ScreenerBotError::Configuration(crate::errors::ConfigurationError::Generic {
-                message: format!("Failed to read configs: {}", e),
-            })
-        })?;
-
         if is_debug_wallet_enabled() {
             log(
                 LogTag::Rpc,
@@ -2267,21 +2252,10 @@ impl RpcClient {
                 })
             })?;
 
-        // Create keypair from private key
-        let private_key_bytes = bs58
-            ::decode(&configs.main_wallet_private)
-            .into_vec()
-            .map_err(|e| {
-                ScreenerBotError::Configuration(
-                    crate::errors::ConfigurationError::InvalidPrivateKey {
-                        error: format!("Invalid private key format: {}", e),
-                    }
-                )
-            })?;
-
-        let keypair = Keypair::try_from(&private_key_bytes[..]).map_err(|e| {
+        // Create keypair from config
+        let keypair = crate::config::get_wallet_keypair().map_err(|e| {
             ScreenerBotError::Configuration(crate::errors::ConfigurationError::InvalidPrivateKey {
-                error: format!("Failed to create keypair: {}", e),
+                error: format!("Failed to load wallet keypair: {}", e),
             })
         })?;
 
@@ -2589,12 +2563,6 @@ impl RpcClient {
         &self,
         swap_transaction_base64: &str
     ) -> Result<String, ScreenerBotError> {
-        let configs = read_configs().map_err(|e| {
-            ScreenerBotError::Configuration(crate::errors::ConfigurationError::Generic {
-                message: format!("Failed to read configs: {}", e),
-            })
-        })?;
-
         if is_debug_transactions_enabled() {
             log(
                 LogTag::Rpc,
@@ -2626,21 +2594,10 @@ impl RpcClient {
                 })
             })?;
 
-        // Create keypair from private key
-        let private_key_bytes = bs58
-            ::decode(&configs.main_wallet_private)
-            .into_vec()
-            .map_err(|e| {
-                ScreenerBotError::Configuration(
-                    crate::errors::ConfigurationError::InvalidPrivateKey {
-                        error: format!("Invalid private key format: {}", e),
-                    }
-                )
-            })?;
-
-        let keypair = Keypair::try_from(&private_key_bytes[..]).map_err(|e| {
+        // Create keypair from config
+        let keypair = crate::config::get_wallet_keypair().map_err(|e| {
             ScreenerBotError::Configuration(crate::errors::ConfigurationError::InvalidPrivateKey {
-                error: format!("Failed to create keypair: {}", e),
+                error: format!("Failed to load wallet keypair: {}", e),
             })
         })?;
 

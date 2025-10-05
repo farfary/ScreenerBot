@@ -3,7 +3,6 @@ use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 use crate::services::{ Service, ServiceHealth, ServiceMetrics };
-use crate::configs::Configs;
 use crate::logger::{ log, LogTag };
 use solana_sdk::signer::Signer;
 
@@ -32,13 +31,9 @@ impl Service for TransactionsService {
         log(LogTag::System, "INFO", "Starting transactions service...");
 
         // Get wallet pubkey from config
-        let config = crate::global
-            ::read_configs()
-            .map_err(|e| format!("Failed to read config: {:?}", e))?;
-        let wallet = crate::configs
-            ::load_wallet_from_config(&config)
-            .map_err(|e| format!("Failed to load wallet: {:?}", e))?;
-        let wallet_pubkey = wallet.pubkey();
+        let wallet_pubkey = crate::config
+            ::get_wallet_pubkey()
+            .map_err(|e| format!("Failed to load wallet: {}", e))?;
 
         // Start global transaction service and capture handle
         let handle = crate::transactions::service

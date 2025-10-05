@@ -10,17 +10,13 @@ pub async fn run_bot() -> Result<(), String> {
 
     log(LogTag::System, "INFO", "🚀 ScreenerBot starting up...");
 
-    // 2. Load configuration (both systems)
-    // Load NEW config system first (required for with_config() calls throughout codebase)
-    crate::config::load_config().map_err(|e| format!("Failed to load new config system: {}", e))?;
-
-    // Load OLD config system for ServiceManager
-    let config = global::read_configs().map_err(|e| format!("Failed to load config: {:?}", e))?;
+    // 2. Load configuration
+    crate::config::load_config().map_err(|e| format!("Failed to load config: {}", e))?;
 
     log(LogTag::System, "INFO", "Configuration loaded successfully");
 
     // 3. Create service manager
-    let mut service_manager = ServiceManager::new(config).await?;
+    let mut service_manager = ServiceManager::new().await?;
 
     log(LogTag::System, "INFO", "Service manager initialized");
 

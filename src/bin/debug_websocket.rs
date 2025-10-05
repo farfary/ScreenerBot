@@ -121,20 +121,21 @@ async fn main() {
     // Step 1: Load RPC configuration
     print_step("Loading RPC configuration", "RUNNING");
 
-    let ws_url = match screenerbot::configs::read_configs() {
-        Ok(config) => {
-            if let Some(first_rpc_url) = config.rpc_urls.first() {
-                let ws = first_rpc_url.replace("https://", "wss://").replace("http://", "ws://");
-                print_step(&format!("RPC URL: {}", first_rpc_url), "INFO");
-                print_step(&format!("WebSocket URL: {}", ws), "SUCCESS");
-                ws
-            } else {
-                print_step("No RPC URLs in config", "ERROR");
-                return;
-            }
-        }
-        Err(e) => {
-            print_step(&format!("Failed to load config: {}", e), "ERROR");
+    // Load config first
+    if let Err(e) = screenerbot::config::load_config() {
+        print_step(&format!("Failed to load config: {}", e), "ERROR");
+        return;
+    }
+
+    let ws_url = {
+        let rpc_urls = screenerbot::config::with_config(|cfg| cfg.rpc.urls.clone());
+        if let Some(first_rpc_url) = rpc_urls.first() {
+            let ws = first_rpc_url.replace("https://", "wss://").replace("http://", "ws://");
+            print_step(&format!("RPC URL: {}", first_rpc_url), "INFO");
+            print_step(&format!("WebSocket URL: {}", ws), "SUCCESS");
+            ws
+        } else {
+            print_step("No RPC URLs in config", "ERROR");
             return;
         }
     };

@@ -342,12 +342,9 @@ async fn burn_single_token_amount(account: &TokenAccountInfo) -> Result<String, 
     )?;
 
     // Get wallet keypair from config
-    let configs = screenerbot::configs
-        ::read_configs()
-        .map_err(|e| format!("Failed to read configs: {:?}", e))?;
-    let wallet_keypair = screenerbot::configs
-        ::load_wallet_from_config(&configs)
-        .map_err(|e| format!("Failed to load wallet keypair: {:?}", e))?;
+    let wallet_keypair = screenerbot::config
+        ::get_wallet_keypair()
+        .map_err(|e| format!("Failed to load wallet keypair: {}", e))?;
 
     // Create burn instruction
     let burn_instruction = spl_instruction

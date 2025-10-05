@@ -102,8 +102,6 @@ pub fn format_mint_for_log(mint: &str) -> String {
     format!("{}...", mint)
 }
 
-// Wallet-related imports
-use crate::global::read_configs;
 // Re-export for backward compatibility
 pub use crate::swaps::SwapResult;
 // Remove dependency on swaps module for get_wallet_address
@@ -118,33 +116,14 @@ use solana_sdk::{
 };
 use spl_token::instruction::close_account;
 
-/// Get the wallet address from the main wallet private key in configs
+/// Get the wallet address from the main wallet private key in config
 /// This replaces the swaps::get_wallet_address dependency
 pub fn get_wallet_address() -> Result<String, ScreenerBotError> {
-    let configs = read_configs().map_err(|e| {
-        ScreenerBotError::Configuration(crate::errors::ConfigurationError::Generic {
-            message: format!("Failed to read config file: {}", e),
-        })
-    })?;
-
-    // Decode the private key from base58
-    let private_key_bytes = bs58
-        ::decode(&configs.main_wallet_private)
-        .into_vec()
-        .map_err(|e| {
-            ScreenerBotError::Configuration(crate::errors::ConfigurationError::InvalidPrivateKey {
-                error: format!("Invalid private key format: {}", e),
-            })
-        })?;
-
-    // Create keypair from private key
-    let keypair = Keypair::try_from(&private_key_bytes[..]).map_err(|e| {
+    crate::config::get_wallet_pubkey_string().map_err(|e| {
         ScreenerBotError::Configuration(crate::errors::ConfigurationError::InvalidPrivateKey {
-            error: format!("Failed to create keypair: {}", e),
+            error: format!("Failed to load wallet address: {}", e),
         })
-    })?;
-
-    Ok(keypair.pubkey().to_string())
+    })
 }
 
 /// Format a duration (from Option<DateTime<Utc>>) as a human-readable age string (y d h m s)
@@ -1065,12 +1044,6 @@ async fn build_and_send_close_instruction(
         );
     }
 
-    let configs = read_configs().map_err(|e| {
-        ScreenerBotError::Configuration(crate::errors::ConfigurationError::Generic {
-            message: format!("Failed to read config file: {}", e),
-        })
-    })?;
-
     // Parse addresses
     if is_debug_ata_enabled() {
         log(
@@ -1098,23 +1071,14 @@ async fn build_and_send_close_instruction(
         )
     })?;
 
-    // Decode private key
+    // Load keypair from config
     if is_debug_ata_enabled() {
         log(LogTag::Wallet, "DEBUG", &format!("🔐 ATA_KEYPAIR: creating keypair from config"));
     }
 
-    let private_key_bytes = bs58
-        ::decode(&configs.main_wallet_private)
-        .into_vec()
-        .map_err(|e| {
-            ScreenerBotError::Configuration(crate::errors::ConfigurationError::InvalidPrivateKey {
-                error: format!("Invalid private key: {}", e),
-            })
-        })?;
-
-    let keypair = Keypair::try_from(&private_key_bytes[..]).map_err(|e| {
+    let keypair = crate::config::get_wallet_keypair().map_err(|e| {
         ScreenerBotError::Configuration(crate::errors::ConfigurationError::InvalidPrivateKey {
-            error: format!("Failed to create keypair: {}", e),
+            error: format!("Failed to load wallet keypair: {}", e),
         })
     })?;
 

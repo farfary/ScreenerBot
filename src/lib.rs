@@ -2,8 +2,7 @@
 
 pub mod arguments;
 pub mod ata_cleanup;
-pub mod config; // New unified config system with zero repetition
-pub mod configs; // Legacy config system (to be migrated)
+pub mod config; // Unified config system with zero repetition
 pub mod constants; // Global constants used across modules
 pub mod entry; // New improved entry system
 pub mod errors; // New structured error handling

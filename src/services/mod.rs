@@ -9,7 +9,6 @@ use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::{ Notify, RwLock };
 use tokio::task::JoinHandle;
-use crate::configs::Configs;
 use crate::logger::{ log, LogTag };
 use std::collections::HashMap;
 use std::sync::LazyLock;
@@ -35,13 +34,10 @@ pub trait Service: Send + Sync {
         vec![]
     }
 
-    /// Check if service is enabled in configuration
-    fn is_enabled(&self, config: &Configs) -> bool {
-        // Default: check if service is in config and enabled
-        config.services.services
-            .get(self.name())
-            .map(|s| s.enabled)
-            .unwrap_or(true)
+    /// Check if service is enabled
+    fn is_enabled(&self) -> bool {
+        // All services are enabled by default
+        true
     }
 
     /// Initialize the service
@@ -72,17 +68,15 @@ pub struct ServiceManager {
     services: HashMap<&'static str, Box<dyn Service>>,
     handles: HashMap<&'static str, Vec<JoinHandle<()>>>,
     shutdown: Arc<Notify>,
-    config: Configs,
     metrics_collector: MetricsCollector,
 }
 
 impl ServiceManager {
-    pub async fn new(config: Configs) -> Result<Self, String> {
+    pub async fn new() -> Result<Self, String> {
         Ok(Self {
             services: HashMap::new(),
             handles: HashMap::new(),
             shutdown: Arc::new(Notify::new()),
-            config,
             metrics_collector: MetricsCollector::new(),
         })
     }
@@ -100,7 +94,7 @@ impl ServiceManager {
         // Filter enabled services
         let enabled_services: Vec<&'static str> = self.services
             .iter()
-            .filter(|(_, service)| service.is_enabled(&self.config))
+            .filter(|(_, service)| service.is_enabled())
             .map(|(name, _)| *name)
             .collect();
 
@@ -305,7 +299,7 @@ impl ServiceManager {
     pub fn is_service_enabled(&self, name: &str) -> bool {
         self.services
             .get(name)
-            .map(|s| s.is_enabled(&self.config))
+            .map(|s| s.is_enabled())
             .unwrap_or(false)
     }
 }

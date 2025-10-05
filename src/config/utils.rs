@@ -9,6 +9,8 @@
 use once_cell::sync::OnceCell;
 use std::sync::RwLock;
 use super::schemas::Config;
+use solana_sdk::signature::{ Keypair, Signer };
+use solana_sdk::pubkey::Pubkey;
 
 /// Global configuration instance
 ///
@@ -200,6 +202,136 @@ pub fn save_config(path: Option<&str>) -> Result<(), String> {
 /// `true` if load_config() has been called successfully
 pub fn is_config_initialized() -> bool {
     CONFIG.get().is_some()
+}
+
+// ============================================================================
+// WALLET MANAGEMENT FUNCTIONS
+// ============================================================================
+
+/// Load the main wallet keypair from the configuration
+///
+/// This function supports multiple private key formats:
+/// - Base58 encoded string (standard Solana format)
+/// - Array format like [1,2,3,4,...] (byte array representation)
+///
+/// The function performs comprehensive validation to ensure the private key
+/// is exactly 64 bytes and can be successfully converted to a Keypair.
+///
+/// # Returns
+/// - `Ok(Keypair)` - Successfully created Solana keypair
+/// - `Err(String)` - Invalid format, wrong length, or parsing error
+///
+/// # Example
+/// ```
+/// use screenerbot::config::get_wallet_keypair;
+///
+/// let wallet = get_wallet_keypair()?;
+/// println!("Wallet public key: {}", wallet.pubkey());
+/// ```
+pub fn get_wallet_keypair() -> Result<Keypair, String> {
+    with_config(|cfg| {
+        let private_key = &cfg.main_wallet_private;
+
+        if private_key.is_empty() {
+            return Err("Main wallet private key is empty in config".to_string());
+        }
+
+        // Parse the private key from base58 string or array format
+        let keypair = if private_key.starts_with('[') && private_key.ends_with(']') {
+            // Handle array format like [1,2,3,4,...]
+            load_keypair_from_array_format(private_key)?
+        } else {
+            // Handle base58 format
+            load_keypair_from_base58_format(private_key)?
+        };
+
+        Ok(keypair)
+    })
+}
+
+/// Helper function to load keypair from array format
+///
+/// Parses private key strings in the format "[1,2,3,4,...]" where each
+/// number represents a byte value from 0-255.
+fn load_keypair_from_array_format(private_key_str: &str) -> Result<Keypair, String> {
+    let private_key_str = private_key_str.trim_start_matches('[').trim_end_matches(']');
+
+    let private_key_bytes: Result<Vec<u8>, _> = private_key_str
+        .split(',')
+        .map(|s| s.trim().parse::<u8>())
+        .collect();
+
+    match private_key_bytes {
+        Ok(bytes) => {
+            if bytes.len() != 64 {
+                return Err(
+                    format!("Invalid private key length: expected 64 bytes, got {}", bytes.len())
+                );
+            }
+            Keypair::from_bytes(&bytes).map_err(|e|
+                format!("Failed to create keypair from array: {}", e)
+            )
+        }
+        Err(e) => Err(format!("Failed to parse private key array: {}", e)),
+    }
+}
+
+/// Helper function to load keypair from base58 format
+///
+/// Parses private key strings in base58 format, which is the standard
+/// Solana wallet format used by most tools and libraries.
+fn load_keypair_from_base58_format(private_key_str: &str) -> Result<Keypair, String> {
+    let decoded = bs58
+        ::decode(private_key_str)
+        .into_vec()
+        .map_err(|e| format!("Failed to decode base58 private key: {}", e))?;
+
+    if decoded.len() != 64 {
+        return Err(format!("Invalid private key length: expected 64 bytes, got {}", decoded.len()));
+    }
+
+    Keypair::from_bytes(&decoded).map_err(|e|
+        format!("Failed to create keypair from base58: {}", e)
+    )
+}
+
+/// Get the wallet public key from the configuration
+///
+/// This loads the keypair and extracts just the public key.
+///
+/// # Returns
+/// - `Ok(Pubkey)` - The wallet's public key
+/// - `Err(String)` - Failed to load or parse keypair
+///
+/// # Example
+/// ```
+/// use screenerbot::config::get_wallet_pubkey;
+///
+/// let pubkey = get_wallet_pubkey()?;
+/// println!("Wallet address: {}", pubkey);
+/// ```
+pub fn get_wallet_pubkey() -> Result<Pubkey, String> {
+    get_wallet_keypair().map(|kp| kp.pubkey())
+}
+
+/// Get the wallet public key as a base58 string
+///
+/// This is useful for logging or display purposes where you need to show
+/// the wallet address but don't need the Pubkey type.
+///
+/// # Returns
+/// - `Ok(String)` - Base58 encoded public key
+/// - `Err(String)` - Failed to load or parse keypair
+///
+/// # Example
+/// ```
+/// use screenerbot::config::get_wallet_pubkey_string;
+///
+/// let address = get_wallet_pubkey_string()?;
+/// println!("Wallet address: {}", address);
+/// ```
+pub fn get_wallet_pubkey_string() -> Result<String, String> {
+    get_wallet_pubkey().map(|pk| pk.to_string())
 }
 
 /// Get a reference to a specific config section
