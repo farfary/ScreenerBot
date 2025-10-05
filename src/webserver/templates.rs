@@ -3032,7 +3032,7 @@ pub fn services_content() -> String {
         }
         
         .summary-card {
-            background: var(--card-bg);
+            background: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: 8px;
             padding: 1.5rem;
@@ -3051,19 +3051,19 @@ pub fn services_content() -> String {
         }
         
         .summary-value.success {
-            color: var(--success-color);
+            color: #10b981;
         }
         
         .summary-value.warning {
-            color: var(--warning-color);
+            color: #f59e0b;
         }
         
         .summary-value.error {
-            color: var(--error-color);
+            color: #ef4444;
         }
         
         .service-card {
-            background: var(--card-bg);
+            background: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: 8px;
             padding: 1.5rem;
@@ -3123,6 +3123,17 @@ pub fn services_content() -> String {
             padding: 0.25rem 0.75rem;
             border-radius: 12px;
         }
+        
+        .loading-message, .error-message {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            font-size: 1rem;
+        }
+        
+        .error-message {
+            color: #ef4444;
+        }
     </style>
 
     <script>
@@ -3132,7 +3143,7 @@ pub fn services_content() -> String {
             try {
                 const response = await fetch('/api/services/overview');
                 const data = await response.json();
-                servicesData = data.data;
+                servicesData = data; // FIX: Direct access, not data.data
                 renderServices();
             } catch (error) {
                 console.error('Failed to load services:', error);
