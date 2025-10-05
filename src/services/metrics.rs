@@ -1,3 +1,4 @@
+use serde::{ Deserialize, Serialize };
 use sysinfo::{ System, Pid };
 use tokio_metrics::TaskMonitor;
 use std::collections::HashMap;
@@ -5,7 +6,7 @@ use std::sync::{ Arc, Mutex };
 use std::time::Instant;
 
 /// Service resource metrics
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ServiceMetrics {
     pub cpu_usage_percent: f32,
     pub memory_usage_bytes: u64,

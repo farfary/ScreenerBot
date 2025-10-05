@@ -23,16 +23,45 @@ pub async fn run_bot() -> Result<(), String> {
     // 4. Register all services
     register_all_services(&mut service_manager);
 
-    // 5. Start all enabled services
+    // 5. Initialize global ServiceManager for webserver access
+    crate::services::init_global_service_manager(service_manager).await;
+
+    // 6. Get mutable reference to continue
+    let manager_ref = crate::services
+        ::get_service_manager().await
+        .ok_or("Failed to get ServiceManager reference")?;
+
+    let mut service_manager = {
+        let mut guard = manager_ref.write().await;
+        guard.take().ok_or("ServiceManager was already taken")?
+    };
+
+    // 7. Start all enabled services
     service_manager.start_all().await?;
+
+    // 8. Put it back for webserver access
+    {
+        let mut guard = manager_ref.write().await;
+        *guard = Some(service_manager);
+    }
 
     log(LogTag::System, "SUCCESS", "✅ All services started - ScreenerBot is running");
 
     // 6. Wait for shutdown signal
     wait_for_shutdown_signal().await?;
 
-    // 7. Stop all services gracefully
+    // 9. Stop all services gracefully
     log(LogTag::System, "INFO", "🛑 Initiating graceful shutdown...");
+
+    let manager_ref = crate::services
+        ::get_service_manager().await
+        .ok_or("Failed to get ServiceManager reference for shutdown")?;
+
+    let mut service_manager = {
+        let mut guard = manager_ref.write().await;
+        guard.take().ok_or("ServiceManager was already taken during shutdown")?
+    };
+
     service_manager.stop_all().await?;
 
     log(LogTag::System, "SUCCESS", "✅ ScreenerBot shut down successfully");

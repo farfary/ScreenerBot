@@ -11,6 +11,7 @@ pub mod wallet;
 pub mod blacklist;
 pub mod config;
 pub mod ws;
+pub mod services;
 
 pub fn create_router(state: Arc<AppState>) -> Router {
     Router::new()
@@ -20,6 +21,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/positions", axum::routing::get(positions_page))
         .route("/tokens", axum::routing::get(tokens_page))
         .route("/events", axum::routing::get(events_page))
+        .route("/services", axum::routing::get(services_page))
         .nest("/api", api_routes())
         .with_state(state)
 }
@@ -54,6 +56,12 @@ async fn events_page() -> Html<String> {
     Html(templates::base_template("Events", "events", &content))
 }
 
+/// Services page handler
+async fn services_page() -> Html<String> {
+    let content = templates::services_content();
+    Html(templates::base_template("Services", "services", &content))
+}
+
 fn api_routes() -> Router<Arc<AppState>> {
     Router::new()
         .merge(status::routes())
@@ -65,4 +73,5 @@ fn api_routes() -> Router<Arc<AppState>> {
         .merge(blacklist::routes())
         .merge(config::routes())
         .merge(ws::routes())
+        .merge(services::routes())
 }

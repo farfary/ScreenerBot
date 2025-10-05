@@ -1160,6 +1160,7 @@ fn nav_tabs(active: &str) -> String {
     let tabs = vec![
         ("home", "🏠 Home"),
         ("status", "📊 Status"),
+        ("services", "🔧 Services"),
         ("positions", "💰 Positions"),
         ("tokens", "🪙 Tokens"),
         ("events", "📡 Events")
@@ -2971,6 +2972,261 @@ pub fn events_content() -> String {
     loadEvents();
     startEventsWebSocket();
     if (ws.enabled === false) startEventsRefresh();
+    </script>
+    "#.to_string()
+}
+
+/// Services management page content
+pub fn services_content() -> String {
+    r#"
+    <div class="services-container">
+        <div class="services-header">
+            <h2>🔧 Services Management</h2>
+            <div class="services-controls">
+                <button class="btn btn-primary" onclick="refreshServices()">🔄 Refresh</button>
+            </div>
+        </div>
+        
+        <div class="services-summary" id="servicesSummary">
+            <div class="summary-card">
+                <div class="summary-label">Total Services</div>
+                <div class="summary-value" id="totalServices">-</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Healthy</div>
+                <div class="summary-value success" id="healthyServices">-</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Starting</div>
+                <div class="summary-value warning" id="startingServices">-</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Unhealthy</div>
+                <div class="summary-value error" id="unhealthyServices">-</div>
+            </div>
+        </div>
+        
+        <div class="services-list" id="servicesList">
+            <div class="loading-message">Loading services...</div>
+        </div>
+    </div>
+
+    <style>
+        .services-container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .services-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+        
+        .services-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .summary-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+        }
+        
+        .summary-label {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+        }
+        
+        .summary-value {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+        
+        .summary-value.success {
+            color: var(--success-color);
+        }
+        
+        .summary-value.warning {
+            color: var(--warning-color);
+        }
+        
+        .summary-value.error {
+            color: var(--error-color);
+        }
+        
+        .service-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .service-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .service-name {
+            font-size: 1.25rem;
+            font-weight: bold;
+        }
+        
+        .service-priority {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            background: var(--bg-secondary);
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+        }
+        
+        .service-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+        
+        .service-detail-item {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .detail-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 0.25rem;
+        }
+        
+        .detail-value {
+            font-size: 0.875rem;
+        }
+        
+        .dependencies-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        
+        .dependency-badge {
+            font-size: 0.75rem;
+            background: var(--bg-secondary);
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+        }
+    </style>
+
+    <script>
+        let servicesData = null;
+        
+        async function loadServices() {
+            try {
+                const response = await fetch('/api/services/overview');
+                const data = await response.json();
+                servicesData = data.data;
+                renderServices();
+            } catch (error) {
+                console.error('Failed to load services:', error);
+                document.getElementById('servicesList').innerHTML = 
+                    '<div class="error-message">Failed to load services</div>';
+            }
+        }
+        
+        function renderServices() {
+            if (!servicesData) return;
+            
+            // Update summary
+            document.getElementById('totalServices').textContent = servicesData.summary.total_services;
+            document.getElementById('healthyServices').textContent = servicesData.summary.healthy_services;
+            document.getElementById('startingServices').textContent = servicesData.summary.starting_services;
+            document.getElementById('unhealthyServices').textContent = servicesData.summary.unhealthy_services;
+            
+            // Render services list
+            const servicesList = document.getElementById('servicesList');
+            servicesList.innerHTML = servicesData.services.map(service => `
+                <div class="service-card">
+                    <div class="service-header">
+                        <div>
+                            <div class="service-name">${service.name}</div>
+                            <span class="badge ${getHealthBadgeClass(service.health)}">${getHealthStatus(service.health)}</span>
+                        </div>
+                        <div class="service-priority">Priority: ${service.priority}</div>
+                    </div>
+                    <div class="service-details">
+                        <div class="service-detail-item">
+                            <div class="detail-label">Status</div>
+                            <div class="detail-value">${service.enabled ? '✅ Enabled' : '❌ Disabled'}</div>
+                        </div>
+                        <div class="service-detail-item">
+                            <div class="detail-label">Uptime</div>
+                            <div class="detail-value">${formatUptime(service.uptime_seconds)}</div>
+                        </div>
+                        <div class="service-detail-item">
+                            <div class="detail-label">Memory</div>
+                            <div class="detail-value">${formatBytes(service.metrics.memory_usage_bytes)}</div>
+                        </div>
+                        <div class="service-detail-item">
+                            <div class="detail-label">Dependencies</div>
+                            <div class="dependencies-list">
+                                ${service.dependencies.length > 0 
+                                    ? service.dependencies.map(dep => `<span class="dependency-badge">${dep}</span>`).join('')
+                                    : '<span class="detail-value">None</span>'
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function getHealthStatus(health) {
+            if (health.status === 'healthy') return '✅ Healthy';
+            if (health.status === 'starting') return '⏳ Starting';
+            if (health.status === 'degraded') return '⚠️ Degraded';
+            if (health.status === 'unhealthy') return '❌ Unhealthy';
+            return '⏸️ ' + health.status;
+        }
+        
+        function getHealthBadgeClass(health) {
+            if (health.status === 'healthy') return 'success';
+            if (health.status === 'starting') return 'warning';
+            if (health.status === 'degraded') return 'warning';
+            if (health.status === 'unhealthy') return 'error';
+            return 'secondary';
+        }
+        
+        function formatUptime(seconds) {
+            if (seconds < 60) return `${seconds}s`;
+            if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+            if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+            return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`;
+        }
+        
+        function formatBytes(bytes) {
+            if (bytes < 1024) return `${bytes} B`;
+            if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+            if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(1)} MB`;
+            return `${(bytes / 1073741824).toFixed(2)} GB`;
+        }
+        
+        function refreshServices() {
+            loadServices();
+        }
+        
+        // Initial load
+        loadServices();
+        
+        // Auto-refresh every 5 seconds
+        setInterval(loadServices, 5000);
     </script>
     "#.to_string()
 }

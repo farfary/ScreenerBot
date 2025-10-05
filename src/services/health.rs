@@ -1,19 +1,27 @@
+use serde::{ Deserialize, Serialize };
+
 /// Service health status
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "status", content = "message")]
 pub enum ServiceHealth {
     /// Service is operating normally
+    #[serde(rename = "healthy")]
     Healthy,
 
     /// Service is operating but with degraded performance
+    #[serde(rename = "degraded")]
     Degraded(String),
 
     /// Service has failed
+    #[serde(rename = "unhealthy")]
     Unhealthy(String),
 
     /// Service is starting up
+    #[serde(rename = "starting")]
     Starting,
 
     /// Service is shutting down
+    #[serde(rename = "stopping")]
     Stopping,
 }
 

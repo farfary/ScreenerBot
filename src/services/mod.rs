@@ -7,11 +7,17 @@ pub use metrics::{ ServiceMetrics, MetricsCollector };
 
 use async_trait::async_trait;
 use std::sync::Arc;
-use tokio::sync::Notify;
+use tokio::sync::{ Notify, RwLock };
 use tokio::task::JoinHandle;
 use crate::configs::Configs;
 use crate::logger::{ log, LogTag };
 use std::collections::HashMap;
+use std::sync::LazyLock;
+
+/// Global ServiceManager instance for webserver and other components access
+static GLOBAL_SERVICE_MANAGER: LazyLock<Arc<RwLock<Option<ServiceManager>>>> = LazyLock::new(||
+    Arc::new(RwLock::new(None))
+);
 
 /// Core service trait that all services must implement
 #[async_trait]
@@ -242,5 +248,44 @@ impl ServiceManager {
             metrics.insert(*name, service_metrics);
         }
         metrics
+    }
+
+    /// Get all registered service names
+    pub fn get_all_service_names(&self) -> Vec<&'static str> {
+        self.services.keys().copied().collect()
+    }
+
+    /// Get service by name
+    pub fn get_service(&self, name: &str) -> Option<&Box<dyn Service>> {
+        self.services.get(name)
+    }
+
+    /// Check if service is enabled
+    pub fn is_service_enabled(&self, name: &str) -> bool {
+        self.services
+            .get(name)
+            .map(|s| s.is_enabled(&self.config))
+            .unwrap_or(false)
+    }
+}
+
+// =============================================================================
+// Global ServiceManager Access Functions
+// =============================================================================
+
+/// Initialize global ServiceManager instance
+pub async fn init_global_service_manager(manager: ServiceManager) {
+    let mut global = GLOBAL_SERVICE_MANAGER.write().await;
+    *global = Some(manager);
+    log(LogTag::System, "INFO", "✅ Global ServiceManager initialized");
+}
+
+/// Get reference to global ServiceManager
+pub async fn get_service_manager() -> Option<Arc<RwLock<Option<ServiceManager>>>> {
+    let global = GLOBAL_SERVICE_MANAGER.read().await;
+    if global.is_some() {
+        Some(GLOBAL_SERVICE_MANAGER.clone())
+    } else {
+        None
     }
 }
