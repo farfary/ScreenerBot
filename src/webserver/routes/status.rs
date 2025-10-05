@@ -44,7 +44,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/status/metrics", get(system_metrics))
 }
 
-/// GET /api/v1/health
+/// GET /api/health
 /// Simple health check endpoint for load balancers and monitoring
 async fn health_check() -> Response {
     let response = HealthResponse {
@@ -56,7 +56,7 @@ async fn health_check() -> Response {
     success_response(response)
 }
 
-/// GET /api/v1/status
+/// GET /api/status
 /// Complete system status including services and metrics
 async fn system_status(State(state): State<Arc<AppState>>) -> Response {
     log(LogTag::Webserver, "DEBUG", "Fetching complete system status");
@@ -78,14 +78,14 @@ async fn system_status(State(state): State<Arc<AppState>>) -> Response {
     success_response(response)
 }
 
-/// GET /api/v1/status/services
+/// GET /api/status/services
 /// Detailed service readiness status
 async fn service_status() -> Response {
     let response = get_service_status_internal();
     success_response(response)
 }
 
-/// GET /api/v1/status/metrics
+/// GET /api/status/metrics
 /// System resource metrics
 async fn system_metrics(State(state): State<Arc<AppState>>) -> Response {
     let response = get_system_metrics_internal(&state).await;

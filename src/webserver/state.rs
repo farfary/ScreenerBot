@@ -18,12 +18,6 @@ pub struct AppState {
 
     /// Server startup time
     pub startup_time: chrono::DateTime<chrono::Utc>,
-
-    // Phase 2: Add references to bot systems
-    // pub transactions_manager: Arc<TransactionsManager>,
-    // pub positions_manager: Arc<PositionsManager>,
-    // pub token_monitor: Arc<TokenMonitor>,
-    // pub security_analyzer: Arc<SecurityAnalyzer>,
 }
 
 impl AppState {
