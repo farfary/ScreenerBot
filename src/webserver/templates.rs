@@ -3450,8 +3450,9 @@ pub fn config_content() -> String {
         }
         
         .category-body {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            /* Vertical stacked layout for all fields */
+            display: flex;
+            flex-direction: column;
             gap: 8px;
             padding: 8px;
         }
@@ -3464,7 +3465,13 @@ pub fn config_content() -> String {
             background: rgba(15, 15, 25, 0.6);
             border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 5px;
-            padding: 8px;
+            padding: 10px;
+            transition: border-color 0.15s ease, background 0.15s ease;
+        }
+
+        .field:hover {
+            background: rgba(20, 20, 35, 0.7);
+            border-color: rgba(255, 255, 255, 0.14);
         }
         
         .field-header {
@@ -3505,6 +3512,10 @@ pub fn config_content() -> String {
             color: white;
             font-size: 13px;
             font-family: monospace;
+        }
+
+        .field textarea {
+            min-height: 64px;
         }
         
         .field input:focus,
