@@ -6,7 +6,10 @@ use axum::{
     Json,
     Router,
 };
+use chrono::{ DateTime, Utc };
+use serde::{ Deserialize, Serialize };
 use std::sync::Arc;
+use sysinfo::System;
 
 use crate::{
     global::{
@@ -20,20 +23,66 @@ use crate::{
     },
     logger::{ log, LogTag },
     rpc::get_global_rpc_stats,
-    webserver::{
-        models::responses::{
-            HealthResponse,
-            ServiceState,
-            ServiceStatusResponse,
-            SystemMetricsResponse,
-            SystemStatusResponse,
-        },
-        state::AppState,
-        utils::{ format_duration, success_response },
-    },
+    webserver::{ state::AppState, utils::{ format_duration, success_response } },
 };
-use chrono::Utc;
-use sysinfo::System;
+
+// ================================================================================================
+// Response Types
+// ================================================================================================
+
+/// Complete system status response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemStatusResponse {
+    pub timestamp: DateTime<Utc>,
+    pub uptime_seconds: u64,
+    pub uptime_formatted: String,
+    pub services: ServiceStatusResponse,
+    pub metrics: SystemMetricsResponse,
+    pub trading_enabled: bool,
+}
+
+/// Service readiness status
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceStatusResponse {
+    pub tokens_system: ServiceState,
+    pub positions_system: ServiceState,
+    pub pool_service: ServiceState,
+    pub security_analyzer: ServiceState,
+    pub transactions_system: ServiceState,
+    pub all_ready: bool,
+}
+
+/// Individual service state
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceState {
+    pub ready: bool,
+    pub last_check: DateTime<Utc>,
+    pub error: Option<String>,
+}
+
+/// System resource metrics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemMetricsResponse {
+    pub memory_usage_mb: u64,
+    pub cpu_usage_percent: f32,
+    pub active_threads: usize,
+    pub rpc_calls_total: u64,
+    pub rpc_calls_failed: u64,
+    pub rpc_success_rate: f32,
+    pub ws_connections: usize,
+}
+
+/// Simple health check response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthResponse {
+    pub status: String,
+    pub timestamp: DateTime<Utc>,
+    pub version: String,
+}
+
+// ================================================================================================
+// Route Handlers
+// ================================================================================================
 
 /// Create status routes
 pub fn routes() -> Router<Arc<AppState>> {
