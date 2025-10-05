@@ -3300,459 +3300,1168 @@ pub fn services_content() -> String {
 pub fn config_content() -> String {
     r#"
     <style>
-        .config-container {
-            display: grid;
-            gap: 20px;
-        }
-        
-        .config-actions {
+        /* COMPACT PROFESSIONAL CONFIG UI */
+        .config-toolbar {
             display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
+            gap: 8px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+            align-items: center;
         }
         
-        .config-actions button {
-            padding: 10px 20px;
-            border: none;
+        .search-box {
+            flex: 1;
+            min-width: 200px;
+            position: relative;
+        }
+        
+        .search-box input {
+            width: 100%;
+            padding: 6px 12px 6px 32px;
+            background: rgba(20, 20, 35, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.15);
             border-radius: 6px;
-            cursor: pointer;
+            color: white;
+            font-size: 13px;
+        }
+        
+        .search-box::before {
+            content: '🔍';
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            opacity: 0.6;
+        }
+        
+        .toolbar-btn {
+            padding: 6px 14px;
+            background: rgba(30, 30, 50, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 6px;
+            color: white;
+            font-size: 12px;
             font-weight: 600;
-            transition: all 0.2s;
+            cursor: pointer;
+            transition: all 0.15s;
         }
         
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+        .toolbar-btn:hover {
+            background: rgba(40, 40, 60, 0.9);
+            border-color: rgba(255, 255, 255, 0.3);
         }
         
-        .btn-warning {
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            color: white;
+        .toolbar-btn.primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; }
+        .toolbar-btn.success { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border: none; }
+        .toolbar-btn.danger { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border: none; }
+        
+        .filter-chips {
+            display: flex;
+            gap: 6px;
         }
         
-        .btn-info {
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            color: white;
-        }
-        
-        .config-actions button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-        }
-        
-        .config-section {
-            background: rgba(30, 30, 50, 0.5);
-            border-radius: 12px;
-            padding: 20px;
+        .chip {
+            padding: 4px 10px;
+            background: rgba(20, 20, 35, 0.6);
             border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.15s;
         }
         
-        .config-section-header {
+        .chip.active {
+            background: rgba(102, 126, 234, 0.3);
+            border-color: #667eea;
+        }
+        
+        .config-card {
+            background: rgba(30, 30, 50, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            margin-bottom: 12px;
+            overflow: hidden;
+        }
+        
+        .card-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 15px;
+            padding: 10px 14px;
+            background: rgba(20, 20, 35, 0.4);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
             cursor: pointer;
             user-select: none;
         }
         
-        .config-section-header h3 {
+        .card-header h3 {
             margin: 0;
-            font-size: 18px;
+            font-size: 15px;
+            font-weight: 600;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
+        }
+        
+        .field-count {
+            font-size: 11px;
+            opacity: 0.6;
+            font-weight: 400;
         }
         
         .expand-icon {
-            transition: transform 0.3s;
+            font-size: 12px;
+            transition: transform 0.2s;
         }
         
         .expand-icon.expanded {
             transform: rotate(180deg);
         }
         
-        .config-form {
+        .card-body {
             display: none;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 15px;
-            margin-top: 15px;
+            padding: 8px;
         }
         
-        .config-form.expanded {
-            display: grid;
+        .card-body.expanded {
+            display: block;
         }
         
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
+        .category {
+            background: rgba(20, 20, 35, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            margin-bottom: 8px;
         }
         
-        .form-group label {
+        .category-header {
+            padding: 8px 12px;
             font-size: 13px;
-            color: #aaa;
+            font-weight: 600;
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .category-header:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+        
+        .category-body {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 8px;
+            padding: 8px;
+        }
+        
+        .category-body.collapsed {
+            display: none;
+        }
+        
+        .field {
+            background: rgba(15, 15, 25, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 5px;
+            padding: 8px;
+        }
+        
+        .field-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        
+        .field-header label {
+            font-size: 12px;
+            font-weight: 500;
+            color: #ddd;
+        }
+        
+        .impact {
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .impact.critical { background: #f5576c; color: white; }
+        .impact.high { background: #ffaa00; color: white; }
+        .impact.medium { background: #4facfe; color: white; }
+        .impact.low { background: #888; color: white; }
+        
+        .field input,
+        .field select,
+        .field textarea {
+            width: 100%;
+            padding: 5px 8px;
+            background: rgba(10, 10, 20, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 4px;
+            color: white;
+            font-size: 13px;
+            font-family: monospace;
+        }
+        
+        .field input:focus,
+        .field select:focus,
+        .field textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            background: rgba(15, 15, 25, 0.9);
+        }
+        
+        .field input.valid {
+            border-color: #38ef7d;
+        }
+        
+        .field input.invalid {
+            border-color: #f5576c;
+            background: rgba(245, 87, 108, 0.08);
+        }
+        
+        .field-hint {
+            font-size: 10px;
+            color: #888;
+            margin-top: 3px;
+            line-height: 1.3;
+        }
+        
+        .field-error {
+            display: none;
+            font-size: 10px;
+            color: #f5576c;
+            margin-top: 3px;
             font-weight: 500;
         }
         
-        .form-group input,
-        .form-group select {
-            background: rgba(20, 20, 30, 0.8);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 6px;
-            padding: 8px 12px;
-            color: white;
-            font-size: 14px;
+        .field-error.visible {
+            display: block;
         }
         
-        .form-group input:focus,
-        .form-group select:focus {
-            outline: none;
-            border-color: #667eea;
+        .card-actions {
+            display: flex;
+            gap: 8px;
+            padding: 8px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
         }
         
         .save-btn {
-            margin-top: 15px;
-            padding: 10px 20px;
+            flex: 1;
+            padding: 8px 16px;
             background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
             border: none;
-            border-radius: 6px;
+            border-radius: 5px;
             color: white;
+            font-size: 12px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.15s;
         }
         
-        .save-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(56, 239, 125, 0.3);
+        .save-btn:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 3px 10px rgba(56, 239, 125, 0.3);
         }
         
-        .status-message {
-            padding: 10px 15px;
-            border-radius: 6px;
-            margin-top: 10px;
+        .save-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .reset-btn {
+            padding: 8px 16px;
+            background: rgba(30, 30, 50, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 5px;
+            color: white;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        
+        .reset-btn:hover {
+            background: rgba(40, 40, 60, 0.9);
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .status {
+            padding: 6px 10px;
+            border-radius: 5px;
+            font-size: 11px;
+            margin-top: 8px;
             display: none;
         }
         
-        .status-message.success {
-            background: rgba(56, 239, 125, 0.2);
-            border: 1px solid rgba(56, 239, 125, 0.5);
+        .status.success {
+            background: rgba(56, 239, 125, 0.15);
+            border: 1px solid rgba(56, 239, 125, 0.4);
             color: #38ef7d;
         }
         
-        .status-message.error {
-            background: rgba(245, 87, 108, 0.2);
-            border: 1px solid rgba(245, 87, 108, 0.5);
+        .status.error {
+            background: rgba(245, 87, 108, 0.15);
+            border: 1px solid rgba(245, 87, 108, 0.4);
+            color: #f5576c;
+        }
+        
+        .status.visible {
+            display: block;
+        }
+        
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+        }
+        
+        .modal.visible {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: #1a1a2e;
+            border-radius: 10px;
+            max-width: 90%;
+            max-height: 85%;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            background: rgba(30, 30, 50, 0.8);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .modal-header h3 {
+            margin: 0;
+            font-size: 16px;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-body {
+            padding: 16px;
+            overflow-y: auto;
+        }
+        
+        .diff-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+        
+        .diff-table th {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 8px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 11px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .diff-table td {
+            padding: 6px 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            font-family: monospace;
+        }
+        
+        .diff-table .new-value {
+            background: rgba(56, 239, 125, 0.1);
+            color: #38ef7d;
+        }
+        
+        .diff-table .old-value {
+            background: rgba(245, 87, 108, 0.1);
             color: #f5576c;
         }
     </style>
 
-    <div class="config-container">
-        <div class="config-actions">
-            <button class="btn-primary" onclick="reloadConfig()">🔄 Reload from Disk</button>
-            <button class="btn-warning" onclick="resetConfig()">⚠️ Reset to Defaults</button>
-            <button class="btn-info" onclick="viewDiff()">📋 View Diff</button>
+    <!-- DYNAMIC CONFIG UI -->
+    <div class="config-toolbar">
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="Search configurations..." oninput="filterConfigs(this.value)">
         </div>
-        
-        <div id="globalStatus" class="status-message"></div>
-        
-        <!-- Trader Config -->
-        <div class="config-section">
-            <div class="config-section-header" onclick="toggleSection('trader')">
-                <h3>
-                    <span>🤖</span>
-                    <span>Trader Configuration</span>
-                </h3>
-                <span class="expand-icon" id="trader-icon">▼</span>
+        <button class="toolbar-btn success" onclick="exportConfig()">📥 Export</button>
+        <button class="toolbar-btn primary" onclick="document.getElementById('importFile').click()">📤 Import</button>
+        <input type="file" id="importFile" style="display:none" accept=".json" onchange="importConfig(this.files[0])">
+        <button class="toolbar-btn primary" onclick="reloadConfig()">🔄 Reload</button>
+        <button class="toolbar-btn danger" onclick="resetConfig()">⚠️ Reset</button>
+        <button class="toolbar-btn" onclick="viewDiff()">📋 Diff</button>
+    </div>
+    
+    <div class="filter-chips">
+        <div class="chip active" onclick="filterByImpact('all')">All</div>
+        <div class="chip" onclick="filterByImpact('critical')">Critical</div>
+        <div class="chip" onclick="filterByImpact('high')">High</div>
+        <div class="chip" onclick="filterByImpact('medium')">Medium</div>
+    </div>
+    
+    <div id="globalStatus" class="status"></div>
+    <div id="configContainer"></div>
+    
+    <!-- Diff Modal -->
+    <div id="diffModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Configuration Differences</h3>
+                <button class="modal-close" onclick="closeDiffModal()">×</button>
             </div>
-            <div id="trader-form" class="config-form">
-                <div class="form-group">
-                    <label>Max Open Positions</label>
-                    <input type="number" id="trader_max_open_positions" min="1" max="100">
-                </div>
-                <div class="form-group">
-                    <label>Position Size (SOL)</label>
-                    <input type="number" id="trader_position_size_sol" step="0.001" min="0">
-                </div>
-                <div class="form-group">
-                    <label>Take Profit (%)</label>
-                    <input type="number" id="trader_take_profit_percentage" step="1" min="0">
-                </div>
-                <div class="form-group">
-                    <label>Stop Loss (%)</label>
-                    <input type="number" id="trader_stop_loss_percentage" step="1" min="0">
-                </div>
-                <div class="form-group">
-                    <label>Slippage BPS</label>
-                    <input type="number" id="trader_slippage_bps" min="0">
-                </div>
-                <button class="save-btn" onclick="saveSection('trader')">💾 Save Trader Config</button>
-                <div id="trader-status" class="status-message"></div>
-            </div>
-        </div>
-        
-        <!-- Positions Config -->
-        <div class="config-section">
-            <div class="config-section-header" onclick="toggleSection('positions')">
-                <h3>
-                    <span>💰</span>
-                    <span>Positions Configuration</span>
-                </h3>
-                <span class="expand-icon" id="positions-icon">▼</span>
-            </div>
-            <div id="positions-form" class="config-form">
-                <div class="form-group">
-                    <label>Verify Balances</label>
-                    <select id="positions_verify_balances">
-                        <option value="true">True</option>
-                        <option value="false">False</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Reconcile on Startup</label>
-                    <select id="positions_reconcile_on_startup">
-                        <option value="true">True</option>
-                        <option value="false">False</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Balance Verify Interval (seconds)</label>
-                    <input type="number" id="positions_balance_verify_interval_secs" min="1">
-                </div>
-                <button class="save-btn" onclick="saveSection('positions')">💾 Save Positions Config</button>
-                <div id="positions-status" class="status-message"></div>
-            </div>
-        </div>
-        
-        <!-- Swaps Config -->
-        <div class="config-section">
-            <div class="config-section-header" onclick="toggleSection('swaps')">
-                <h3>
-                    <span>🔄</span>
-                    <span>Swaps Configuration</span>
-                </h3>
-                <span class="expand-icon" id="swaps-icon">▼</span>
-            </div>
-            <div id="swaps-form" class="config-form">
-                <div class="form-group">
-                    <label>Priority Fee (lamports)</label>
-                    <input type="number" id="swaps_priority_fee_lamports" min="0">
-                </div>
-                <div class="form-group">
-                    <label>Compute Unit Limit</label>
-                    <input type="number" id="swaps_compute_unit_limit" min="0">
-                </div>
-                <div class="form-group">
-                    <label>Use Dynamic Priority Fee</label>
-                    <select id="swaps_use_dynamic_priority_fee">
-                        <option value="true">True</option>
-                        <option value="false">False</option>
-                    </select>
-                </div>
-                <button class="save-btn" onclick="saveSection('swaps')">💾 Save Swaps Config</button>
-                <div id="swaps-status" class="status-message"></div>
-            </div>
-        </div>
-        
-        <!-- Filtering Config -->
-        <div class="config-section">
-            <div class="config-section-header" onclick="toggleSection('filtering')">
-                <h3>
-                    <span>🔍</span>
-                    <span>Filtering Configuration</span>
-                </h3>
-                <span class="expand-icon" id="filtering-icon">▼</span>
-            </div>
-            <div id="filtering-form" class="config-form">
-                <div class="form-group">
-                    <label>Min Liquidity (SOL)</label>
-                    <input type="number" id="filtering_min_liquidity_sol" step="0.1" min="0">
-                </div>
-                <div class="form-group">
-                    <label>Min Market Cap (SOL)</label>
-                    <input type="number" id="filtering_min_market_cap_sol" step="1" min="0">
-                </div>
-                <div class="form-group">
-                    <label>Max Market Cap (SOL)</label>
-                    <input type="number" id="filtering_max_market_cap_sol" step="1" min="0">
-                </div>
-                <button class="save-btn" onclick="saveSection('filtering')">💾 Save Filtering Config</button>
-                <div id="filtering-status" class="status-message"></div>
+            <div class="modal-body" id="diffModalBody">
+                <p style="text-align:center;opacity:0.6;">Loading...</p>
             </div>
         </div>
     </div>
 
     <script>
-        // Toggle section expand/collapse
-        function toggleSection(section) {
-            const form = document.getElementById(`${section}-form`);
-            const icon = document.getElementById(`${section}-icon`);
-            
-            form.classList.toggle('expanded');
-            icon.classList.toggle('expanded');
-            
-            // Load config when expanding
-            if (form.classList.contains('expanded')) {
-                loadSectionConfig(section);
-            }
-        }
+        // COMPLETE DYNAMIC CONFIG UI IMPLEMENTATION - ALL 155 FIELDS
+        // =============================================================================
+// CONFIGURATION METADATA - Single source of truth for all 155 fields
+// =============================================================================
+const CONFIG_METADATA = {
+    trader: {
+        max_open_positions: { type: 'number', label: 'Max Open Positions', hint: 'Max simultaneous positions (2-5 conservative)', min: 1, max: 100, unit: 'positions', impact: 'critical', category: 'Core Trading' },
+        trade_size_sol: { type: 'number', label: 'Trade Size', hint: 'SOL per position (0.005-0.01 for testing)', min: 0.001, max: 10, step: 0.001, unit: 'SOL', impact: 'critical', category: 'Core Trading' },
         
-        // Load config for specific section
-        async function loadSectionConfig(section) {
-            try {
-                const response = await fetch(`/api/config/${section}`);
-                const result = await response.json();
-                
-                if (result.data) {
-                    // Populate form fields
-                    Object.keys(result.data).forEach(key => {
-                        const input = document.getElementById(`${section}_${key}`);
-                        if (input) {
-                            input.value = result.data[key];
-                        }
-                    });
-                }
-            } catch (error) {
-                console.error(`Failed to load ${section} config:`, error);
-            }
-        }
+        min_profit_threshold_enabled: { type: 'boolean', label: 'Enable Profit Threshold', hint: 'Require minimum profit before exit', impact: 'high', category: 'Profit Management' },
+        min_profit_threshold_percent: { type: 'number', label: 'Min Profit %', hint: '2-5% typical for volatile tokens', min: 0, max: 100, step: 0.1, unit: '%', impact: 'high', category: 'Profit Management' },
+        profit_extra_needed_sol: { type: 'number', label: 'Profit Extra Buffer', hint: 'Extra SOL for fees/slippage', min: 0, max: 0.01, step: 0.00001, unit: 'SOL', impact: 'medium', category: 'Profit Management' },
         
-        // Save section config
-        async function saveSection(section) {
-            const statusDiv = document.getElementById(`${section}-status`);
-            statusDiv.style.display = 'none';
-            
-            try {
-                // Collect form data
-                const updates = {};
-                const inputs = document.querySelectorAll(`#${section}-form input, #${section}-form select`);
-                
-                inputs.forEach(input => {
-                    const key = input.id.replace(`${section}_`, '');
-                    let value = input.value;
-                    
-                    // Type conversion
-                    if (input.type === 'number') {
-                        value = parseFloat(value);
-                    } else if (input.tagName === 'SELECT') {
-                        value = value === 'true';
+        time_override_duration_hours: { type: 'number', label: 'Time Override Duration', hint: 'Hours before forced exit (168=1 week)', min: 1, max: 720, step: 1, unit: 'hours', impact: 'medium', category: 'Time Overrides' },
+        time_override_loss_threshold_percent: { type: 'number', label: 'Time Override Loss %', hint: 'Loss % to trigger time override (-40 = exit if down 40%)', min: -100, max: 0, step: 1, unit: '%', impact: 'medium', category: 'Time Overrides' },
+        
+        slippage_quote_default_pct: { type: 'number', label: 'Default Slippage', hint: '3% balanced, higher = more fills but worse price', min: 0.1, max: 25, step: 0.1, unit: '%', impact: 'high', category: 'Slippage' },
+        slippage_exit_profit_shortfall_pct: { type: 'number', label: 'Profit Exit Slippage', hint: 'Extra slippage when exiting at profit', min: 0, max: 50, step: 1, unit: '%', impact: 'high', category: 'Slippage' },
+        slippage_exit_loss_shortfall_pct: { type: 'number', label: 'Loss Exit Slippage', hint: 'Even higher to exit bad positions', min: 0, max: 50, step: 1, unit: '%', impact: 'high', category: 'Slippage' },
+        slippage_exit_retry_steps_pct: { type: 'array', label: 'Exit Retry Steps', hint: 'Comma-separated slippage values for retries', unit: '%', impact: 'medium', category: 'Slippage' },
+        
+        debug_force_sell_mode: { type: 'boolean', label: 'Force Sell Mode', hint: '⚠️ DEBUG ONLY - Do not use in production!', impact: 'critical', category: 'Debug' },
+        debug_force_sell_timeout_secs: { type: 'number', label: 'Force Sell Timeout', hint: 'Seconds before force sell (only if enabled)', min: 10, max: 300, step: 5, unit: 'seconds', impact: 'high', category: 'Debug' },
+        debug_force_buy_mode: { type: 'boolean', label: 'Force Buy Mode', hint: '⚠️ DEBUG ONLY - Do not use in production!', impact: 'critical', category: 'Debug' },
+        debug_force_buy_drop_threshold_percent: { type: 'number', label: 'Force Buy Drop %', hint: 'Price drop % to trigger buy (only if enabled)', min: 0, max: 50, step: 0.1, unit: '%', impact: 'high', category: 'Debug' },
+        
+        position_close_cooldown_minutes: { type: 'number', label: 'Close Cooldown', hint: 'Minutes before reopening same token', min: 0, max: 1440, step: 5, unit: 'minutes', impact: 'medium', category: 'Timing' },
+        entry_monitor_interval_secs: { type: 'number', label: 'Entry Monitor Interval', hint: 'Seconds between entry scans (lower = more responsive)', min: 1, max: 60, step: 1, unit: 'seconds', impact: 'medium', category: 'Timing' },
+        position_monitor_interval_secs: { type: 'number', label: 'Position Monitor Interval', hint: 'Seconds between position checks', min: 1, max: 60, step: 1, unit: 'seconds', impact: 'medium', category: 'Timing' },
+        
+        semaphore_acquire_timeout_secs: { type: 'number', label: 'Semaphore Timeout', hint: 'Prevents deadlocks in concurrent ops', min: 5, max: 300, step: 5, unit: 'seconds', impact: 'low', category: 'Timeouts' },
+        token_check_task_timeout_secs: { type: 'number', label: 'Token Check Timeout', hint: 'Timeout for individual token validation', min: 5, max: 120, step: 5, unit: 'seconds', impact: 'low', category: 'Timeouts' },
+        token_check_collection_timeout_secs: { type: 'number', label: 'Token Collection Timeout', hint: 'Collecting all token checks', min: 10, max: 180, step: 5, unit: 'seconds', impact: 'low', category: 'Timeouts' },
+        token_check_handle_timeout_secs: { type: 'number', label: 'Token Handle Timeout', hint: 'Handle timeout for token tasks', min: 10, max: 150, step: 5, unit: 'seconds', impact: 'low', category: 'Timeouts' },
+        sell_operations_collection_timeout_secs: { type: 'number', label: 'Sell Collection Timeout', hint: 'Overall limit for batch sells', min: 30, max: 600, step: 10, unit: 'seconds', impact: 'low', category: 'Timeouts' },
+        sell_operation_smart_timeout_secs: { type: 'number', label: 'Smart Sell Timeout', hint: 'Intelligent timeout adapting to network', min: 60, max: 1200, step: 30, unit: 'seconds', impact: 'low', category: 'Timeouts' },
+        sell_semaphore_acquire_timeout_secs: { type: 'number', label: 'Sell Semaphore Timeout', hint: 'Sell operation lock timeout', min: 10, max: 300, step: 5, unit: 'seconds', impact: 'low', category: 'Timeouts' },
+        sell_task_handle_timeout_secs: { type: 'number', label: 'Sell Task Handle Timeout', hint: 'Handle timeout for sell tasks', min: 60, max: 600, step: 10, unit: 'seconds', impact: 'low', category: 'Timeouts' },
+        entry_cycle_min_wait_ms: { type: 'number', label: 'Entry Cycle Min Wait', hint: 'Rate limiting for entry checks', min: 10, max: 5000, step: 10, unit: 'ms', impact: 'low', category: 'Timeouts' },
+        token_processing_shutdown_check_ms: { type: 'number', label: 'Token Shutdown Check', hint: 'Milliseconds between shutdown checks', min: 10, max: 1000, step: 10, unit: 'ms', impact: 'low', category: 'Timeouts' },
+        task_shutdown_check_ms: { type: 'number', label: 'Task Shutdown Check', hint: 'Milliseconds between task shutdown checks', min: 10, max: 1000, step: 10, unit: 'ms', impact: 'low', category: 'Timeouts' },
+        sell_operation_shutdown_check_ms: { type: 'number', label: 'Sell Shutdown Check', hint: 'Milliseconds between sell shutdown checks', min: 10, max: 1000, step: 10, unit: 'ms', impact: 'low', category: 'Timeouts' },
+        collection_shutdown_check_ms: { type: 'number', label: 'Collection Shutdown Check', hint: 'Milliseconds between collection shutdown checks', min: 10, max: 1000, step: 10, unit: 'ms', impact: 'low', category: 'Timeouts' },
+        entry_check_concurrency: { type: 'number', label: 'Entry Check Concurrency', hint: 'Tokens to check concurrently (higher = faster but more CPU)', min: 1, max: 50, step: 1, unit: 'concurrent', impact: 'medium', category: 'Performance' }
+    },
+    
+    positions: {
+        position_open_cooldown_secs: { type: 'number', label: 'Open Cooldown', hint: 'Seconds between opening positions', min: 0, max: 300, step: 1, unit: 'seconds', impact: 'medium', category: 'Timing' },
+        pending_open_ttl_secs: { type: 'number', label: 'Pending Open TTL', hint: 'Time to live for pending opens (consider failed after this)', min: 30, max: 600, step: 10, unit: 'seconds', impact: 'medium', category: 'Timing' },
+        profit_extra_needed_sol: { type: 'number', label: 'Profit Extra Buffer', hint: 'Extra SOL needed for profit calculations (priority fees)', min: 0, max: 0.01, step: 0.0001, unit: 'SOL', impact: 'high', category: 'Profit' }
+    },
+    
+    filtering: {
+        filter_cache_ttl_secs: { type: 'number', label: 'Cache TTL', hint: 'How long to cache filter results (lower = more current)', min: 5, max: 300, step: 5, unit: 'seconds', impact: 'medium', category: 'Performance' },
+        target_filtered_tokens: { type: 'number', label: 'Target Filtered Tokens', hint: 'Bot processes up to this many qualified tokens', min: 10, max: 10000, step: 100, unit: 'tokens', impact: 'medium', category: 'Performance' },
+        max_tokens_to_process: { type: 'number', label: 'Max Tokens to Process', hint: 'Max tokens to evaluate before filtering', min: 100, max: 50000, step: 500, unit: 'tokens', impact: 'medium', category: 'Performance' },
+        
+        require_name_and_symbol: { type: 'boolean', label: 'Require Name & Symbol', hint: 'Recommended: true. Filters incomplete tokens', impact: 'high', category: 'Requirements' },
+        require_logo_url: { type: 'boolean', label: 'Require Logo', hint: 'Optional. Logo may indicate legitimacy', impact: 'medium', category: 'Requirements' },
+        require_website_url: { type: 'boolean', label: 'Require Website', hint: 'Optional. Website may indicate serious project', impact: 'medium', category: 'Requirements' },
+        
+        min_token_age_minutes: { type: 'number', label: 'Min Token Age', hint: '60min avoids brand new tokens, lower for sniping', min: 0, max: 10080, step: 10, unit: 'minutes', impact: 'high', category: 'Age' },
+        
+        min_transactions_5min: { type: 'number', label: 'Min TX (5min)', hint: 'Min transactions in last 5 minutes (1+ is minimal)', min: 0, max: 1000, step: 1, unit: 'txs', impact: 'medium', category: 'Activity' },
+        min_transactions_1h: { type: 'number', label: 'Min TX (1h)', hint: 'Min transactions in last hour (sustained activity)', min: 0, max: 10000, step: 5, unit: 'txs', impact: 'medium', category: 'Activity' },
+        
+        min_liquidity_usd: { type: 'number', label: 'Min Liquidity', hint: '$1 very low, $1000+ for serious trading', min: 0, max: 10000000, step: 10, unit: 'USD', impact: 'critical', category: 'Liquidity' },
+        max_liquidity_usd: { type: 'number', label: 'Max Liquidity', hint: 'High max to avoid filtering established tokens', min: 100, max: 1000000000, step: 100000, unit: 'USD', impact: 'medium', category: 'Liquidity' },
+        
+        min_market_cap_usd: { type: 'number', label: 'Min Market Cap', hint: '$1000 filters micro-cap tokens', min: 0, max: 10000000, step: 100, unit: 'USD', impact: 'high', category: 'Market Cap' },
+        max_market_cap_usd: { type: 'number', label: 'Max Market Cap', hint: 'Filters out large-cap tokens', min: 1000, max: 1000000000, step: 100000, unit: 'USD', impact: 'high', category: 'Market Cap' },
+        
+        min_security_score: { type: 'number', label: 'Min Security Score', hint: '10+ decent, 50+ safer (rugcheck score)', min: 0, max: 100, step: 5, unit: 'score', impact: 'critical', category: 'Security' },
+        max_top_holder_pct: { type: 'number', label: 'Max Top Holder %', hint: '15% means top holder can own max 15% supply', min: 0, max: 100, step: 1, unit: '%', impact: 'critical', category: 'Security' },
+        max_top_3_holders_pct: { type: 'number', label: 'Max Top 3 Holders %', hint: 'Combined max for top 3 holders (lower = more distributed)', min: 0, max: 100, step: 1, unit: '%', impact: 'high', category: 'Security' },
+        min_pumpfun_lp_lock_pct: { type: 'number', label: 'Min PumpFun LP Lock', hint: '50%+ reduces rug risk for PumpFun tokens', min: 0, max: 100, step: 5, unit: '%', impact: 'high', category: 'Security' },
+        min_regular_lp_lock_pct: { type: 'number', label: 'Min Regular LP Lock', hint: '50%+ indicates locked liquidity for regular tokens', min: 0, max: 100, step: 5, unit: '%', impact: 'high', category: 'Security' },
+        min_unique_holders: { type: 'number', label: 'Min Unique Holders', hint: '500+ indicates community adoption', min: 0, max: 1000000, step: 50, unit: 'holders', impact: 'medium', category: 'Community' }
+    },
+    
+    swaps: {
+        gmgn_enabled: { type: 'boolean', label: 'GMGN Router', hint: 'GMGN provides MEV protection', impact: 'high', category: 'Routers' },
+        jupiter_enabled: { type: 'boolean', label: 'Jupiter Router', hint: 'Jupiter finds best routes across DEXes', impact: 'high', category: 'Routers' },
+        raydium_enabled: { type: 'boolean', label: 'Raydium Direct', hint: 'Direct Raydium swaps (bypass aggregators)', impact: 'medium', category: 'Routers' },
+        
+        quote_timeout_secs: { type: 'number', label: 'Quote Timeout', hint: 'How long to wait for price quotes', min: 5, max: 60, step: 1, unit: 'seconds', impact: 'medium', category: 'Timeouts' },
+        api_timeout_secs: { type: 'number', label: 'API Timeout', hint: 'Overall timeout for API calls', min: 10, max: 120, step: 5, unit: 'seconds', impact: 'medium', category: 'Timeouts' },
+        retry_attempts: { type: 'number', label: 'Retry Attempts', hint: '3 is balanced, more can be excessive', min: 0, max: 10, step: 1, unit: 'attempts', impact: 'medium', category: 'Retry' },
+        
+        transaction_confirmation_timeout_secs: { type: 'number', label: 'TX Confirmation Timeout', hint: '300s = 5 min, congestion may need more', min: 60, max: 600, step: 30, unit: 'seconds', impact: 'high', category: 'Confirmation' },
+        priority_confirmation_timeout_secs: { type: 'number', label: 'Priority Confirm Timeout', hint: 'Timeout for priority confirmation', min: 10, max: 300, step: 5, unit: 'seconds', impact: 'medium', category: 'Confirmation' },
+        transaction_confirmation_max_attempts: { type: 'number', label: 'TX Confirm Max Attempts', hint: 'Max attempts to confirm transaction', min: 5, max: 100, step: 5, unit: 'attempts', impact: 'medium', category: 'Confirmation' },
+        priority_confirmation_max_attempts: { type: 'number', label: 'Priority Confirm Attempts', hint: 'Max attempts for priority confirmation', min: 5, max: 50, step: 5, unit: 'attempts', impact: 'medium', category: 'Confirmation' },
+        transaction_confirmation_retry_delay_ms: { type: 'number', label: 'TX Confirm Retry Delay', hint: 'Milliseconds between confirmation retries', min: 1000, max: 10000, step: 500, unit: 'ms', impact: 'low', category: 'Confirmation' },
+        priority_confirmation_retry_delay_ms: { type: 'number', label: 'Priority Retry Delay', hint: 'Milliseconds between priority retries', min: 500, max: 5000, step: 500, unit: 'ms', impact: 'low', category: 'Confirmation' },
+        fast_failure_threshold_attempts: { type: 'number', label: 'Fast Failure Threshold', hint: 'Attempts before fast failure', min: 1, max: 20, step: 1, unit: 'attempts', impact: 'low', category: 'Confirmation' },
+        
+        initial_confirmation_delay_ms: { type: 'number', label: 'Initial Confirm Delay', hint: 'Initial delay before first confirmation check', min: 1000, max: 10000, step: 500, unit: 'ms', impact: 'low', category: 'Delays' },
+        max_confirmation_delay_secs: { type: 'number', label: 'Max Confirm Delay', hint: 'Maximum confirmation delay', min: 1, max: 60, step: 1, unit: 'seconds', impact: 'low', category: 'Delays' },
+        confirmation_backoff_multiplier: { type: 'number', label: 'Confirm Backoff Multiplier', hint: 'Backoff multiplier for retries', min: 1.0, max: 5.0, step: 0.1, unit: 'x', impact: 'low', category: 'Delays' },
+        confirmation_timeout_secs: { type: 'number', label: 'Confirmation Timeout', hint: 'Overall confirmation timeout', min: 10, max: 300, step: 10, unit: 'seconds', impact: 'medium', category: 'Delays' },
+        priority_confirmation_timeout_secs_mod: { type: 'number', label: 'Priority Timeout Modifier', hint: 'Modifier for priority confirmation timeout', min: 1, max: 30, step: 1, unit: 'seconds', impact: 'low', category: 'Delays' },
+        
+        rate_limit_base_delay_secs: { type: 'number', label: 'Rate Limit Base Delay', hint: 'Base delay for rate limiting', min: 1, max: 60, step: 1, unit: 'seconds', impact: 'low', category: 'Rate Limit' },
+        rate_limit_increment_secs: { type: 'number', label: 'Rate Limit Increment', hint: 'Increment for each rate limit hit', min: 1, max: 30, step: 1, unit: 'seconds', impact: 'low', category: 'Rate Limit' },
+        
+        early_attempt_delay_ms: { type: 'number', label: 'Early Attempt Delay', hint: 'Delay for early attempts', min: 500, max: 5000, step: 500, unit: 'ms', impact: 'low', category: 'Delays' },
+        early_attempts_count: { type: 'number', label: 'Early Attempts Count', hint: 'Number of early attempts', min: 1, max: 10, step: 1, unit: 'attempts', impact: 'low', category: 'Delays' },
+        
+        gmgn_quote_api: { type: 'string', label: 'GMGN Quote API', hint: 'GMGN API endpoint for quotes', impact: 'low', category: 'GMGN' },
+        gmgn_partner: { type: 'string', label: 'GMGN Partner', hint: 'Partner identifier for GMGN', impact: 'low', category: 'GMGN' },
+        gmgn_anti_mev: { type: 'boolean', label: 'GMGN Anti-MEV', hint: 'Enable GMGN MEV protection', impact: 'medium', category: 'GMGN' },
+        gmgn_fee_sol: { type: 'number', label: 'GMGN Fee', hint: 'Usually 0, check GMGN docs', min: 0, max: 0.1, step: 0.001, unit: 'SOL', impact: 'low', category: 'GMGN' },
+        gmgn_default_swap_mode: { type: 'string', label: 'GMGN Swap Mode', hint: 'ExactIn or ExactOut', impact: 'low', category: 'GMGN' },
+        
+        jupiter_quote_api: { type: 'string', label: 'Jupiter Quote API', hint: 'Jupiter API endpoint for quotes', impact: 'low', category: 'Jupiter' },
+        jupiter_swap_api: { type: 'string', label: 'Jupiter Swap API', hint: 'Jupiter API endpoint for swaps', impact: 'low', category: 'Jupiter' },
+        jupiter_dynamic_compute_unit_limit: { type: 'boolean', label: 'Jupiter Dynamic CU Limit', hint: 'Let Jupiter calculate compute units', impact: 'medium', category: 'Jupiter' },
+        jupiter_default_priority_fee: { type: 'number', label: 'Jupiter Priority Fee', hint: '1000 lamports = 0.000001 SOL, higher = faster', min: 0, max: 1000000, step: 100, unit: 'lamports', impact: 'medium', category: 'Jupiter' },
+        jupiter_default_swap_mode: { type: 'string', label: 'Jupiter Swap Mode', hint: 'ExactIn or ExactOut', impact: 'low', category: 'Jupiter' },
+        
+        slippage_quote_default_pct: { type: 'number', label: 'Default Slippage', hint: '1% tight, 3-5% for volatile', min: 0.1, max: 25, step: 0.1, unit: '%', impact: 'high', category: 'Slippage' },
+        slippage_exit_profit_shortfall_pct: { type: 'number', label: 'Profit Exit Slippage', hint: 'Higher ensures exits succeed', min: 0, max: 50, step: 1, unit: '%', impact: 'high', category: 'Slippage' },
+        slippage_exit_loss_shortfall_pct: { type: 'number', label: 'Loss Exit Slippage', hint: 'Even higher to exit bad positions', min: 0, max: 50, step: 1, unit: '%', impact: 'high', category: 'Slippage' },
+        slippage_exit_retry_steps_pct: { type: 'array', label: 'Exit Retry Steps', hint: 'Comma-separated slippage for retries', unit: '%', impact: 'medium', category: 'Slippage' }
+    },
+    
+    tokens: {
+        dexscreener_rate_limit_per_minute: { type: 'number', label: 'DexScreener Rate Limit', hint: 'API calls per minute', min: 10, max: 300, step: 10, unit: 'calls/min', impact: 'medium', category: 'API Limits' },
+        dexscreener_discovery_rate_limit: { type: 'number', label: 'DexScreener Discovery Limit', hint: 'Discovery API calls per minute', min: 10, max: 300, step: 10, unit: 'calls/min', impact: 'medium', category: 'API Limits' },
+        max_tokens_per_api_call: { type: 'number', label: 'Max Tokens Per Call', hint: 'Tokens per API request', min: 10, max: 100, step: 10, unit: 'tokens', impact: 'low', category: 'API Limits' },
+        raydium_rate_limit_per_minute: { type: 'number', label: 'Raydium Rate Limit', hint: 'Raydium API calls per minute', min: 10, max: 300, step: 10, unit: 'calls/min', impact: 'medium', category: 'API Limits' },
+        geckoterminal_rate_limit_per_minute: { type: 'number', label: 'GeckoTerminal Rate Limit', hint: 'GeckoTerminal API calls per minute', min: 10, max: 120, step: 10, unit: 'calls/min', impact: 'medium', category: 'API Limits' },
+        max_tokens_per_batch: { type: 'number', label: 'Max Tokens Per Batch', hint: 'Tokens per batch operation', min: 10, max: 100, step: 10, unit: 'tokens', impact: 'low', category: 'API Limits' },
+        
+        max_price_deviation_percent: { type: 'number', label: 'Max Price Deviation', hint: 'Max allowed price deviation for validation', min: 1, max: 100, step: 1, unit: '%', impact: 'high', category: 'Validation' },
+        
+        max_accounts_per_call: { type: 'number', label: 'Max Accounts Per RPC Call', hint: 'Accounts per get_multiple_accounts (max 100)', min: 10, max: 100, step: 10, unit: 'accounts', impact: 'medium', category: 'RPC' },
+        max_decimal_retry_attempts: { type: 'number', label: 'Max Decimal Retry', hint: 'Retries for fetching token decimals', min: 1, max: 10, step: 1, unit: 'attempts', impact: 'low', category: 'RPC' },
+        
+        low_liquidity_threshold: { type: 'number', label: 'Low Liquidity Threshold', hint: 'USD threshold for low liquidity blacklist', min: 10, max: 10000, step: 10, unit: 'USD', impact: 'high', category: 'Blacklist' },
+        min_age_hours: { type: 'number', label: 'Min Age for Blacklist', hint: 'Hours before token can be blacklisted', min: 0, max: 168, step: 1, unit: 'hours', impact: 'medium', category: 'Blacklist' },
+        max_low_liquidity_count: { type: 'number', label: 'Max Low Liq Count', hint: 'Times seen with low liquidity before blacklist', min: 1, max: 20, step: 1, unit: 'times', impact: 'medium', category: 'Blacklist' },
+        max_no_route_failures: { type: 'number', label: 'Max No Route Failures', hint: 'Route failures before blacklist', min: 1, max: 20, step: 1, unit: 'failures', impact: 'medium', category: 'Blacklist' },
+        cache_refresh_interval_minutes: { type: 'number', label: 'Cache Refresh Interval', hint: 'Minutes between cache refreshes', min: 1, max: 60, step: 5, unit: 'minutes', impact: 'low', category: 'Blacklist' },
+        
+        max_ohlcv_age_hours: { type: 'number', label: 'Max OHLCV Age', hint: 'Hours to keep OHLCV data', min: 24, max: 720, step: 24, unit: 'hours', impact: 'low', category: 'OHLCV' },
+        max_memory_cache_entries: { type: 'number', label: 'Max Memory Cache', hint: 'OHLCV entries in memory cache', min: 100, max: 5000, step: 100, unit: 'entries', impact: 'medium', category: 'OHLCV' },
+        max_ohlcv_limit: { type: 'number', label: 'Max OHLCV Limit', hint: 'Max OHLCV candles to fetch', min: 100, max: 5000, step: 100, unit: 'candles', impact: 'low', category: 'OHLCV' },
+        default_ohlcv_limit: { type: 'number', label: 'Default OHLCV Limit', hint: 'Default candles to fetch', min: 10, max: 1000, step: 10, unit: 'candles', impact: 'low', category: 'OHLCV' },
+        
+        max_update_interval_hours: { type: 'number', label: 'Max Update Interval', hint: 'Hours between token updates', min: 1, max: 24, step: 1, unit: 'hours', impact: 'medium', category: 'Monitoring' },
+        new_token_boost_max_age_minutes: { type: 'number', label: 'New Token Boost Age', hint: 'Minutes to boost new tokens', min: 10, max: 240, step: 10, unit: 'minutes', impact: 'low', category: 'Monitoring' },
+        
+        max_pattern_length: { type: 'number', label: 'Max Pattern Length', hint: 'Max length for pattern detection', min: 3, max: 20, step: 1, unit: 'chars', impact: 'low', category: 'Patterns' }
+    },
+    
+    rpc: {
+        urls: { type: 'array', label: 'RPC URLs', hint: 'Comma-separated RPC endpoints (round-robin)', impact: 'critical', category: 'Endpoints' }
+    },
+    
+    sol_price: {
+        price_refresh_interval_secs: { type: 'number', label: 'Price Refresh Interval', hint: 'Seconds between SOL price updates', min: 10, max: 300, step: 10, unit: 'seconds', impact: 'medium', category: 'Timing' }
+    },
+    
+    summary: {
+        summary_display_interval_secs: { type: 'number', label: 'Display Interval', hint: 'Seconds between summary display updates', min: 5, max: 300, step: 5, unit: 'seconds', impact: 'low', category: 'Display' },
+        max_recent_closed_positions: { type: 'number', label: 'Max Recent Closed', hint: 'Number of recent closed positions to display', min: 5, max: 100, step: 5, unit: 'positions', impact: 'low', category: 'Display' }
+    },
+    
+    events: {
+        batch_timeout_ms: { type: 'number', label: 'Batch Timeout', hint: 'Milliseconds for event batch timeout', min: 10, max: 1000, step: 10, unit: 'ms', impact: 'low', category: 'Performance' }
+    }
+};
+
+const SECTION_INFO = {
+    trader: { icon: '🤖', title: 'Trader', fields: 33 },
+    positions: { icon: '💰', title: 'Positions', fields: 3 },
+    filtering: { icon: '🔍', title: 'Filtering', fields: 17 },
+    swaps: { icon: '🔄', title: 'Swaps', fields: 36 },
+    tokens: { icon: '🪙', title: 'Tokens', fields: 19 },
+    rpc: { icon: '🌐', title: 'RPC', fields: 1 },
+    sol_price: { icon: '💲', title: 'SOL Price', fields: 1 },
+    summary: { icon: '📊', title: 'Summary', fields: 2 },
+    events: { icon: '📝', title: 'Events', fields: 1 }
+};
+
+// =============================================================================
+// DYNAMIC RENDERING ENGINE
+// =============================================================================
+
+function renderAllSections() {
+    const container = document.getElementById('configContainer');
+    container.innerHTML = '';
+    
+    for (const [sectionName, sectionInfo] of Object.entries(SECTION_INFO)) {
+        container.innerHTML += renderSection(sectionName, sectionInfo);
+    }
+}
+
+function renderSection(sectionName, sectionInfo) {
+    const metadata = CONFIG_METADATA[sectionName];
+    if (!metadata) return '';
+    
+    // Group fields by category
+    const categories = {};
+    for (const [fieldKey, fieldMeta] of Object.entries(metadata)) {
+        const cat = fieldMeta.category || 'General';
+        if (!categories[cat]) categories[cat] = [];
+        categories[cat].push({ key: fieldKey, ...fieldMeta });
+    }
+    
+    let html = `
+        <div class="config-card" data-section="${sectionName}">
+            <div class="card-header" onclick="toggleSection('${sectionName}')">
+                <h3>
+                    <span>${sectionInfo.icon}</span>
+                    <span>${sectionInfo.title}</span>
+                    <span class="field-count">(${sectionInfo.fields} fields)</span>
+                </h3>
+                <span class="expand-icon" id="${sectionName}-icon">▼</span>
+            </div>
+            <div class="card-body" id="${sectionName}-body">
+    `;
+    
+    // Render categories
+    for (const [catName, fields] of Object.entries(categories)) {
+        html += renderCategory(sectionName, catName, fields);
+    }
+    
+    // Card actions
+    html += `
+                <div class="card-actions">
+                    <button class="save-btn" onclick="saveSection('${sectionName}')">💾 Save</button>
+                    <button class="reset-btn" onclick="resetSection('${sectionName}')">🔙 Reset</button>
+                </div>
+                <div class="status" id="${sectionName}-status"></div>
+            </div>
+        </div>
+    `;
+    
+    return html;
+}
+
+function renderCategory(sectionName, catName, fields) {
+    const isAdvanced = catName.includes('Timeout') || catName.includes('Delay') || catName.includes('Advanced');
+    const collapsedClass = isAdvanced ? ' collapsed' : '';
+    
+    let html = `
+        <div class="category">
+            <div class="category-header" onclick="toggleCategory(this)">
+                ${catName} (${fields.length})
+                <span class="category-toggle">▼</span>
+            </div>
+            <div class="category-body${collapsedClass}">
+    `;
+    
+    fields.forEach(field => {
+        html += renderField(sectionName, field);
+    });
+    
+    html += `
+            </div>
+        </div>
+    `;
+    
+    return html;
+}
+
+function renderField(sectionName, field) {
+    const fieldId = `${sectionName}_${field.key}`;
+    let inputHTML = '';
+    
+    if (field.type === 'boolean') {
+        inputHTML = `
+            <select id="${fieldId}" onchange="validateField(this)">
+                <option value="true">Enabled</option>
+                <option value="false">Disabled</option>
+            </select>
+        `;
+    } else if (field.type === 'array') {
+        inputHTML = `
+            <textarea id="${fieldId}" rows="2" placeholder="Comma-separated values" oninput="validateField(this)"></textarea>
+        `;
+    } else if (field.type === 'string') {
+        inputHTML = `
+            <input type="text" id="${fieldId}" oninput="validateField(this)">
+        `;
+    } else { // number
+        inputHTML = `
+            <input type="number" id="${fieldId}"
+                ${field.min !== undefined ? `min="${field.min}"` : ''}
+                ${field.max !== undefined ? `max="${field.max}"` : ''}
+                ${field.step ? `step="${field.step}"` : ''}
+                oninput="validateField(this)">
+        `;
+    }
+    
+    return `
+        <div class="field" data-impact="${field.impact}" data-field-key="${field.key}">
+            <div class="field-header">
+                <label>${field.label}${field.unit ? ` (${field.unit})` : ''}</label>
+                <span class="impact ${field.impact}">${field.impact}</span>
+            </div>
+            ${inputHTML}
+            <div class="field-hint">${field.hint}</div>
+            <div class="field-error"></div>
+        </div>
+    `;
+}
+
+// =============================================================================
+// LOAD & SAVE FUNCTIONS
+// =============================================================================
+
+async function loadAllConfigs() {
+    for (const sectionName of Object.keys(SECTION_INFO)) {
+        await loadSection(sectionName);
+    }
+}
+
+async function loadSection(sectionName) {
+    try {
+        const response = await fetch(`/api/config/${sectionName}`);
+        const result = await response.json();
+        
+        if (result.data) {
+            // Populate fields
+            for (const [key, value] of Object.entries(result.data)) {
+                const fieldId = `${sectionName}_${key}`;
+                const input = document.getElementById(fieldId);
+                if (input) {
+                    if (input.tagName === 'SELECT') {
+                        input.value = value.toString();
+                    } else if (input.tagName === 'TEXTAREA') {
+                        // Handle arrays
+                        input.value = Array.isArray(value) ? value.join(', ') : value;
+                    } else {
+                        input.value = value;
                     }
-                    
-                    updates[key] = value;
-                });
-                
-                // Send PATCH request
-                const response = await fetch(`/api/config/${section}`, {
+                    validateField(input);
+                }
+            }
+        }
+    } catch (error) {
+        console.error(`Failed to load ${sectionName} config:`, error);
+    }
+}
+
+async function saveSection(sectionName) {
+    const btn = event.target;
+    const statusDiv = document.getElementById(`${sectionName}-status`);
+    
+    // Validate first
+    const body = document.getElementById(`${sectionName}-body`);
+    const inputs = body.querySelectorAll('input, select, textarea');
+    let hasErrors = false;
+    
+    inputs.forEach(input => {
+        if (!validateField(input)) hasErrors = true;
+    });
+    
+    if (hasErrors) {
+        showStatus(statusDiv, 'error', 'Fix validation errors first');
+        return;
+    }
+    
+    // Loading state
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Saving...';
+    
+    try {
+        // Collect data
+        const updates = {};
+        inputs.forEach(input => {
+            const key = input.id.replace(`${sectionName}_`, '');
+            let value = input.value;
+            
+            if (input.type === 'number') {
+                value = parseFloat(value);
+            } else if (input.tagName === 'SELECT') {
+                value = value === 'true';
+            } else if (input.tagName === 'TEXTAREA') {
+                // Handle arrays
+                value = value.split(',').map(v => v.trim()).filter(v => v);
+                // Try to convert to numbers if possible
+                const numValue = value.map(v => parseFloat(v));
+                if (numValue.every(v => !isNaN(v))) {
+                    value = numValue;
+                }
+            }
+            
+            updates[key] = value;
+        });
+        
+        // Save
+        const response = await fetch(`/api/config/${sectionName}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates)
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showStatus(statusDiv, 'success', result.message || 'Saved successfully');
+            btn.innerHTML = '✅ Saved';
+            setTimeout(() => { btn.innerHTML = '💾 Save'; }, 2000);
+        } else {
+            throw new Error(result.error?.message || 'Save failed');
+        }
+    } catch (error) {
+        showStatus(statusDiv, 'error', error.message);
+        btn.innerHTML = '❌ Failed';
+        setTimeout(() => { btn.innerHTML = '💾 Save'; }, 2000);
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function resetSection(sectionName) {
+    if (!confirm(`Reset ${SECTION_INFO[sectionName].title} to last saved values?`)) return;
+    await loadSection(sectionName);
+    showStatus(document.getElementById(`${sectionName}-status`), 'success', 'Reset to saved values');
+}
+
+// =============================================================================
+// VALIDATION
+// =============================================================================
+
+function validateField(input) {
+    const [sectionName, ...keyParts] = input.id.split('_');
+    const fieldKey = keyParts.join('_');
+    const metadata = CONFIG_METADATA[sectionName]?.[fieldKey];
+    
+    if (!metadata) return true;
+    
+    const errorEl = input.parentElement.querySelector('.field-error');
+    const errors = [];
+    
+    if (metadata.type === 'number') {
+        const value = parseFloat(input.value);
+        if (isNaN(value)) {
+            errors.push('Must be a number');
+        } else {
+            if (metadata.min !== undefined && value < metadata.min) {
+                errors.push(`Min: ${metadata.min}`);
+            }
+            if (metadata.max !== undefined && value > metadata.max) {
+                errors.push(`Max: ${metadata.max}`);
+            }
+        }
+    }
+    
+    if (errors.length > 0) {
+        input.classList.add('invalid');
+        input.classList.remove('valid');
+        errorEl.textContent = errors.join(', ');
+        errorEl.classList.add('visible');
+        return false;
+    } else {
+        input.classList.remove('invalid');
+        input.classList.add('valid');
+        errorEl.classList.remove('visible');
+        return true;
+    }
+}
+
+// =============================================================================
+// SEARCH & FILTER
+// =============================================================================
+
+let currentImpactFilter = 'all';
+
+function filterConfigs(query) {
+    query = query.toLowerCase();
+    
+    document.querySelectorAll('.field').forEach(field => {
+        const label = field.querySelector('label').textContent.toLowerCase();
+        const hint = field.querySelector('.field-hint').textContent.toLowerCase();
+        const impactMatch = currentImpactFilter === 'all' || field.dataset.impact === currentImpactFilter;
+        const textMatch = !query || label.includes(query) || hint.includes(query);
+        
+        field.style.display = (impactMatch && textMatch) ? 'block' : 'none';
+    });
+    
+    // Hide empty categories
+    document.querySelectorAll('.category').forEach(cat => {
+        const visibleFields = cat.querySelectorAll('.field[style*="block"]').length;
+        cat.style.display = visibleFields > 0 ? 'block' : 'none';
+    });
+    
+    // Hide empty sections
+    document.querySelectorAll('.config-card').forEach(card => {
+        const visibleCategories = card.querySelectorAll('.category[style*="block"]').length;
+        card.style.display = visibleCategories > 0 ? 'block' : 'none';
+    });
+}
+
+function filterByImpact(level) {
+    currentImpactFilter = level;
+    
+    // Update chip states
+    document.querySelectorAll('.chip').forEach(chip => {
+        chip.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    // Reapply filter
+    const searchQuery = document.getElementById('searchInput').value;
+    filterConfigs(searchQuery);
+}
+
+// =============================================================================
+// UTILITY FUNCTIONS
+// =============================================================================
+
+async function exportConfig() {
+    try {
+        const response = await fetch('/api/config');
+        const config = await response.json();
+        
+        const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `screenerbot-config-${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    } catch (error) {
+        showStatus(document.getElementById('globalStatus'), 'error', 'Export failed');
+    }
+}
+
+async function importConfig(file) {
+    if (!file) return;
+    
+    try {
+        const text = await file.text();
+        const config = JSON.parse(text);
+        
+        if (!confirm(`Import configuration from ${file.name}? This will update ALL settings.`)) {
+            return;
+        }
+        
+        // Update each section
+        for (const [section, data] of Object.entries(config)) {
+            if (SECTION_INFO[section]) {
+                await fetch(`/api/config/${section}`, {
                     method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(updates)
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
                 });
-                
-                const result = await response.json();
-                
-                if (response.ok) {
-                    showStatus(statusDiv, 'success', result.message || 'Configuration saved successfully');
-                } else {
-                    showStatus(statusDiv, 'error', result.error?.message || 'Failed to save configuration');
-                }
-            } catch (error) {
-                showStatus(statusDiv, 'error', `Error: ${error.message}`);
             }
         }
         
-        // Reload config from disk
-        async function reloadConfig() {
-            const statusDiv = document.getElementById('globalStatus');
-            statusDiv.style.display = 'none';
-            
-            try {
-                const response = await fetch('/api/config/reload', {
-                    method: 'POST'
-                });
-                
-                const result = await response.json();
-                
-                if (response.ok) {
-                    showStatus(statusDiv, 'success', result.message || 'Configuration reloaded from disk');
-                    // Reload any open sections
-                    document.querySelectorAll('.config-form.expanded').forEach(form => {
-                        const section = form.id.replace('-form', '');
-                        loadSectionConfig(section);
-                    });
-                } else {
-                    showStatus(statusDiv, 'error', result.error?.message || 'Failed to reload configuration');
+        showStatus(document.getElementById('globalStatus'), 'success', 'Config imported');
+        await loadAllConfigs();
+    } catch (error) {
+        showStatus(document.getElementById('globalStatus'), 'error', `Import failed: ${error.message}`);
+    }
+}
+
+async function reloadConfig() {
+    if (!confirm('Reload configuration from disk? Unsaved changes will be lost.')) return;
+    
+    try {
+        const response = await fetch('/api/config/reload', { method: 'POST' });
+        const result = await response.json();
+        
+        if (response.ok) {
+            showStatus(document.getElementById('globalStatus'), 'success', 'Reloaded from disk');
+            await loadAllConfigs();
+        } else {
+            throw new Error(result.error?.message || 'Reload failed');
+        }
+    } catch (error) {
+        showStatus(document.getElementById('globalStatus'), 'error', error.message);
+    }
+}
+
+async function resetConfig() {
+    if (!confirm('⚠️ Reset ALL configuration to defaults? This CANNOT be undone!')) return;
+    
+    try {
+        const response = await fetch('/api/config/reset', { method: 'POST' });
+        const result = await response.json();
+        
+        if (response.ok) {
+            showStatus(document.getElementById('globalStatus'), 'success', 'Reset to defaults');
+            await loadAllConfigs();
+        } else {
+            throw new Error(result.error?.message || 'Reset failed');
+        }
+    } catch (error) {
+        showStatus(document.getElementById('globalStatus'), 'error', error.message);
+    }
+}
+
+async function viewDiff() {
+    const modal = document.getElementById('diffModal');
+    const body = document.getElementById('diffModalBody');
+    
+    modal.classList.add('visible');
+    body.innerHTML = '<p style="text-align:center;opacity:0.6;">Loading...</p>';
+    
+    try {
+        const response = await fetch('/api/config/diff');
+        const result = await response.json();
+        
+        if (!result.has_changes) {
+            body.innerHTML = '<p style="text-align:center;">No changes detected - memory and disk configs match</p>';
+            return;
+        }
+        
+        // Build diff table
+        let tableHTML = `
+            <table class="diff-table">
+                <thead>
+                    <tr>
+                        <th>Section</th>
+                        <th>Field</th>
+                        <th>Memory</th>
+                        <th>Disk</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+        
+        for (const [section, memData] of Object.entries(result.memory)) {
+            const diskData = result.disk[section] || {};
+            for (const [key, memValue] of Object.entries(memData)) {
+                if (JSON.stringify(memValue) !== JSON.stringify(diskData[key])) {
+                    tableHTML += `
+                        <tr>
+                            <td>${section}</td>
+                            <td>${key}</td>
+                            <td class="new-value">${JSON.stringify(memValue)}</td>
+                            <td class="old-value">${JSON.stringify(diskData[key])}</td>
+                        </tr>
+                    `;
                 }
-            } catch (error) {
-                showStatus(statusDiv, 'error', `Error: ${error.message}`);
             }
         }
         
-        // Reset config to defaults
-        async function resetConfig() {
-            if (!confirm('Are you sure you want to reset ALL configuration to defaults? This cannot be undone!')) {
-                return;
-            }
-            
-            const statusDiv = document.getElementById('globalStatus');
-            statusDiv.style.display = 'none';
-            
-            try {
-                const response = await fetch('/api/config/reset', {
-                    method: 'POST'
-                });
-                
-                const result = await response.json();
-                
-                if (response.ok) {
-                    showStatus(statusDiv, 'success', result.message || 'Configuration reset to defaults');
-                    // Reload any open sections
-                    document.querySelectorAll('.config-form.expanded').forEach(form => {
-                        const section = form.id.replace('-form', '');
-                        loadSectionConfig(section);
-                    });
-                } else {
-                    showStatus(statusDiv, 'error', result.error?.message || 'Failed to reset configuration');
-                }
-            } catch (error) {
-                showStatus(statusDiv, 'error', `Error: ${error.message}`);
-            }
-        }
-        
-        // View diff between memory and disk
-        async function viewDiff() {
-            const statusDiv = document.getElementById('globalStatus');
-            statusDiv.style.display = 'none';
-            
-            try {
-                const response = await fetch('/api/config/diff');
-                const result = await response.json();
-                
-                if (response.ok && result.has_changes) {
-                    const diffText = JSON.stringify(result.diff, null, 2);
-                    alert(`Configuration Differences:\n\n${diffText}`);
-                } else if (response.ok) {
-                    showStatus(statusDiv, 'success', 'No differences - memory and disk configs match');
-                } else {
-                    showStatus(statusDiv, 'error', result.error?.message || 'Failed to get diff');
-                }
-            } catch (error) {
-                showStatus(statusDiv, 'error', `Error: ${error.message}`);
-            }
-        }
-        
-        // Show status message
-        function showStatus(element, type, message) {
-            element.className = `status-message ${type}`;
-            element.textContent = message;
-            element.style.display = 'block';
-            
-            setTimeout(() => {
-                element.style.display = 'none';
-            }, 5000);
-        }
+        tableHTML += '</tbody></table>';
+        body.innerHTML = tableHTML;
+    } catch (error) {
+        body.innerHTML = `<p style="color:#f5576c;text-align:center;">Error: ${error.message}</p>`;
+    }
+}
+
+function closeDiffModal() {
+    document.getElementById('diffModal').classList.remove('visible');
+}
+
+function toggleSection(sectionName) {
+    const body = document.getElementById(`${sectionName}-body`);
+    const icon = document.getElementById(`${sectionName}-icon`);
+    
+    body.classList.toggle('expanded');
+    icon.classList.toggle('expanded');
+    
+    // Load when expanding
+    if (body.classList.contains('expanded')) {
+        loadSection(sectionName);
+    }
+}
+
+function toggleCategory(header) {
+    const body = header.nextElementSibling;
+    const toggle = header.querySelector('.category-toggle');
+    
+    body.classList.toggle('collapsed');
+    toggle.textContent = body.classList.contains('collapsed') ? '▶' : '▼';
+}
+
+function showStatus(element, type, message) {
+    element.className = `status ${type} visible`;
+    element.textContent = message;
+    
+    setTimeout(() => {
+        element.classList.remove('visible');
+    }, 5000);
+}
+
+// =============================================================================
+// INITIALIZATION
+// =============================================================================
+
+window.addEventListener('DOMContentLoaded', () => {
+    renderAllSections();
+    
+    // Auto-expand first section
+    const firstSection = Object.keys(SECTION_INFO)[0];
+    toggleSection(firstSection);
+});
+
+// Close modal when clicking outside
+document.addEventListener('click', (e) => {
+    if (e.target.id === 'diffModal') {
+        closeDiffModal();
+    }
+});
     </script>
     "#.to_string()
 }
