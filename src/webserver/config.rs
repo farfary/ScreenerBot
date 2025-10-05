@@ -1,7 +1,7 @@
 /// Webserver configuration management
 ///
 /// Handles loading, validation, and runtime configuration for the webserver dashboard.
-/// Configuration can come from environment variables or the main configs.json file.
+/// Configuration can come from environment variables or the main config.toml file.
 
 use serde::{ Deserialize, Serialize };
 

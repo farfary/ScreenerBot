@@ -99,7 +99,7 @@ pub fn get_pending_services() -> Vec<&'static str> {
 pub const DATA_DIR: &str = "data";
 
 /// Configuration files
-pub const CONFIG_FILE: &str = "data/configs.json";
+pub const CONFIG_FILE: &str = "data/config.toml";
 
 /// Database files
 pub const TOKENS_DATABASE: &str = "data/tokens.db";

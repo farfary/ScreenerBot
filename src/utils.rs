@@ -102,10 +102,8 @@ pub fn format_mint_for_log(mint: &str) -> String {
     format!("{}...", mint)
 }
 
-// Re-export for backward compatibility
+// Re-export SwapResult for convenience
 pub use crate::swaps::SwapResult;
-// Remove dependency on swaps module for get_wallet_address
-// pub use crate::swaps::get_wallet_address;
 
 use bs58;
 use solana_sdk::{

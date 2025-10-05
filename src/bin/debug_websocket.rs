@@ -160,8 +160,8 @@ async fn main() {
         Ok(Err(e)) => {
             print_step(&format!("Connection failed: {}", e), "ERROR");
             println!("\n🔍 Troubleshooting:");
-            println!("   1. Check if the RPC URL is correct in configs.json");
-            println!("   2. Verify network connectivity");
+            println!("   1. Check if the RPC URL is correct in config.toml");
+            println!("   2. Verify network connectivity:");
             println!("   3. Check if Helius API key is valid");
             println!("   4. Try: curl -I {}", ws_url.replace("wss://", "https://"));
             return;

@@ -25,7 +25,7 @@
 //! - Only removes specific data files, not configuration files
 //!
 //! ## Configuration
-//! Requires `configs.json` with wallet private key and RPC endpoints.
+//! Requires `config.toml` with wallet private key and RPC endpoints.
 //!
 //! ## Warning
 //! This tool will attempt to sell ALL tokens in your wallet AND delete specific bot data files. Use with caution!
@@ -126,7 +126,7 @@ fn print_help() {
     log(LogTag::System, "INFO", "    • logs/screenerbot_*.log (all bot log files)");
     log(LogTag::System, "INFO", "");
     log(LogTag::System, "INFO", "FILES THAT WILL BE PRESERVED:");
-    log(LogTag::System, "INFO", "    • data/configs.json (wallet keys and RPC endpoints)");
+    log(LogTag::System, "INFO", "    • data/config.toml (wallet keys and RPC endpoints)");
     log(LogTag::System, "INFO", "    • data/tokens.db (token database)");
     log(LogTag::System, "INFO", "    • data/decimal_cache.json (token decimals cache)");
     log(LogTag::System, "INFO", "    • data/token_blacklist.json (blacklisted tokens)");

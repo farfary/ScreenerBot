@@ -833,14 +833,14 @@ impl Clone for RpcClient {
 }
 
 impl RpcClient {
-    /// Create new RPC client with configuration from configs.json
+    /// Create new RPC client with configuration from config.toml
     pub fn new() -> Self {
         Self::from_config().unwrap_or_else(|e| {
             log(LogTag::Rpc, "ERROR", &format!("Failed to load config: {}", e));
             log(
                 LogTag::Rpc,
                 "FATAL",
-                "Cannot initialize RPC client without valid configuration. Please check configs.json"
+                "Cannot initialize RPC client without valid configuration. Please check config.toml"
             );
             std::process::exit(1);
         })
@@ -4925,7 +4925,7 @@ impl RpcClient {
     }
 
     /// Get token holder count using Helius DAS API
-    /// Uses the configured Helius RPC URLs with API keys from configs.json
+    /// Uses the configured Helius RPC URLs with API keys from config.toml
     pub async fn get_token_holder_count(&self, mint_address: &str) -> Result<u32, String> {
         // Build DAS API request for getAssetOwners
         let request_payload =
