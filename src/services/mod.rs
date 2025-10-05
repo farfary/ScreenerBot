@@ -286,13 +286,31 @@ impl ServiceManager {
         health
     }
 
-    /// Get metrics
-    pub async fn get_metrics(&mut self) -> HashMap<&'static str, ServiceMetrics> {
-        let mut metrics = HashMap::new();
-        for (name, _service) in &self.services {
-            let service_metrics = self.metrics_collector.collect_for_service(name).await;
-            metrics.insert(*name, service_metrics);
+    /// Get metrics (optimized - single system refresh for all services, no &mut needed)
+    pub async fn get_metrics(&self) -> HashMap<&'static str, ServiceMetrics> {
+        // Get service names
+        let service_names: Vec<&'static str> = self.services.keys().copied().collect();
+
+        // Collect base metrics efficiently (single refresh)
+        let mut metrics = self.metrics_collector.collect_all(&service_names).await;
+
+        // Merge service-specific metrics from each service's metrics() method
+        for (name, service) in &self.services {
+            if let Some(base_metrics) = metrics.get_mut(name) {
+                let service_specific = service.metrics().await;
+
+                // Merge service-specific operational metrics
+                base_metrics.operations_total = service_specific.operations_total;
+                base_metrics.operations_per_second = service_specific.operations_per_second;
+                base_metrics.errors_total = service_specific.errors_total;
+
+                // Merge custom metrics
+                for (key, value) in service_specific.custom_metrics {
+                    base_metrics.custom_metrics.insert(key, value);
+                }
+            }
         }
+
         metrics
     }
 

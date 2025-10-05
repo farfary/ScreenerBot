@@ -88,12 +88,12 @@ impl AppState {
         std::collections::HashMap::new()
     }
 
-    /// Get service metrics
+    /// Get service metrics (optimized - uses read lock, not write lock)
     pub async fn get_service_metrics(
         &self
     ) -> std::collections::HashMap<&'static str, crate::services::ServiceMetrics> {
         if let Some(manager_ref) = crate::services::get_service_manager().await {
-            if let Some(mut manager) = manager_ref.write().await.as_mut() {
+            if let Some(manager) = manager_ref.read().await.as_ref() {
                 return manager.get_metrics().await;
             }
         }
