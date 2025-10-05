@@ -25,4 +25,3 @@ pub mod transactions; // New modular transactions system
 pub mod utils;
 pub mod wallet; // Wallet balance monitoring
 pub mod webserver; // Webserver dashboard for monitoring and management
-pub mod websocket; // WebSocket client for real-time transaction monitoring // Learning system for pattern recognition and auto-improvement

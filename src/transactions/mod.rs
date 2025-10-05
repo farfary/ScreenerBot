@@ -47,6 +47,7 @@ pub mod service;
 pub mod types;
 pub mod utils;
 pub mod verifier;
+pub mod websocket;
 
 // Public API exports - Core functionality
 pub use manager::TransactionsManager;

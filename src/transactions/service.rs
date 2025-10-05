@@ -21,8 +21,8 @@ use crate::transactions::{
     processor::TransactionProcessor,
     types::*,
     utils::*,
+    websocket,
 };
-use crate::websocket;
 
 // =============================================================================
 // BOOTSTRAP CONFIGURATION
