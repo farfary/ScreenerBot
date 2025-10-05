@@ -18,7 +18,7 @@ impl Service for PoolDiscoveryService {
     }
 
     fn dependencies(&self) -> Vec<&'static str> {
-        vec!["transactions"]
+        vec!["transactions", "pool_helpers"]
     }
 
     async fn initialize(&mut self) -> Result<(), String> {

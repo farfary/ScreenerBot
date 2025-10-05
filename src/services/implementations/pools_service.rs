@@ -15,12 +15,12 @@ impl Service for PoolsService {
     }
 
     fn priority(&self) -> i32 {
-        35 // After pool sub-services (31-34)
+        30 // Before pool sub-services (31-34) - must initialize components first
     }
 
     fn dependencies(&self) -> Vec<&'static str> {
-        // Depends on all pool sub-services (starts helper tasks after main tasks running)
-        vec!["pool_discovery", "pool_fetcher", "pool_calculator", "pool_analyzer"]
+        // Only depends on transactions (components need to be initialized before sub-services start)
+        vec!["transactions"]
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
