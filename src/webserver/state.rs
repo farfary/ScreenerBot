@@ -3,7 +3,7 @@
 /// Contains references to core ScreenerBot systems and shared resources
 /// that need to be accessed by route handlers.
 
-use crate::webserver::config::WebserverConfig;
+use crate::config::WebserverConfig;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 

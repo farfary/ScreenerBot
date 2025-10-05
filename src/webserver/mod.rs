@@ -7,7 +7,6 @@
 ///
 /// See docs/webserver-dashboard-architecture.md for full design
 
-pub mod config;
 pub mod routes;
 pub mod server;
 pub mod state;

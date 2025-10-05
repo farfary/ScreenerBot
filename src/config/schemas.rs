@@ -422,3 +422,40 @@ config_struct! {
         monitoring: MonitoringConfig = MonitoringConfig::default(),
     }
 }
+
+// ============================================================================
+// IMPLEMENTATIONS
+// ============================================================================
+
+impl WebserverConfig {
+    /// Validate webserver configuration
+    pub fn validate(&self) -> Result<(), String> {
+        if self.host.is_empty() {
+            return Err("Host cannot be empty".to_string());
+        }
+
+        if self.port == 0 {
+            return Err("Port cannot be 0".to_string());
+        }
+
+        if self.rate_limit.enabled && self.rate_limit.requests_per_minute == 0 {
+            return Err("Rate limit requests_per_minute must be > 0 when enabled".to_string());
+        }
+
+        if self.websocket.enabled {
+            if self.websocket.max_connections == 0 {
+                return Err("WebSocket max_connections must be > 0 when enabled".to_string());
+            }
+            if self.websocket.heartbeat_interval_secs == 0 {
+                return Err("WebSocket heartbeat_interval_secs must be > 0".to_string());
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Get the full bind address (host:port)
+    pub fn bind_address(&self) -> String {
+        format!("{}:{}", self.host, self.port)
+    }
+}

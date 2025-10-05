@@ -22,6 +22,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/tokens", axum::routing::get(tokens_page))
         .route("/events", axum::routing::get(events_page))
         .route("/services", axum::routing::get(services_page))
+        .route("/config", axum::routing::get(config_page))
         .nest("/api", api_routes())
         .with_state(state)
 }
@@ -60,6 +61,12 @@ async fn events_page() -> Html<String> {
 async fn services_page() -> Html<String> {
     let content = templates::services_content();
     Html(templates::base_template("Services", "services", &content))
+}
+
+/// Config page handler
+async fn config_page() -> Html<String> {
+    let content = templates::config_content();
+    Html(templates::base_template("Configuration", "config", &content))
 }
 
 fn api_routes() -> Router<Arc<AppState>> {

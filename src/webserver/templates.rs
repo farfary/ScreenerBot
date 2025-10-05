@@ -1163,7 +1163,8 @@ fn nav_tabs(active: &str) -> String {
         ("services", "🔧 Services"),
         ("positions", "💰 Positions"),
         ("tokens", "🪙 Tokens"),
-        ("events", "📡 Events")
+        ("events", "📡 Events"),
+        ("config", "⚙️ Config")
     ];
 
     tabs.iter()
@@ -3291,6 +3292,467 @@ pub fn services_content() -> String {
         
         // Auto-refresh every 5 seconds
         setInterval(loadServices, 5000);
+    </script>
+    "#.to_string()
+}
+
+/// Configuration management page content
+pub fn config_content() -> String {
+    r#"
+    <style>
+        .config-container {
+            display: grid;
+            gap: 20px;
+        }
+        
+        .config-actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .config-actions button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-warning {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+        
+        .btn-info {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+        
+        .config-actions button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        
+        .config-section {
+            background: rgba(30, 30, 50, 0.5);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .config-section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .config-section-header h3 {
+            margin: 0;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .expand-icon {
+            transition: transform 0.3s;
+        }
+        
+        .expand-icon.expanded {
+            transform: rotate(180deg);
+        }
+        
+        .config-form {
+            display: none;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .config-form.expanded {
+            display: grid;
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .form-group label {
+            font-size: 13px;
+            color: #aaa;
+            font-weight: 500;
+        }
+        
+        .form-group input,
+        .form-group select {
+            background: rgba(20, 20, 30, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            padding: 8px 12px;
+            color: white;
+            font-size: 14px;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .save-btn {
+            margin-top: 15px;
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .save-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(56, 239, 125, 0.3);
+        }
+        
+        .status-message {
+            padding: 10px 15px;
+            border-radius: 6px;
+            margin-top: 10px;
+            display: none;
+        }
+        
+        .status-message.success {
+            background: rgba(56, 239, 125, 0.2);
+            border: 1px solid rgba(56, 239, 125, 0.5);
+            color: #38ef7d;
+        }
+        
+        .status-message.error {
+            background: rgba(245, 87, 108, 0.2);
+            border: 1px solid rgba(245, 87, 108, 0.5);
+            color: #f5576c;
+        }
+    </style>
+
+    <div class="config-container">
+        <div class="config-actions">
+            <button class="btn-primary" onclick="reloadConfig()">🔄 Reload from Disk</button>
+            <button class="btn-warning" onclick="resetConfig()">⚠️ Reset to Defaults</button>
+            <button class="btn-info" onclick="viewDiff()">📋 View Diff</button>
+        </div>
+        
+        <div id="globalStatus" class="status-message"></div>
+        
+        <!-- Trader Config -->
+        <div class="config-section">
+            <div class="config-section-header" onclick="toggleSection('trader')">
+                <h3>
+                    <span>🤖</span>
+                    <span>Trader Configuration</span>
+                </h3>
+                <span class="expand-icon" id="trader-icon">▼</span>
+            </div>
+            <div id="trader-form" class="config-form">
+                <div class="form-group">
+                    <label>Max Open Positions</label>
+                    <input type="number" id="trader_max_open_positions" min="1" max="100">
+                </div>
+                <div class="form-group">
+                    <label>Position Size (SOL)</label>
+                    <input type="number" id="trader_position_size_sol" step="0.001" min="0">
+                </div>
+                <div class="form-group">
+                    <label>Take Profit (%)</label>
+                    <input type="number" id="trader_take_profit_percentage" step="1" min="0">
+                </div>
+                <div class="form-group">
+                    <label>Stop Loss (%)</label>
+                    <input type="number" id="trader_stop_loss_percentage" step="1" min="0">
+                </div>
+                <div class="form-group">
+                    <label>Slippage BPS</label>
+                    <input type="number" id="trader_slippage_bps" min="0">
+                </div>
+                <button class="save-btn" onclick="saveSection('trader')">💾 Save Trader Config</button>
+                <div id="trader-status" class="status-message"></div>
+            </div>
+        </div>
+        
+        <!-- Positions Config -->
+        <div class="config-section">
+            <div class="config-section-header" onclick="toggleSection('positions')">
+                <h3>
+                    <span>💰</span>
+                    <span>Positions Configuration</span>
+                </h3>
+                <span class="expand-icon" id="positions-icon">▼</span>
+            </div>
+            <div id="positions-form" class="config-form">
+                <div class="form-group">
+                    <label>Verify Balances</label>
+                    <select id="positions_verify_balances">
+                        <option value="true">True</option>
+                        <option value="false">False</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Reconcile on Startup</label>
+                    <select id="positions_reconcile_on_startup">
+                        <option value="true">True</option>
+                        <option value="false">False</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Balance Verify Interval (seconds)</label>
+                    <input type="number" id="positions_balance_verify_interval_secs" min="1">
+                </div>
+                <button class="save-btn" onclick="saveSection('positions')">💾 Save Positions Config</button>
+                <div id="positions-status" class="status-message"></div>
+            </div>
+        </div>
+        
+        <!-- Swaps Config -->
+        <div class="config-section">
+            <div class="config-section-header" onclick="toggleSection('swaps')">
+                <h3>
+                    <span>🔄</span>
+                    <span>Swaps Configuration</span>
+                </h3>
+                <span class="expand-icon" id="swaps-icon">▼</span>
+            </div>
+            <div id="swaps-form" class="config-form">
+                <div class="form-group">
+                    <label>Priority Fee (lamports)</label>
+                    <input type="number" id="swaps_priority_fee_lamports" min="0">
+                </div>
+                <div class="form-group">
+                    <label>Compute Unit Limit</label>
+                    <input type="number" id="swaps_compute_unit_limit" min="0">
+                </div>
+                <div class="form-group">
+                    <label>Use Dynamic Priority Fee</label>
+                    <select id="swaps_use_dynamic_priority_fee">
+                        <option value="true">True</option>
+                        <option value="false">False</option>
+                    </select>
+                </div>
+                <button class="save-btn" onclick="saveSection('swaps')">💾 Save Swaps Config</button>
+                <div id="swaps-status" class="status-message"></div>
+            </div>
+        </div>
+        
+        <!-- Filtering Config -->
+        <div class="config-section">
+            <div class="config-section-header" onclick="toggleSection('filtering')">
+                <h3>
+                    <span>🔍</span>
+                    <span>Filtering Configuration</span>
+                </h3>
+                <span class="expand-icon" id="filtering-icon">▼</span>
+            </div>
+            <div id="filtering-form" class="config-form">
+                <div class="form-group">
+                    <label>Min Liquidity (SOL)</label>
+                    <input type="number" id="filtering_min_liquidity_sol" step="0.1" min="0">
+                </div>
+                <div class="form-group">
+                    <label>Min Market Cap (SOL)</label>
+                    <input type="number" id="filtering_min_market_cap_sol" step="1" min="0">
+                </div>
+                <div class="form-group">
+                    <label>Max Market Cap (SOL)</label>
+                    <input type="number" id="filtering_max_market_cap_sol" step="1" min="0">
+                </div>
+                <button class="save-btn" onclick="saveSection('filtering')">💾 Save Filtering Config</button>
+                <div id="filtering-status" class="status-message"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Toggle section expand/collapse
+        function toggleSection(section) {
+            const form = document.getElementById(`${section}-form`);
+            const icon = document.getElementById(`${section}-icon`);
+            
+            form.classList.toggle('expanded');
+            icon.classList.toggle('expanded');
+            
+            // Load config when expanding
+            if (form.classList.contains('expanded')) {
+                loadSectionConfig(section);
+            }
+        }
+        
+        // Load config for specific section
+        async function loadSectionConfig(section) {
+            try {
+                const response = await fetch(`/api/config/${section}`);
+                const result = await response.json();
+                
+                if (result.data) {
+                    // Populate form fields
+                    Object.keys(result.data).forEach(key => {
+                        const input = document.getElementById(`${section}_${key}`);
+                        if (input) {
+                            input.value = result.data[key];
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error(`Failed to load ${section} config:`, error);
+            }
+        }
+        
+        // Save section config
+        async function saveSection(section) {
+            const statusDiv = document.getElementById(`${section}-status`);
+            statusDiv.style.display = 'none';
+            
+            try {
+                // Collect form data
+                const updates = {};
+                const inputs = document.querySelectorAll(`#${section}-form input, #${section}-form select`);
+                
+                inputs.forEach(input => {
+                    const key = input.id.replace(`${section}_`, '');
+                    let value = input.value;
+                    
+                    // Type conversion
+                    if (input.type === 'number') {
+                        value = parseFloat(value);
+                    } else if (input.tagName === 'SELECT') {
+                        value = value === 'true';
+                    }
+                    
+                    updates[key] = value;
+                });
+                
+                // Send PATCH request
+                const response = await fetch(`/api/config/${section}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(updates)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showStatus(statusDiv, 'success', result.message || 'Configuration saved successfully');
+                } else {
+                    showStatus(statusDiv, 'error', result.error?.message || 'Failed to save configuration');
+                }
+            } catch (error) {
+                showStatus(statusDiv, 'error', `Error: ${error.message}`);
+            }
+        }
+        
+        // Reload config from disk
+        async function reloadConfig() {
+            const statusDiv = document.getElementById('globalStatus');
+            statusDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/config/reload', {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showStatus(statusDiv, 'success', result.message || 'Configuration reloaded from disk');
+                    // Reload any open sections
+                    document.querySelectorAll('.config-form.expanded').forEach(form => {
+                        const section = form.id.replace('-form', '');
+                        loadSectionConfig(section);
+                    });
+                } else {
+                    showStatus(statusDiv, 'error', result.error?.message || 'Failed to reload configuration');
+                }
+            } catch (error) {
+                showStatus(statusDiv, 'error', `Error: ${error.message}`);
+            }
+        }
+        
+        // Reset config to defaults
+        async function resetConfig() {
+            if (!confirm('Are you sure you want to reset ALL configuration to defaults? This cannot be undone!')) {
+                return;
+            }
+            
+            const statusDiv = document.getElementById('globalStatus');
+            statusDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/config/reset', {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showStatus(statusDiv, 'success', result.message || 'Configuration reset to defaults');
+                    // Reload any open sections
+                    document.querySelectorAll('.config-form.expanded').forEach(form => {
+                        const section = form.id.replace('-form', '');
+                        loadSectionConfig(section);
+                    });
+                } else {
+                    showStatus(statusDiv, 'error', result.error?.message || 'Failed to reset configuration');
+                }
+            } catch (error) {
+                showStatus(statusDiv, 'error', `Error: ${error.message}`);
+            }
+        }
+        
+        // View diff between memory and disk
+        async function viewDiff() {
+            const statusDiv = document.getElementById('globalStatus');
+            statusDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/config/diff');
+                const result = await response.json();
+                
+                if (response.ok && result.has_changes) {
+                    const diffText = JSON.stringify(result.diff, null, 2);
+                    alert(`Configuration Differences:\n\n${diffText}`);
+                } else if (response.ok) {
+                    showStatus(statusDiv, 'success', 'No differences - memory and disk configs match');
+                } else {
+                    showStatus(statusDiv, 'error', result.error?.message || 'Failed to get diff');
+                }
+            } catch (error) {
+                showStatus(statusDiv, 'error', `Error: ${error.message}`);
+            }
+        }
+        
+        // Show status message
+        function showStatus(element, type, message) {
+            element.className = `status-message ${type}`;
+            element.textContent = message;
+            element.style.display = 'block';
+            
+            setTimeout(() => {
+                element.style.display = 'none';
+            }, 5000);
+        }
     </script>
     "#.to_string()
 }

@@ -10,8 +10,9 @@ use tokio::net::TcpListener;
 use tokio::sync::Notify;
 
 use crate::{
+    config::WebserverConfig,
     logger::{ log, LogTag },
-    webserver::{ config::WebserverConfig, routes, state::AppState },
+    webserver::{ routes, state::AppState },
 };
 
 /// Global shutdown notifier

@@ -33,21 +33,11 @@ impl Service for WebserverService {
     async fn start(&mut self, shutdown: Arc<Notify>) -> Result<Vec<JoinHandle<()>>, String> {
         log(LogTag::System, "INFO", "🌐 Starting webserver dashboard...");
 
-        // Get config values from new config system
-        let (host, port) = crate::config::with_config(|cfg| {
-            (cfg.webserver.host.clone(), cfg.webserver.port)
-        });
+        // Get webserver config from main config system
+        let webserver_config = crate::config::with_config(|cfg| cfg.webserver.clone());
 
-        // Build webserver config using webserver module's type
-        let webserver_config = crate::webserver::config::WebserverConfig {
-            enabled: true,
-            host: host.clone(),
-            port,
-            cors: crate::webserver::config::CorsConfig::default(),
-            rate_limit: crate::webserver::config::RateLimitConfig::default(),
-            auth: crate::webserver::config::AuthConfig::default(),
-            websocket: crate::webserver::config::WebSocketConfig::default(),
-        };
+        let host = webserver_config.host.clone();
+        let port = webserver_config.port;
 
         let handle = tokio::spawn(async move {
             if let Err(e) = crate::webserver::start_server(webserver_config).await {

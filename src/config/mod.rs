@@ -108,6 +108,7 @@ pub use utils::{
     reload_config,
     reload_config_from_path,
     save_config,
+    update_config_section,
     with_config,
     CONFIG,
     CONFIG_FILE_PATH,
