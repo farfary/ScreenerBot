@@ -63,8 +63,18 @@ pub struct ServiceState {
 /// System resource metrics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemMetricsResponse {
-    pub memory_usage_mb: u64,
-    pub cpu_usage_percent: f32,
+    // Backward-compat (kept for existing UI):
+    pub memory_usage_mb: u64, // maps to system used memory
+    pub cpu_usage_percent: f32, // maps to system CPU usage
+
+    // Detailed metrics (new):
+    pub system_memory_used_mb: u64,
+    pub system_memory_total_mb: u64,
+    pub process_memory_mb: u64,
+    pub cpu_system_percent: f32,
+    pub cpu_process_percent: f32,
+
+    // Others
     pub active_threads: usize,
     pub rpc_calls_total: u64,
     pub rpc_calls_failed: u64,
@@ -229,11 +239,16 @@ async fn get_system_metrics_internal(state: &AppState) -> SystemMetricsResponse 
     let mut sys = System::new_all();
     sys.refresh_all();
 
-    // Get current process info
+    // Global (system) CPU and memory
+    let cpu_system_percent = sys.global_cpu_info().cpu_usage();
+    let system_memory_total_mb = (sys.total_memory() / 1024 / 1024) as u64;
+    let system_memory_used_mb = (sys.used_memory() / 1024 / 1024) as u64;
+
+    // Current process info
     let pid = sysinfo::get_current_pid().ok();
-    let (memory_mb, cpu_percent) = if let Some(pid) = pid {
+    let (process_memory_mb, cpu_process_percent) = if let Some(pid) = pid {
         if let Some(process) = sys.process(pid) {
-            let mem = process.memory() / 1024 / 1024; // Convert to MB
+            let mem = (process.memory() / 1024 / 1024) as u64; // MB
             let cpu = process.cpu_usage();
             (mem, cpu)
         } else {
@@ -253,8 +268,16 @@ async fn get_system_metrics_internal(state: &AppState) -> SystemMetricsResponse 
     let ws_connections = state.ws_connection_count().await;
 
     SystemMetricsResponse {
-        memory_usage_mb: memory_mb,
-        cpu_usage_percent: cpu_percent,
+        // Backward-compat fields map to system-wide view
+        memory_usage_mb: system_memory_used_mb,
+        cpu_usage_percent: cpu_system_percent,
+
+        // Detailed
+        system_memory_used_mb,
+        system_memory_total_mb,
+        process_memory_mb,
+        cpu_system_percent,
+        cpu_process_percent,
         active_threads: thread_count,
         rpc_calls_total: total_calls,
         rpc_calls_failed: 0, // RpcStats doesn't track failures separately

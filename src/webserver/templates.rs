@@ -1881,8 +1881,12 @@ pub fn home_content() -> String {
                 <span class="metric-value loading-text" id="rpcRate">--</span>
             </div>
             <div class="metric-row">
-                <span class="metric-label">Memory</span>
-                <span class="metric-value loading-text" id="memoryUsage">--</span>
+                <span class="metric-label">CPU (System)</span>
+                <span class="metric-value loading-text" id="homeCpu">--</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Memory (Sys)</span>
+                <span class="metric-value loading-text" id="homeMem">--</span>
             </div>
             <div class="metric-row">
                 <span class="metric-label">Uptime</span>
@@ -2008,8 +2012,25 @@ pub fn home_content() -> String {
                 document.getElementById('rpcRate').textContent = `${data.rpc.calls_per_second.toFixed(1)}/sec`;
                 document.getElementById('rpcRate').classList.remove('loading-text');
                 
-                document.getElementById('memoryUsage').textContent = `${data.system.memory_mb.toFixed(0)} MB`;
-                document.getElementById('memoryUsage').classList.remove('loading-text');
+                // Fetch detailed system metrics for CPU/memory
+                try {
+                    const mres = await fetch('/api/status/metrics');
+                    const m = await mres.json();
+                    const cpuEl = document.getElementById('homeCpu');
+                    const memEl = document.getElementById('homeMem');
+                    cpuEl.textContent = `${m.cpu_system_percent.toFixed(1)}%`;
+                    memEl.textContent = `${m.system_memory_used_mb} / ${m.system_memory_total_mb} MB`;
+                    cpuEl.classList.remove('loading-text');
+                    memEl.classList.remove('loading-text');
+                } catch (e) {
+                    // fallback: use simplified fields from overview
+                    const cpuEl = document.getElementById('homeCpu');
+                    const memEl = document.getElementById('homeMem');
+                    cpuEl.textContent = `${data.system.cpu_percent.toFixed(1)}%`;
+                    memEl.textContent = `${data.system.memory_mb.toFixed(0)} MB`;
+                    cpuEl.classList.remove('loading-text');
+                    memEl.classList.remove('loading-text');
+                }
                 
                 document.getElementById('systemUptime').textContent = data.system.uptime_formatted;
                 document.getElementById('systemUptime').classList.remove('loading-text');
@@ -2091,6 +2112,18 @@ pub fn status_content() -> String {
                 <span class="metric-label">Active Threads</span>
                 <span class="metric-value loading-text" id="threads">Loading...</span>
             </div>
+            <div class="metric-row">
+                <span class="metric-label">Process Memory</span>
+                <span class="metric-value loading-text" id="procMem">Loading...</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Process CPU</span>
+                <span class="metric-value loading-text" id="procCpu">Loading...</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">System Memory</span>
+                <span class="metric-value loading-text" id="sysMem">Loading...</span>
+            </div>
         </div>
         
         <div class="card">
@@ -2135,12 +2168,17 @@ pub fn status_content() -> String {
                 const metrics = await metricsRes.json();
                 
                 // Update metrics
-                document.getElementById('memory').textContent = metrics.memory_usage_mb + ' MB';
-                document.getElementById('cpu').textContent = metrics.cpu_usage_percent.toFixed(1) + '%';
+                document.getElementById('memory').textContent = metrics.system_memory_used_mb + ' MB';
+                document.getElementById('cpu').textContent = metrics.cpu_system_percent.toFixed(1) + '%';
                 document.getElementById('threads').textContent = metrics.active_threads;
                 document.getElementById('rpcCalls').textContent = formatNumber(metrics.rpc_calls_total);
                 document.getElementById('successRate').textContent = metrics.rpc_success_rate.toFixed(1) + '%';
                 document.getElementById('wsConns').textContent = metrics.ws_connections;
+
+                // Detailed metrics
+                document.getElementById('procMem').textContent = metrics.process_memory_mb + ' MB';
+                document.getElementById('procCpu').textContent = metrics.cpu_process_percent.toFixed(1) + '%';
+                document.getElementById('sysMem').textContent = metrics.system_memory_used_mb + ' / ' + metrics.system_memory_total_mb + ' MB';
                 
                 // Remove loading class
                 document.querySelectorAll('.loading-text').forEach(el => el.classList.remove('loading-text'));
@@ -3006,13 +3044,34 @@ pub fn services_content() -> String {
             </div>
         </div>
         
-        <div class="services-list" id="servicesList">
-            <div class="loading-message">Loading services...</div>
+        <div class="table-scroll">
+            <table class="table" id="servicesTable">
+                <thead>
+                    <tr>
+                        <th style="min-width: 160px;">Name</th>
+                        <th style="min-width: 110px;">Health</th>
+                        <th style="min-width: 80px;">Priority</th>
+                        <th style="min-width: 90px;">Enabled</th>
+                        <th style="min-width: 120px;">Uptime</th>
+                        <th style="min-width: 110px;">CPU</th>
+                        <th style="min-width: 120px;">Memory</th>
+                        <th style="min-width: 220px;">Dependencies</th>
+                    </tr>
+                </thead>
+                <tbody id="servicesTableBody">
+                    <tr>
+                        <td colspan="7" style="text-align:center; padding: 20px; color: var(--text-muted);">
+                            Loading services...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
     </div>
 
     <style>
         .services-container {
+            width: 100%;
             max-width: 1400px;
             margin: 0 auto;
         }
@@ -3062,13 +3121,11 @@ pub fn services_content() -> String {
             color: #ef4444;
         }
         
-        .service-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 1.5rem;
-            margin-bottom: 1rem;
-        }
+        /* Badges for health in table */
+        .badge.success { background: var(--badge-online); color: #fff; }
+        .badge.warning { background: var(--badge-loading); color: #fff; }
+        .badge.error { background: var(--badge-error); color: #fff; }
+        .badge.secondary { background: var(--bg-secondary); color: var(--text-primary); }
         
         .service-header {
             display: flex;
@@ -3093,7 +3150,7 @@ pub fn services_content() -> String {
         .service-details {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
+            gap: 0.75rem 1rem;
         }
         
         .service-detail-item {
@@ -3138,21 +3195,27 @@ pub fn services_content() -> String {
 
     <script>
         let servicesData = null;
-        
+
         async function loadServices() {
             try {
                 const response = await fetch('/api/services/overview');
                 const data = await response.json();
                 servicesData = data; // FIX: Direct access, not data.data
-                renderServices();
+                renderServicesTable();
             } catch (error) {
                 console.error('Failed to load services:', error);
-                document.getElementById('servicesList').innerHTML = 
-                    '<div class="error-message">Failed to load services</div>';
+                const tbody = document.getElementById('servicesTableBody');
+                if (tbody) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="7" style="text-align:center; padding: 20px; color: #ef4444;">Failed to load services</td>
+                        </tr>
+                    `;
+                }
             }
         }
-        
-        function renderServices() {
+
+        function renderServicesTable() {
             if (!servicesData) return;
             
             // Update summary
@@ -3160,43 +3223,33 @@ pub fn services_content() -> String {
             document.getElementById('healthyServices').textContent = servicesData.summary.healthy_services;
             document.getElementById('startingServices').textContent = servicesData.summary.starting_services;
             document.getElementById('unhealthyServices').textContent = servicesData.summary.unhealthy_services;
-            
-            // Render services list
-            const servicesList = document.getElementById('servicesList');
-            servicesList.innerHTML = servicesData.services.map(service => `
-                <div class="service-card">
-                    <div class="service-header">
-                        <div>
-                            <div class="service-name">${service.name}</div>
-                            <span class="badge ${getHealthBadgeClass(service.health)}">${getHealthStatus(service.health)}</span>
-                        </div>
-                        <div class="service-priority">Priority: ${service.priority}</div>
-                    </div>
-                    <div class="service-details">
-                        <div class="service-detail-item">
-                            <div class="detail-label">Status</div>
-                            <div class="detail-value">${service.enabled ? '✅ Enabled' : '❌ Disabled'}</div>
-                        </div>
-                        <div class="service-detail-item">
-                            <div class="detail-label">Uptime</div>
-                            <div class="detail-value">${formatUptime(service.uptime_seconds)}</div>
-                        </div>
-                        <div class="service-detail-item">
-                            <div class="detail-label">Memory</div>
-                            <div class="detail-value">${formatBytes(service.metrics.memory_usage_bytes)}</div>
-                        </div>
-                        <div class="service-detail-item">
-                            <div class="detail-label">Dependencies</div>
-                            <div class="dependencies-list">
-                                ${service.dependencies.length > 0 
-                                    ? service.dependencies.map(dep => `<span class="dependency-badge">${dep}</span>`).join('')
-                                    : '<span class="detail-value">None</span>'
-                                }
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `).join('');
+
+            const tbody = document.getElementById('servicesTableBody');
+            if (!tbody) return;
+
+            const rows = servicesData.services.map(service => {
+                const deps = service.dependencies && service.dependencies.length
+                    ? service.dependencies.map(dep => `<span class=\"dependency-badge\">${dep}</span>`).join(' ')
+                    : '<span class="detail-value">None</span>';
+                return `
+                    <tr>
+                        <td style="font-weight:600;">${service.name}</td>
+                        <td><span class="badge ${getHealthBadgeClass(service.health)}">${getHealthStatus(service.health)}</span></td>
+                        <td>${service.priority}</td>
+                        <td>${service.enabled ? '✅ Enabled' : '❌ Disabled'}</td>
+                        <td>${formatUptime(service.uptime_seconds)}</td>
+                        <td>${(service.metrics.cpu_usage_percent || 0).toFixed(1)}%</td>
+                        <td>${formatBytes(service.metrics.memory_usage_bytes)}</td>
+                        <td>${deps}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            tbody.innerHTML = rows || `
+                <tr>
+                    <td colspan="7" style="text-align:center; padding: 20px; color: var(--text-muted);">No services</td>
+                </tr>
+            `;
         }
         
         function getHealthStatus(health) {
