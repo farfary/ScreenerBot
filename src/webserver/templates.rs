@@ -1020,13 +1020,15 @@ fn common_styles() -> &'static str {
         }
 
         /* Modal Body - Split Layout */
-        .token-modal .modal-body {
+        .token-modal .token-detail-body {
             display: flex;
             flex: 1;
             min-height: 0;
             overflow: hidden;
             padding: 0;
             gap: 0;
+            max-height: none;
+            height: auto;
         }
 
         .token-modal .modal-main {
@@ -1035,6 +1037,7 @@ fn common_styles() -> &'static str {
             flex-direction: column;
             overflow: hidden;
             min-width: 0;
+            min-height: 0;
         }
 
         .token-modal .modal-sidebar {
@@ -1045,8 +1048,6 @@ fn common_styles() -> &'static str {
             border-left: 1px solid #2d3748;
             display: flex;
             flex-direction: column;
-            gap: 16px;
-            padding: 16px;
             overflow-y: auto;
             align-self: stretch;
             min-height: 0;
@@ -1057,19 +1058,21 @@ fn common_styles() -> &'static str {
             flex: 1;
             display: flex;
             flex-direction: column;
+            align-items: center;
             justify-content: center;
             padding: 12px 16px;
             background: #0a0e14;
             position: relative;
-            min-height: 400px;
+            min-height: 0;
             min-width: 0;
             overflow: hidden;
         }
 
         .token-modal .chart-canvas {
-            flex: 1;
             width: 100%;
             height: 100%;
+            max-width: 100%;
+            max-height: 100%;
         }
 
         .token-modal .chart-loading {
@@ -1088,6 +1091,7 @@ fn common_styles() -> &'static str {
             padding: 6px 10px 0 10px;
             background: #0f1419;
             border-bottom: 1px solid #2d3748;
+            flex-shrink: 0;
         }
 
         .token-modal .modal-tab {
@@ -1128,25 +1132,39 @@ fn common_styles() -> &'static str {
             flex: 1;
             display: flex;
             flex-direction: column;
-            padding: 12px 14px;
+            padding: 0;
             background: #0f1419;
             min-height: 0;
             overflow: hidden;
             position: relative;
+            /* Override global .modal-content constraints */
+            width: 100%;
+            max-width: none;
+            height: auto;
+            max-height: none;
         }
 
         .token-modal .tab-pane {
             display: none;
             flex: 1;
             min-height: 0;
+            min-width: 0; /* allow flex sizing to full width */
             overflow-y: auto;
             overflow-x: hidden;
+            padding: 12px 14px;
+            width: 100%;
         }
 
         .token-modal .tab-pane.active {
             display: flex;
             flex-direction: column;
             animation: fadeInContent 0.3s ease;
+        }
+        
+        /* CRITICAL: Override generic modal-body height cap */
+        .token-modal .token-detail-body {
+            max-height: none !important;
+            height: auto !important;
         }
 
         @keyframes fadeInContent {
@@ -1165,11 +1183,11 @@ fn common_styles() -> &'static str {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             gap: 10px;
-            margin-bottom: 12px;
+            width: 100%;
         }
 
         @media (max-width: 1200px) {
-            .token-modal .modal-body {
+            .token-modal .token-detail-body {
                 flex-direction: column;
             }
 
@@ -1246,6 +1264,40 @@ fn common_styles() -> &'static str {
             color: #e2e8f0;
             font-weight: 600;
             font-family: 'Courier New', monospace;
+        }
+
+        /* Ensure all tab-pane children expand to full width */
+        .token-modal .tab-pane > div {
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        /* Security tab blocks should expand */
+        .token-modal .security-badge,
+        .token-modal .metric-card,
+        .token-modal .risk-list,
+        .token-modal .risk-item {
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        /* Overview grid spans full width */
+        .token-modal .metrics-grid {
+            width: 100%;
+            min-width: 100%;
+            box-sizing: border-box;
+        }
+
+        /* Chart container full width */
+        .token-modal .modal-chart-container {
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        /* Transactions list full width */
+        .token-modal #transactions-list {
+            width: 100%;
+            box-sizing: border-box;
         }
 
         /* Sidebar Metrics */
@@ -3380,7 +3432,7 @@ pub fn tokens_content() -> String {
             </div>
 
             <!-- Modal Body -->
-            <div class="modal-body">
+            <div class="modal-body token-detail-body">
                 <!-- Main Content Area -->
                 <div class="modal-main">
                     <!-- Tabs Navigation -->
