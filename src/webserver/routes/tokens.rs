@@ -215,11 +215,18 @@ pub fn routes() -> Router<Arc<AppState>> {
 // =============================================================================
 
 /// Get tokens list with views, sorting, and pagination
+///
+/// NOTE: Uses POST /api/tokens/filter pattern to work around Axum 0.7 Handler trait issue
+/// with complex nested async functions. The full implementation is available via filter_tokens
+/// endpoint. This stub is kept for compatibility.
 async fn get_tokens_list(Query(query): Query<TokenListQuery>) -> Json<TokenListResponse> {
-    let page_size = query.page_size.min(200).max(1);
+    use crate::config::with_config;
+
+    let max_page_size = with_config(|cfg| cfg.webserver.tokens_tab.max_page_size);
+    let page_size = query.page_size.min(max_page_size).max(1);
     let page = query.page.max(1);
 
-    // Simple stub - returns empty list for now
+    // Return stub - use POST /api/tokens/filter for full functionality
     Json(TokenListResponse {
         items: vec![],
         page,
@@ -232,40 +239,257 @@ async fn get_tokens_list(Query(query): Query<TokenListQuery>) -> Json<TokenListR
 
 /// Get token detail
 async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse> {
-    // Stub implementation
+    log(LogTag::Api, "TOKEN_DETAIL", &format!("mint={}", mint));
+
+    // Fetch token from database (ONE async call)
+    let db = match TokenDatabase::new() {
+        Ok(db) => db,
+        Err(_) => {
+            return Json(TokenDetailResponse {
+                mint: mint.clone(),
+                symbol: "ERROR".to_string(),
+                name: Some("Database unavailable".to_string()),
+                logo_url: None,
+                website: None,
+                verified: false,
+                tags: vec![],
+                price_sol: None,
+                price_confidence: None,
+                price_updated_at: None,
+                liquidity_usd: None,
+                volume_24h: None,
+                fdv: None,
+                market_cap: None,
+                price_change_h1: None,
+                price_change_h24: None,
+                pool_address: None,
+                pool_dex: None,
+                pool_reserves_sol: None,
+                pool_reserves_token: None,
+                security_score: None,
+                security_score_normalized: None,
+                rugged: None,
+                mint_authority: None,
+                freeze_authority: None,
+                total_holders: None,
+                top_10_concentration: None,
+                security_risks: vec![],
+                has_ohlcv: false,
+                has_pool_price: false,
+                has_open_position: false,
+                blacklisted: false,
+                timestamp: chrono::Utc::now().to_rfc3339(),
+            });
+        }
+    };
+
+    let token = match db.get_token_by_mint(&mint) {
+        Ok(Some(t)) => t,
+        Ok(None) => {
+            return Json(TokenDetailResponse {
+                mint: mint.clone(),
+                symbol: "NOT_FOUND".to_string(),
+                name: Some("Token not in database".to_string()),
+                logo_url: None,
+                website: None,
+                verified: false,
+                tags: vec![],
+                price_sol: None,
+                price_confidence: None,
+                price_updated_at: None,
+                liquidity_usd: None,
+                volume_24h: None,
+                fdv: None,
+                market_cap: None,
+                price_change_h1: None,
+                price_change_h24: None,
+                pool_address: None,
+                pool_dex: None,
+                pool_reserves_sol: None,
+                pool_reserves_token: None,
+                security_score: None,
+                security_score_normalized: None,
+                rugged: None,
+                mint_authority: None,
+                freeze_authority: None,
+                total_holders: None,
+                top_10_concentration: None,
+                security_risks: vec![],
+                has_ohlcv: false,
+                has_pool_price: false,
+                has_open_position: false,
+                blacklisted: false,
+                timestamp: chrono::Utc::now().to_rfc3339(),
+            });
+        }
+        Err(_) => {
+            return Json(TokenDetailResponse {
+                mint: mint.clone(),
+                symbol: "ERROR".to_string(),
+                name: Some("Database error".to_string()),
+                logo_url: None,
+                website: None,
+                verified: false,
+                tags: vec![],
+                price_sol: None,
+                price_confidence: None,
+                price_updated_at: None,
+                liquidity_usd: None,
+                volume_24h: None,
+                fdv: None,
+                market_cap: None,
+                price_change_h1: None,
+                price_change_h24: None,
+                pool_address: None,
+                pool_dex: None,
+                pool_reserves_sol: None,
+                pool_reserves_token: None,
+                security_score: None,
+                security_score_normalized: None,
+                rugged: None,
+                mint_authority: None,
+                freeze_authority: None,
+                total_holders: None,
+                top_10_concentration: None,
+                security_risks: vec![],
+                has_ohlcv: false,
+                has_pool_price: false,
+                has_open_position: false,
+                blacklisted: false,
+                timestamp: chrono::Utc::now().to_rfc3339(),
+            });
+        }
+    };
+
+    // Get enrichment data (all sync or from cache)
+    let (
+        price_sol,
+        price_confidence,
+        price_updated_at,
+        pool_address,
+        pool_dex,
+        pool_reserves_sol,
+        pool_reserves_token,
+    ) = if let Some(price_result) = pools::get_pool_price(&mint) {
+        let age_secs = price_result.timestamp.elapsed().as_secs();
+        let now_unix = std::time::SystemTime
+            ::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        (
+            Some(price_result.price_sol),
+            Some(price_result.confidence),
+            Some(now_unix - (age_secs as i64)),
+            Some(price_result.pool_address),
+            price_result.source_pool,
+            Some(price_result.sol_reserves),
+            Some(price_result.token_reserves),
+        )
+    } else {
+        (None, None, None, None, None, None, None)
+    };
+
+    // Get security info (sync DB call)
+    let (
+        security_score,
+        security_score_normalized,
+        rugged,
+        mint_authority,
+        freeze_authority,
+        total_holders,
+        top_10_concentration,
+        security_risks,
+    ) = SecurityDatabase::new("data/security.db")
+        .ok()
+        .and_then(|db| db.get_security_info(&mint).ok().flatten())
+        .map(|sec| {
+            let top_10_conc = if sec.top_holders.len() >= 10 {
+                Some(
+                    sec.top_holders
+                        .iter()
+                        .take(10)
+                        .map(|h| h.pct)
+                        .sum::<f64>()
+                )
+            } else {
+                None
+            };
+            let risks = sec.risks
+                .iter()
+                .map(|r| SecurityRisk {
+                    name: r.name.clone(),
+                    level: r.level.clone(),
+                    description: r.description.clone(),
+                    score: r.score,
+                })
+                .collect();
+            (
+                Some(sec.score),
+                Some(sec.score_normalised),
+                Some(sec.rugged),
+                sec.mint_authority,
+                sec.freeze_authority,
+                Some(sec.total_holders),
+                top_10_conc,
+                risks,
+            )
+        })
+        .unwrap_or((None, None, None, None, None, None, None, vec![]));
+
+    // Get status flags (mix of sync and cache checks)
+    let has_ohlcv = ohlcv_db
+        ::get_ohlcv_database()
+        .and_then(|db| db.check_data_availability(&mint))
+        .map(|meta| meta.data_points_count > 0 && !meta.is_expired)
+        .unwrap_or(false);
+
+    let has_pool_price = price_sol.is_some();
+    let blacklisted = blacklist::is_token_blacklisted_db(&mint);
+
+    // Position check - this is the ONLY additional async, keep it last and simple
+    let has_open_position = positions::is_open_position(&mint).await;
+
     Json(TokenDetailResponse {
-        mint: mint.clone(),
-        symbol: "STUB".to_string(),
-        name: None,
-        logo_url: None,
-        website: None,
-        verified: false,
-        tags: vec![],
-        price_sol: None,
-        price_confidence: None,
-        price_updated_at: None,
-        liquidity_usd: None,
-        volume_24h: None,
-        fdv: None,
-        market_cap: None,
-        price_change_h1: None,
-        price_change_h24: None,
-        pool_address: None,
-        pool_dex: None,
-        pool_reserves_sol: None,
-        pool_reserves_token: None,
-        security_score: None,
-        security_score_normalized: None,
-        rugged: None,
-        mint_authority: None,
-        freeze_authority: None,
-        total_holders: None,
-        top_10_concentration: None,
-        security_risks: vec![],
-        has_ohlcv: false,
-        has_pool_price: false,
-        has_open_position: false,
-        blacklisted: false,
+        mint: token.mint,
+        symbol: token.symbol,
+        name: Some(token.name),
+        logo_url: token.info.as_ref().and_then(|i| i.image_url.clone()),
+        website: token.info
+            .as_ref()
+            .and_then(|i| i.websites.as_ref())
+            .and_then(|w| w.first())
+            .map(|w| w.url.clone()),
+        verified: token.labels
+            .as_ref()
+            .map(|l| l.iter().any(|label| label.to_lowercase() == "verified"))
+            .unwrap_or(false),
+        tags: token.labels.unwrap_or_default(),
+        price_sol,
+        price_confidence,
+        price_updated_at,
+        liquidity_usd: token.liquidity.as_ref().and_then(|l| l.usd),
+        volume_24h: token.volume.as_ref().and_then(|v| v.h24),
+        fdv: token.fdv,
+        market_cap: token.market_cap,
+        price_change_h1: token.price_change.as_ref().and_then(|p| p.h1),
+        price_change_h24: token.price_change.as_ref().and_then(|p| p.h24),
+        pool_address,
+        pool_dex,
+        pool_reserves_sol,
+        pool_reserves_token,
+        security_score,
+        security_score_normalized,
+        rugged,
+        mint_authority,
+        freeze_authority,
+        total_holders,
+        top_10_concentration,
+        security_risks,
+        has_ohlcv,
+        has_pool_price,
+        has_open_position,
+        blacklisted,
         timestamp: chrono::Utc::now().to_rfc3339(),
     })
 }
@@ -557,6 +781,75 @@ async fn get_tokens_with_prices() -> Json<TokensResponse> {
 // HELPER FUNCTIONS
 // =============================================================================
 
+/// Build complete token list response with filtering, sorting, and pagination
+async fn build_token_list_response(query: TokenListQuery) -> TokenListResponse {
+    use crate::config::with_config;
+
+    // Get config-driven limits
+    let max_page_size = with_config(|cfg| cfg.webserver.tokens_tab.max_page_size);
+    let page_size = query.page_size.min(max_page_size).max(1);
+    let page = query.page.max(1);
+
+    // Fetch tokens for the specified view
+    let tokens = match get_tokens_for_view(&query.view).await {
+        Ok(t) => t,
+        Err(_) => vec![],
+    };
+
+    // Apply search filter
+    let filtered = if query.search.is_empty() {
+        tokens
+    } else {
+        let search_lower = query.search.to_lowercase();
+        tokens
+            .into_iter()
+            .filter(|t| {
+                t.symbol.to_lowercase().contains(&search_lower) ||
+                    t.mint.to_lowercase().contains(&search_lower) ||
+                    t.name
+                        .as_ref()
+                        .map(|n| n.to_lowercase().contains(&search_lower))
+                        .unwrap_or(false)
+            })
+            .collect()
+    };
+
+    // Sort tokens
+    let mut sorted = filtered;
+    sort_tokens(&mut sorted, &query.sort_by, &query.sort_dir);
+
+    // Calculate pagination
+    let total = sorted.len();
+    let total_pages = (total + page_size - 1) / page_size;
+    let start_idx = (page - 1) * page_size;
+    let end_idx = (start_idx + page_size).min(total);
+
+    let items = if start_idx < total { sorted[start_idx..end_idx].to_vec() } else { vec![] };
+
+    log(
+        LogTag::Api,
+        "TOKENS_LIST",
+        &format!(
+            "view={} search='{}' page={}/{} items={}/{}",
+            query.view,
+            query.search,
+            page,
+            total_pages,
+            items.len(),
+            total
+        )
+    );
+
+    TokenListResponse {
+        items,
+        page,
+        page_size,
+        total,
+        total_pages,
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    }
+}
+
 /// Get tokens for a specific view
 async fn get_tokens_for_view(view: &str) -> Result<Vec<TokenSummary>, String> {
     match view {
@@ -630,6 +923,9 @@ async fn get_position_tokens() -> Result<Vec<TokenSummary>, String> {
 
 /// Get secure tokens (high security score, not rugged)
 async fn get_secure_tokens() -> Result<Vec<TokenSummary>, String> {
+    use crate::config::with_config;
+
+    let threshold = with_config(|cfg| cfg.webserver.tokens_tab.secure_token_score_threshold);
     let db = TokenDatabase::new().map_err(|e| e.to_string())?;
     let all_tokens = db.get_all_tokens().await?;
     let security_db = SecurityDatabase::new("data/security.db").map_err(|e| e.to_string())?;
@@ -637,7 +933,7 @@ async fn get_secure_tokens() -> Result<Vec<TokenSummary>, String> {
     let mut tokens = Vec::new();
     for token in all_tokens {
         if let Ok(Some(sec)) = security_db.get_security_info(&token.mint) {
-            if sec.score > 500 && !sec.rugged {
+            if sec.score > threshold && !sec.rugged {
                 tokens.push(token_to_summary(token).await);
             }
         }
@@ -646,12 +942,15 @@ async fn get_secure_tokens() -> Result<Vec<TokenSummary>, String> {
     Ok(tokens)
 }
 
-/// Get recently created tokens (last 24 hours)
+/// Get recently created tokens (configurable lookback period)
 async fn get_recent_tokens() -> Result<Vec<TokenSummary>, String> {
+    use crate::config::with_config;
+
+    let hours = with_config(|cfg| cfg.webserver.tokens_tab.recent_token_hours);
     let db = TokenDatabase::new().map_err(|e| e.to_string())?;
     let all_tokens = db.get_all_tokens().await?;
 
-    let cutoff = chrono::Utc::now() - chrono::Duration::hours(24);
+    let cutoff = chrono::Utc::now() - chrono::Duration::hours(hours);
     let mut tokens = Vec::new();
 
     for token in all_tokens {

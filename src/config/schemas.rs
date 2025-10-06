@@ -327,6 +327,35 @@ config_struct! {
 }
 
 config_struct! {
+    /// Tokens tab webserver configuration
+    pub struct TokensTabConfig {
+        /// Default page size for token lists
+        default_page_size: usize = 50,
+        
+        /// Maximum page size (enforced limit)
+        max_page_size: usize = 200,
+        
+        /// Auto-refresh interval (milliseconds)
+        auto_refresh_interval_ms: u64 = 2000,
+        
+        /// Price staleness warning threshold (seconds)
+        price_staleness_threshold_seconds: u64 = 60,
+        
+        /// Security score threshold for "secure" view
+        secure_token_score_threshold: i32 = 500,
+        
+        /// Recent token lookback period (hours)
+        recent_token_hours: i64 = 24,
+        
+        /// Enable OHLCV charts
+        enable_ohlcv_charts: bool = true,
+        
+        /// Enable token detail page
+        enable_detail_page: bool = true,
+    }
+}
+
+config_struct! {
     /// Webserver configuration
     pub struct WebserverConfig {
         enabled: bool = true,
@@ -336,6 +365,7 @@ config_struct! {
         rate_limit: RateLimitConfig = RateLimitConfig::default(),
         auth: AuthConfig = AuthConfig::default(),
         websocket: WebSocketConfig = WebSocketConfig::default(),
+        tokens_tab: TokensTabConfig = TokensTabConfig::default(),
     }
 }
 
