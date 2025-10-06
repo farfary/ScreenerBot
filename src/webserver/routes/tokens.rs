@@ -201,6 +201,7 @@ pub struct FilterRequest {
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
+        .route("/tokens/list", get(get_tokens_list))
         .route("/tokens/stats", get(get_tokens_stats))
         .route("/tokens/filter", post(filter_tokens))
         .route("/tokens/:mint", get(get_token_detail))
@@ -210,6 +211,72 @@ pub fn routes() -> Router<Arc<AppState>> {
 // =============================================================================
 // HANDLERS
 // =============================================================================
+
+/// List tokens with simple query params and view selection
+/// GET /api/tokens/list?view=pool|all|blacklisted|positions|secure|recent&search=...&sort_by=...&sort_dir=...&page=1&page_size=50
+async fn get_tokens_list(Query(query): Query<TokenListQuery>) -> Json<TokenListResponse> {
+    use crate::config::with_config;
+
+    // Config-driven limits
+    let max_page_size = with_config(|cfg| cfg.webserver.tokens_tab.max_page_size);
+    let page_size = query.page_size.min(max_page_size).max(1);
+    let page = query.page.max(1);
+
+    // ONE async call to fetch tokens for the chosen view
+    let tokens = get_tokens_for_view(&query.view).await.unwrap_or_default();
+
+    // Search filter (sync)
+    let filtered: Vec<TokenSummary> = if query.search.is_empty() {
+        tokens
+    } else {
+        let search_lower = query.search.to_lowercase();
+        tokens
+            .into_iter()
+            .filter(|t| {
+                t.symbol.to_lowercase().contains(&search_lower) ||
+                    t.mint.to_lowercase().contains(&search_lower) ||
+                    t.name
+                        .as_ref()
+                        .map(|n| n.to_lowercase().contains(&search_lower))
+                        .unwrap_or(false)
+            })
+            .collect()
+    };
+
+    // Sort (sync)
+    let mut sorted = filtered;
+    sort_tokens(&mut sorted, &query.sort_by, &query.sort_dir);
+
+    // Pagination (sync)
+    let total = sorted.len();
+    let total_pages = (total + page_size - 1) / page_size;
+    let start_idx = (page - 1) * page_size;
+    let end_idx = (start_idx + page_size).min(total);
+    let items = if start_idx < total { sorted[start_idx..end_idx].to_vec() } else { vec![] };
+
+    log(
+        LogTag::Api,
+        "TOKENS_LIST",
+        &format!(
+            "view={} search='{}' page={}/{} items={}/{}",
+            query.view,
+            query.search,
+            page,
+            total_pages,
+            items.len(),
+            total
+        )
+    );
+
+    Json(TokenListResponse {
+        items,
+        page,
+        page_size,
+        total,
+        total_pages,
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    })
+}
 
 /// Get token detail
 async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse> {

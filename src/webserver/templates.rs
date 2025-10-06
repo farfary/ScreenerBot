@@ -2477,6 +2477,10 @@ pub fn tokens_content() -> String {
             <input type="text" id="searchInput" placeholder="Search by symbol or mint" 
                    style="flex: 1; min-width: 200px; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9em; background: var(--bg-primary); color: var(--text-primary);">
             <div class="spacer"></div>
+            <div class="subtabs" style="display:flex; gap:6px; margin-right: 12px;">
+                <button class="btn btn-secondary" id="tabPool" onclick="switchTokensView('pool')">Pool Service</button>
+                <button class="btn btn-secondary" id="tabAll" onclick="switchTokensView('all')">All Tokens</button>
+            </div>
             <span id="tokenCount" style="color: var(--text-secondary); font-size: 0.9em;">Loading...</span>
             <button onclick="loadTokens()" class="btn btn-primary">🔄 Refresh</button>
         </div>
@@ -2506,6 +2510,7 @@ pub fn tokens_content() -> String {
         let tokensRefreshInterval = null;
         let tokensRequestController = null;
         let tokensLoading = false;
+        let tokensView = 'pool';
         
         async function loadTokens() {
             // Skip refresh if dropdown is currently open to prevent it from disappearing
@@ -2524,26 +2529,23 @@ pub fn tokens_content() -> String {
             tokensLoading = true;
             
             try {
-                const res = await fetch('/api/tokens/filter', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        search: document.getElementById('searchInput').value || '',
-                        has_pool_price: true,
-                        sort_by: 'symbol',
-                        sort_dir: 'asc',
-                        page: 1,
-                        page_size: 1000
-                    }),
-                    signal: tokensRequestController.signal
+                const params = new URLSearchParams({
+                    view: tokensView,
+                    search: document.getElementById('searchInput').value || '',
+                    sort_by: 'symbol',
+                    sort_dir: 'asc',
+                    page: '1',
+                    page_size: '1000'
                 });
+                const res = await fetch(`/api/tokens/list?${params.toString()}`, { signal: tokensRequestController.signal });
                 const data = await res.json();
                 
                 // Backend returns plain TokenListResponse { items, total, ... }
                 allTokensData = Array.isArray(data.items) ? data.items : [];
                 
+                const viewLabel = tokensView === 'pool' ? 'with available prices' : 'in database';
                 document.getElementById('tokenCount').textContent = 
-                    `${Number.isFinite(data.total) ? data.total : allTokensData.length} tokens with available prices`;
+                    `${Number.isFinite(data.total) ? data.total : allTokensData.length} tokens ${viewLabel}`;
                 
                 renderTokens(allTokensData);
                 
@@ -2555,13 +2557,24 @@ pub fn tokens_content() -> String {
                 tokensLoading = false;
             }
         }
+
+        function switchTokensView(view) {
+            if (tokensView === view) return;
+            tokensView = view;
+            // Toggle active styles
+            document.getElementById('tabPool').classList.toggle('btn-primary', view === 'pool');
+            document.getElementById('tabPool').classList.toggle('btn-secondary', view !== 'pool');
+            document.getElementById('tabAll').classList.toggle('btn-primary', view === 'all');
+            document.getElementById('tabAll').classList.toggle('btn-secondary', view !== 'all');
+            loadTokens();
+        }
         
         function renderTokens(tokens) {
             const tbody = document.getElementById('tokensTableBody');
             
             if (tokens.length === 0) {
                 tbody.innerHTML = 
-                    '<tr><td colspan="4" style="text-align: center; padding: 20px; color: #94a3b8;">No tokens with available prices</td></tr>';
+                    `<tr><td colspan="4" style="text-align: center; padding: 20px; color: #94a3b8;">No tokens found for view: ${tokensView}</td></tr>`;
                 return;
             }
             
@@ -2661,6 +2674,9 @@ pub fn tokens_content() -> String {
             }, 2000);
         }
         
+        // Initialize tab styles
+        document.getElementById('tabPool').classList.add('btn-primary');
+        document.getElementById('tabAll').classList.add('btn-secondary');
         loadTokens();
         startTokensRefresh();
     </script>
