@@ -21,9 +21,22 @@ pub struct OhlcvDatabase {
 impl OhlcvDatabase {
     /// Initialize the database and create tables
     pub fn new<P: AsRef<Path>>(path: P) -> OhlcvResult<Self> {
-        let conn = Connection::open(path).map_err(|e|
+        let mut conn = Connection::open(path).map_err(|e|
             OhlcvError::DatabaseError(format!("Failed to open database: {}", e))
         )?;
+
+        // Enable WAL for better concurrent read/write performance BEFORE moving conn
+        let _ = conn.execute("PRAGMA journal_mode=WAL;", []);
+
+        // Backward-compatible schema guards: add new columns if missing (ignore errors if exist)
+        let _ = conn.execute(
+            "ALTER TABLE ohlcv_monitor_config ADD COLUMN last_pool_discovery_attempt INTEGER",
+            []
+        );
+        let _ = conn.execute(
+            "ALTER TABLE ohlcv_monitor_config ADD COLUMN consecutive_pool_failures INTEGER NOT NULL DEFAULT 0",
+            []
+        );
 
         let db = Self {
             conn: Arc::new(Mutex::new(conn)),

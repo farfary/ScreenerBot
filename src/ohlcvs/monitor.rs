@@ -341,6 +341,10 @@ impl OhlcvMonitor {
                         self.db.upsert_monitor_config(config)?;
                     }
                 } else {
+                    // Ensure ascending timestamp order for consistency
+                    let mut data_points = data_points;
+                    data_points.sort_by_key(|p| p.timestamp);
+
                     // Store data
                     self.db.insert_1m_data(mint, &pool_address, &data_points)?;
 

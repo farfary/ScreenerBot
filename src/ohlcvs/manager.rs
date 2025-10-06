@@ -108,54 +108,67 @@ impl PoolManager {
     /// Queries pools.db price_history table to find pools for this token
     pub async fn discover_pools(&self, mint: &str) -> OhlcvResult<Vec<PoolConfig>> {
         use rusqlite::Connection;
+        use tokio::task;
 
-        // Open pools.db (Pool Service database)
-        let pools_db = Connection::open("data/pools.db").map_err(|e|
-            OhlcvError::DatabaseError(format!("Failed to open pools.db: {}", e))
-        )?;
+        // Perform blocking SQLite work off the async runtime
+        let mint_owned = mint.to_string();
+        let discovered: OhlcvResult<Vec<PoolConfig>> = task
+            ::spawn_blocking(move || {
+                // Open pools.db (Pool Service database)
+                let pools_db = Connection::open("data/pools.db").map_err(|e|
+                    OhlcvError::DatabaseError(format!("Failed to open pools.db: {}", e))
+                )?;
 
-        // Query for pools associated with this mint
-        let mut stmt = pools_db
-            .prepare(
-                "SELECT DISTINCT pool_address 
-             FROM price_history 
-             WHERE mint = ? 
-             ORDER BY timestamp_unix DESC 
+                // Query for pools associated with this mint
+                let mut stmt = pools_db
+                    .prepare(
+                        "SELECT DISTINCT pool_address \
+             FROM price_history \
+             WHERE mint = ? \
+             ORDER BY timestamp_unix DESC \
              LIMIT 10"
-            )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to prepare query: {}", e)))?;
+                    )
+                    .map_err(|e|
+                        OhlcvError::DatabaseError(format!("Failed to prepare query: {}", e))
+                    )?;
 
-        let mut pools = Vec::new();
-        let rows = stmt
-            .query_map([mint], |row| { row.get::<_, String>(0) })
-            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {}", e)))?;
+                let mut pools = Vec::new();
+                let rows = stmt
+                    .query_map([mint_owned.as_str()], |row| row.get::<_, String>(0))
+                    .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {}", e)))?;
 
-        for row in rows {
-            if let Ok(pool_address) = row {
-                // Create pool config
-                // Note: DEX and liquidity info not available in price_history
-                // Using defaults - will be updated when we add pool metadata table
-                let config = PoolConfig::new(
-                    pool_address,
-                    "dexscreener".to_string(), // Source: discovered via Pool Service
-                    0.0 // Liquidity unknown from price_history table
-                );
+                for row in rows {
+                    if let Ok(pool_address) = row {
+                        // Create pool config (DEX/liquidity unknown from price_history)
+                        pools.push(PoolConfig::new(pool_address, "dexscreener".to_string(), 0.0));
+                    }
+                }
 
-                // Store in OHLCV database
-                self.db.upsert_pool(mint, &config)?;
-                pools.push(config);
-            }
+                if pools.is_empty() {
+                    return Err(
+                        OhlcvError::PoolNotFound(
+                            format!("No pools found in Pool Service for token: {}", mint_owned)
+                        )
+                    );
+                }
+
+                Ok(pools)
+            }).await
+            .map_err(|e|
+                OhlcvError::DatabaseError(format!("Join error during pool discovery: {}", e))
+            )?;
+
+        // Unwrap inner result from blocking task
+        let discovered = discovered?;
+
+        // Upsert discovered pools into OHLCV DB on the async side (rusqlite is still blocking but short)
+        let mut result = Vec::new();
+        for config in discovered.into_iter() {
+            self.db.upsert_pool(mint, &config)?;
+            result.push(config);
         }
 
-        if pools.is_empty() {
-            return Err(
-                OhlcvError::PoolNotFound(
-                    format!("No pools found in Pool Service for token: {}", mint)
-                )
-            );
-        }
-
-        Ok(pools)
+        Ok(result)
     }
 
     /// Get pool metadata for API responses
