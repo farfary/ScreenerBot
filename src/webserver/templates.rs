@@ -4685,68 +4685,50 @@ pub fn events_content() -> String {
 pub fn services_content() -> String {
     r#"
     <div class="services-container">
-        <div class="services-header">
-            <h2>🔧 Services Management</h2>
-            <div class="services-controls">
+        <div class="services-toolbar">
+            <div class="toolbar-left">
+                <input id="serviceSearch" class="input" type="text" placeholder="Search services..." />
+                <select id="statusFilter" class="input">
+                    <option value="all">All statuses</option>
+                    <option value="healthy">Healthy</option>
+                    <option value="degraded">Degraded</option>
+                    <option value="starting">Starting</option>
+                    <option value="unhealthy">Unhealthy</option>
+                </select>
+                <label class="toggle"><input type="checkbox" id="enabledOnly" /> Enabled only</label>
+            </div>
+            <div class="toolbar-right">
+                <div class="chip">Total <span id="totalServices">-</span></div>
+                <div class="chip chip-success">Healthy <span id="healthyServices">-</span></div>
+                <div class="chip chip-warn">Starting <span id="startingServices">-</span></div>
+                <div class="chip chip-error">Unhealthy <span id="unhealthyServices">-</span></div>
+                <div class="chip" title="Process-wide CPU">CPU <span id="processCpu">-</span></div>
+                <div class="chip" title="Process-wide Memory">Mem <span id="processMemory">-</span></div>
                 <button class="btn btn-primary" onclick="refreshServices()">🔄 Refresh</button>
             </div>
         </div>
-        
-        <div class="services-summary" id="servicesSummary">
-            <div class="summary-card">
-                <div class="summary-label">Total Services</div>
-                <div class="summary-value" id="totalServices">-</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-label">Healthy</div>
-                <div class="summary-value success" id="healthyServices">-</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-label">Starting</div>
-                <div class="summary-value warning" id="startingServices">-</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-label">Unhealthy</div>
-                <div class="summary-value error" id="unhealthyServices">-</div>
-            </div>
-            <div class="summary-card" title="Process-wide CPU (all services share the same process)">
-                <div class="summary-label">Process CPU</div>
-                <div class="summary-value" id="processCpu">-</div>
-            </div>
-            <div class="summary-card" title="Process-wide memory (all services share the same process)">
-                <div class="summary-label">Process Memory</div>
-                <div class="summary-value" id="processMemory">-</div>
-            </div>
-        </div>
-        
-        <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">
-            <strong>ℹ️ About Service Metrics:</strong>
-            <ul style="margin: 0.5rem 0 0 1.5rem; color: var(--text-muted);">
-                <li><strong>Activity</strong>: Shows how busy each service is based on poll time ratio (better than CPU for async tasks)</li>
-                <li><strong>Process CPU/Memory</strong>: All services run in a single async process and share these resources</li>
-                <li><strong>Avg Poll Time</strong>: How long each service spends working when polled</li>
-                <li><strong>Tasks</strong>: Number of instrumented async tasks per service</li>
-            </ul>
-        </div>
-        
+
         <div class="table-scroll">
-            <table class="table" id="servicesTable">
+            <table class="table services-table" id="servicesTable">
                 <thead>
                     <tr>
-                        <th style="min-width: 160px;">Name</th>
-                        <th style="min-width: 110px;">Health</th>
-                        <th style="min-width: 80px;">Priority</th>
-                        <th style="min-width: 90px;">Enabled</th>
-                        <th style="min-width: 120px;">Uptime</th>
-                        <th style="min-width: 110px;" title="Service activity based on poll time ratio (better than CPU for async tasks)">Activity</th>
-                        <th style="min-width: 120px;" title="Average time spent in each poll">Avg Poll Time</th>
-                        <th style="min-width: 100px;">Tasks</th>
-                        <th style="min-width: 220px;">Dependencies</th>
+                        <th data-sort="name">Name</th>
+                        <th data-sort="health">Health</th>
+                        <th data-sort="priority">Priority</th>
+                        <th data-sort="enabled">Enabled</th>
+                        <th data-sort="uptime">Uptime</th>
+                        <th data-sort="activity" title="Poll time ratio (busyness)">Activity</th>
+                        <th data-sort="poll">Avg Poll</th>
+                        <th data-sort="pps">Polls/s</th>
+                        <th data-sort="tasks">Tasks</th>
+                        <th data-sort="ops">Ops/s</th>
+                        <th data-sort="errors">Errors</th>
+                        <th>Dependencies</th>
                     </tr>
                 </thead>
                 <tbody id="servicesTableBody">
                     <tr>
-                        <td colspan="9" style="text-align:center; padding: 20px; color: var(--text-muted);">
+                        <td colspan="12" style="text-align:center; padding: 20px; color: var(--text-muted);">
                             Loading services...
                         </td>
                     </tr>
@@ -4756,276 +4738,246 @@ pub fn services_content() -> String {
     </div>
 
     <style>
-        .services-container {
-            width: 100%;
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-        
-        .services-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 2rem;
-        }
-        
-        .services-summary {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2rem;
-        }
-        
-        .summary-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 1.5rem;
-            text-align: center;
-        }
-        
-        .summary-label {
-            font-size: 0.875rem;
-            color: var(--text-muted);
-            margin-bottom: 0.5rem;
-        }
-        
-        .summary-value {
-            font-size: 2rem;
-            font-weight: bold;
-        }
-        
-        .summary-value.success {
-            color: #10b981;
-        }
-        
-        .summary-value.warning {
-            color: #f59e0b;
-        }
-        
-        .summary-value.error {
-            color: #ef4444;
-        }
-        
-        /* Badges for health in table */
+        .services-container { width: 100%; max-width: 1400px; margin: 0 auto; }
+        .services-toolbar { display: flex; gap: 1rem; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .toolbar-left, .toolbar-right { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+        .input { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.4rem 0.6rem; }
+        .toggle { color: var(--text-muted); font-size: 0.9rem; display: flex; align-items: center; gap: 0.4rem; }
+        .chip { background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 999px; padding: 0.25rem 0.6rem; font-size: 0.85rem; }
+        .chip-success { background: #064e3b; color: #34d399; border-color: #065f46; }
+        .chip-warn { background: #4a3000; color: #fbbf24; border-color: #92400e; }
+        .chip-error { background: #4c0519; color: #fb7185; border-color: #7f1d1d; }
+
+        /* Activity bar */
+        .activity-cell { min-width: 140px; }
+        .activity-track { background: #1f2937; border-radius: 6px; height: 8px; width: 100%; overflow: hidden; }
+        .activity-fill { height: 100%; border-radius: 6px; background: #10b981; transition: width 0.25s ease; }
+        .activity-meta { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+
+        /* Sortable headers */
+        .services-table th[data-sort] { cursor: pointer; user-select: none; }
+        .services-table th[data-sort].asc::after { content: ' \25B2'; color: var(--text-muted); }
+        .services-table th[data-sort].desc::after { content: ' \25BC'; color: var(--text-muted); }
+
+        /* Dependencies */
+        .dependency-badge { font-size: 0.75rem; background: var(--bg-secondary); padding: 0.25rem 0.6rem; border-radius: 12px; display: inline-block; margin: 2px; }
+
+        /* Health badges reuse existing theme */
         .badge.success { background: var(--badge-online); color: #fff; }
         .badge.warning { background: var(--badge-loading); color: #fff; }
         .badge.error { background: var(--badge-error); color: #fff; }
         .badge.secondary { background: var(--bg-secondary); color: var(--text-primary); }
-        
-        .service-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-        }
-        
-        .service-name {
-            font-size: 1.25rem;
-            font-weight: bold;
-        }
-        
-        .service-priority {
-            font-size: 0.875rem;
-            color: var(--text-muted);
-            background: var(--bg-secondary);
-            padding: 0.25rem 0.75rem;
-            border-radius: 4px;
-        }
-        
-        .service-details {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 0.75rem 1rem;
-        }
-        
-        .service-detail-item {
-            display: flex;
-            flex-direction: column;
-        }
-        
-        .detail-label {
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            margin-bottom: 0.25rem;
-        }
-        
-        .detail-value {
-            font-size: 0.875rem;
-        }
-        
-        .dependencies-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-        }
-        
-        .dependency-badge {
-            font-size: 0.75rem;
-            background: var(--bg-secondary);
-            padding: 0.25rem 0.75rem;
-            border-radius: 12px;
-        }
-        
-        .loading-message, .error-message {
-            text-align: center;
-            padding: 2rem;
-            color: var(--text-muted);
-            font-size: 1rem;
-        }
-        
-        .error-message {
-            color: #ef4444;
-        }
     </style>
 
     <script>
         let servicesData = null;
+        let sortKey = 'priority';
+        let sortDir = 'asc';
 
         async function loadServices() {
             try {
                 const response = await fetch('/api/services/overview');
                 const data = await response.json();
-                servicesData = data; // FIX: Direct access, not data.data
+                servicesData = data; // direct
+                bindToolbarEventsOnce();
                 renderServicesTable();
+                bindSortHandlersOnce();
             } catch (error) {
                 console.error('Failed to load services:', error);
                 const tbody = document.getElementById('servicesTableBody');
                 if (tbody) {
                     tbody.innerHTML = `
                         <tr>
-                            <td colspan="7" style="text-align:center; padding: 20px; color: #ef4444;">Failed to load services</td>
+                            <td colspan="12" style="text-align:center; padding: 20px; color: #ef4444;">Failed to load services</td>
                         </tr>
                     `;
                 }
             }
         }
 
+        function currentFilters() {
+            const q = (document.getElementById('serviceSearch')?.value || '').toLowerCase();
+            const status = document.getElementById('statusFilter')?.value || 'all';
+            const enabledOnly = document.getElementById('enabledOnly')?.checked || false;
+            return { q, status, enabledOnly };
+        }
+
+        function filteredAndSortedServices() {
+            if (!servicesData) return [];
+            const { q, status, enabledOnly } = currentFilters();
+            let arr = servicesData.services.slice();
+
+            // Filter
+            arr = arr.filter(s => {
+                const matchesText = !q || s.name.toLowerCase().includes(q);
+                const matchesStatus = status === 'all' || (s.health?.status === status);
+                const matchesEnabled = !enabledOnly || s.enabled;
+                return matchesText && matchesStatus && matchesEnabled;
+            });
+
+            // Sort
+            const getKey = (s) => {
+                const m = s.metrics || {};
+                switch (sortKey) {
+                    case 'name': return s.name || '';
+                    case 'health': return healthRank(s.health?.status);
+                    case 'priority': return s.priority || 0;
+                    case 'enabled': return s.enabled ? 1 : 0;
+                    case 'uptime': return s.uptime_seconds || 0;
+                    case 'activity': {
+                        const total = (m.total_poll_duration_ns||0)+(m.total_idle_duration_ns||0);
+                        return total>0 ? (m.total_poll_duration_ns||0)/total : 0;
+                    }
+                    case 'poll': return m.mean_poll_duration_ns || 0;
+                    case 'pps': return (s.uptime_seconds>0) ? (m.total_polls||0)/s.uptime_seconds : 0;
+                    case 'tasks': return m.task_count || 0;
+                    case 'ops': return m.operations_per_second || 0;
+                    case 'errors': return m.errors_total || 0;
+                    default: return s.priority || 0;
+                }
+            };
+
+            arr.sort((a,b) => {
+                const ka = getKey(a);
+                const kb = getKey(b);
+                if (ka < kb) return sortDir === 'asc' ? -1 : 1;
+                if (ka > kb) return sortDir === 'asc' ? 1 : -1;
+                return 0;
+            });
+
+            return arr;
+        }
+
         function renderServicesTable() {
             if (!servicesData) return;
-            
-            // Update summary
+
+            // Update compact summary chips
             document.getElementById('totalServices').textContent = servicesData.summary.total_services;
             document.getElementById('healthyServices').textContent = servicesData.summary.healthy_services;
             document.getElementById('startingServices').textContent = servicesData.summary.starting_services;
             document.getElementById('unhealthyServices').textContent = servicesData.summary.unhealthy_services;
-            
-            // Update process-wide metrics (get from first service, they're all the same)
+
+            // Process-wide metrics
             if (servicesData.services && servicesData.services.length > 0) {
-                const firstService = servicesData.services[0];
-                const cpu = (firstService.metrics.process_cpu_percent || 0).toFixed(1);
-                const memory = formatBytes(firstService.metrics.process_memory_bytes || 0);
-                document.getElementById('processCpu').textContent = cpu + '%';
-                document.getElementById('processMemory').textContent = memory;
+                const m0 = servicesData.services[0].metrics || {};
+                document.getElementById('processCpu').textContent = `${(m0.process_cpu_percent||0).toFixed(1)}%`;
+                document.getElementById('processMemory').textContent = formatBytes(m0.process_memory_bytes||0);
             }
 
             const tbody = document.getElementById('servicesTableBody');
             if (!tbody) return;
 
-            const rows = servicesData.services.map(service => {
+            const rows = filteredAndSortedServices().map(service => {
+                const m = service.metrics || {};
                 const deps = service.dependencies && service.dependencies.length
                     ? service.dependencies.map(dep => `<span class=\"dependency-badge\">${dep}</span>`).join(' ')
                     : '<span class="detail-value">None</span>';
-                
-                const m = service.metrics;
-                
-                // Calculate activity percentage (poll time / total time)
-                const totalTime = (m.total_poll_duration_ns || 0) + (m.total_idle_duration_ns || 0);
-                const activityPercent = totalTime > 0 
-                    ? ((m.total_poll_duration_ns || 0) / totalTime * 100).toFixed(1)
-                    : '0.0';
-                
-                // Get activity status
-                const activityValue = parseFloat(activityPercent);
-                const activityStatus = activityValue > 80 ? 'Very Active' 
-                    : activityValue > 50 ? 'Active'
-                    : activityValue > 20 ? 'Moderate'
-                    : activityValue > 5 ? 'Light'
-                    : 'Idle';
-                
-                // Color code activity
-                const activityColor = activityValue > 80 ? '#10b981' 
-                    : activityValue > 50 ? '#3b82f6'
-                    : activityValue > 20 ? '#f59e0b'
-                    : activityValue > 5 ? '#6b7280'
-                    : '#9ca3af';
-                
-                const taskInfo = m.task_count > 0 
-                    ? `${m.task_count} tasks\nPoll: ${formatDuration(m.mean_poll_duration_ns)}\nIdle: ${formatDuration(m.mean_idle_duration_ns)}\nTotal Polls: ${m.total_polls || 0}`
-                    : 'No instrumented tasks';
-                
-                const avgPollTime = formatDuration(m.mean_poll_duration_ns || 0);
-                
+
+                const total = (m.total_poll_duration_ns||0)+(m.total_idle_duration_ns||0);
+                const activity = total>0 ? ((m.total_poll_duration_ns||0)/total*100) : 0;
+                const activityColor = activity>80 ? '#10b981' : activity>50 ? '#3b82f6' : activity>20 ? '#f59e0b' : activity>5 ? '#6b7280' : '#9ca3af';
+                const avgPoll = formatDuration(m.mean_poll_duration_ns||0);
+                const pps = service.uptime_seconds>0 ? ((m.total_polls||0)/service.uptime_seconds).toFixed(2) : '0.00';
+
+                const taskInfo = m.task_count>0 ? `${m.task_count} tasks\nPoll: ${formatDuration(m.mean_poll_duration_ns)}\nIdle: ${formatDuration(m.mean_idle_duration_ns)}\nTotal Polls: ${m.total_polls||0}` : 'No instrumented tasks';
+
                 return `
                     <tr>
                         <td style="font-weight:600;">${service.name}</td>
                         <td><span class="badge ${getHealthBadgeClass(service.health)}">${getHealthStatus(service.health)}</span></td>
                         <td>${service.priority}</td>
-                        <td>${service.enabled ? '✅ Enabled' : '❌ Disabled'}</td>
+                        <td>${service.enabled ? '✅' : '❌'}</td>
                         <td>${formatUptime(service.uptime_seconds)}</td>
-                        <td title="Activity: ${activityStatus}\nPoll time ratio shows how busy this service is">
-                            <span style="color: ${activityColor}; font-weight: 600;">${activityPercent}%</span>
-                            <span style="font-size: 0.75rem; color: var(--text-muted);"> (${activityStatus})</span>
+                        <td class="activity-cell" title="${activity.toFixed(1)}% busy">
+                            <div class="activity-track"><div class="activity-fill" style="width:${activity.toFixed(1)}%; background:${activityColor}"></div></div>
+                            <div class="activity-meta"><span>${activity.toFixed(1)}%</span><span>${m.total_polls||0} polls</span></div>
                         </td>
-                        <td title="Average duration per poll">${avgPollTime}</td>
-                        <td title="${taskInfo}">${m.task_count} tasks</td>
+                        <td title="Average duration per poll">${avgPoll}</td>
+                        <td title="Polls per second">${pps}</td>
+                        <td title="${taskInfo}">${m.task_count||0}</td>
+                        <td title="Operations per second">${(m.operations_per_second||0).toFixed(2)}</td>
+                        <td title="Total errors">${m.errors_total||0}</td>
                         <td>${deps}</td>
-                    </tr>
-                `;
+                    </tr>`;
             }).join('');
 
             tbody.innerHTML = rows || `
                 <tr>
-                    <td colspan="7" style="text-align:center; padding: 20px; color: var(--text-muted);">No services</td>
-                </tr>
-            `;
+                    <td colspan="12" style="text-align:center; padding: 20px; color: var(--text-muted);">No services</td>
+                </tr>`;
         }
-        
+
+        function bindToolbarEventsOnce() {
+            if (bindToolbarEventsOnce._bound) return; bindToolbarEventsOnce._bound = true;
+            document.getElementById('serviceSearch')?.addEventListener('input', renderServicesTable);
+            document.getElementById('statusFilter')?.addEventListener('change', renderServicesTable);
+            document.getElementById('enabledOnly')?.addEventListener('change', renderServicesTable);
+        }
+
+        function bindSortHandlersOnce() {
+            if (bindSortHandlersOnce._bound) return; bindSortHandlersOnce._bound = true;
+            document.querySelectorAll('#servicesTable thead th[data-sort]').forEach(th => {
+                th.addEventListener('click', () => {
+                    const key = th.getAttribute('data-sort');
+                    if (!key) return;
+                    if (sortKey === key) { sortDir = (sortDir === 'asc') ? 'desc' : 'asc'; } else { sortKey = key; sortDir = 'asc'; }
+                    document.querySelectorAll('#servicesTable thead th[data-sort]').forEach(h => h.classList.remove('asc','desc'));
+                    th.classList.add(sortDir);
+                    renderServicesTable();
+                });
+            });
+        }
+
+        function healthRank(status) {
+            switch (status) {
+                case 'healthy': return 3;
+                case 'degraded': return 2;
+                case 'starting': return 1;
+                case 'unhealthy': return 0;
+                default: return -1;
+            }
+        }
+
         function getHealthStatus(health) {
-            if (health.status === 'healthy') return '✅ Healthy';
-            if (health.status === 'starting') return '⏳ Starting';
-            if (health.status === 'degraded') return '⚠️ Degraded';
-            if (health.status === 'unhealthy') return '❌ Unhealthy';
-            return '⏸️ ' + health.status;
+            if (health?.status === 'healthy') return '✅ Healthy';
+            if (health?.status === 'starting') return '⏳ Starting';
+            if (health?.status === 'degraded') return '⚠️ Degraded';
+            if (health?.status === 'unhealthy') return '❌ Unhealthy';
+            return '⏸️ ' + (health?.status || 'unknown');
         }
-        
+
         function getHealthBadgeClass(health) {
-            if (health.status === 'healthy') return 'success';
-            if (health.status === 'starting') return 'warning';
-            if (health.status === 'degraded') return 'warning';
-            if (health.status === 'unhealthy') return 'error';
+            if (health?.status === 'healthy') return 'success';
+            if (health?.status === 'starting') return 'warning';
+            if (health?.status === 'degraded') return 'warning';
+            if (health?.status === 'unhealthy') return 'error';
             return 'secondary';
         }
-        
+
         function formatUptime(seconds) {
-            if (seconds < 60) return `${seconds}s`;
+            if (!seconds || seconds < 60) return `${seconds||0}s`;
             if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
             if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
             return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`;
         }
-        
+
         function formatBytes(bytes) {
-            if (bytes < 1024) return `${bytes} B`;
+            if (!bytes || bytes < 1024) return `${bytes||0} B`;
             if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
             if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(1)} MB`;
             return `${(bytes / 1073741824).toFixed(2)} GB`;
         }
-        
+
         function formatDuration(nanos) {
-            if (nanos < 1000) return `${nanos}ns`;
+            if (!nanos || nanos < 1000) return `${nanos||0}ns`;
             if (nanos < 1000000) return `${(nanos / 1000).toFixed(1)}µs`;
             if (nanos < 1000000000) return `${(nanos / 1000000).toFixed(1)}ms`;
             return `${(nanos / 1000000000).toFixed(2)}s`;
         }
-        
-        function refreshServices() {
-            loadServices();
-        }
-        
-        // Initial load
+
+        function refreshServices() { loadServices(); }
+
         loadServices();
-        
-        // Auto-refresh every 5 seconds
         setInterval(loadServices, 5000);
     </script>
     "#.to_string()
