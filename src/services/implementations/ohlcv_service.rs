@@ -1,5 +1,5 @@
-use crate::logger::{log, LogTag};
-use crate::services::{Service, ServiceHealth};
+use crate::logger::{ log, LogTag };
+use crate::services::{ Service, ServiceHealth };
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
@@ -29,8 +29,8 @@ impl Service for OhlcvService {
         log(LogTag::System, "INFO", "Initializing OHLCV service...");
 
         // Initialize OHLCV service (creates database, sets up global instance)
-        crate::tokens::ohlcvs::init_ohlcv_service()
-            .await
+        crate::tokens::ohlcvs
+            ::init_ohlcv_service().await
             .map_err(|e| format!("Failed to initialize OHLCV service: {}", e))?;
 
         log(LogTag::System, "SUCCESS", "✅ OHLCV service initialized");
@@ -40,34 +40,48 @@ impl Service for OhlcvService {
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor,
+        monitor: tokio_metrics::TaskMonitor
     ) -> Result<Vec<JoinHandle<()>>, String> {
         log(LogTag::System, "INFO", "Starting OHLCV monitoring...");
 
         // Get cloned service for background monitoring
-        let service = crate::tokens::ohlcvs::get_ohlcv_service_clone()
-            .await
+        let service = crate::tokens::ohlcvs
+            ::get_ohlcv_service_clone().await
             .map_err(|e| format!("Failed to get OHLCV service: {}", e))?;
 
         // Start background monitoring
         service.start_monitoring(shutdown.clone()).await;
 
-        // Create task handle for lifecycle tracking
-        let monitor_handle = tokio::spawn(monitor.instrument(async move {
+        // Auto-populate watch list with open positions for immediate data collection
+        let service_clone = service.clone();
+        tokio::spawn(async move {
+            // Wait a moment for other services to be ready
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+
+            log(LogTag::Ohlcv, "AUTO_POPULATE", "Adding open positions to OHLCV watch list...");
+
+            // Add all open positions to watch list
+            let open_positions = crate::positions::get_open_positions().await;
+            for position in &open_positions {
+                service_clone.add_to_watch_list(&position.mint, true).await;
+            }
             log(
                 LogTag::Ohlcv,
-                "TASK_START",
-                "🚀 OHLCV monitoring task started (instrumented)",
+                "AUTO_POPULATE_DONE",
+                &format!("✅ Added {} open positions to OHLCV watch list", open_positions.len())
             );
-            shutdown.notified().await;
-            log(LogTag::Ohlcv, "TASK_END", "✅ OHLCV monitoring task ended");
-        }));
+        });
 
-        log(
-            LogTag::System,
-            "SUCCESS",
-            "✅ OHLCV monitoring started (instrumented)",
+        // Create task handle for lifecycle tracking
+        let monitor_handle = tokio::spawn(
+            monitor.instrument(async move {
+                log(LogTag::Ohlcv, "TASK_START", "🚀 OHLCV monitoring task started (instrumented)");
+                shutdown.notified().await;
+                log(LogTag::Ohlcv, "TASK_END", "✅ OHLCV monitoring task ended");
+            })
         );
+
+        log(LogTag::System, "SUCCESS", "✅ OHLCV monitoring started (instrumented)");
 
         Ok(vec![monitor_handle])
     }
