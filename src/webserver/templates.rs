@@ -21,6 +21,14 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     <div class="header">
         <h1>🤖 ScreenerBot Dashboard</h1>
         <div class="header-controls">
+            <button class="control-btn trader-btn" id="traderToggle" aria-label="Toggle trader">
+                <span id="traderIcon">⏸️</span>
+                <span id="traderText">Stop Trader</span>
+            </button>
+            <button class="control-btn reboot-btn" id="rebootBtn" aria-label="Reboot system">
+                <span>🔄</span>
+                <span>Reboot</span>
+            </button>
             <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
                 <span id="themeIcon">🌙</span>
                 <span id="themeText">Dark</span>
@@ -582,6 +590,46 @@ fn common_styles() -> &'static str {
             display: flex;
             align-items: center;
             gap: 10px;
+        }
+        
+        /* Control Buttons */
+        .control-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: var(--header-text);
+            padding: 4px 10px;
+            border-radius: 14px;
+            cursor: pointer;
+            font-size: 0.9em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.3s ease, opacity 0.3s ease;
+        }
+        
+        .control-btn:hover:not(:disabled) {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        .control-btn:active:not(:disabled) {
+            transform: scale(0.95);
+        }
+        
+        .control-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .trader-btn.running {
+            background: rgba(16, 185, 129, 0.3);
+        }
+        
+        .trader-btn.stopped {
+            background: rgba(239, 68, 68, 0.3);
+        }
+        
+        .reboot-btn:hover:not(:disabled) {
+            background: rgba(239, 68, 68, 0.3);
         }
         
         /* Theme Toggle Button */
@@ -1725,16 +1773,13 @@ fn nav_tabs(active: &str) -> String {
         ("positions", "💰 Positions"),
         ("tokens", "🪙 Tokens"),
         ("events", "📡 Events"),
-        ("config", "⚙️ Config"),
+        ("config", "⚙️ Config")
     ];
 
     tabs.iter()
         .map(|(name, label)| {
             let active_class = if *name == active { " active" } else { "" };
-            format!(
-                r#"<a href="/{}" class="tab{}">{}</a>"#,
-                name, active_class, label
-            )
+            format!(r#"<a href="/{}" class="tab{}">{}</a>"#, name, active_class, label)
         })
         .collect::<Vec<_>>()
         .join("\n        ")
@@ -2343,6 +2388,220 @@ fn common_scripts() -> &'static str {
             container.className = 'toast-container';
             document.body.appendChild(container);
             return container;
+        }
+        
+        // =============================================================================
+        // TRADER CONTROL SYSTEM
+        // =============================================================================
+        
+        let traderStatusPollInterval = null;
+        let isReconnecting = false;
+        
+        // Initialize trader controls on page load
+        function initializeTraderControls() {
+            const traderToggle = document.getElementById('traderToggle');
+            const rebootBtn = document.getElementById('rebootBtn');
+            
+            if (traderToggle) {
+                traderToggle.addEventListener('click', toggleTrader);
+            }
+            
+            if (rebootBtn) {
+                rebootBtn.addEventListener('click', rebootSystem);
+            }
+            
+            // Start polling trader status
+            updateTraderStatus();
+            traderStatusPollInterval = setInterval(updateTraderStatus, 2000);
+        }
+        
+        // Update trader status from API
+        async function updateTraderStatus() {
+            if (isReconnecting) return; // Skip during reconnect
+            
+            try {
+                const res = await fetch('/api/trader/status');
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                
+                const data = await res.json();
+                const status = data.data || data;
+                
+                updateTraderUI(status.enabled, status.running);
+            } catch (error) {
+                console.warn('Failed to fetch trader status:', error);
+                // Don't update UI on transient network errors
+            }
+        }
+        
+        // Update trader UI based on status
+        function updateTraderUI(enabled, running) {
+            const traderToggle = document.getElementById('traderToggle');
+            const traderIcon = document.getElementById('traderIcon');
+            const traderText = document.getElementById('traderText');
+            
+            if (!traderToggle || !traderIcon || !traderText) return;
+            
+            // Remove existing state classes
+            traderToggle.classList.remove('running', 'stopped');
+            
+            if (enabled && running) {
+                traderToggle.classList.add('running');
+                traderIcon.textContent = '▶️';
+                traderText.textContent = 'Trader Running';
+            } else {
+                traderToggle.classList.add('stopped');
+                traderIcon.textContent = '⏸️';
+                traderText.textContent = 'Trader Stopped';
+            }
+            
+            traderToggle.disabled = false;
+        }
+        
+        // Toggle trader on/off
+        async function toggleTrader() {
+            const traderToggle = document.getElementById('traderToggle');
+            const traderIcon = document.getElementById('traderIcon');
+            const traderText = document.getElementById('traderText');
+            
+            if (!traderToggle) return;
+            
+            // Determine current state from UI
+            const isRunning = traderToggle.classList.contains('running');
+            const endpoint = isRunning ? '/api/trader/stop' : '/api/trader/start';
+            const action = isRunning ? 'Stopping' : 'Starting';
+            
+            // Disable button and show loading state
+            traderToggle.disabled = true;
+            traderIcon.textContent = '⏳';
+            traderText.textContent = `${action}...`;
+            
+            try {
+                const res = await fetch(endpoint, { method: 'POST' });
+                const data = await res.json();
+                
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || data.message || 'Request failed');
+                }
+                
+                // Update UI based on response
+                const status = data.data?.status || {};
+                updateTraderUI(status.enabled, status.running);
+                
+                const message = data.data?.message || data.message || 
+                    (isRunning ? 'Trader stopped successfully' : 'Trader started successfully');
+                showToast(`✅ ${message}`);
+                
+                // Immediate status refresh
+                setTimeout(updateTraderStatus, 500);
+            } catch (error) {
+                console.error('Trader toggle error:', error);
+                showToast(`❌ Failed to ${isRunning ? 'stop' : 'start'} trader: ${error.message}`, 'error');
+                
+                // Restore previous state
+                updateTraderUI(isRunning, isRunning);
+            }
+        }
+        
+        // Reboot the entire system
+        async function rebootSystem() {
+            const rebootBtn = document.getElementById('rebootBtn');
+            if (!rebootBtn) return;
+            
+            // Confirm action
+            if (!confirm('⚠️ Are you sure you want to reboot ScreenerBot? This will restart the entire process.')) {
+                return;
+            }
+            
+            // Disable button and show loading
+            rebootBtn.disabled = true;
+            const originalHTML = rebootBtn.innerHTML;
+            rebootBtn.innerHTML = '<span>⏳</span><span>Rebooting...</span>';
+            
+            try {
+                const res = await fetch('/api/system/reboot', { method: 'POST' });
+                const data = await res.json();
+                
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || 'Reboot request failed');
+                }
+                
+                showToast('🔄 System reboot initiated. Reconnecting...', 'info');
+                
+                // Start reconnection attempts
+                isReconnecting = true;
+                if (traderStatusPollInterval) {
+                    clearInterval(traderStatusPollInterval);
+                    traderStatusPollInterval = null;
+                }
+                
+                attemptReconnect();
+            } catch (error) {
+                console.error('Reboot error:', error);
+                showToast(`❌ Failed to initiate reboot: ${error.message}`, 'error');
+                
+                // Restore button
+                rebootBtn.disabled = false;
+                rebootBtn.innerHTML = originalHTML;
+            }
+        }
+        
+        // Attempt to reconnect after reboot
+        async function attemptReconnect() {
+            const maxAttempts = 60; // 60 attempts = 2 minutes
+            let attempt = 0;
+            
+            const checkConnection = async () => {
+                attempt++;
+                
+                try {
+                    const res = await fetch('/api/status', { 
+                        cache: 'no-cache',
+                        signal: AbortSignal.timeout(3000)
+                    });
+                    
+                    if (res.ok) {
+                        showToast('✅ System reconnected successfully!');
+                        
+                        // Reload the page to refresh all state
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1000);
+                        return;
+                    }
+                } catch (error) {
+                    // Connection failed, continue trying
+                }
+                
+                if (attempt < maxAttempts) {
+                    showToast(`🔄 Reconnecting... (${attempt}/${maxAttempts})`, 'info');
+                    setTimeout(checkConnection, 2000);
+                } else {
+                    showToast('❌ Reconnection timeout. Please refresh the page manually.', 'error');
+                    isReconnecting = false;
+                    
+                    // Re-enable reboot button
+                    const rebootBtn = document.getElementById('rebootBtn');
+                    if (rebootBtn) {
+                        rebootBtn.disabled = false;
+                        rebootBtn.innerHTML = '<span>🔄</span><span>Reboot</span>';
+                    }
+                }
+            };
+            
+            // Wait 3 seconds before first attempt (give system time to restart)
+            setTimeout(checkConnection, 3000);
+        }
+        
+        // Show notification toast
+        function showNotification(message, type = 'info') {
+            showToast(message, type);
+        }
+        
+        // Initialize trader controls when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeTraderControls);
+        } else {
+            initializeTraderControls();
         }
     "#
 }

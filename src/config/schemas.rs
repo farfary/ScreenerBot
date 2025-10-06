@@ -27,6 +27,9 @@ config_struct! {
 config_struct! {
     /// Trading system configuration
     pub struct TraderConfig {
+        // Trader control
+        enabled: bool = true,
+
         // Core trading parameters
         max_open_positions: usize = 2,
         trade_size_sol: f64 = 0.005,
