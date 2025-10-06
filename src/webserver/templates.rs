@@ -2503,33 +2503,47 @@ pub fn tokens_content() -> String {
     
     <script>
         let allTokensData = [];
-    let tokensRefreshInterval = null;
+        let tokensRefreshInterval = null;
+        let tokensRequestController = null;
+        let tokensLoading = false;
         
         async function loadTokens() {
             // Skip refresh if dropdown is currently open to prevent it from disappearing
             if (document.querySelector('.dropdown-menu.show')) {
                 return;
             }
+            if (tokensLoading) {
+                // Avoid stacking if a previous request is still in flight
+                return;
+            }
+            // Abort previous request if still running
+            if (tokensRequestController) {
+                tokensRequestController.abort();
+            }
+            tokensRequestController = new AbortController();
+            tokensLoading = true;
             
             try {
                 const res = await fetch('/api/tokens/filter', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        view: 'pool',
-                        search: '',
+                        search: document.getElementById('searchInput').value || '',
+                        has_pool_price: true,
                         sort_by: 'symbol',
                         sort_dir: 'asc',
                         page: 1,
                         page_size: 1000
-                    })
+                    }),
+                    signal: tokensRequestController.signal
                 });
                 const data = await res.json();
                 
-                allTokensData = data.data?.items || [];
+                // Backend returns plain TokenListResponse { items, total, ... }
+                allTokensData = Array.isArray(data.items) ? data.items : [];
                 
                 document.getElementById('tokenCount').textContent = 
-                    `${data.data?.total || 0} tokens with available prices`;
+                    `${Number.isFinite(data.total) ? data.total : allTokensData.length} tokens with available prices`;
                 
                 renderTokens(allTokensData);
                 
@@ -2537,6 +2551,8 @@ pub fn tokens_content() -> String {
                 console.error('Failed to load tokens:', error);
                 document.getElementById('tokensTableBody').innerHTML = 
                     '<tr><td colspan="4" style="text-align: center; padding: 20px; color: #ef4444;">Failed to load tokens</td></tr>';
+            } finally {
+                tokensLoading = false;
             }
         }
         
@@ -2568,8 +2584,8 @@ pub fn tokens_content() -> String {
                                     ⋮
                                 </button>
                                 <div class="dropdown-menu">
-                                    <button onclick="copyDebugInfo('${token.mint}', 'token')" class="dropdown-item">
-                                        📋 Copy Debug Info
+                                    <button onclick="copyMint('${token.mint}')" class="dropdown-item">
+                                        📋 Copy Mint
                                     </button>
                                     <button onclick="copyMint('${token.mint}')" class="dropdown-item">
                                         📋 Copy Mint
@@ -2583,8 +2599,8 @@ pub fn tokens_content() -> String {
                                     <button onclick="openSolscan('${token.mint}')" class="dropdown-item">
                                         🔍 Open Solscan
                                     </button>
-                                    <button onclick="showDebugModal('${token.mint}', 'token')" class="dropdown-item">
-                                        🐛 Debug Info
+                                    <button onclick="openTokenDetail('${token.mint}')" class="dropdown-item">
+                                        🔎 View Details
                                     </button>
                                 </div>
                             </div>
@@ -2595,7 +2611,8 @@ pub fn tokens_content() -> String {
         }
         
         function formatTimeAgo(timestamp) {
-            const seconds = Math.floor(Date.now() / 1000) - timestamp;
+            if (!timestamp || !Number.isFinite(timestamp)) return '-';
+            const seconds = Math.max(0, Math.floor(Date.now() / 1000) - timestamp);
             
             if (seconds < 60) return `${seconds}s ago`;
             if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
@@ -2607,6 +2624,11 @@ pub fn tokens_content() -> String {
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        function openTokenDetail(mint) {
+            // If you add a token detail UI route, navigate there; for now open API detail
+            window.open(`/api/tokens/${mint}`, '_blank');
         }
         
         function copyToClipboard(text) {
@@ -2631,12 +2653,12 @@ pub fn tokens_content() -> String {
             }
         });
         
-        // Silent auto-refresh every second
+        // Silent auto-refresh
         function startTokensRefresh() {
             if (tokensRefreshInterval) clearInterval(tokensRefreshInterval);
             tokensRefreshInterval = setInterval(() => {
                 loadTokens();
-            }, 1000);
+            }, 2000);
         }
         
         loadTokens();

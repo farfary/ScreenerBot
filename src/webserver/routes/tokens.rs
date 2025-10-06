@@ -1,6 +1,6 @@
 use axum::{ extract::{ Path, Query }, http::StatusCode, routing::{ get, post }, Json, Router };
 use serde::{ Deserialize, Serialize };
-use std::sync::Arc;
+use std::{ collections::{ HashMap, HashSet }, sync::Arc };
 
 use crate::{
     logger::{ log, LogTag },
@@ -584,12 +584,18 @@ async fn filter_tokens(Json(filter): Json<FilterRequest>) -> Result<
 
     // Get all tokens
     let db = TokenDatabase::new().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let mut all_tokens = db.get_all_tokens().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let all_tokens = db.get_all_tokens().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mints: Vec<String> = all_tokens
+        .iter()
+        .map(|token| token.mint.clone())
+        .collect();
+    let caches = TokenSummaryCaches::build(&mints).await;
 
     // Convert to TokenSummary and apply filters
     let mut tokens = Vec::new();
     for token in all_tokens {
-        let mut summary = token_to_summary(token).await;
+        let mut summary = token_to_summary(token, &caches);
 
         // Apply filters
         if !filter.search.is_empty() {
@@ -689,6 +695,101 @@ async fn filter_tokens(Json(filter): Json<FilterRequest>) -> Result<
 // HELPER FUNCTIONS
 // =============================================================================
 
+#[derive(Debug, Default)]
+struct TokenSummaryCaches {
+    security: HashMap<String, SecuritySnapshot>,
+    ohlcv: HashSet<String>,
+    open_positions: HashSet<String>,
+    blacklisted: HashSet<String>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct SecuritySnapshot {
+    score: i32,
+    rugged: bool,
+}
+
+impl TokenSummaryCaches {
+    async fn build(mints: &[String]) -> Self {
+        let unique_mints: HashSet<String> = mints.iter().cloned().collect();
+
+        let open_positions = positions
+            ::get_open_positions().await
+            .into_iter()
+            .map(|pos| pos.mint)
+            .collect::<HashSet<_>>();
+
+        let blacklisted = blacklist::get_blacklisted_mints().into_iter().collect::<HashSet<_>>();
+
+        let security = load_security_snapshots(&unique_mints);
+        let ohlcv = load_ohlcv_flags(&unique_mints);
+
+        Self {
+            security,
+            ohlcv,
+            open_positions,
+            blacklisted,
+        }
+    }
+
+    fn security_snapshot(&self, mint: &str) -> Option<&SecuritySnapshot> {
+        self.security.get(mint)
+    }
+
+    fn has_ohlcv(&self, mint: &str) -> bool {
+        self.ohlcv.contains(mint)
+    }
+
+    fn has_open_position(&self, mint: &str) -> bool {
+        self.open_positions.contains(mint)
+    }
+
+    fn is_blacklisted(&self, mint: &str) -> bool {
+        self.blacklisted.contains(mint)
+    }
+}
+
+fn load_security_snapshots(mints: &HashSet<String>) -> HashMap<String, SecuritySnapshot> {
+    let mut snapshots = HashMap::new();
+
+    if mints.is_empty() {
+        return snapshots;
+    }
+
+    if let Ok(db) = SecurityDatabase::new("data/security.db") {
+        for mint in mints {
+            if let Ok(Some(sec)) = db.get_security_info(mint) {
+                snapshots.insert(mint.clone(), SecuritySnapshot {
+                    score: sec.score,
+                    rugged: sec.rugged,
+                });
+            }
+        }
+    }
+
+    snapshots
+}
+
+fn load_ohlcv_flags(mints: &HashSet<String>) -> HashSet<String> {
+    let mut has_ohlcv = HashSet::new();
+
+    if mints.is_empty() {
+        return has_ohlcv;
+    }
+
+    if let Ok(db) = ohlcv_db::get_ohlcv_database() {
+        for mint in mints {
+            if let Ok(meta) = db.check_data_availability(mint) {
+                if meta.data_points_count > 0 && !meta.is_expired {
+                    has_ohlcv.insert(mint.clone());
+                }
+            }
+        }
+    }
+
+    has_ohlcv
+}
+
 /// Get tokens for a specific view
 async fn get_tokens_for_view(view: &str) -> Result<Vec<TokenSummary>, String> {
     match view {
@@ -706,58 +807,89 @@ async fn get_tokens_for_view(view: &str) -> Result<Vec<TokenSummary>, String> {
 async fn get_pool_tokens() -> Result<Vec<TokenSummary>, String> {
     let available_mints = pools::get_available_tokens();
     let db = TokenDatabase::new().map_err(|e| e.to_string())?;
-    let mut tokens = Vec::new();
+    let mut raw_tokens = Vec::new();
 
     for mint in available_mints {
         if let Ok(Some(token)) = db.get_token_by_mint(&mint) {
-            tokens.push(token_to_summary(token).await);
+            raw_tokens.push(token);
         }
     }
 
-    Ok(tokens)
+    let mints: Vec<String> = raw_tokens
+        .iter()
+        .map(|token| token.mint.clone())
+        .collect();
+    let caches = TokenSummaryCaches::build(&mints).await;
+
+    Ok(
+        raw_tokens
+            .into_iter()
+            .map(|token| token_to_summary(token, &caches))
+            .collect()
+    )
 }
 
 /// Get all tokens from database
 async fn get_all_tokens_from_db() -> Result<Vec<TokenSummary>, String> {
     let db = TokenDatabase::new().map_err(|e| e.to_string())?;
     let tokens = db.get_all_tokens().await?;
+    let mints: Vec<String> = tokens
+        .iter()
+        .map(|token| token.mint.clone())
+        .collect();
+    let caches = TokenSummaryCaches::build(&mints).await;
 
-    let mut summaries = Vec::new();
-    for token in tokens {
-        summaries.push(token_to_summary(token).await);
-    }
-
-    Ok(summaries)
+    Ok(
+        tokens
+            .into_iter()
+            .map(|token| token_to_summary(token, &caches))
+            .collect()
+    )
 }
 
 /// Get blacklisted tokens
 async fn get_blacklisted_tokens() -> Result<Vec<TokenSummary>, String> {
     let db = TokenDatabase::new().map_err(|e| e.to_string())?;
     let all_tokens = db.get_all_tokens().await?;
+    let mints: Vec<String> = all_tokens
+        .iter()
+        .map(|token| token.mint.clone())
+        .collect();
+    let caches = TokenSummaryCaches::build(&mints).await;
 
-    let mut tokens = Vec::new();
-    for token in all_tokens {
-        if blacklist::is_token_blacklisted_db(&token.mint) {
-            tokens.push(token_to_summary(token).await);
-        }
-    }
-
-    Ok(tokens)
+    Ok(
+        all_tokens
+            .into_iter()
+            .filter(|token| caches.is_blacklisted(&token.mint))
+            .map(|token| token_to_summary(token, &caches))
+            .collect()
+    )
 }
 
 /// Get tokens with open positions
 async fn get_position_tokens() -> Result<Vec<TokenSummary>, String> {
     let db = TokenDatabase::new().map_err(|e| e.to_string())?;
     let open_positions = positions::get_open_positions().await;
+    let mut raw_tokens = Vec::new();
 
-    let mut tokens = Vec::new();
     for pos in open_positions {
         if let Ok(Some(token)) = db.get_token_by_mint(&pos.mint) {
-            tokens.push(token_to_summary(token).await);
+            raw_tokens.push(token);
         }
     }
 
-    Ok(tokens)
+    let mints: Vec<String> = raw_tokens
+        .iter()
+        .map(|token| token.mint.clone())
+        .collect();
+    let caches = TokenSummaryCaches::build(&mints).await;
+
+    Ok(
+        raw_tokens
+            .into_iter()
+            .map(|token| token_to_summary(token, &caches))
+            .collect()
+    )
 }
 
 /// Get secure tokens (high security score, not rugged)
@@ -767,18 +899,24 @@ async fn get_secure_tokens() -> Result<Vec<TokenSummary>, String> {
     let threshold = with_config(|cfg| cfg.webserver.tokens_tab.secure_token_score_threshold);
     let db = TokenDatabase::new().map_err(|e| e.to_string())?;
     let all_tokens = db.get_all_tokens().await?;
-    let security_db = SecurityDatabase::new("data/security.db").map_err(|e| e.to_string())?;
+    let mints: Vec<String> = all_tokens
+        .iter()
+        .map(|token| token.mint.clone())
+        .collect();
+    let caches = TokenSummaryCaches::build(&mints).await;
 
-    let mut tokens = Vec::new();
-    for token in all_tokens {
-        if let Ok(Some(sec)) = security_db.get_security_info(&token.mint) {
-            if sec.score > threshold && !sec.rugged {
-                tokens.push(token_to_summary(token).await);
-            }
-        }
-    }
-
-    Ok(tokens)
+    Ok(
+        all_tokens
+            .into_iter()
+            .filter(|token| {
+                caches
+                    .security_snapshot(&token.mint)
+                    .map(|snapshot| snapshot.score > threshold && !snapshot.rugged)
+                    .unwrap_or(false)
+            })
+            .map(|token| token_to_summary(token, &caches))
+            .collect()
+    )
 }
 
 /// Get recently created tokens (configurable lookback period)
@@ -790,7 +928,7 @@ async fn get_recent_tokens() -> Result<Vec<TokenSummary>, String> {
     let all_tokens = db.get_all_tokens().await?;
 
     let cutoff = chrono::Utc::now() - chrono::Duration::hours(hours);
-    let mut tokens = Vec::new();
+    let mut recent_tokens = Vec::new();
 
     for token in all_tokens {
         // Use pair_created_at if available
@@ -798,17 +936,31 @@ async fn get_recent_tokens() -> Result<Vec<TokenSummary>, String> {
             let created_time = chrono::DateTime::from_timestamp(created_at, 0);
             if let Some(ct) = created_time {
                 if ct > cutoff {
-                    tokens.push(token_to_summary(token).await);
+                    recent_tokens.push(token);
                 }
             }
         }
     }
 
-    Ok(tokens)
+    let mints: Vec<String> = recent_tokens
+        .iter()
+        .map(|token| token.mint.clone())
+        .collect();
+    let caches = TokenSummaryCaches::build(&mints).await;
+
+    Ok(
+        recent_tokens
+            .into_iter()
+            .map(|token| token_to_summary(token, &caches))
+            .collect()
+    )
 }
 
 /// Convert ApiToken to TokenSummary with enriched data
-async fn token_to_summary(token: crate::tokens::types::ApiToken) -> TokenSummary {
+fn token_to_summary(
+    token: crate::tokens::types::ApiToken,
+    caches: &TokenSummaryCaches
+) -> TokenSummary {
     // Get price info
     let (price_sol, price_updated_at) = if
         let Some(price_result) = pools::get_pool_price(&token.mint)
@@ -824,22 +976,16 @@ async fn token_to_summary(token: crate::tokens::types::ApiToken) -> TokenSummary
         (None, None)
     };
 
-    // Get security info
-    let (security_score, rugged) = SecurityDatabase::new("data/security.db")
-        .ok()
-        .and_then(|db| db.get_security_info(&token.mint).ok().flatten())
-        .map(|s| (Some(s.score), Some(s.rugged)))
-        .unwrap_or((None, None));
-
     // Check status flags
     let has_pool_price = price_sol.is_some();
-    let has_ohlcv = ohlcv_db
-        ::get_ohlcv_database()
-        .and_then(|db| db.check_data_availability(&token.mint))
-        .map(|meta| meta.data_points_count > 0 && !meta.is_expired)
-        .unwrap_or(false);
-    let has_open_position = positions::is_open_position(&token.mint).await;
-    let blacklisted = blacklist::is_token_blacklisted_db(&token.mint);
+    let has_ohlcv = caches.has_ohlcv(&token.mint);
+    let has_open_position = caches.has_open_position(&token.mint);
+    let blacklisted = caches.is_blacklisted(&token.mint);
+
+    let (security_score, rugged) = caches
+        .security_snapshot(&token.mint)
+        .map(|snapshot| (Some(snapshot.score), Some(snapshot.rugged)))
+        .unwrap_or((None, None));
 
     TokenSummary {
         mint: token.mint,
