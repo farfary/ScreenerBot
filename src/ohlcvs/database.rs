@@ -1,12 +1,18 @@
 // Database layer for OHLCV module
 
 use crate::ohlcvs::types::{
-    OhlcvDataPoint, OhlcvError, OhlcvResult, PoolConfig, Priority, Timeframe, TokenOhlcvConfig,
+    OhlcvDataPoint,
+    OhlcvError,
+    OhlcvResult,
+    PoolConfig,
+    Priority,
+    Timeframe,
+    TokenOhlcvConfig,
 };
-use chrono::{DateTime, Duration, Utc};
-use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
+use chrono::{ DateTime, Duration, Utc };
+use rusqlite::{ params, Connection, OptionalExtension, Result as SqliteResult };
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::{ Arc, Mutex };
 
 pub struct OhlcvDatabase {
     conn: Arc<Mutex<Connection>>,
@@ -15,8 +21,9 @@ pub struct OhlcvDatabase {
 impl OhlcvDatabase {
     /// Initialize the database and create tables
     pub fn new<P: AsRef<Path>>(path: P) -> OhlcvResult<Self> {
-        let conn = Connection::open(path)
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to open database: {}", e)))?;
+        let conn = Connection::open(path).map_err(|e|
+            OhlcvError::DatabaseError(format!("Failed to open database: {}", e))
+        )?;
 
         let db = Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -27,8 +34,7 @@ impl OhlcvDatabase {
     }
 
     fn create_tables(&self) -> OhlcvResult<()> {
-        let conn = self
-            .conn
+        let conn = self.conn
             .lock()
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
 
@@ -110,7 +116,9 @@ impl OhlcvDatabase {
                 last_fetch TEXT,
                 last_activity TEXT NOT NULL,
                 consecutive_empty_fetches INTEGER NOT NULL DEFAULT 0,
-                is_active INTEGER NOT NULL DEFAULT 1
+                is_active INTEGER NOT NULL DEFAULT 1,
+                last_pool_discovery_attempt INTEGER,
+                consecutive_pool_failures INTEGER NOT NULL DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS idx_monitor_active ON ohlcv_monitor_config(is_active, priority);
             "#
@@ -123,8 +131,7 @@ impl OhlcvDatabase {
     // ==================== Pool Management ====================
 
     pub fn upsert_pool(&self, mint: &str, pool: &PoolConfig) -> OhlcvResult<()> {
-        let conn = self
-            .conn
+        let conn = self.conn
             .lock()
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
 
@@ -155,8 +162,7 @@ impl OhlcvDatabase {
     }
 
     pub fn get_pools(&self, mint: &str) -> OhlcvResult<Vec<PoolConfig>> {
-        let conn = self
-            .conn
+        let conn = self.conn
             .lock()
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
 
@@ -165,7 +171,7 @@ impl OhlcvDatabase {
                 "SELECT pool_address, dex, liquidity, is_default, last_success, failure_count
                  FROM ohlcv_pools
                  WHERE mint = ?1
-                 ORDER BY liquidity DESC",
+                 ORDER BY liquidity DESC"
             )
             .map_err(|e| {
                 OhlcvError::DatabaseError(format!("Failed to prepare statement: {}", e))
@@ -197,8 +203,7 @@ impl OhlcvDatabase {
     }
 
     pub fn mark_pool_failure(&self, mint: &str, pool_address: &str) -> OhlcvResult<()> {
-        let conn = self
-            .conn
+        let conn = self.conn
             .lock()
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
 
@@ -213,8 +218,7 @@ impl OhlcvDatabase {
     }
 
     pub fn mark_pool_success(&self, mint: &str, pool_address: &str) -> OhlcvResult<()> {
-        let conn = self
-            .conn
+        let conn = self.conn
             .lock()
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
 
@@ -234,20 +238,21 @@ impl OhlcvDatabase {
         &self,
         mint: &str,
         pool_address: &str,
-        data: &[OhlcvDataPoint],
+        data: &[OhlcvDataPoint]
     ) -> OhlcvResult<usize> {
         if data.is_empty() {
             return Ok(0);
         }
 
-        let conn = self
-            .conn
+        let conn = self.conn
             .lock()
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
 
-        let tx = conn.unchecked_transaction().map_err(|e| {
-            OhlcvError::DatabaseError(format!("Failed to start transaction: {}", e))
-        })?;
+        let tx = conn
+            .unchecked_transaction()
+            .map_err(|e| {
+                OhlcvError::DatabaseError(format!("Failed to start transaction: {}", e))
+            })?;
 
         let mut inserted = 0;
         for point in data {
@@ -271,8 +276,7 @@ impl OhlcvDatabase {
             }
         }
 
-        tx.commit()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to commit: {}", e)))?;
+        tx.commit().map_err(|e| OhlcvError::DatabaseError(format!("Failed to commit: {}", e)))?;
 
         Ok(inserted)
     }
@@ -283,15 +287,14 @@ impl OhlcvDatabase {
         pool_address: Option<&str>,
         from_timestamp: Option<i64>,
         to_timestamp: Option<i64>,
-        limit: usize,
+        limit: usize
     ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
-        let conn = self
-            .conn
+        let conn = self.conn
             .lock()
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
 
         let mut query = String::from(
-            "SELECT timestamp, open, high, low, close, volume FROM ohlcv_1m WHERE mint = ?1",
+            "SELECT timestamp, open, high, low, close, volume FROM ohlcv_1m WHERE mint = ?1"
         );
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(mint.to_string())];
 
@@ -321,8 +324,10 @@ impl OhlcvDatabase {
             .prepare(&query)
             .map_err(|e| OhlcvError::DatabaseError(format!("Failed to prepare: {}", e)))?;
 
-        let params_refs: Vec<&dyn rusqlite::ToSql> =
-            params_vec.iter().map(|p| p.as_ref()).collect();
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec
+            .iter()
+            .map(|p| p.as_ref())
+            .collect();
 
         let data = stmt
             .query_map(params_refs.as_slice(), |row| {
@@ -349,20 +354,21 @@ impl OhlcvDatabase {
         mint: &str,
         pool_address: &str,
         timeframe: Timeframe,
-        data: &[OhlcvDataPoint],
+        data: &[OhlcvDataPoint]
     ) -> OhlcvResult<()> {
         if data.is_empty() {
             return Ok(());
         }
 
-        let conn = self
-            .conn
+        let conn = self.conn
             .lock()
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
 
-        let tx = conn.unchecked_transaction().map_err(|e| {
-            OhlcvError::DatabaseError(format!("Failed to start transaction: {}", e))
-        })?;
+        let tx = conn
+            .unchecked_transaction()
+            .map_err(|e| {
+                OhlcvError::DatabaseError(format!("Failed to start transaction: {}", e))
+            })?;
 
         for point in data {
             tx
@@ -384,8 +390,7 @@ impl OhlcvDatabase {
                 .map_err(|e| OhlcvError::DatabaseError(format!("Insert failed: {}", e)))?;
         }
 
-        tx.commit()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Commit failed: {}", e)))?;
+        tx.commit().map_err(|e| OhlcvError::DatabaseError(format!("Commit failed: {}", e)))?;
 
         Ok(())
     }
@@ -397,22 +402,21 @@ impl OhlcvDatabase {
         timeframe: Timeframe,
         from_timestamp: Option<i64>,
         to_timestamp: Option<i64>,
-        limit: usize,
+        limit: usize
     ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
-        let conn = self
-            .conn
+        let conn = self.conn
             .lock()
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
 
         let mut query = String::from(
             "SELECT timestamp, open, high, low, close, volume FROM ohlcv_aggregated 
-             WHERE mint = ?1 AND pool_address = ?2 AND timeframe = ?3",
+             WHERE mint = ?1 AND pool_address = ?2 AND timeframe = ?3"
         );
 
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![
             Box::new(mint.to_string()),
             Box::new(pool_address.to_string()),
-            Box::new(timeframe.as_str().to_string()),
+            Box::new(timeframe.as_str().to_string())
         ];
 
         if let Some(from) = from_timestamp {
@@ -435,8 +439,10 @@ impl OhlcvDatabase {
             .prepare(&query)
             .map_err(|e| OhlcvError::DatabaseError(format!("Failed to prepare: {}", e)))?;
 
-        let params_refs: Vec<&dyn rusqlite::ToSql> =
-            params_vec.iter().map(|p| p.as_ref()).collect();
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec
+            .iter()
+            .map(|p| p.as_ref())
+            .collect();
 
         let data = stmt
             .query_map(params_refs.as_slice(), |row| {
@@ -464,10 +470,9 @@ impl OhlcvDatabase {
         pool_address: &str,
         timeframe: Timeframe,
         start_timestamp: i64,
-        end_timestamp: i64,
+        end_timestamp: i64
     ) -> OhlcvResult<()> {
-        let conn = self
-            .conn
+        let conn = self.conn
             .lock()
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
 
@@ -485,10 +490,9 @@ impl OhlcvDatabase {
     pub fn get_unfilled_gaps(
         &self,
         mint: &str,
-        timeframe: Timeframe,
+        timeframe: Timeframe
     ) -> OhlcvResult<Vec<(String, i64, i64)>> {
-        let conn = self
-            .conn
+        let conn = self.conn
             .lock()
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
 
@@ -497,17 +501,13 @@ impl OhlcvDatabase {
                 "SELECT pool_address, start_timestamp, end_timestamp FROM ohlcv_gaps
                  WHERE mint = ?1 AND timeframe = ?2 AND filled = 0
                  ORDER BY start_timestamp DESC
-                 LIMIT 100",
+                 LIMIT 100"
             )
             .map_err(|e| OhlcvError::DatabaseError(format!("Failed to prepare: {}", e)))?;
 
         let gaps = stmt
             .query_map(params![mint, timeframe.as_str()], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, i64>(1)?,
-                    row.get::<_, i64>(2)?,
-                ))
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?, row.get::<_, i64>(2)?))
             })
             .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {}", e)))?
             .collect::<SqliteResult<Vec<_>>>()
@@ -522,10 +522,9 @@ impl OhlcvDatabase {
         pool_address: &str,
         timeframe: Timeframe,
         start_timestamp: i64,
-        end_timestamp: i64,
+        end_timestamp: i64
     ) -> OhlcvResult<()> {
-        let conn = self
-            .conn
+        let conn = self.conn
             .lock()
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
 
@@ -543,28 +542,31 @@ impl OhlcvDatabase {
     // ==================== Monitor Configuration ====================
 
     pub fn upsert_monitor_config(&self, config: &TokenOhlcvConfig) -> OhlcvResult<()> {
-        let conn = self
-            .conn
+        let conn = self.conn
             .lock()
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
 
         conn
             .execute(
-                "INSERT INTO ohlcv_monitor_config (mint, priority, fetch_interval_seconds, last_activity, consecutive_empty_fetches, is_active)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                "INSERT INTO ohlcv_monitor_config (mint, priority, fetch_interval_seconds, last_activity, consecutive_empty_fetches, is_active, last_pool_discovery_attempt, consecutive_pool_failures)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
              ON CONFLICT(mint) DO UPDATE SET
                 priority = excluded.priority,
                 fetch_interval_seconds = excluded.fetch_interval_seconds,
                 last_activity = excluded.last_activity,
                 consecutive_empty_fetches = excluded.consecutive_empty_fetches,
-                is_active = excluded.is_active",
+                is_active = excluded.is_active,
+                last_pool_discovery_attempt = excluded.last_pool_discovery_attempt,
+                consecutive_pool_failures = excluded.consecutive_pool_failures",
                 params![
                     &config.mint,
                     config.priority.as_str(),
                     config.fetch_frequency.as_secs() as i64,
                     config.last_activity.to_rfc3339(),
                     config.consecutive_empty_fetches,
-                    config.is_active as i32
+                    config.is_active as i32,
+                    config.last_pool_discovery_attempt,
+                    config.consecutive_pool_failures
                 ]
             )
             .map_err(|e| OhlcvError::DatabaseError(format!("Failed to upsert config: {}", e)))?;
@@ -573,14 +575,13 @@ impl OhlcvDatabase {
     }
 
     pub fn get_monitor_config(&self, mint: &str) -> OhlcvResult<Option<TokenOhlcvConfig>> {
-        let conn = self
-            .conn
+        let conn = self.conn
             .lock()
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
 
         let config: Option<TokenOhlcvConfig> = conn
             .query_row(
-                "SELECT priority, fetch_interval_seconds, last_activity, consecutive_empty_fetches, is_active
+                "SELECT priority, fetch_interval_seconds, last_activity, consecutive_empty_fetches, is_active, last_pool_discovery_attempt, consecutive_pool_failures
                  FROM ohlcv_monitor_config WHERE mint = ?1",
                 params![mint],
                 |row| {
@@ -593,12 +594,16 @@ impl OhlcvDatabase {
                         .unwrap_or_else(|_| Utc::now());
                     let consecutive_empty: u32 = row.get(3)?;
                     let is_active: i32 = row.get(4)?;
+                    let last_pool_attempt: Option<i64> = row.get(5)?;
+                    let pool_failures: u32 = row.get(6)?;
 
                     let mut config = TokenOhlcvConfig::new(mint.to_string(), priority);
                     config.fetch_frequency = std::time::Duration::from_secs(fetch_secs as u64);
                     config.last_activity = last_activity;
                     config.consecutive_empty_fetches = consecutive_empty;
                     config.is_active = is_active != 0;
+                    config.last_pool_discovery_attempt = last_pool_attempt;
+                    config.consecutive_pool_failures = pool_failures;
 
                     Ok(config)
                 }
@@ -610,14 +615,13 @@ impl OhlcvDatabase {
     }
 
     pub fn get_all_active_configs(&self) -> OhlcvResult<Vec<TokenOhlcvConfig>> {
-        let conn = self
-            .conn
+        let conn = self.conn
             .lock()
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
 
         let mut stmt = conn
             .prepare(
-                "SELECT mint, priority, fetch_interval_seconds, last_activity, consecutive_empty_fetches
+                "SELECT mint, priority, fetch_interval_seconds, last_activity, consecutive_empty_fetches, last_pool_discovery_attempt, consecutive_pool_failures
                  FROM ohlcv_monitor_config WHERE is_active = 1
                  ORDER BY priority DESC"
             )
@@ -634,11 +638,15 @@ impl OhlcvDatabase {
                     .map(|dt| dt.with_timezone(&Utc))
                     .unwrap_or_else(|_| Utc::now());
                 let consecutive_empty: u32 = row.get(4)?;
+                let last_pool_attempt: Option<i64> = row.get(5)?;
+                let pool_failures: u32 = row.get(6)?;
 
                 let mut config = TokenOhlcvConfig::new(mint, priority);
                 config.fetch_frequency = std::time::Duration::from_secs(fetch_secs as u64);
                 config.last_activity = last_activity;
                 config.consecutive_empty_fetches = consecutive_empty;
+                config.last_pool_discovery_attempt = last_pool_attempt;
+                config.consecutive_pool_failures = pool_failures;
 
                 Ok(config)
             })
@@ -652,26 +660,20 @@ impl OhlcvDatabase {
     // ==================== Cleanup ====================
 
     pub fn cleanup_old_data(&self, retention_days: i64) -> OhlcvResult<usize> {
-        let conn = self
-            .conn
+        let conn = self.conn
             .lock()
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
 
         let cutoff = (Utc::now() - Duration::days(retention_days)).to_rfc3339();
 
         let deleted = conn
-            .execute(
-                "DELETE FROM ohlcv_1m WHERE created_at < ?1",
-                params![cutoff],
-            )
+            .execute("DELETE FROM ohlcv_1m WHERE created_at < ?1", params![cutoff])
             .map_err(|e| OhlcvError::DatabaseError(format!("Cleanup failed: {}", e)))?;
 
         // Also clean aggregated cache
-        conn.execute(
-            "DELETE FROM ohlcv_aggregated WHERE created_at < ?1",
-            params![cutoff],
-        )
-        .map_err(|e| OhlcvError::DatabaseError(format!("Cleanup failed: {}", e)))?;
+        conn
+            .execute("DELETE FROM ohlcv_aggregated WHERE created_at < ?1", params![cutoff])
+            .map_err(|e| OhlcvError::DatabaseError(format!("Cleanup failed: {}", e)))?;
 
         Ok(deleted)
     }
@@ -679,8 +681,7 @@ impl OhlcvDatabase {
     // ==================== Metrics ====================
 
     pub fn get_data_point_count(&self) -> OhlcvResult<usize> {
-        let conn = self
-            .conn
+        let conn = self.conn
             .lock()
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
 
@@ -692,8 +693,7 @@ impl OhlcvDatabase {
     }
 
     pub fn has_data_for_mint(&self, mint: &str) -> OhlcvResult<bool> {
-        let conn = self
-            .conn
+        let conn = self.conn
             .lock()
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
 
@@ -701,7 +701,7 @@ impl OhlcvDatabase {
             .query_row(
                 "SELECT EXISTS(SELECT 1 FROM ohlcv_1m WHERE mint = ?1 LIMIT 1)",
                 params![mint],
-                |row| row.get(0),
+                |row| row.get(0)
             )
             .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {}", e)))?;
 
@@ -709,23 +709,19 @@ impl OhlcvDatabase {
     }
 
     pub fn get_pool_count(&self) -> OhlcvResult<usize> {
-        let conn = self
-            .conn
+        let conn = self.conn
             .lock()
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
 
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM ohlcv_pools", params![], |row| {
-                row.get(0)
-            })
+            .query_row("SELECT COUNT(*) FROM ohlcv_pools", params![], |row| { row.get(0) })
             .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {}", e)))?;
 
         Ok(count as usize)
     }
 
     pub fn get_token_count(&self) -> OhlcvResult<usize> {
-        let conn = self
-            .conn
+        let conn = self.conn
             .lock()
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
 
@@ -733,7 +729,7 @@ impl OhlcvDatabase {
             .query_row(
                 "SELECT COUNT(DISTINCT mint) FROM ohlcv_monitor_config WHERE is_active = 1",
                 params![],
-                |row| row.get(0),
+                |row| row.get(0)
             )
             .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {}", e)))?;
 
@@ -741,8 +737,7 @@ impl OhlcvDatabase {
     }
 
     pub fn get_gap_count(&self, filled: bool) -> OhlcvResult<usize> {
-        let conn = self
-            .conn
+        let conn = self.conn
             .lock()
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
 
@@ -750,7 +745,7 @@ impl OhlcvDatabase {
             .query_row(
                 "SELECT COUNT(*) FROM ohlcv_gaps WHERE filled = ?1",
                 params![filled as i32],
-                |row| row.get(0),
+                |row| row.get(0)
             )
             .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {}", e)))?;
 

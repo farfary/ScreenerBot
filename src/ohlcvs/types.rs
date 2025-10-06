@@ -226,6 +226,9 @@ pub struct TokenOhlcvConfig {
     pub fetch_frequency: Duration,
     pub consecutive_empty_fetches: u32,
     pub is_active: bool,
+    // Pool discovery backoff fields
+    pub last_pool_discovery_attempt: Option<i64>,
+    pub consecutive_pool_failures: u32,
 }
 
 impl TokenOhlcvConfig {
@@ -238,6 +241,8 @@ impl TokenOhlcvConfig {
             fetch_frequency: priority.base_interval(),
             consecutive_empty_fetches: 0,
             is_active: true,
+            last_pool_discovery_attempt: None,
+            consecutive_pool_failures: 0,
         }
     }
 
@@ -273,6 +278,62 @@ impl TokenOhlcvConfig {
         let max_secs = base.as_secs() * 10;
 
         Duration::from_secs(adjusted_secs.min(max_secs))
+    }
+
+    /// Check if enough time has passed to retry pool discovery
+    /// Uses exponential backoff: 5m, 15m, 1h, 6h, 24h
+    pub fn should_retry_pool_discovery(&self) -> bool {
+        if self.consecutive_pool_failures == 0 {
+            return true; // First attempt or no failures
+        }
+
+        let last_attempt = match self.last_pool_discovery_attempt {
+            Some(t) => t,
+            None => {
+                return true;
+            } // Never attempted
+        };
+
+        let now = Utc::now().timestamp();
+        let elapsed = now - last_attempt;
+
+        // Exponential backoff intervals
+        let backoff_secs = match self.consecutive_pool_failures {
+            1 => 300, // 5 minutes
+            2 => 900, // 15 minutes
+            3 => 3600, // 1 hour
+            4 => 21600, // 6 hours
+            _ => 86400, // 24 hours (max)
+        };
+
+        elapsed >= backoff_secs
+    }
+
+    /// Mark pool discovery failure
+    pub fn mark_pool_discovery_failure(&mut self) {
+        self.consecutive_pool_failures += 1;
+        self.last_pool_discovery_attempt = Some(Utc::now().timestamp());
+    }
+
+    /// Mark pool discovery success
+    pub fn mark_pool_discovery_success(&mut self) {
+        self.consecutive_pool_failures = 0;
+        self.last_pool_discovery_attempt = Some(Utc::now().timestamp());
+    }
+
+    /// Get human-readable backoff time
+    pub fn get_next_retry_description(&self) -> String {
+        if self.consecutive_pool_failures == 0 {
+            return "immediately".to_string();
+        }
+
+        match self.consecutive_pool_failures {
+            1 => "5 minutes".to_string(),
+            2 => "15 minutes".to_string(),
+            3 => "1 hour".to_string(),
+            4 => "6 hours".to_string(),
+            _ => "24 hours".to_string(),
+        }
     }
 }
 

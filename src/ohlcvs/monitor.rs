@@ -247,37 +247,64 @@ impl OhlcvMonitor {
     }
 
     async fn fetch_token_data(&self, mint: &str) -> OhlcvResult<()> {
-        // Check if we have pools, if not try to discover
-        let has_pools = {
+        // Check if we should try pool discovery (using backoff logic)
+        let (has_pools, should_retry_discovery) = {
             let active = self.active_tokens.read().await;
             let config = active.get(mint).ok_or_else(|| OhlcvError::NotFound(mint.to_string()))?;
-            config.get_best_pool().is_some()
+            let has = config.get_best_pool().is_some();
+            let should_retry = !has && config.should_retry_pool_discovery();
+            (has, should_retry)
         };
 
-        // If no pools exist, try to discover them
-        if !has_pools {
+        // If no pools and backoff period has elapsed, try to discover them
+        if !has_pools && should_retry_discovery {
             match self.pool_manager.discover_pools(mint).await {
                 Ok(discovered) if !discovered.is_empty() => {
-                    // Update config with discovered pools
+                    // Success! Update config with discovered pools and reset failure counter
                     let mut active = self.active_tokens.write().await;
                     if let Some(config) = active.get_mut(mint) {
                         config.pools = discovered;
+                        config.mark_pool_discovery_success();
                         self.db.upsert_monitor_config(config)?;
+
+                        println!(
+                            "[OHLCV Monitor] ✅ Pool discovery succeeded for {} after {} failures",
+                            mint,
+                            config.consecutive_pool_failures
+                        );
                     }
                 }
-                Ok(_) => {
+                Ok(_) | Err(_) => {
+                    // Failed - update failure counter and backoff timestamp
+                    let mut active = self.active_tokens.write().await;
+                    if let Some(config) = active.get_mut(mint) {
+                        let was_failure_count = config.consecutive_pool_failures;
+                        config.mark_pool_discovery_failure();
+                        self.db.upsert_monitor_config(config)?;
+
+                        // Log with appropriate frequency (only first 3 attempts, then once at 5, 10, etc.)
+                        let should_log = was_failure_count < 3 || was_failure_count % 5 == 0;
+
+                        if should_log {
+                            eprintln!(
+                                "[OHLCV Monitor] ⚠️  Pool discovery failed for {} (attempt {}). Next retry: {}",
+                                mint,
+                                config.consecutive_pool_failures,
+                                config.get_next_retry_description()
+                            );
+                        }
+                    }
+
                     return Err(
-                        OhlcvError::PoolNotFound(format!("No pools discovered for token: {}", mint))
-                    );
-                }
-                Err(e) => {
-                    return Err(
-                        OhlcvError::PoolNotFound(
-                            format!("Failed to discover pools for {}: {}", mint, e)
-                        )
+                        OhlcvError::PoolNotFound(format!("No pools available for token: {}", mint))
                     );
                 }
             }
+        } else if !has_pools {
+            // In backoff period - skip silently
+            return Err(
+                OhlcvError::PoolNotFound(format!("Token {} in discovery backoff period", mint))
+            );
         }
 
         // Get token config with pools
