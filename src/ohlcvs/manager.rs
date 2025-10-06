@@ -115,9 +115,16 @@ impl PoolManager {
         let discovered: OhlcvResult<Vec<PoolConfig>> = task
             ::spawn_blocking(move || {
                 // Open pools.db (Pool Service database)
-                let pools_db = Connection::open("data/pools.db").map_err(|e|
+                // Use read-only to avoid writer locks and configure for read speed
+                let mut pools_db = Connection::open_with_flags(
+                    "data/pools.db",
+                    rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY
+                ).map_err(|e|
                     OhlcvError::DatabaseError(format!("Failed to open pools.db: {}", e))
                 )?;
+                let _ = pools_db.pragma_update(None, "query_only", "1");
+                let _ = pools_db.pragma_update(None, "cache_size", 20000);
+                let _ = pools_db.pragma_update(None, "temp_store", "memory");
 
                 // Query for pools associated with this mint
                 let mut stmt = pools_db

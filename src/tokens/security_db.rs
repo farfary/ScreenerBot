@@ -1,5 +1,5 @@
-use rusqlite::{Connection, Result as SqliteResult, Row};
-use serde::{Deserialize, Serialize};
+use rusqlite::{ Connection, Result as SqliteResult, Row };
+use serde::{ Deserialize, Serialize };
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -84,6 +84,12 @@ pub struct SecurityDatabase {
 impl SecurityDatabase {
     pub fn new(db_path: &str) -> SqliteResult<Self> {
         let conn = Connection::open(db_path)?;
+        // Configure pragmas for better concurrency/perf
+        let _ = conn.pragma_update(None, "journal_mode", "WAL");
+        let _ = conn.pragma_update(None, "synchronous", "NORMAL");
+        let _ = conn.pragma_update(None, "cache_size", 10000);
+        let _ = conn.pragma_update(None, "temp_store", "memory");
+        let _ = conn.busy_timeout(std::time::Duration::from_millis(30_000));
         let db = SecurityDatabase { conn };
         db.create_tables()?;
         Ok(db)
@@ -130,7 +136,7 @@ impl SecurityDatabase {
                 raw_response TEXT NOT NULL
             )
             "#,
-            [],
+            []
         )?;
 
         // Security risks table (normalized)
@@ -147,7 +153,7 @@ impl SecurityDatabase {
                 FOREIGN KEY (mint) REFERENCES security_info(mint)
             )
             "#,
-            [],
+            []
         )?;
 
         // Markets table (normalized)
@@ -170,7 +176,7 @@ impl SecurityDatabase {
                 FOREIGN KEY (mint) REFERENCES security_info(mint)
             )
             "#,
-            [],
+            []
         )?;
 
         // Top holders table (normalized)
@@ -187,37 +193,37 @@ impl SecurityDatabase {
                 FOREIGN KEY (mint) REFERENCES security_info(mint)
             )
             "#,
-            [],
+            []
         )?;
 
         // Create indices for performance
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_security_info_analyzed ON security_info(analyzed_at)",
-            [],
+            []
         )?;
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_security_info_score ON security_info(score_normalised)",
-            [],
+            []
         )?;
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_security_risks_mint ON security_risks(mint)",
-            [],
+            []
         )?;
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_security_risks_level ON security_risks(level)",
-            [],
+            []
         )?;
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_security_markets_mint ON security_markets(mint)",
-            [],
+            []
         )?;
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_security_markets_type ON security_markets(market_type)",
-            [],
+            []
         )?;
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_security_holders_mint ON security_holders(mint)",
-            [],
+            []
         )?;
 
         Ok(())
@@ -300,7 +306,7 @@ impl SecurityDatabase {
                     market.lp_unlocked,
                     market.base_price,
                     market.quote_price
-                ],
+                ]
             )?;
         }
 
@@ -325,9 +331,7 @@ impl SecurityDatabase {
     }
 
     pub fn get_security_info(&self, mint: &str) -> SqliteResult<Option<SecurityInfo>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT * FROM security_info WHERE mint = ?1")?;
+        let mut stmt = self.conn.prepare("SELECT * FROM security_info WHERE mint = ?1")?;
 
         let mut rows = stmt.query_map([mint], |row| {
             Ok(SecurityInfo {
@@ -353,17 +357,15 @@ impl SecurityDatabase {
                 detected_at: row.get("detected_at")?,
                 analyzed_at: row.get("analyzed_at")?,
                 raw_response: row.get("raw_response")?,
-                risks: Vec::new(),       // Will be filled below
-                markets: Vec::new(),     // Will be filled below
+                risks: Vec::new(), // Will be filled below
+                markets: Vec::new(), // Will be filled below
                 top_holders: Vec::new(), // Will be filled below
             })
         })?;
 
         if let Some(mut info) = rows.next().transpose()? {
             // Load risks
-            let mut risk_stmt = self
-                .conn
-                .prepare("SELECT * FROM security_risks WHERE mint = ?1")?;
+            let mut risk_stmt = self.conn.prepare("SELECT * FROM security_risks WHERE mint = ?1")?;
             let risk_rows = risk_stmt.query_map([mint], |row| {
                 Ok(SecurityRisk {
                     name: row.get("name")?,
@@ -378,9 +380,9 @@ impl SecurityDatabase {
             }
 
             // Load markets
-            let mut market_stmt = self
-                .conn
-                .prepare("SELECT * FROM security_markets WHERE mint = ?1")?;
+            let mut market_stmt = self.conn.prepare(
+                "SELECT * FROM security_markets WHERE mint = ?1"
+            )?;
             let market_rows = market_stmt.query_map([mint], |row| {
                 Ok(MarketInfo {
                     pubkey: row.get("pubkey")?,
@@ -401,9 +403,9 @@ impl SecurityDatabase {
             }
 
             // Load top holders
-            let mut holder_stmt = self
-                .conn
-                .prepare("SELECT * FROM security_holders WHERE mint = ?1 ORDER BY pct DESC")?;
+            let mut holder_stmt = self.conn.prepare(
+                "SELECT * FROM security_holders WHERE mint = ?1 ORDER BY pct DESC"
+            )?;
             let holder_rows = holder_stmt.query_map([mint], |row| {
                 Ok(HolderInfo {
                     address: row.get("address")?,
@@ -441,26 +443,21 @@ impl SecurityDatabase {
         let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM security_info")?;
         stats.insert("total".to_string(), stmt.query_row([], |row| row.get(0))?);
 
-        let mut stmt = self
-            .conn
-            .prepare("SELECT COUNT(*) FROM security_info WHERE rugged = 0")?;
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM security_info WHERE rugged = 0")?;
         stats.insert("safe".to_string(), stmt.query_row([], |row| row.get(0))?);
 
-        let mut stmt = self
-            .conn
-            .prepare("SELECT COUNT(*) FROM security_info WHERE score_normalised >= 70")?;
-        stats.insert(
-            "high_score".to_string(),
-            stmt.query_row([], |row| row.get(0))?,
-        );
+        let mut stmt = self.conn.prepare(
+            "SELECT COUNT(*) FROM security_info WHERE score_normalised >= 70"
+        )?;
+        stats.insert("high_score".to_string(), stmt.query_row([], |row| row.get(0))?);
 
         Ok(stats)
     }
 
     pub fn count_safe_tokens(&self) -> SqliteResult<i64> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT COUNT(*) FROM security_info WHERE score_normalised >= 70")?;
+        let mut stmt = self.conn.prepare(
+            "SELECT COUNT(*) FROM security_info WHERE score_normalised >= 70"
+        )?;
         stmt.query_row([], |row| row.get(0))
     }
 
@@ -472,16 +469,16 @@ impl SecurityDatabase {
     }
 
     pub fn count_danger_tokens(&self) -> SqliteResult<i64> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT COUNT(*) FROM security_info WHERE score_normalised < 40")?;
+        let mut stmt = self.conn.prepare(
+            "SELECT COUNT(*) FROM security_info WHERE score_normalised < 40"
+        )?;
         stmt.query_row([], |row| row.get(0))
     }
 
     pub fn count_pump_fun_tokens(&self) -> SqliteResult<i64> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT COUNT(*) FROM security_info WHERE raw_response LIKE '%pump.fun%'")?;
+        let mut stmt = self.conn.prepare(
+            "SELECT COUNT(*) FROM security_info WHERE raw_response LIKE '%pump.fun%'"
+        )?;
         stmt.query_row([], |row| row.get(0))
     }
 
@@ -501,9 +498,9 @@ impl SecurityDatabase {
         let mut tokens_without_security = 0i64;
 
         // Check each token mint against security_info table
-        let mut security_stmt = self
-            .conn
-            .prepare("SELECT 1 FROM security_info WHERE mint = ?1 LIMIT 1")?;
+        let mut security_stmt = self.conn.prepare(
+            "SELECT 1 FROM security_info WHERE mint = ?1 LIMIT 1"
+        )?;
 
         for token_result in token_rows {
             let mint = token_result?;
@@ -525,8 +522,9 @@ impl SecurityDatabase {
 
         // Get token mints from tokens.db ordered by liquidity (highest first) with no hard limit
         // Prioritize high-liquidity tokens to ensure security info is populated for tradable assets first
-        let mut tokens_stmt =
-            tokens_conn.prepare("SELECT mint FROM tokens ORDER BY liquidity_usd DESC")?;
+        let mut tokens_stmt = tokens_conn.prepare(
+            "SELECT mint FROM tokens ORDER BY liquidity_usd DESC"
+        )?;
         let token_rows = tokens_stmt.query_map([], |row| {
             let mint: String = row.get(0)?;
             Ok(mint)
@@ -535,9 +533,9 @@ impl SecurityDatabase {
         let mut tokens_without_security = Vec::new();
 
         // Check each token mint against security_info table
-        let mut security_stmt = self
-            .conn
-            .prepare("SELECT 1 FROM security_info WHERE mint = ?1 LIMIT 1")?;
+        let mut security_stmt = self.conn.prepare(
+            "SELECT 1 FROM security_info WHERE mint = ?1 LIMIT 1"
+        )?;
 
         for token_result in token_rows {
             let mint = token_result?;
@@ -570,9 +568,7 @@ pub fn parse_rugcheck_response(raw_json: &str) -> Result<SecurityInfo, serde_jso
     let decimals = token_info["decimals"].as_u64().map(|d| d as u8);
     let supply = token_info["supply"].as_u64();
     let mint_authority = token_info["mintAuthority"].as_str().map(|s| s.to_string());
-    let freeze_authority = token_info["freezeAuthority"]
-        .as_str()
-        .map(|s| s.to_string());
+    let freeze_authority = token_info["freezeAuthority"].as_str().map(|s| s.to_string());
 
     // Extract security info
     let score = response["score"].as_i64().unwrap_or(0) as i32;

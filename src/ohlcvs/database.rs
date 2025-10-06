@@ -27,6 +27,8 @@ impl OhlcvDatabase {
 
         // Enable WAL for better concurrent read/write performance BEFORE moving conn
         let _ = conn.execute("PRAGMA journal_mode=WAL;", []);
+        // Set reasonable busy timeout to handle brief contention
+        let _ = conn.busy_timeout(std::time::Duration::from_millis(30_000));
 
         // Backward-compatible schema guards: add new columns if missing (ignore errors if exist)
         let _ = conn.execute(
