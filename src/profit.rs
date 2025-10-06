@@ -108,7 +108,16 @@ async fn fetch_ath_context(mint: &str, current_price: f64) -> AthContext {
     }
 
     // 2. Refresh
-    let ohlcv = match crate::tokens::ohlcvs::get_latest_ohlcv(mint, ATH_MAX_OHLCV_POINTS).await {
+    let ohlcv = match crate::ohlcvs::get_ohlcv_data(
+        mint,
+        crate::ohlcvs::Timeframe::Minute1,
+        None,
+        ATH_MAX_OHLCV_POINTS as usize,
+        None,
+        None,
+    )
+    .await
+    {
         Ok(v) => v,
         Err(_) => {
             return AthContext::default();

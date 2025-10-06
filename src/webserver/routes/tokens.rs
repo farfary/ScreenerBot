@@ -1,4 +1,5 @@
 use axum::{ extract::{ Path, Query }, http::StatusCode, routing::{ get, post }, Json, Router };
+use futures::stream::{ self, StreamExt };
 use serde::{ Deserialize, Serialize };
 use std::{ collections::{ HashMap, HashSet }, sync::Arc };
 
@@ -6,7 +7,7 @@ use crate::{
     logger::{ log, LogTag },
     pools,
     positions,
-    tokens::{ blacklist, cache::TokenDatabase, ohlcv_db, security_db::SecurityDatabase },
+    tokens::{ blacklist, cache::TokenDatabase, security_db::SecurityDatabase },
     webserver::{ state::AppState, utils::{ error_response, success_response } },
 };
 
@@ -601,11 +602,17 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         .unwrap_or((None, None, None, None, None, None, None, vec![]));
 
     // Get status flags (mix of sync and cache checks)
-    let has_ohlcv = ohlcv_db
-        ::get_ohlcv_database()
-        .and_then(|db| db.check_data_availability(&mint))
-        .map(|meta| meta.data_points_count > 0 && !meta.is_expired)
-        .unwrap_or(false);
+    let has_ohlcv = match crate::ohlcvs::has_data(&mint).await {
+        Ok(flag) => flag,
+        Err(e) => {
+            log(
+                LogTag::Api,
+                "WARN",
+                &format!("Failed to determine OHLCV availability for {}: {}", mint, e)
+            );
+            false
+        }
+    };
 
     let has_pool_price = price_sol.is_some();
     let blacklisted = blacklist::is_token_blacklisted_db(&mint);
@@ -613,10 +620,26 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     // Position check - this is the ONLY additional async, keep it last and simple
     let has_open_position = positions::is_open_position(&mint).await;
 
-    // Add token to OHLCV watch list for future data collection
+    // Add token to OHLCV monitoring with appropriate priority
     // This ensures chart data will be available when users view this token again
-    if let Ok(ohlcv_service) = crate::tokens::ohlcvs::get_ohlcv_service_clone().await {
-        ohlcv_service.add_to_watch_list(&mint, has_open_position).await;
+    let priority = if has_open_position {
+        crate::ohlcvs::Priority::Critical
+    } else {
+        crate::ohlcvs::Priority::Medium // User is viewing, so medium priority
+    };
+
+    if let Err(e) = crate::ohlcvs::add_token_monitoring(&mint, priority).await {
+        log(LogTag::Api, "WARN", &format!("Failed to add {} to OHLCV monitoring: {}", mint, e));
+    }
+
+    // Record view activity
+    if
+        let Err(e) = crate::ohlcvs::record_activity(
+            &mint,
+            crate::ohlcvs::ActivityType::TokenViewed
+        ).await
+    {
+        log(LogTag::Api, "WARN", &format!("Failed to record token view for {}: {}", mint, e));
     }
 
     Json(TokenDetailResponse {
@@ -670,17 +693,39 @@ async fn get_token_ohlcv(
 ) -> Result<Json<Vec<OhlcvPoint>>, StatusCode> {
     log(LogTag::Api, "TOKEN_OHLCV", &format!("mint={} limit={}", mint, query.limit));
 
-    // Add token to OHLCV watch list if not already being monitored
+    // Add token to OHLCV monitoring with appropriate priority
     // This ensures data collection starts when a user views the chart
-    if let Ok(ohlcv_service) = crate::tokens::ohlcvs::get_ohlcv_service_clone().await {
-        let is_open_position = positions::is_open_position(&mint).await;
-        ohlcv_service.add_to_watch_list(&mint, is_open_position).await;
+    let is_open_position = positions::is_open_position(&mint).await;
+    let priority = if is_open_position {
+        crate::ohlcvs::Priority::Critical
+    } else {
+        crate::ohlcvs::Priority::High // User is viewing chart, high interest
+    };
+
+    if let Err(e) = crate::ohlcvs::add_token_monitoring(&mint, priority).await {
+        log(LogTag::Api, "WARN", &format!("Failed to add {} to OHLCV monitoring: {}", mint, e));
     }
 
-    let db = ohlcv_db::get_ohlcv_database().map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    // Record chart view activity (stronger signal than just viewing token)
+    if
+        let Err(e) = crate::ohlcvs::record_activity(
+            &mint,
+            crate::ohlcvs::ActivityType::ChartViewed
+        ).await
+    {
+        log(LogTag::Api, "WARN", &format!("Failed to record chart view for {}: {}", mint, e));
+    }
 
-    let data = db
-        .get_ohlcv_data(&mint, Some(query.limit))
+    // Fetch OHLCV data using new API
+    let data = crate::ohlcvs
+        ::get_ohlcv_data(
+            &mint,
+            crate::ohlcvs::Timeframe::Minute1,
+            None,
+            query.limit as usize,
+            None,
+            None
+        ).await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let points: Vec<OhlcvPoint> = data
@@ -741,19 +786,8 @@ async fn get_tokens_stats() -> Result<Json<TokenStatsResponse>, StatusCode> {
     };
 
     // Count with OHLCV
-    let with_ohlcv = if let Ok(ohlcv_db) = ohlcv_db::get_ohlcv_database() {
-        all_tokens
-            .iter()
-            .filter(|t| {
-                ohlcv_db
-                    .check_data_availability(&t.mint)
-                    .map(|meta| meta.data_points_count > 0)
-                    .unwrap_or(false)
-            })
-            .count()
-    } else {
-        0
-    };
+    let ohlcv_metrics = crate::ohlcvs::get_metrics().await;
+    let with_ohlcv = ohlcv_metrics.tokens_monitored;
 
     Ok(
         Json(TokenStatsResponse {
@@ -924,7 +958,7 @@ impl TokenSummaryCaches {
         let blacklisted = blacklist::get_blacklisted_mints().into_iter().collect::<HashSet<_>>();
 
         let security = load_security_snapshots(&unique_mints);
-        let ohlcv = load_ohlcv_flags(&unique_mints);
+        let ohlcv = load_ohlcv_flags(&unique_mints).await;
 
         Self {
             security,
@@ -972,24 +1006,22 @@ fn load_security_snapshots(mints: &HashSet<String>) -> HashMap<String, SecurityS
     snapshots
 }
 
-fn load_ohlcv_flags(mints: &HashSet<String>) -> HashSet<String> {
-    let mut has_ohlcv = HashSet::new();
-
+async fn load_ohlcv_flags(mints: &HashSet<String>) -> HashSet<String> {
     if mints.is_empty() {
-        return has_ohlcv;
+        return HashSet::new();
     }
 
-    if let Ok(db) = ohlcv_db::get_ohlcv_database() {
-        for mint in mints {
-            if let Ok(meta) = db.check_data_availability(mint) {
-                if meta.data_points_count > 0 && !meta.is_expired {
-                    has_ohlcv.insert(mint.clone());
-                }
-            }
-        }
-    }
-
-    has_ohlcv
+    stream
+        ::iter(mints.iter().cloned())
+        .map(|mint| async move {
+            let has_data = crate::ohlcvs::has_data(&mint).await.unwrap_or(false);
+            (mint, has_data)
+        })
+        .buffer_unordered(8)
+        .filter_map(|(mint, has_data)| async move {
+            if has_data { Some(mint) } else { None }
+        })
+        .collect::<HashSet<_>>().await
 }
 
 #[inline]

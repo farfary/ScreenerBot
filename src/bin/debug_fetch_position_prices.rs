@@ -1,12 +1,11 @@
-use chrono::{DateTime, Utc};
-use clap::{Arg, Command};
+use chrono::{ DateTime, Utc };
+use clap::{ Arg, Command };
 use rusqlite;
 use screenerbot::arguments::set_cmd_args;
-use screenerbot::logger::{log, LogTag};
-use screenerbot::pools::{init_pool_service, set_debug_token_override, stop_pool_service};
-use screenerbot::positions::{get_db_open_positions, initialize_positions_database};
-use screenerbot::tokens::ohlcv_db::init_ohlcv_database;
-use screenerbot::tokens::{get_latest_ohlcv, init_ohlcv_service};
+use screenerbot::logger::{ log, LogTag };
+use screenerbot::ohlcvs::{ get_ohlcv_data, Timeframe };
+use screenerbot::pools::{ init_pool_service, set_debug_token_override, stop_pool_service };
+use screenerbot::positions::{ get_db_open_positions, initialize_positions_database };
 use std::sync::Arc;
 use tokio::sync::Notify;
 
@@ -69,11 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let validate_only = matches.get_flag("validate-only");
 
-    log(
-        LogTag::System,
-        "INFO",
-        "🚀 Starting comprehensive price fetching tool for open positions",
-    );
+    log(LogTag::System, "INFO", "🚀 Starting comprehensive price fetching tool for open positions");
     println!("🚀 Debug Tool: Fetch Position Prices");
     println!("📅 Days to fetch: {}", days);
     println!("🔍 Validate only: {}", validate_only);
@@ -83,35 +78,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log(LogTag::System, "INFO", "📊 Initializing databases...");
 
     if let Err(e) = initialize_positions_database().await {
-        log(
-            LogTag::Positions,
-            "ERROR",
-            &format!("Failed to initialize positions database: {}", e),
-        );
+        log(LogTag::Positions, "ERROR", &format!("Failed to initialize positions database: {}", e));
         return Err(format!("Positions database initialization failed: {}", e).into());
     }
     println!("✅ Positions database initialized");
 
-    if let Err(e) = init_ohlcv_database() {
-        log(
-            LogTag::Ohlcv,
-            "ERROR",
-            &format!("Failed to initialize OHLCV database: {}", e),
-        );
-        return Err(format!("OHLCV database initialization failed: {}", e).into());
-    }
-    println!("✅ OHLCV database initialized");
+    // TODO: OHLCV service initialization handled by ServiceManager in new system
+    println!("⚠️  OHLCV functionality temporarily disabled - needs rewrite for new system");
 
     // Step 2: Load open positions
     log(LogTag::System, "INFO", "📋 Loading open positions...");
     let open_positions = match get_db_open_positions().await {
         Ok(positions) => positions,
         Err(e) => {
-            log(
-                LogTag::Positions,
-                "ERROR",
-                &format!("Failed to load open positions: {}", e),
-            );
+            log(LogTag::Positions, "ERROR", &format!("Failed to load open positions: {}", e));
             return Err(format!("Failed to load open positions: {}", e).into());
         }
     };
@@ -135,18 +115,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // Step 3: Configure token monitoring
-    let tokens_to_monitor: Vec<String> = open_positions.iter().map(|p| p.mint.clone()).collect();
+    let tokens_to_monitor: Vec<String> = open_positions
+        .iter()
+        .map(|p| p.mint.clone())
+        .collect();
     set_debug_token_override(Some(tokens_to_monitor.clone()));
 
     // Step 4: Initialize pool service
     log(LogTag::System, "INFO", "🏊 Starting pool service...");
     let shutdown_pools = Arc::new(Notify::new());
     if let Err(e) = init_pool_service(shutdown_pools.clone()).await {
-        log(
-            LogTag::PoolService,
-            "ERROR",
-            &format!("Failed to start pool service: {}", e),
-        );
+        log(LogTag::PoolService, "ERROR", &format!("Failed to start pool service: {}", e));
         return Err(format!("Pool service start failed: {}", e).into());
     }
     println!("✅ Pool service started");
@@ -154,32 +133,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Give discovery time to fetch pools
     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
-    // Step 5: Initialize OHLCV service
-    log(LogTag::System, "INFO", "📈 Starting OHLCV service...");
-    if let Err(e) = init_ohlcv_service().await {
-        log(
-            LogTag::Ohlcv,
-            "ERROR",
-            &format!("OHLCV service initialization failed: {}", e),
-        );
-        return Err(format!("OHLCV service failed: {}", e).into());
-    }
-    println!("✅ OHLCV service started");
-
-    // Step 6: SOL price coverage is now handled automatically by OHLCV service
+    // Step 5: OHLCV service is managed by the main runtime
     log(
         LogTag::System,
         "INFO",
-        "💰 SOL price coverage handled by OHLCV service...",
+        "📈 Skipping OHLCV service startup (handled by main runtime). Operating in read-only mode."
     );
+    println!("⚠️  OHLCV service startup is handled by the main bot. Continuing in read-only mode.");
 
     if !validate_only {
         // Step 7: Fetch OHLCV data for each position
-        log(
-            LogTag::System,
-            "INFO",
-            "📊 Fetching OHLCV data for positions...",
-        );
+        log(LogTag::System, "INFO", "📊 Fetching OHLCV data for positions...");
         println!("📊 Fetching OHLCV data for each position...");
 
         let candles_per_day = 1440; // 1-minute candles
@@ -194,17 +158,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 position.mint
             );
 
-            // Use OHLCV service instead of direct API calls
-            match get_latest_ohlcv(&position.mint, total_candles).await {
+            // Use OHLCV data access API
+            match
+                get_ohlcv_data(
+                    &position.mint,
+                    Timeframe::Minute1,
+                    None,
+                    total_candles as usize,
+                    None,
+                    None
+                ).await
+            {
                 Ok(data) => {
-                    println!("  ✅ Stored {} OHLCV data points", data.len());
+                    println!("  ✅ Retrieved {} OHLCV data points", data.len());
                 }
                 Err(e) => {
                     println!("  ❌ Failed: {}", e);
                     log(
                         LogTag::Ohlcv,
                         "ERROR",
-                        &format!("Failed to fetch OHLCV for {}: {}", position.mint, e),
+                        &format!("Failed to fetch OHLCV for {}: {}", position.mint, e)
                     );
                 }
             }
@@ -217,11 +190,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Step 8: Validate price calculations
-    log(
-        LogTag::System,
-        "INFO",
-        "🔍 Validating price calculations...",
-    );
+    log(LogTag::System, "INFO", "🔍 Validating price calculations...");
     println!("\n🔍 Validating price calculations...");
 
     for position in &open_positions {
@@ -231,7 +200,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(validation) => {
                 println!(
                     "  💰 Entry price: {} SOL (position) vs {} SOL (OHLCV)",
-                    position.entry_price, validation.ohlcv_price_at_entry
+                    position.entry_price,
+                    validation.ohlcv_price_at_entry
                 );
 
                 if let Some(current) = validation.current_price {
@@ -254,7 +224,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("================");
 
     // Get database stats
-    let conn = rusqlite::Connection::open("data/ohlcvs.db")
+    let conn = rusqlite::Connection
+        ::open("data/ohlcvs.db")
         .map_err(|e| format!("Failed to open database: {}", e))?;
 
     let ohlcv_count: i64 = conn
@@ -272,19 +243,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Gracefully stop pool service
     log(LogTag::System, "INFO", "🛑 Shutting down services...");
     if let Err(e) = stop_pool_service(3).await {
-        log(
-            LogTag::PoolService,
-            "WARN",
-            &format!("Pool service stop warning: {}", e),
-        );
+        log(LogTag::PoolService, "WARN", &format!("Pool service stop warning: {}", e));
     }
     println!("✅ Services stopped gracefully");
 
-    log(
-        LogTag::System,
-        "INFO",
-        "🎉 Price fetching and validation completed successfully",
-    );
+    log(LogTag::System, "INFO", "🎉 Price fetching and validation completed successfully");
     println!("\n🎉 Price fetching and validation completed!");
 
     Ok(())
@@ -299,10 +262,11 @@ struct PriceValidation {
 
 async fn validate_position_prices(
     mint: &str,
-    entry_time: &DateTime<Utc>,
+    entry_time: &DateTime<Utc>
 ) -> Result<PriceValidation, String> {
     // Use raw SQL to get SOL prices directly
-    let conn = rusqlite::Connection::open("data/ohlcvs.db")
+    let conn = rusqlite::Connection
+        ::open("data/ohlcvs.db")
         .map_err(|e| format!("Failed to open database: {}", e))?;
 
     let mut stmt = conn
@@ -321,11 +285,7 @@ async fn validate_position_prices(
     for row_result in rows {
         match row_result {
             Ok((timestamp, price)) => price_data.push((timestamp, price)),
-            Err(e) => log(
-                LogTag::Ohlcv,
-                "WARN",
-                &format!("Failed to parse row: {}", e),
-            ),
+            Err(e) => log(LogTag::Ohlcv, "WARN", &format!("Failed to parse row: {}", e)),
         }
     }
 

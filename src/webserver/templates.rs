@@ -1960,13 +1960,16 @@ fn nav_tabs(active: &str) -> String {
         ("positions", "💰 Positions"),
         ("tokens", "🪙 Tokens"),
         ("events", "📡 Events"),
-        ("config", "⚙️ Config")
+        ("config", "⚙️ Config"),
     ];
 
     tabs.iter()
         .map(|(name, label)| {
             let active_class = if *name == active { " active" } else { "" };
-            format!(r#"<a href="/{}" class="tab{}">{}</a>"#, name, active_class, label)
+            format!(
+                r#"<a href="/{}" class="tab{}">{}</a>"#,
+                name, active_class, label
+            )
         })
         .collect::<Vec<_>>()
         .join("\n        ")

@@ -3,9 +3,9 @@
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::database::OhlcvDatabase;
 use crate::ohlcvs::fetcher::OhlcvFetcher;
-use crate::ohlcvs::types::{ OhlcvDataPoint, OhlcvError, OhlcvResult, Priority, Timeframe };
+use crate::ohlcvs::types::{OhlcvDataPoint, OhlcvError, OhlcvResult, Priority, Timeframe};
 use std::sync::Arc;
-use tokio::time::{ sleep, Duration };
+use tokio::time::{sleep, Duration};
 
 pub struct GapManager {
     db: Arc<OhlcvDatabase>,
@@ -22,10 +22,12 @@ impl GapManager {
         &self,
         mint: &str,
         pool_address: &str,
-        timeframe: Timeframe
+        timeframe: Timeframe,
     ) -> OhlcvResult<Vec<(i64, i64)>> {
         // Get existing data
-        let data = self.db.get_1m_data(mint, Some(pool_address), None, None, 10000)?;
+        let data = self
+            .db
+            .get_1m_data(mint, Some(pool_address), None, None, 10000)?;
 
         if data.is_empty() {
             return Ok(Vec::new());
@@ -36,7 +38,8 @@ impl GapManager {
 
         // Store detected gaps in database
         for (start, end) in &gaps {
-            self.db.insert_gap(mint, pool_address, timeframe, *start, *end)?;
+            self.db
+                .insert_gap(mint, pool_address, timeframe, *start, *end)?;
         }
 
         Ok(gaps)
@@ -50,15 +53,13 @@ impl GapManager {
         timeframe: Timeframe,
         start_timestamp: i64,
         end_timestamp: i64,
-        priority: Priority
+        priority: Priority,
     ) -> OhlcvResult<usize> {
         // Fetch historical data for the gap period
-        let data = self.fetcher.fetch_historical(
-            pool_address,
-            timeframe,
-            start_timestamp,
-            end_timestamp
-        ).await?;
+        let data = self
+            .fetcher
+            .fetch_historical(pool_address, timeframe, start_timestamp, end_timestamp)
+            .await?;
 
         if data.is_empty() {
             return Ok(0);
@@ -69,7 +70,13 @@ impl GapManager {
 
         // Mark gap as filled if we got data
         if inserted > 0 {
-            self.db.mark_gap_filled(mint, pool_address, timeframe, start_timestamp, end_timestamp)?;
+            self.db.mark_gap_filled(
+                mint,
+                pool_address,
+                timeframe,
+                start_timestamp,
+                end_timestamp,
+            )?;
         }
 
         Ok(inserted)
@@ -79,22 +86,20 @@ impl GapManager {
     pub async fn get_unfilled_gaps(
         &self,
         mint: &str,
-        timeframe: Timeframe
+        timeframe: Timeframe,
     ) -> OhlcvResult<Vec<Gap>> {
         let gap_tuples = self.db.get_unfilled_gaps(mint, timeframe)?;
 
-        Ok(
-            gap_tuples
-                .into_iter()
-                .map(|(pool_address, start, end)| Gap {
-                    mint: mint.to_string(),
-                    pool_address,
-                    timeframe,
-                    start_timestamp: start,
-                    end_timestamp: end,
-                })
-                .collect()
-        )
+        Ok(gap_tuples
+            .into_iter()
+            .map(|(pool_address, start, end)| Gap {
+                mint: mint.to_string(),
+                pool_address,
+                timeframe,
+                start_timestamp: start,
+                end_timestamp: end,
+            })
+            .collect())
     }
 
     /// Fill all gaps for a token with priority-based strategy
@@ -113,15 +118,16 @@ impl GapManager {
                 // Add delay between requests to respect rate limits
                 sleep(Duration::from_millis(500)).await;
 
-                match
-                    self.fill_gap(
+                match self
+                    .fill_gap(
                         &gap.mint,
                         &gap.pool_address,
                         gap.timeframe,
                         gap.start_timestamp,
                         gap.end_timestamp,
-                        priority
-                    ).await
+                        priority,
+                    )
+                    .await
                 {
                     Ok(inserted) => {
                         stats.filled_gaps += 1;
@@ -153,18 +159,17 @@ impl GapManager {
         &self,
         mint: &str,
         pool_address: &str,
-        timeframe: Timeframe
+        timeframe: Timeframe,
     ) -> OhlcvResult<DataQualityReport> {
-        let data = self.db.get_1m_data(mint, Some(pool_address), None, None, 10000)?;
+        let data = self
+            .db
+            .get_1m_data(mint, Some(pool_address), None, None, 10000)?;
 
         let total_candles = data.len();
         let gaps = OhlcvAggregator::detect_gaps(&data, timeframe);
         let gap_count = gaps.len();
 
-        let invalid_candles = data
-            .iter()
-            .filter(|d| !d.is_valid())
-            .count();
+        let invalid_candles = data.iter().filter(|d| !d.is_valid()).count();
 
         // Calculate expected candles
         let expected = if let (Some(first), Some(last)) = (data.first(), data.last()) {
@@ -206,15 +211,16 @@ impl GapManager {
                 .collect();
 
             for gap in recent_gaps {
-                if
-                    let Ok(filled) = self.fill_gap(
+                if let Ok(filled) = self
+                    .fill_gap(
                         &gap.mint,
                         &gap.pool_address,
                         gap.timeframe,
                         gap.start_timestamp,
                         gap.end_timestamp,
-                        Priority::High
-                    ).await
+                        Priority::High,
+                    )
+                    .await
                 {
                     total_filled += filled;
                 }

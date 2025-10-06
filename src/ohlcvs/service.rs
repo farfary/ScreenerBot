@@ -1,5 +1,6 @@
 // Main OHLCV service implementation
 
+use crate::logger::{ log, LogTag };
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::cache::OhlcvCache;
 use crate::ohlcvs::database::OhlcvDatabase;
@@ -17,11 +18,10 @@ use crate::ohlcvs::types::{
     Priority,
     Timeframe,
 };
-use crate::services::Service;
 use chrono::Utc;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{ Notify, RwLock };
 use tokio::task::JoinHandle;
 
 static OHLCV_SERVICE: RwLock<Option<Arc<OhlcvServiceImpl>>> = RwLock::const_new(None);
@@ -153,82 +153,83 @@ impl OhlcvServiceImpl {
         // Take only requested limit
         Ok(result.into_iter().take(limit).collect())
     }
+
+    fn has_data(&self, mint: &str) -> OhlcvResult<bool> {
+        self.db.has_data_for_mint(mint)
+    }
 }
 
-#[async_trait::async_trait]
-impl Service for OhlcvService {
-    fn name(&self) -> &'static str {
-        "ohlcv"
-    }
+impl OhlcvService {
+    pub async fn initialize() -> OhlcvResult<()> {
+        {
+            let existing = OHLCV_SERVICE.read().await;
+            if existing.is_some() {
+                return Ok(());
+            }
+        }
 
-    fn priority(&self) -> u32 {
-        50 // Medium priority
-    }
+        log(LogTag::Ohlcv, "INIT", "Initializing OHLCV runtime");
 
-    fn dependencies(&self) -> Vec<&'static str> {
-        vec!["rpc_stats"] // May need RPC for pool discovery
-    }
-
-    async fn initialize(&self) -> Result<(), String> {
         let db_path = PathBuf::from("data/ohlcvs.db");
-
-        let service_impl = OhlcvServiceImpl::new(db_path).map_err(|e|
-            format!("Failed to initialize OHLCV service: {}", e)
-        )?;
+        let service_impl = OhlcvServiceImpl::new(db_path)?;
 
         let mut global = OHLCV_SERVICE.write().await;
         *global = Some(Arc::new(service_impl));
 
-        println!("[OHLCV Service] Initialized");
+        log(LogTag::Ohlcv, "SUCCESS", "OHLCV runtime ready");
         Ok(())
     }
 
-    async fn start(
-        &self,
-        _monitor: crate::services::TaskMonitor
-    ) -> Result<Vec<JoinHandle<()>>, String> {
+    pub async fn start(
+        shutdown: Arc<Notify>,
+        monitor: tokio_metrics::TaskMonitor
+    ) -> OhlcvResult<Vec<JoinHandle<()>>> {
         let service = {
             let global = OHLCV_SERVICE.read().await;
-            global.as_ref().ok_or("OHLCV service not initialized")?.clone()
+            global
+                .as_ref()
+                .cloned()
+                .ok_or_else(|| OhlcvError::NotFound("Service not initialized".to_string()))?
         };
 
-        // Start monitoring
-        service.monitor.start().await.map_err(|e| format!("Failed to start monitor: {}", e))?;
+        let monitor_instance = Arc::clone(&service.monitor);
 
-        println!("[OHLCV Service] Started monitoring");
+        // Start background monitoring tasks before awaiting shutdown
+        monitor_instance.clone().start().await?;
+        log(LogTag::Ohlcv, "TASK_START", "OHLCV monitoring tasks started");
 
-        // Return empty handles - monitor spawns its own tasks internally
-        Ok(vec![])
+        let shutdown_task = tokio::spawn(
+            monitor.instrument(async move {
+                shutdown.notified().await;
+                log(LogTag::Ohlcv, "TASK_STOP", "Shutdown signal received for OHLCV monitoring");
+                monitor_instance.stop().await;
+                log(LogTag::Ohlcv, "TASK_END", "OHLCV monitoring tasks stopped");
+            })
+        );
+
+        Ok(vec![shutdown_task])
     }
 
-    async fn health(&self) -> Result<serde_json::Value, String> {
-        let service = {
-            let global = OHLCV_SERVICE.read().await;
-            global.as_ref().ok_or("Service not initialized")?.clone()
+    pub async fn has_data(mint: &str) -> OhlcvResult<bool> {
+        let needs_init = {
+            let guard = OHLCV_SERVICE.read().await;
+            guard.is_none()
         };
 
-        let stats = service.monitor.get_stats().await;
+        if needs_init {
+            // Attempt to lazily initialize the service if it hasn't been set up yet
+            Self::initialize().await?;
+        }
 
-        Ok(
-            serde_json::json!({
-            "status": "healthy",
-            "tokens_monitored": stats.total_tokens,
-            "cache_hit_rate": format!("{:.2}%", stats.cache_hit_rate * 100.0),
-            "api_calls_per_minute": format!("{:.1}", stats.api_calls_per_minute),
-            "queue_size": stats.queue_size,
-        })
-        )
-    }
-
-    async fn metrics(&self) -> Result<serde_json::Value, String> {
         let service = {
             let global = OHLCV_SERVICE.read().await;
-            global.as_ref().ok_or("Service not initialized")?.clone()
+            global
+                .as_ref()
+                .cloned()
+                .ok_or_else(|| OhlcvError::NotFound("Service not initialized".to_string()))?
         };
 
-        let metrics = get_metrics_impl(&service).await;
-
-        Ok(serde_json::to_value(metrics).map_err(|e| e.to_string())?)
+        service.has_data(mint)
     }
 }
 
@@ -345,6 +346,18 @@ pub async fn get_metrics() -> OhlcvMetrics {
     };
 
     get_metrics_impl(&service).await
+}
+
+pub async fn has_data(mint: &str) -> OhlcvResult<bool> {
+    let service = {
+        let global = OHLCV_SERVICE.read().await;
+        global
+            .as_ref()
+            .cloned()
+            .ok_or_else(|| OhlcvError::NotFound("Service not initialized".to_string()))?
+    };
+
+    service.has_data(mint)
 }
 
 async fn get_metrics_impl(service: &OhlcvServiceImpl) -> OhlcvMetrics {

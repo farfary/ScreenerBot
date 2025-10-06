@@ -1,6 +1,6 @@
 // Smart priority system with activity-based throttling
 
-use crate::ohlcvs::types::{ Priority, TokenOhlcvConfig };
+use crate::ohlcvs::types::{Priority, TokenOhlcvConfig};
 use chrono::Utc;
 use std::time::Duration;
 
@@ -13,7 +13,7 @@ impl PriorityManager {
         is_open_position: bool,
         recent_views: u32,
         recent_trades: u32,
-        hours_since_activity: f64
+        hours_since_activity: f64,
     ) -> u32 {
         let mut score = 0u32;
 
@@ -83,9 +83,9 @@ impl PriorityManager {
 
         // Moderately inactive - throttle
         if hours_inactive < 24.0 {
-            return RecommendedAction::Throttle(
-                Duration::from_secs(((config.fetch_frequency.as_secs() as f64) * 2.0) as u64)
-            );
+            return RecommendedAction::Throttle(Duration::from_secs(
+                ((config.fetch_frequency.as_secs() as f64) * 2.0) as u64,
+            ));
         }
 
         // Very inactive - pause
@@ -95,15 +95,15 @@ impl PriorityManager {
         }
 
         // Default - throttle moderately
-        RecommendedAction::Throttle(
-            Duration::from_secs(((config.fetch_frequency.as_secs() as f64) * 1.5) as u64)
-        )
+        RecommendedAction::Throttle(Duration::from_secs(
+            ((config.fetch_frequency.as_secs() as f64) * 1.5) as u64,
+        ))
     }
 
     /// Update priority based on new activity
     pub fn update_priority_on_activity(
         current_priority: Priority,
-        activity_type: ActivityType
+        activity_type: ActivityType,
     ) -> Priority {
         match activity_type {
             ActivityType::PositionOpened => Priority::Critical,
@@ -213,7 +213,10 @@ mod tests {
 
     #[test]
     fn test_priority_from_score() {
-        assert_eq!(PriorityManager::priority_from_score(150), Priority::Critical);
+        assert_eq!(
+            PriorityManager::priority_from_score(150),
+            Priority::Critical
+        );
         assert_eq!(PriorityManager::priority_from_score(75), Priority::High);
         assert_eq!(PriorityManager::priority_from_score(25), Priority::Medium);
         assert_eq!(PriorityManager::priority_from_score(5), Priority::Low);
@@ -252,7 +255,10 @@ mod tests {
 
     #[test]
     fn test_batch_size_calculation() {
-        assert_eq!(PriorityManager::calculate_batch_size(Priority::Critical), 1000);
+        assert_eq!(
+            PriorityManager::calculate_batch_size(Priority::Critical),
+            1000
+        );
         assert_eq!(PriorityManager::calculate_batch_size(Priority::High), 500);
         assert_eq!(PriorityManager::calculate_batch_size(Priority::Medium), 200);
         assert_eq!(PriorityManager::calculate_batch_size(Priority::Low), 100);

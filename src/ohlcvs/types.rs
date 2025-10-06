@@ -169,7 +169,7 @@ impl PoolConfig {
 }
 
 /// Priority level for monitoring
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub enum Priority {
     Critical = 4,
     High = 3,

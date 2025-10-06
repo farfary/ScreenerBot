@@ -1,9 +1,9 @@
 // Three-tier caching system for OHLCV data
 
-use crate::ohlcvs::types::{ OhlcvDataPoint, OhlcvError, OhlcvResult, Timeframe };
-use std::collections::{ HashMap, VecDeque };
-use std::sync::{ Arc, Mutex };
-use std::time::{ Duration, Instant };
+use crate::ohlcvs::types::{OhlcvDataPoint, OhlcvError, OhlcvResult, Timeframe};
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 const HOT_CACHE_MAX_TOKENS: usize = 100;
 const HOT_CACHE_RETENTION_HOURS: i64 = 24;
@@ -58,17 +58,24 @@ impl OhlcvCache {
         &self,
         mint: &str,
         pool_address: Option<&str>,
-        timeframe: Timeframe
+        timeframe: Timeframe,
     ) -> OhlcvResult<Option<Vec<OhlcvDataPoint>>> {
-        let key = (mint.to_string(), pool_address.map(|s| s.to_string()), timeframe);
+        let key = (
+            mint.to_string(),
+            pool_address.map(|s| s.to_string()),
+            timeframe,
+        );
 
-        let mut cache = self.hot_cache
+        let mut cache = self
+            .hot_cache
             .lock()
             .map_err(|e| OhlcvError::CacheError(format!("Lock error: {}", e)))?;
 
         if let Some(entry) = cache.get_mut(&key) {
             // Check if expired
-            if entry.is_expired(Duration::from_secs(3600 * (HOT_CACHE_RETENTION_HOURS as u64))) {
+            if entry.is_expired(Duration::from_secs(
+                3600 * (HOT_CACHE_RETENTION_HOURS as u64),
+            )) {
                 cache.remove(&key);
                 self.record_miss();
                 return Ok(None);
@@ -93,15 +100,20 @@ impl OhlcvCache {
         mint: &str,
         pool_address: Option<&str>,
         timeframe: Timeframe,
-        data: Vec<OhlcvDataPoint>
+        data: Vec<OhlcvDataPoint>,
     ) -> OhlcvResult<()> {
         if data.is_empty() {
             return Ok(());
         }
 
-        let key = (mint.to_string(), pool_address.map(|s| s.to_string()), timeframe);
+        let key = (
+            mint.to_string(),
+            pool_address.map(|s| s.to_string()),
+            timeframe,
+        );
 
-        let mut cache = self.hot_cache
+        let mut cache = self
+            .hot_cache
             .lock()
             .map_err(|e| OhlcvError::CacheError(format!("Lock error: {}", e)))?;
 
@@ -121,18 +133,19 @@ impl OhlcvCache {
         &self,
         mint: &str,
         pool_address: Option<&str>,
-        timeframe: Option<Timeframe>
+        timeframe: Option<Timeframe>,
     ) -> OhlcvResult<()> {
-        let mut cache = self.hot_cache
+        let mut cache = self
+            .hot_cache
             .lock()
             .map_err(|e| OhlcvError::CacheError(format!("Lock error: {}", e)))?;
 
         let keys_to_remove: Vec<CacheKey> = cache
             .keys()
             .filter(|(m, p, tf)| {
-                m == mint &&
-                    (pool_address.is_none() || pool_address == p.as_deref()) &&
-                    (timeframe.is_none() || timeframe == Some(*tf))
+                m == mint
+                    && (pool_address.is_none() || pool_address == p.as_deref())
+                    && (timeframe.is_none() || timeframe == Some(*tf))
             })
             .cloned()
             .collect();
@@ -147,13 +160,15 @@ impl OhlcvCache {
 
     /// Clear all cache
     pub fn clear(&self) -> OhlcvResult<()> {
-        let mut cache = self.hot_cache
+        let mut cache = self
+            .hot_cache
             .lock()
             .map_err(|e| OhlcvError::CacheError(format!("Lock error: {}", e)))?;
 
         cache.clear();
 
-        let mut access_order = self.access_order
+        let mut access_order = self
+            .access_order
             .lock()
             .map_err(|e| OhlcvError::CacheError(format!("Lock error: {}", e)))?;
 
@@ -177,15 +192,13 @@ impl OhlcvCache {
 
     /// Get cache size
     pub fn size(&self) -> usize {
-        self.hot_cache
-            .lock()
-            .map(|cache| cache.len())
-            .unwrap_or(0)
+        self.hot_cache.lock().map(|cache| cache.len()).unwrap_or(0)
     }
 
     /// Cleanup expired entries
     pub fn cleanup_expired(&self) -> OhlcvResult<usize> {
-        let mut cache = self.hot_cache
+        let mut cache = self
+            .hot_cache
             .lock()
             .map_err(|e| OhlcvError::CacheError(format!("Lock error: {}", e)))?;
 
@@ -222,7 +235,8 @@ impl OhlcvCache {
     }
 
     fn update_access_order(&self, key: &CacheKey) -> OhlcvResult<()> {
-        let mut access_order = self.access_order
+        let mut access_order = self
+            .access_order
             .lock()
             .map_err(|e| OhlcvError::CacheError(format!("Lock error: {}", e)))?;
 
@@ -236,7 +250,8 @@ impl OhlcvCache {
     }
 
     fn remove_from_access_order(&self, key: &CacheKey) -> OhlcvResult<()> {
-        let mut access_order = self.access_order
+        let mut access_order = self
+            .access_order
             .lock()
             .map_err(|e| OhlcvError::CacheError(format!("Lock error: {}", e)))?;
 
@@ -246,7 +261,8 @@ impl OhlcvCache {
     }
 
     fn evict_lru(&self, cache: &mut HashMap<CacheKey, CacheEntry>) -> OhlcvResult<()> {
-        let mut access_order = self.access_order
+        let mut access_order = self
+            .access_order
             .lock()
             .map_err(|e| OhlcvError::CacheError(format!("Lock error: {}", e)))?;
 
@@ -276,10 +292,14 @@ mod tests {
         let data = vec![OhlcvDataPoint::new(1000, 1.0, 2.0, 0.5, 1.5, 100.0)];
 
         // Put data
-        cache.put("mint1", Some("pool1"), Timeframe::Minute1, data.clone()).unwrap();
+        cache
+            .put("mint1", Some("pool1"), Timeframe::Minute1, data.clone())
+            .unwrap();
 
         // Get data
-        let result = cache.get("mint1", Some("pool1"), Timeframe::Minute1).unwrap();
+        let result = cache
+            .get("mint1", Some("pool1"), Timeframe::Minute1)
+            .unwrap();
         assert!(result.is_some());
         assert_eq!(result.unwrap().len(), 1);
 
@@ -293,13 +313,17 @@ mod tests {
 
         let data = vec![OhlcvDataPoint::new(1000, 1.0, 2.0, 0.5, 1.5, 100.0)];
 
-        cache.put("mint1", Some("pool1"), Timeframe::Minute1, data.clone()).unwrap();
+        cache
+            .put("mint1", Some("pool1"), Timeframe::Minute1, data.clone())
+            .unwrap();
 
         // Invalidate
         cache.invalidate("mint1", Some("pool1"), None).unwrap();
 
         // Should be gone
-        let result = cache.get("mint1", Some("pool1"), Timeframe::Minute1).unwrap();
+        let result = cache
+            .get("mint1", Some("pool1"), Timeframe::Minute1)
+            .unwrap();
         assert!(result.is_none());
     }
 
@@ -311,7 +335,9 @@ mod tests {
         // Fill cache beyond capacity
         for i in 0..HOT_CACHE_MAX_TOKENS + 10 {
             let mint = format!("mint{}", i);
-            cache.put(&mint, None, Timeframe::Minute1, data.clone()).unwrap();
+            cache
+                .put(&mint, None, Timeframe::Minute1, data.clone())
+                .unwrap();
         }
 
         // Size should be capped

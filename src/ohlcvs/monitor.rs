@@ -44,7 +44,7 @@ impl OhlcvMonitor {
     }
 
     /// Start monitoring all active tokens
-    pub async fn start(&self) -> OhlcvResult<()> {
+    pub async fn start(self: Arc<Self>) -> OhlcvResult<()> {
         // Load active tokens from database
         self.load_active_tokens().await?;
 

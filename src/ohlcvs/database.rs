@@ -171,16 +171,18 @@ impl OhlcvDatabase {
                  WHERE mint = ?1
                  ORDER BY liquidity DESC"
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to prepare statement: {}", e)))?;
+            .map_err(|e| {
+                OhlcvError::DatabaseError(format!("Failed to prepare statement: {}", e))
+            })?;
 
         let pools = stmt
             .query_map(params![mint], |row| {
                 let last_success_str: Option<String> = row.get(4)?;
-                let last_success = last_success_str.and_then(|s|
+                let last_success = last_success_str.and_then(|s| {
                     DateTime::parse_from_rfc3339(&s)
                         .ok()
                         .map(|dt| dt.with_timezone(&Utc))
-                );
+                });
 
                 Ok(PoolConfig {
                     address: row.get(0)?,
@@ -246,7 +248,9 @@ impl OhlcvDatabase {
 
         let tx = conn
             .unchecked_transaction()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to start transaction: {}", e)))?;
+            .map_err(|e| {
+                OhlcvError::DatabaseError(format!("Failed to start transaction: {}", e))
+            })?;
 
         let mut inserted = 0;
         for point in data {
@@ -356,7 +360,9 @@ impl OhlcvDatabase {
 
         let tx = conn
             .unchecked_transaction()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to start transaction: {}", e)))?;
+            .map_err(|e| {
+                OhlcvError::DatabaseError(format!("Failed to start transaction: {}", e))
+            })?;
 
         for point in data {
             tx
@@ -663,6 +669,22 @@ impl OhlcvDatabase {
             .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {}", e)))?;
 
         Ok(count as usize)
+    }
+
+    pub fn has_data_for_mint(&self, mint: &str) -> OhlcvResult<bool> {
+        let conn = self.conn
+            .lock()
+            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
+
+        let exists: i64 = conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM ohlcv_1m WHERE mint = ?1 LIMIT 1)",
+                params![mint],
+                |row| row.get(0)
+            )
+            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {}", e)))?;
+
+        Ok(exists != 0)
     }
 
     pub fn get_pool_count(&self) -> OhlcvResult<usize> {

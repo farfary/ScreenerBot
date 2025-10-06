@@ -2,33 +2,34 @@
 // Provides comprehensive OHLCV (Open, High, Low, Close, Volume) data management
 // with multi-timeframe support, intelligent caching, and smart monitoring.
 
-mod types;
-mod database;
-mod cache;
-mod fetcher;
-mod manager;
 mod aggregator;
+mod cache;
+mod database;
+mod fetcher;
 mod gaps;
-mod priorities;
+mod manager;
 mod monitor;
+mod priorities;
 mod service;
+mod types;
 
 pub use types::{
-    Timeframe,
     OhlcvDataPoint,
-    TokenOhlcvConfig,
-    PoolConfig,
-    Priority,
+    OhlcvError,
     OhlcvMetrics,
     OhlcvResult,
-    OhlcvError,
+    PoolConfig,
     PoolMetadata,
+    Priority,
+    Timeframe,
+    TokenOhlcvConfig,
 };
 
+pub use priorities::ActivityType;
 pub use service::OhlcvService;
 
-use database::OhlcvDatabase;
 use cache::OhlcvCache;
+use database::OhlcvDatabase;
 use fetcher::OhlcvFetcher;
 use manager::PoolManager;
 use monitor::OhlcvMonitor;
@@ -66,4 +67,20 @@ pub async fn request_refresh(mint: &str) -> OhlcvResult<()> {
 
 pub async fn get_metrics() -> OhlcvMetrics {
     service::get_metrics().await
+}
+
+pub async fn has_data(mint: &str) -> OhlcvResult<bool> {
+    service::has_data(mint).await
+}
+
+pub async fn add_token_monitoring(mint: &str, priority: Priority) -> OhlcvResult<()> {
+    service::add_token_monitoring(mint, priority).await
+}
+
+pub async fn remove_token_monitoring(mint: &str) -> OhlcvResult<()> {
+    service::remove_token_monitoring(mint).await
+}
+
+pub async fn record_activity(mint: &str, activity_type: ActivityType) -> OhlcvResult<()> {
+    service::record_activity(mint, activity_type).await
 }

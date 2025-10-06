@@ -1,6 +1,6 @@
 // Timeframe aggregation logic
 
-use crate::ohlcvs::types::{ OhlcvDataPoint, OhlcvError, OhlcvResult, Timeframe };
+use crate::ohlcvs::types::{OhlcvDataPoint, OhlcvError, OhlcvResult, Timeframe};
 use std::collections::HashMap;
 
 pub struct OhlcvAggregator;
@@ -9,7 +9,7 @@ impl OhlcvAggregator {
     /// Aggregate 1-minute data to a higher timeframe
     pub fn aggregate(
         data: &[OhlcvDataPoint],
-        target_timeframe: Timeframe
+        target_timeframe: Timeframe,
     ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
         if data.is_empty() {
             return Ok(Vec::new());
@@ -69,10 +69,7 @@ impl OhlcvAggregator {
             .iter()
             .map(|p| p.low)
             .fold(f64::INFINITY, f64::min);
-        let volume: f64 = sorted_points
-            .iter()
-            .map(|p| p.volume)
-            .sum();
+        let volume: f64 = sorted_points.iter().map(|p| p.volume).sum();
 
         Some(OhlcvDataPoint {
             timestamp,
@@ -165,15 +162,13 @@ impl OhlcvAggregator {
     pub fn resample(
         data: &[OhlcvDataPoint],
         from_timeframe: Timeframe,
-        to_timeframe: Timeframe
+        to_timeframe: Timeframe,
     ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
         // Can only downsample (smaller -> larger timeframe)
         if to_timeframe.to_seconds() < from_timeframe.to_seconds() {
-            return Err(
-                OhlcvError::InvalidTimeframe(
-                    "Cannot upsample data, only downsample supported".to_string()
-                )
-            );
+            return Err(OhlcvError::InvalidTimeframe(
+                "Cannot upsample data, only downsample supported".to_string(),
+            ));
         }
 
         if from_timeframe == to_timeframe {
@@ -189,22 +184,19 @@ impl OhlcvAggregator {
             return None;
         }
 
-        let total_volume: f64 = data
-            .iter()
-            .map(|p| p.volume)
-            .sum();
+        let total_volume: f64 = data.iter().map(|p| p.volume).sum();
         if total_volume == 0.0 {
             return None;
         }
 
-        let vwap: f64 =
-            data
-                .iter()
-                .map(|p| {
-                    let typical_price = (p.high + p.low + p.close) / 3.0;
-                    typical_price * p.volume
-                })
-                .sum::<f64>() / total_volume;
+        let vwap: f64 = data
+            .iter()
+            .map(|p| {
+                let typical_price = (p.high + p.low + p.close) / 3.0;
+                typical_price * p.volume
+            })
+            .sum::<f64>()
+            / total_volume;
 
         Some(vwap)
     }
@@ -221,7 +213,7 @@ mod tests {
             OhlcvDataPoint::new(60, 102.0, 110.0, 100.0, 108.0, 1500.0),
             OhlcvDataPoint::new(120, 108.0, 115.0, 105.0, 110.0, 2000.0),
             OhlcvDataPoint::new(180, 110.0, 120.0, 108.0, 115.0, 2500.0),
-            OhlcvDataPoint::new(240, 115.0, 118.0, 112.0, 116.0, 1800.0)
+            OhlcvDataPoint::new(240, 115.0, 118.0, 112.0, 116.0, 1800.0),
         ];
 
         let aggregated = OhlcvAggregator::aggregate(&data, Timeframe::Minute5).unwrap();
@@ -241,7 +233,7 @@ mod tests {
             OhlcvDataPoint::new(0, 100.0, 105.0, 95.0, 102.0, 1000.0),
             OhlcvDataPoint::new(60, 102.0, 110.0, 100.0, 108.0, 1500.0),
             // Gap here - missing 120
-            OhlcvDataPoint::new(180, 110.0, 120.0, 108.0, 115.0, 2500.0)
+            OhlcvDataPoint::new(180, 110.0, 120.0, 108.0, 115.0, 2500.0),
         ];
 
         let gaps = OhlcvAggregator::detect_gaps(&data, Timeframe::Minute1);
@@ -255,7 +247,7 @@ mod tests {
         let data = vec![
             OhlcvDataPoint::new(0, 100.0, 105.0, 95.0, 102.0, 1000.0),
             // Gap
-            OhlcvDataPoint::new(180, 110.0, 120.0, 108.0, 115.0, 2500.0)
+            OhlcvDataPoint::new(180, 110.0, 120.0, 108.0, 115.0, 2500.0),
         ];
 
         let interpolated = OhlcvAggregator::interpolate_gaps(&data, Timeframe::Minute1);
@@ -270,7 +262,7 @@ mod tests {
     fn test_vwap_calculation() {
         let data = vec![
             OhlcvDataPoint::new(0, 100.0, 105.0, 95.0, 100.0, 1000.0),
-            OhlcvDataPoint::new(60, 100.0, 110.0, 100.0, 110.0, 2000.0)
+            OhlcvDataPoint::new(60, 100.0, 110.0, 100.0, 110.0, 2000.0),
         ];
 
         let vwap = OhlcvAggregator::calculate_vwap(&data).unwrap();

@@ -124,7 +124,10 @@ impl PoolManager {
         Ok(
             pools
                 .into_iter()
-                .map(|p| (p.address, p.is_healthy()))
+                .map(|p| {
+                    let address = p.address.clone();
+                    (address, p.is_healthy())
+                })
                 .collect()
         )
     }

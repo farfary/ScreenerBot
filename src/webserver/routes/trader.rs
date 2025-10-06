@@ -1,11 +1,17 @@
-use axum::{ extract::State, http::StatusCode, response::Response, routing::{ get, post }, Router };
-use serde::{ Deserialize, Serialize };
+use axum::{
+    extract::State,
+    http::StatusCode,
+    response::Response,
+    routing::{get, post},
+    Router,
+};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::config::with_config;
-use crate::trader::{ is_trader_running, start_trader, stop_trader_gracefully, TraderControlError };
+use crate::trader::{is_trader_running, start_trader, stop_trader_gracefully, TraderControlError};
 use crate::webserver::state::AppState;
-use crate::webserver::utils::{ error_response, success_response };
+use crate::webserver::utils::{error_response, success_response};
 
 // =============================================================================
 // RESPONSE TYPES
@@ -50,7 +56,7 @@ async fn start_trader_handler() -> Response {
             StatusCode::BAD_REQUEST,
             "Trader Error",
             "Trader is already running",
-            None
+            None,
         );
     }
 
@@ -71,11 +77,10 @@ async fn start_trader_handler() -> Response {
         }
         Err(err) => {
             let (status, message) = match err {
-                TraderControlError::ConfigUpdate(e) =>
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to update trader config: {}", e),
-                    ),
+                TraderControlError::ConfigUpdate(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to update trader config: {}", e),
+                ),
                 other => (StatusCode::BAD_REQUEST, other.to_string()),
             };
 
@@ -91,7 +96,7 @@ async fn stop_trader_handler() -> Response {
             StatusCode::BAD_REQUEST,
             "Trader Error",
             "Trader is already stopped",
-            None
+            None,
         );
     }
 
@@ -112,15 +117,18 @@ async fn stop_trader_handler() -> Response {
         }
         Err(err) => {
             let (status, message) = match err {
-                TraderControlError::ConfigUpdate(e) =>
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to update trader config: {}", e),
-                    ),
-                TraderControlError::AlreadyStopped =>
-                    (StatusCode::BAD_REQUEST, "Trader is already stopped".to_string()),
-                TraderControlError::AlreadyRunning =>
-                    (StatusCode::BAD_REQUEST, "Trader is already running".to_string()),
+                TraderControlError::ConfigUpdate(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to update trader config: {}", e),
+                ),
+                TraderControlError::AlreadyStopped => (
+                    StatusCode::BAD_REQUEST,
+                    "Trader is already stopped".to_string(),
+                ),
+                TraderControlError::AlreadyRunning => (
+                    StatusCode::BAD_REQUEST,
+                    "Trader is already running".to_string(),
+                ),
             };
 
             error_response(status, "Trader Error", &message, None)
