@@ -12,7 +12,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{title} - ScreenerBot</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
     <style>
         {common_styles}
     </style>
@@ -1804,6 +1804,118 @@ fn common_styles() -> &'static str {
         .toast-message {
             color: var(--text-primary);
             font-size: 0.9em;
+        }
+
+        /* Chart Styles */
+        #token-chart {
+            width: 100%;
+            height: 400px;
+            background: var(--bg-card);
+            border-radius: 8px;
+        }
+
+        #chart-loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 400px;
+            color: var(--text-secondary);
+            font-size: 1.1em;
+        }
+
+        #chart-loading::after {
+            content: '...';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+
+        #chart-error {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 400px;
+            gap: 16px;
+        }
+
+        #chart-error-message {
+            color: var(--badge-error);
+            font-size: 1em;
+        }
+
+        #chart-error button {
+            padding: 8px 16px;
+            background: var(--link-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background 0.2s ease;
+        }
+
+        #chart-error button:hover {
+            background: var(--link-hover);
+        }
+
+        .chart-controls {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 12px;
+            padding: 12px;
+            background: var(--table-header-bg);
+            border-radius: 6px;
+        }
+
+        .timeframe-selector {
+            display: flex;
+            gap: 4px;
+        }
+
+        .timeframe-btn {
+            padding: 6px 12px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 0.85em;
+            transition: all 0.2s ease;
+        }
+
+        .timeframe-btn:hover {
+            background: var(--bg-card-hover);
+            color: var(--text-primary);
+        }
+
+        .timeframe-btn.active {
+            background: var(--link-color);
+            color: white;
+            border-color: var(--link-color);
+        }
+
+        .indicator-toggles {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .indicator-toggles label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--text-secondary);
+            font-size: 0.85em;
+            cursor: pointer;
+        }
+
+        .indicator-toggles input[type="checkbox"] {
+            cursor: pointer;
         }
 
         /* Full-height page utilities */
@@ -3618,9 +3730,34 @@ pub fn tokens_content() -> String {
 
                         <!-- Chart Tab -->
                         <div class="tab-pane" id="tab-chart">
-                            <div class="modal-chart-container">
-                                <canvas id="tokenChart" class="chart-canvas"></canvas>
-                                <div class="chart-loading" id="chart-loading">Loading chart data...</div>
+                            <div id="token-chart-container" style="height: 500px; width: 100%; position: relative; background: #1a1a1a; border-radius: 8px; overflow: hidden;">
+                                <div id="token-chart" style="width: 100%; height: 100%;"></div>
+                                <div id="chart-loading" class="chart-loading">
+                                    <div class="spinner"></div>
+                                    <p>Loading chart data...</p>
+                                </div>
+                                <div id="chart-error" class="chart-error" style="display: none;">
+                                    <p>Failed to load chart data</p>
+                                    <button onclick="retryChartLoad()">Retry</button>
+                                </div>
+                            </div>
+                            
+                            <!-- Chart Controls -->
+                            <div class="chart-controls">
+                                <div class="timeframe-selector">
+                                    <button class="tf-btn active" data-tf="1m">1m</button>
+                                    <button class="tf-btn" data-tf="5m">5m</button>
+                                    <button class="tf-btn" data-tf="15m">15m</button>
+                                    <button class="tf-btn" data-tf="1h">1h</button>
+                                    <button class="tf-btn" data-tf="4h">4h</button>
+                                    <button class="tf-btn" data-tf="1d">1D</button>
+                                </div>
+                                
+                                <div class="indicator-toggles">
+                                    <label><input type="checkbox" id="show-volume" checked> Volume</label>
+                                    <label><input type="checkbox" id="show-ma20"> MA(20)</label>
+                                    <label><input type="checkbox" id="show-ma50"> MA(50)</label>
+                                </div>
                             </div>
                         </div>
 
@@ -4044,9 +4181,9 @@ pub fn tokens_content() -> String {
             });
             document.getElementById(`tab-${tabName}`).classList.add('active');
 
-            // Load chart if switching to chart tab
-            if (tabName === 'chart' && !modalChart) {
-                loadChartData(currentModalMint);
+            // Initialize chart if switching to chart tab
+            if (tabName === 'chart' && currentModalMint) {
+                initTokenChart(currentModalMint);
             }
         }
 
@@ -4199,67 +4336,313 @@ pub fn tokens_content() -> String {
             }
         }
 
-        // Load OHLCV chart
-        async function loadChartData(mint) {
+        // Lightweight Charts variables
+        let tokenChart = null;
+        let candlestickSeries = null;
+        let volumeSeries = null;
+        let ma20Line = null;
+        let ma50Line = null;
+        let currentMint = null;
+        let currentTimeframe = '1h';
+
+        // Initialize Lightweight Chart
+        async function initTokenChart(mint) {
+            currentMint = mint;
+            
+            // Clean up existing chart
+            if (tokenChart) {
+                tokenChart.remove();
+                tokenChart = null;
+                candlestickSeries = null;
+                volumeSeries = null;
+                ma20Line = null;
+                ma50Line = null;
+            }
+
+            const container = document.getElementById('token-chart');
+            if (!container || typeof LightweightCharts === 'undefined') {
+                showChartError('Chart library not loaded');
+                return;
+            }
+
+            // Create chart
+            tokenChart = LightweightCharts.createChart(container, {
+                layout: {
+                    background: { color: '#1a202c' },
+                    textColor: '#e2e8f0',
+                },
+                grid: {
+                    vertLines: { color: '#2d3748' },
+                    horzLines: { color: '#2d3748' },
+                },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal,
+                },
+                rightPriceScale: {
+                    borderColor: '#2d3748',
+                },
+                timeScale: {
+                    borderColor: '#2d3748',
+                    timeVisible: true,
+                    secondsVisible: false,
+                },
+                width: container.clientWidth,
+                height: 400,
+            });
+
+            // Add candlestick series
+            candlestickSeries = tokenChart.addCandlestickSeries({
+                upColor: '#10b981',
+                downColor: '#ef4444',
+                borderVisible: false,
+                wickUpColor: '#10b981',
+                wickDownColor: '#ef4444',
+            });
+
+            // Add volume series
+            volumeSeries = tokenChart.addHistogramSeries({
+                color: '#667eea',
+                priceFormat: {
+                    type: 'volume',
+                },
+                priceScaleId: 'volume',
+            });
+
+            tokenChart.priceScale('volume').applyOptions({
+                scaleMargins: {
+                    top: 0.8,
+                    bottom: 0,
+                },
+            });
+
+            // Add MA lines
+            ma20Line = tokenChart.addLineSeries({
+                color: '#f59e0b',
+                lineWidth: 1,
+                title: 'MA20',
+            });
+
+            ma50Line = tokenChart.addLineSeries({
+                color: '#3b82f6',
+                lineWidth: 1,
+                title: 'MA50',
+            });
+
+            // Load initial data
+            await loadChartData(mint, currentTimeframe);
+
+            // Handle window resize
+            window.addEventListener('resize', resizeChart);
+        }
+
+        // Load chart data from API
+        async function loadChartData(mint, timeframe) {
+            showChartLoading();
+
             try {
-                const res = await fetch(`/api/tokens/${mint}/ohlcv?limit=100`);
+                const limits = {
+                    '5m': 288,    // 24 hours
+                    '15m': 384,   // 4 days
+                    '1h': 336,    // 2 weeks
+                    '4h': 360,    // 2 months
+                    '1d': 365     // 1 year
+                };
+
+                const res = await fetch(`/api/tokens/${mint}/ohlcv?limit=${limits[timeframe] || 200}`);
                 const data = await res.json();
 
-                if (data.length === 0) {
-                    document.getElementById('chart-loading').textContent = 'No chart data available';
+                if (!Array.isArray(data) || data.length === 0) {
+                    showChartError('No chart data available');
                     return;
                 }
 
-                document.getElementById('chart-loading').style.display = 'none';
-
-                const ctx = document.getElementById('tokenChart').getContext('2d');
-                
-                if (typeof Chart === 'undefined') {
-                    document.getElementById('chart-loading').textContent = 'Chart.js not loaded';
-                    return;
-                }
-
-                modalChart = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: data.map(d => new Date(d.timestamp * 1000).toLocaleTimeString()),
-                        datasets: [{
-                            label: 'Price (SOL)',
-                            data: data.map(d => d.close),
-                            borderColor: '#667eea',
-                            backgroundColor: 'rgba(102, 126, 234, 0.1)',
-                            borderWidth: 2,
-                            fill: true,
-                            tension: 0.4
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                display: true,
-                                labels: { color: '#e2e8f0' }
-                            }
-                        },
-                        scales: {
-                            x: {
-                                ticks: { color: '#94a3b8' },
-                                grid: { color: '#2d3748' }
-                            },
-                            y: {
-                                ticks: { color: '#94a3b8' },
-                                grid: { color: '#2d3748' }
-                            }
+                // Convert to Lightweight Charts format with validation
+                const candleData = data
+                    .map(d => {
+                        const open = parseFloat(d.open);
+                        const high = parseFloat(d.high);
+                        const low = parseFloat(d.low);
+                        const close = parseFloat(d.close);
+                        const timestamp = parseInt(d.timestamp);
+                        
+                        // Validate all values are valid numbers
+                        if (isNaN(open) || isNaN(high) || isNaN(low) || isNaN(close) || isNaN(timestamp)) {
+                            return null;
                         }
-                    }
-                });
+                        
+                        // Validate price values are positive
+                        if (open <= 0 || high <= 0 || low <= 0 || close <= 0) {
+                            return null;
+                        }
+                        
+                        return {
+                            time: timestamp,
+                            open: open,
+                            high: high,
+                            low: low,
+                            close: close
+                        };
+                    })
+                    .filter(d => d !== null);
+
+                const volumeData = data
+                    .map(d => {
+                        const volume = parseFloat(d.volume);
+                        const close = parseFloat(d.close);
+                        const open = parseFloat(d.open);
+                        const timestamp = parseInt(d.timestamp);
+                        
+                        // Validate values
+                        if (isNaN(volume) || isNaN(close) || isNaN(open) || isNaN(timestamp) || volume < 0) {
+                            return null;
+                        }
+                        
+                        return {
+                            time: timestamp,
+                            value: volume,
+                            color: close >= open ? '#10b981' : '#ef4444'
+                        };
+                    })
+                    .filter(d => d !== null);
+
+                // Check if we have valid data after filtering
+                if (candleData.length === 0) {
+                    showChartError('No valid chart data available');
+                    return;
+                }
+
+                console.log(`Loaded ${candleData.length} valid candles for ${timeframe}`);
+
+                // Set data
+                candlestickSeries.setData(candleData);
+                volumeSeries.setData(volumeData);
+
+                // Calculate and set moving averages if enabled
+                updateIndicators(candleData);
+
+                // Fit content
+                tokenChart.timeScale().fitContent();
+
+                hideChartError();
 
             } catch (error) {
-                console.error('Failed to load chart:', error);
-                document.getElementById('chart-loading').textContent = 'Failed to load chart data';
+                console.error('Failed to load chart data:', error);
+                showChartError('Failed to load chart data: ' + error.message);
             }
         }
+
+        // Calculate Moving Average
+        function calculateMA(data, period) {
+            const result = [];
+            for (let i = period - 1; i < data.length; i++) {
+                let sum = 0;
+                for (let j = 0; j < period; j++) {
+                    sum += data[i - j].close;
+                }
+                result.push({
+                    time: data[i].time,
+                    value: sum / period
+                });
+            }
+            return result;
+        }
+
+        // Update indicators
+        function updateIndicators(candleData) {
+            const ma20Enabled = document.getElementById('ma20-toggle')?.checked;
+            const ma50Enabled = document.getElementById('ma50-toggle')?.checked;
+
+            if (ma20Enabled && candleData.length >= 20) {
+                const ma20Data = calculateMA(candleData, 20);
+                ma20Line.setData(ma20Data);
+            } else {
+                ma20Line.setData([]);
+            }
+
+            if (ma50Enabled && candleData.length >= 50) {
+                const ma50Data = calculateMA(candleData, 50);
+                ma50Line.setData(ma50Data);
+            } else {
+                ma50Line.setData([]);
+            }
+        }
+
+        // Chart UI helpers
+        function showChartLoading() {
+            const loading = document.getElementById('chart-loading');
+            const error = document.getElementById('chart-error');
+            const container = document.getElementById('token-chart');
+            if (loading) loading.style.display = 'flex';
+            if (error) error.style.display = 'none';
+            if (container) container.style.display = 'none';
+        }
+
+        function showChartError(message) {
+            const loading = document.getElementById('chart-loading');
+            const error = document.getElementById('chart-error');
+            const errorMsg = document.getElementById('chart-error-message');
+            const container = document.getElementById('token-chart');
+            if (loading) loading.style.display = 'none';
+            if (error) error.style.display = 'flex';
+            if (errorMsg) errorMsg.textContent = message;
+            if (container) container.style.display = 'none';
+        }
+
+        function hideChartError() {
+            const loading = document.getElementById('chart-loading');
+            const error = document.getElementById('chart-error');
+            const container = document.getElementById('token-chart');
+            if (loading) loading.style.display = 'none';
+            if (error) error.style.display = 'none';
+            if (container) container.style.display = 'block';
+        }
+
+        function retryChartLoad() {
+            if (currentMint) {
+                loadChartData(currentMint, currentTimeframe);
+            }
+        }
+
+        function resizeChart() {
+            if (tokenChart) {
+                const container = document.getElementById('token-chart');
+                if (container) {
+                    tokenChart.applyOptions({
+                        width: container.clientWidth
+                    });
+                }
+            }
+        }
+
+        // Event listeners for chart controls
+        document.addEventListener('DOMContentLoaded', () => {
+            // Timeframe selector
+            document.querySelectorAll('.timeframe-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.timeframe-btn').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    currentTimeframe = e.target.dataset.timeframe;
+                    if (currentMint) {
+                        loadChartData(currentMint, currentTimeframe);
+                    }
+                });
+            });
+
+            // Indicator toggles
+            document.getElementById('ma20-toggle')?.addEventListener('change', () => {
+                if (candlestickSeries) {
+                    const data = candlestickSeries.data();
+                    updateIndicators(data);
+                }
+            });
+
+            document.getElementById('ma50-toggle')?.addEventListener('change', () => {
+                if (candlestickSeries) {
+                    const data = candlestickSeries.data();
+                    updateIndicators(data);
+                }
+            });
+        });
 
         // Modal action functions
         function copyMintFromModal() {
