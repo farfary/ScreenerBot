@@ -1,11 +1,12 @@
-use crate::webserver::{state::AppState, templates};
-use axum::{response::Html, Router};
+use crate::webserver::{ state::AppState, templates };
+use axum::{ response::Html, Router };
 use std::sync::Arc;
 
 pub mod blacklist;
 pub mod config;
 pub mod dashboard;
 pub mod events;
+pub mod ohlcv;
 pub mod positions;
 pub mod services;
 pub mod status;
@@ -68,11 +69,7 @@ async fn services_page() -> Html<String> {
 /// Config page handler
 async fn config_page() -> Html<String> {
     let content = templates::config_content();
-    Html(templates::base_template(
-        "Configuration",
-        "config",
-        &content,
-    ))
+    Html(templates::base_template("Configuration", "config", &content))
 }
 
 fn api_routes() -> Router<Arc<AppState>> {
@@ -87,6 +84,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .merge(config::routes())
         .merge(ws::routes())
         .merge(services::routes())
+        .merge(ohlcv::ohlcv_routes())
         .nest("/trader", trader::routes())
         .nest("/system", system::routes())
 }

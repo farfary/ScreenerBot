@@ -329,6 +329,44 @@ config_struct! {
 }
 
 config_struct! {
+    /// OHLCV data monitoring configuration
+    pub struct OhlcvConfig {
+        /// Enable OHLCV data collection
+        enabled: bool = true,
+        /// Maximum number of tokens to monitor simultaneously
+        max_monitored_tokens: usize = 100,
+        /// Data retention period in days
+        retention_days: i64 = 7,
+        /// GeckoTerminal API rate limit (calls per minute)
+        api_rate_limit: usize = 30,
+        /// Default fetch interval for low priority tokens (seconds)
+        default_fetch_interval_secs: u64 = 900,
+        /// Critical token fetch interval (seconds, for open positions)
+        critical_fetch_interval_secs: u64 = 30,
+        /// High priority fetch interval (seconds)
+        high_fetch_interval_secs: u64 = 60,
+        /// Medium priority fetch interval (seconds)
+        medium_fetch_interval_secs: u64 = 300,
+        /// Maximum consecutive empty fetches before throttling
+        max_empty_fetches: u32 = 10,
+        /// Enable automatic gap filling
+        auto_fill_gaps: bool = true,
+        /// Gap fill check interval (seconds)
+        gap_fill_interval_secs: u64 = 300,
+        /// Cache size (maximum number of tokens in hot cache)
+        cache_size: usize = 100,
+        /// Cache retention hours (for hot cache)
+        cache_retention_hours: i64 = 24,
+        /// Database cleanup interval (seconds)
+        cleanup_interval_secs: u64 = 3600,
+        /// Enable pool failover
+        pool_failover_enabled: bool = true,
+        /// Maximum pool failures before switching
+        max_pool_failures: u32 = 5,
+    }
+}
+
+config_struct! {
     /// Tokens tab webserver configuration
     pub struct TokensTabConfig {
         /// Default page size for token lists
@@ -452,6 +490,9 @@ config_struct! {
 
         /// Monitoring configuration
         monitoring: MonitoringConfig = MonitoringConfig::default(),
+
+        /// OHLCV data configuration
+        ohlcv: OhlcvConfig = OhlcvConfig::default(),
     }
 }
 

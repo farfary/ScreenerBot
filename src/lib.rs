@@ -11,6 +11,7 @@ pub mod filtering;
 pub mod global;
 pub mod learner;
 pub mod logger;
+pub mod ohlcvs; // OHLCV data module for chart data
 pub mod pools; // New modular pool system
 pub mod positions;
 pub mod profit;
