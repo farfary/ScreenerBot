@@ -40,15 +40,7 @@ impl Timeframe {
 
     /// Returns the GeckoTerminal API parameter for this timeframe
     pub fn to_api_param(&self) -> &'static str {
-        match self {
-            Timeframe::Minute1 => "minute",
-            Timeframe::Minute5 => "minute",
-            Timeframe::Minute15 => "minute",
-            Timeframe::Hour1 => "hour",
-            Timeframe::Hour4 => "hour",
-            Timeframe::Hour12 => "hour",
-            Timeframe::Day1 => "day",
-        }
+        self.as_str()
     }
 
     /// Returns all supported timeframes

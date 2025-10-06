@@ -14,15 +14,8 @@ mod service;
 mod types;
 
 pub use types::{
-    OhlcvDataPoint,
-    OhlcvError,
-    OhlcvMetrics,
-    OhlcvResult,
-    PoolConfig,
-    PoolMetadata,
-    Priority,
-    Timeframe,
-    TokenOhlcvConfig,
+    OhlcvDataPoint, OhlcvError, OhlcvMetrics, OhlcvResult, PoolConfig, PoolMetadata, Priority,
+    Timeframe, TokenOhlcvConfig,
 };
 
 pub use priorities::ActivityType;
@@ -41,7 +34,7 @@ pub async fn get_ohlcv_data(
     pool_address: Option<&str>,
     limit: usize,
     from_timestamp: Option<i64>,
-    to_timestamp: Option<i64>
+    to_timestamp: Option<i64>,
 ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
     service::get_ohlcv_data(
         mint,
@@ -49,8 +42,9 @@ pub async fn get_ohlcv_data(
         pool_address,
         limit,
         from_timestamp,
-        to_timestamp
-    ).await
+        to_timestamp,
+    )
+    .await
 }
 
 pub async fn get_available_pools(mint: &str) -> OhlcvResult<Vec<PoolMetadata>> {

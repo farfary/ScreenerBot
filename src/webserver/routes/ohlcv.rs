@@ -1,30 +1,23 @@
 // OHLCV API routes
 
 use crate::ohlcvs::{
-    add_token_monitoring,
-    get_available_pools,
-    get_data_gaps,
-    get_metrics,
-    get_ohlcv_data,
-    record_activity,
-    remove_token_monitoring,
-    request_refresh,
-    ActivityType,
-    OhlcvDataPoint,
-    PoolMetadata,
-    Priority,
-    Timeframe,
+    add_token_monitoring, get_available_pools, get_data_gaps, get_metrics, get_ohlcv_data,
+    record_activity, remove_token_monitoring, request_refresh, ActivityType, OhlcvDataPoint,
+    PoolMetadata, Priority, Timeframe,
 };
-use crate::webserver::{ state::AppState, utils::{ error_response, success_response } };
+use crate::webserver::{
+    state::AppState,
+    utils::{error_response, success_response},
+};
 use axum::{
-    extract::{ Path, Query },
+    extract::{Path, Query},
     http::StatusCode,
     response::Json,
     response::Response,
-    routing::{ delete, get, post },
+    routing::{delete, get, post},
     Router,
 };
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 // ==================== Response Types ====================
@@ -107,10 +100,11 @@ struct MonitorRequest {
 
 async fn get_ohlcv_data_handler(
     Path(mint): Path<String>,
-    Query(params): Query<OhlcvQuery>
+    Query(params): Query<OhlcvQuery>,
 ) -> Result<Response, Response> {
     // Parse timeframe
-    let timeframe = params.timeframe
+    let timeframe = params
+        .timeframe
         .as_deref()
         .and_then(Timeframe::from_str)
         .unwrap_or(Timeframe::Minute1);
@@ -118,15 +112,15 @@ async fn get_ohlcv_data_handler(
     let limit = params.limit.unwrap_or(100).min(1000); // Cap at 1000
 
     // Fetch data
-    match
-        get_ohlcv_data(
-            &mint,
-            timeframe,
-            params.pool.as_deref(),
-            limit,
-            params.from,
-            params.to
-        ).await
+    match get_ohlcv_data(
+        &mint,
+        timeframe,
+        params.pool.as_deref(),
+        limit,
+        params.from,
+        params.to,
+    )
+    .await
     {
         Ok(data) => {
             let response = OhlcvDataResponse {
@@ -139,15 +133,12 @@ async fn get_ohlcv_data_handler(
 
             Ok(success_response(response))
         }
-        Err(e) =>
-            Err(
-                error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "ohlcv_fetch_failed",
-                    &format!("Failed to fetch OHLCV data: {}", e),
-                    None
-                )
-            ),
+        Err(e) => Err(error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ohlcv_fetch_failed",
+            &format!("Failed to fetch OHLCV data: {}", e),
+            None,
+        )),
     }
 }
 
@@ -167,23 +158,21 @@ async fn get_pools_handler(Path(mint): Path<String>) -> Result<Response, Respons
 
             Ok(success_response(response))
         }
-        Err(e) =>
-            Err(
-                error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "ohlcv_pools_failed",
-                    &format!("Failed to fetch pools: {}", e),
-                    None
-                )
-            ),
+        Err(e) => Err(error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ohlcv_pools_failed",
+            &format!("Failed to fetch pools: {}", e),
+            None,
+        )),
     }
 }
 
 async fn get_gaps_handler(
     Path(mint): Path<String>,
-    Query(params): Query<GapsQuery>
+    Query(params): Query<GapsQuery>,
 ) -> Result<Response, Response> {
-    let timeframe = params.timeframe
+    let timeframe = params
+        .timeframe
         .as_deref()
         .and_then(Timeframe::from_str)
         .unwrap_or(Timeframe::Minute1);
@@ -208,21 +197,19 @@ async fn get_gaps_handler(
 
             Ok(success_response(response))
         }
-        Err(e) =>
-            Err(
-                error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "ohlcv_gaps_failed",
-                    &format!("Failed to fetch gaps: {}", e),
-                    None
-                )
-            ),
+        Err(e) => Err(error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ohlcv_gaps_failed",
+            &format!("Failed to fetch gaps: {}", e),
+            None,
+        )),
     }
 }
 
 async fn get_status_handler(Path(mint): Path<String>) -> Result<Response, Response> {
     // Check if we have data for this token
-    let has_data = get_ohlcv_data(&mint, Timeframe::Minute1, None, 1, None, None).await
+    let has_data = get_ohlcv_data(&mint, Timeframe::Minute1, None, 1, None, None)
+        .await
         .map(|d| !d.is_empty())
         .unwrap_or(false);
 
@@ -237,7 +224,8 @@ async fn get_status_handler(Path(mint): Path<String>) -> Result<Response, Respon
     }
 
     // Get latest timestamp
-    let latest_timestamp = get_ohlcv_data(&mint, Timeframe::Minute1, None, 1, None, None).await
+    let latest_timestamp = get_ohlcv_data(&mint, Timeframe::Minute1, None, 1, None, None)
+        .await
         .ok()
         .and_then(|d| d.first().map(|p| p.timestamp));
 
@@ -267,24 +255,16 @@ async fn get_status_handler(Path(mint): Path<String>) -> Result<Response, Respon
 
 async fn refresh_handler(Path(mint): Path<String>) -> Result<Response, Response> {
     match request_refresh(&mint).await {
-        Ok(_) =>
-            Ok(
-                success_response(
-                    serde_json::json!({
+        Ok(_) => Ok(success_response(serde_json::json!({
             "message": "Refresh requested",
             "mint": mint
-        })
-                )
-            ),
-        Err(e) =>
-            Err(
-                error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "ohlcv_refresh_failed",
-                    &format!("Failed to refresh: {}", e),
-                    None
-                )
-            ),
+        }))),
+        Err(e) => Err(error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ohlcv_refresh_failed",
+            &format!("Failed to refresh: {}", e),
+            None,
+        )),
     }
 }
 
@@ -308,79 +288,56 @@ async fn get_metrics_handler() -> Result<Response, Response> {
 
 async fn add_monitoring_handler(
     Path(mint): Path<String>,
-    Json(body): Json<MonitorRequest>
+    Json(body): Json<MonitorRequest>,
 ) -> Result<Response, Response> {
-    let priority = body.priority
+    let priority = body
+        .priority
         .as_deref()
         .and_then(Priority::from_str)
         .unwrap_or(Priority::Medium);
 
     match add_token_monitoring(&mint, priority).await {
-        Ok(_) =>
-            Ok(
-                success_response(
-                    serde_json::json!({
+        Ok(_) => Ok(success_response(serde_json::json!({
             "message": "Monitoring started",
             "mint": mint,
             "priority": priority.as_str()
-        })
-                )
-            ),
-        Err(e) =>
-            Err(
-                error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "ohlcv_monitor_start_failed",
-                    &format!("Failed to start monitoring: {}", e),
-                    None
-                )
-            ),
+        }))),
+        Err(e) => Err(error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ohlcv_monitor_start_failed",
+            &format!("Failed to start monitoring: {}", e),
+            None,
+        )),
     }
 }
 
 async fn remove_monitoring_handler(Path(mint): Path<String>) -> Result<Response, Response> {
     match remove_token_monitoring(&mint).await {
-        Ok(_) =>
-            Ok(
-                success_response(
-                    serde_json::json!({
+        Ok(_) => Ok(success_response(serde_json::json!({
             "message": "Monitoring stopped",
             "mint": mint
-        })
-                )
-            ),
-        Err(e) =>
-            Err(
-                error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "ohlcv_monitor_stop_failed",
-                    &format!("Failed to stop monitoring: {}", e),
-                    None
-                )
-            ),
+        }))),
+        Err(e) => Err(error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ohlcv_monitor_stop_failed",
+            &format!("Failed to stop monitoring: {}", e),
+            None,
+        )),
     }
 }
 
 async fn record_view_handler(Path(mint): Path<String>) -> Result<Response, Response> {
     match record_activity(&mint, ActivityType::ChartViewed).await {
-        Ok(_) =>
-            Ok(
-                success_response(
-                    serde_json::json!({
+        Ok(_) => Ok(success_response(serde_json::json!({
             "message": "Activity recorded",
             "mint": mint
-        })
-                )
-            ),
-        Err(e) =>
-            Err(
-                error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "ohlcv_activity_failed",
-                    &format!("Failed to record activity: {}", e),
-                    None
-                )
-            ),
+        }))),
+        Err(e) => Err(error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ohlcv_activity_failed",
+            &format!("Failed to record activity: {}", e),
+            None,
+        )),
     }
 }
 
@@ -396,7 +353,10 @@ pub fn ohlcv_routes() -> Router<Arc<AppState>> {
         // Control endpoints
         .route("/api/ohlcv/:mint/refresh", post(refresh_handler))
         .route("/api/ohlcv/:mint/monitor", post(add_monitoring_handler))
-        .route("/api/ohlcv/:mint/monitor", delete(remove_monitoring_handler))
+        .route(
+            "/api/ohlcv/:mint/monitor",
+            delete(remove_monitoring_handler),
+        )
         .route("/api/ohlcv/:mint/view", post(record_view_handler))
         // System endpoints
         .route("/api/ohlcv/metrics", get(get_metrics_handler))

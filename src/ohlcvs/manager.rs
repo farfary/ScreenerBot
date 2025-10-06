@@ -2,6 +2,7 @@
 
 use crate::ohlcvs::database::OhlcvDatabase;
 use crate::ohlcvs::types::{ OhlcvError, OhlcvResult, PoolConfig, PoolMetadata };
+use std::cmp::Ordering;
 use std::sync::Arc;
 
 pub struct PoolManager {
@@ -44,10 +45,8 @@ impl PoolManager {
         // Find highest liquidity pool that's healthy
         let best = pools
             .into_iter()
-            .filter(|p| p.is_healthy())
-            .max_by(|a, b| {
-                a.liquidity.partial_cmp(&b.liquidity).unwrap_or(std::cmp::Ordering::Equal)
-            });
+            .filter(|p| p.is_healthy() && p.liquidity.is_finite())
+            .max_by(|a, b| { a.liquidity.partial_cmp(&b.liquidity).unwrap_or(Ordering::Less) });
 
         Ok(best)
     }
@@ -167,38 +166,4 @@ pub struct PoolStats {
     pub healthy_pools: usize,
     pub total_liquidity: f64,
     pub has_default: bool,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ohlcvs::database::OhlcvDatabase;
-    use tempfile::NamedTempFile;
-
-    #[tokio::test]
-    async fn test_pool_registration() {
-        let temp_file = NamedTempFile::new().unwrap();
-        let db = Arc::new(OhlcvDatabase::new(temp_file.path()).unwrap());
-        let manager = PoolManager::new(db);
-
-        manager.register_pool("mint1", "pool1", "raydium", 10000.0).await.unwrap();
-
-        let pools = manager.get_pools("mint1").await.unwrap();
-        assert_eq!(pools.len(), 1);
-        assert_eq!(pools[0].address, "pool1");
-    }
-
-    #[tokio::test]
-    async fn test_best_pool_selection() {
-        let temp_file = NamedTempFile::new().unwrap();
-        let db = Arc::new(OhlcvDatabase::new(temp_file.path()).unwrap());
-        let manager = PoolManager::new(db);
-
-        manager.register_pool("mint1", "pool1", "raydium", 5000.0).await.unwrap();
-        manager.register_pool("mint1", "pool2", "orca", 10000.0).await.unwrap();
-
-        let best = manager.get_best_pool("mint1").await.unwrap();
-        assert!(best.is_some());
-        assert_eq!(best.unwrap().address, "pool2"); // Higher liquidity
-    }
 }

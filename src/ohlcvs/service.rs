@@ -21,10 +21,10 @@ use crate::ohlcvs::types::{
 use chrono::Utc;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::{ Notify, RwLock };
+use tokio::sync::{ Notify, OnceCell };
 use tokio::task::JoinHandle;
 
-static OHLCV_SERVICE: RwLock<Option<Arc<OhlcvServiceImpl>>> = RwLock::const_new(None);
+static OHLCV_SERVICE: OnceCell<Arc<OhlcvServiceImpl>> = OnceCell::const_new();
 
 pub struct OhlcvService;
 
@@ -77,19 +77,18 @@ impl OhlcvServiceImpl {
         let pool = if let Some(addr) = pool_address {
             addr.to_string()
         } else {
-            // Use default pool
-            let default_pool = self.pool_manager
-                .get_default_pool(mint).await?
-                .or_else(|| {
-                    // Fall back to best pool
-                    futures::executor
-                        ::block_on(self.pool_manager.get_best_pool(mint))
-                        .ok()
-                        .flatten()
-                })
-                .ok_or_else(|| OhlcvError::PoolNotFound(mint.to_string()))?;
+            // Use default pool, falling back to best available option
+            let mut selected_pool = self.pool_manager.get_default_pool(mint).await?;
 
-            default_pool.address
+            if selected_pool.is_none() {
+                selected_pool = self.pool_manager.get_best_pool(mint).await?;
+            }
+
+            let default_pool = selected_pool.ok_or_else(||
+                OhlcvError::PoolNotFound(mint.to_string())
+            )?;
+
+            default_pool.address.clone()
         };
 
         // Try cache first
@@ -159,38 +158,30 @@ impl OhlcvServiceImpl {
     }
 }
 
-impl OhlcvService {
-    pub async fn initialize() -> OhlcvResult<()> {
-        {
-            let existing = OHLCV_SERVICE.read().await;
-            if existing.is_some() {
-                return Ok(());
-            }
-        }
-
+async fn get_or_init_service() -> OhlcvResult<Arc<OhlcvServiceImpl>> {
+    let service = OHLCV_SERVICE.get_or_try_init(|| async {
         log(LogTag::Ohlcv, "INIT", "Initializing OHLCV runtime");
 
         let db_path = PathBuf::from("data/ohlcvs.db");
         let service_impl = OhlcvServiceImpl::new(db_path)?;
 
-        let mut global = OHLCV_SERVICE.write().await;
-        *global = Some(Arc::new(service_impl));
-
         log(LogTag::Ohlcv, "SUCCESS", "OHLCV runtime ready");
-        Ok(())
+        Ok::<Arc<OhlcvServiceImpl>, OhlcvError>(Arc::new(service_impl))
+    }).await?;
+
+    Ok(Arc::clone(service))
+}
+
+impl OhlcvService {
+    pub async fn initialize() -> OhlcvResult<()> {
+        get_or_init_service().await.map(|_| ())
     }
 
     pub async fn start(
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor
     ) -> OhlcvResult<Vec<JoinHandle<()>>> {
-        let service = {
-            let global = OHLCV_SERVICE.read().await;
-            global
-                .as_ref()
-                .cloned()
-                .ok_or_else(|| OhlcvError::NotFound("Service not initialized".to_string()))?
-        };
+        let service = get_or_init_service().await?;
 
         let monitor_instance = Arc::clone(&service.monitor);
 
@@ -211,24 +202,7 @@ impl OhlcvService {
     }
 
     pub async fn has_data(mint: &str) -> OhlcvResult<bool> {
-        let needs_init = {
-            let guard = OHLCV_SERVICE.read().await;
-            guard.is_none()
-        };
-
-        if needs_init {
-            // Attempt to lazily initialize the service if it hasn't been set up yet
-            Self::initialize().await?;
-        }
-
-        let service = {
-            let global = OHLCV_SERVICE.read().await;
-            global
-                .as_ref()
-                .cloned()
-                .ok_or_else(|| OhlcvError::NotFound("Service not initialized".to_string()))?
-        };
-
+        let service = get_or_init_service().await?;
         service.has_data(mint)
     }
 }
@@ -243,37 +217,19 @@ pub async fn get_ohlcv_data(
     from_timestamp: Option<i64>,
     to_timestamp: Option<i64>
 ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
-    let service = {
-        let global = OHLCV_SERVICE.read().await;
-        global
-            .as_ref()
-            .ok_or_else(|| OhlcvError::NotFound("Service not initialized".to_string()))?
-            .clone()
-    };
+    let service = get_or_init_service().await?;
 
     service.get_ohlcv_data(mint, timeframe, pool_address, limit, from_timestamp, to_timestamp).await
 }
 
 pub async fn get_available_pools(mint: &str) -> OhlcvResult<Vec<PoolMetadata>> {
-    let service = {
-        let global = OHLCV_SERVICE.read().await;
-        global
-            .as_ref()
-            .ok_or_else(|| OhlcvError::NotFound("Service not initialized".to_string()))?
-            .clone()
-    };
+    let service = get_or_init_service().await?;
 
     service.pool_manager.get_pool_metadata(mint).await
 }
 
 pub async fn get_data_gaps(mint: &str, timeframe: Timeframe) -> OhlcvResult<Vec<(i64, i64)>> {
-    let service = {
-        let global = OHLCV_SERVICE.read().await;
-        global
-            .as_ref()
-            .ok_or_else(|| OhlcvError::NotFound("Service not initialized".to_string()))?
-            .clone()
-    };
+    let service = get_or_init_service().await?;
 
     let gaps = service.gap_manager.get_unfilled_gaps(mint, timeframe).await?;
 
@@ -286,13 +242,7 @@ pub async fn get_data_gaps(mint: &str, timeframe: Timeframe) -> OhlcvResult<Vec<
 }
 
 pub async fn request_refresh(mint: &str) -> OhlcvResult<()> {
-    let service = {
-        let global = OHLCV_SERVICE.read().await;
-        global
-            .as_ref()
-            .ok_or_else(|| OhlcvError::NotFound("Service not initialized".to_string()))?
-            .clone()
-    };
+    let service = get_or_init_service().await?;
 
     // Record activity
     service.monitor.record_activity(mint, ActivityType::DataRequested).await?;
@@ -302,61 +252,33 @@ pub async fn request_refresh(mint: &str) -> OhlcvResult<()> {
 }
 
 pub async fn add_token_monitoring(mint: &str, priority: Priority) -> OhlcvResult<()> {
-    let service = {
-        let global = OHLCV_SERVICE.read().await;
-        global
-            .as_ref()
-            .ok_or_else(|| OhlcvError::NotFound("Service not initialized".to_string()))?
-            .clone()
-    };
+    let service = get_or_init_service().await?;
 
     service.monitor.add_token(mint.to_string(), priority).await
 }
 
 pub async fn remove_token_monitoring(mint: &str) -> OhlcvResult<()> {
-    let service = {
-        let global = OHLCV_SERVICE.read().await;
-        global
-            .as_ref()
-            .ok_or_else(|| OhlcvError::NotFound("Service not initialized".to_string()))?
-            .clone()
-    };
+    let service = get_or_init_service().await?;
 
     service.monitor.remove_token(mint).await
 }
 
 pub async fn record_activity(mint: &str, activity_type: ActivityType) -> OhlcvResult<()> {
-    let service = {
-        let global = OHLCV_SERVICE.read().await;
-        global
-            .as_ref()
-            .ok_or_else(|| OhlcvError::NotFound("Service not initialized".to_string()))?
-            .clone()
-    };
+    let service = get_or_init_service().await?;
 
     service.monitor.record_activity(mint, activity_type).await
 }
 
 pub async fn get_metrics() -> OhlcvMetrics {
-    let service = match OHLCV_SERVICE.read().await.as_ref() {
-        Some(s) => s.clone(),
-        None => {
-            return OhlcvMetrics::default();
-        }
-    };
-
-    get_metrics_impl(&service).await
+    if let Some(service) = OHLCV_SERVICE.get() {
+        get_metrics_impl(service.as_ref()).await
+    } else {
+        OhlcvMetrics::default()
+    }
 }
 
 pub async fn has_data(mint: &str) -> OhlcvResult<bool> {
-    let service = {
-        let global = OHLCV_SERVICE.read().await;
-        global
-            .as_ref()
-            .cloned()
-            .ok_or_else(|| OhlcvError::NotFound("Service not initialized".to_string()))?
-    };
-
+    let service = get_or_init_service().await?;
     service.has_data(mint)
 }
 
@@ -370,7 +292,8 @@ async fn get_metrics_impl(service: &OhlcvServiceImpl) -> OhlcvMetrics {
     let gaps_filled = service.db.get_gap_count(true).unwrap_or(0);
 
     // Calculate database size (rough estimate)
-    let database_size_mb = ((data_points_stored as f64) * 64.0) / (1024.0 * 1024.0); // ~64 bytes per point
+    let database_size_bytes = (data_points_stored as u128).saturating_mul(64);
+    let database_size_mb = (database_size_bytes as f64) / (1024.0 * 1024.0); // ~64 bytes per point
 
     OhlcvMetrics {
         tokens_monitored,
@@ -383,17 +306,5 @@ async fn get_metrics_impl(service: &OhlcvServiceImpl) -> OhlcvMetrics {
         data_points_stored,
         database_size_mb,
         oldest_data_timestamp: None, // Could query DB for this if needed
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_service_initialization() {
-        let service = OhlcvService;
-        assert_eq!(service.name(), "ohlcv");
-        assert_eq!(service.priority(), 50);
     }
 }

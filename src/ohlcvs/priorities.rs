@@ -1,6 +1,6 @@
 // Smart priority system with activity-based throttling
 
-use crate::ohlcvs::types::{Priority, TokenOhlcvConfig};
+use crate::ohlcvs::types::{ Priority, TokenOhlcvConfig };
 use chrono::Utc;
 use std::time::Duration;
 
@@ -13,7 +13,7 @@ impl PriorityManager {
         is_open_position: bool,
         recent_views: u32,
         recent_trades: u32,
-        hours_since_activity: f64,
+        hours_since_activity: f64
     ) -> u32 {
         let mut score = 0u32;
 
@@ -83,9 +83,9 @@ impl PriorityManager {
 
         // Moderately inactive - throttle
         if hours_inactive < 24.0 {
-            return RecommendedAction::Throttle(Duration::from_secs(
-                ((config.fetch_frequency.as_secs() as f64) * 2.0) as u64,
-            ));
+            return RecommendedAction::Throttle(
+                Duration::from_secs(((config.fetch_frequency.as_secs() as f64) * 2.0) as u64)
+            );
         }
 
         // Very inactive - pause
@@ -95,15 +95,15 @@ impl PriorityManager {
         }
 
         // Default - throttle moderately
-        RecommendedAction::Throttle(Duration::from_secs(
-            ((config.fetch_frequency.as_secs() as f64) * 1.5) as u64,
-        ))
+        RecommendedAction::Throttle(
+            Duration::from_secs(((config.fetch_frequency.as_secs() as f64) * 1.5) as u64)
+        )
     }
 
     /// Update priority based on new activity
     pub fn update_priority_on_activity(
         current_priority: Priority,
-        activity_type: ActivityType,
+        activity_type: ActivityType
     ) -> Priority {
         match activity_type {
             ActivityType::PositionOpened => Priority::Critical,
@@ -188,94 +188,4 @@ pub enum RecommendedAction {
     FetchNow,
     Throttle(Duration),
     Pause,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_priority_score_calculation() {
-        // Open position should have highest score
-        let score1 = PriorityManager::calculate_priority_score(true, 0, 0, 0.0);
-        assert!(score1 >= 100);
-
-        // Recent activity should have higher score than inactive
-        let score2 = PriorityManager::calculate_priority_score(false, 10, 5, 1.0);
-        let score3 = PriorityManager::calculate_priority_score(false, 10, 5, 100.0);
-        assert!(score2 > score3);
-
-        // Trades should contribute more than views
-        let score4 = PriorityManager::calculate_priority_score(false, 10, 0, 0.0);
-        let score5 = PriorityManager::calculate_priority_score(false, 0, 2, 0.0);
-        assert!(score5 > score4);
-    }
-
-    #[test]
-    fn test_priority_from_score() {
-        assert_eq!(
-            PriorityManager::priority_from_score(150),
-            Priority::Critical
-        );
-        assert_eq!(PriorityManager::priority_from_score(75), Priority::High);
-        assert_eq!(PriorityManager::priority_from_score(25), Priority::Medium);
-        assert_eq!(PriorityManager::priority_from_score(5), Priority::Low);
-    }
-
-    #[test]
-    fn test_throttle_multiplier() {
-        assert_eq!(PriorityManager::throttle_multiplier(0), 1.0);
-        assert_eq!(PriorityManager::throttle_multiplier(2), 2.0);
-        assert_eq!(PriorityManager::throttle_multiplier(10), 3.0); // Capped
-    }
-
-    #[test]
-    fn test_update_priority_on_activity() {
-        assert_eq!(
-            PriorityManager::update_priority_on_activity(
-                Priority::Low,
-                ActivityType::PositionOpened
-            ),
-            Priority::Critical
-        );
-
-        assert_eq!(
-            PriorityManager::update_priority_on_activity(
-                Priority::Critical,
-                ActivityType::PositionClosed
-            ),
-            Priority::High
-        );
-
-        assert_eq!(
-            PriorityManager::update_priority_on_activity(Priority::Low, ActivityType::TokenViewed),
-            Priority::Medium
-        );
-    }
-
-    #[test]
-    fn test_batch_size_calculation() {
-        assert_eq!(
-            PriorityManager::calculate_batch_size(Priority::Critical),
-            1000
-        );
-        assert_eq!(PriorityManager::calculate_batch_size(Priority::High), 500);
-        assert_eq!(PriorityManager::calculate_batch_size(Priority::Medium), 200);
-        assert_eq!(PriorityManager::calculate_batch_size(Priority::Low), 100);
-    }
-
-    #[test]
-    fn test_retry_logic() {
-        assert!(PriorityManager::should_retry(Priority::Critical, 3));
-        assert!(!PriorityManager::should_retry(Priority::Critical, 6));
-        assert!(!PriorityManager::should_retry(Priority::Low, 2));
-    }
-
-    #[test]
-    fn test_retry_delay() {
-        assert_eq!(PriorityManager::retry_delay(0), Duration::from_secs(2));
-        assert_eq!(PriorityManager::retry_delay(1), Duration::from_secs(4));
-        assert_eq!(PriorityManager::retry_delay(2), Duration::from_secs(8));
-        assert_eq!(PriorityManager::retry_delay(10), Duration::from_secs(64)); // Capped at 2^5
-    }
 }

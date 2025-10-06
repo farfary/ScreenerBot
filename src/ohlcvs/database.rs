@@ -297,22 +297,26 @@ impl OhlcvDatabase {
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(mint.to_string())];
 
         if let Some(pool) = pool_address {
-            query.push_str(" AND pool_address = ?");
+            let placeholder = params_vec.len() + 1;
+            query.push_str(&format!(" AND pool_address = ?{}", placeholder));
             params_vec.push(Box::new(pool.to_string()));
         }
 
         if let Some(from) = from_timestamp {
-            query.push_str(&format!(" AND timestamp >= ?{}", params_vec.len() + 1));
+            let placeholder = params_vec.len() + 1;
+            query.push_str(&format!(" AND timestamp >= ?{}", placeholder));
             params_vec.push(Box::new(from));
         }
 
         if let Some(to) = to_timestamp {
-            query.push_str(&format!(" AND timestamp <= ?{}", params_vec.len() + 1));
+            let placeholder = params_vec.len() + 1;
+            query.push_str(&format!(" AND timestamp <= ?{}", placeholder));
             params_vec.push(Box::new(to));
         }
 
-        query.push_str(" ORDER BY timestamp DESC LIMIT ?");
-        params_vec.push(Box::new(limit));
+        let placeholder = params_vec.len() + 1;
+        query.push_str(&format!(" ORDER BY timestamp DESC LIMIT ?{}", placeholder));
+        params_vec.push(Box::new(limit as i64));
 
         let mut stmt = conn
             .prepare(&query)
@@ -414,17 +418,20 @@ impl OhlcvDatabase {
         ];
 
         if let Some(from) = from_timestamp {
-            query.push_str(&format!(" AND timestamp >= ?{}", params_vec.len() + 1));
+            let placeholder = params_vec.len() + 1;
+            query.push_str(&format!(" AND timestamp >= ?{}", placeholder));
             params_vec.push(Box::new(from));
         }
 
         if let Some(to) = to_timestamp {
-            query.push_str(&format!(" AND timestamp <= ?{}", params_vec.len() + 1));
+            let placeholder = params_vec.len() + 1;
+            query.push_str(&format!(" AND timestamp <= ?{}", placeholder));
             params_vec.push(Box::new(to));
         }
 
-        query.push_str(" ORDER BY timestamp DESC LIMIT ?");
-        params_vec.push(Box::new(limit));
+        let placeholder = params_vec.len() + 1;
+        query.push_str(&format!(" ORDER BY timestamp DESC LIMIT ?{}", placeholder));
+        params_vec.push(Box::new(limit as i64));
 
         let mut stmt = conn
             .prepare(&query)
