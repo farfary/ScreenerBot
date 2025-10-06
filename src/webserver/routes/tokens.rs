@@ -222,7 +222,129 @@ async fn get_tokens_list(Query(query): Query<TokenListQuery>) -> Json<TokenListR
     let page_size = query.page_size.min(max_page_size).max(1);
     let page = query.page.max(1);
 
-    // ONE async call to fetch tokens for the chosen view
+    // Optimized path for view=all when sorting on inexpensive fields
+    let cheap_sort = matches!(
+        query.sort_by.as_str(),
+        "symbol" |
+            "liquidity_usd" |
+            "volume_24h" |
+            "fdv" |
+            "market_cap" |
+            "price_change_h1" |
+            "price_change_h24"
+    );
+
+    if query.view == "all" && cheap_sort {
+        // Load raw tokens
+        let db = match TokenDatabase::new() {
+            Ok(db) => db,
+            Err(_) => {
+                return Json(TokenListResponse {
+                    items: vec![],
+                    page,
+                    page_size,
+                    total: 0,
+                    total_pages: 0,
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                });
+            }
+        };
+        let mut raw = db.get_all_tokens().await.unwrap_or_default();
+
+        // Search on raw fields
+        if !query.search.is_empty() {
+            let q = query.search.to_lowercase();
+            raw.retain(|t| {
+                t.symbol.to_lowercase().contains(&q) ||
+                    t.mint.to_lowercase().contains(&q) ||
+                    t.name.to_lowercase().contains(&q)
+            });
+        }
+
+        // Sort raw by selected key
+        let ascending = query.sort_dir == "asc";
+        raw.sort_by(|a, b| {
+            let cmp = match query.sort_by.as_str() {
+                "symbol" => a.symbol.cmp(&b.symbol),
+                "liquidity_usd" =>
+                    optf(a.liquidity.as_ref().and_then(|l| l.usd))
+                        .partial_cmp(&optf(b.liquidity.as_ref().and_then(|l| l.usd)))
+                        .unwrap_or(std::cmp::Ordering::Equal),
+                "volume_24h" =>
+                    optf(a.volume.as_ref().and_then(|v| v.h24))
+                        .partial_cmp(&optf(b.volume.as_ref().and_then(|v| v.h24)))
+                        .unwrap_or(std::cmp::Ordering::Equal),
+                "fdv" => optf(a.fdv).partial_cmp(&optf(b.fdv)).unwrap_or(std::cmp::Ordering::Equal),
+                "market_cap" =>
+                    optf(a.market_cap)
+                        .partial_cmp(&optf(b.market_cap))
+                        .unwrap_or(std::cmp::Ordering::Equal),
+                "price_change_h1" =>
+                    optf(a.price_change.as_ref().and_then(|p| p.h1))
+                        .partial_cmp(&optf(b.price_change.as_ref().and_then(|p| p.h1)))
+                        .unwrap_or(std::cmp::Ordering::Equal),
+                "price_change_h24" =>
+                    optf(a.price_change.as_ref().and_then(|p| p.h24))
+                        .partial_cmp(&optf(b.price_change.as_ref().and_then(|p| p.h24)))
+                        .unwrap_or(std::cmp::Ordering::Equal),
+                _ => std::cmp::Ordering::Equal,
+            };
+            if ascending {
+                cmp
+            } else {
+                cmp.reverse()
+            }
+        });
+
+        // Paginate raw
+        let total = raw.len();
+        let total_pages = (total + page_size - 1) / page_size;
+        let start_idx = (page - 1) * page_size;
+        let end_idx = (start_idx + page_size).min(total);
+        let page_slice: Vec<crate::tokens::types::ApiToken> = if start_idx < total {
+            raw[start_idx..end_idx].to_vec()
+        } else {
+            vec![]
+        };
+
+        // Build caches only for the current page
+        let mints: Vec<String> = page_slice
+            .iter()
+            .map(|t| t.mint.clone())
+            .collect();
+        let caches = TokenSummaryCaches::build(&mints).await;
+
+        let items = page_slice
+            .into_iter()
+            .map(|t| token_to_summary(t, &caches))
+            .collect();
+
+        log(
+            LogTag::Api,
+            "TOKENS_LIST_OPTIMIZED",
+            &format!(
+                "view=all search='{}' sort_by={} sort_dir={} page={}/{} items={}/{}",
+                query.search,
+                query.sort_by,
+                query.sort_dir,
+                page,
+                total_pages,
+                page_size.min(total),
+                total
+            )
+        );
+
+        return Json(TokenListResponse {
+            items,
+            page,
+            page_size,
+            total,
+            total_pages,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        });
+    }
+
+    // Default generic path (handles pool/secure/positions/blacklisted/recent and expensive sorts)
     let tokens = get_tokens_for_view(&query.view).await.unwrap_or_default();
 
     // Search filter (sync)
@@ -857,6 +979,11 @@ fn load_ohlcv_flags(mints: &HashSet<String>) -> HashSet<String> {
     has_ohlcv
 }
 
+#[inline]
+fn optf(v: Option<f64>) -> f64 {
+    v.unwrap_or(0.0)
+}
+
 /// Get tokens for a specific view
 async fn get_tokens_for_view(view: &str) -> Result<Vec<TokenSummary>, String> {
     match view {
@@ -916,18 +1043,21 @@ async fn get_all_tokens_from_db() -> Result<Vec<TokenSummary>, String> {
 
 /// Get blacklisted tokens
 async fn get_blacklisted_tokens() -> Result<Vec<TokenSummary>, String> {
+    // Fetch blacklist first, then fetch only those tokens from DB for speed
+    let blacklisted_mints: Vec<String> = blacklist::get_blacklisted_mints();
+    if blacklisted_mints.is_empty() {
+        return Ok(Vec::new());
+    }
+
     let db = TokenDatabase::new().map_err(|e| e.to_string())?;
-    let all_tokens = db.get_all_tokens().await?;
-    let mints: Vec<String> = all_tokens
-        .iter()
-        .map(|token| token.mint.clone())
-        .collect();
-    let caches = TokenSummaryCaches::build(&mints).await;
+    let tokens = db.get_tokens_by_mints(&blacklisted_mints).await.map_err(|e| e.to_string())?;
+
+    // Build caches scoped to this page's mints only
+    let caches = TokenSummaryCaches::build(&blacklisted_mints).await;
 
     Ok(
-        all_tokens
+        tokens
             .into_iter()
-            .filter(|token| caches.is_blacklisted(&token.mint))
             .map(|token| token_to_summary(token, &caches))
             .collect()
     )

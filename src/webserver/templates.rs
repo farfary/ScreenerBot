@@ -769,9 +769,9 @@ fn common_styles() -> &'static str {
             font-size: 0.9em;
         }
 
-        /* Tokens table: force-fit columns, no horizontal scroll */
+        /* Tokens table: flexible auto-fit columns with min/max constraints */
         #tokensTable {
-            table-layout: fixed;
+            table-layout: auto;
             width: 100%;
         }
         #tokensTable th, #tokensTable td {
@@ -779,23 +779,23 @@ fn common_styles() -> &'static str {
             overflow: hidden;
             text-overflow: ellipsis;
         }
-        /* Column widths must sum to 100% */
-        #tokensTable th:nth-child(1), #tokensTable td:nth-child(1) { width: 20%; }
-        #tokensTable th:nth-child(2), #tokensTable td:nth-child(2) { width: 9%; }
-        #tokensTable th:nth-child(3), #tokensTable td:nth-child(3) { width: 9%; }
-        #tokensTable th:nth-child(4), #tokensTable td:nth-child(4) { width: 9%; }
-        #tokensTable th:nth-child(5), #tokensTable td:nth-child(5) { width: 9%; }
-        #tokensTable th:nth-child(6), #tokensTable td:nth-child(6) { width: 9%; }
-        #tokensTable th:nth-child(7), #tokensTable td:nth-child(7) { width: 6%; }
-        #tokensTable th:nth-child(8), #tokensTable td:nth-child(8) { width: 6%; }
-        #tokensTable th:nth-child(9), #tokensTable td:nth-child(9) { width: 6%; }
-        #tokensTable th:nth-child(10), #tokensTable td:nth-child(10) { width: 7%; }
-        #tokensTable th:nth-child(11), #tokensTable td:nth-child(11) { width: 5%; }
-        #tokensTable th:nth-child(12), #tokensTable td:nth-child(12) { width: 5%; }
+        /* Dynamic column sizing with sensible constraints */
+        #tokensTable th:nth-child(1), #tokensTable td:nth-child(1) { min-width: 140px; max-width: 200px; }
+        #tokensTable th:nth-child(2), #tokensTable td:nth-child(2) { min-width: 110px; text-align: right; }
+        #tokensTable th:nth-child(3), #tokensTable td:nth-child(3) { min-width: 90px; text-align: right; }
+        #tokensTable th:nth-child(4), #tokensTable td:nth-child(4) { min-width: 90px; text-align: right; }
+        #tokensTable th:nth-child(5), #tokensTable td:nth-child(5) { min-width: 90px; text-align: right; }
+        #tokensTable th:nth-child(6), #tokensTable td:nth-child(6) { min-width: 90px; text-align: right; }
+        #tokensTable th:nth-child(7), #tokensTable td:nth-child(7) { min-width: 60px; text-align: right; }
+        #tokensTable th:nth-child(8), #tokensTable td:nth-child(8) { min-width: 60px; text-align: right; }
+        #tokensTable th:nth-child(9), #tokensTable td:nth-child(9) { min-width: 70px; text-align: right; }
+        #tokensTable th:nth-child(10), #tokensTable td:nth-child(10) { min-width: 80px; }
+        #tokensTable th:nth-child(11), #tokensTable td:nth-child(11) { min-width: 70px; text-align: right; }
+        #tokensTable th:nth-child(12), #tokensTable td:nth-child(12) { min-width: 50px; text-align: center; }
         
         .table th {
             background: var(--table-header-bg);
-            padding: 10px;
+            padding: 6px;
             text-align: left;
             font-weight: 600;
             color: var(--table-header-text);
@@ -808,8 +808,16 @@ fn common_styles() -> &'static str {
         #tokensTable th .sort-indicator { font-size: 0.9em; opacity: 0.6; }
         
         .table td {
-            padding: 10px;
+            padding: 10px 8px;
             border-bottom: 1px solid var(--border-color);
+            vertical-align: middle;
+        }
+
+        /* Numeric cells: compact, tabular digits for perfect alignment */
+        #tokensTable td.num, #tokensTable th.num {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: 0;
         }
         
         .table tr:hover {
@@ -2513,6 +2521,7 @@ pub fn tokens_content() -> String {
             <div class="subtabs" style="display:flex; gap:6px; margin-right: 12px;">
                 <button class="btn btn-secondary" id="tabPool" onclick="switchTokensView('pool')">Pool Service</button>
                 <button class="btn btn-secondary" id="tabAll" onclick="switchTokensView('all')">All Tokens</button>
+                <button class="btn btn-secondary" id="tabBlacklisted" onclick="switchTokensView('blacklisted')">Blacklisted</button>
             </div>
             <span id="tokenCount" style="color: var(--text-secondary); font-size: 0.9em;">Loading...</span>
             <button onclick="loadTokens()" class="btn btn-primary">🔄 Refresh</button>
@@ -2586,7 +2595,7 @@ pub fn tokens_content() -> String {
                 // Backend returns plain TokenListResponse { items, total, ... }
                 allTokensData = Array.isArray(data.items) ? data.items : [];
                 
-                const viewLabel = tokensView === 'pool' ? 'with available prices' : 'in database';
+                const viewLabel = tokensView === 'pool' ? 'with available prices' : tokensView === 'blacklisted' ? 'blacklisted' : 'in database';
                 document.getElementById('tokenCount').textContent = 
                     `${Number.isFinite(data.total) ? data.total : allTokensData.length} tokens ${viewLabel}`;
                 
@@ -2609,6 +2618,8 @@ pub fn tokens_content() -> String {
             document.getElementById('tabPool').classList.toggle('btn-secondary', view !== 'pool');
             document.getElementById('tabAll').classList.toggle('btn-primary', view === 'all');
             document.getElementById('tabAll').classList.toggle('btn-secondary', view !== 'all');
+            document.getElementById('tabBlacklisted').classList.toggle('btn-primary', view === 'blacklisted');
+            document.getElementById('tabBlacklisted').classList.toggle('btn-secondary', view !== 'blacklisted');
             // Reset sort when switching view (optional); keep by default
             updateSortIndicators();
             loadTokens();
@@ -2640,22 +2651,22 @@ pub fn tokens_content() -> String {
                 return `
                     <tr>
                         <td>
-                            <div style="display:flex; align-items:center; gap:10px;">
+                            <div style="display:flex; align-items:center; gap:12px;">
                                 ${logo}
-                                <div>
-                                    <div style="font-weight:600; color:#667eea;">${escapeHtml(token.symbol)}</div>
-                                    <div style="font-size:0.85em; color: var(--text-secondary);">${name}</div>
+                                <div style="display:flex; flex-direction:column; gap:1px;">
+                                    <div style="font-weight:600; color:#667eea; font-size:0.95em;">${escapeHtml(token.symbol)}</div>
+                                    <div style="font-size:0.8em; color:#94a3b8;">${name}</div>
                                 </div>
                             </div>
                         </td>
-                        <td style="font-family: 'Courier New', monospace; font-weight: 600;">${priceDisplay}</td>
-                        <td>${liquidity}</td>
-                        <td>${vol24h}</td>
-                        <td>${fdv}</td>
-                        <td>${marketCap}</td>
-                        <td>${ch1h}</td>
-                        <td>${ch24h}</td>
-                        <td>${security}</td>
+                        <td class="num" style="font-weight:600;" title="${token.price_sol ?? ''}">${priceDisplay}</td>
+                        <td class="num" title="${token.liquidity_usd ?? ''}">${liquidity}</td>
+                        <td class="num" title="${token.volume_24h ?? ''}">${vol24h}</td>
+                        <td class="num" title="${token.fdv ?? ''}">${fdv}</td>
+                        <td class="num" title="${token.market_cap ?? ''}">${marketCap}</td>
+                        <td class="num" title="${token.price_change_h1 ?? ''}">${ch1h}</td>
+                        <td class="num" title="${token.price_change_h24 ?? ''}">${ch24h}</td>
+                        <td class="num" title="${token.security_score ?? ''}">${security}</td>
                         <td>${status}</td>
                         <td style="font-size: 0.85em; color: #64748b;">${timeAgo}</td>
                         <td>
@@ -2678,17 +2689,17 @@ pub fn tokens_content() -> String {
         function safeLogoHtml(url, symbol) {
             const letter = (symbol && symbol.length > 0) ? symbol[0].toUpperCase() : '?';
             if (!url) {
-                return `<div style="width:28px;height:28px;border-radius:6px;background:#e2e8f0;color:#475569;display:flex;align-items:center;justify-content:center;font-weight:700;">${letter}</div>`;
+                return `<div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85em;flex-shrink:0;">${letter}</div>`;
             }
             const esc = (s) => s.replace(/"/g, '&quot;');
-            return `<img src="${esc(url)}" alt="${esc(symbol || '')}" width="28" height="28" style="border-radius:6px;object-fit:cover;" onerror="this.onerror=null;this.replaceWith('${`<div style=\\"width:28px;height:28px;border-radius:6px;background:#e2e8f0;color:#475569;display:flex;align-items:center;justify-content:center;font-weight:700;\\">${letter}\\</div>`}');">`;
+            return `<img src="${esc(url)}" alt="${esc(symbol || '')}" width="32" height="32" style="border-radius:8px;object-fit:cover;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,0.1);" onerror="this.onerror=null;this.outerHTML='<div style=\\"width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85em;flex-shrink:0;\\">${letter}</div>';">`;
         }
 
         function formatPriceSol(price) {
             if (price === null || price === undefined) return 'N/A';
             if (!Number.isFinite(price)) return 'N/A';
             if (price === 0) return '0';
-            return price < 0.000001 ? price.toExponential(4) : price.toFixed(9);
+            return price < 0.000001 ? price.toExponential(4) : price.toFixed(8);
         }
 
         function formatCurrencyUSD(value) {
@@ -2814,6 +2825,7 @@ pub fn tokens_content() -> String {
         // Initialize tab styles and sortable headers
         document.getElementById('tabPool').classList.add('btn-primary');
         document.getElementById('tabAll').classList.add('btn-secondary');
+        document.getElementById('tabBlacklisted').classList.add('btn-secondary');
         setupSortableHeaders();
         loadTokens();
         startTokensRefresh();
