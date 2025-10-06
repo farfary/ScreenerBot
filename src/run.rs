@@ -111,12 +111,24 @@ fn register_all_services(manager: &mut ServiceManager) {
 
 /// Wait for shutdown signal (Ctrl+C)
 async fn wait_for_shutdown_signal() -> Result<(), String> {
-    log(LogTag::System, "INFO", "Waiting for Ctrl+C to shutdown");
+    log(LogTag::System, "INFO", "Waiting for Ctrl+C (press twice to force kill)");
 
+    // First Ctrl+C triggers graceful shutdown
     tokio::signal
         ::ctrl_c().await
         .map_err(|e| format!("Failed to listen for shutdown signal: {}", e))?;
 
-    log(LogTag::System, "INFO", "Shutdown signal received");
+    log(LogTag::System, "WARN", "Shutdown signal received. Press Ctrl+C again to force kill.");
+
+    // Spawn a background listener for a second Ctrl+C to exit immediately
+    tokio::spawn(async move {
+        // If another Ctrl+C is received during graceful shutdown, exit immediately
+        if tokio::signal::ctrl_c().await.is_ok() {
+            log(LogTag::System, "ERROR", "Second Ctrl+C detected — forcing immediate exit.");
+            // 130 is the conventional exit code for SIGINT
+            std::process::exit(130);
+        }
+    });
+
     Ok(())
 }
