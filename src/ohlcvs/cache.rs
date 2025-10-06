@@ -1,4 +1,7 @@
 // Three-tier caching system for OHLCV data
+//
+// INVARIANT: All cached data MUST be stored in ASC timestamp order.
+// This ensures consistent behavior across cache hits, DB queries, and aggregations.
 
 use crate::ohlcvs::types::{ OhlcvDataPoint, OhlcvError, OhlcvResult, Timeframe };
 use std::collections::{ HashMap, VecDeque };

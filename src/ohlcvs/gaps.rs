@@ -25,11 +25,14 @@ impl GapManager {
         timeframe: Timeframe
     ) -> OhlcvResult<Vec<(i64, i64)>> {
         // Get existing data
-        let data = self.db.get_1m_data(mint, Some(pool_address), None, None, 10000)?;
+        let mut data = self.db.get_1m_data(mint, Some(pool_address), None, None, 10000)?;
 
         if data.is_empty() {
             return Ok(Vec::new());
         }
+
+        // Sort to ASC for accurate gap detection
+        data.sort_by_key(|d| d.timestamp);
 
         // Detect gaps using aggregator
         let gaps = OhlcvAggregator::detect_gaps(&data, timeframe);
@@ -52,20 +55,32 @@ impl GapManager {
         end_timestamp: i64,
         priority: Priority
     ) -> OhlcvResult<usize> {
-        // Fetch historical data for the gap period
-        let data = self.fetcher.fetch_historical(
+        // Always fetch 1m base data (API constraint)
+        let data_1m = self.fetcher.fetch_historical(
             pool_address,
-            timeframe,
+            Timeframe::Minute1,
             start_timestamp,
             end_timestamp
         ).await?;
 
-        if data.is_empty() {
+        if data_1m.is_empty() {
             return Ok(0);
         }
 
-        // Store the data
-        let inserted = self.db.insert_1m_data(mint, pool_address, &data)?;
+        // Store 1m data
+        let inserted = self.db.insert_1m_data(mint, pool_address, &data_1m)?;
+
+        // If higher timeframe, aggregate and cache
+        if timeframe != Timeframe::Minute1 {
+            if
+                let Ok(aggregated) = crate::ohlcvs::aggregator::OhlcvAggregator::aggregate(
+                    &data_1m,
+                    timeframe
+                )
+            {
+                let _ = self.db.cache_aggregated_data(mint, pool_address, timeframe, &aggregated);
+            }
+        }
 
         // Mark gap as filled if we got data
         if inserted > 0 {
@@ -155,9 +170,13 @@ impl GapManager {
         pool_address: &str,
         timeframe: Timeframe
     ) -> OhlcvResult<DataQualityReport> {
-        let data = self.db.get_1m_data(mint, Some(pool_address), None, None, 10000)?;
+        let mut data = self.db.get_1m_data(mint, Some(pool_address), None, None, 10000)?;
 
         let total_candles = data.len();
+
+        // Sort to ASC for accurate gap detection
+        data.sort_by_key(|d| d.timestamp);
+
         let gaps = OhlcvAggregator::detect_gaps(&data, timeframe);
         let gap_count = gaps.len();
 

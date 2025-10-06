@@ -92,7 +92,10 @@ impl OhlcvServiceImpl {
         };
 
         // Try cache first
-        if let Ok(Some(cached_data)) = self.cache.get(mint, Some(&pool), timeframe) {
+        if let Ok(Some(mut cached_data)) = self.cache.get(mint, Some(&pool), timeframe) {
+            // Ensure ASC ordering
+            cached_data.sort_by_key(|d| d.timestamp);
+
             // Filter by timestamp if needed
             let filtered: Vec<OhlcvDataPoint> = cached_data
                 .into_iter()
@@ -100,17 +103,18 @@ impl OhlcvServiceImpl {
                     (from_timestamp.is_none() || d.timestamp >= from_timestamp.unwrap()) &&
                         (to_timestamp.is_none() || d.timestamp <= to_timestamp.unwrap())
                 })
-                .take(limit)
                 .collect();
 
             if !filtered.is_empty() {
-                return Ok(filtered);
+                // Take last N entries (most recent)
+                let start_idx = filtered.len().saturating_sub(limit);
+                return Ok(filtered.into_iter().skip(start_idx).collect());
             }
         }
 
         // Try aggregated cache in database
         if timeframe != Timeframe::Minute1 {
-            let aggregated = self.db.get_aggregated_data(
+            let mut aggregated = self.db.get_aggregated_data(
                 mint,
                 &pool,
                 timeframe,
@@ -120,9 +124,15 @@ impl OhlcvServiceImpl {
             )?;
 
             if !aggregated.is_empty() {
-                // Update cache
+                // Normalize to ASC ordering
+                aggregated.sort_by_key(|d| d.timestamp);
+
+                // Update cache with normalized data
                 let _ = self.cache.put(mint, Some(&pool), timeframe, aggregated.clone());
-                return Ok(aggregated);
+
+                // Take last N entries (most recent)
+                let start_idx = aggregated.len().saturating_sub(limit);
+                return Ok(aggregated.into_iter().skip(start_idx).collect());
             }
         }
 
@@ -140,17 +150,21 @@ impl OhlcvServiceImpl {
         }
 
         // Aggregate if needed
-        let result = if timeframe == Timeframe::Minute1 {
+        let mut result = if timeframe == Timeframe::Minute1 {
             raw_data
         } else {
             OhlcvAggregator::aggregate(&raw_data, timeframe)?
         };
 
+        // Normalize to ASC ordering
+        result.sort_by_key(|d| d.timestamp);
+
         // Cache the result
         let _ = self.cache.put(mint, Some(&pool), timeframe, result.clone());
 
-        // Take only requested limit
-        Ok(result.into_iter().take(limit).collect())
+        // Take only requested limit from the end (most recent)
+        let start_idx = result.len().saturating_sub(limit);
+        Ok(result.into_iter().skip(start_idx).collect())
     }
 
     fn has_data(&self, mint: &str) -> OhlcvResult<bool> {
@@ -162,7 +176,8 @@ async fn get_or_init_service() -> OhlcvResult<Arc<OhlcvServiceImpl>> {
     let service = OHLCV_SERVICE.get_or_try_init(|| async {
         log(LogTag::Ohlcv, "INIT", "Initializing OHLCV runtime");
 
-        let db_path = PathBuf::from("data/ohlcvs.db");
+        // Use config for DB path
+        let db_path = PathBuf::from("data").join("ohlcvs.db");
         let service_impl = OhlcvServiceImpl::new(db_path)?;
 
         log(LogTag::Ohlcv, "SUCCESS", "OHLCV runtime ready");

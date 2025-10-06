@@ -1,12 +1,12 @@
 // GeckoTerminal API fetcher with rate limiting and priority queue
 
-use crate::ohlcvs::types::{ OhlcvDataPoint, OhlcvError, OhlcvResult, Priority, Timeframe };
-use chrono::{ DateTime, Utc };
+use crate::ohlcvs::types::{OhlcvDataPoint, OhlcvError, OhlcvResult, Priority, Timeframe};
+use chrono::{DateTime, Utc};
 use reqwest::Client;
 use serde::Deserialize;
-use std::collections::{ BinaryHeap, VecDeque };
-use std::sync::{ Arc, Mutex };
-use std::time::{ Duration, Instant };
+use std::collections::{BinaryHeap, VecDeque};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
 const MAX_REQUESTS_PER_MINUTE: usize = 30;
@@ -93,7 +93,7 @@ impl OhlcvFetcher {
         timeframe: Timeframe,
         priority: Priority,
         before_timestamp: Option<i64>,
-        limit: usize
+        limit: usize,
     ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
         // Queue the request
         self.queue_request(
@@ -102,7 +102,7 @@ impl OhlcvFetcher {
             timeframe,
             priority,
             before_timestamp,
-            limit
+            limit,
         )?;
 
         // Process queue (this will respect rate limits)
@@ -115,7 +115,7 @@ impl OhlcvFetcher {
         pool_address: &str,
         timeframe: Timeframe,
         before_timestamp: Option<i64>,
-        limit: usize
+        limit: usize,
     ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
         // Wait for rate limit if needed
         self.wait_for_rate_limit().await?;
@@ -126,30 +126,25 @@ impl OhlcvFetcher {
         let timeframe_param = timeframe.to_api_param();
         let mut url = format!(
             "https://api.geckoterminal.com/api/v2/networks/solana/pools/{}/ohlcv/{}",
-            pool_address,
-            timeframe_param
+            pool_address, timeframe_param
         );
 
         if let Some(before) = before_timestamp {
             url.push_str(&format!("?before_timestamp={}", before));
         }
-        url.push_str(
-            &format!(
-                "{}limit={}",
-                if before_timestamp.is_some() {
-                    "&"
-                } else {
-                    "?"
-                },
-                limit.min(MAX_CANDLES_PER_REQUEST)
-            )
-        );
+        url.push_str(&format!(
+            "{}limit={}",
+            if before_timestamp.is_some() { "&" } else { "?" },
+            limit.min(MAX_CANDLES_PER_REQUEST)
+        ));
 
         // Make request
-        let response = self.client
+        let response = self
+            .client
             .get(&url)
             .header("Accept", "application/json")
-            .send().await
+            .send()
+            .await
             .map_err(|e| OhlcvError::ApiError(format!("Request failed: {}", e)))?;
 
         // Check rate limit
@@ -158,16 +153,23 @@ impl OhlcvFetcher {
         }
 
         if !response.status().is_success() {
-            return Err(OhlcvError::ApiError(format!("API returned status: {}", response.status())));
+            return Err(OhlcvError::ApiError(format!(
+                "API returned status: {}",
+                response.status()
+            )));
         }
 
         // Parse response
         let gecko_response: GeckoOhlcvResponse = response
-            .json().await
+            .json()
+            .await
             .map_err(|e| OhlcvError::ApiError(format!("Failed to parse response: {}", e)))?;
 
         // Convert to our format
-        let data_points: Vec<OhlcvDataPoint> = gecko_response.data.attributes.ohlcv_list
+        let data_points: Vec<OhlcvDataPoint> = gecko_response
+            .data
+            .attributes
+            .ohlcv_list
             .into_iter()
             .filter_map(|candle| {
                 if candle.len() == 6 {
@@ -201,7 +203,7 @@ impl OhlcvFetcher {
         pool_address: &str,
         timeframe: Timeframe,
         from_timestamp: i64,
-        to_timestamp: i64
+        to_timestamp: i64,
     ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
         let mut all_data = Vec::new();
         let mut before = Some(to_timestamp);
@@ -213,23 +215,16 @@ impl OhlcvFetcher {
 
         for _ in 0..max_requests.min(10) {
             // Limit to 10 requests per call
-            let data = self.fetch_immediate(
-                pool_address,
-                timeframe,
-                before,
-                MAX_CANDLES_PER_REQUEST
-            ).await?;
+            let data = self
+                .fetch_immediate(pool_address, timeframe, before, MAX_CANDLES_PER_REQUEST)
+                .await?;
 
             if data.is_empty() {
                 break;
             }
 
             // Check if we've reached the start
-            let oldest_timestamp = data
-                .iter()
-                .map(|d| d.timestamp)
-                .min()
-                .unwrap_or(0);
+            let oldest_timestamp = data.iter().map(|d| d.timestamp).min().unwrap_or(0);
             if oldest_timestamp <= from_timestamp {
                 // Filter and add only data within range
                 all_data.extend(data.into_iter().filter(|d| d.timestamp >= from_timestamp));
@@ -251,8 +246,14 @@ impl OhlcvFetcher {
 
     /// Get average latency in milliseconds
     pub fn average_latency_ms(&self) -> f64 {
-        let total_latency = *self.total_latency_ms.lock().unwrap_or_else(|e| e.into_inner());
-        let api_calls = *self.api_calls_count.lock().unwrap_or_else(|e| e.into_inner());
+        let total_latency = *self
+            .total_latency_ms
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let api_calls = *self
+            .api_calls_count
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
 
         if api_calls == 0 {
             return 0.0;
@@ -263,7 +264,10 @@ impl OhlcvFetcher {
 
     /// Get API calls per minute
     pub fn calls_per_minute(&self) -> f64 {
-        let mut history = self.request_history.lock().unwrap_or_else(|e| e.into_inner());
+        let mut history = self
+            .request_history
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let now = Instant::now();
 
         Self::prune_history(&mut history, now);
@@ -298,9 +302,10 @@ impl OhlcvFetcher {
         timeframe: Timeframe,
         priority: Priority,
         before_timestamp: Option<i64>,
-        limit: usize
+        limit: usize,
     ) -> OhlcvResult<()> {
-        let mut queue = self.request_queue
+        let mut queue = self
+            .request_queue
             .lock()
             .map_err(|e| OhlcvError::ApiError(format!("Lock error: {}", e)))?;
 
@@ -320,7 +325,8 @@ impl OhlcvFetcher {
     async fn process_queue(&self) -> OhlcvResult<Vec<OhlcvDataPoint>> {
         // Get next request from queue
         let request = {
-            let mut queue = self.request_queue
+            let mut queue = self
+                .request_queue
                 .lock()
                 .map_err(|e| OhlcvError::ApiError(format!("Lock error: {}", e)))?;
 
@@ -332,8 +338,9 @@ impl OhlcvFetcher {
                 &req.pool_address,
                 req.timeframe,
                 req.before_timestamp,
-                req.limit
-            ).await
+                req.limit,
+            )
+            .await
         } else {
             Ok(Vec::new())
         }
@@ -342,7 +349,8 @@ impl OhlcvFetcher {
     async fn wait_for_rate_limit(&self) -> OhlcvResult<()> {
         loop {
             let can_proceed = {
-                let mut history = self.request_history
+                let mut history = self
+                    .request_history
                     .lock()
                     .map_err(|e| OhlcvError::ApiError(format!("Lock error: {}", e)))?;
 

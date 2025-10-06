@@ -1,7 +1,7 @@
 // Pool manager for multi-pool support and failover
 
 use crate::ohlcvs::database::OhlcvDatabase;
-use crate::ohlcvs::types::{ OhlcvError, OhlcvResult, PoolConfig, PoolMetadata };
+use crate::ohlcvs::types::{OhlcvError, OhlcvResult, PoolConfig, PoolMetadata};
 use std::cmp::Ordering;
 use std::sync::Arc;
 
@@ -20,7 +20,7 @@ impl PoolManager {
         mint: &str,
         pool_address: &str,
         dex: &str,
-        liquidity: f64
+        liquidity: f64,
     ) -> OhlcvResult<()> {
         let pool = PoolConfig::new(pool_address.to_string(), dex.to_string(), liquidity);
         self.db.upsert_pool(mint, &pool)?;
@@ -46,7 +46,11 @@ impl PoolManager {
         let best = pools
             .into_iter()
             .filter(|p| p.is_healthy() && p.liquidity.is_finite())
-            .max_by(|a, b| { a.liquidity.partial_cmp(&b.liquidity).unwrap_or(Ordering::Less) });
+            .max_by(|a, b| {
+                a.liquidity
+                    .partial_cmp(&b.liquidity)
+                    .unwrap_or(Ordering::Less)
+            });
 
         Ok(best)
     }
@@ -120,15 +124,13 @@ impl PoolManager {
     /// Health check all pools for a token
     pub async fn check_pool_health(&self, mint: &str) -> OhlcvResult<Vec<(String, bool)>> {
         let pools = self.get_pools(mint).await?;
-        Ok(
-            pools
-                .into_iter()
-                .map(|p| {
-                    let address = p.address.clone();
-                    (address, p.is_healthy())
-                })
-                .collect()
-        )
+        Ok(pools
+            .into_iter()
+            .map(|p| {
+                let address = p.address.clone();
+                (address, p.is_healthy())
+            })
+            .collect())
     }
 
     /// Reset failure count for a pool (for manual recovery)
@@ -141,14 +143,8 @@ impl PoolManager {
         let pools = self.get_pools(mint).await?;
 
         let total_pools = pools.len();
-        let healthy_pools = pools
-            .iter()
-            .filter(|p| p.is_healthy())
-            .count();
-        let total_liquidity: f64 = pools
-            .iter()
-            .map(|p| p.liquidity)
-            .sum();
+        let healthy_pools = pools.iter().filter(|p| p.is_healthy()).count();
+        let total_liquidity: f64 = pools.iter().map(|p| p.liquidity).sum();
         let has_default = pools.iter().any(|p| p.is_default);
 
         Ok(PoolStats {
