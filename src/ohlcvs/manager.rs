@@ -1,7 +1,7 @@
 // Pool manager for multi-pool support and failover
 
 use crate::ohlcvs::database::OhlcvDatabase;
-use crate::ohlcvs::types::{OhlcvError, OhlcvResult, PoolConfig, PoolMetadata};
+use crate::ohlcvs::types::{ OhlcvError, OhlcvResult, PoolConfig, PoolMetadata };
 use std::cmp::Ordering;
 use std::sync::Arc;
 
@@ -20,7 +20,7 @@ impl PoolManager {
         mint: &str,
         pool_address: &str,
         dex: &str,
-        liquidity: f64,
+        liquidity: f64
     ) -> OhlcvResult<()> {
         let pool = PoolConfig::new(pool_address.to_string(), dex.to_string(), liquidity);
         self.db.upsert_pool(mint, &pool)?;
@@ -46,11 +46,7 @@ impl PoolManager {
         let best = pools
             .into_iter()
             .filter(|p| p.is_healthy() && p.liquidity.is_finite())
-            .max_by(|a, b| {
-                a.liquidity
-                    .partial_cmp(&b.liquidity)
-                    .unwrap_or(Ordering::Less)
-            });
+            .max_by(|a, b| { a.liquidity.partial_cmp(&b.liquidity).unwrap_or(Ordering::Less) });
 
         Ok(best)
     }
@@ -108,11 +104,58 @@ impl PoolManager {
         Ok(None)
     }
 
-    /// Discover and register pools from DexScreener
+    /// Discover and register pools from Pool Service
+    /// Queries pools.db price_history table to find pools for this token
     pub async fn discover_pools(&self, mint: &str) -> OhlcvResult<Vec<PoolConfig>> {
-        // This would integrate with DexScreener API to find pools
-        // For now, return empty - implement when DexScreener integration is ready
-        Ok(Vec::new())
+        use rusqlite::Connection;
+
+        // Open pools.db (Pool Service database)
+        let pools_db = Connection::open("data/pools.db").map_err(|e|
+            OhlcvError::DatabaseError(format!("Failed to open pools.db: {}", e))
+        )?;
+
+        // Query for pools associated with this mint
+        let mut stmt = pools_db
+            .prepare(
+                "SELECT DISTINCT pool_address 
+             FROM price_history 
+             WHERE mint = ? 
+             ORDER BY timestamp_unix DESC 
+             LIMIT 10"
+            )
+            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to prepare query: {}", e)))?;
+
+        let mut pools = Vec::new();
+        let rows = stmt
+            .query_map([mint], |row| { row.get::<_, String>(0) })
+            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {}", e)))?;
+
+        for row in rows {
+            if let Ok(pool_address) = row {
+                // Create pool config
+                // Note: DEX and liquidity info not available in price_history
+                // Using defaults - will be updated when we add pool metadata table
+                let config = PoolConfig::new(
+                    pool_address,
+                    "dexscreener".to_string(), // Source: discovered via Pool Service
+                    0.0 // Liquidity unknown from price_history table
+                );
+
+                // Store in OHLCV database
+                self.db.upsert_pool(mint, &config)?;
+                pools.push(config);
+            }
+        }
+
+        if pools.is_empty() {
+            return Err(
+                OhlcvError::PoolNotFound(
+                    format!("No pools found in Pool Service for token: {}", mint)
+                )
+            );
+        }
+
+        Ok(pools)
     }
 
     /// Get pool metadata for API responses
@@ -124,13 +167,15 @@ impl PoolManager {
     /// Health check all pools for a token
     pub async fn check_pool_health(&self, mint: &str) -> OhlcvResult<Vec<(String, bool)>> {
         let pools = self.get_pools(mint).await?;
-        Ok(pools
-            .into_iter()
-            .map(|p| {
-                let address = p.address.clone();
-                (address, p.is_healthy())
-            })
-            .collect())
+        Ok(
+            pools
+                .into_iter()
+                .map(|p| {
+                    let address = p.address.clone();
+                    (address, p.is_healthy())
+                })
+                .collect()
+        )
     }
 
     /// Reset failure count for a pool (for manual recovery)
@@ -143,8 +188,14 @@ impl PoolManager {
         let pools = self.get_pools(mint).await?;
 
         let total_pools = pools.len();
-        let healthy_pools = pools.iter().filter(|p| p.is_healthy()).count();
-        let total_liquidity: f64 = pools.iter().map(|p| p.liquidity).sum();
+        let healthy_pools = pools
+            .iter()
+            .filter(|p| p.is_healthy())
+            .count();
+        let total_liquidity: f64 = pools
+            .iter()
+            .map(|p| p.liquidity)
+            .sum();
         let has_default = pools.iter().any(|p| p.is_default);
 
         Ok(PoolStats {
