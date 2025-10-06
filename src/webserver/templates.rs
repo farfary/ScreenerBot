@@ -12,6 +12,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{title} - ScreenerBot</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
         {common_styles}
     </style>
@@ -822,6 +823,525 @@ fn common_styles() -> &'static str {
         
         .table tr:hover {
             background: var(--bg-card-hover);
+        }
+
+        /* ===================================================================
+           TOKEN DETAILS MODAL - Professional Trading Dashboard
+           =================================================================== */
+        
+        .token-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(4px);
+            z-index: 9999;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .token-modal-overlay.active {
+            display: flex;
+            align-items: stretch;
+            justify-content: stretch;
+        }
+
+        .token-modal {
+            width: 100vw;
+            height: 100vh;
+            background: #0f1419;
+            border-radius: 0;
+            display: flex;
+            flex-direction: column;
+            box-shadow: none;
+            animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            overflow: hidden;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(40px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        /* Modal Header */
+        .token-modal .modal-header {
+            background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
+            padding: 6px 16px;
+            border-bottom: 1px solid #2d3748;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .token-modal .modal-header-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex: 1;
+        }
+
+        .token-modal .modal-token-logo {
+            width: 32px;
+            height: 32px;
+            border-radius: 7px;
+            box-shadow: 0 1px 4px rgba(102, 126, 234, 0.18);
+        }
+
+        .token-modal .modal-token-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .token-modal .modal-token-symbol {
+            font-size: 1em;
+            font-weight: 700;
+            color: #e2e8f0;
+        }
+
+        .token-modal .modal-token-name {
+            font-size: 0.8em;
+            color: #94a3b8;
+        }
+
+        .token-modal .modal-price-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-left: auto;
+            margin-right: 16px;
+        }
+
+        .token-modal .modal-price {
+            font-size: 1.1em;
+            font-weight: 700;
+            color: #e2e8f0;
+            font-family: 'Courier New', monospace;
+        }
+
+        .token-modal .modal-price-change {
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.8em;
+        }
+
+        .token-modal .modal-price-change.positive {
+            background: rgba(16, 185, 129, 0.15);
+            color: #10b981;
+        }
+
+        .token-modal .modal-price-change.negative {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+        }
+
+        .token-modal .modal-close-btn {
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            background: #1e293b;
+            border: 1px solid #334155;
+            color: #94a3b8;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1em;
+            transition: all 0.2s;
+        }
+
+        .token-modal .modal-close-btn:hover {
+            background: #334155;
+            color: #e2e8f0;
+            transform: scale(1.05);
+        }
+
+        /* Modal Body - Split Layout */
+        .token-modal .modal-body {
+            display: flex;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+            padding: 0;
+            gap: 0;
+        }
+
+        .token-modal .modal-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-width: 0;
+        }
+
+        .token-modal .modal-sidebar {
+            width: 280px;
+            min-width: 280px;
+            background: #1a1f2e;
+            border-left: 1px solid #2d3748;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        /* Chart Area */
+        .token-modal .modal-chart-container {
+            flex: 1;
+            padding: 12px 16px;
+            background: #0a0e14;
+            position: relative;
+            min-height: 400px;
+        }
+
+        .token-modal .chart-canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .token-modal .chart-loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #64748b;
+            font-size: 1.1em;
+        }
+
+        /* Tabs Navigation */
+        .token-modal .modal-tabs {
+            display: flex;
+            gap: 4px;
+            padding: 6px 10px 0 10px;
+            background: #0f1419;
+            border-bottom: 1px solid #2d3748;
+        }
+
+        .token-modal .modal-tab {
+            padding: 6px 10px;
+            background: transparent;
+            border: none;
+            color: #94a3b8;
+            font-size: 0.85em;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 8px 8px 0 0;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .token-modal .modal-tab:hover {
+            background: #1a1f2e;
+            color: #e2e8f0;
+        }
+
+        .token-modal .modal-tab.active {
+            background: #1a1f2e;
+            color: #667eea;
+        }
+
+        .token-modal .modal-tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #667eea;
+        }
+
+        /* Tab Content */
+        .token-modal .modal-content {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 12px 14px;
+            background: #0f1419;
+            min-height: 0;
+        }
+
+        .token-modal .tab-pane {
+            display: none;
+            min-height: min-content;
+        }
+
+        .token-modal .tab-pane.active {
+            display: block;
+            animation: fadeInContent 0.3s ease;
+        }
+
+        @keyframes fadeInContent {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Metrics Grid */
+        .token-modal .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        @media (max-width: 1200px) {
+            .token-modal .modal-body {
+                flex-direction: column;
+            }
+
+            .token-modal .modal-sidebar {
+                width: 100%;
+                border-left: none;
+                border-top: 1px solid #2d3748;
+                max-height: 300px;
+            }
+        }
+
+        /* Custom Scrollbar */
+        .token-modal .modal-content::-webkit-scrollbar,
+        .token-modal .modal-sidebar::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .token-modal .modal-content::-webkit-scrollbar-track,
+        .token-modal .modal-sidebar::-webkit-scrollbar-track {
+            background: #1a1f2e;
+        }
+
+        .token-modal .modal-content::-webkit-scrollbar-thumb,
+        .token-modal .modal-sidebar::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+
+        .token-modal .modal-content::-webkit-scrollbar-thumb:hover,
+        .token-modal .modal-sidebar::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+
+        .token-modal .metric-card {
+            background: #1a1f2e;
+            border: 1px solid #2d3748;
+            border-radius: 6px;
+            padding: 10px;
+        }
+
+        .token-modal .metric-card-header {
+            font-size: 0.78em;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .token-modal .metric-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            border-bottom: 1px solid #2d3748;
+        }
+
+        .token-modal .metric-row:last-child {
+            border-bottom: none;
+        }
+
+        .token-modal .metric-label {
+            color: #94a3b8;
+            font-size: 0.9em;
+        }
+
+        .token-modal .metric-value {
+            color: #e2e8f0;
+            font-weight: 600;
+            font-family: 'Courier New', monospace;
+        }
+
+        /* Sidebar Metrics */
+        .token-modal .sidebar-section {
+            padding: 14px 12px;
+            border-bottom: 1px solid #2d3748;
+        }
+
+        .token-modal .sidebar-section:last-child {
+            border-bottom: none;
+        }
+
+        .token-modal .sidebar-section-title {
+            font-size: 0.8em;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+
+        .token-modal .sidebar-metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+        }
+
+        .token-modal .sidebar-metric-label {
+            color: #94a3b8;
+            font-size: 0.85em;
+        }
+
+        .token-modal .sidebar-metric-value {
+            color: #e2e8f0;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
+        /* Quick Actions */
+        .token-modal .quick-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .token-modal .quick-action-btn {
+            padding: 8px 12px;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            color: #e2e8f0;
+            font-size: 0.85em;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: left;
+        }
+
+        .token-modal .quick-action-btn:hover {
+            background: #334155;
+            border-color: #667eea;
+            transform: translateX(4px);
+        }
+
+        /* Security Score Badge */
+        .token-modal .security-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 1.2em;
+            margin-bottom: 20px;
+        }
+
+        .token-modal .security-badge.excellent {
+            background: rgba(16, 185, 129, 0.15);
+            color: #10b981;
+            border: 2px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .token-modal .security-badge.good {
+            background: rgba(34, 197, 94, 0.15);
+            color: #22c55e;
+            border: 2px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .token-modal .security-badge.warning {
+            background: rgba(245, 158, 11, 0.15);
+            color: #f59e0b;
+            border: 2px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .token-modal .security-badge.danger {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+            border: 2px solid rgba(239, 68, 68, 0.3);
+        }
+
+        /* Risk Factors List */
+        .token-modal .risk-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .token-modal .risk-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: #1a1f2e;
+            border-radius: 8px;
+            border-left: 3px solid;
+        }
+
+        .token-modal .risk-item.low {
+            border-left-color: #10b981;
+        }
+
+        .token-modal .risk-item.medium {
+            border-left-color: #f59e0b;
+        }
+
+        .token-modal .risk-item.high {
+            border-left-color: #ef4444;
+        }
+
+        .token-modal .risk-icon {
+            font-size: 1.2em;
+        }
+
+        .token-modal .risk-content {
+            flex: 1;
+        }
+
+        .token-modal .risk-title {
+            color: #e2e8f0;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
+        .token-modal .risk-description {
+            color: #94a3b8;
+            font-size: 0.8em;
+            margin-top: 4px;
+        }
+
+        .token-modal .risk-score {
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+        }
+
+        /* Progress Bar */
+        .progress-bar {
+            height: 8px;
+            background: #2d3748;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
         }
         
         .btn {
@@ -2554,6 +3074,281 @@ pub fn tokens_content() -> String {
             </table>
         </div>
     </div>
+
+    <!-- Token Details Modal -->
+    <div class="token-modal-overlay" id="tokenModal" onclick="closeTokenModal(event)">
+        <div class="token-modal" onclick="event.stopPropagation()">
+            <!-- Modal Header -->
+            <div class="modal-header">
+                <div class="modal-header-left">
+                    <img id="modalTokenLogo" class="modal-token-logo" src="" alt="">
+                    <div class="modal-token-info">
+                        <div class="modal-token-symbol" id="modalTokenSymbol">SONIC</div>
+                        <div class="modal-token-name" id="modalTokenName">Sonic SVM</div>
+                    </div>
+                </div>
+                <div class="modal-price-info">
+                    <div class="modal-price" id="modalTokenPrice">0.00077622</div>
+                    <div class="modal-price-change positive" id="modalTokenChange">+2.12%</div>
+                </div>
+                <button class="modal-close-btn" onclick="closeTokenModal()" title="Close (ESC)">×</button>
+            </div>
+
+            <!-- Modal Body -->
+            <div class="modal-body">
+                <!-- Main Content Area -->
+                <div class="modal-main">
+                    <!-- Tabs Navigation -->
+                    <div class="modal-tabs">
+                        <button class="modal-tab active" onclick="switchModalTab('overview')">📊 Overview</button>
+                        <button class="modal-tab" onclick="switchModalTab('security')">🛡️ Security</button>
+                        <button class="modal-tab" onclick="switchModalTab('chart')">📈 Chart</button>
+                        <button class="modal-tab" onclick="switchModalTab('transactions')">💱 Transactions</button>
+                    </div>
+
+                    <!-- Tab Content -->
+                    <div class="modal-content">
+                        <!-- Overview Tab -->
+                        <div class="tab-pane active" id="tab-overview">
+                            <div class="metrics-grid">
+                                <div class="metric-card">
+                                    <div class="metric-card-header">🧾 Token Profile</div>
+                                    <div class="metric-row" title="Full mint address">
+                                        <span class="metric-label">Mint</span>
+                                        <span class="metric-value" id="detail-mint" style="font-size:0.75em; letter-spacing:0.3px; overflow:hidden; text-overflow:ellipsis; max-width:160px;">—</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Decimals</span>
+                                        <span class="metric-value" id="detail-decimals">—</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Verified</span>
+                                        <span class="metric-value" id="detail-verified">—</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Blacklisted</span>
+                                        <span class="metric-value" id="detail-blacklisted">—</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Launch</span>
+                                        <span class="metric-value" id="detail-launch-date">—</span>
+                                    </div>
+                                </div>
+                                <div class="metric-card">
+                                    <div class="metric-card-header">💰 Market Data</div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Liquidity</span>
+                                        <span class="metric-value" id="detail-liquidity">$628.66K</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Volume 24h</span>
+                                        <span class="metric-value" id="detail-volume24h">$124.32K</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Volume 6h</span>
+                                        <span class="metric-value" id="detail-volume6h">$45.67K</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Volume 1h</span>
+                                        <span class="metric-value" id="detail-volume1h">$12.45K</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">FDV</span>
+                                        <span class="metric-value" id="detail-fdv">$432.41M</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Market Cap</span>
+                                        <span class="metric-value" id="detail-marketcap">$64.86M</span>
+                                    </div>
+                                </div>
+
+                                <div class="metric-card">
+                                    <div class="metric-card-header">🏊 Pool Metrics</div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">DEX</span>
+                                        <span class="metric-value" id="detail-dex">Raydium CPMM</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Pool Address</span>
+                                        <span class="metric-value" id="detail-pool" style="font-size:0.75em;">—</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">SOL Reserves</span>
+                                        <span class="metric-value" id="detail-sol-reserves">3,241.5</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Token Reserves</span>
+                                        <span class="metric-value" id="detail-token-reserves">84.2M</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Confidence</span>
+                                        <span class="metric-value" id="detail-confidence">0.95</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Pool Age</span>
+                                        <span class="metric-value" id="detail-pool-age">2h 15m</span>
+                                    </div>
+                                </div>
+
+                                <div class="metric-card">
+                                    <div class="metric-card-header">📊 Price Changes</div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">5 minutes</span>
+                                        <span class="metric-value" id="detail-change5m">+2.5%</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">1 hour</span>
+                                        <span class="metric-value" id="detail-change1h">-1.2%</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">6 hours</span>
+                                        <span class="metric-value" id="detail-change6h">+5.8%</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">24 hours</span>
+                                        <span class="metric-value" id="detail-change24h">+15.3%</span>
+                                    </div>
+                                </div>
+
+                                <div class="metric-card">
+                                    <div class="metric-card-header">💱 Transaction Flow</div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Buys 24h</span>
+                                        <span class="metric-value" id="detail-buys24h">432</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Sells 24h</span>
+                                        <span class="metric-value" id="detail-sells24h">389</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Buy/Sell Ratio</span>
+                                        <span class="metric-value" id="detail-ratio">1.11</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Net Flow</span>
+                                        <span class="metric-value" id="detail-netflow">+43 Buys</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Security Tab -->
+                        <div class="tab-pane" id="tab-security">
+                            <div class="security-badge excellent" id="security-badge">
+                                <span>🛡️</span>
+                                <span>Security Score: <span id="security-score-value">35593</span> / 40000</span>
+                            </div>
+
+                            <div class="metric-card" style="margin-bottom: 20px;">
+                                <div class="metric-card-header">Overall Security Analysis</div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" id="security-progress" style="width: 89%"></div>
+                                </div>
+                                <div style="margin-top: 12px; color: #94a3b8; font-size: 0.9em;" id="security-status">
+                                    ✅ This token passes major security checks
+                                </div>
+                            </div>
+
+                            <div class="metric-card" style="margin-bottom: 20px;">
+                                <div class="metric-card-header">🔑 Token Authorities</div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Mint Authority</span>
+                                    <span class="metric-value" id="detail-mint-auth" style="font-size:0.75em;">None ✅</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Freeze Authority</span>
+                                    <span class="metric-value" id="detail-freeze-auth" style="font-size:0.75em;">None ✅</span>
+                                </div>
+                            </div>
+
+                            <div class="metric-card" style="margin-bottom: 20px;">
+                                <div class="metric-card-header">👥 Holder Distribution</div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Total Holders</span>
+                                    <span class="metric-value" id="detail-holders">1,234</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Top 10 Concentration</span>
+                                    <span class="metric-value" id="detail-top10">45.2%</span>
+                                </div>
+                            </div>
+
+                            <div class="metric-card-header" style="margin-bottom: 12px;">⚠️ Risk Factors</div>
+                            <div class="risk-list" id="risk-factors-list">
+                                <!-- Risk items will be populated here -->
+                            </div>
+                        </div>
+
+                        <!-- Chart Tab -->
+                        <div class="tab-pane" id="tab-chart">
+                            <div class="modal-chart-container">
+                                <canvas id="tokenChart" class="chart-canvas"></canvas>
+                                <div class="chart-loading" id="chart-loading">Loading chart data...</div>
+                            </div>
+                        </div>
+
+                        <!-- Transactions Tab -->
+                        <div class="tab-pane" id="tab-transactions">
+                            <div class="metric-card">
+                                <div class="metric-card-header">📜 Recent Transactions</div>
+                                <div id="transactions-list" style="color: #94a3b8; text-align: center; padding: 40px;">
+                                    Loading recent transactions...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sidebar -->
+                <div class="modal-sidebar">
+                    <div class="sidebar-section">
+                        <div class="sidebar-section-title">⚡ Live Metrics</div>
+                        <div class="sidebar-metric">
+                            <span class="sidebar-metric-label">Price (SOL)</span>
+                            <span class="sidebar-metric-value" id="sidebar-price">0.00077622</span>
+                        </div>
+                        <div class="sidebar-metric">
+                            <span class="sidebar-metric-label">24h Volume</span>
+                            <span class="sidebar-metric-value" id="sidebar-volume">$124.3K</span>
+                        </div>
+                        <div class="sidebar-metric">
+                            <span class="sidebar-metric-label">Liquidity</span>
+                            <span class="sidebar-metric-value" id="sidebar-liq">$628.7K</span>
+                        </div>
+                        <div class="sidebar-metric">
+                            <span class="sidebar-metric-label">Market Cap</span>
+                            <span class="sidebar-metric-value" id="sidebar-mcap">$64.86M</span>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-section">
+                        <div class="sidebar-section-title">🔗 Quick Actions</div>
+                        <div class="quick-actions">
+                            <button class="quick-action-btn" id="action-copy-mint" onclick="copyMintFromModal()">
+                                📋 Copy Mint Address
+                            </button>
+                            <button class="quick-action-btn" id="action-dexscreener" onclick="openDexScreenerFromModal()">
+                                📊 Open DexScreener →
+                            </button>
+                            <button class="quick-action-btn" id="action-gmgn" onclick="openGMGNFromModal()">
+                                🔗 Open GMGN →
+                            </button>
+                            <button class="quick-action-btn" id="action-solscan" onclick="openSolscanFromModal()">
+                                🔍 Open Solscan →
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-section">
+                        <div class="sidebar-section-title">🏷️ Status Flags</div>
+                        <div id="sidebar-badges" style="display: flex; flex-wrap: wrap; gap: 6px;">
+                            <!-- Badges will be populated here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     
     <script>
         let allTokensData = [];
@@ -2649,13 +3444,13 @@ pub fn tokens_content() -> String {
                 const name = token.name ? escapeHtml(token.name) : '';
 
                 return `
-                    <tr>
+                    <tr onclick="openTokenDetail('${token.mint}')" style="cursor:pointer;" title="Click to view details">
                         <td>
-                            <div style="display:flex; align-items:center; gap:12px;">
+                            <div style="display:flex; align-items:center; gap:12px; min-width:0;">
                                 ${logo}
-                                <div style="display:flex; flex-direction:column; gap:1px;">
-                                    <div style="font-weight:600; color:#667eea; font-size:0.95em;">${escapeHtml(token.symbol)}</div>
-                                    <div style="font-size:0.8em; color:#94a3b8;">${name}</div>
+                                <div style="display:flex; flex-direction:column; gap:1px; min-width:0;">
+                                    <div style="font-weight:600; color:#667eea; font-size:0.95em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 260px;">${escapeHtml(token.symbol || '')}</div>
+                                    <div style="font-size:0.8em; color:#94a3b8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 260px;">${name}</div>
                                 </div>
                             </div>
                         </td>
@@ -2669,7 +3464,7 @@ pub fn tokens_content() -> String {
                         <td class="num" title="${token.security_score ?? ''}">${security}</td>
                         <td>${status}</td>
                         <td style="font-size: 0.85em; color: #64748b;">${timeAgo}</td>
-                        <td>
+                        <td onclick="event.stopPropagation();">
                             <div class="dropdown-container">
                                 <button class="dropdown-btn" onclick="toggleDropdown(event)" aria-label="Actions">⋮</button>
                                 <div class="dropdown-menu">
@@ -2687,12 +3482,40 @@ pub fn tokens_content() -> String {
         }
 
         function safeLogoHtml(url, symbol) {
-            const letter = (symbol && symbol.length > 0) ? symbol[0].toUpperCase() : '?';
-            if (!url) {
-                return `<div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85em;flex-shrink:0;">${letter}</div>`;
+            // Pick the first alphanumeric as the fallback letter; default to '?'
+            let fallback = '?';
+            if (symbol && typeof symbol === 'string') {
+                for (const ch of symbol) {
+                    const u = ch.toUpperCase();
+                    if (/^[A-Z0-9]$/.test(u)) { fallback = u; break; }
+                }
             }
-            const esc = (s) => s.replace(/"/g, '&quot;');
-            return `<img src="${esc(url)}" alt="${esc(symbol || '')}" width="32" height="32" style="border-radius:8px;object-fit:cover;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,0.1);" onerror="this.onerror=null;this.outerHTML='<div style=\\"width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85em;flex-shrink:0;\\">${letter}</div>';">`;
+            if (!url) {
+                return `<div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85em;flex-shrink:0;">${fallback}</div>`;
+            }
+            const esc = (s) => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            // Note: fallback is restricted to [A-Z0-9]; use JS handler to avoid string HTML injection
+            return `<img src="${esc(url)}" alt="${esc(symbol || '')}" width="32" height="32" style="border-radius:8px;object-fit:cover;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,0.1);" onerror="fallbackLogo(this, '${fallback}')">`;
+        }
+
+        function fallbackLogo(img, letter) {
+            try {
+                img.onerror = null;
+                const div = document.createElement('div');
+                div.style.width = '32px';
+                div.style.height = '32px';
+                div.style.borderRadius = '8px';
+                div.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                div.style.color = 'white';
+                div.style.display = 'flex';
+                div.style.alignItems = 'center';
+                div.style.justifyContent = 'center';
+                div.style.fontWeight = '700';
+                div.style.fontSize = '0.85em';
+                div.style.flexShrink = '0';
+                div.textContent = (letter && /^[A-Z0-9]$/.test(letter)) ? letter : '?';
+                img.replaceWith(div);
+            } catch (_) { /* no-op */ }
         }
 
         function formatPriceSol(price) {
@@ -2829,6 +3652,311 @@ pub fn tokens_content() -> String {
         setupSortableHeaders();
         loadTokens();
         startTokensRefresh();
+
+        // ===== MODAL FUNCTIONS =====
+        // Global variable to store current token mint for modal actions
+        let currentModalMint = '';
+        let modalChart = null;
+
+        // Open token details modal
+        async function openTokenDetail(mint) {
+            currentModalMint = mint;
+            const modal = document.getElementById('tokenModal');
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+
+            // Load token data
+            await loadTokenDetails(mint);
+        }
+
+        // Close modal
+        function closeTokenModal(event) {
+            if (event && event.target.id !== 'tokenModal') return;
+            const modal = document.getElementById('tokenModal');
+            modal.classList.remove('active');
+            document.body.style.overflow = '';
+            
+            // Destroy chart if exists
+            if (modalChart) {
+                modalChart.destroy();
+                modalChart = null;
+            }
+        }
+
+        // ESC key to close
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const modal = document.getElementById('tokenModal');
+                if (modal.classList.contains('active')) {
+                    closeTokenModal();
+                }
+            }
+        });
+
+        // Switch modal tabs
+        function switchModalTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.modal-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Update tab panes
+            document.querySelectorAll('.tab-pane').forEach(pane => {
+                pane.classList.remove('active');
+            });
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+
+            // Load chart if switching to chart tab
+            if (tabName === 'chart' && !modalChart) {
+                loadChartData(currentModalMint);
+            }
+        }
+
+        // Load token details from API
+        async function loadTokenDetails(mint) {
+            try {
+                console.log('Loading token details for mint:', mint);
+                const res = await fetch(`/api/tokens/${mint}`);
+                console.log('API response status:', res.status);
+                
+                if (!res.ok) {
+                    throw new Error(`API returned ${res.status}`);
+                }
+                
+                const data = await res.json();
+                console.log('Token data received:', data);
+
+                // Update header
+                document.getElementById('modalTokenSymbol').textContent = data.symbol || 'Unknown';
+                document.getElementById('modalTokenName').textContent = data.name || '';
+                const logoImg = document.getElementById('modalTokenLogo');
+                if (data.logo_url) {
+                    logoImg.src = data.logo_url;
+                    logoImg.style.display = 'block';
+                } else {
+                    logoImg.style.display = 'none';
+                }
+                logoImg.alt = data.symbol || '';
+
+                const price = Number.isFinite(data.price_sol) ? data.price_sol : null;
+                const change24h = Number.isFinite(data.price_change_h24) ? data.price_change_h24 : null;
+                document.getElementById('modalTokenPrice').textContent = formatPriceSol(price);
+
+                const changeEl = document.getElementById('modalTokenChange');
+                changeEl.textContent = formatPercentClean(change24h);
+                changeEl.classList.remove('positive', 'negative');
+                if (change24h !== null) {
+                    changeEl.classList.add(change24h >= 0 ? 'positive' : 'negative');
+                }
+
+                // Update sidebar
+                document.getElementById('sidebar-price').textContent = formatPriceSol(price);
+                document.getElementById('sidebar-volume').textContent = formatCurrencyUSD(data.volume_24h);
+                document.getElementById('sidebar-liq').textContent = formatCurrencyUSD(data.liquidity_usd);
+                document.getElementById('sidebar-mcap').textContent = formatCurrencyUSD(data.market_cap);
+
+                // Update Overview tab
+                const mintValue = data.mint || mint;
+                const mintEl = document.getElementById('detail-mint');
+                mintEl.textContent = mintValue || '—';
+                mintEl.setAttribute('title', mintValue || '—');
+                document.getElementById('detail-decimals').textContent = Number.isFinite(data.decimals) ? data.decimals : '—';
+                document.getElementById('detail-verified').textContent = data.verified ? 'Yes' : 'No';
+                document.getElementById('detail-blacklisted').textContent = data.blacklisted ? 'Yes' : 'No';
+                const launchEl = document.getElementById('detail-launch-date');
+                if (data.pair_created_at) {
+                    const launchDate = new Date(data.pair_created_at * 1000);
+                    launchEl.textContent = `${launchDate.toLocaleString()} (${formatTimeAgo(data.pair_created_at)})`;
+                } else {
+                    launchEl.textContent = '—';
+                }
+
+                document.getElementById('detail-liquidity').textContent = formatCurrencyUSD(data.liquidity_usd);
+                document.getElementById('detail-volume24h').textContent = formatCurrencyUSD(data.volume_24h);
+                document.getElementById('detail-volume6h').textContent = formatCurrencyUSD(data.volume_6h);
+                document.getElementById('detail-volume1h').textContent = formatCurrencyUSD(data.volume_1h);
+                document.getElementById('detail-fdv').textContent = formatCurrencyUSD(data.fdv);
+                document.getElementById('detail-marketcap').textContent = formatCurrencyUSD(data.market_cap);
+
+                document.getElementById('detail-dex').textContent = data.pool_dex || '—';
+                document.getElementById('detail-pool').textContent = data.pool_address ? (data.pool_address.substring(0, 8) + '...') : '—';
+                document.getElementById('detail-sol-reserves').textContent = data.pool_reserves_sol ? data.pool_reserves_sol.toFixed(2) : '—';
+                document.getElementById('detail-token-reserves').textContent = data.pool_reserves_token ? formatLargeNumber(data.pool_reserves_token) : '—';
+                if (Number.isFinite(data.price_confidence)) {
+                    document.getElementById('detail-confidence').textContent = (data.price_confidence * 100).toFixed(1) + '%';
+                } else {
+                    document.getElementById('detail-confidence').textContent = '—';
+                }
+                
+                const poolAge = data.pair_created_at ? formatTimeAgo(data.pair_created_at) : '—';
+                document.getElementById('detail-pool-age').textContent = poolAge;
+
+                document.getElementById('detail-change5m').textContent = formatPercentClean(data.price_change_m5);
+                document.getElementById('detail-change1h').textContent = formatPercentClean(data.price_change_h1);
+                document.getElementById('detail-change6h').textContent = formatPercentClean(data.price_change_h6);
+                document.getElementById('detail-change24h').textContent = formatPercentClean(data.price_change_h24);
+
+                // Update Security tab
+                if (data.security_score) {
+                    const score = data.security_score;
+                    const maxScore = 40000;
+                    const percent = (score / maxScore * 100).toFixed(0);
+                    
+                    document.getElementById('security-score-value').textContent = score;
+                    document.getElementById('security-progress').style.width = percent + '%';
+
+                    const badge = document.getElementById('security-badge');
+                    badge.className = 'security-badge';
+                    if (percent >= 85) badge.classList.add('excellent');
+                    else if (percent >= 70) badge.classList.add('good');
+                    else if (percent >= 50) badge.classList.add('warning');
+                    else badge.classList.add('danger');
+
+                    if (data.rugged) {
+                        document.getElementById('security-status').innerHTML = '❌ Warning: This token has been flagged as rugged';
+                    }
+                }
+
+                document.getElementById('detail-mint-auth').textContent = data.mint_authority || 'None ✅';
+                document.getElementById('detail-freeze-auth').textContent = data.freeze_authority || 'None ✅';
+                document.getElementById('detail-holders').textContent = data.total_holders || '—';
+                document.getElementById('detail-top10').textContent = data.top_10_concentration ? (data.top_10_concentration * 100).toFixed(1) + '%' : '—';
+
+                // Populate risk factors
+                const riskList = document.getElementById('risk-factors-list');
+                riskList.innerHTML = '';
+                if (data.security_risks && data.security_risks.length > 0) {
+                    data.security_risks.forEach(risk => {
+                        const riskItem = document.createElement('div');
+                        riskItem.className = `risk-item ${risk.level}`;
+                        riskItem.innerHTML = `
+                            <div class="risk-icon">${risk.level === 'low' ? '✅' : risk.level === 'medium' ? '⚠️' : '🚨'}</div>
+                            <div class="risk-content">
+                                <div class="risk-title">${escapeHtml(risk.name)}</div>
+                                <div class="risk-description">${escapeHtml(risk.description)}</div>
+                            </div>
+                            <div class="risk-score">${risk.score > 0 ? '+' : ''}${risk.score}</div>
+                        `;
+                        riskList.appendChild(riskItem);
+                    });
+                } else {
+                    riskList.innerHTML = '<div style="color: #94a3b8; text-align: center; padding: 20px;">No risk factors available</div>';
+                }
+
+                // Update status badges
+                const badgesContainer = document.getElementById('sidebar-badges');
+                badgesContainer.innerHTML = '';
+                if (data.has_pool_price) badgesContainer.innerHTML += '<span class="badge" style="background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;">POOL</span>';
+                if (data.has_ohlcv) badgesContainer.innerHTML += '<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;">OHLCV</span>';
+                if (data.has_open_position) badgesContainer.innerHTML += '<span class="badge" style="background:#fde68a;color:#92400e;border:1px solid #fcd34d;">POS</span>';
+                if (data.blacklisted) badgesContainer.innerHTML += '<span class="badge" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;">BL</span>';
+                if (data.verified) badgesContainer.innerHTML += '<span class="badge" style="background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;">VERIFIED</span>';
+
+            } catch (error) {
+                console.error('Failed to load token details:', error);
+                // Show error in modal
+                document.getElementById('modalTokenSymbol').textContent = 'ERROR';
+                document.getElementById('modalTokenName').textContent = error.message;
+                alert('Failed to load token details: ' + error.message + '\\n\\nCheck browser console for details.');
+            }
+        }
+
+        // Load OHLCV chart
+        async function loadChartData(mint) {
+            try {
+                const res = await fetch(`/api/tokens/${mint}/ohlcv?limit=100`);
+                const data = await res.json();
+
+                if (data.length === 0) {
+                    document.getElementById('chart-loading').textContent = 'No chart data available';
+                    return;
+                }
+
+                document.getElementById('chart-loading').style.display = 'none';
+
+                const ctx = document.getElementById('tokenChart').getContext('2d');
+                
+                if (typeof Chart === 'undefined') {
+                    document.getElementById('chart-loading').textContent = 'Chart.js not loaded';
+                    return;
+                }
+
+                modalChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.map(d => new Date(d.timestamp * 1000).toLocaleTimeString()),
+                        datasets: [{
+                            label: 'Price (SOL)',
+                            data: data.map(d => d.close),
+                            borderColor: '#667eea',
+                            backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                labels: { color: '#e2e8f0' }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                ticks: { color: '#94a3b8' },
+                                grid: { color: '#2d3748' }
+                            },
+                            y: {
+                                ticks: { color: '#94a3b8' },
+                                grid: { color: '#2d3748' }
+                            }
+                        }
+                    }
+                });
+
+            } catch (error) {
+                console.error('Failed to load chart:', error);
+                document.getElementById('chart-loading').textContent = 'Failed to load chart data';
+            }
+        }
+
+        // Modal action functions
+        function copyMintFromModal() {
+            copyMint(currentModalMint);
+        }
+
+        function openDexScreenerFromModal() {
+            openDexScreener(currentModalMint);
+        }
+
+        function openGMGNFromModal() {
+            openGMGN(currentModalMint);
+        }
+
+        function openSolscanFromModal() {
+            openSolscan(currentModalMint);
+        }
+
+        // Helper: format large numbers
+        function formatLargeNumber(value) {
+            if (!value) return '—';
+            const abs = Math.abs(value);
+            if (abs >= 1_000_000_000) return (value / 1_000_000_000).toFixed(2) + 'B';
+            if (abs >= 1_000_000) return (value / 1_000_000).toFixed(2) + 'M';
+            if (abs >= 1_000) return (value / 1_000).toFixed(2) + 'K';
+            return value.toFixed(2);
+        }
+
+        // Helper: format percent without HTML tags
+        function formatPercentClean(value) {
+            if (value === null || value === undefined || !Number.isFinite(value)) return '—';
+            const sign = value > 0 ? '+' : '';
+            return `${sign}${value.toFixed(2)}%`;
+        }
     </script>
     "#.to_string()
 }
