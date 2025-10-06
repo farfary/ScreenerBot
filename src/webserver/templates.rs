@@ -768,6 +768,30 @@ fn common_styles() -> &'static str {
             border-collapse: collapse;
             font-size: 0.9em;
         }
+
+        /* Tokens table: force-fit columns, no horizontal scroll */
+        #tokensTable {
+            table-layout: fixed;
+            width: 100%;
+        }
+        #tokensTable th, #tokensTable td {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        /* Column widths must sum to 100% */
+        #tokensTable th:nth-child(1), #tokensTable td:nth-child(1) { width: 20%; }
+        #tokensTable th:nth-child(2), #tokensTable td:nth-child(2) { width: 9%; }
+        #tokensTable th:nth-child(3), #tokensTable td:nth-child(3) { width: 9%; }
+        #tokensTable th:nth-child(4), #tokensTable td:nth-child(4) { width: 9%; }
+        #tokensTable th:nth-child(5), #tokensTable td:nth-child(5) { width: 9%; }
+        #tokensTable th:nth-child(6), #tokensTable td:nth-child(6) { width: 9%; }
+        #tokensTable th:nth-child(7), #tokensTable td:nth-child(7) { width: 6%; }
+        #tokensTable th:nth-child(8), #tokensTable td:nth-child(8) { width: 6%; }
+        #tokensTable th:nth-child(9), #tokensTable td:nth-child(9) { width: 6%; }
+        #tokensTable th:nth-child(10), #tokensTable td:nth-child(10) { width: 7%; }
+        #tokensTable th:nth-child(11), #tokensTable td:nth-child(11) { width: 5%; }
+        #tokensTable th:nth-child(12), #tokensTable td:nth-child(12) { width: 5%; }
         
         .table th {
             background: var(--table-header-bg);
@@ -777,6 +801,11 @@ fn common_styles() -> &'static str {
             color: var(--table-header-text);
             border-bottom: 2px solid var(--border-color);
         }
+
+        /* Sortable headers */
+        #tokensTable th.sortable { cursor: pointer; user-select: none; }
+        #tokensTable th .sort-label { display: inline-flex; align-items: center; gap: 6px; }
+        #tokensTable th .sort-indicator { font-size: 0.9em; opacity: 0.6; }
         
         .table td {
             padding: 10px;
@@ -1151,6 +1180,10 @@ fn common_styles() -> &'static str {
             border: 1px solid var(--border-color);
             border-radius: 8px;
             background: var(--bg-card);
+        }
+        .table-scroll.no-x-scroll {
+            overflow-x: hidden;
+            overflow-y: auto;
         }
     "#
 }
@@ -2484,14 +2517,22 @@ pub fn tokens_content() -> String {
             <span id="tokenCount" style="color: var(--text-secondary); font-size: 0.9em;">Loading...</span>
             <button onclick="loadTokens()" class="btn btn-primary">🔄 Refresh</button>
         </div>
-        <div class="table-scroll">
+        <div class="table-scroll no-x-scroll">
             <table class="table" id="tokensTable">
                 <thead>
                     <tr>
-                        <th style="min-width: 80px;">Symbol</th>
-                        <th style="min-width: 160px;">Price (SOL)</th>
-                        <th style="min-width: 120px;">Updated</th>
-                        <th style="min-width: 100px;">Actions</th>
+                        <th class="sortable" data-sort-key="symbol"><span class="sort-label">Token <span class="sort-indicator" id="sort-indicator-symbol"></span></span></th>
+                        <th class="sortable" data-sort-key="price_sol"><span class="sort-label">Price (SOL) <span class="sort-indicator" id="sort-indicator-price_sol"></span></span></th>
+                        <th class="sortable" data-sort-key="liquidity_usd"><span class="sort-label">Liquidity <span class="sort-indicator" id="sort-indicator-liquidity_usd"></span></span></th>
+                        <th class="sortable" data-sort-key="volume_24h"><span class="sort-label">24h Vol <span class="sort-indicator" id="sort-indicator-volume_24h"></span></span></th>
+                        <th class="sortable" data-sort-key="fdv"><span class="sort-label">FDV <span class="sort-indicator" id="sort-indicator-fdv"></span></span></th>
+                        <th class="sortable" data-sort-key="market_cap"><span class="sort-label">Mkt Cap <span class="sort-indicator" id="sort-indicator-market_cap"></span></span></th>
+                        <th class="sortable" data-sort-key="price_change_h1"><span class="sort-label">1h <span class="sort-indicator" id="sort-indicator-price_change_h1"></span></span></th>
+                        <th class="sortable" data-sort-key="price_change_h24"><span class="sort-label">24h <span class="sort-indicator" id="sort-indicator-price_change_h24"></span></span></th>
+                        <th class="sortable" data-sort-key="security_score"><span class="sort-label">Security <span class="sort-indicator" id="sort-indicator-security_score"></span></span></th>
+                        <th>Status</th>
+                        <th class="sortable" data-sort-key="updated_at"><span class="sort-label">Updated <span class="sort-indicator" id="sort-indicator-updated_at"></span></span></th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="tokensTableBody">
@@ -2510,7 +2551,9 @@ pub fn tokens_content() -> String {
         let tokensRefreshInterval = null;
         let tokensRequestController = null;
         let tokensLoading = false;
-        let tokensView = 'pool';
+    let tokensView = 'pool';
+    let sortBy = 'symbol';
+    let sortDir = 'asc';
         
         async function loadTokens() {
             // Skip refresh if dropdown is currently open to prevent it from disappearing
@@ -2532,8 +2575,8 @@ pub fn tokens_content() -> String {
                 const params = new URLSearchParams({
                     view: tokensView,
                     search: document.getElementById('searchInput').value || '',
-                    sort_by: 'symbol',
-                    sort_dir: 'asc',
+                    sort_by: sortBy,
+                    sort_dir: sortDir,
                     page: '1',
                     page_size: '1000'
                 });
@@ -2566,6 +2609,8 @@ pub fn tokens_content() -> String {
             document.getElementById('tabPool').classList.toggle('btn-secondary', view !== 'pool');
             document.getElementById('tabAll').classList.toggle('btn-primary', view === 'all');
             document.getElementById('tabAll').classList.toggle('btn-secondary', view !== 'all');
+            // Reset sort when switching view (optional); keep by default
+            updateSortIndicators();
             loadTokens();
         }
         
@@ -2574,53 +2619,116 @@ pub fn tokens_content() -> String {
             
             if (tokens.length === 0) {
                 tbody.innerHTML = 
-                    `<tr><td colspan="4" style="text-align: center; padding: 20px; color: #94a3b8;">No tokens found for view: ${tokensView}</td></tr>`;
+                    `<tr><td colspan="12" style="text-align: center; padding: 20px; color: #94a3b8;">No tokens found for view: ${tokensView}</td></tr>`;
                 return;
             }
             
             tbody.innerHTML = tokens.map(token => {
                 const timeAgo = token.price_updated_at ? formatTimeAgo(token.price_updated_at) : 'N/A';
-                const priceDisplay = token.price_sol ? 
-                    (token.price_sol < 0.000001 ? 
-                        token.price_sol.toExponential(4) : 
-                        token.price_sol.toFixed(9)) : 
-                    'N/A';
-                
+                const priceDisplay = formatPriceSol(token.price_sol);
+                const liquidity = formatCurrencyUSD(token.liquidity_usd);
+                const vol24h = formatCurrencyUSD(token.volume_24h);
+                const fdv = formatCurrencyUSD(token.fdv);
+                const marketCap = formatCurrencyUSD(token.market_cap);
+                const ch1h = formatPercent(token.price_change_h1);
+                const ch24h = formatPercent(token.price_change_h24);
+                const security = renderSecurity(token.security_score, token.rugged);
+                const status = renderStatusBadges(token);
+                const logo = safeLogoHtml(token.logo_url, token.symbol);
+                const name = token.name ? escapeHtml(token.name) : '';
+
                 return `
                     <tr>
-                        <td style="font-weight: 600; color: #667eea;">${escapeHtml(token.symbol)}</td>
+                        <td>
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                ${logo}
+                                <div>
+                                    <div style="font-weight:600; color:#667eea;">${escapeHtml(token.symbol)}</div>
+                                    <div style="font-size:0.85em; color: var(--text-secondary);">${name}</div>
+                                </div>
+                            </div>
+                        </td>
                         <td style="font-family: 'Courier New', monospace; font-weight: 600;">${priceDisplay}</td>
+                        <td>${liquidity}</td>
+                        <td>${vol24h}</td>
+                        <td>${fdv}</td>
+                        <td>${marketCap}</td>
+                        <td>${ch1h}</td>
+                        <td>${ch24h}</td>
+                        <td>${security}</td>
+                        <td>${status}</td>
                         <td style="font-size: 0.85em; color: #64748b;">${timeAgo}</td>
                         <td>
                             <div class="dropdown-container">
-                                <button class="dropdown-btn" onclick="toggleDropdown(event)" aria-label="Actions">
-                                    ⋮
-                                </button>
+                                <button class="dropdown-btn" onclick="toggleDropdown(event)" aria-label="Actions">⋮</button>
                                 <div class="dropdown-menu">
-                                    <button onclick="copyMint('${token.mint}')" class="dropdown-item">
-                                        📋 Copy Mint
-                                    </button>
-                                    <button onclick="copyMint('${token.mint}')" class="dropdown-item">
-                                        📋 Copy Mint
-                                    </button>
-                                    <button onclick="openGMGN('${token.mint}')" class="dropdown-item">
-                                        🔗 Open GMGN
-                                    </button>
-                                    <button onclick="openDexScreener('${token.mint}')" class="dropdown-item">
-                                        📊 Open DexScreener
-                                    </button>
-                                    <button onclick="openSolscan('${token.mint}')" class="dropdown-item">
-                                        🔍 Open Solscan
-                                    </button>
-                                    <button onclick="openTokenDetail('${token.mint}')" class="dropdown-item">
-                                        🔎 View Details
-                                    </button>
+                                    <button onclick="copyMint('${token.mint}')" class="dropdown-item">📋 Copy Mint</button>
+                                    <button onclick="openGMGN('${token.mint}')" class="dropdown-item">🔗 Open GMGN</button>
+                                    <button onclick="openDexScreener('${token.mint}')" class="dropdown-item">📊 Open DexScreener</button>
+                                    <button onclick="openSolscan('${token.mint}')" class="dropdown-item">🔍 Open Solscan</button>
+                                    <button onclick="openTokenDetail('${token.mint}')" class="dropdown-item">🔎 View Details</button>
                                 </div>
                             </div>
                         </td>
                     </tr>
                 `;
             }).join('');
+        }
+
+        function safeLogoHtml(url, symbol) {
+            const letter = (symbol && symbol.length > 0) ? symbol[0].toUpperCase() : '?';
+            if (!url) {
+                return `<div style="width:28px;height:28px;border-radius:6px;background:#e2e8f0;color:#475569;display:flex;align-items:center;justify-content:center;font-weight:700;">${letter}</div>`;
+            }
+            const esc = (s) => s.replace(/"/g, '&quot;');
+            return `<img src="${esc(url)}" alt="${esc(symbol || '')}" width="28" height="28" style="border-radius:6px;object-fit:cover;" onerror="this.onerror=null;this.replaceWith('${`<div style=\\"width:28px;height:28px;border-radius:6px;background:#e2e8f0;color:#475569;display:flex;align-items:center;justify-content:center;font-weight:700;\\">${letter}\\</div>`}');">`;
+        }
+
+        function formatPriceSol(price) {
+            if (price === null || price === undefined) return 'N/A';
+            if (!Number.isFinite(price)) return 'N/A';
+            if (price === 0) return '0';
+            return price < 0.000001 ? price.toExponential(4) : price.toFixed(9);
+        }
+
+        function formatCurrencyUSD(value) {
+            if (value === null || value === undefined || !Number.isFinite(value)) return '—';
+            const abs = Math.abs(value);
+            let v = value;
+            let suffix = '';
+            if (abs >= 1_000_000_000) { v = value / 1_000_000_000; suffix = 'B'; }
+            else if (abs >= 1_000_000) { v = value / 1_000_000; suffix = 'M'; }
+            else if (abs >= 1_000) { v = value / 1_000; suffix = 'K'; }
+            return `$${v.toFixed(2)}${suffix}`;
+        }
+
+        function formatPercent(value) {
+            if (value === null || value === undefined || !Number.isFinite(value)) return '<span>—</span>';
+            const cls = value > 0 ? 'color: #16a34a;' : (value < 0 ? 'color:#ef4444;' : 'color:inherit;');
+            const sign = value > 0 ? '+' : '';
+            return `<span style="${cls}">${sign}${value.toFixed(2)}%</span>`;
+        }
+
+        function renderSecurity(score, rugged) {
+            if (rugged === true) {
+                return `<span class="badge" style="background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;">RUG</span>`;
+            }
+            if (score === null || score === undefined) return '—';
+            let color = '#64748b';
+            if (score >= 700) color = '#16a34a';
+            else if (score >= 500) color = '#22c55e';
+            else if (score >= 300) color = '#f59e0b';
+            else color = '#ef4444';
+            return `<span style="font-weight:600;color:${color}">${score}</span>`;
+        }
+
+        function renderStatusBadges(token) {
+            const badges = [];
+            if (token.has_pool_price) badges.push('<span class="badge" style="background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;">POOL</span>');
+            if (token.has_ohlcv) badges.push('<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;">OHLCV</span>');
+            if (token.has_open_position) badges.push('<span class="badge" style="background:#fde68a;color:#92400e;border:1px solid #fcd34d;">POS</span>');
+            if (token.blacklisted) badges.push('<span class="badge" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;">BL</span>');
+            return badges.join(' ');
         }
         
         function formatTimeAgo(timestamp) {
@@ -2673,10 +2781,40 @@ pub fn tokens_content() -> String {
                 loadTokens();
             }, 2000);
         }
+
+        function setupSortableHeaders() {
+            const thead = document.querySelector('#tokensTable thead');
+            if (!thead) return;
+            thead.addEventListener('click', (e) => {
+                const th = e.target.closest('th.sortable');
+                if (!th) return;
+                const key = th.getAttribute('data-sort-key');
+                if (!key) return;
+                if (sortBy === key) {
+                    sortDir = (sortDir === 'asc') ? 'desc' : 'asc';
+                } else {
+                    sortBy = key;
+                    // Default direction: symbol asc, others desc
+                    sortDir = (key === 'symbol') ? 'asc' : 'desc';
+                }
+                updateSortIndicators();
+                loadTokens();
+            });
+            updateSortIndicators();
+        }
+
+        function updateSortIndicators() {
+            const indicators = document.querySelectorAll('#tokensTable .sort-indicator');
+            indicators.forEach(el => { el.textContent = ''; });
+            const id = `sort-indicator-${sortBy}`;
+            const el = document.getElementById(id);
+            if (el) el.textContent = sortDir === 'asc' ? '▲' : '▼';
+        }
         
-        // Initialize tab styles
+        // Initialize tab styles and sortable headers
         document.getElementById('tabPool').classList.add('btn-primary');
         document.getElementById('tabAll').classList.add('btn-secondary');
+        setupSortableHeaders();
         loadTokens();
         startTokensRefresh();
     </script>
