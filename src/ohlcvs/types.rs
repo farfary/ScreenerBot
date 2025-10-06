@@ -1,7 +1,7 @@
 // Core types for OHLCV module
 
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use chrono::{ DateTime, Utc };
+use serde::{ Deserialize, Serialize };
 use std::fmt;
 use std::time::Duration;
 
@@ -39,8 +39,18 @@ impl Timeframe {
     }
 
     /// Returns the GeckoTerminal API parameter for this timeframe
+    ///
+    /// GeckoTerminal API only supports: "minute", "hour", "day", "second"
+    /// We fetch base granularity and aggregate locally for finer timeframes
     pub fn to_api_param(&self) -> &'static str {
-        self.as_str()
+        match self {
+            // All minute-based timeframes fetch from "minute" endpoint (1m candles)
+            Timeframe::Minute1 | Timeframe::Minute5 | Timeframe::Minute15 => "minute",
+            // All hour-based timeframes fetch from "hour" endpoint (1h candles)
+            Timeframe::Hour1 | Timeframe::Hour4 | Timeframe::Hour12 => "hour",
+            // Day timeframe
+            Timeframe::Day1 => "day",
+        }
     }
 
     /// Returns all supported timeframes
@@ -52,7 +62,7 @@ impl Timeframe {
             Timeframe::Hour1,
             Timeframe::Hour4,
             Timeframe::Hour12,
-            Timeframe::Day1,
+            Timeframe::Day1
         ]
     }
 
@@ -114,12 +124,12 @@ impl OhlcvDataPoint {
 
     /// Validates that the OHLCV data is consistent
     pub fn is_valid(&self) -> bool {
-        self.high >= self.low
-            && self.open >= self.low
-            && self.open <= self.high
-            && self.close >= self.low
-            && self.close <= self.high
-            && self.volume >= 0.0
+        self.high >= self.low &&
+            self.open >= self.low &&
+            self.open <= self.high &&
+            self.close >= self.low &&
+            self.close <= self.high &&
+            self.volume >= 0.0
     }
 }
 
@@ -236,11 +246,12 @@ impl TokenOhlcvConfig {
     }
 
     pub fn get_best_pool(&self) -> Option<&PoolConfig> {
-        self.pools.iter().filter(|p| p.is_healthy()).max_by(|a, b| {
-            a.liquidity
-                .partial_cmp(&b.liquidity)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        })
+        self.pools
+            .iter()
+            .filter(|p| p.is_healthy())
+            .max_by(|a, b| {
+                a.liquidity.partial_cmp(&b.liquidity).unwrap_or(std::cmp::Ordering::Equal)
+            })
     }
 
     pub fn mark_activity(&mut self) {
@@ -331,7 +342,10 @@ pub enum OhlcvError {
     RateLimitExceeded,
     PoolNotFound(String),
     InvalidTimeframe(String),
-    DataGap { start: i64, end: i64 },
+    DataGap {
+        start: i64,
+        end: i64,
+    },
     CacheError(String),
     NotFound(String),
 }
