@@ -1,7 +1,12 @@
 /// Test binary for webserver-only startup
 /// This allows testing events and WebSocket functionality without running the full bot
 
-use screenerbot::{ events, logger::{ log, LogTag }, webserver::{ self, config::WebserverConfig } };
+use screenerbot::{
+    config::{ load_config, get_config_clone },
+    events,
+    logger::{ log, LogTag },
+    webserver,
+};
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -10,9 +15,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logger (no init function, just use it directly)
     log(LogTag::System, "INFO", "🧪 Starting webserver-only test...");
 
-    // Set up minimal webserver config
-    let mut webserver_config = WebserverConfig::default();
-    webserver_config.enabled = true;
+    // Load configuration
+    load_config().expect("Failed to load config");
+    let config = get_config_clone();
+    let webserver_config = config.webserver.clone();
 
     // Initialize events system
     log(LogTag::System, "INFO", "Initializing events system...");

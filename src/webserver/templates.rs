@@ -2512,13 +2512,24 @@ pub fn tokens_content() -> String {
             }
             
             try {
-                const res = await fetch('/api/tokens');
+                const res = await fetch('/api/tokens/filter', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        view: 'pool',
+                        search: '',
+                        sort_by: 'symbol',
+                        sort_dir: 'asc',
+                        page: 1,
+                        page_size: 1000
+                    })
+                });
                 const data = await res.json();
                 
-                allTokensData = data.tokens || [];
+                allTokensData = data.data?.items || [];
                 
                 document.getElementById('tokenCount').textContent = 
-                    `${allTokensData.length} tokens with available prices`;
+                    `${data.data?.total || 0} tokens with available prices`;
                 
                 renderTokens(allTokensData);
                 
@@ -2539,10 +2550,12 @@ pub fn tokens_content() -> String {
             }
             
             tbody.innerHTML = tokens.map(token => {
-                const timeAgo = formatTimeAgo(token.updated_at);
-                const priceDisplay = token.price_sol < 0.000001 ? 
-                    token.price_sol.toExponential(4) : 
-                    token.price_sol.toFixed(9);
+                const timeAgo = token.price_updated_at ? formatTimeAgo(token.price_updated_at) : 'N/A';
+                const priceDisplay = token.price_sol ? 
+                    (token.price_sol < 0.000001 ? 
+                        token.price_sol.toExponential(4) : 
+                        token.price_sol.toFixed(9)) : 
+                    'N/A';
                 
                 return `
                     <tr>
