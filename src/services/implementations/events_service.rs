@@ -1,9 +1,9 @@
+use crate::logger::{log, LogTag};
+use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
-use crate::services::{ Service, ServiceHealth, ServiceMetrics };
-use crate::logger::{ log, LogTag };
 
 pub struct EventsService;
 
@@ -25,9 +25,9 @@ impl Service for EventsService {
         log(LogTag::System, "INFO", "Initializing events system...");
 
         // Initialize events database and system
-        crate::events
-            ::init().await
-            .map_err(|e| { format!("Failed to initialize events system: {}", e) })?;
+        crate::events::init()
+            .await
+            .map_err(|e| format!("Failed to initialize events system: {}", e))?;
 
         log(LogTag::System, "SUCCESS", "Events system initialized");
         Ok(())
@@ -36,17 +36,19 @@ impl Service for EventsService {
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor
+        monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
-        log(LogTag::System, "INFO", "Starting events service (instrumented)...");
+        log(
+            LogTag::System,
+            "INFO",
+            "Starting events service (instrumented)...",
+        );
 
         // Events system doesn't spawn background tasks currently
         // Just wait for shutdown signal
-        let handle = tokio::spawn(
-            monitor.instrument(async move {
-                shutdown.notified().await;
-            })
-        );
+        let handle = tokio::spawn(monitor.instrument(async move {
+            shutdown.notified().await;
+        }));
 
         Ok(vec![handle])
     }

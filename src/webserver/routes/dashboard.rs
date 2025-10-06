@@ -1,19 +1,16 @@
-use axum::{ extract::State, response::Json, routing::get, Router };
-use serde::{ Deserialize, Serialize };
+use axum::{extract::State, response::Json, routing::get, Router};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::webserver::state::AppState;
-use crate::wallet::get_current_wallet_status;
-use crate::positions;
-use crate::rpc::get_global_rpc_stats;
-use crate::tokens::blacklist::{ get_blacklist_summary, BlacklistSummary };
 use crate::global::{
-    TOKENS_SYSTEM_READY,
-    POSITIONS_SYSTEM_READY,
-    POOL_SERVICE_READY,
-    SECURITY_ANALYZER_READY,
+    POOL_SERVICE_READY, POSITIONS_SYSTEM_READY, SECURITY_ANALYZER_READY, TOKENS_SYSTEM_READY,
     TRANSACTIONS_SYSTEM_READY,
 };
+use crate::positions;
+use crate::rpc::get_global_rpc_stats;
+use crate::tokens::blacklist::{get_blacklist_summary, BlacklistSummary};
+use crate::wallet::get_current_wallet_status;
+use crate::webserver::state::AppState;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DashboardOverview {
@@ -104,30 +101,27 @@ pub fn routes() -> Router<Arc<AppState>> {
 async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<DashboardOverview> {
     // Get wallet info
     let wallet_info = match get_current_wallet_status().await {
-        Ok(Some(snapshot)) =>
-            WalletInfo {
-                sol_balance: snapshot.sol_balance,
-                sol_balance_lamports: snapshot.sol_balance_lamports,
-                total_tokens_count: snapshot.total_tokens_count as usize,
-                last_updated: Some(snapshot.snapshot_time.to_rfc3339()),
-            },
-        _ =>
-            WalletInfo {
-                sol_balance: 0.0,
-                sol_balance_lamports: 0,
-                total_tokens_count: 0,
-                last_updated: None,
-            },
+        Ok(Some(snapshot)) => WalletInfo {
+            sol_balance: snapshot.sol_balance,
+            sol_balance_lamports: snapshot.sol_balance_lamports,
+            total_tokens_count: snapshot.total_tokens_count as usize,
+            last_updated: Some(snapshot.snapshot_time.to_rfc3339()),
+        },
+        _ => WalletInfo {
+            sol_balance: 0.0,
+            sol_balance_lamports: 0,
+            total_tokens_count: 0,
+            last_updated: None,
+        },
     };
 
     // Get positions summary
     let open_positions = positions::get_db_open_positions().await.unwrap_or_default();
-    let closed_positions = positions::get_db_closed_positions().await.unwrap_or_default();
+    let closed_positions = positions::get_db_closed_positions()
+        .await
+        .unwrap_or_default();
 
-    let total_invested_sol: f64 = open_positions
-        .iter()
-        .map(|p| p.entry_size_sol)
-        .sum();
+    let total_invested_sol: f64 = open_positions.iter().map(|p| p.entry_size_sol).sum();
 
     let total_pnl: f64 = closed_positions
         .iter()
@@ -145,11 +139,7 @@ async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<Dash
         let profitable = closed_positions
             .iter()
             .filter(|p| {
-                if
-                    let (Some(entry), Some(exit)) = (
-                        p.effective_entry_price,
-                        p.effective_exit_price,
-                    )
+                if let (Some(entry), Some(exit)) = (p.effective_entry_price, p.effective_exit_price)
                 {
                     exit > entry
                 } else {
@@ -166,8 +156,7 @@ async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<Dash
     let open_position_details: Vec<OpenPositionDetail> = open_positions
         .iter()
         .map(|p| {
-            let hold_duration = chrono::Utc
-                ::now()
+            let hold_duration = chrono::Utc::now()
                 .signed_duration_since(p.entry_time)
                 .num_minutes();
 
@@ -207,12 +196,11 @@ async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<Dash
         transactions_system: TRANSACTIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::Relaxed),
     };
 
-    let all_services_ready =
-        services.tokens_system &&
-        services.positions_system &&
-        services.pool_service &&
-        services.security_analyzer &&
-        services.transactions_system;
+    let all_services_ready = services.tokens_system
+        && services.positions_system
+        && services.pool_service
+        && services.security_analyzer
+        && services.transactions_system;
 
     let uptime_seconds = state.uptime_seconds();
     let uptime_formatted = format_uptime(uptime_seconds);
@@ -223,8 +211,7 @@ async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<Dash
 
     let memory_mb = (sys.used_memory() as f64) / 1024.0 / 1024.0;
     let cpu_percent = sys.global_cpu_info().cpu_usage() as f64;
-    let active_threads = std::thread
-        ::available_parallelism()
+    let active_threads = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(1);
 
@@ -241,8 +228,7 @@ async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<Dash
     // Get RPC stats
     let rpc_info = match get_global_rpc_stats() {
         Some(rpc_stats) => {
-            let rpc_uptime = chrono::Utc
-                ::now()
+            let rpc_uptime = chrono::Utc::now()
                 .signed_duration_since(rpc_stats.startup_time)
                 .num_seconds() as u64;
             RpcInfo {
@@ -251,12 +237,11 @@ async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<Dash
                 uptime_seconds: rpc_uptime,
             }
         }
-        None =>
-            RpcInfo {
-                total_calls: 0,
-                calls_per_second: 0.0,
-                uptime_seconds: 0,
-            },
+        None => RpcInfo {
+            total_calls: 0,
+            calls_per_second: 0.0,
+            uptime_seconds: 0,
+        },
     };
 
     // Get blacklist info
@@ -274,22 +259,21 @@ async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<Dash
                 by_reason,
             }
         }
-        Err(_) =>
-            BlacklistInfo {
-                total_blacklisted: 0,
-                by_reason: std::collections::HashMap::new(),
-            },
+        Err(_) => BlacklistInfo {
+            total_blacklisted: 0,
+            by_reason: std::collections::HashMap::new(),
+        },
     };
 
     // Get monitoring info (from config system)
     let monitoring_info = MonitoringInfo {
         tokens_tracked: crate::pools::get_available_tokens().len(),
-        entry_check_interval_secs: crate::config::with_config(
-            |cfg| cfg.trader.entry_monitor_interval_secs
-        ),
-        position_monitor_interval_secs: crate::config::with_config(
-            |cfg| cfg.trader.position_monitor_interval_secs
-        ),
+        entry_check_interval_secs: crate::config::with_config(|cfg| {
+            cfg.trader.entry_monitor_interval_secs
+        }),
+        position_monitor_interval_secs: crate::config::with_config(|cfg| {
+            cfg.trader.position_monitor_interval_secs
+        }),
     };
 
     Json(DashboardOverview {

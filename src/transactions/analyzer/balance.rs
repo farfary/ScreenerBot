@@ -10,16 +10,16 @@
 // - MEV/Jito tip exclusion for clean swap amount detection
 // - Account-to-mint mapping for token identification
 
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 
-use crate::logger::{ log, LogTag };
-use crate::tokens::{ decimals::lamports_to_sol, get_token_decimals_sync };
-use crate::utils::sol_to_lamports;
-use crate::transactions::{ types::*, utils::*, program_ids };
 use crate::global::is_debug_transactions_enabled;
+use crate::logger::{log, LogTag};
+use crate::tokens::{decimals::lamports_to_sol, get_token_decimals_sync};
+use crate::transactions::{program_ids, types::*, utils::*};
+use crate::utils::sol_to_lamports;
 
 // =============================================================================
 // BALANCE ANALYSIS TYPES
@@ -56,7 +56,7 @@ pub struct CleanTransfer {
 pub enum TransferType {
     SolTransfer,
     TokenTransfer,
-    SwapLeg, // Part of a DEX swap
+    SwapLeg,     // Part of a DEX swap
     LiquidityOp, // Liquidity provision/removal
 }
 
@@ -68,7 +68,7 @@ pub enum TransferType {
 const COMMON_RENT_AMOUNTS: &[u64] = &[
     2039280, // Standard ATA rent
     1461600, // Token account rent
-    890880, // Mint account rent
+    890880,  // Mint account rent
 ];
 
 // MEV/Jito tip addresses are centralized in program_ids; reuse that list via helper.
@@ -83,13 +83,16 @@ const MAX_TIP_AMOUNT: f64 = 0.01; // 0.01 SOL
 /// Comprehensive balance analysis following industry standards
 pub async fn analyze_balance_changes(
     transaction: &Transaction,
-    tx_data: &crate::rpc::TransactionDetails
+    tx_data: &crate::rpc::TransactionDetails,
 ) -> Result<BalanceAnalysis, String> {
     if is_debug_transactions_enabled() {
         log(
             LogTag::Transactions,
             "BALANCE_ANALYZE",
-            &format!("Analyzing balance changes for tx: {}", transaction.signature)
+            &format!(
+                "Analyzing balance changes for tx: {}",
+                transaction.signature
+            ),
         );
     }
 
@@ -98,10 +101,8 @@ pub async fn analyze_balance_changes(
     let token_changes = extract_token_balance_changes(transaction, tx_data).await?;
 
     // Filter out noise (tips, rent, etc.)
-    let (clean_transfers, total_tips_filtered, total_rent) = filter_noise_transfers(
-        &sol_changes,
-        &token_changes
-    ).await?;
+    let (clean_transfers, total_tips_filtered, total_rent) =
+        filter_noise_transfers(&sol_changes, &token_changes).await?;
 
     // Extra safety: detect MEV/Jito tips directly from parsed instructions as well.
     // Take the max of the two methods to avoid double counting while ensuring we don't miss tips
@@ -125,12 +126,15 @@ pub async fn analyze_balance_changes(
 /// Main public function for extracting balance changes
 pub async fn extract_balance_changes(
     transaction: &Transaction,
-    tx_data: &crate::rpc::TransactionDetails
+    tx_data: &crate::rpc::TransactionDetails,
 ) -> Result<BalanceAnalysis, String> {
     log(
         LogTag::Transactions,
         "BALANCE_ANALYZE",
-        &format!("Analyzing balance changes for tx: {}", transaction.signature)
+        &format!(
+            "Analyzing balance changes for tx: {}",
+            transaction.signature
+        ),
     );
 
     // Extract all balance changes
@@ -158,7 +162,7 @@ pub async fn extract_balance_changes(
 /// Quick balance extraction for performance-critical paths
 pub async fn extract_basic_changes(
     transaction: &Transaction,
-    tx_data: &crate::rpc::TransactionDetails
+    tx_data: &crate::rpc::TransactionDetails,
 ) -> Result<BalanceAnalysis, String> {
     // Lightweight version - just raw changes without deep filtering
     let sol_changes = extract_sol_balance_changes(transaction, tx_data).await?;
@@ -181,7 +185,7 @@ pub async fn extract_basic_changes(
 /// Extract SOL balance changes using meta.preBalances/postBalances
 async fn extract_sol_balance_changes(
     transaction: &Transaction,
-    tx_data: &crate::rpc::TransactionDetails
+    tx_data: &crate::rpc::TransactionDetails,
 ) -> Result<HashMap<String, SolBalanceChange>, String> {
     let mut sol_changes = HashMap::new();
 
@@ -192,17 +196,19 @@ async fn extract_sol_balance_changes(
         log(
             LogTag::Transactions,
             "BALANCE_DEBUG",
-            &format!("Extracted {} account keys from message", account_keys.len())
+            &format!("Extracted {} account keys from message", account_keys.len()),
         );
     }
 
     // Get balance arrays
-    let pre_balances: &Vec<u64> = tx_data.meta
+    let pre_balances: &Vec<u64> = tx_data
+        .meta
         .as_ref()
         .and_then(|m| Some(m.pre_balances.as_ref()))
         .ok_or("Missing pre_balances in transaction meta")?;
 
-    let post_balances: &Vec<u64> = tx_data.meta
+    let post_balances: &Vec<u64> = tx_data
+        .meta
         .as_ref()
         .and_then(|m| Some(m.post_balances.as_ref()))
         .ok_or("Missing post_balances in transaction meta")?;
@@ -223,7 +229,7 @@ async fn extract_sol_balance_changes(
     // Align account_keys length to balances length (jsonParsed often includes additional LUT keys)
     let min_len = std::cmp::min(
         account_keys.len(),
-        std::cmp::min(pre_balances.len(), post_balances.len())
+        std::cmp::min(pre_balances.len(), post_balances.len()),
     );
     let account_keys = account_keys.into_iter().take(min_len).collect::<Vec<_>>();
 
@@ -236,12 +242,15 @@ async fn extract_sol_balance_changes(
             let change_lamports = (post_balance as i64) - (pre_balance as i64);
             let change_sol = lamports_to_sol(change_lamports.abs() as u64);
 
-            sol_changes.insert(account_key.clone(), SolBalanceChange {
-                account: account_key.clone(),
-                pre_balance: lamports_to_sol(pre_balance),
-                post_balance: lamports_to_sol(post_balance),
-                change: change_sol * (if change_lamports < 0 { -1.0 } else { 1.0 }),
-            });
+            sol_changes.insert(
+                account_key.clone(),
+                SolBalanceChange {
+                    account: account_key.clone(),
+                    pre_balance: lamports_to_sol(pre_balance),
+                    post_balance: lamports_to_sol(post_balance),
+                    change: change_sol * (if change_lamports < 0 { -1.0 } else { 1.0 }),
+                },
+            );
         }
     }
 
@@ -255,7 +264,7 @@ async fn extract_sol_balance_changes(
 /// Extract token balance changes using meta.preTokenBalances/postTokenBalances
 async fn extract_token_balance_changes(
     transaction: &Transaction,
-    tx_data: &crate::rpc::TransactionDetails
+    tx_data: &crate::rpc::TransactionDetails,
 ) -> Result<HashMap<String, Vec<TokenBalanceChange>>, String> {
     let mut token_changes: HashMap<String, Vec<TokenBalanceChange>> = HashMap::new();
 
@@ -264,8 +273,14 @@ async fn extract_token_balance_changes(
     // Process pre/post token balances
     let empty_pre_balances = Vec::new();
     let empty_post_balances = Vec::new();
-    let pre_token_balances = meta.pre_token_balances.as_ref().unwrap_or(&empty_pre_balances);
-    let post_token_balances = meta.post_token_balances.as_ref().unwrap_or(&empty_post_balances);
+    let pre_token_balances = meta
+        .pre_token_balances
+        .as_ref()
+        .unwrap_or(&empty_pre_balances);
+    let post_token_balances = meta
+        .post_token_balances
+        .as_ref()
+        .unwrap_or(&empty_post_balances);
 
     // Create lookup maps for efficient matching
     let mut pre_map: HashMap<(u32, String), &crate::rpc::UiTokenAmount> = HashMap::new();
@@ -300,7 +315,11 @@ async fn extract_token_balance_changes(
         let owner_opt = post_owner_map
             .get(&(account_index, mint.clone()))
             .and_then(|o| o.clone())
-            .or_else(|| pre_owner_map.get(&(account_index, mint.clone())).and_then(|o| o.clone()));
+            .or_else(|| {
+                pre_owner_map
+                    .get(&(account_index, mint.clone()))
+                    .and_then(|o| o.clone())
+            });
 
         let account_key_owned = if let Some(owner) = owner_opt {
             owner
@@ -335,7 +354,10 @@ async fn extract_token_balance_changes(
                 usd_value: None, // Will be calculated later if needed
             };
 
-            token_changes.entry(account_key_owned).or_insert_with(Vec::new).push(token_change);
+            token_changes
+                .entry(account_key_owned)
+                .or_insert_with(Vec::new)
+                .push(token_change);
         }
     }
 
@@ -349,7 +371,7 @@ async fn extract_token_balance_changes(
                 token_changes.len(),
                 pre_token_balances.len(),
                 post_token_balances.len()
-            )
+            ),
         );
     }
 
@@ -363,7 +385,7 @@ async fn extract_token_balance_changes(
 /// Filter out rent payments, tips, and other noise from transfers
 async fn filter_noise_transfers(
     sol_changes: &HashMap<String, SolBalanceChange>,
-    token_changes: &HashMap<String, Vec<TokenBalanceChange>>
+    token_changes: &HashMap<String, Vec<TokenBalanceChange>>,
 ) -> Result<(Vec<CleanTransfer>, f64, f64), String> {
     let mut clean_transfers = Vec::new();
     let mut total_tips = 0.0;
@@ -450,7 +472,7 @@ fn is_tip_transfer(account: &str, amount: f64) -> bool {
 fn calculate_balance_confidence(
     sol_changes: &HashMap<String, SolBalanceChange>,
     token_changes: &HashMap<String, Vec<TokenBalanceChange>>,
-    clean_transfers: &[CleanTransfer]
+    clean_transfers: &[CleanTransfer],
 ) -> f64 {
     let mut score = 0.0;
     let mut factors = 0;
@@ -468,12 +490,7 @@ fn calculate_balance_confidence(
     factors += 1;
 
     // Factor 3: Reasonable number of changes (not too many = complex, not too few = incomplete)
-    let total_changes =
-        sol_changes.len() +
-        token_changes
-            .values()
-            .map(|v| v.len())
-            .sum::<usize>();
+    let total_changes = sol_changes.len() + token_changes.values().map(|v| v.len()).sum::<usize>();
     if total_changes >= 2 && total_changes <= 10 {
         score += 0.3;
     }
@@ -508,12 +525,11 @@ fn account_keys_from_message(message: &Value) -> Vec<String> {
         // Fallback: array of objects with pubkey field
         keys = array
             .iter()
-            .filter_map(|v|
-                v
-                    .get("pubkey")
+            .filter_map(|v| {
+                v.get("pubkey")
                     .and_then(|p| p.as_str())
                     .map(|s| s.to_string())
-            )
+            })
             .collect();
         return keys;
     }
@@ -528,7 +544,7 @@ fn account_keys_from_message(message: &Value) -> Vec<String> {
                 static_keys
                     .iter()
                     .filter_map(|v| v.as_str())
-                    .map(|s| s.to_string())
+                    .map(|s| s.to_string()),
             );
         }
 
@@ -539,7 +555,7 @@ fn account_keys_from_message(message: &Value) -> Vec<String> {
                     writable
                         .iter()
                         .filter_map(|v| v.as_str())
-                        .map(|s| s.to_string())
+                        .map(|s| s.to_string()),
                 );
             }
             if let Some(readonly) = loaded.get("readonly").and_then(|v| v.as_array()) {
@@ -547,7 +563,7 @@ fn account_keys_from_message(message: &Value) -> Vec<String> {
                     readonly
                         .iter()
                         .filter_map(|v| v.as_str())
-                        .map(|s| s.to_string())
+                        .map(|s| s.to_string()),
                 );
             }
         }
@@ -589,7 +605,12 @@ async fn detect_mev_tips_from_instructions(tx_data: &crate::rpc::TransactionDeta
         }
     };
 
-    if let Some(ixs) = tx_data.transaction.message.get("instructions").and_then(|v| v.as_array()) {
+    if let Some(ixs) = tx_data
+        .transaction
+        .message
+        .get("instructions")
+        .and_then(|v| v.as_array())
+    {
         for ix in ixs {
             consider_ix(ix);
         }

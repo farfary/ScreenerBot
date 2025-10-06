@@ -9,15 +9,15 @@
 // 3. Pool address recognition - Identify specific pool contracts
 // 4. Confidence scoring - Weight multiple detection signals
 
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 
-use crate::logger::{ log, LogTag };
-use crate::transactions::{ program_ids::*, types::*, utils::* };
-use crate::global::is_debug_transactions_enabled;
 use super::balance::BalanceAnalysis;
+use crate::global::is_debug_transactions_enabled;
+use crate::logger::{log, LogTag};
+use crate::transactions::{program_ids::*, types::*, utils::*};
 
 // =============================================================================
 // DEX ANALYSIS TYPES
@@ -61,11 +61,11 @@ pub enum DetectedDex {
 /// Method used for DEX detection
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DetectionMethod {
-    ProgramId, // Direct program ID match
-    LogParsing, // Event log analysis
+    ProgramId,   // Direct program ID match
+    LogParsing,  // Event log analysis
     PoolAddress, // Pool contract recognition
-    Heuristic, // Pattern-based detection
-    Combined, // Multiple methods
+    Heuristic,   // Pattern-based detection
+    Combined,    // Multiple methods
 }
 
 // =============================================================================
@@ -80,24 +80,60 @@ fn get_dex_program_map() -> HashMap<&'static str, DetectedDex> {
     map.insert(JUPITER_V6_PROGRAM_ID, DetectedDex::Jupiter);
 
     // Raydium
-    map.insert("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8", DetectedDex::Raydium);
-    map.insert("CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK", DetectedDex::RaydiumCLMM);
+    map.insert(
+        "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
+        DetectedDex::Raydium,
+    );
+    map.insert(
+        "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK",
+        DetectedDex::RaydiumCLMM,
+    );
 
     // Orca
-    map.insert("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP", DetectedDex::Orca);
-    map.insert("whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc", DetectedDex::OrcaWhirlpool);
+    map.insert(
+        "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP",
+        DetectedDex::Orca,
+    );
+    map.insert(
+        "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
+        DetectedDex::OrcaWhirlpool,
+    );
 
     // PumpFun
-    map.insert("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P", DetectedDex::PumpFun);
+    map.insert(
+        "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",
+        DetectedDex::PumpFun,
+    );
 
     // Other DEXes
-    map.insert("Dooar9JkhdZ7J3LHN3A7YCuoGRUggXhQaG4kijfLGU2j", DetectedDex::Meteora);
-    map.insert("EewxydAPCCVuNEyrVN68PuSYdQ7wKn27V9Gjeoi8dy3S", DetectedDex::Lifinity);
-    map.insert("AMM55ShdkoGRB5jVYPjWziwk8m5MpwyDgsMWHaMSQWH6", DetectedDex::Aldrin);
-    map.insert("9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin", DetectedDex::Serum);
-    map.insert("srmqPiDkJokFGBWxH3qzowH4NhGFaKjR5Ek8TRnq6PZ", DetectedDex::Serum);
-    map.insert("opnb2LAfJYbRMAHHvqjCwQxanZn7ReEHp1k81EohpZb", DetectedDex::OpenBook);
-    map.insert("PhoeNiX7BPQtuPBGYWf5KhxZVsXBMNzC9mHvgSe3kfE", DetectedDex::Phoenix);
+    map.insert(
+        "Dooar9JkhdZ7J3LHN3A7YCuoGRUggXhQaG4kijfLGU2j",
+        DetectedDex::Meteora,
+    );
+    map.insert(
+        "EewxydAPCCVuNEyrVN68PuSYdQ7wKn27V9Gjeoi8dy3S",
+        DetectedDex::Lifinity,
+    );
+    map.insert(
+        "AMM55ShdkoGRB5jVYPjWziwk8m5MpwyDgsMWHaMSQWH6",
+        DetectedDex::Aldrin,
+    );
+    map.insert(
+        "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin",
+        DetectedDex::Serum,
+    );
+    map.insert(
+        "srmqPiDkJokFGBWxH3qzowH4NhGFaKjR5Ek8TRnq6PZ",
+        DetectedDex::Serum,
+    );
+    map.insert(
+        "opnb2LAfJYbRMAHHvqjCwQxanZn7ReEHp1k81EohpZb",
+        DetectedDex::OpenBook,
+    );
+    map.insert(
+        "PhoeNiX7BPQtuPBGYWf5KhxZVsXBMNzC9mHvgSe3kfE",
+        DetectedDex::Phoenix,
+    );
 
     map
 }
@@ -126,7 +162,7 @@ fn get_log_patterns() -> HashMap<&'static str, DetectedDex> {
 pub async fn detect_dex_interactions(
     transaction: &Transaction,
     tx_data: &crate::rpc::TransactionDetails,
-    balance_analysis: &BalanceAnalysis
+    balance_analysis: &BalanceAnalysis,
 ) -> Result<DexAnalysis, String> {
     detect_dex_and_router(transaction, tx_data, balance_analysis).await
 }
@@ -135,13 +171,13 @@ pub async fn detect_dex_interactions(
 pub async fn detect_dex_and_router(
     transaction: &Transaction,
     tx_data: &crate::rpc::TransactionDetails,
-    balance_analysis: &BalanceAnalysis
+    balance_analysis: &BalanceAnalysis,
 ) -> Result<DexAnalysis, String> {
     if is_debug_transactions_enabled() {
         log(
             LogTag::Transactions,
             "DEX_DETECT",
-            &format!("Detecting DEX/router for tx: {}", transaction.signature)
+            &format!("Detecting DEX/router for tx: {}", transaction.signature),
         );
     }
 
@@ -164,7 +200,7 @@ pub async fn detect_dex_and_router(
         log_detection,
         log_confidence,
         pool_detection,
-        pool_confidence
+        pool_confidence,
     );
 
     // Step 6: Extract metadata from logs
@@ -183,7 +219,7 @@ pub async fn detect_dex_and_router(
 /// Quick DEX detection for performance-critical paths
 pub async fn quick_dex_detection(
     transaction: &Transaction,
-    tx_data: &crate::rpc::TransactionDetails
+    tx_data: &crate::rpc::TransactionDetails,
 ) -> Result<DexAnalysis, String> {
     // Lightweight detection - just program ID matching
     let program_ids = extract_program_ids(tx_data)?;
@@ -224,12 +260,13 @@ fn detect_by_program_id(program_ids: &[String]) -> (Option<DetectedDex>, f64) {
 
 /// Detect DEX by parsing transaction logs
 fn detect_by_log_parsing(
-    tx_data: &crate::rpc::TransactionDetails
+    tx_data: &crate::rpc::TransactionDetails,
 ) -> Result<(Option<DetectedDex>, f64), String> {
     let log_patterns = get_log_patterns();
 
     let empty_logs = Vec::new();
-    let logs = tx_data.meta
+    let logs = tx_data
+        .meta
         .as_ref()
         .and_then(|m| m.log_messages.as_ref())
         .unwrap_or(&empty_logs);
@@ -247,7 +284,7 @@ fn detect_by_log_parsing(
 
 /// Detect DEX by recognizing known pool addresses
 fn detect_by_pool_address(
-    tx_data: &crate::rpc::TransactionDetails
+    tx_data: &crate::rpc::TransactionDetails,
 ) -> Result<(Option<DetectedDex>, Option<String>, f64), String> {
     // This would be expanded with a database of known pool addresses
     // For now, we'll use heuristics based on account patterns
@@ -279,7 +316,7 @@ fn combine_detection_results(
     log_detection: Option<DetectedDex>,
     log_confidence: f64,
     pool_detection: Option<DetectedDex>,
-    pool_confidence: f64
+    pool_confidence: f64,
 ) -> (Option<DetectedDex>, DetectionMethod, f64) {
     // Weighted scoring: program ID > pool address > log parsing
     let program_weight = 1.0;
@@ -292,9 +329,17 @@ fn combine_detection_results(
 
     // Find highest scoring detection
     if program_score >= pool_score && program_score >= log_score && program_detection.is_some() {
-        (program_detection, DetectionMethod::ProgramId, program_confidence)
+        (
+            program_detection,
+            DetectionMethod::ProgramId,
+            program_confidence,
+        )
     } else if pool_score >= log_score && pool_detection.is_some() {
-        (pool_detection, DetectionMethod::PoolAddress, pool_confidence)
+        (
+            pool_detection,
+            DetectionMethod::PoolAddress,
+            pool_confidence,
+        )
     } else if log_detection.is_some() {
         (log_detection, DetectionMethod::LogParsing, log_confidence)
     } else {
@@ -319,10 +364,8 @@ fn extract_program_ids(tx_data: &crate::rpc::TransactionDetails) -> Result<Vec<S
             // Prefer direct programId string when available
             if let Some(pid) = instruction.get("programId").and_then(|v| v.as_str()) {
                 program_ids.push(pid.to_string());
-            } else if
-                let Some(program_id_index) = instruction
-                    .get("programIdIndex")
-                    .and_then(|v| v.as_u64())
+            } else if let Some(program_id_index) =
+                instruction.get("programIdIndex").and_then(|v| v.as_u64())
             {
                 if let Some(program_id) = account_keys.get(program_id_index as usize) {
                     program_ids.push(program_id.clone());
@@ -335,19 +378,16 @@ fn extract_program_ids(tx_data: &crate::rpc::TransactionDetails) -> Result<Vec<S
     if let Some(meta) = &tx_data.meta {
         if let Some(inner_instructions) = &meta.inner_instructions {
             for inner_ix_group in inner_instructions {
-                if
-                    let Some(instructions) = inner_ix_group
-                        .get("instructions")
-                        .and_then(|v| v.as_array())
+                if let Some(instructions) = inner_ix_group
+                    .get("instructions")
+                    .and_then(|v| v.as_array())
                 {
                     for inner_ix in instructions {
                         // Prefer direct programId string when available
                         if let Some(pid) = inner_ix.get("programId").and_then(|v| v.as_str()) {
                             program_ids.push(pid.to_string());
-                        } else if
-                            let Some(program_id_index) = inner_ix
-                                .get("programIdIndex")
-                                .and_then(|v| v.as_u64())
+                        } else if let Some(program_id_index) =
+                            inner_ix.get("programIdIndex").and_then(|v| v.as_u64())
                         {
                             if let Some(program_id) = account_keys.get(program_id_index as usize) {
                                 program_ids.push(program_id.clone());
@@ -381,12 +421,11 @@ fn extract_account_keys(message: &Value) -> Vec<String> {
         // Fallback: array of objects with { pubkey, ... }
         keys = array
             .iter()
-            .filter_map(|v|
-                v
-                    .get("pubkey")
+            .filter_map(|v| {
+                v.get("pubkey")
                     .and_then(|p| p.as_str())
                     .map(|s| s.to_string())
-            )
+            })
             .collect();
         return keys;
     }
@@ -400,7 +439,7 @@ fn extract_account_keys(message: &Value) -> Vec<String> {
                 static_keys
                     .iter()
                     .filter_map(|v| v.as_str())
-                    .map(|s| s.to_string())
+                    .map(|s| s.to_string()),
             );
         }
 
@@ -410,7 +449,7 @@ fn extract_account_keys(message: &Value) -> Vec<String> {
                     writable
                         .iter()
                         .filter_map(|v| v.as_str())
-                        .map(|s| s.to_string())
+                        .map(|s| s.to_string()),
                 );
             }
             if let Some(readonly) = loaded.get("readonly").and_then(|v| v.as_array()) {
@@ -418,7 +457,7 @@ fn extract_account_keys(message: &Value) -> Vec<String> {
                     readonly
                         .iter()
                         .filter_map(|v| v.as_str())
-                        .map(|s| s.to_string())
+                        .map(|s| s.to_string()),
                 );
             }
         }
@@ -444,7 +483,7 @@ fn is_orca_pool_pattern(account: &str) -> bool {
 /// Extract DEX-specific metadata from transaction logs
 fn extract_dex_metadata(
     tx_data: &crate::rpc::TransactionDetails,
-    detected_dex: &Option<DetectedDex>
+    detected_dex: &Option<DetectedDex>,
 ) -> Result<HashMap<String, String>, String> {
     let mut metadata = HashMap::new();
 

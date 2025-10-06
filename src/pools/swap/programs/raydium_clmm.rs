@@ -4,25 +4,20 @@
 /// It integrates with the centralized Raydium CLMM decoder and provides proper
 /// account derivation and swap calculations based on the Uniswap V3 model.
 use super::ProgramSwap;
-use crate::logger::{ log, LogTag };
-use crate::pools::decoders::raydium_clmm::{ ClmmPoolInfo, RaydiumClmmDecoder };
+use crate::logger::{log, LogTag};
+use crate::pools::decoders::raydium_clmm::{ClmmPoolInfo, RaydiumClmmDecoder};
 use crate::pools::swap::executor::SwapExecutor;
 use crate::pools::swap::types::{
-    constants::*,
-    SwapDirection,
-    SwapError,
-    SwapParams,
-    SwapRequest,
-    SwapResult,
+    constants::*, SwapDirection, SwapError, SwapParams, SwapRequest, SwapResult,
 };
 use crate::pools::types::RAYDIUM_CLMM_PROGRAM_ID;
 use crate::pools::AccountData;
-use crate::rpc::{ get_rpc_client, sol_to_lamports };
+use crate::rpc::{get_rpc_client, sol_to_lamports};
 
 use solana_sdk::{
-    instruction::{ AccountMeta, Instruction },
+    instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
-    signature::{ Keypair, Signer },
+    signature::{Keypair, Signer},
     system_instruction,
     transaction::Transaction,
 };
@@ -41,12 +36,12 @@ pub struct RaydiumClmmSwap;
 impl ProgramSwap for RaydiumClmmSwap {
     async fn execute_swap(
         request: SwapRequest,
-        pool_data: AccountData
+        pool_data: AccountData,
     ) -> Result<SwapResult, SwapError> {
         log(
             LogTag::System,
             "INFO",
-            &format!("🟣 Starting Raydium CLMM {:?} swap", request.direction)
+            &format!("🟣 Starting Raydium CLMM {:?} swap", request.direction),
         );
 
         // Decode pool state using centralized decoder
@@ -63,10 +58,8 @@ impl ProgramSwap for RaydiumClmmSwap {
             "INFO",
             &format!(
                 "💡 CLMM Swap: {} → {} (min output: {})",
-                swap_params.input_amount,
-                swap_params.expected_output,
-                swap_params.minimum_output
-            )
+                swap_params.input_amount, swap_params.expected_output, swap_params.minimum_output
+            ),
         );
 
         // Build transaction with proper account derivation
@@ -75,8 +68,9 @@ impl ProgramSwap for RaydiumClmmSwap {
             &request,
             &pool_info,
             &swap_params,
-            &pool_data
-        ).await?;
+            &pool_data,
+        )
+        .await?;
 
         // Execute transaction
         SwapExecutor::execute_transaction(transaction, swap_params, request.dry_run).await
@@ -98,15 +92,14 @@ impl RaydiumClmmSwap {
 
     /// Load wallet from configuration
     async fn load_wallet() -> Result<Keypair, SwapError> {
-        crate::config
-            ::get_wallet_keypair()
+        crate::config::get_wallet_keypair()
             .map_err(|e| SwapError::ExecutionError(format!("Failed to load wallet: {}", e)))
     }
 
     /// Calculate swap parameters using CLMM concentrated liquidity math
     async fn calculate_clmm_swap_params(
         request: &SwapRequest,
-        pool_info: &ClmmPoolInfo
+        pool_info: &ClmmPoolInfo,
     ) -> Result<SwapParams, SwapError> {
         let rpc_client = get_rpc_client();
 
@@ -123,27 +116,40 @@ impl RaydiumClmmSwap {
                 vault_1_balance,
                 pool_info.tick_current,
                 Self::sqrt_price_x64_to_price(pool_info.sqrt_price_x64)
-            )
+            ),
         );
 
         // Determine which token is SOL and get current price
-        let (sol_mint, token_mint, sol_decimals, token_decimals, is_token_0_sol) = if
-            pool_info.token_mint_0 == WSOL_MINT
-        {
-            (WSOL_MINT, &pool_info.token_mint_1, 9, pool_info.mint_decimals_1, true)
-        } else if pool_info.token_mint_1 == WSOL_MINT {
-            (WSOL_MINT, &pool_info.token_mint_0, 9, pool_info.mint_decimals_0, false)
-        } else {
-            return Err(SwapError::InvalidPool("Pool does not contain SOL".to_string()));
-        };
+        let (sol_mint, token_mint, sol_decimals, token_decimals, is_token_0_sol) =
+            if pool_info.token_mint_0 == WSOL_MINT {
+                (
+                    WSOL_MINT,
+                    &pool_info.token_mint_1,
+                    9,
+                    pool_info.mint_decimals_1,
+                    true,
+                )
+            } else if pool_info.token_mint_1 == WSOL_MINT {
+                (
+                    WSOL_MINT,
+                    &pool_info.token_mint_0,
+                    9,
+                    pool_info.mint_decimals_0,
+                    false,
+                )
+            } else {
+                return Err(SwapError::InvalidPool(
+                    "Pool does not contain SOL".to_string(),
+                ));
+            };
 
         // Convert sqrt_price_x64 to actual price
         let sqrt_price = Self::sqrt_price_x64_to_price(pool_info.sqrt_price_x64);
         let current_price = sqrt_price * sqrt_price;
 
         // Calculate swap amounts based on CLMM pricing
-        let (input_amount, expected_output, input_amount_raw, minimum_output_raw) = match
-            request.direction
+        let (input_amount, expected_output, input_amount_raw, minimum_output_raw) = match request
+            .direction
         {
             SwapDirection::Buy => {
                 // Buying tokens with SOL
@@ -163,8 +169,9 @@ impl RaydiumClmmSwap {
                 };
 
                 let token_amount_raw = (token_amount * (10_f64).powi(token_decimals as i32)) as u64;
-                let minimum_token_raw = ((token_amount_raw as f64) *
-                    (1.0 - (request.slippage_bps as f64) / 10000.0)) as u64;
+                let minimum_token_raw = ((token_amount_raw as f64)
+                    * (1.0 - (request.slippage_bps as f64) / 10000.0))
+                    as u64;
 
                 (sol_amount, token_amount, sol_amount_raw, minimum_token_raw)
             }
@@ -185,8 +192,9 @@ impl RaydiumClmmSwap {
                 };
 
                 let sol_amount_raw = sol_to_lamports(sol_amount);
-                let minimum_sol_raw = ((sol_amount_raw as f64) *
-                    (1.0 - (request.slippage_bps as f64) / 10000.0)) as u64;
+                let minimum_sol_raw = ((sol_amount_raw as f64)
+                    * (1.0 - (request.slippage_bps as f64) / 10000.0))
+                    as u64;
 
                 (token_amount, sol_amount, token_amount_raw, minimum_sol_raw)
             }
@@ -195,11 +203,11 @@ impl RaydiumClmmSwap {
         Ok(SwapParams {
             input_amount,
             expected_output,
-            minimum_output: (minimum_output_raw as f64) /
-            (10_f64).powi(match request.direction {
-                SwapDirection::Buy => token_decimals as i32,
-                SwapDirection::Sell => sol_decimals as i32,
-            }),
+            minimum_output: (minimum_output_raw as f64)
+                / (10_f64).powi(match request.direction {
+                    SwapDirection::Buy => token_decimals as i32,
+                    SwapDirection::Sell => sol_decimals as i32,
+                }),
             input_amount_raw,
             minimum_output_raw,
         })
@@ -211,13 +219,14 @@ impl RaydiumClmmSwap {
         request: &SwapRequest,
         pool_info: &ClmmPoolInfo,
         swap_params: &SwapParams,
-        pool_data: &AccountData
+        pool_data: &AccountData,
     ) -> Result<Transaction, SwapError> {
         let mut instructions = Vec::new();
         let wallet_pubkey = wallet.pubkey();
 
         // Determine token mint and programs - need to properly detect Token-2022
-        let (token_mint, token_program_id, is_token_0_sol) = if pool_info.token_mint_0 == WSOL_MINT {
+        let (token_mint, token_program_id, is_token_0_sol) = if pool_info.token_mint_0 == WSOL_MINT
+        {
             let token_mint = &pool_info.token_mint_1;
             // Check if this is a Token-2022 token by attempting to get account info
             let token_program_id = Self::get_token_program_for_mint(token_mint).await?;
@@ -227,13 +236,15 @@ impl RaydiumClmmSwap {
             let token_program_id = Self::get_token_program_for_mint(token_mint).await?;
             (token_mint, token_program_id, true)
         } else {
-            return Err(SwapError::InvalidPool("Pool does not contain SOL".to_string()));
+            return Err(SwapError::InvalidPool(
+                "Pool does not contain SOL".to_string(),
+            ));
         };
 
         // Get associated token accounts with correct program
         let wsol_ata = spl_associated_token_account::get_associated_token_address(
             &wallet_pubkey,
-            &Pubkey::from_str(WSOL_MINT).unwrap()
+            &Pubkey::from_str(WSOL_MINT).unwrap(),
         );
 
         let token_ata = if token_program_id == Pubkey::from_str(TOKEN_2022_PROGRAM_ID).unwrap() {
@@ -241,13 +252,13 @@ impl RaydiumClmmSwap {
             spl_associated_token_account::get_associated_token_address_with_program_id(
                 &wallet_pubkey,
                 &Pubkey::from_str(token_mint).unwrap(),
-                &token_program_id
+                &token_program_id,
             )
         } else {
             // Legacy SPL token ATA
             spl_associated_token_account::get_associated_token_address(
                 &wallet_pubkey,
-                &Pubkey::from_str(token_mint).unwrap()
+                &Pubkey::from_str(token_mint).unwrap(),
             )
         };
 
@@ -258,7 +269,7 @@ impl RaydiumClmmSwap {
                     &wallet_pubkey,
                     &wallet_pubkey,
                     &Pubkey::from_str(WSOL_MINT).unwrap(),
-                    &spl_token::id()
+                    &spl_token::id(),
                 );
             instructions.push(create_wsol_ix);
         }
@@ -269,7 +280,7 @@ impl RaydiumClmmSwap {
                     &wallet_pubkey,
                     &wallet_pubkey,
                     &Pubkey::from_str(token_mint).unwrap(),
-                    &token_program_id
+                    &token_program_id,
                 );
             instructions.push(create_token_ix);
         }
@@ -279,7 +290,7 @@ impl RaydiumClmmSwap {
             let transfer_ix = system_instruction::transfer(
                 &wallet_pubkey,
                 &wsol_ata,
-                swap_params.input_amount_raw
+                swap_params.input_amount_raw,
             );
             instructions.push(transfer_ix);
 
@@ -296,8 +307,9 @@ impl RaydiumClmmSwap {
             request.direction,
             swap_params,
             is_token_0_sol,
-            &pool_data.pubkey // Pass the actual pool address
-        ).await?;
+            &pool_data.pubkey, // Pass the actual pool address
+        )
+        .await?;
         instructions.push(swap_ix);
 
         // Handle WSOL unwrapping
@@ -306,14 +318,15 @@ impl RaydiumClmmSwap {
             &wsol_ata,
             &wallet_pubkey,
             &wallet_pubkey,
-            &[]
+            &[],
         )?;
         instructions.push(close_wsol_ix);
 
         // Create transaction
         let rpc_client = get_rpc_client();
         let recent_blockhash = rpc_client
-            .get_latest_blockhash().await
+            .get_latest_blockhash()
+            .await
             .map_err(|e| SwapError::RpcError(format!("Failed to get blockhash: {}", e)))?;
 
         let transaction = Transaction::new_with_payer(&instructions, Some(&wallet_pubkey));
@@ -332,15 +345,13 @@ impl RaydiumClmmSwap {
         direction: SwapDirection,
         swap_params: &SwapParams,
         is_token_0_sol: bool,
-        pool_address: &Pubkey // Pass the actual pool address from AccountData
+        pool_address: &Pubkey, // Pass the actual pool address from AccountData
     ) -> Result<Instruction, SwapError> {
         // Use the passed pool address
-        let amm_config = Pubkey::from_str(&pool_info.amm_config).map_err(|e|
-            SwapError::TransactionError(format!("Invalid amm_config: {}", e))
-        )?;
-        let observation_key = Pubkey::from_str(&pool_info.observation_key).map_err(|e|
-            SwapError::TransactionError(format!("Invalid observation_key: {}", e))
-        )?;
+        let amm_config = Pubkey::from_str(&pool_info.amm_config)
+            .map_err(|e| SwapError::TransactionError(format!("Invalid amm_config: {}", e)))?;
+        let observation_key = Pubkey::from_str(&pool_info.observation_key)
+            .map_err(|e| SwapError::TransactionError(format!("Invalid observation_key: {}", e)))?;
 
         // Get mint addresses
         let wsol_mint = Pubkey::from_str(WSOL_MINT).unwrap();
@@ -351,34 +362,31 @@ impl RaydiumClmmSwap {
         };
 
         // Token vaults
-        let token_vault_0 = Pubkey::from_str(&pool_info.token_vault_0).map_err(|e|
-            SwapError::TransactionError(format!("Invalid token_vault_0: {}", e))
-        )?;
-        let token_vault_1 = Pubkey::from_str(&pool_info.token_vault_1).map_err(|e|
-            SwapError::TransactionError(format!("Invalid token_vault_1: {}", e))
-        )?;
+        let token_vault_0 = Pubkey::from_str(&pool_info.token_vault_0)
+            .map_err(|e| SwapError::TransactionError(format!("Invalid token_vault_0: {}", e)))?;
+        let token_vault_1 = Pubkey::from_str(&pool_info.token_vault_1)
+            .map_err(|e| SwapError::TransactionError(format!("Invalid token_vault_1: {}", e)))?;
 
         // Determine input/output accounts based on direction and token orientation
-        let (input_token_account, output_token_account, input_vault, output_vault) = match
-            (direction, is_token_0_sol)
-        {
-            (SwapDirection::Buy, true) => {
-                // Buying tokens with SOL, SOL is token_0
-                (wsol_ata, token_ata, &token_vault_0, &token_vault_1)
-            }
-            (SwapDirection::Buy, false) => {
-                // Buying tokens with SOL, SOL is token_1
-                (wsol_ata, token_ata, &token_vault_1, &token_vault_0)
-            }
-            (SwapDirection::Sell, true) => {
-                // Selling tokens for SOL, SOL is token_0
-                (token_ata, wsol_ata, &token_vault_1, &token_vault_0)
-            }
-            (SwapDirection::Sell, false) => {
-                // Selling tokens for SOL, SOL is token_1
-                (token_ata, wsol_ata, &token_vault_0, &token_vault_1)
-            }
-        };
+        let (input_token_account, output_token_account, input_vault, output_vault) =
+            match (direction, is_token_0_sol) {
+                (SwapDirection::Buy, true) => {
+                    // Buying tokens with SOL, SOL is token_0
+                    (wsol_ata, token_ata, &token_vault_0, &token_vault_1)
+                }
+                (SwapDirection::Buy, false) => {
+                    // Buying tokens with SOL, SOL is token_1
+                    (wsol_ata, token_ata, &token_vault_1, &token_vault_0)
+                }
+                (SwapDirection::Sell, true) => {
+                    // Selling tokens for SOL, SOL is token_0
+                    (token_ata, wsol_ata, &token_vault_1, &token_vault_0)
+                }
+                (SwapDirection::Sell, false) => {
+                    // Selling tokens for SOL, SOL is token_1
+                    (token_ata, wsol_ata, &token_vault_0, &token_vault_1)
+                }
+            };
 
         // Build instruction data with correct SwapV2 discriminator
         let mut instruction_data = vec![0x96, 0x43, 0x18, 0xcd, 0xc5, 0x65, 0x95, 0x7b]; // SwapV2 discriminator
@@ -401,22 +409,22 @@ impl RaydiumClmmSwap {
 
         // Build accounts in correct SwapSingleV2 order
         let accounts = vec![
-            AccountMeta::new_readonly(*user, true), // payer
-            AccountMeta::new_readonly(amm_config, false), // amm_config
-            AccountMeta::new(*pool_address, false), // pool_state
-            AccountMeta::new(*input_token_account, false), // input_token_account
-            AccountMeta::new(*output_token_account, false), // output_token_account
-            AccountMeta::new(*input_vault, false), // input_vault
-            AccountMeta::new(*output_vault, false), // output_vault
-            AccountMeta::new(observation_key, false), // observation_state
+            AccountMeta::new_readonly(*user, true),            // payer
+            AccountMeta::new_readonly(amm_config, false),      // amm_config
+            AccountMeta::new(*pool_address, false),            // pool_state
+            AccountMeta::new(*input_token_account, false),     // input_token_account
+            AccountMeta::new(*output_token_account, false),    // output_token_account
+            AccountMeta::new(*input_vault, false),             // input_vault
+            AccountMeta::new(*output_vault, false),            // output_vault
+            AccountMeta::new(observation_key, false),          // observation_state
             AccountMeta::new_readonly(spl_token::id(), false), // token_program
             AccountMeta::new_readonly(spl_token_2022::id(), false), // token_program_2022
             AccountMeta::new_readonly(
                 Pubkey::from_str("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr").unwrap(),
-                false
+                false,
             ), // memo_program
-            AccountMeta::new_readonly(input_mint, false), // input_vault_mint
-            AccountMeta::new_readonly(output_mint, false) // output_vault_mint
+            AccountMeta::new_readonly(input_mint, false),      // input_vault_mint
+            AccountMeta::new_readonly(output_mint, false),     // output_vault_mint
         ];
 
         Ok(Instruction {
@@ -438,13 +446,13 @@ impl RaydiumClmmSwap {
     /// Determine the correct token program for a mint
     async fn get_token_program_for_mint(mint_address: &str) -> Result<Pubkey, SwapError> {
         let rpc_client = get_rpc_client();
-        let mint_pubkey = Pubkey::from_str(mint_address).map_err(|e|
-            SwapError::RpcError(format!("Invalid mint address: {}", e))
-        )?;
+        let mint_pubkey = Pubkey::from_str(mint_address)
+            .map_err(|e| SwapError::RpcError(format!("Invalid mint address: {}", e)))?;
 
         // Get the mint account to check its owner
         let mint_account = rpc_client
-            .get_account(&mint_pubkey).await
+            .get_account(&mint_pubkey)
+            .await
             .map_err(|e| SwapError::RpcError(format!("Failed to fetch mint account: {}", e)))?;
 
         // Check the owner to determine if it's Token-2022 or legacy SPL Token
@@ -457,12 +465,12 @@ impl RaydiumClmmSwap {
 
     async fn get_token_account_balance(account_address: &str) -> Result<u64, SwapError> {
         let rpc_client = get_rpc_client();
-        let pubkey = Pubkey::from_str(account_address).map_err(|e|
-            SwapError::RpcError(format!("Invalid account address: {}", e))
-        )?;
+        let pubkey = Pubkey::from_str(account_address)
+            .map_err(|e| SwapError::RpcError(format!("Invalid account address: {}", e)))?;
 
         let account = rpc_client
-            .get_account(&pubkey).await
+            .get_account(&pubkey)
+            .await
             .map_err(|e| SwapError::RpcError(format!("Failed to fetch account: {}", e)))?;
 
         // Parse token account data to get amount

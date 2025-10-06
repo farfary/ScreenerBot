@@ -11,14 +11,13 @@
 ///   cargo run --bin debug_websocket
 ///   cargo run --bin debug_websocket -- --duration 60  (run for 60 seconds)
 ///   cargo run --bin debug_websocket -- --wallet YOUR_WALLET_ADDRESS
-
 use chrono::Utc;
-use futures_util::{ SinkExt, StreamExt };
-use serde::{ Deserialize, Serialize };
+use futures_util::{SinkExt, StreamExt};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Notify;
-use tokio::time::{ Duration, timeout };
-use tokio_tungstenite::{ connect_async, tungstenite::Message };
+use tokio::time::{timeout, Duration};
+use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 #[derive(Serialize)]
 struct LogsSubscribe {
@@ -53,11 +52,16 @@ fn print_step(step: &str, status: &str) {
         "INFO" => "ℹ️",
         _ => "▪️",
     };
-    println!("{} {} {}", status_symbol, step, if status != "RUNNING" && status != "INFO" {
-        format!("- {}", status)
-    } else {
-        String::new()
-    });
+    println!(
+        "{} {} {}",
+        status_symbol,
+        step,
+        if status != "RUNNING" && status != "INFO" {
+            format!("- {}", status)
+        } else {
+            String::new()
+        }
+    );
 }
 
 #[tokio::main]
@@ -130,7 +134,9 @@ async fn main() {
     let ws_url = {
         let rpc_urls = screenerbot::config::with_config(|cfg| cfg.rpc.urls.clone());
         if let Some(first_rpc_url) = rpc_urls.first() {
-            let ws = first_rpc_url.replace("https://", "wss://").replace("http://", "ws://");
+            let ws = first_rpc_url
+                .replace("https://", "wss://")
+                .replace("http://", "ws://");
             print_step(&format!("RPC URL: {}", first_rpc_url), "INFO");
             print_step(&format!("WebSocket URL: {}", ws), "SUCCESS");
             ws
@@ -152,7 +158,10 @@ async fn main() {
     let ws_stream = match connection_result {
         Ok(Ok((stream, resp))) => {
             let elapsed = connect_start.elapsed();
-            print_step(&format!("Connection established in {:?}", elapsed), "SUCCESS");
+            print_step(
+                &format!("Connection established in {:?}", elapsed),
+                "SUCCESS",
+            );
             print_step(&format!("Response status: {:?}", resp.status()), "INFO");
             println!();
             stream
@@ -163,7 +172,10 @@ async fn main() {
             println!("   1. Check if the RPC URL is correct in config.toml");
             println!("   2. Verify network connectivity:");
             println!("   3. Check if Helius API key is valid");
-            println!("   4. Try: curl -I {}", ws_url.replace("wss://", "https://"));
+            println!(
+                "   4. Try: curl -I {}",
+                ws_url.replace("wss://", "https://")
+            );
             return;
         }
         Err(_) => {
@@ -191,7 +203,7 @@ async fn main() {
             }),
             serde_json::json!({
                 "commitment": "confirmed"
-            })
+            }),
         ],
     };
 
@@ -236,7 +248,10 @@ async fn main() {
             println!("\n📨 Raw Response:");
             match serde_json::from_str::<serde_json::Value>(&text) {
                 Ok(json_val) => {
-                    println!("{}", serde_json::to_string_pretty(&json_val).unwrap_or(text.clone()));
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&json_val).unwrap_or(text.clone())
+                    );
                 }
                 Err(_) => {
                     println!("{}", text);
@@ -259,7 +274,7 @@ async fn main() {
                         subscription_id = result.as_u64();
                         print_step(
                             &format!("Subscription confirmed! ID: {:?}", subscription_id),
-                            "SUCCESS"
+                            "SUCCESS",
                         );
                     }
                 }
@@ -269,7 +284,10 @@ async fn main() {
             }
         }
         Ok(Some(Ok(msg))) => {
-            print_step(&format!("Received unexpected message type: {:?}", msg), "WARNING");
+            print_step(
+                &format!("Received unexpected message type: {:?}", msg),
+                "WARNING",
+            );
         }
         Ok(Some(Err(e))) => {
             print_step(&format!("WebSocket error: {}", e), "ERROR");
@@ -292,7 +310,10 @@ async fn main() {
     println!();
 
     // Step 5: Monitor for Messages
-    print_header(&format!("👀 STEP 4: MONITORING FOR MESSAGES ({}s)", test_duration));
+    print_header(&format!(
+        "👀 STEP 4: MONITORING FOR MESSAGES ({}s)",
+        test_duration
+    ));
 
     if subscription_id.is_some() {
         print_step("Listening for notifications", "SUCCESS");
@@ -358,10 +379,8 @@ async fn main() {
                             // Extract signature if available
                             if let Some(params) = resp.params {
                                 if let Some(result) = params.get("result") {
-                                    if
-                                        let Some(signature) = result
-                                            .get("value")
-                                            .and_then(|v| v.get("signature"))
+                                    if let Some(signature) =
+                                        result.get("value").and_then(|v| v.get("signature"))
                                     {
                                         println!("\n   🎯 Transaction Signature: {}", signature);
                                     }
@@ -445,7 +464,10 @@ async fn main() {
         println!("✅ Subscription:         CONFIRMED");
 
         if notification_count > 0 {
-            println!("✅ Notifications:        RECEIVED ({} notifications)", notification_count);
+            println!(
+                "✅ Notifications:        RECEIVED ({} notifications)",
+                notification_count
+            );
             println!("\n🎉 WebSocket is fully operational!");
         } else {
             println!("⚠️  Notifications:        NONE RECEIVED");

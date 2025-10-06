@@ -1,3 +1,4 @@
+use super::schemas::Config;
 /// Configuration utilities - loading, reloading, and access helpers
 ///
 /// This module provides utility functions for working with the configuration system:
@@ -5,12 +6,10 @@
 /// - Hot-reloading configuration at runtime
 /// - Thread-safe access helpers
 /// - File watching for automatic reloads
-
 use once_cell::sync::OnceCell;
-use std::sync::RwLock;
-use super::schemas::Config;
-use solana_sdk::signature::{ Keypair, Signer };
 use solana_sdk::pubkey::Pubkey;
+use solana_sdk::signature::{Keypair, Signer};
+use std::sync::RwLock;
 
 /// Global configuration instance
 ///
@@ -55,12 +54,10 @@ pub fn load_config() -> Result<(), String> {
 pub fn load_config_from_path(path: &str) -> Result<(), String> {
     let config = if std::path::Path::new(path).exists() {
         // Load from file
-        let contents = std::fs
-            ::read_to_string(path)
+        let contents = std::fs::read_to_string(path)
             .map_err(|e| format!("Failed to read config file '{}': {}", path, e))?;
 
-        toml
-            ::from_str::<Config>(&contents)
+        toml::from_str::<Config>(&contents)
             .map_err(|e| format!("Failed to parse config file '{}': {}", path, e))?
     } else {
         // Use defaults if file doesn't exist
@@ -68,7 +65,9 @@ pub fn load_config_from_path(path: &str) -> Result<(), String> {
         Config::default()
     };
 
-    CONFIG.set(RwLock::new(config)).map_err(|_| "Config already initialized".to_string())?;
+    CONFIG
+        .set(RwLock::new(config))
+        .map_err(|_| "Config already initialized".to_string())?;
 
     Ok(())
 }
@@ -103,12 +102,10 @@ pub fn reload_config() -> Result<(), String> {
 /// - `Ok(())` - Configuration reloaded successfully
 /// - `Err(String)` - Error message if reloading failed
 pub fn reload_config_from_path(path: &str) -> Result<(), String> {
-    let contents = std::fs
-        ::read_to_string(path)
+    let contents = std::fs::read_to_string(path)
         .map_err(|e| format!("Failed to read config file '{}': {}", path, e))?;
 
-    let new_config = toml
-        ::from_str::<Config>(&contents)
+    let new_config = toml::from_str::<Config>(&contents)
         .map_err(|e| format!("Failed to parse config file '{}': {}", path, e))?;
 
     if let Some(config_lock) = CONFIG.get() {
@@ -140,10 +137,17 @@ pub fn reload_config_from_path(path: &str) -> Result<(), String> {
 /// let max_positions = with_config(|cfg| cfg.trader.max_open_positions);
 /// let trade_size = with_config(|cfg| cfg.trader.trade_size_sol);
 /// ```
-pub fn with_config<F, R>(f: F) -> R where F: FnOnce(&Config) -> R {
-    let config_lock = CONFIG.get().expect("Config not initialized. Call load_config() first.");
+pub fn with_config<F, R>(f: F) -> R
+where
+    F: FnOnce(&Config) -> R,
+{
+    let config_lock = CONFIG
+        .get()
+        .expect("Config not initialized. Call load_config() first.");
 
-    let config = config_lock.read().expect("Failed to acquire config read lock");
+    let config = config_lock
+        .read()
+        .expect("Failed to acquire config read lock");
 
     f(&config)
 }
@@ -189,8 +193,7 @@ pub fn save_config(path: Option<&str>) -> Result<(), String> {
         toml::to_string_pretty(cfg).map_err(|e| format!("Failed to serialize config: {}", e))
     })?;
 
-    std::fs
-        ::write(path, config_str)
+    std::fs::write(path, config_str)
         .map_err(|e| format!("Failed to write config file '{}': {}", path, e))?;
 
     Ok(())
@@ -254,7 +257,9 @@ pub fn get_wallet_keypair() -> Result<Keypair, String> {
 /// Parses private key strings in the format "[1,2,3,4,...]" where each
 /// number represents a byte value from 0-255.
 fn load_keypair_from_array_format(private_key_str: &str) -> Result<Keypair, String> {
-    let private_key_str = private_key_str.trim_start_matches('[').trim_end_matches(']');
+    let private_key_str = private_key_str
+        .trim_start_matches('[')
+        .trim_end_matches(']');
 
     let private_key_bytes: Result<Vec<u8>, _> = private_key_str
         .split(',')
@@ -264,13 +269,13 @@ fn load_keypair_from_array_format(private_key_str: &str) -> Result<Keypair, Stri
     match private_key_bytes {
         Ok(bytes) => {
             if bytes.len() != 64 {
-                return Err(
-                    format!("Invalid private key length: expected 64 bytes, got {}", bytes.len())
-                );
+                return Err(format!(
+                    "Invalid private key length: expected 64 bytes, got {}",
+                    bytes.len()
+                ));
             }
-            Keypair::from_bytes(&bytes).map_err(|e|
-                format!("Failed to create keypair from array: {}", e)
-            )
+            Keypair::from_bytes(&bytes)
+                .map_err(|e| format!("Failed to create keypair from array: {}", e))
         }
         Err(e) => Err(format!("Failed to parse private key array: {}", e)),
     }
@@ -281,18 +286,19 @@ fn load_keypair_from_array_format(private_key_str: &str) -> Result<Keypair, Stri
 /// Parses private key strings in base58 format, which is the standard
 /// Solana wallet format used by most tools and libraries.
 fn load_keypair_from_base58_format(private_key_str: &str) -> Result<Keypair, String> {
-    let decoded = bs58
-        ::decode(private_key_str)
+    let decoded = bs58::decode(private_key_str)
         .into_vec()
         .map_err(|e| format!("Failed to decode base58 private key: {}", e))?;
 
     if decoded.len() != 64 {
-        return Err(format!("Invalid private key length: expected 64 bytes, got {}", decoded.len()));
+        return Err(format!(
+            "Invalid private key length: expected 64 bytes, got {}",
+            decoded.len()
+        ));
     }
 
-    Keypair::from_bytes(&decoded).map_err(|e|
-        format!("Failed to create keypair from base58: {}", e)
-    )
+    Keypair::from_bytes(&decoded)
+        .map_err(|e| format!("Failed to create keypair from base58: {}", e))
 }
 
 /// Get the wallet public key from the configuration
@@ -370,9 +376,12 @@ pub fn get_wallet_pubkey_string() -> Result<String, String> {
 /// )?;
 /// ```
 pub fn update_config_section<F>(update_fn: F, save_to_disk: bool) -> Result<(), String>
-    where F: FnOnce(&mut Config)
+where
+    F: FnOnce(&mut Config),
 {
-    let config_lock = CONFIG.get().ok_or("Config not initialized. Call load_config() first.")?;
+    let config_lock = CONFIG
+        .get()
+        .ok_or("Config not initialized. Call load_config() first.")?;
 
     {
         let mut config = config_lock
@@ -419,10 +428,11 @@ pub fn update_config_section<F>(update_fn: F, save_to_disk: bool) -> Result<(), 
 pub fn update_with_diff<F, T>(
     get_section: impl Fn(&Config) -> T,
     update_fn: F,
-    save_to_disk: bool
-)
-    -> Result<(T, T), String>
-    where F: FnOnce(&mut Config), T: Clone
+    save_to_disk: bool,
+) -> Result<(T, T), String>
+where
+    F: FnOnce(&mut Config),
+    T: Clone,
 {
     let old_value = with_config(|cfg| get_section(cfg));
 

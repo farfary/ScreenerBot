@@ -11,14 +11,14 @@
 /// - Error resilience with fallback mechanisms
 /// - Thread-safe price access for concurrent operations
 use crate::global::is_debug_sol_price_enabled;
-use crate::logger::{ log, LogTag };
+use crate::logger::{log, LogTag};
 use once_cell::sync::Lazy;
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::sync::RwLock as StdRwLock;
-use std::time::{ Duration, Instant };
+use std::time::{Duration, Instant};
 use tokio::sync::Notify;
-use tokio::time::{ interval, sleep };
+use tokio::time::{interval, sleep};
 
 // =============================================================================
 // CONFIGURATION CONSTANTS
@@ -106,14 +106,12 @@ impl SolPriceData {
 // =============================================================================
 
 /// Global SOL price cache with thread-safe access
-static SOL_PRICE_CACHE: Lazy<Arc<StdRwLock<SolPriceData>>> = Lazy::new(||
-    Arc::new(StdRwLock::new(SolPriceData::default()))
-);
+static SOL_PRICE_CACHE: Lazy<Arc<StdRwLock<SolPriceData>>> =
+    Lazy::new(|| Arc::new(StdRwLock::new(SolPriceData::default())));
 
 /// Service status tracking
-static SERVICE_RUNNING: Lazy<Arc<std::sync::atomic::AtomicBool>> = Lazy::new(||
-    Arc::new(std::sync::atomic::AtomicBool::new(false))
-);
+static SERVICE_RUNNING: Lazy<Arc<std::sync::atomic::AtomicBool>> =
+    Lazy::new(|| Arc::new(std::sync::atomic::AtomicBool::new(false)));
 
 // =============================================================================
 // PUBLIC API
@@ -134,14 +132,18 @@ pub fn get_sol_price() -> f64 {
                         &format!(
                             "SOL price cache stale (age: {}s), returning 0.0",
                             cache.age_seconds()
-                        )
+                        ),
                     );
                 }
                 0.0
             }
         }
         Err(e) => {
-            log(LogTag::SolPrice, "ERROR", &format!("Failed to read SOL price cache: {}", e));
+            log(
+                LogTag::SolPrice,
+                "ERROR",
+                &format!("Failed to read SOL price cache: {}", e),
+            );
             0.0
         }
     }
@@ -152,7 +154,11 @@ pub fn get_sol_price_info() -> Option<SolPriceData> {
     match SOL_PRICE_CACHE.read() {
         Ok(cache) => Some(cache.clone()),
         Err(e) => {
-            log(LogTag::SolPrice, "ERROR", &format!("Failed to read SOL price info: {}", e));
+            log(
+                LogTag::SolPrice,
+                "ERROR",
+                &format!("Failed to read SOL price info: {}", e),
+            );
             None
         }
     }
@@ -173,7 +179,7 @@ pub fn is_sol_price_service_running() -> bool {
 /// Returns JoinHandle so ServiceManager can wait for graceful shutdown.
 pub async fn start_sol_price_service(
     shutdown: Arc<Notify>,
-    monitor: tokio_metrics::TaskMonitor
+    monitor: tokio_metrics::TaskMonitor,
 ) -> Result<tokio::task::JoinHandle<()>, String> {
     log(LogTag::SolPrice, "STARTUP", "🚀 Starting SOL price service");
 
@@ -181,19 +187,25 @@ pub async fn start_sol_price_service(
     SERVICE_RUNNING.store(true, std::sync::atomic::Ordering::SeqCst);
 
     // Spawn the background task and return handle
-    let handle = tokio::spawn(
-        monitor.instrument(async move {
-            sol_price_task(shutdown).await;
-        })
-    );
+    let handle = tokio::spawn(monitor.instrument(async move {
+        sol_price_task(shutdown).await;
+    }));
 
-    log(LogTag::SolPrice, "SUCCESS", "✅ SOL price service started (instrumented)");
+    log(
+        LogTag::SolPrice,
+        "SUCCESS",
+        "✅ SOL price service started (instrumented)",
+    );
     Ok(handle)
 }
 
 /// Stop the SOL price service
 pub async fn stop_sol_price_service() {
-    log(LogTag::SolPrice, "SHUTDOWN", "🛑 Stopping SOL price service");
+    log(
+        LogTag::SolPrice,
+        "SHUTDOWN",
+        "🛑 Stopping SOL price service",
+    );
 
     // Mark service as stopped
     SERVICE_RUNNING.store(false, std::sync::atomic::Ordering::SeqCst);
@@ -207,7 +219,11 @@ pub async fn stop_sol_price_service() {
 
 /// Main SOL price monitoring task
 async fn sol_price_task(shutdown: Arc<Notify>) {
-    log(LogTag::SolPrice, "INFO", "📈 SOL price monitoring task started");
+    log(
+        LogTag::SolPrice,
+        "INFO",
+        "📈 SOL price monitoring task started",
+    );
 
     let mut price_interval = interval(Duration::from_secs(PRICE_REFRESH_INTERVAL_SECS));
     let mut consecutive_errors = 0u32;
@@ -249,7 +265,11 @@ async fn sol_price_task(shutdown: Arc<Notify>) {
 
     // Mark service as stopped
     SERVICE_RUNNING.store(false, std::sync::atomic::Ordering::SeqCst);
-    log(LogTag::SolPrice, "INFO", "✅ SOL price monitoring task completed");
+    log(
+        LogTag::SolPrice,
+        "INFO",
+        "✅ SOL price monitoring task completed",
+    );
 }
 
 // =============================================================================
@@ -259,7 +279,11 @@ async fn sol_price_task(shutdown: Arc<Notify>) {
 /// Fetch SOL price from Jupiter API and update cache
 async fn fetch_and_update_sol_price(consecutive_errors: &mut u32) {
     if is_debug_sol_price_enabled() {
-        log(LogTag::SolPrice, "DEBUG", "🔄 Fetching SOL price from Jupiter API");
+        log(
+            LogTag::SolPrice,
+            "DEBUG",
+            "🔄 Fetching SOL price from Jupiter API",
+        );
     }
 
     match fetch_sol_price_from_jupiter().await {
@@ -268,16 +292,19 @@ async fn fetch_and_update_sol_price(consecutive_errors: &mut u32) {
                 update_price_cache(price, "jupiter_api".to_string(), true).await;
                 *consecutive_errors = 0; // Reset error counter on success
 
-                log(LogTag::SolPrice, "SUCCESS", &format!("💰 SOL price updated: ${:.4}", price));
+                log(
+                    LogTag::SolPrice,
+                    "SUCCESS",
+                    &format!("💰 SOL price updated: ${:.4}", price),
+                );
             } else {
                 log(
                     LogTag::SolPrice,
                     "WARN",
                     &format!(
                         "⚠️ SOL price validation failed: ${:.4} (change >{}%)",
-                        price,
-                        MAX_PRICE_CHANGE_PERCENT
-                    )
+                        price, MAX_PRICE_CHANGE_PERCENT
+                    ),
                 );
                 *consecutive_errors += 1;
             }
@@ -289,7 +316,10 @@ async fn fetch_and_update_sol_price(consecutive_errors: &mut u32) {
             log(
                 LogTag::SolPrice,
                 "ERROR",
-                &format!("❌ Failed to fetch SOL price: {} (errors: {})", e, consecutive_errors)
+                &format!(
+                    "❌ Failed to fetch SOL price: {} (errors: {})",
+                    e, consecutive_errors
+                ),
             );
 
             // If too many errors, mark cache as invalid but keep last price
@@ -307,7 +337,8 @@ async fn fetch_sol_price_from_jupiter() -> Result<f64, String> {
     let response = client
         .get(JUPITER_PRICE_API)
         .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
-        .send().await
+        .send()
+        .await
         .map_err(|e| format!("Request failed: {}", e))?;
 
     if !response.status().is_success() {
@@ -315,7 +346,8 @@ async fn fetch_sol_price_from_jupiter() -> Result<f64, String> {
     }
 
     let price_response: JupiterPriceResponse = response
-        .json().await
+        .json()
+        .await
         .map_err(|e| format!("JSON parsing failed: {}", e))?;
 
     // Extract SOL price directly from the response
@@ -362,10 +394,8 @@ async fn update_price_cache(price: f64, source: String, is_valid: bool) {
                 "DEBUG",
                 &format!(
                     "💾 Price cache updated: ${:.4} from {} (fetch: {})",
-                    price,
-                    cache.source,
-                    cache.fetch_count
-                )
+                    price, cache.source, cache.fetch_count
+                ),
             );
         }
     }
@@ -385,7 +415,7 @@ async fn invalidate_cache() {
         log(
             LogTag::SolPrice,
             "WARN",
-            "⚠️ SOL price cache marked as invalid due to consecutive errors"
+            "⚠️ SOL price cache marked as invalid due to consecutive errors",
         );
     }
 }

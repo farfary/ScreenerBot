@@ -7,9 +7,9 @@
 //! derived swap metrics (amounts, mints, router detection, etc.) against the
 //! CSV expectations. It surfaces mismatches for deeper debugging.
 
-use std::{ collections::HashMap, path::PathBuf, str::FromStr };
+use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
-use anyhow::{ anyhow, Context, Result };
+use anyhow::{anyhow, Context, Result};
 use clap::Parser;
 use colored::*;
 use serde::Deserialize;
@@ -21,8 +21,8 @@ use screenerbot::{
     transactions::{
         database::init_transaction_database,
         processor::TransactionProcessor,
-        types::{ SwapPnLInfo, TokenSwapInfo, Transaction },
-        utils::{ WSOL_MINT },
+        types::{SwapPnLInfo, TokenSwapInfo, Transaction},
+        utils::WSOL_MINT,
     },
 };
 
@@ -184,7 +184,10 @@ async fn main() -> Result<()> {
     if let Err(e) = events::init().await {
         eprintln!(
             "{}",
-            format!("[WARN] Events system not initialized (continuing without persistent events): {}", e)
+            format!(
+                "[WARN] Events system not initialized (continuing without persistent events): {}",
+                e
+            )
         );
     } else {
         // Spawn background maintenance (non-blocking)
@@ -193,30 +196,30 @@ async fn main() -> Result<()> {
 
     // Single-transaction inspection mode
     if let Some(sig) = args.single.clone() {
-        let wallet_str = args.wallet
+        let wallet_str = args
+            .wallet
             .clone()
             .ok_or_else(|| anyhow!("--wallet <PUBKEY> is required with --single"))?;
         let wallet_pk = Pubkey::from_str(&wallet_str).context("Invalid --wallet pubkey")?;
-        init_transaction_database().await.map_err(|e|
-            anyhow!("Failed to initialize transactions database: {}", e)
-        )?;
+        init_transaction_database()
+            .await
+            .map_err(|e| anyhow!("Failed to initialize transactions database: {}", e))?;
         let processor = TransactionProcessor::new_with_cache_options(
             wallet_pk,
             args.cache_only,
-            args.force_refresh
+            args.force_refresh,
         );
 
         let tx = processor
-            .process_transaction(&sig).await
+            .process_transaction(&sig)
+            .await
             .map_err(|e| anyhow!("Processing failed for {}: {}", sig, e))?;
 
         println!("Single-transaction analysis for {}", sig.bold());
         println!("Wallet: {}", wallet_str);
         println!(
             "Status: {:?} success={} fee_lamports={:?}",
-            tx.status,
-            tx.success,
-            tx.fee_lamports
+            tx.status, tx.success, tx.fee_lamports
         );
         if let Some(slot) = tx.slot {
             println!("Slot: {}", slot);
@@ -244,11 +247,7 @@ async fn main() -> Result<()> {
         if let Some(ref pnl) = tx.swap_pnl_info {
             println!(
                 "PnL: swap_type={} sol_amount={:.9} token_amount={:.9} fees={:.9} ata_rents={:.9}",
-                pnl.swap_type,
-                pnl.sol_amount,
-                pnl.token_amount,
-                pnl.fees_paid_sol,
-                pnl.ata_rents
+                pnl.swap_type, pnl.sol_amount, pnl.token_amount, pnl.fees_paid_sol, pnl.ata_rents
             );
         }
 
@@ -262,10 +261,7 @@ async fn main() -> Result<()> {
                     inst.program_id,
                     inst.instruction_type,
                     inst.accounts.len(),
-                    inst.data
-                        .as_ref()
-                        .map(|_| " data")
-                        .unwrap_or("")
+                    inst.data.as_ref().map(|_| " data").unwrap_or("")
                 );
             }
         }
@@ -283,11 +279,9 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    let csv_path = args.csv
-        .clone()
-        .ok_or_else(||
-            anyhow!("--csv <PATH> is required for batch verification (omit it when using --single)")
-        )?;
+    let csv_path = args.csv.clone().ok_or_else(|| {
+        anyhow!("--csv <PATH> is required for batch verification (omit it when using --single)")
+    })?;
     let rows = load_csv(&csv_path)?;
     if rows.is_empty() {
         println!("{}", "No rows found in CSV".yellow());
@@ -306,21 +300,21 @@ async fn main() -> Result<()> {
         rows
     };
 
-    init_transaction_database().await.map_err(|e|
-        anyhow!("Failed to initialize transactions database: {}", e)
-    )?;
+    init_transaction_database()
+        .await
+        .map_err(|e| anyhow!("Failed to initialize transactions database: {}", e))?;
 
     println!(
         "{}",
         format!(
             "Loaded {} swap rows across {} wallet(s)",
             rows.len(),
-            rows
-                .iter()
+            rows.iter()
                 .map(|r| &r.wallet)
                 .collect::<std::collections::HashSet<_>>()
                 .len()
-        ).bold()
+        )
+        .bold()
     );
 
     let mut stats = VerificationStats::default();
@@ -337,7 +331,11 @@ async fn main() -> Result<()> {
             if let Err(e) = std::fs::create_dir_all(parent) {
                 eprintln!(
                     "{}",
-                    format!("[WARN] Could not create parent dir {}: {}", parent.display(), e)
+                    format!(
+                        "[WARN] Could not create parent dir {}: {}",
+                        parent.display(),
+                        e
+                    )
                 );
             }
         }
@@ -354,7 +352,10 @@ async fn main() -> Result<()> {
                     "match_status",
                 ]);
                 csv_writer = Some(wtr);
-                println!("{}", format!("Writing verification results to {}", path.display()));
+                println!(
+                    "{}",
+                    format!("Writing verification results to {}", path.display())
+                );
             }
             Err(e) => {
                 eprintln!(
@@ -378,7 +379,7 @@ async fn main() -> Result<()> {
         let processor = TransactionProcessor::new_with_cache_options(
             wallet_pubkey,
             args.cache_only,
-            args.force_refresh
+            args.force_refresh,
         );
 
         for row in wallet_rows {
@@ -397,11 +398,8 @@ async fn main() -> Result<()> {
 
             match processor.process_transaction(&row.signature).await {
                 Ok(transaction) => {
-                    let outcome = compare_row_with_transaction(
-                        &row,
-                        &transaction,
-                        args.min_mismatch_percent
-                    );
+                    let outcome =
+                        compare_row_with_transaction(&row, &transaction, args.min_mismatch_percent);
                     if outcome.matched {
                         stats.matched += 1;
                         if !args.mismatches_only {
@@ -446,7 +444,12 @@ async fn main() -> Result<()> {
                     stats.processing_failures += 1;
                     println!(
                         "{}",
-                        format!("{} {}: {}", "PROCESSING_ERROR".red().bold(), &row.signature, err)
+                        format!(
+                            "{} {}: {}",
+                            "PROCESSING_ERROR".red().bold(),
+                            &row.signature,
+                            err
+                        )
                     );
 
                     // Even on processing error, try to log a CSV row with expected amounts from CSV and zero calculated
@@ -465,14 +468,20 @@ async fn main() -> Result<()> {
     println!("  Processed : {}", stats.processed);
     println!("  Matched   : {}", stats.matched.to_string().green());
     println!("  Mismatched: {}", stats.mismatched.to_string().red());
-    println!("  Failures  : {}", if stats.processing_failures == 0 {
-        stats.processing_failures.to_string().green()
-    } else {
-        stats.processing_failures.to_string().red()
-    });
+    println!(
+        "  Failures  : {}",
+        if stats.processing_failures == 0 {
+            stats.processing_failures.to_string().green()
+        } else {
+            stats.processing_failures.to_string().red()
+        }
+    );
 
     if args.min_mismatch_percent > 0.0 {
-        println!("  Min mismatch threshold: {}%", args.min_mismatch_percent.to_string().cyan());
+        println!(
+            "  Min mismatch threshold: {}%",
+            args.min_mismatch_percent.to_string().cyan()
+        );
     }
 
     if stats.mismatched > 0 {
@@ -493,8 +502,7 @@ async fn main() -> Result<()> {
 }
 
 fn load_csv(csv_path: &PathBuf) -> Result<Vec<CsvSwapRow>> {
-    let mut reader = csv::ReaderBuilder
-        ::new()
+    let mut reader = csv::ReaderBuilder::new()
         .has_headers(true)
         .from_path(csv_path)
         .with_context(|| format!("Failed to open CSV at {}", csv_path.display()))?;
@@ -525,12 +533,15 @@ fn group_rows_by_wallet(rows: Vec<CsvSwapRow>) -> HashMap<String, Vec<CsvSwapRow
 fn compare_row_with_transaction(
     row: &CsvSwapRow,
     transaction: &Transaction,
-    min_mismatch_percent: f64
+    min_mismatch_percent: f64,
 ) -> ComparisonOutcome {
     let mut issues = Vec::new();
 
     if !transaction.success {
-        issues.push(format!("Transaction failed on-chain: {:?}", transaction.error_message));
+        issues.push(format!(
+            "Transaction failed on-chain: {:?}",
+            transaction.error_message
+        ));
     }
 
     if transaction.swap_pnl_info.is_none() {
@@ -558,7 +569,10 @@ fn compare_row_with_transaction(
 
     if let Some(ref pnl) = pnl_info {
         if pnl.swap_type != "Buy" && pnl.swap_type != "Sell" {
-            issues.push(format!("Unexpected swap type in PnL info: {}", pnl.swap_type));
+            issues.push(format!(
+                "Unexpected swap type in PnL info: {}",
+                pnl.swap_type
+            ));
         }
     }
 
@@ -587,45 +601,39 @@ fn verify_swap_orientation(row: &CsvSwapRow, swap: &TokenSwapInfo) -> Result<(),
     };
 
     if swap.swap_type != expected_swap_type {
-        return Err(
-            format!("Swap type mismatch: expected {}, got {}", expected_swap_type, swap.swap_type)
-        );
+        return Err(format!(
+            "Swap type mismatch: expected {}, got {}",
+            expected_swap_type, swap.swap_type
+        ));
     }
 
     match expected_swap_type {
         "sol_to_token" => {
             if swap.input_mint != WSOL_MINT {
-                return Err(
-                    format!("Input mint mismatch for buy: expected WSOL, got {}", swap.input_mint)
-                );
+                return Err(format!(
+                    "Input mint mismatch for buy: expected WSOL, got {}",
+                    swap.input_mint
+                ));
             }
             if swap.output_mint != row.token2 {
-                return Err(
-                    format!(
-                        "Output mint mismatch: expected {}, got {}",
-                        &row.token2,
-                        &swap.output_mint
-                    )
-                );
+                return Err(format!(
+                    "Output mint mismatch: expected {}, got {}",
+                    &row.token2, &swap.output_mint
+                ));
             }
         }
         "token_to_sol" => {
             if swap.input_mint != row.token1 {
-                return Err(
-                    format!(
-                        "Input mint mismatch for sell: expected {}, got {}",
-                        &row.token1,
-                        &swap.input_mint
-                    )
-                );
+                return Err(format!(
+                    "Input mint mismatch for sell: expected {}, got {}",
+                    &row.token1, &swap.input_mint
+                ));
             }
             if swap.output_mint != WSOL_MINT {
-                return Err(
-                    format!(
-                        "Output mint mismatch for sell: expected WSOL, got {}",
-                        &swap.output_mint
-                    )
-                );
+                return Err(format!(
+                    "Output mint mismatch for sell: expected WSOL, got {}",
+                    &swap.output_mint
+                ));
             }
         }
         "token_to_token" => {
@@ -643,17 +651,15 @@ fn verify_swap_amounts(
     row: &CsvSwapRow,
     swap: &TokenSwapInfo,
     pnl_info: &Option<SwapPnLInfo>,
-    min_mismatch_percent: f64
+    min_mismatch_percent: f64,
 ) -> Result<(), String> {
     let decimals1 = decimals_or_default(&row.token1, row.token_decimals1)?;
     let decimals2 = decimals_or_default(&row.token2, row.token_decimals2)?;
 
-    let expected_input_raw = parse_amount(&row.amount1, decimals1).map_err(|e|
-        format!("Failed to parse Token1 amount: {}", e)
-    )?;
-    let expected_output_raw = parse_amount(&row.amount2, decimals2).map_err(|e|
-        format!("Failed to parse Token2 amount: {}", e)
-    )?;
+    let expected_input_raw = parse_amount(&row.amount1, decimals1)
+        .map_err(|e| format!("Failed to parse Token1 amount: {}", e))?;
+    let expected_output_raw = parse_amount(&row.amount2, decimals2)
+        .map_err(|e| format!("Failed to parse Token2 amount: {}", e))?;
 
     // Start with processor-reported raw amounts
     let mut actual_input_raw = swap.input_amount as i128;
@@ -726,38 +732,35 @@ fn verify_swap_amounts(
     let output_allowed = tolerance_for_decimals(decimals2);
 
     if input_diff > (input_allowed as i128) && input_percent_diff >= min_mismatch_percent {
-        return Err(
-            format!(
-                "Input amount mismatch: expected {} (raw {}), got {} (raw {}), diff {} ({:.2}%)",
-                format_ui_amount(expected_input_raw, decimals1),
-                expected_input_raw,
-                format_ui_amount(actual_input_raw.max(0) as u128, decimals1),
-                actual_input_raw,
-                input_diff,
-                input_percent_diff
-            )
-        );
+        return Err(format!(
+            "Input amount mismatch: expected {} (raw {}), got {} (raw {}), diff {} ({:.2}%)",
+            format_ui_amount(expected_input_raw, decimals1),
+            expected_input_raw,
+            format_ui_amount(actual_input_raw.max(0) as u128, decimals1),
+            actual_input_raw,
+            input_diff,
+            input_percent_diff
+        ));
     }
 
     if output_diff > (output_allowed as i128) && output_percent_diff >= min_mismatch_percent {
-        return Err(
-            format!(
-                "Output amount mismatch: expected {} (raw {}), got {} (raw {}), diff {} ({:.2}%)",
-                format_ui_amount(expected_output_raw, decimals2),
-                expected_output_raw,
-                format_ui_amount(actual_output_raw.max(0) as u128, decimals2),
-                actual_output_raw,
-                output_diff,
-                output_percent_diff
-            )
-        );
+        return Err(format!(
+            "Output amount mismatch: expected {} (raw {}), got {} (raw {}), diff {} ({:.2}%)",
+            format_ui_amount(expected_output_raw, decimals2),
+            expected_output_raw,
+            format_ui_amount(actual_output_raw.max(0) as u128, decimals2),
+            actual_output_raw,
+            output_diff,
+            output_percent_diff
+        ));
     }
 
     Ok(())
 }
 
 fn verify_router_detection(row: &CsvSwapRow, swap: &TokenSwapInfo) -> Result<(), String> {
-    let platform_hint = row.platform
+    let platform_hint = row
+        .platform
         .as_ref()
         .map(|s| s.to_ascii_lowercase())
         .unwrap_or_default();
@@ -781,9 +784,10 @@ fn verify_router_detection(row: &CsvSwapRow, swap: &TokenSwapInfo) -> Result<(),
     };
 
     if swap.router != expected_router {
-        return Err(
-            format!("Router mismatch: expected {}, detected {}", expected_router, swap.router)
-        );
+        return Err(format!(
+            "Router mismatch: expected {}, detected {}",
+            expected_router, swap.router
+        ));
     }
 
     Ok(())
@@ -795,7 +799,10 @@ fn decimals_or_default(token: &str, decimals: Option<u32>) -> Result<u32, String
     }
 
     decimals.ok_or_else(|| {
-        format!("Missing decimals for token {} in CSV (required for verification)", token)
+        format!(
+            "Missing decimals for token {} in CSV (required for verification)",
+            token
+        )
     })
 }
 
@@ -861,11 +868,7 @@ fn print_verbose_details(outcome: &ComparisonOutcome) {
     if let Some(ref pnl) = outcome.pnl_info {
         println!(
             "  PnL: swap_type={} sol_amount={:.6} token_amount={:.6} fees={:.6} ata_rents={:.6}",
-            pnl.swap_type,
-            pnl.sol_amount,
-            pnl.token_amount,
-            pnl.fees_paid_sol,
-            pnl.ata_rents
+            pnl.swap_type, pnl.sol_amount, pnl.token_amount, pnl.fees_paid_sol, pnl.ata_rents
         );
     }
 }
@@ -875,10 +878,7 @@ fn print_mismatch_compact(outcome: &ComparisonOutcome) {
     let csv = &outcome.csv_row;
 
     // CSV platform hint and decimals
-    let platform = csv.platform
-        .as_ref()
-        .map(|s| s.as_str())
-        .unwrap_or("-");
+    let platform = csv.platform.as_ref().map(|s| s.as_str()).unwrap_or("-");
 
     // Always show CSV-side token+amount context
     let d1 = match decimals_or_default(&csv.token1, csv.token_decimals1) {
@@ -919,31 +919,15 @@ fn print_mismatch_compact(outcome: &ComparisonOutcome) {
 
         println!(
             "  Details: router={} type={} mints={} -> {} | csv_platform={} | csv_decimals={}/{}",
-            swap.router,
-            swap.swap_type,
-            swap.input_mint,
-            swap.output_mint,
-            platform,
-            d1,
-            d2
+            swap.router, swap.swap_type, swap.input_mint, swap.output_mint, platform, d1, d2
         );
         println!(
             "           in: exp {} (raw {}) vs got {} (raw {}) [Δ {} ({:.2}%)]",
-            exp_in_ui,
-            exp_in_raw,
-            act_in_ui,
-            act_in_raw,
-            in_diff,
-            in_pct
+            exp_in_ui, exp_in_raw, act_in_ui, act_in_raw, in_diff, in_pct
         );
         println!(
             "           out: exp {} (raw {}) vs got {} (raw {}) [Δ {} ({:.2}%)]",
-            exp_out_ui,
-            exp_out_raw,
-            act_out_ui,
-            act_out_raw,
-            out_diff,
-            out_pct
+            exp_out_ui, exp_out_raw, act_out_ui, act_out_raw, out_diff, out_pct
         );
     } else {
         // No swap info captured; still provide CSV context for investigation
@@ -955,7 +939,10 @@ fn print_mismatch_compact(outcome: &ComparisonOutcome) {
             d1,
             d2
         );
-        println!("           csv amounts: token1={} | token2={}", csv.amount1, csv.amount2);
+        println!(
+            "           csv amounts: token1={} | token2={}",
+            csv.amount1, csv.amount2
+        );
     }
 }
 
@@ -975,13 +962,11 @@ fn compute_sol_leg_diff(outcome: &ComparisonOutcome) -> Result<(i128, i128, f64)
 
     // Expected SOL in lamports from CSV (decimals always 9 for WSOL)
     let expected_sol_lamports: i128 = if token1_is_sol {
-        parse_amount(&csv.amount1, 9).map_err(|e|
-            format!("Failed to parse CSV SOL amount1: {}", e)
-        )? as i128
+        parse_amount(&csv.amount1, 9)
+            .map_err(|e| format!("Failed to parse CSV SOL amount1: {}", e))? as i128
     } else {
-        parse_amount(&csv.amount2, 9).map_err(|e|
-            format!("Failed to parse CSV SOL amount2: {}", e)
-        )? as i128
+        parse_amount(&csv.amount2, 9)
+            .map_err(|e| format!("Failed to parse CSV SOL amount2: {}", e))? as i128
     };
 
     // Actual SOL lamports from swap, or 0 if none
@@ -1039,36 +1024,34 @@ fn compute_sol_leg_diff(outcome: &ComparisonOutcome) -> Result<(i128, i128, f64)
 /// Write one CSV record for analyzer, amounts in SOL (UI)
 fn write_results_csv_record(
     wtr: &mut csv::Writer<std::fs::File>,
-    outcome: &ComparisonOutcome
+    outcome: &ComparisonOutcome,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (actual_lamports, expected_lamports, pct) = compute_sol_leg_diff(outcome).unwrap_or((
-        0, 0, 0.0,
-    ));
+    let (actual_lamports, expected_lamports, pct) =
+        compute_sol_leg_diff(outcome).unwrap_or((0, 0, 0.0));
     let actual_ui = (actual_lamports as f64) / 1_000_000_000.0;
     let expected_ui = (expected_lamports as f64) / 1_000_000_000.0;
-    let router = outcome.swap_info
+    let router = outcome
+        .swap_info
         .as_ref()
         .map(|s| s.router.clone())
         .unwrap_or_else(|| "-".to_string());
     let status = if outcome.matched { "MATCH" } else { "MISMATCH" };
 
-    wtr.write_record(
-        &[
-            outcome.signature.as_str(),
-            &format!("{:.9}", actual_ui),
-            &format!("{:.9}", expected_ui),
-            &format!("{:.6}", pct),
-            router.as_str(),
-            status,
-        ]
-    )?;
+    wtr.write_record(&[
+        outcome.signature.as_str(),
+        &format!("{:.9}", actual_ui),
+        &format!("{:.9}", expected_ui),
+        &format!("{:.6}", pct),
+        router.as_str(),
+        status,
+    ])?;
     Ok(())
 }
 
 /// Minimal CSV record when processing errored—use CSV expected SOL and zero calculated
 fn write_results_csv_record_from_error(
     wtr: &mut csv::Writer<std::fs::File>,
-    row: &CsvSwapRow
+    row: &CsvSwapRow,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Determine SOL expected from CSV
     let token1_is_sol = row.token1 == WSOL_MINT;
@@ -1080,17 +1063,19 @@ fn write_results_csv_record_from_error(
     let expected_ui = (expected_sol_lamports as f64) / 1_000_000_000.0;
     // Calculated is zero when processing fails
     let actual_ui = 0.0f64;
-    let pct = if expected_sol_lamports != 0 { -100.0 } else { 0.0 };
+    let pct = if expected_sol_lamports != 0 {
+        -100.0
+    } else {
+        0.0
+    };
 
-    wtr.write_record(
-        &[
-            row.signature.as_str(),
-            &format!("{:.9}", actual_ui),
-            &format!("{:.9}", expected_ui),
-            &format!("{:.6}", pct),
-            "-",
-            "PROCESSING_ERROR",
-        ]
-    )?;
+    wtr.write_record(&[
+        row.signature.as_str(),
+        &format!("{:.9}", actual_ui),
+        &format!("{:.9}", expected_ui),
+        &format!("{:.6}", pct),
+        "-",
+        "PROCESSING_ERROR",
+    ])?;
     Ok(())
 }

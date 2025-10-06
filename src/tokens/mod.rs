@@ -1,6 +1,6 @@
 //// Pool pricing is enabled - use pool interface only
-use crate::global::{ is_debug_decimals_enabled, is_debug_monitor_enabled };
-use crate::logger::{ log, LogTag };
+use crate::global::{is_debug_decimals_enabled, is_debug_monitor_enabled};
+use crate::logger::{log, LogTag};
 use std::sync::Arc;
 use std::sync::Mutex;
 use tokio::sync::Notify;
@@ -22,16 +22,12 @@ pub mod types;
 
 // Re-export main types and functions
 pub use blacklist::{
-    add_to_blacklist_db,
-    get_blacklist_stats_db,
-    initialize_system_stable_blacklist,
-    is_system_or_stable_token,
-    is_token_blacklisted,
-    is_token_excluded_from_trading,
+    add_to_blacklist_db, get_blacklist_stats_db, initialize_system_stable_blacklist,
+    is_system_or_stable_token, is_token_blacklisted, is_token_excluded_from_trading,
     track_liquidity_db,
 };
-pub use cache::{ DatabaseStats, TokenDatabase };
-pub use decimals::{ batch_fetch_token_decimals, get_token_decimals_from_chain };
+pub use cache::{DatabaseStats, TokenDatabase};
+pub use decimals::{batch_fetch_token_decimals, get_token_decimals_from_chain};
 pub use dexscreener::{
     get_global_dexscreener_api,
     get_token_pairs_from_api,
@@ -43,29 +39,16 @@ pub use dexscreener::{
     DEXSCREENER_RATE_LIMIT_PER_MINUTE,
     MAX_TOKENS_PER_API_CALL,
 };
-pub use discovery::{ discover_tokens_once, start_token_discovery, TokenDiscovery };
+pub use discovery::{discover_tokens_once, start_token_discovery, TokenDiscovery};
 pub use geckoterminal::OhlcvDataPoint;
 pub use ohlcvs::{
-    get_latest_ohlcv,
-    get_ohlcv_service_clone,
-    init_ohlcv_service,
-    is_ohlcv_data_available,
-    start_ohlcv_monitoring,
-    DataAvailability,
-    OhlcvService,
+    get_latest_ohlcv, get_ohlcv_service_clone, init_ohlcv_service, is_ohlcv_data_available,
+    start_ohlcv_monitoring, DataAvailability, OhlcvService,
 };
 pub use patterns::{
-    categorize_token,
-    get_pattern_analyzer,
-    initialize_pattern_analyzer,
-    log_pattern_analysis_results,
-    refresh_pattern_analysis,
-    PatternAnalysisSummary,
-    PatternType,
-    PlatformCategory,
-    TokenCategorization,
-    TokenPattern,
-    TokenPatternAnalyzer,
+    categorize_token, get_pattern_analyzer, initialize_pattern_analyzer,
+    log_pattern_analysis_results, refresh_pattern_analysis, PatternAnalysisSummary, PatternType,
+    PlatformCategory, TokenCategorization, TokenPattern, TokenPatternAnalyzer,
 };
 pub use security::{
     // Re-export helpers used by bins/tools
@@ -79,12 +62,7 @@ pub use security::{
     SecurityAnalyzer,
 };
 pub use security_db::{
-    parse_rugcheck_response,
-    HolderInfo,
-    MarketInfo,
-    SecurityDatabase,
-    SecurityInfo,
-    SecurityRisk,
+    parse_rugcheck_response, HolderInfo, MarketInfo, SecurityDatabase, SecurityInfo, SecurityRisk,
 };
 pub use types::*;
 
@@ -134,7 +112,8 @@ impl TokensSystem {
 
     /// Get system statistics
     pub async fn get_system_stats(&self) -> Result<TokensSystemStats, String> {
-        let db_stats = self.database
+        let db_stats = self
+            .database
             .get_stats()
             .map_err(|e| format!("Failed to get database stats: {}", e))?;
         let blacklist_stats = get_blacklist_stats_db();
@@ -167,14 +146,18 @@ pub struct TokensSystemStats {
 
 /// Initialize the tokens system with price service
 pub async fn initialize_tokens_system() -> Result<TokensSystem, Box<dyn std::error::Error>> {
-    log(LogTag::System, "INIT", "Initializing complete tokens system...");
+    log(
+        LogTag::System,
+        "INIT",
+        "Initializing complete tokens system...",
+    );
 
     // Initialize global RPC client from configuration
     if let Err(e) = crate::rpc::init_rpc_client() {
         log(
             LogTag::System,
             "WARN",
-            &format!("RPC config initialization failed, using fallback: {}", e)
+            &format!("RPC config initialization failed, using fallback: {}", e),
         );
     }
 
@@ -191,15 +174,27 @@ pub async fn initialize_tokens_system() -> Result<TokensSystem, Box<dyn std::err
 
     // Initialize OHLCV service
     if let Err(e) = init_ohlcv_service().await {
-        log(LogTag::System, "WARN", &format!("OHLCV service initialization failed: {}", e));
+        log(
+            LogTag::System,
+            "WARN",
+            &format!("OHLCV service initialization failed: {}", e),
+        );
     } else {
-        log(LogTag::System, "SUCCESS", "OHLCV service initialized successfully");
+        log(
+            LogTag::System,
+            "SUCCESS",
+            "OHLCV service initialized successfully",
+        );
     }
 
     // Create tokens system
     let system = TokensSystem::new()?;
 
-    log(LogTag::System, "SUCCESS", "Tokens system initialized successfully");
+    log(
+        LogTag::System,
+        "SUCCESS",
+        "Tokens system initialized successfully",
+    );
 
     // Signal that tokens system is ready
     crate::global::TOKENS_SYSTEM_READY.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -237,7 +232,11 @@ pub async fn get_token_decimals(mint: &str) -> Option<u8> {
     // Handle SOL native token immediately
     if mint == "So11111111111111111111111111111111111111112" {
         if debug_enabled {
-            log(LogTag::Decimals, "SOL_NATIVE", "SOL decimals: 9 (native token)");
+            log(
+                LogTag::Decimals,
+                "SOL_NATIVE",
+                "SOL decimals: 9 (native token)",
+            );
         }
         return Some(9);
     }
@@ -248,7 +247,7 @@ pub async fn get_token_decimals(mint: &str) -> Option<u8> {
             log(
                 LogTag::Decimals,
                 "CACHE_HIT",
-                &format!("Cached decimals for {}: {}", &mint[..8], decimals)
+                &format!("Cached decimals for {}: {}", &mint[..8], decimals),
             );
         }
         return Some(decimals);
@@ -259,7 +258,7 @@ pub async fn get_token_decimals(mint: &str) -> Option<u8> {
         log(
             LogTag::Decimals,
             "BLOCKCHAIN_FETCH",
-            &format!("Fetching decimals for {} from blockchain", &mint[..8])
+            &format!("Fetching decimals for {} from blockchain", &mint[..8]),
         );
     }
 
@@ -269,7 +268,11 @@ pub async fn get_token_decimals(mint: &str) -> Option<u8> {
                 log(
                     LogTag::Decimals,
                     "FETCH_SUCCESS",
-                    &format!("Fetched decimals {} for {} from blockchain", decimals, &mint[..8])
+                    &format!(
+                        "Fetched decimals {} for {} from blockchain",
+                        decimals,
+                        &mint[..8]
+                    ),
                 );
             }
             return Some(decimals);
@@ -279,7 +282,7 @@ pub async fn get_token_decimals(mint: &str) -> Option<u8> {
                 log(
                     LogTag::Decimals,
                     "FETCH_ERROR",
-                    &format!("Failed to fetch decimals for {}: {}", &mint[..8], e)
+                    &format!("Failed to fetch decimals for {}: {}", &mint[..8], e),
                 );
             }
         }
@@ -290,7 +293,10 @@ pub async fn get_token_decimals(mint: &str) -> Option<u8> {
         log(
             LogTag::Decimals,
             "NO_DECIMALS",
-            &format!("No decimals available for {} - operations will be skipped", &mint[..8])
+            &format!(
+                "No decimals available for {} - operations will be skipped",
+                &mint[..8]
+            ),
         );
     }
 
@@ -329,15 +335,11 @@ pub async fn get_all_tokens_by_liquidity() -> Result<Vec<ApiToken>, String> {
         Ok(tokens) => {
             let mut sorted_tokens = tokens;
             sorted_tokens.sort_by(|a, b| {
-                let a_liq = a.liquidity
-                    .as_ref()
-                    .and_then(|l| l.usd)
-                    .unwrap_or(0.0);
-                let b_liq = b.liquidity
-                    .as_ref()
-                    .and_then(|l| l.usd)
-                    .unwrap_or(0.0);
-                b_liq.partial_cmp(&a_liq).unwrap_or(std::cmp::Ordering::Equal)
+                let a_liq = a.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
+                let b_liq = b.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
+                b_liq
+                    .partial_cmp(&a_liq)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             });
             Ok(sorted_tokens)
         }

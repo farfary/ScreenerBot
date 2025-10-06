@@ -10,13 +10,13 @@
 // - Failed transaction patterns
 // - High-frequency trading signatures
 
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::logger::{ log, LogTag };
-use crate::transactions::types::*;
+use super::{balance::BalanceAnalysis, classify::TransactionClass, dex::DexAnalysis};
 use crate::global::is_debug_transactions_enabled;
-use super::{ balance::BalanceAnalysis, dex::DexAnalysis, classify::TransactionClass };
+use crate::logger::{log, LogTag};
+use crate::transactions::types::*;
 
 // =============================================================================
 // PATTERN ANALYSIS TYPES
@@ -78,9 +78,9 @@ pub enum PatternType {
 /// Pattern severity levels
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PatternSeverity {
-    Low, // Informational
-    Medium, // Worth monitoring
-    High, // Potentially concerning
+    Low,      // Informational
+    Medium,   // Worth monitoring
+    High,     // Potentially concerning
     Critical, // Likely malicious
 }
 
@@ -121,30 +121,30 @@ pub struct TradingBehavior {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TraderType {
-    Retail, // Small individual trader
-    Whale, // Large holder
-    Bot, // Automated trading
+    Retail,      // Small individual trader
+    Whale,       // Large holder
+    Bot,         // Automated trading
     Arbitrageur, // Arbitrage trader
-    Liquidator, // Liquidation bot
-    MevBot, // MEV bot
+    Liquidator,  // Liquidation bot
+    MevBot,      // MEV bot
     Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SizeCategory {
-    Micro, // < 0.1 SOL
-    Small, // 0.1 - 1 SOL
+    Micro,  // < 0.1 SOL
+    Small,  // 0.1 - 1 SOL
     Medium, // 1 - 10 SOL
-    Large, // 10 - 100 SOL
-    Whale, // > 100 SOL
+    Large,  // 10 - 100 SOL
+    Whale,  // > 100 SOL
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SophisticationLevel {
-    Basic, // Simple swaps
+    Basic,        // Simple swaps
     Intermediate, // Multi-step operations
-    Advanced, // Complex DeFi interactions
-    Expert, // MEV/arbitrage strategies
+    Advanced,     // Complex DeFi interactions
+    Expert,       // MEV/arbitrage strategies
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -174,13 +174,13 @@ pub async fn detect_patterns(
     tx_data: &crate::rpc::TransactionDetails,
     balance_analysis: &BalanceAnalysis,
     dex_analysis: &DexAnalysis,
-    classification: &TransactionClass
+    classification: &TransactionClass,
 ) -> Result<PatternAnalysis, String> {
     if is_debug_transactions_enabled() {
         log(
             LogTag::Transactions,
             "PATTERNS_DETECT",
-            &format!("Detecting patterns for tx: {}", transaction.signature)
+            &format!("Detecting patterns for tx: {}", transaction.signature),
         );
     }
 
@@ -190,19 +190,17 @@ pub async fn detect_patterns(
         tx_data,
         balance_analysis,
         dex_analysis,
-        classification
-    ).await?;
+        classification,
+    )
+    .await?;
 
     // Step 2: Assess risk level
     let risk_assessment = assess_risk(&detected_patterns, balance_analysis).await?;
 
     // Step 3: Analyze trading behavior
-    let trading_behavior = analyze_trading_behavior(
-        transaction,
-        balance_analysis,
-        dex_analysis,
-        classification
-    ).await?;
+    let trading_behavior =
+        analyze_trading_behavior(transaction, balance_analysis, dex_analysis, classification)
+            .await?;
 
     // Step 4: Calculate overall confidence
     let confidence = calculate_pattern_confidence(&detected_patterns, &trading_behavior);
@@ -225,7 +223,7 @@ async fn detect_specific_patterns(
     tx_data: &crate::rpc::TransactionDetails,
     balance_analysis: &BalanceAnalysis,
     dex_analysis: &DexAnalysis,
-    classification: &TransactionClass
+    classification: &TransactionClass,
 ) -> Result<Vec<DetectedPattern>, String> {
     let mut patterns = Vec::new();
 
@@ -262,7 +260,7 @@ async fn detect_specific_patterns(
 async fn detect_mev_patterns(
     transaction: &Transaction,
     balance_analysis: &BalanceAnalysis,
-    dex_analysis: &DexAnalysis
+    dex_analysis: &DexAnalysis,
 ) -> Result<Vec<DetectedPattern>, String> {
     let mut patterns = Vec::new();
 
@@ -270,12 +268,15 @@ async fn detect_mev_patterns(
     if balance_analysis.total_tips > 0.001 {
         patterns.push(DetectedPattern {
             pattern_type: PatternType::MevActivity,
-            description: format!("High MEV tip detected: {:.6} SOL", balance_analysis.total_tips),
+            description: format!(
+                "High MEV tip detected: {:.6} SOL",
+                balance_analysis.total_tips
+            ),
             confidence: 0.8,
             severity: PatternSeverity::Medium,
             evidence: vec![
                 format!("MEV tip amount: {:.6} SOL", balance_analysis.total_tips),
-                "Above normal tip threshold".to_string()
+                "Above normal tip threshold".to_string(),
             ],
         });
     }
@@ -289,7 +290,7 @@ async fn detect_mev_patterns(
             severity: PatternSeverity::Medium,
             evidence: vec![
                 format!("DEX programs involved: {}", dex_analysis.program_ids.len()),
-                format!("Programs: {:?}", dex_analysis.program_ids)
+                format!("Programs: {:?}", dex_analysis.program_ids),
             ],
         });
     }
@@ -300,7 +301,7 @@ async fn detect_mev_patterns(
 /// Detect wash trading patterns
 async fn detect_wash_trading(
     transaction: &Transaction,
-    balance_analysis: &BalanceAnalysis
+    balance_analysis: &BalanceAnalysis,
 ) -> Result<Vec<DetectedPattern>, String> {
     let mut patterns = Vec::new();
 
@@ -318,7 +319,7 @@ async fn detect_wash_trading(
                     severity: PatternSeverity::Low,
                     evidence: vec![
                         format!("Account: {}", account),
-                        format!("Token changes: {}", changes.len())
+                        format!("Token changes: {}", changes.len()),
                     ],
                 });
             }
@@ -331,11 +332,12 @@ async fn detect_wash_trading(
 /// Detect fee anomalies
 async fn detect_fee_anomalies(
     tx_data: &crate::rpc::TransactionDetails,
-    balance_analysis: &BalanceAnalysis
+    balance_analysis: &BalanceAnalysis,
 ) -> Result<Vec<DetectedPattern>, String> {
     let mut patterns = Vec::new();
 
-    let base_fee = tx_data.meta
+    let base_fee = tx_data
+        .meta
         .as_ref()
         .map(|m| (m.fee as f64) / 1_000_000_000.0)
         .unwrap_or(0.0);
@@ -349,13 +351,14 @@ async fn detect_fee_anomalies(
             severity: PatternSeverity::Medium,
             evidence: vec![
                 format!("Base fee: {:.6} SOL", base_fee),
-                "Above normal fee threshold".to_string()
+                "Above normal fee threshold".to_string(),
             ],
         });
     }
 
     // Check total tips vs transaction value
-    let total_transfer_value: f64 = balance_analysis.clean_transfers
+    let total_transfer_value: f64 = balance_analysis
+        .clean_transfers
         .iter()
         .map(|t| t.amount)
         .sum();
@@ -371,7 +374,7 @@ async fn detect_fee_anomalies(
                 evidence: vec![
                     format!("Tip ratio: {:.2}%", tip_ratio * 100.0),
                     format!("Tips: {:.6} SOL", balance_analysis.total_tips),
-                    format!("Transfer value: {:.6} SOL", total_transfer_value)
+                    format!("Transfer value: {:.6} SOL", total_transfer_value),
                 ],
             });
         }
@@ -382,7 +385,7 @@ async fn detect_fee_anomalies(
 
 /// Detect whale activity
 async fn detect_whale_activity(
-    balance_analysis: &BalanceAnalysis
+    balance_analysis: &BalanceAnalysis,
 ) -> Result<Vec<DetectedPattern>, String> {
     let mut patterns = Vec::new();
 
@@ -396,7 +399,7 @@ async fn detect_whale_activity(
                 severity: PatternSeverity::Low,
                 evidence: vec![
                     format!("SOL amount: {:.2}", change.change.abs()),
-                    format!("Account: {}", change.account)
+                    format!("Account: {}", change.account),
                 ],
             });
         }
@@ -408,7 +411,7 @@ async fn detect_whale_activity(
 /// Detect arbitrage patterns
 async fn detect_arbitrage_patterns(
     balance_analysis: &BalanceAnalysis,
-    dex_analysis: &DexAnalysis
+    dex_analysis: &DexAnalysis,
 ) -> Result<Vec<DetectedPattern>, String> {
     let mut patterns = Vec::new();
 
@@ -421,7 +424,10 @@ async fn detect_arbitrage_patterns(
             severity: PatternSeverity::Low,
             evidence: vec![
                 format!("Multiple DEXes: {}", dex_analysis.program_ids.len()),
-                format!("Multiple transfers: {}", balance_analysis.clean_transfers.len())
+                format!(
+                    "Multiple transfers: {}",
+                    balance_analysis.clean_transfers.len()
+                ),
             ],
         });
     }
@@ -436,7 +442,7 @@ async fn detect_arbitrage_patterns(
 /// Assess overall risk level
 async fn assess_risk(
     patterns: &[DetectedPattern],
-    balance_analysis: &BalanceAnalysis
+    balance_analysis: &BalanceAnalysis,
 ) -> Result<RiskAssessment, String> {
     let mut risk_score = 0.0;
     let mut risk_factors = Vec::new();
@@ -459,7 +465,8 @@ async fn assess_risk(
     }
 
     // Add volume-based risk
-    let total_volume: f64 = balance_analysis.sol_changes
+    let total_volume: f64 = balance_analysis
+        .sol_changes
         .values()
         .map(|c| c.change.abs())
         .sum();
@@ -510,7 +517,7 @@ async fn analyze_trading_behavior(
     transaction: &Transaction,
     balance_analysis: &BalanceAnalysis,
     dex_analysis: &DexAnalysis,
-    classification: &TransactionClass
+    classification: &TransactionClass,
 ) -> Result<TradingBehavior, String> {
     // Determine trader type
     let trader_type = determine_trader_type(balance_analysis, dex_analysis).await?;
@@ -538,9 +545,10 @@ async fn analyze_trading_behavior(
 /// Determine trader type from patterns
 async fn determine_trader_type(
     balance_analysis: &BalanceAnalysis,
-    dex_analysis: &DexAnalysis
+    dex_analysis: &DexAnalysis,
 ) -> Result<TraderType, String> {
-    let total_sol_volume: f64 = balance_analysis.sol_changes
+    let total_sol_volume: f64 = balance_analysis
+        .sol_changes
         .values()
         .map(|c| c.change.abs())
         .sum();
@@ -566,7 +574,8 @@ async fn determine_trader_type(
 
 /// Categorize transaction size
 fn categorize_transaction_size(balance_analysis: &BalanceAnalysis) -> SizeCategory {
-    let total_sol_volume: f64 = balance_analysis.sol_changes
+    let total_sol_volume: f64 = balance_analysis
+        .sol_changes
         .values()
         .map(|c| c.change.abs())
         .sum();
@@ -587,7 +596,7 @@ fn categorize_transaction_size(balance_analysis: &BalanceAnalysis) -> SizeCatego
 /// Assess sophistication level
 async fn assess_sophistication(
     dex_analysis: &DexAnalysis,
-    classification: &TransactionClass
+    classification: &TransactionClass,
 ) -> Result<SophisticationLevel, String> {
     // Multiple DEXes + complex classification = expert
     if dex_analysis.program_ids.len() > 2 {
@@ -600,13 +609,11 @@ async fn assess_sophistication(
     }
 
     // Complex transaction types = intermediate
-    if
-        matches!(
-            classification.transaction_type,
-            super::classify::ClassifiedType::AddLiquidity |
-                super::classify::ClassifiedType::RemoveLiquidity
-        )
-    {
+    if matches!(
+        classification.transaction_type,
+        super::classify::ClassifiedType::AddLiquidity
+            | super::classify::ClassifiedType::RemoveLiquidity
+    ) {
         return Ok(SophisticationLevel::Intermediate);
     }
 
@@ -620,7 +627,7 @@ async fn assess_sophistication(
 /// Calculate pattern analysis confidence
 fn calculate_pattern_confidence(
     patterns: &[DetectedPattern],
-    trading_behavior: &TradingBehavior
+    trading_behavior: &TradingBehavior,
 ) -> f64 {
     if patterns.is_empty() {
         return 0.5; // Medium confidence for no patterns
@@ -628,10 +635,7 @@ fn calculate_pattern_confidence(
 
     // Average confidence of detected patterns
     let pattern_confidence: f64 =
-        patterns
-            .iter()
-            .map(|p| p.confidence)
-            .sum::<f64>() / (patterns.len() as f64);
+        patterns.iter().map(|p| p.confidence).sum::<f64>() / (patterns.len() as f64);
 
     // Boost confidence for clear trader type identification
     let behavior_boost = match trading_behavior.trader_type {

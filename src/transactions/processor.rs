@@ -3,22 +3,18 @@
 // This module handles the core transaction processing logic including
 // data extraction, analysis, and classification of blockchain transactions.
 
-use chrono::{ DateTime, Utc };
+use chrono::{DateTime, Utc};
 use serde_json::Value;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
-use std::time::{ Duration, Instant };
+use std::time::{Duration, Instant};
 
 use crate::global::is_debug_transactions_enabled;
-use crate::logger::{ log, LogTag };
+use crate::logger::{log, LogTag};
 use crate::pools::types::SOL_MINT;
-use crate::tokens::{ decimals::lamports_to_sol, get_token_decimals, get_token_from_db };
+use crate::tokens::{decimals::lamports_to_sol, get_token_decimals, get_token_from_db};
 use crate::transactions::{
-    analyzer::TransactionAnalyzer,
-    fetcher::TransactionFetcher,
-    program_ids::*,
-    types::*,
-    utils::*,
+    analyzer::TransactionAnalyzer, fetcher::TransactionFetcher, program_ids::*, types::*, utils::*,
 };
 
 // =============================================================================
@@ -52,7 +48,7 @@ impl TransactionProcessor {
     pub fn new_with_cache_options(
         wallet_pubkey: Pubkey,
         cache_only: bool,
-        force_refresh: bool
+        force_refresh: bool,
     ) -> Self {
         Self {
             wallet_pubkey,
@@ -76,7 +72,7 @@ impl TransactionProcessor {
                     "Processing transaction: {} for wallet: {}",
                     signature,
                     &self.wallet_pubkey.to_string()
-                )
+                ),
             );
         }
 
@@ -84,13 +80,19 @@ impl TransactionProcessor {
         let tx_data = self.fetch_transaction_data(signature).await?;
 
         // Step 2: Create Transaction structure from raw data snapshot
-        let mut transaction = self.create_transaction_from_data(signature, &tx_data).await?;
+        let mut transaction = self
+            .create_transaction_from_data(signature, &tx_data)
+            .await?;
 
         // Use new analyzer to get complete analysis
-        let analysis = self.analyzer.analyze_transaction(&transaction, &tx_data).await?;
+        let analysis = self
+            .analyzer
+            .analyze_transaction(&transaction, &tx_data)
+            .await?;
 
         // Map analyzer results to transaction fields
-        self.map_analysis_to_transaction(&mut transaction, &analysis, &tx_data).await?;
+        self.map_analysis_to_transaction(&mut transaction, &analysis, &tx_data)
+            .await?;
 
         let processing_duration = start_time.elapsed();
         transaction.analysis_duration_ms = Some(processing_duration.as_millis() as u64);
@@ -105,7 +107,7 @@ impl TransactionProcessor {
                     transaction.transaction_type,
                     transaction.direction,
                     processing_duration.as_millis()
-                )
+                ),
             );
         }
 
@@ -116,8 +118,9 @@ impl TransactionProcessor {
             transaction.success,
             transaction.fee_lamports,
             transaction.slot,
-            None
-        ).await;
+            None,
+        )
+        .await;
 
         // Store processed transaction in database for future retrieval
         if let Some(database) = crate::transactions::database::get_transaction_database().await {
@@ -126,14 +129,14 @@ impl TransactionProcessor {
                     log(
                         LogTag::Transactions,
                         "WARN",
-                        &format!("Failed to cache processed transaction: {}", e)
+                        &format!("Failed to cache processed transaction: {}", e),
                     );
                 }
             } else if self.debug_enabled {
                 log(
                     LogTag::Transactions,
                     "CACHE_PROCESSED",
-                    &format!("Cached processed transaction: {}", signature)
+                    &format!("Cached processed transaction: {}", signature),
                 );
             }
         }
@@ -144,7 +147,7 @@ impl TransactionProcessor {
     /// Process multiple transactions concurrently
     pub async fn process_transactions_batch(
         &self,
-        signatures: Vec<String>
+        signatures: Vec<String>,
     ) -> HashMap<String, Result<Transaction, String>> {
         let mut results = HashMap::new();
 
@@ -166,11 +169,11 @@ impl TransactionProcessor {
     /// Fetch transaction data with cache-first strategy
     async fn fetch_transaction_data(
         &self,
-        signature: &str
+        signature: &str,
     ) -> Result<crate::rpc::TransactionDetails, String> {
         // Import the global database (avoiding multiple instances for now)
-        let database = crate::transactions::database
-            ::get_transaction_database().await
+        let database = crate::transactions::database::get_transaction_database()
+            .await
             .ok_or_else(|| "Transaction database not initialized".to_string())?;
 
         // Step 1: Handle cache-only mode - only try cache, never fetch from RPC
@@ -180,14 +183,18 @@ impl TransactionProcessor {
                     log(
                         LogTag::Transactions,
                         "CACHE_ONLY_HIT",
-                        &format!("Using cached raw transaction data (cache-only mode): {}", signature)
+                        &format!(
+                            "Using cached raw transaction data (cache-only mode): {}",
+                            signature
+                        ),
                     );
                 }
                 return Ok(cached_details);
             } else {
-                return Err(
-                    format!("Transaction {} not found in cache (cache-only mode)", signature)
-                );
+                return Err(format!(
+                    "Transaction {} not found in cache (cache-only mode)",
+                    signature
+                ));
             }
         }
 
@@ -197,7 +204,7 @@ impl TransactionProcessor {
                 log(
                     LogTag::Transactions,
                     "FORCE_REFRESH",
-                    &format!("Force fetching fresh transaction data: {}", signature)
+                    &format!("Force fetching fresh transaction data: {}", signature),
                 );
             }
         } else {
@@ -207,7 +214,7 @@ impl TransactionProcessor {
                     log(
                         LogTag::Transactions,
                         "CACHE_HIT",
-                        &format!("Using cached raw transaction data for: {}", signature)
+                        &format!("Using cached raw transaction data for: {}", signature),
                     );
                 }
                 return Ok(cached_details);
@@ -217,7 +224,7 @@ impl TransactionProcessor {
                 log(
                     LogTag::Transactions,
                     "CACHE_MISS",
-                    &format!("Fetching fresh transaction data for: {}", signature)
+                    &format!("Fetching fresh transaction data for: {}", signature),
                 );
             }
         }
@@ -230,16 +237,14 @@ impl TransactionProcessor {
             // Create a minimal transaction for caching raw data
             let mut temp_transaction = Transaction::new(signature.to_string());
             temp_transaction.raw_transaction_data = Some(
-                serde_json
-                    ::to_value(&tx_details)
-                    .map_err(|e| format!("Failed to serialize transaction details: {}", e))?
+                serde_json::to_value(&tx_details)
+                    .map_err(|e| format!("Failed to serialize transaction details: {}", e))?,
             );
             temp_transaction.slot = Some(tx_details.slot);
             temp_transaction.block_time = tx_details.block_time;
             if let Some(block_time) = tx_details.block_time {
-                temp_transaction.timestamp = DateTime::from_timestamp(block_time, 0).unwrap_or_else(
-                    || Utc::now()
-                );
+                temp_transaction.timestamp =
+                    DateTime::from_timestamp(block_time, 0).unwrap_or_else(|| Utc::now());
             }
             if let Some(meta) = &tx_details.meta {
                 temp_transaction.success = match &meta.err {
@@ -259,14 +264,17 @@ impl TransactionProcessor {
                     log(
                         LogTag::Transactions,
                         "WARN",
-                        &format!("Failed to cache raw transaction data for {}: {}", signature, e)
+                        &format!(
+                            "Failed to cache raw transaction data for {}: {}",
+                            signature, e
+                        ),
                     );
                 }
             } else if self.debug_enabled {
                 log(
                     LogTag::Transactions,
                     "CACHE_STORE",
-                    &format!("Cached raw transaction data for: {}", signature)
+                    &format!("Cached raw transaction data for: {}", signature),
                 );
             }
         }
@@ -278,36 +286,34 @@ impl TransactionProcessor {
     async fn create_transaction_from_data(
         &self,
         signature: &str,
-        tx_data: &crate::rpc::TransactionDetails
+        tx_data: &crate::rpc::TransactionDetails,
     ) -> Result<Transaction, String> {
         let mut transaction = Transaction::new(signature.to_string());
 
         // Store raw transaction data for future reference
         transaction.raw_transaction_data = Some(
-            serde_json
-                ::to_value(tx_data)
-                .map_err(|e| format!("Failed to serialize transaction data: {}", e))?
+            serde_json::to_value(tx_data)
+                .map_err(|e| format!("Failed to serialize transaction data: {}", e))?,
         );
 
         // Add comprehensive debug logging for transaction structure
         if self.debug_enabled {
             // Parse instruction count from the transaction message
-            let instructions_info = if
-                let Some(instructions) = tx_data.transaction.message.get("instructions")
-            {
-                if let Some(instructions_array) = instructions.as_array() {
-                    format!("{} instructions found", instructions_array.len())
+            let instructions_info =
+                if let Some(instructions) = tx_data.transaction.message.get("instructions") {
+                    if let Some(instructions_array) = instructions.as_array() {
+                        format!("{} instructions found", instructions_array.len())
+                    } else {
+                        "instructions field not an array".to_string()
+                    }
                 } else {
-                    "instructions field not an array".to_string()
-                }
-            } else {
-                "no instructions field found".to_string()
-            };
+                    "no instructions field found".to_string()
+                };
 
             log(
                 LogTag::Transactions,
                 "TX_DEBUG_INSTRUCTIONS",
-                &format!("Transaction {} structure: {}", signature, instructions_info)
+                &format!("Transaction {} structure: {}", signature, instructions_info),
             );
 
             if let Some(meta) = &tx_data.meta {
@@ -316,7 +322,12 @@ impl TransactionProcessor {
                         format!(
                             "{} logs (showing first 5): {}",
                             log_messages.len(),
-                            log_messages.iter().take(5).cloned().collect::<Vec<_>>().join(" | ")
+                            log_messages
+                                .iter()
+                                .take(5)
+                                .cloned()
+                                .collect::<Vec<_>>()
+                                .join(" | ")
                         )
                     } else {
                         format!("{} logs: {}", log_messages.len(), log_messages.join(" | "))
@@ -325,7 +336,7 @@ impl TransactionProcessor {
                     log(
                         LogTag::Transactions,
                         "TX_DEBUG_LOGS",
-                        &format!("Transaction {} {}", signature, log_preview)
+                        &format!("Transaction {} {}", signature, log_preview),
                     );
                 }
 
@@ -337,27 +348,26 @@ impl TransactionProcessor {
                         signature,
                         meta.pre_balances.len(),
                         meta.post_balances.len()
-                    )
+                    ),
                 );
             }
 
             // Parse account keys count
-            let account_keys_info = if
-                let Some(account_keys) = tx_data.transaction.message.get("accountKeys")
-            {
-                if let Some(keys_array) = account_keys.as_array() {
-                    format!("{} account keys", keys_array.len())
+            let account_keys_info =
+                if let Some(account_keys) = tx_data.transaction.message.get("accountKeys") {
+                    if let Some(keys_array) = account_keys.as_array() {
+                        format!("{} account keys", keys_array.len())
+                    } else {
+                        "accountKeys field not an array".to_string()
+                    }
                 } else {
-                    "accountKeys field not an array".to_string()
-                }
-            } else {
-                "no accountKeys field found".to_string()
-            };
+                    "no accountKeys field found".to_string()
+                };
 
             log(
                 LogTag::Transactions,
                 "TX_DEBUG_ACCOUNTS",
-                &format!("Transaction {} accounts: {}", signature, account_keys_info)
+                &format!("Transaction {} accounts: {}", signature, account_keys_info),
             );
         }
 
@@ -378,9 +388,8 @@ impl TransactionProcessor {
 
         if let Some(block_time) = tx_data.block_time {
             transaction.block_time = Some(block_time);
-            transaction.timestamp = DateTime::from_timestamp(block_time, 0).unwrap_or_else(||
-                Utc::now()
-            );
+            transaction.timestamp =
+                DateTime::from_timestamp(block_time, 0).unwrap_or_else(|| Utc::now());
         }
 
         transaction.slot = Some(tx_data.slot);
@@ -401,125 +410,174 @@ impl TransactionProcessor {
         &self,
         transaction: &mut Transaction,
         analysis: &crate::transactions::analyzer::CompleteAnalysis,
-        tx_data: &crate::rpc::TransactionDetails
+        tx_data: &crate::rpc::TransactionDetails,
     ) -> Result<(), String> {
         // Map classification results
         transaction.transaction_type = match analysis.classification.transaction_type {
             crate::transactions::analyzer::classify::ClassifiedType::Buy => TransactionType::Buy,
             crate::transactions::analyzer::classify::ClassifiedType::Sell => TransactionType::Sell,
-            crate::transactions::analyzer::classify::ClassifiedType::Swap =>
-                TransactionType::Unknown, // Could be Buy or Sell depending on direction
-            crate::transactions::analyzer::classify::ClassifiedType::Transfer =>
-                TransactionType::Transfer,
-            crate::transactions::analyzer::classify::ClassifiedType::AddLiquidity =>
-                TransactionType::Unknown,
-            crate::transactions::analyzer::classify::ClassifiedType::RemoveLiquidity =>
-                TransactionType::Unknown,
-            crate::transactions::analyzer::classify::ClassifiedType::NftOperation =>
-                TransactionType::Unknown,
-            crate::transactions::analyzer::classify::ClassifiedType::ProgramInteraction =>
-                TransactionType::Compute,
-            crate::transactions::analyzer::classify::ClassifiedType::Failed =>
-                TransactionType::Failed,
-            crate::transactions::analyzer::classify::ClassifiedType::Unknown =>
-                TransactionType::Unknown,
+            crate::transactions::analyzer::classify::ClassifiedType::Swap => {
+                TransactionType::Unknown
+            } // Could be Buy or Sell depending on direction
+            crate::transactions::analyzer::classify::ClassifiedType::Transfer => {
+                TransactionType::Transfer
+            }
+            crate::transactions::analyzer::classify::ClassifiedType::AddLiquidity => {
+                TransactionType::Unknown
+            }
+            crate::transactions::analyzer::classify::ClassifiedType::RemoveLiquidity => {
+                TransactionType::Unknown
+            }
+            crate::transactions::analyzer::classify::ClassifiedType::NftOperation => {
+                TransactionType::Unknown
+            }
+            crate::transactions::analyzer::classify::ClassifiedType::ProgramInteraction => {
+                TransactionType::Compute
+            }
+            crate::transactions::analyzer::classify::ClassifiedType::Failed => {
+                TransactionType::Failed
+            }
+            crate::transactions::analyzer::classify::ClassifiedType::Unknown => {
+                TransactionType::Unknown
+            }
         };
 
         transaction.direction = match analysis.classification.direction {
-            Some(crate::transactions::analyzer::classify::SwapDirection::SolToToken) =>
-                TransactionDirection::Incoming,
-            Some(crate::transactions::analyzer::classify::SwapDirection::TokenToSol) =>
-                TransactionDirection::Outgoing,
-            Some(crate::transactions::analyzer::classify::SwapDirection::TokenToToken) =>
-                TransactionDirection::Internal,
+            Some(crate::transactions::analyzer::classify::SwapDirection::SolToToken) => {
+                TransactionDirection::Incoming
+            }
+            Some(crate::transactions::analyzer::classify::SwapDirection::TokenToSol) => {
+                TransactionDirection::Outgoing
+            }
+            Some(crate::transactions::analyzer::classify::SwapDirection::TokenToToken) => {
+                TransactionDirection::Internal
+            }
             None => TransactionDirection::Unknown,
         };
 
         // Map balance changes
         transaction.sol_balance_changes = analysis.balance.sol_changes.values().cloned().collect();
-        transaction.token_balance_changes = analysis.balance.token_changes
+        transaction.token_balance_changes = analysis
+            .balance
+            .token_changes
             .values()
             .flatten()
             .cloned()
             .collect();
-        transaction.sol_balance_change = analysis.balance.sol_changes
+        transaction.sol_balance_change = analysis
+            .balance
+            .sol_changes
             .values()
             .map(|change| change.change)
             .sum();
 
         // Map ATA analysis
-        transaction.ata_analysis = Some(crate::transactions::types::AtaAnalysis {
-            total_ata_creations: analysis.ata.rent_summary.accounts_created,
-            total_ata_closures: analysis.ata.rent_summary.accounts_closed,
-            token_ata_creations: analysis.ata.account_lifecycle.created_accounts
-                .iter()
-                .filter(
-                    |acc| acc.mint.is_some() && acc.mint.as_ref().unwrap() != &SOL_MINT.to_string()
-                )
-                .count() as u32,
-            token_ata_closures: 0, // ClosedAccount doesn't have mint info, calculate from operations instead
-            wsol_ata_creations: analysis.ata.account_lifecycle.created_accounts
-                .iter()
-                .filter(|acc| acc.mint.as_ref() == Some(&SOL_MINT.to_string()))
-                .count() as u32,
-            wsol_ata_closures: 0, // ClosedAccount doesn't have mint info, calculate from operations instead
-            total_rent_spent: analysis.ata.rent_summary.total_rent_paid,
-            total_rent_recovered: analysis.ata.rent_summary.total_rent_recovered,
-            net_rent_impact: analysis.ata.rent_summary.net_rent_cost,
-            token_rent_spent: analysis.ata.account_lifecycle.created_accounts
-                .iter()
-                .filter(
-                    |acc| acc.mint.is_some() && acc.mint.as_ref().unwrap() != &SOL_MINT.to_string()
-                )
-                .map(|acc| acc.rent_paid)
-                .sum(),
-            token_rent_recovered: analysis.ata.account_lifecycle.closed_accounts
-                .iter()
-                .map(|acc| acc.rent_recovered)
-                .sum::<f64>() * 0.5, // Estimate half for tokens (since we can't distinguish)
-            token_net_rent_impact: {
-                let spent: f64 = analysis.ata.account_lifecycle.created_accounts
+        transaction.ata_analysis =
+            Some(crate::transactions::types::AtaAnalysis {
+                total_ata_creations: analysis.ata.rent_summary.accounts_created,
+                total_ata_closures: analysis.ata.rent_summary.accounts_closed,
+                token_ata_creations: analysis
+                    .ata
+                    .account_lifecycle
+                    .created_accounts
                     .iter()
-                    .filter(
-                        |acc|
-                            acc.mint.is_some() &&
-                            acc.mint.as_ref().unwrap() != &SOL_MINT.to_string()
-                    )
+                    .filter(|acc| {
+                        acc.mint.is_some() && acc.mint.as_ref().unwrap() != &SOL_MINT.to_string()
+                    })
+                    .count() as u32,
+                token_ata_closures: 0, // ClosedAccount doesn't have mint info, calculate from operations instead
+                wsol_ata_creations: analysis
+                    .ata
+                    .account_lifecycle
+                    .created_accounts
+                    .iter()
+                    .filter(|acc| acc.mint.as_ref() == Some(&SOL_MINT.to_string()))
+                    .count() as u32,
+                wsol_ata_closures: 0, // ClosedAccount doesn't have mint info, calculate from operations instead
+                total_rent_spent: analysis.ata.rent_summary.total_rent_paid,
+                total_rent_recovered: analysis.ata.rent_summary.total_rent_recovered,
+                net_rent_impact: analysis.ata.rent_summary.net_rent_cost,
+                token_rent_spent: analysis
+                    .ata
+                    .account_lifecycle
+                    .created_accounts
+                    .iter()
+                    .filter(|acc| {
+                        acc.mint.is_some() && acc.mint.as_ref().unwrap() != &SOL_MINT.to_string()
+                    })
                     .map(|acc| acc.rent_paid)
-                    .sum();
-                let recovered: f64 =
-                    analysis.ata.account_lifecycle.closed_accounts
+                    .sum(),
+                token_rent_recovered: analysis
+                    .ata
+                    .account_lifecycle
+                    .closed_accounts
+                    .iter()
+                    .map(|acc| acc.rent_recovered)
+                    .sum::<f64>()
+                    * 0.5, // Estimate half for tokens (since we can't distinguish)
+                token_net_rent_impact: {
+                    let spent: f64 = analysis
+                        .ata
+                        .account_lifecycle
+                        .created_accounts
+                        .iter()
+                        .filter(|acc| {
+                            acc.mint.is_some()
+                                && acc.mint.as_ref().unwrap() != &SOL_MINT.to_string()
+                        })
+                        .map(|acc| acc.rent_paid)
+                        .sum();
+                    let recovered: f64 = analysis
+                        .ata
+                        .account_lifecycle
+                        .closed_accounts
                         .iter()
                         .map(|acc| acc.rent_recovered)
-                        .sum::<f64>() * 0.5; // Estimate half for tokens
-                recovered - spent
-            },
-            wsol_rent_spent: analysis.ata.account_lifecycle.created_accounts
-                .iter()
-                .filter(|acc| acc.mint.as_ref() == Some(&SOL_MINT.to_string()))
-                .map(|acc| acc.rent_paid)
-                .sum(),
-            wsol_rent_recovered: analysis.ata.account_lifecycle.closed_accounts
-                .iter()
-                .map(|acc| acc.rent_recovered)
-                .sum::<f64>() * 0.5, // Estimate half for WSOL (since we can't distinguish)
-            wsol_net_rent_impact: {
-                let spent: f64 = analysis.ata.account_lifecycle.created_accounts
+                        .sum::<f64>()
+                        * 0.5; // Estimate half for tokens
+                    recovered - spent
+                },
+                wsol_rent_spent: analysis
+                    .ata
+                    .account_lifecycle
+                    .created_accounts
                     .iter()
                     .filter(|acc| acc.mint.as_ref() == Some(&SOL_MINT.to_string()))
                     .map(|acc| acc.rent_paid)
-                    .sum();
-                let recovered: f64 =
-                    analysis.ata.account_lifecycle.closed_accounts
+                    .sum(),
+                wsol_rent_recovered: analysis
+                    .ata
+                    .account_lifecycle
+                    .closed_accounts
+                    .iter()
+                    .map(|acc| acc.rent_recovered)
+                    .sum::<f64>()
+                    * 0.5, // Estimate half for WSOL (since we can't distinguish)
+                wsol_net_rent_impact: {
+                    let spent: f64 = analysis
+                        .ata
+                        .account_lifecycle
+                        .created_accounts
+                        .iter()
+                        .filter(|acc| acc.mint.as_ref() == Some(&SOL_MINT.to_string()))
+                        .map(|acc| acc.rent_paid)
+                        .sum();
+                    let recovered: f64 = analysis
+                        .ata
+                        .account_lifecycle
+                        .closed_accounts
                         .iter()
                         .map(|acc| acc.rent_recovered)
-                        .sum::<f64>() * 0.5; // Estimate half for WSOL
-                recovered - spent
-            },
-            detected_operations: analysis.ata.ata_operations
-                .iter()
-                .map(|op| {
-                    crate::transactions::types::AtaOperation {
+                        .sum::<f64>()
+                        * 0.5; // Estimate half for WSOL
+                    recovered - spent
+                },
+                detected_operations: analysis
+                    .ata
+                    .ata_operations
+                    .iter()
+                    .map(|op| {
+                        crate::transactions::types::AtaOperation {
                         operation_type: match op.operation_type {
                             crate::transactions::analyzer::ata::AtaOperationType::Create =>
                                 crate::transactions::types::AtaOperationType::Creation,
@@ -541,94 +599,90 @@ impl TransactionProcessor {
                         mint: op.mint.clone().unwrap_or_default(),
                         rent_cost_sol: Some(op.rent_amount),
                     }
-                })
-                .collect(),
-        });
+                    })
+                    .collect(),
+            });
 
         // Map token swap info and swap PnL info based on analysis outputs
         // This fills Transaction.token_swap_info and swap_pnl_info so downstream tools (CSV verifier)
         // can validate amounts, mints, and router detection.
-        if
-            matches!(
-                analysis.classification.transaction_type,
-                crate::transactions::analyzer::classify::ClassifiedType::Buy |
-                    crate::transactions::analyzer::classify::ClassifiedType::Sell |
-                    crate::transactions::analyzer::classify::ClassifiedType::Swap
-            )
-        {
+        if matches!(
+            analysis.classification.transaction_type,
+            crate::transactions::analyzer::classify::ClassifiedType::Buy
+                | crate::transactions::analyzer::classify::ClassifiedType::Sell
+                | crate::transactions::analyzer::classify::ClassifiedType::Swap
+        ) {
             // Determine swap orientation and primary token
             let direction_opt = &analysis.classification.direction;
             let primary_token_opt = &analysis.classification.primary_token;
 
-            if
-                let (Some(direction), Some(primary_mint)) = (
-                    direction_opt.as_ref(),
-                    primary_token_opt.as_ref(),
-                )
+            if let (Some(direction), Some(primary_mint)) =
+                (direction_opt.as_ref(), primary_token_opt.as_ref())
             {
                 // Resolve router string from DEX detection
-                let router_str = (
-                    match analysis.dex.detected_dex.as_ref() {
-                        Some(crate::transactions::analyzer::dex::DetectedDex::Jupiter) => "jupiter",
-                        Some(crate::transactions::analyzer::dex::DetectedDex::Raydium) => "raydium",
-                        Some(crate::transactions::analyzer::dex::DetectedDex::RaydiumCLMM) =>
-                            "raydium",
-                        Some(crate::transactions::analyzer::dex::DetectedDex::Orca) => "orca",
-                        Some(crate::transactions::analyzer::dex::DetectedDex::OrcaWhirlpool) =>
-                            "orca",
-                        Some(crate::transactions::analyzer::dex::DetectedDex::PumpFun) => "pumpfun",
-                        Some(crate::transactions::analyzer::dex::DetectedDex::Meteora) => "meteora",
-                        Some(_) => "unknown",
-                        None => "unknown",
-                    }
-                ).to_string();
+                let router_str = (match analysis.dex.detected_dex.as_ref() {
+                    Some(crate::transactions::analyzer::dex::DetectedDex::Jupiter) => "jupiter",
+                    Some(crate::transactions::analyzer::dex::DetectedDex::Raydium) => "raydium",
+                    Some(crate::transactions::analyzer::dex::DetectedDex::RaydiumCLMM) => "raydium",
+                    Some(crate::transactions::analyzer::dex::DetectedDex::Orca) => "orca",
+                    Some(crate::transactions::analyzer::dex::DetectedDex::OrcaWhirlpool) => "orca",
+                    Some(crate::transactions::analyzer::dex::DetectedDex::PumpFun) => "pumpfun",
+                    Some(crate::transactions::analyzer::dex::DetectedDex::Meteora) => "meteora",
+                    Some(_) => "unknown",
+                    None => "unknown",
+                })
+                .to_string();
 
                 // Helper to get wallet key string
                 let wallet_key = self.wallet_pubkey.to_string();
 
                 // CRITICAL FIX: Fetch token decimals with RPC metadata as primary source
                 // This prevents 1000x errors from wrong decimals (e.g., USDC 6 decimals)
-                let token_decimals: u8 = extract_token_decimals_from_rpc(
-                    &tx_data,
-                    primary_mint
-                ).unwrap_or_else(|| {
-                    // Fallback to DB lookup only if RPC doesn't have it
-                    tokio::task::block_in_place(|| {
-                        tokio::runtime::Handle
-                            ::current()
-                            .block_on(async {
-                                crate::tokens::get_token_decimals(primary_mint).await.unwrap_or(9)
+                let token_decimals: u8 = extract_token_decimals_from_rpc(&tx_data, primary_mint)
+                    .unwrap_or_else(|| {
+                        // Fallback to DB lookup only if RPC doesn't have it
+                        tokio::task::block_in_place(|| {
+                            tokio::runtime::Handle::current().block_on(async {
+                                crate::tokens::get_token_decimals(primary_mint)
+                                    .await
+                                    .unwrap_or(9)
                             })
-                    })
-                }) as u8;
+                        })
+                    }) as u8;
 
                 // Locate token balance change for the wallet and mint
-                let token_ui_change: Option<f64> = analysis.balance.token_changes
+                let token_ui_change: Option<f64> = analysis
+                    .balance
+                    .token_changes
                     .get(&wallet_key)
-                    .and_then(|changes|
+                    .and_then(|changes| {
                         changes
                             .iter()
                             .find(|c| c.mint == *primary_mint)
                             .map(|c| c.change)
-                    )
+                    })
                     // fallback: largest change across owners for this mint
                     .or_else(|| {
-                        analysis.balance.token_changes
+                        analysis
+                            .balance
+                            .token_changes
                             .values()
                             .flat_map(|v| v.iter())
                             .filter(|c| c.mint == *primary_mint)
-                            .max_by(|a, b|
+                            .max_by(|a, b| {
                                 a.change
                                     .abs()
                                     .partial_cmp(&b.change.abs())
                                     .unwrap_or(std::cmp::Ordering::Equal)
-                            )
+                            })
                             .map(|c| c.change)
                     });
 
                 // Locate SOL change for the wallet only (do not fallback to any account),
                 // because the largest SOL change might be WSOL ATA credit/debit which corrupts swap I/O.
-                let sol_change_wallet = analysis.balance.sol_changes
+                let sol_change_wallet = analysis
+                    .balance
+                    .sol_changes
                     .get(&wallet_key)
                     .map(|c| c.change);
 
@@ -649,36 +703,27 @@ impl TransactionProcessor {
 
                         // Prefer authoritative WSOL wrap deposit:
                         // 1) Sum of system transfers from wallet -> wallet-owned WSOL ATA(s)
-                        if
-                            let Some(lamports) = find_wrap_deposit_via_sys_transfers_to_wsol_atas(
-                                &tx_data,
-                                &wallet_key
-                            )
+                        if let Some(lamports) =
+                            find_wrap_deposit_via_sys_transfers_to_wsol_atas(&tx_data, &wallet_key)
                         {
                             input_raw = lamports;
                             input_ui = (lamports as f64) / 1_000_000_000.0;
-                        } else if
-                            let Some(lamports) = find_wrap_deposit_via_transfer_to_sync_account(
-                                &tx_data,
-                                &wallet_key
-                            )
+                        } else if let Some(lamports) =
+                            find_wrap_deposit_via_transfer_to_sync_account(&tx_data, &wallet_key)
                         {
                             // 1b) Direct: match syncNative account with the exact preceding system transfer from wallet
                             input_raw = lamports;
                             input_ui = (lamports as f64) / 1_000_000_000.0;
-                        } else if
-                            let Some((sync_account, lamports)) = find_wrap_sync_account_and_delta(
-                                &tx_data
-                            )
+                        } else if let Some((sync_account, lamports)) =
+                            find_wrap_sync_account_and_delta(&tx_data)
                         {
                             // 2) If we detected syncNative, attempt to sum system transfers from wallet to that account
-                            if
-                                let Some(lamports_precise) =
-                                    sum_system_transfers_to_account_from_wallet(
-                                        &tx_data,
-                                        &wallet_key,
-                                        &sync_account
-                                    )
+                            if let Some(lamports_precise) =
+                                sum_system_transfers_to_account_from_wallet(
+                                    &tx_data,
+                                    &wallet_key,
+                                    &sync_account,
+                                )
                             {
                                 input_raw = lamports_precise;
                                 input_ui = (lamports_precise as f64) / 1_000_000_000.0;
@@ -686,29 +731,24 @@ impl TransactionProcessor {
                                 input_raw = lamports;
                                 input_ui = (lamports as f64) / 1_000_000_000.0;
                             }
-                        } else if
-                            let Some(lamports) = find_wsol_wrap_deposit_lamports(
-                                &tx_data,
-                                &wallet_key
-                            )
+                        } else if let Some(lamports) =
+                            find_wsol_wrap_deposit_lamports(&tx_data, &wallet_key)
                         {
                             input_raw = lamports;
                             input_ui = (lamports as f64) / 1_000_000_000.0;
-                        } else if
-                            let Some(wsol_ui) = find_owner_wsol_change_ui(&analysis, &wallet_key)
+                        } else if let Some(wsol_ui) =
+                            find_owner_wsol_change_ui(&analysis, &wallet_key)
                         {
                             // Secondary: owner-aggregated WSOL outflow
                             input_ui = wsol_ui;
                             input_raw = (wsol_ui * 1_000_000_000.0)
                                 .round()
-                                .clamp(0.0, u64::MAX as f64) as u64;
+                                .clamp(0.0, u64::MAX as f64)
+                                as u64;
                         } else {
                             // Fallbacks: instruction-derived system transfer, then SOL delta for swap calculation
-                            if
-                                let Some(lamports) = find_largest_system_transfer_from_wallet(
-                                    &tx_data,
-                                    &wallet_key
-                                )
+                            if let Some(lamports) =
+                                find_largest_system_transfer_from_wallet(&tx_data, &wallet_key)
                             {
                                 input_raw = lamports;
                                 input_ui = (lamports as f64) / 1_000_000_000.0;
@@ -723,7 +763,8 @@ impl TransactionProcessor {
                                 input_ui = sol_for_swap;
                                 input_raw = (sol_for_swap * 1_000_000_000.0)
                                     .round()
-                                    .clamp(0.0, u64::MAX as f64) as u64;
+                                    .clamp(0.0, u64::MAX as f64)
+                                    as u64;
                             }
                         }
 
@@ -735,18 +776,18 @@ impl TransactionProcessor {
                             let derived_swap_ui = (sol_delta_ui - non_swap_costs).max(0.0);
                             let derived_swap_raw = (derived_swap_ui * 1_000_000_000.0)
                                 .round()
-                                .clamp(0.0, u64::MAX as f64) as u64;
+                                .clamp(0.0, u64::MAX as f64)
+                                as u64;
                             if derived_swap_raw > input_raw {
                                 input_raw = derived_swap_raw;
                                 input_ui = derived_swap_ui;
                             }
                             // Also reconcile with the largest non-tip system transfer from wallet (authoritative WSOL deposit)
-                            if
-                                let Some(deposit_raw) =
-                                    find_largest_system_transfer_from_wallet_excluding_tips(
-                                        &tx_data,
-                                        &wallet_key
-                                    )
+                            if let Some(deposit_raw) =
+                                find_largest_system_transfer_from_wallet_excluding_tips(
+                                    &tx_data,
+                                    &wallet_key,
+                                )
                             {
                                 if deposit_raw > input_raw {
                                     input_raw = deposit_raw;
@@ -771,14 +812,14 @@ impl TransactionProcessor {
                                         fb.base_fee + fb.priority_fee + fb.mev_tips + fb.rent_costs;
 
                                     // The pure swap amount should be total outflow minus transaction costs
-                                    let gross_input_ui = (total_outflow - transaction_costs).max(
-                                        0.0
-                                    );
+                                    let gross_input_ui =
+                                        (total_outflow - transaction_costs).max(0.0);
 
                                     if gross_input_ui > 0.0 {
                                         let gross_input_raw = (gross_input_ui * 1_000_000_000.0)
                                             .round()
-                                            .clamp(0.0, u64::MAX as f64) as u64;
+                                            .clamp(0.0, u64::MAX as f64)
+                                            as u64;
 
                                         if gross_input_raw > input_raw {
                                             log(
@@ -802,15 +843,13 @@ impl TransactionProcessor {
                         }
 
                         // Apply DEX-specific corrections based on instruction analysis and program patterns
-                        if
-                            let Some(corrected_amount) = self.apply_dex_specific_corrections(
-                                &router_str,
-                                input_raw,
-                                &tx_data,
-                                &analysis.balance,
-                                direction
-                            )
-                        {
+                        if let Some(corrected_amount) = self.apply_dex_specific_corrections(
+                            &router_str,
+                            input_raw,
+                            &tx_data,
+                            &analysis.balance,
+                            direction,
+                        ) {
                             if corrected_amount != input_raw {
                                 log(
                                     LogTag::Transactions,
@@ -819,11 +858,11 @@ impl TransactionProcessor {
                                         "Applied {router} correction: {} -> {} ({:.2}% diff)",
                                         input_raw,
                                         corrected_amount,
-                                        (((input_raw as f64) - (corrected_amount as f64)).abs() /
-                                            (corrected_amount as f64)) *
-                                            100.0,
+                                        (((input_raw as f64) - (corrected_amount as f64)).abs()
+                                            / (corrected_amount as f64))
+                                            * 100.0,
                                         router = router_str
-                                    )
+                                    ),
                                 );
                                 input_raw = corrected_amount;
                                 input_ui = (corrected_amount as f64) / 1_000_000_000.0;
@@ -874,12 +913,11 @@ impl TransactionProcessor {
                                     // Skip rent-pattern outflows (e.g., ATA close rent ~0.00203928 SOL)
                                     let outflow_lamports = (outflow_amount * 1_000_000_000.0)
                                         .round()
-                                        .clamp(0.0, u64::MAX as f64) as u64;
-                                    if
-                                        crate::transactions::analyzer::balance::is_rent_amount(
-                                            outflow_lamports
-                                        )
-                                    {
+                                        .clamp(0.0, u64::MAX as f64)
+                                        as u64;
+                                    if crate::transactions::analyzer::balance::is_rent_amount(
+                                        outflow_lamports,
+                                    ) {
                                         continue;
                                     }
 
@@ -916,9 +954,8 @@ impl TransactionProcessor {
                                 tips = scanned;
                             }
 
-                            sol_from_swap = (sol_abs + fb.base_fee + fb.priority_fee + tips).max(
-                                0.0
-                            );
+                            sol_from_swap =
+                                (sol_abs + fb.base_fee + fb.priority_fee + tips).max(0.0);
 
                             if self.debug_enabled {
                                 log(
@@ -937,18 +974,17 @@ impl TransactionProcessor {
                         output_ui = sol_from_swap;
                         output_raw = (sol_from_swap * 1_000_000_000.0)
                             .round()
-                            .clamp(0.0, u64::MAX as f64) as u64;
+                            .clamp(0.0, u64::MAX as f64)
+                            as u64;
 
                         // Apply DEX-specific corrections based on instruction analysis and program patterns
-                        if
-                            let Some(corrected_amount) = self.apply_dex_specific_corrections(
-                                &router_str,
-                                output_raw,
-                                &tx_data,
-                                &analysis.balance,
-                                direction
-                            )
-                        {
+                        if let Some(corrected_amount) = self.apply_dex_specific_corrections(
+                            &router_str,
+                            output_raw,
+                            &tx_data,
+                            &analysis.balance,
+                            direction,
+                        ) {
                             if corrected_amount != output_raw {
                                 log(
                                     LogTag::Transactions,
@@ -957,11 +993,11 @@ impl TransactionProcessor {
                                         "Applied {router} correction: {} -> {} ({:.2}% diff)",
                                         output_raw,
                                         corrected_amount,
-                                        (((output_raw as f64) - (corrected_amount as f64)).abs() /
-                                            (corrected_amount as f64)) *
-                                            100.0,
+                                        (((output_raw as f64) - (corrected_amount as f64)).abs()
+                                            / (corrected_amount as f64))
+                                            * 100.0,
                                         router = router_str
-                                    )
+                                    ),
                                 );
                                 output_raw = corrected_amount;
                                 output_ui = (corrected_amount as f64) / 1_000_000_000.0;
@@ -974,25 +1010,25 @@ impl TransactionProcessor {
                                 "MAP_SWAP_TOKEN_TO_SOL_FINAL",
                                 &format!(
                                     "Final swap calculation: output_ui={:.9} SOL (raw={})",
-                                    output_ui,
-                                    output_raw
-                                )
+                                    output_ui, output_raw
+                                ),
                             );
                         }
                     }
                     crate::transactions::analyzer::classify::SwapDirection::TokenToToken => {
                         swap_type_str = "token_to_token";
                         input_mint = primary_mint.clone();
-                        output_mint = analysis.classification.secondary_token
+                        output_mint = analysis
+                            .classification
+                            .secondary_token
                             .clone()
                             .unwrap_or_default();
 
                         let token_abs = token_ui_change.unwrap_or(0.0).abs();
                         input_ui = token_abs;
                         let scale_in = (10f64).powi(token_decimals as i32);
-                        input_raw = (token_abs * scale_in)
-                            .round()
-                            .clamp(0.0, u64::MAX as f64) as u64;
+                        input_raw =
+                            (token_abs * scale_in).round().clamp(0.0, u64::MAX as f64) as u64;
 
                         // Output side unknown without deeper decoding; leave zeros
                         output_ui = 0.0;
@@ -1056,8 +1092,9 @@ impl TransactionProcessor {
                 }
 
                 // Map PnL main component if present
-                let swap_pnl_info = if let Some(main) = &analysis.pnl.main_pnl {
-                    let swap_type = match direction {
+                let swap_pnl_info =
+                    if let Some(main) = &analysis.pnl.main_pnl {
+                        let swap_type = match direction {
                         crate::transactions::analyzer::classify::SwapDirection::SolToToken => "Buy",
                         crate::transactions::analyzer::classify::SwapDirection::TokenToSol =>
                             "Sell",
@@ -1065,118 +1102,112 @@ impl TransactionProcessor {
                             "Swap",
                     };
 
-                    let fees_total = analysis.pnl.fee_breakdown.total_fees;
-                    let status_str = if transaction.success { "✅ Success" } else { "❌ Failed" };
+                        let fees_total = analysis.pnl.fee_breakdown.total_fees;
+                        let status_str = if transaction.success {
+                            "✅ Success"
+                        } else {
+                            "❌ Failed"
+                        };
 
-                    Some(SwapPnLInfo {
-                        token_mint: primary_mint.clone(),
-                        token_symbol: String::new(),
-                        swap_type: swap_type.to_string(),
-                        sol_amount: main.sol_amount_adjusted.abs(),
-                        token_amount: main.token_amount.abs(),
-                        calculated_price_sol: main.price_per_token,
-                        timestamp: transaction.timestamp,
-                        signature: transaction.signature.clone(),
-                        router: router_str.clone(),
-                        fee_sol: analysis.pnl.fee_breakdown.base_fee,
-                        // CRITICAL FIX: Use total_rent_paid for all swap types
-                        // ATAs can be created in any swap (e.g., WSOL ATA during sells)
-                        // The verifier expects this value to normalize CSV amounts that include rent
-                        ata_rents: analysis.ata.rent_summary.total_rent_paid,
-                        effective_sol_spent: if
-                            matches!(
+                        Some(SwapPnLInfo {
+                            token_mint: primary_mint.clone(),
+                            token_symbol: String::new(),
+                            swap_type: swap_type.to_string(),
+                            sol_amount: main.sol_amount_adjusted.abs(),
+                            token_amount: main.token_amount.abs(),
+                            calculated_price_sol: main.price_per_token,
+                            timestamp: transaction.timestamp,
+                            signature: transaction.signature.clone(),
+                            router: router_str.clone(),
+                            fee_sol: analysis.pnl.fee_breakdown.base_fee,
+                            // CRITICAL FIX: Use total_rent_paid for all swap types
+                            // ATAs can be created in any swap (e.g., WSOL ATA during sells)
+                            // The verifier expects this value to normalize CSV amounts that include rent
+                            ata_rents: analysis.ata.rent_summary.total_rent_paid,
+                            effective_sol_spent: if matches!(
                                 direction,
                                 crate::transactions::analyzer::classify::SwapDirection::SolToToken
-                            )
-                        {
-                            main.sol_amount_adjusted.abs()
-                        } else {
-                            0.0
-                        },
-                        effective_sol_received: if
-                            matches!(
+                            ) {
+                                main.sol_amount_adjusted.abs()
+                            } else {
+                                0.0
+                            },
+                            effective_sol_received: if matches!(
                                 direction,
                                 crate::transactions::analyzer::classify::SwapDirection::TokenToSol
-                            )
-                        {
-                            main.sol_amount_adjusted.abs()
-                        } else {
-                            0.0
-                        },
-                        ata_created_count: transaction.ata_analysis
-                            .as_ref()
-                            .map(|a| a.total_ata_creations)
-                            .unwrap_or(0),
-                        ata_closed_count: transaction.ata_analysis
-                            .as_ref()
-                            .map(|a| a.total_ata_closures)
-                            .unwrap_or(0),
-                        slot: transaction.slot,
-                        status: status_str.to_string(),
-                        // Legacy fields for debug tools
-                        sol_spent: if
-                            matches!(
+                            ) {
+                                main.sol_amount_adjusted.abs()
+                            } else {
+                                0.0
+                            },
+                            ata_created_count: transaction
+                                .ata_analysis
+                                .as_ref()
+                                .map(|a| a.total_ata_creations)
+                                .unwrap_or(0),
+                            ata_closed_count: transaction
+                                .ata_analysis
+                                .as_ref()
+                                .map(|a| a.total_ata_closures)
+                                .unwrap_or(0),
+                            slot: transaction.slot,
+                            status: status_str.to_string(),
+                            // Legacy fields for debug tools
+                            sol_spent: if matches!(
                                 direction,
                                 crate::transactions::analyzer::classify::SwapDirection::SolToToken
-                            )
-                        {
-                            main.sol_amount_raw.abs()
-                        } else {
-                            0.0
-                        },
-                        sol_received: if
-                            matches!(
+                            ) {
+                                main.sol_amount_raw.abs()
+                            } else {
+                                0.0
+                            },
+                            sol_received: if matches!(
                                 direction,
                                 crate::transactions::analyzer::classify::SwapDirection::TokenToSol
-                            )
-                        {
-                            main.sol_amount_raw.abs()
-                        } else {
-                            0.0
-                        },
-                        tokens_bought: if
-                            matches!(
+                            ) {
+                                main.sol_amount_raw.abs()
+                            } else {
+                                0.0
+                            },
+                            tokens_bought: if matches!(
                                 direction,
                                 crate::transactions::analyzer::classify::SwapDirection::SolToToken
-                            )
-                        {
-                            main.token_amount.abs()
-                        } else {
-                            0.0
-                        },
-                        tokens_sold: if
-                            matches!(
+                            ) {
+                                main.token_amount.abs()
+                            } else {
+                                0.0
+                            },
+                            tokens_sold: if matches!(
                                 direction,
                                 crate::transactions::analyzer::classify::SwapDirection::TokenToSol
-                            )
-                        {
-                            main.token_amount.abs()
-                        } else {
-                            0.0
-                        },
-                        net_sol_change: analysis.balance.sol_changes
-                            .values()
-                            .map(|c| c.change)
-                            .sum(),
-                        estimated_token_value_sol: None,
-                        estimated_pnl_sol: None,
-                        fees_paid_sol: fees_total,
-                    })
-                } else {
-                    None
-                };
+                            ) {
+                                main.token_amount.abs()
+                            } else {
+                                0.0
+                            },
+                            net_sol_change: analysis
+                                .balance
+                                .sol_changes
+                                .values()
+                                .map(|c| c.change)
+                                .sum(),
+                            estimated_token_value_sol: None,
+                            estimated_pnl_sol: None,
+                            fees_paid_sol: fees_total,
+                        })
+                    } else {
+                        None
+                    };
 
                 transaction.token_swap_info = Some(token_swap_info.clone());
                 transaction.token_info = Some(token_swap_info);
                 transaction.swap_pnl_info = swap_pnl_info;
 
                 if self.debug_enabled {
-                    if
-                        matches!(
-                            direction,
-                            crate::transactions::analyzer::classify::SwapDirection::SolToToken
-                        )
-                    {
+                    if matches!(
+                        direction,
+                        crate::transactions::analyzer::classify::SwapDirection::SolToToken
+                    ) {
                         let fb = &analysis.pnl.fee_breakdown;
                         log(
                             LogTag::Transactions,
@@ -1196,20 +1227,15 @@ impl TransactionProcessor {
                         "MAP_SWAP",
                         &format!(
                             "Mapped swap: dir={:?} router={} in {} (ui={:.9}) -> out {} (ui={:.6})",
-                            direction,
-                            router_str,
-                            input_raw,
-                            input_ui,
-                            output_raw,
-                            output_ui
-                        )
+                            direction, router_str, input_raw, input_ui, output_raw, output_ui
+                        ),
                     );
                 }
             } else if self.debug_enabled {
                 log(
                     LogTag::Transactions,
                     "MAP_SWAP_SKIPPED",
-                    &"Skipping swap mapping: missing direction or primary token".to_string()
+                    &"Skipping swap mapping: missing direction or primary token".to_string(),
                 );
             }
         }
@@ -1221,7 +1247,7 @@ impl TransactionProcessor {
     fn calculate_tip_amount(
         &self,
         transaction: &Transaction,
-        tx_data: &crate::rpc::TransactionDetails
+        tx_data: &crate::rpc::TransactionDetails,
     ) -> f64 {
         // Simple placeholder implementation
         0.0
@@ -1248,12 +1274,11 @@ fn account_keys_from_message(message: &Value) -> Vec<String> {
         // Fallback: array of objects containing { pubkey, signer, writable, source }
         keys = array
             .iter()
-            .filter_map(|v|
-                v
-                    .get("pubkey")
+            .filter_map(|v| {
+                v.get("pubkey")
                     .and_then(|p| p.as_str())
                     .map(|s| s.to_string())
-            )
+            })
             .collect();
         if !keys.is_empty() {
             return keys;
@@ -1325,7 +1350,7 @@ fn parse_ui_amount(amount: &crate::rpc::UiTokenAmount) -> f64 {
 /// Returns None if the token is not found in pre/post token balances
 fn extract_token_decimals_from_rpc(
     tx_data: &crate::rpc::TransactionDetails,
-    mint: &str
+    mint: &str,
 ) -> Option<u8> {
     let meta = tx_data.meta.as_ref()?;
 
@@ -1353,7 +1378,7 @@ fn extract_token_decimals_from_rpc(
 /// Find the largest parsed system transfer amount from the wallet in inner/outer instructions
 fn find_largest_system_transfer_from_wallet(
     tx_data: &crate::rpc::TransactionDetails,
-    wallet_key: &str
+    wallet_key: &str,
 ) -> Option<u64> {
     let mut best: Option<u64> = None;
 
@@ -1361,10 +1386,7 @@ fn find_largest_system_transfer_from_wallet(
     let mut consider_ix = |ix: &serde_json::Value| {
         // Prefer parsed format
         if let Some(parsed) = ix.get("parsed") {
-            let ix_type = parsed
-                .get("type")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let ix_type = parsed.get("type").and_then(|v| v.as_str()).unwrap_or("");
             if let Some(info) = parsed.get("info") {
                 let source = info
                     .get("source")
@@ -1388,10 +1410,11 @@ fn find_largest_system_transfer_from_wallet(
     };
 
     // Outer instructions
-    if
-        let Some(instructions) = tx_data.transaction.message
-            .get("instructions")
-            .and_then(|v| v.as_array())
+    if let Some(instructions) = tx_data
+        .transaction
+        .message
+        .get("instructions")
+        .and_then(|v| v.as_array())
     {
         for ix in instructions {
             consider_ix(ix);
@@ -1417,29 +1440,30 @@ fn find_largest_system_transfer_from_wallet(
 /// Find the WSOL token amount that left the wallet (owner-aggregated token change) as UI amount
 fn find_owner_wsol_change_ui(
     analysis: &crate::transactions::analyzer::CompleteAnalysis,
-    wallet_key: &str
+    wallet_key: &str,
 ) -> Option<f64> {
-    analysis.balance.token_changes.get(wallet_key).and_then(|changes| {
-        changes
-            .iter()
-            .find(|c| c.mint == WSOL_MINT && c.change < 0.0)
-            .map(|c| c.change.abs())
-    })
+    analysis
+        .balance
+        .token_changes
+        .get(wallet_key)
+        .and_then(|changes| {
+            changes
+                .iter()
+                .find(|c| c.mint == WSOL_MINT && c.change < 0.0)
+                .map(|c| c.change.abs())
+        })
 }
 
 /// Sum explicit MEV/Jito tip lamports sent from wallet by scanning parsed instructions
 fn find_mev_tips_from_wallet(
     tx_data: &crate::rpc::TransactionDetails,
-    wallet_key: &str
+    wallet_key: &str,
 ) -> Option<u64> {
     use crate::transactions::program_ids::is_mev_tip_address;
     let mut total: u64 = 0;
     let mut consider_ix = |ix: &serde_json::Value| {
         if let Some(parsed) = ix.get("parsed") {
-            let ix_type = parsed
-                .get("type")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let ix_type = parsed.get("type").and_then(|v| v.as_str()).unwrap_or("");
             if ix_type == "transfer" {
                 if let Some(info) = parsed.get("info") {
                     let source = info
@@ -1461,10 +1485,11 @@ fn find_mev_tips_from_wallet(
             }
         }
     };
-    if
-        let Some(instructions) = tx_data.transaction.message
-            .get("instructions")
-            .and_then(|v| v.as_array())
+    if let Some(instructions) = tx_data
+        .transaction
+        .message
+        .get("instructions")
+        .and_then(|v| v.as_array())
     {
         for ix in instructions {
             consider_ix(ix);
@@ -1491,7 +1516,7 @@ fn find_mev_tips_from_wallet(
 /// Find lamports deposited into the wallet's WSOL ATA by inspecting pre/post balances at that account index
 fn find_wsol_wrap_deposit_lamports(
     tx_data: &crate::rpc::TransactionDetails,
-    wallet_key: &str
+    wallet_key: &str,
 ) -> Option<u64> {
     let meta = tx_data.meta.as_ref()?;
     let empty_vec: Vec<crate::rpc::TokenBalance> = Vec::new();
@@ -1567,7 +1592,12 @@ fn find_wrap_deposit_via_sync_native(tx_data: &crate::rpc::TransactionDetails) -
         }
     };
 
-    if let Some(ixs) = tx_data.transaction.message.get("instructions").and_then(|v| v.as_array()) {
+    if let Some(ixs) = tx_data
+        .transaction
+        .message
+        .get("instructions")
+        .and_then(|v| v.as_array())
+    {
         for ix in ixs {
             consider_ix(ix);
         }
@@ -1597,7 +1627,7 @@ fn resolve_account_keys_vec(message: &serde_json::Value) -> Vec<String> {
 /// Collect wallet-owned WSOL ATA addresses from pre/post token balances
 fn get_wallet_wsol_ata_addresses(
     tx_data: &crate::rpc::TransactionDetails,
-    wallet_key: &str
+    wallet_key: &str,
 ) -> Vec<String> {
     let meta = match tx_data.meta.as_ref() {
         Some(m) => m,
@@ -1645,7 +1675,12 @@ fn get_wallet_wsol_ata_addresses(
             }
         }
     };
-    if let Some(ixs) = tx_data.transaction.message.get("instructions").and_then(|v| v.as_array()) {
+    if let Some(ixs) = tx_data
+        .transaction
+        .message
+        .get("instructions")
+        .and_then(|v| v.as_array())
+    {
         for ix in ixs {
             consider_ix(ix);
         }
@@ -1673,7 +1708,7 @@ fn get_wallet_wsol_ata_addresses(
 /// Find wrap deposit by summing system transfers from wallet to their WSOL ATA addresses
 fn find_wrap_deposit_via_sys_transfers_to_wsol_atas(
     tx_data: &crate::rpc::TransactionDetails,
-    wallet_key: &str
+    wallet_key: &str,
 ) -> Option<u64> {
     let wsol_atas = get_wallet_wsol_ata_addresses(tx_data, wallet_key);
     if wsol_atas.is_empty() {
@@ -1683,10 +1718,7 @@ fn find_wrap_deposit_via_sys_transfers_to_wsol_atas(
     let mut total: u64 = 0;
     let mut consider_ix = |ix: &serde_json::Value| {
         if let Some(parsed) = ix.get("parsed") {
-            let ix_type = parsed
-                .get("type")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let ix_type = parsed.get("type").and_then(|v| v.as_str()).unwrap_or("");
             if ix_type == "transfer" {
                 if let Some(info) = parsed.get("info") {
                     let source = info
@@ -1709,10 +1741,11 @@ fn find_wrap_deposit_via_sys_transfers_to_wsol_atas(
         }
     };
 
-    if
-        let Some(instructions) = tx_data.transaction.message
-            .get("instructions")
-            .and_then(|v| v.as_array())
+    if let Some(instructions) = tx_data
+        .transaction
+        .message
+        .get("instructions")
+        .and_then(|v| v.as_array())
     {
         for ix in instructions {
             consider_ix(ix);
@@ -1739,7 +1772,7 @@ fn find_wrap_deposit_via_sys_transfers_to_wsol_atas(
 
 /// Detect syncNative account and its lamport delta; returns (account_pubkey, delta_lamports)
 fn find_wrap_sync_account_and_delta(
-    tx_data: &crate::rpc::TransactionDetails
+    tx_data: &crate::rpc::TransactionDetails,
 ) -> Option<(String, u64)> {
     let meta = tx_data.meta.as_ref()?;
     let pre = &meta.pre_balances;
@@ -1769,7 +1802,12 @@ fn find_wrap_sync_account_and_delta(
         }
     };
 
-    if let Some(ixs) = tx_data.transaction.message.get("instructions").and_then(|v| v.as_array()) {
+    if let Some(ixs) = tx_data
+        .transaction
+        .message
+        .get("instructions")
+        .and_then(|v| v.as_array())
+    {
         for ix in ixs {
             consider_ix(ix);
         }
@@ -1793,7 +1831,7 @@ fn find_wrap_sync_account_and_delta(
 fn sum_system_transfers_to_account_from_wallet(
     tx_data: &crate::rpc::TransactionDetails,
     wallet_key: &str,
-    dest_account: &str
+    dest_account: &str,
 ) -> Option<u64> {
     let mut total: u64 = 0;
     let mut consider_ix = |ix: &serde_json::Value| {
@@ -1821,7 +1859,12 @@ fn sum_system_transfers_to_account_from_wallet(
             }
         }
     };
-    if let Some(ixs) = tx_data.transaction.message.get("instructions").and_then(|v| v.as_array()) {
+    if let Some(ixs) = tx_data
+        .transaction
+        .message
+        .get("instructions")
+        .and_then(|v| v.as_array())
+    {
         for ix in ixs {
             consider_ix(ix);
         }
@@ -1847,7 +1890,7 @@ fn sum_system_transfers_to_account_from_wallet(
 /// Find the largest system transfer amount sent from the wallet to any destination excluding known tip addresses
 fn find_largest_system_transfer_from_wallet_excluding_tips(
     tx_data: &crate::rpc::TransactionDetails,
-    wallet_key: &str
+    wallet_key: &str,
 ) -> Option<u64> {
     use crate::transactions::program_ids::is_mev_tip_address;
     let mut best: u64 = 0;
@@ -1880,7 +1923,12 @@ fn find_largest_system_transfer_from_wallet_excluding_tips(
             }
         }
     };
-    if let Some(ixs) = tx_data.transaction.message.get("instructions").and_then(|v| v.as_array()) {
+    if let Some(ixs) = tx_data
+        .transaction
+        .message
+        .get("instructions")
+        .and_then(|v| v.as_array())
+    {
         for ix in ixs {
             consider_ix(ix);
         }
@@ -1927,7 +1975,12 @@ fn detect_mev_tips_from_instructions_light(tx_data: &crate::rpc::TransactionDeta
             }
         }
     };
-    if let Some(ixs) = tx_data.transaction.message.get("instructions").and_then(|v| v.as_array()) {
+    if let Some(ixs) = tx_data
+        .transaction
+        .message
+        .get("instructions")
+        .and_then(|v| v.as_array())
+    {
         for ix in ixs {
             consider_ix(ix);
         }
@@ -1949,7 +2002,7 @@ fn detect_mev_tips_from_instructions_light(tx_data: &crate::rpc::TransactionDeta
 /// Detect wrap deposit by matching the syncNative account with explicit system transfer from wallet
 fn find_wrap_deposit_via_transfer_to_sync_account(
     tx_data: &crate::rpc::TransactionDetails,
-    wallet_key: &str
+    wallet_key: &str,
 ) -> Option<u64> {
     let (sync_account, _delta) = find_wrap_sync_account_and_delta(tx_data)?;
     sum_system_transfers_to_account_from_wallet(tx_data, wallet_key, &sync_account)
@@ -1976,16 +2029,11 @@ fn sum_inner_wsol_transferchecked_ui(tx_data: &crate::rpc::TransactionDetails) -
             for ix in ixs {
                 if let Some(parsed) = ix.get("parsed") {
                     if let Some(info) = parsed.get("info") {
-                        let mint = info
-                            .get("mint")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("");
+                        let mint = info.get("mint").and_then(|v| v.as_str()).unwrap_or("");
                         if mint == crate::transactions::utils::WSOL_MINT {
                             if let Some(token_amount) = info.get("tokenAmount") {
-                                if
-                                    let Some(ui) = token_amount
-                                        .get("uiAmount")
-                                        .and_then(|v| v.as_f64())
+                                if let Some(ui) =
+                                    token_amount.get("uiAmount").and_then(|v| v.as_f64())
                                 {
                                     if ui > 0.0 {
                                         total_ui += ui;
@@ -2004,7 +2052,7 @@ fn sum_inner_wsol_transferchecked_ui(tx_data: &crate::rpc::TransactionDetails) -
 /// Sum WSOL inner transfers (transfer or transferChecked) that credit the wallet's WSOL ATAs, returning SOL units
 fn sum_inner_wsol_transfers_ui_to_wallet(
     tx_data: &crate::rpc::TransactionDetails,
-    wallet_key: &str
+    wallet_key: &str,
 ) -> f64 {
     let meta = match tx_data.meta.as_ref() {
         Some(m) => m,
@@ -2029,16 +2077,10 @@ fn sum_inner_wsol_transfers_ui_to_wallet(
         if let Some(ixs) = group.get("instructions").and_then(|v| v.as_array()) {
             for ix in ixs {
                 if let Some(parsed) = ix.get("parsed") {
-                    let ix_type = parsed
-                        .get("type")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
+                    let ix_type = parsed.get("type").and_then(|v| v.as_str()).unwrap_or("");
                     if ix_type == "transfer" || ix_type == "transferChecked" {
                         if let Some(info) = parsed.get("info") {
-                            let mint = info
-                                .get("mint")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("");
+                            let mint = info.get("mint").and_then(|v| v.as_str()).unwrap_or("");
                             if mint == crate::transactions::utils::WSOL_MINT {
                                 let dest = info
                                     .get("destination")
@@ -2049,27 +2091,21 @@ fn sum_inner_wsol_transfers_ui_to_wallet(
                                     // Prefer tokenAmount.uiAmount (transferChecked). Fallback to amount lamports (transfer)
                                     let mut ui_amount = 0.0f64;
                                     if let Some(token_amount) = info.get("tokenAmount") {
-                                        if
-                                            let Some(ui) = token_amount
-                                                .get("uiAmount")
-                                                .and_then(|v| v.as_f64())
+                                        if let Some(ui) =
+                                            token_amount.get("uiAmount").and_then(|v| v.as_f64())
                                         {
                                             ui_amount = ui;
                                         }
                                     }
                                     if ui_amount == 0.0 {
-                                        if
-                                            let Some(raw) = info
-                                                .get("amount")
-                                                .and_then(|v| v.as_str())
+                                        if let Some(raw) =
+                                            info.get("amount").and_then(|v| v.as_str())
                                         {
                                             if let Ok(lamports) = raw.parse::<u64>() {
                                                 ui_amount = (lamports as f64) / 1_000_000_000.0;
                                             }
-                                        } else if
-                                            let Some(raw_num) = info
-                                                .get("amount")
-                                                .and_then(|v| v.as_u64())
+                                        } else if let Some(raw_num) =
+                                            info.get("amount").and_then(|v| v.as_u64())
                                         {
                                             ui_amount = (raw_num as f64) / 1_000_000_000.0;
                                         }
@@ -2096,25 +2132,24 @@ impl TransactionProcessor {
         calculated_amount: u64,
         tx_data: &crate::rpc::TransactionDetails,
         balance_analysis: &crate::transactions::analyzer::balance::BalanceAnalysis,
-        direction: &crate::transactions::analyzer::classify::SwapDirection
+        direction: &crate::transactions::analyzer::classify::SwapDirection,
     ) -> Option<u64> {
         match router {
-            "jupiter" =>
-                self.apply_jupiter_corrections(
-                    calculated_amount,
-                    tx_data,
-                    balance_analysis,
-                    direction
-                ),
-            "pumpfun" =>
-                self.apply_pumpfun_corrections(
-                    calculated_amount,
-                    tx_data,
-                    balance_analysis,
-                    direction
-                ),
-            "raydium" =>
-                self.apply_raydium_corrections(calculated_amount, tx_data, balance_analysis),
+            "jupiter" => self.apply_jupiter_corrections(
+                calculated_amount,
+                tx_data,
+                balance_analysis,
+                direction,
+            ),
+            "pumpfun" => self.apply_pumpfun_corrections(
+                calculated_amount,
+                tx_data,
+                balance_analysis,
+                direction,
+            ),
+            "raydium" => {
+                self.apply_raydium_corrections(calculated_amount, tx_data, balance_analysis)
+            }
             _ => None,
         }
     }
@@ -2125,7 +2160,7 @@ impl TransactionProcessor {
         calculated_amount: u64,
         tx_data: &crate::rpc::TransactionDetails,
         _balance_analysis: &crate::transactions::analyzer::balance::BalanceAnalysis,
-        direction: &crate::transactions::analyzer::classify::SwapDirection
+        direction: &crate::transactions::analyzer::classify::SwapDirection,
     ) -> Option<u64> {
         // Direction-aware correction policy for Jupiter:
         // - Buy (SOL -> Token): prefer authoritative deposit amount from wallet to WSOL ATA(s).
@@ -2134,17 +2169,15 @@ impl TransactionProcessor {
         match direction {
             crate::transactions::analyzer::classify::SwapDirection::SolToToken => {
                 // Find the authoritative deposit (largest non-tip system transfer from wallet)
-                if
-                    let Some(deposit_raw) = find_largest_system_transfer_from_wallet_excluding_tips(
-                        tx_data,
-                        &self.wallet_pubkey.to_string()
-                    )
-                {
+                if let Some(deposit_raw) = find_largest_system_transfer_from_wallet_excluding_tips(
+                    tx_data,
+                    &self.wallet_pubkey.to_string(),
+                ) {
                     if deposit_raw > 0 {
                         // Only replace when it differs meaningfully (>0.05%) to avoid churn
                         let rel = if calculated_amount > 0 {
-                            (((calculated_amount as i128) - (deposit_raw as i128)).abs() as f64) /
-                                (calculated_amount as f64)
+                            (((calculated_amount as i128) - (deposit_raw as i128)).abs() as f64)
+                                / (calculated_amount as f64)
                         } else {
                             1.0
                         };
@@ -2164,7 +2197,7 @@ impl TransactionProcessor {
         &self,
         calculated_amount: u64,
         tx_data: &crate::rpc::TransactionDetails,
-        _balance_analysis: &crate::transactions::analyzer::balance::BalanceAnalysis
+        _balance_analysis: &crate::transactions::analyzer::balance::BalanceAnalysis,
     ) -> Option<u64> {
         let raydium_program_ids = [
             "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8", // Raydium AMM
@@ -2172,23 +2205,22 @@ impl TransactionProcessor {
         ];
 
         // Check if this transaction involves Raydium by analyzing instructions
-        let has_raydium = if
-            let Some(instructions) = tx_data.transaction.message.get("instructions")
-        {
-            if let Some(instructions_array) = instructions.as_array() {
-                instructions_array.iter().any(|ix| {
-                    if let Some(program_id) = ix.get("programId").and_then(|p| p.as_str()) {
-                        raydium_program_ids.contains(&program_id)
-                    } else {
-                        false
-                    }
-                })
+        let has_raydium =
+            if let Some(instructions) = tx_data.transaction.message.get("instructions") {
+                if let Some(instructions_array) = instructions.as_array() {
+                    instructions_array.iter().any(|ix| {
+                        if let Some(program_id) = ix.get("programId").and_then(|p| p.as_str()) {
+                            raydium_program_ids.contains(&program_id)
+                        } else {
+                            false
+                        }
+                    })
+                } else {
+                    false
+                }
             } else {
                 false
-            }
-        } else {
-            false
-        };
+            };
 
         if !has_raydium {
             return None;
@@ -2205,7 +2237,7 @@ impl TransactionProcessor {
         calculated_amount: u64,
         tx_data: &crate::rpc::TransactionDetails,
         balance_analysis: &crate::transactions::analyzer::balance::BalanceAnalysis,
-        direction: &crate::transactions::analyzer::classify::SwapDirection
+        direction: &crate::transactions::analyzer::classify::SwapDirection,
     ) -> Option<u64> {
         // Detect PumpFun by presence of legacy or AMM program IDs among outer instructions
         let pumpfun_programs = [
@@ -2213,18 +2245,18 @@ impl TransactionProcessor {
             crate::pools::types::PUMP_FUN_AMM_PROGRAM_ID,
         ];
 
-        let has_pumpfun = if
-            let Some(ixs) = tx_data.transaction.message
-                .get("instructions")
-                .and_then(|v| v.as_array())
+        let has_pumpfun = if let Some(ixs) = tx_data
+            .transaction
+            .message
+            .get("instructions")
+            .and_then(|v| v.as_array())
         {
-            ixs.iter().any(|ix|
-                ix
-                    .get("programId")
+            ixs.iter().any(|ix| {
+                ix.get("programId")
                     .and_then(|v| v.as_str())
                     .map(|pid| pumpfun_programs.contains(&pid))
                     .unwrap_or(false)
-            )
+            })
         } else {
             false
         };
@@ -2236,10 +2268,8 @@ impl TransactionProcessor {
         match direction {
             crate::transactions::analyzer::classify::SwapDirection::TokenToSol => {
                 // SELL: prefer exact WSOL inner credits to wallet ATAs
-                let candidate_sell_ui = sum_inner_wsol_transfers_ui_to_wallet(
-                    tx_data,
-                    &self.wallet_pubkey.to_string()
-                );
+                let candidate_sell_ui =
+                    sum_inner_wsol_transfers_ui_to_wallet(tx_data, &self.wallet_pubkey.to_string());
                 let candidate_sell_raw = (candidate_sell_ui * 1_000_000_000.0)
                     .round()
                     .clamp(0.0, u64::MAX as f64) as u64;
@@ -2251,12 +2281,10 @@ impl TransactionProcessor {
             }
             crate::transactions::analyzer::classify::SwapDirection::SolToToken => {
                 // BUY: prefer largest non-tip system transfer from wallet (authoritative deposit)
-                if
-                    let Some(deposit_raw) = find_largest_system_transfer_from_wallet_excluding_tips(
-                        tx_data,
-                        &self.wallet_pubkey.to_string()
-                    )
-                {
+                if let Some(deposit_raw) = find_largest_system_transfer_from_wallet_excluding_tips(
+                    tx_data,
+                    &self.wallet_pubkey.to_string(),
+                ) {
                     if deposit_raw > 0 {
                         return Some(deposit_raw);
                     }
@@ -2275,38 +2303,41 @@ impl TransactionProcessor {
         calculated_amount: u64,
         adjusted_amount: u64,
         tx_data: &crate::rpc::TransactionDetails,
-        balance_analysis: &crate::transactions::analyzer::balance::BalanceAnalysis
+        balance_analysis: &crate::transactions::analyzer::balance::BalanceAnalysis,
     ) -> bool {
         // Look for Pumpfun-specific instruction patterns
         let pumpfun_program_id = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
 
         // Count Pumpfun instructions by analyzing transaction structure
-        let pumpfun_instruction_count = if
-            let Some(instructions) = tx_data.transaction.message.get("instructions")
-        {
-            if let Some(instructions_array) = instructions.as_array() {
-                instructions_array
-                    .iter()
-                    .filter(|ix| {
-                        if let Some(program_id) = ix.get("programId").and_then(|p| p.as_str()) {
-                            program_id == pumpfun_program_id
-                        } else {
-                            false
-                        }
-                    })
-                    .count()
+        let pumpfun_instruction_count =
+            if let Some(instructions) = tx_data.transaction.message.get("instructions") {
+                if let Some(instructions_array) = instructions.as_array() {
+                    instructions_array
+                        .iter()
+                        .filter(|ix| {
+                            if let Some(program_id) = ix.get("programId").and_then(|p| p.as_str()) {
+                                program_id == pumpfun_program_id
+                            } else {
+                                false
+                            }
+                        })
+                        .count()
+                } else {
+                    0
+                }
             } else {
                 0
-            }
-        } else {
-            0
-        };
+            };
 
         // Check for intermediary account patterns in balance changes
-        let has_intermediary_pattern = balance_analysis.sol_changes.iter().any(|(account, change)| {
-            // Look for accounts that aren't the main wallet but have SOL changes
-            change.change.abs() > 0.0 && !change.change.is_nan()
-        });
+        let has_intermediary_pattern =
+            balance_analysis
+                .sol_changes
+                .iter()
+                .any(|(account, change)| {
+                    // Look for accounts that aren't the main wallet but have SOL changes
+                    change.change.abs() > 0.0 && !change.change.is_nan()
+                });
 
         // Pumpfun typically has 1-2 instructions and intermediary accounts
         pumpfun_instruction_count >= 1 && pumpfun_instruction_count <= 3 && has_intermediary_pattern

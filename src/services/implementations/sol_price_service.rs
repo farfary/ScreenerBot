@@ -1,9 +1,9 @@
+use crate::logger::{log, LogTag};
+use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
-use crate::services::{ Service, ServiceHealth, ServiceMetrics };
-use crate::logger::{ log, LogTag };
 
 pub struct SolPriceService;
 
@@ -29,15 +29,19 @@ impl Service for SolPriceService {
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor
+        monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
         log(LogTag::System, "INFO", "Starting SOL price tracking...");
 
-        let handle = crate::sol_price
-            ::start_sol_price_service(shutdown.clone(), monitor).await
+        let handle = crate::sol_price::start_sol_price_service(shutdown.clone(), monitor)
+            .await
             .map_err(|e| format!("Failed to start SOL price service: {}", e))?;
 
-        log(LogTag::System, "SUCCESS", "✅ SOL price service started (1 instrumented handle)");
+        log(
+            LogTag::System,
+            "SUCCESS",
+            "✅ SOL price service started (1 instrumented handle)",
+        );
 
         // Return price_task handle so ServiceManager can wait for graceful shutdown
         Ok(vec![handle])

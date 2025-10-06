@@ -9,17 +9,17 @@
 // - Account for rent costs in ATA operations
 // - Apply DEX-specific fee structures
 
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::logger::{ log, LogTag };
-use crate::transactions::types::*;
-use crate::global::is_debug_transactions_enabled;
 use super::{
-    balance::BalanceAnalysis,
-    classify::{ ClassifiedType, SwapDirection, TransactionClass },
     ata::AtaAnalysis,
+    balance::BalanceAnalysis,
+    classify::{ClassifiedType, SwapDirection, TransactionClass},
 };
+use crate::global::is_debug_transactions_enabled;
+use crate::logger::{log, LogTag};
+use crate::transactions::types::*;
 
 // =============================================================================
 // P&L ANALYSIS TYPES
@@ -116,13 +116,13 @@ pub async fn calculate_pnl(
     tx_data: &crate::rpc::TransactionDetails,
     balance_analysis: &BalanceAnalysis,
     classification: &TransactionClass,
-    ata_analysis: &AtaAnalysis
+    ata_analysis: &AtaAnalysis,
 ) -> Result<PnLAnalysis, String> {
     if is_debug_transactions_enabled() {
         log(
             LogTag::Transactions,
             "PNL_CALCULATE",
-            &format!("Calculating P&L for tx: {}", transaction.signature)
+            &format!("Calculating P&L for tx: {}", transaction.signature),
         );
     }
 
@@ -130,7 +130,8 @@ pub async fn calculate_pnl(
     let fee_breakdown = calculate_fee_breakdown(tx_data, balance_analysis, ata_analysis).await?;
 
     // Step 2: Calculate main P&L based on transaction type
-    let main_pnl = calculate_main_swap_pnl(balance_analysis, classification, &fee_breakdown).await?;
+    let main_pnl =
+        calculate_main_swap_pnl(balance_analysis, classification, &fee_breakdown).await?;
 
     // Step 3: Extract swap components for complex transactions
     let swap_components = extract_swap_components(balance_analysis, classification).await?;
@@ -158,7 +159,7 @@ pub async fn calculate_pnl(
 async fn calculate_fee_breakdown(
     tx_data: &crate::rpc::TransactionDetails,
     balance_analysis: &BalanceAnalysis,
-    ata_analysis: &AtaAnalysis
+    ata_analysis: &AtaAnalysis,
 ) -> Result<FeeBreakdown, String> {
     // Base signature fee and priority fee split from meta.fee, with override from ComputeBudget parsing
     let (mut base_fee, mut priority_fee) = if let Some(meta) = &tx_data.meta {
@@ -194,7 +195,8 @@ async fn calculate_fee_breakdown(
                             }
                         }
                         "setComputeUnitPrice" => {
-                            if let Some(price) = info.get("microLamports").and_then(|v| v.as_u64()) {
+                            if let Some(price) = info.get("microLamports").and_then(|v| v.as_u64())
+                            {
                                 cu_price_micro_lamports = Some(price);
                             }
                         }
@@ -206,10 +208,7 @@ async fn calculate_fee_breakdown(
         }
 
         // Fall back to raw data decoding when parsed is absent
-        let program_id = ix
-            .get("programId")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let program_id = ix.get("programId").and_then(|v| v.as_str()).unwrap_or("");
         if program_id == "ComputeBudget111111111111111111111111111111" {
             if let Some(data_b58) = ix.get("data").and_then(|v| v.as_str()) {
                 if let Ok(bytes) = bs58::decode(data_b58).into_vec() {
@@ -220,26 +219,17 @@ async fn calculate_fee_breakdown(
                         match tag {
                             2 => {
                                 if rest.len() >= 4 {
-                                    let units = u32::from_le_bytes([
-                                        rest[0],
-                                        rest[1],
-                                        rest[2],
-                                        rest[3],
-                                    ]) as u64;
+                                    let units =
+                                        u32::from_le_bytes([rest[0], rest[1], rest[2], rest[3]])
+                                            as u64;
                                     cu_limit = Some(units);
                                 }
                             }
                             3 => {
                                 if rest.len() >= 8 {
                                     let price = u64::from_le_bytes([
-                                        rest[0],
-                                        rest[1],
-                                        rest[2],
-                                        rest[3],
-                                        rest[4],
-                                        rest[5],
-                                        rest[6],
-                                        rest[7],
+                                        rest[0], rest[1], rest[2], rest[3], rest[4], rest[5],
+                                        rest[6], rest[7],
                                     ]);
                                     cu_price_micro_lamports = Some(price);
                                 }
@@ -252,7 +242,12 @@ async fn calculate_fee_breakdown(
         }
     };
 
-    if let Some(ixs) = tx_data.transaction.message.get("instructions").and_then(|v| v.as_array()) {
+    if let Some(ixs) = tx_data
+        .transaction
+        .message
+        .get("instructions")
+        .and_then(|v| v.as_array())
+    {
         for ix in ixs {
             consider_ix(ix);
         }
@@ -271,7 +266,8 @@ async fn calculate_fee_breakdown(
 
     if let Some(price_micro) = cu_price_micro_lamports {
         // Use computeUnitsConsumed if available; else fall back to set limit
-        let units = tx_data.meta
+        let units = tx_data
+            .meta
             .as_ref()
             .and_then(|m| m.compute_units_consumed)
             .or(cu_limit)
@@ -337,7 +333,12 @@ fn detect_mev_tips_from_instructions(tx_data: &crate::rpc::TransactionDetails) -
             }
         }
     };
-    if let Some(ixs) = tx_data.transaction.message.get("instructions").and_then(|v| v.as_array()) {
+    if let Some(ixs) = tx_data
+        .transaction
+        .message
+        .get("instructions")
+        .and_then(|v| v.as_array())
+    {
         for ix in ixs {
             consider_ix(ix);
         }
@@ -359,12 +360,13 @@ fn detect_mev_tips_from_instructions(tx_data: &crate::rpc::TransactionDetails) -
 /// Estimate swap fees based on DEX and transaction patterns
 async fn estimate_swap_fees(
     balance_analysis: &BalanceAnalysis,
-    tx_data: &crate::rpc::TransactionDetails
+    tx_data: &crate::rpc::TransactionDetails,
 ) -> Result<f64, String> {
     // This would implement DEX-specific fee calculation
     // For now, return a reasonable estimate based on transfer amounts
 
-    let total_sol_transfers: f64 = balance_analysis.sol_changes
+    let total_sol_transfers: f64 = balance_analysis
+        .sol_changes
         .values()
         .map(|change| change.change.abs())
         .sum();
@@ -381,20 +383,24 @@ async fn estimate_swap_fees(
 async fn calculate_main_swap_pnl(
     balance_analysis: &BalanceAnalysis,
     classification: &TransactionClass,
-    fee_breakdown: &FeeBreakdown
+    fee_breakdown: &FeeBreakdown,
 ) -> Result<Option<SwapPnL>, String> {
     // Only calculate P&L for swap-type transactions
-    if
-        !matches!(
-            classification.transaction_type,
-            ClassifiedType::Buy | ClassifiedType::Sell | ClassifiedType::Swap
-        )
-    {
+    if !matches!(
+        classification.transaction_type,
+        ClassifiedType::Buy | ClassifiedType::Sell | ClassifiedType::Swap
+    ) {
         return Ok(None);
     }
 
-    let direction = classification.direction.as_ref().ok_or("Missing swap direction")?;
-    let token_mint = classification.primary_token.as_ref().ok_or("Missing primary token")?;
+    let direction = classification
+        .direction
+        .as_ref()
+        .ok_or("Missing swap direction")?;
+    let token_mint = classification
+        .primary_token
+        .as_ref()
+        .ok_or("Missing primary token")?;
 
     // Find the largest token change for this mint
     let token_change = find_largest_token_change(balance_analysis, token_mint)?;
@@ -424,24 +430,22 @@ async fn calculate_main_swap_pnl(
         0.0
     };
 
-    Ok(
-        Some(SwapPnL {
-            token_mint: token_mint.clone(),
-            token_amount: token_change.change.abs(),
-            token_decimals: token_change.decimals,
-            sol_amount_adjusted,
-            sol_amount_raw: sol_change.abs(),
-            price_per_token,
-            direction: direction.clone(),
-            dex: None, // Would be filled from DEX detection
-        })
-    )
+    Ok(Some(SwapPnL {
+        token_mint: token_mint.clone(),
+        token_amount: token_change.change.abs(),
+        token_decimals: token_change.decimals,
+        sol_amount_adjusted,
+        sol_amount_raw: sol_change.abs(),
+        price_per_token,
+        direction: direction.clone(),
+        dex: None, // Would be filled from DEX detection
+    }))
 }
 
 /// Find the largest token balance change for a specific mint
 fn find_largest_token_change(
     balance_analysis: &BalanceAnalysis,
-    target_mint: &str
+    target_mint: &str,
 ) -> Result<TokenBalanceChange, String> {
     let mut largest_change: Option<TokenBalanceChange> = None;
     let mut largest_amount = 0.0;
@@ -461,26 +465,29 @@ fn find_largest_token_change(
 /// Find the SOL change that corresponds to a token swap
 fn find_corresponding_sol_change(
     balance_analysis: &BalanceAnalysis,
-    token_change: &TokenBalanceChange
+    token_change: &TokenBalanceChange,
 ) -> Result<f64, String> {
     // TODO: Implement proper SOL-token change correlation
     // For now, use the largest SOL change (heuristic)
-    if
-        let Some(largest_change) = balance_analysis.sol_changes
-            .values()
-            .max_by(|a, b|
-                a.change.abs().partial_cmp(&b.change.abs()).unwrap_or(std::cmp::Ordering::Equal)
-            )
-    {
+    if let Some(largest_change) = balance_analysis.sol_changes.values().max_by(|a, b| {
+        a.change
+            .abs()
+            .partial_cmp(&b.change.abs())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    }) {
         return Ok(largest_change.change);
     } else {
         return Err("No SOL changes found".to_string());
     }
-    let largest_sol_change = balance_analysis.sol_changes
+    let largest_sol_change = balance_analysis
+        .sol_changes
         .values()
-        .max_by(|a, b|
-            a.change.abs().partial_cmp(&b.change.abs()).unwrap_or(std::cmp::Ordering::Equal)
-        )
+        .max_by(|a, b| {
+            a.change
+                .abs()
+                .partial_cmp(&b.change.abs())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
         .map(|change| change.change)
         .unwrap_or(0.0);
 
@@ -494,16 +501,13 @@ fn find_corresponding_sol_change(
 /// Extract individual swap components for complex transactions
 async fn extract_swap_components(
     balance_analysis: &BalanceAnalysis,
-    classification: &TransactionClass
+    classification: &TransactionClass,
 ) -> Result<Vec<SwapComponent>, String> {
     let mut components = Vec::new();
 
     // For simple swaps, create a single component
-    if
-        let (Some(primary_token), Some(direction)) = (
-            &classification.primary_token,
-            &classification.direction,
-        )
+    if let (Some(primary_token), Some(direction)) =
+        (&classification.primary_token, &classification.direction)
     {
         let sol_mint = "So11111111111111111111111111111111111111112";
 
@@ -551,7 +555,7 @@ async fn extract_swap_components(
 fn calculate_net_cost(
     fee_breakdown: &FeeBreakdown,
     main_pnl: &Option<SwapPnL>,
-    balance_analysis: &BalanceAnalysis
+    balance_analysis: &BalanceAnalysis,
 ) -> NetTransactionCost {
     let sol_fees_and_rent = fee_breakdown.total_fees;
 
@@ -559,12 +563,13 @@ fn calculate_net_cost(
     let sol_swap_net = if let Some(pnl) = main_pnl {
         match pnl.direction {
             SwapDirection::SolToToken => -pnl.sol_amount_adjusted, // SOL spent
-            SwapDirection::TokenToSol => pnl.sol_amount_adjusted, // SOL received
-            SwapDirection::TokenToToken => 0.0, // No direct SOL impact
+            SwapDirection::TokenToSol => pnl.sol_amount_adjusted,  // SOL received
+            SwapDirection::TokenToToken => 0.0,                    // No direct SOL impact
         }
     } else {
         // Use raw balance changes if no P&L
-        balance_analysis.sol_changes
+        balance_analysis
+            .sol_changes
             .values()
             .map(|change| change.change)
             .sum()
@@ -595,7 +600,7 @@ fn calculate_net_cost(
 fn calculate_pnl_confidence(
     main_pnl: &Option<SwapPnL>,
     fee_breakdown: &FeeBreakdown,
-    balance_analysis: &BalanceAnalysis
+    balance_analysis: &BalanceAnalysis,
 ) -> f64 {
     let mut score = 0.0;
     let mut factors = 0;

@@ -1,17 +1,17 @@
-use axum::{ response::Html, Router };
+use crate::webserver::{state::AppState, templates};
+use axum::{response::Html, Router};
 use std::sync::Arc;
-use crate::webserver::{ state::AppState, templates };
 
-pub mod status;
-pub mod tokens;
-pub mod events;
-pub mod positions;
-pub mod dashboard;
-pub mod wallet;
 pub mod blacklist;
 pub mod config;
-pub mod ws;
+pub mod dashboard;
+pub mod events;
+pub mod positions;
 pub mod services;
+pub mod status;
+pub mod tokens;
+pub mod wallet;
+pub mod ws;
 
 pub fn create_router(state: Arc<AppState>) -> Router {
     Router::new()
@@ -66,7 +66,11 @@ async fn services_page() -> Html<String> {
 /// Config page handler
 async fn config_page() -> Html<String> {
     let content = templates::config_content();
-    Html(templates::base_template("Configuration", "config", &content))
+    Html(templates::base_template(
+        "Configuration",
+        "config",
+        &content,
+    ))
 }
 
 fn api_routes() -> Router<Arc<AppState>> {

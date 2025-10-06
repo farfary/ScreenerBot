@@ -2,6 +2,7 @@
 ///
 /// This module provides a single, focused function to get filtered tokens ready for pool monitoring.
 /// All filtering logic is consolidated here for clarity and efficiency.
+use crate::config::{ with_config, FilteringConfig };
 use crate::global::is_debug_filtering_enabled;
 use crate::logger::{ log, LogTag };
 use crate::tokens::cache::TokenDatabase;
@@ -23,9 +24,6 @@ use tokio::sync::RwLock;
 // =============================================================================
 // CACHING CONFIGURATION (to avoid blocking discovery every 5s)
 // =============================================================================
-/// TTL for cached filtered tokens; discovery reads from cache and we refresh in background
-const FILTER_CACHE_TTL_SECS: u64 = 15;
-
 struct FilterCache {
     tokens: Vec<String>,
     updated_at: StdInstant,
@@ -44,60 +42,6 @@ fn get_filter_cache() -> &'static Arc<RwLock<FilterCache>> {
         )
     })
 }
-
-// =============================================================================
-// FILTERING CONFIGURATION - MINIMAL SAFETY FOR $1-$100M TRADING RANGE
-// =============================================================================
-
-/// Target number of tokens to return from filtering
-const TARGET_FILTERED_TOKENS: usize = 1000;
-
-/// Maximum tokens to process in one filtering cycle for performance
-const MAX_TOKENS_TO_PROCESS: usize = 5000;
-
-// ===== BASIC TOKEN INFO REQUIREMENTS =====
-/// Token must have name and symbol (always required)
-const REQUIRE_NAME_AND_SYMBOL: bool = true;
-/// Token must have logo URL
-const REQUIRE_LOGO_URL: bool = false;
-/// Token must have website URL
-const REQUIRE_WEBSITE_URL: bool = false;
-
-// ===== TOKEN AGE REQUIREMENTS =====
-/// Minimum token age in minutes before allowing monitoring
-const MIN_TOKEN_AGE_MINUTES: i64 = 1 * 60;
-
-// ===== TRANSACTION ACTIVITY REQUIREMENTS =====
-/// Minimum transactions in 5 minutes (very low for small tokens)
-const MIN_TRANSACTIONS_5MIN: i64 = 1;
-/// Minimum transactions in 1 hour (low threshold for new tokens)
-const MIN_TRANSACTIONS_1H: i64 = 5;
-
-// ===== LIQUIDITY REQUIREMENTS =====
-/// Minimum liquidity in USD ($1 = 0.001 SOL equivalent)
-const MIN_LIQUIDITY_USD: f64 = 1.0;
-/// Maximum liquidity in USD ($100M cap for trading focus)
-const MAX_LIQUIDITY_USD: f64 = 100_000_000.0;
-
-// ===== MARKET CAP REQUIREMENTS =====
-/// Minimum market cap in USD ($1000 minimum)
-const MIN_MARKET_CAP_USD: f64 = 1000.0;
-/// Maximum market cap in USD ($100M maximum)
-const MAX_MARKET_CAP_USD: f64 = 100_000_000.0;
-
-// ===== MINIMAL SECURITY REQUIREMENTS (VERY PERMISSIVE) =====
-/// Minimum security score (0-100) - very low threshold for inclusion
-const MIN_SECURITY_SCORE: i32 = 10;
-/// Maximum acceptable top holder percentage (very permissive)
-const MAX_TOP_HOLDER_PCT: f64 = 15.0;
-/// Maximum acceptable top 3 holders percentage (very permissive)
-const MAX_TOP_3_HOLDERS_PCT: f64 = 5.0;
-/// Minimum LP lock percentage for pump.fun tokens (relaxed)
-const MIN_PUMPFUN_LP_LOCK_PCT: f64 = 50.0;
-/// Minimum LP lock percentage for regular tokens (very relaxed)
-const MIN_REGULAR_LP_LOCK_PCT: f64 = 50.0;
-/// Minimum unique holders required (based on Rugcheck cached DB)
-const MIN_UNIQUE_HOLDERS: u32 = 500;
 
 // =============================================================================
 // MAIN FILTERING FUNCTION
@@ -122,13 +66,15 @@ const MIN_UNIQUE_HOLDERS: u32 = 500;
 /// Returns: Vec<String> - List of token mint addresses ready for monitoring
 pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
     let debug_enabled = is_debug_filtering_enabled();
+    let filtering_config = with_config(|cfg| cfg.filtering.clone());
+    let cache_ttl = StdDuration::from_secs(filtering_config.filter_cache_ttl_secs);
 
     // Fast path: serve from cache if fresh
     {
         let cache = get_filter_cache();
         let guard = cache.read().await;
         let age = StdInstant::now().saturating_duration_since(guard.updated_at);
-        if age < StdDuration::from_secs(FILTER_CACHE_TTL_SECS) {
+        if age < cache_ttl {
             if debug_enabled {
                 log(
                     LogTag::Filtering,
@@ -166,8 +112,9 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
             }
 
             // Spawn background refresh; ignore join handle
+            let refresh_config = filtering_config.clone();
             tokio::spawn(async move {
-                if let Ok(tokens) = compute_filtered_tokens().await {
+                if let Ok(tokens) = compute_filtered_tokens(refresh_config).await {
                     let cache = get_filter_cache();
                     let mut guard = cache.write().await;
                     guard.tokens = tokens;
@@ -180,7 +127,7 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
     }
 
     // Cold start (no cache): compute synchronously, update cache, and return
-    let tokens = compute_filtered_tokens().await?;
+    let tokens = compute_filtered_tokens(filtering_config).await?;
     {
         let cache = get_filter_cache();
         let mut guard = cache.write().await;
@@ -191,9 +138,11 @@ pub async fn get_filtered_tokens() -> Result<Vec<String>, String> {
 }
 
 // Heavy compute moved here so we can refresh in background without recursion
-async fn compute_filtered_tokens() -> Result<Vec<String>, String> {
+async fn compute_filtered_tokens(filtering_config: FilteringConfig) -> Result<Vec<String>, String> {
     let start_time = StdInstant::now();
     let debug_enabled = is_debug_filtering_enabled();
+    let max_tokens_to_process = filtering_config.max_tokens_to_process;
+    let target_filtered_tokens = filtering_config.target_filtered_tokens;
 
     if debug_enabled {
         log(LogTag::Filtering, "START", "Starting token filtering cycle");
@@ -240,12 +189,18 @@ async fn compute_filtered_tokens() -> Result<Vec<String>, String> {
         );
     }
 
-    for token_api in all_tokens.iter().take(MAX_TOKENS_TO_PROCESS) {
+    for token_api in all_tokens.iter().take(max_tokens_to_process) {
         // Convert ApiToken to Token for filtering
         let token_obj = Token::from(token_api.clone());
 
         // Apply ALL filtering criteria (including security)
-        if let Some(reason) = apply_all_filters(&token_obj, &mut filtering_stats).await {
+        if
+            let Some(reason) = apply_all_filters(
+                &token_obj,
+                &mut filtering_stats,
+                &filtering_config
+            ).await
+        {
             filtering_stats.record_rejection(reason);
             continue;
         }
@@ -255,7 +210,7 @@ async fn compute_filtered_tokens() -> Result<Vec<String>, String> {
         filtering_stats.passed_basic_filters += 1;
 
         // Stop when we have enough tokens
-        if filtered_tokens.len() >= TARGET_FILTERED_TOKENS {
+        if target_filtered_tokens > 0 && filtered_tokens.len() >= target_filtered_tokens {
             break;
         }
     }
@@ -293,7 +248,8 @@ async fn compute_filtered_tokens() -> Result<Vec<String>, String> {
 /// Also records which filtering stages were passed for statistics
 async fn apply_all_filters(
     token: &Token,
-    stats: &mut FilteringStats
+    stats: &mut FilteringStats,
+    filtering_config: &FilteringConfig
 ) -> Option<FilterRejectionReason> {
     // 1. Check decimals availability in database
     if !has_decimals_in_database(&token.mint) {
@@ -302,13 +258,13 @@ async fn apply_all_filters(
     stats.record_stage_pass("decimals");
 
     // 2. Enforce minimum age requirement
-    if let Some(reason) = check_minimum_age(token) {
+    if let Some(reason) = check_minimum_age(token, filtering_config) {
         return Some(reason);
     }
     stats.record_stage_pass("age");
 
     // 3. Check security requirements (new integrated approach)
-    if let Some(reason) = check_security_requirements(&token.mint).await {
+    if let Some(reason) = check_security_requirements(&token.mint, filtering_config).await {
         return Some(reason);
     }
     stats.record_stage_pass("security");
@@ -319,25 +275,25 @@ async fn apply_all_filters(
     }
 
     // 5. Check basic token info completeness
-    if let Some(reason) = check_basic_token_info(token) {
+    if let Some(reason) = check_basic_token_info(token, filtering_config) {
         return Some(reason);
     }
     stats.record_stage_pass("basic_info");
 
     // 6. Check minimum transaction activity
-    if let Some(reason) = check_transaction_activity(token) {
+    if let Some(reason) = check_transaction_activity(token, filtering_config) {
         return Some(reason);
     }
     stats.record_stage_pass("transactions");
 
     // 7. Check minimum liquidity
-    if let Some(reason) = check_liquidity_requirements(token) {
+    if let Some(reason) = check_liquidity_requirements(token, filtering_config) {
         return Some(reason);
     }
     stats.record_stage_pass("liquidity");
 
     // 8. Check market cap range
-    if let Some(reason) = check_market_cap_requirements(token) {
+    if let Some(reason) = check_market_cap_requirements(token, filtering_config) {
         return Some(reason);
     }
     stats.record_stage_pass("market_cap");
@@ -346,7 +302,10 @@ async fn apply_all_filters(
 }
 
 /// Ensure token has existed long enough to be eligible
-fn check_minimum_age(token: &Token) -> Option<FilterRejectionReason> {
+fn check_minimum_age(
+    token: &Token,
+    filtering_config: &FilteringConfig
+) -> Option<FilterRejectionReason> {
     let created_at = match token.created_at {
         Some(value) => value,
         None => {
@@ -357,7 +316,7 @@ fn check_minimum_age(token: &Token) -> Option<FilterRejectionReason> {
     let age_minutes = Utc::now().signed_duration_since(created_at).num_minutes();
     let normalized_age = age_minutes.max(0);
 
-    if normalized_age < MIN_TOKEN_AGE_MINUTES {
+    if normalized_age < filtering_config.min_token_age_minutes {
         return Some(FilterRejectionReason::TokenTooNew);
     }
 
@@ -370,7 +329,10 @@ async fn check_cooldown_filter(mint: &str) -> bool {
 }
 
 /// Check security requirements - STRICT authority checking
-async fn check_security_requirements(mint: &str) -> Option<FilterRejectionReason> {
+async fn check_security_requirements(
+    mint: &str,
+    filtering_config: &FilteringConfig
+) -> Option<FilterRejectionReason> {
     use crate::global::is_debug_filtering_enabled;
 
     // Get security analyzer
@@ -391,6 +353,26 @@ async fn check_security_requirements(mint: &str) -> Option<FilterRejectionReason
     // Get cached security data (avoid API calls for performance)
     match analyzer.analyze_token_any_cached(mint).await {
         Some(analysis) => {
+            // Minimum security score check (treat <=0 as disabled)
+            if
+                filtering_config.min_security_score > 0 &&
+                analysis.score_normalized < filtering_config.min_security_score
+            {
+                if is_debug_filtering_enabled() {
+                    log(
+                        LogTag::Filtering,
+                        "SECURITY_SCORE_REJECT",
+                        &format!(
+                            "Security score below minimum for mint={} ({} < required {})",
+                            mint,
+                            analysis.score_normalized,
+                            filtering_config.min_security_score
+                        )
+                    );
+                }
+                return Some(FilterRejectionReason::SecurityScoreTooLow);
+            }
+
             // CRITICAL: Always reject tokens with unsafe authorities (mint/freeze)
             if !analysis.authorities_safe {
                 if is_debug_filtering_enabled() {
@@ -416,10 +398,76 @@ async fn check_security_requirements(mint: &str) -> Option<FilterRejectionReason
                     Some(FilterRejectionReason::SecurityHighRisk)
                 }
                 _ => {
+                    // Enforce top holder concentration thresholds when data exists
+                    if filtering_config.max_top_holder_pct > 0.0 {
+                        if let Some(top_holder_pct) = analysis.top_holder_pct {
+                            if top_holder_pct > filtering_config.max_top_holder_pct {
+                                if is_debug_filtering_enabled() {
+                                    log(
+                                        LogTag::Filtering,
+                                        "HOLDER_REJECT",
+                                        &format!(
+                                            "Top holder concentration too high for mint={} ({:.2}% > {:.2}%)",
+                                            mint,
+                                            top_holder_pct,
+                                            filtering_config.max_top_holder_pct
+                                        )
+                                    );
+                                }
+                                return Some(FilterRejectionReason::TopHolderConcentration);
+                            }
+                        }
+                    }
+
+                    if filtering_config.max_top_3_holders_pct > 0.0 {
+                        if let Some(top_three_pct) = analysis.top_3_holder_pct {
+                            if top_three_pct > filtering_config.max_top_3_holders_pct {
+                                if is_debug_filtering_enabled() {
+                                    log(
+                                        LogTag::Filtering,
+                                        "HOLDER3_REJECT",
+                                        &format!(
+                                            "Top 3 holder concentration too high for mint={} ({:.2}% > {:.2}%)",
+                                            mint,
+                                            top_three_pct,
+                                            filtering_config.max_top_3_holders_pct
+                                        )
+                                    );
+                                }
+                                return Some(FilterRejectionReason::TopThreeHolderConcentration);
+                            }
+                        }
+                    }
+
+                    let required_lp_lock = if analysis.pump_fun_token {
+                        filtering_config.min_pumpfun_lp_lock_pct
+                    } else {
+                        filtering_config.min_regular_lp_lock_pct
+                    };
+
+                    if required_lp_lock > 0.0 {
+                        let actual_lp_lock = analysis.max_lp_locked_pct.unwrap_or(0.0);
+                        if actual_lp_lock < required_lp_lock {
+                            if is_debug_filtering_enabled() {
+                                log(
+                                    LogTag::Filtering,
+                                    "LP_REJECT",
+                                    &format!(
+                                        "LP lock too low for mint={} ({:.2}% < {:.2}% required)",
+                                        mint,
+                                        actual_lp_lock,
+                                        required_lp_lock
+                                    )
+                                );
+                            }
+                            return Some(FilterRejectionReason::LpLockTooLow);
+                        }
+                    }
+
                     // Enforce minimum unique holders using cached Rugcheck data (no API calls)
                     match analyzer.get_cached_holder_count(mint).await {
                         Some(count) => {
-                            if count < MIN_UNIQUE_HOLDERS {
+                            if count < filtering_config.min_unique_holders {
                                 if is_debug_filtering_enabled() {
                                     log(
                                         LogTag::Filtering,
@@ -428,7 +476,7 @@ async fn check_security_requirements(mint: &str) -> Option<FilterRejectionReason
                                             "Insufficient holders for mint={} ({} < required {})",
                                             mint,
                                             count,
-                                            MIN_UNIQUE_HOLDERS
+                                            filtering_config.min_unique_holders
                                         )
                                     );
                                 }
@@ -487,9 +535,12 @@ fn has_decimals_in_database(mint: &str) -> bool {
 }
 
 /// Check basic token information completeness
-fn check_basic_token_info(token: &Token) -> Option<FilterRejectionReason> {
+fn check_basic_token_info(
+    token: &Token,
+    filtering_config: &FilteringConfig
+) -> Option<FilterRejectionReason> {
     // Always check name and symbol if required
-    if REQUIRE_NAME_AND_SYMBOL {
+    if filtering_config.require_name_and_symbol {
         // Check name
         if token.name.trim().is_empty() {
             return Some(FilterRejectionReason::EmptyName);
@@ -502,14 +553,14 @@ fn check_basic_token_info(token: &Token) -> Option<FilterRejectionReason> {
     }
 
     // Check logo URL if required
-    if REQUIRE_LOGO_URL {
+    if filtering_config.require_logo_url {
         if token.logo_url.as_ref().map_or(true, |url| url.trim().is_empty()) {
             return Some(FilterRejectionReason::EmptyLogoUrl);
         }
     }
 
     // Check website URL if required
-    if REQUIRE_WEBSITE_URL {
+    if filtering_config.require_website_url {
         if token.website.as_ref().map_or(true, |url| url.trim().is_empty()) {
             return Some(FilterRejectionReason::EmptyWebsiteUrl);
         }
@@ -519,13 +570,16 @@ fn check_basic_token_info(token: &Token) -> Option<FilterRejectionReason> {
 }
 
 /// Check transaction activity requirements
-fn check_transaction_activity(token: &Token) -> Option<FilterRejectionReason> {
+fn check_transaction_activity(
+    token: &Token,
+    filtering_config: &FilteringConfig
+) -> Option<FilterRejectionReason> {
     let txns = token.txns.as_ref()?;
 
     // Check 5-minute transactions
     if let Some(m5) = &txns.m5 {
         let total_5min = m5.buys.unwrap_or(0) + m5.sells.unwrap_or(0);
-        if total_5min < MIN_TRANSACTIONS_5MIN {
+        if total_5min < filtering_config.min_transactions_5min {
             return Some(FilterRejectionReason::InsufficientTransactions5Min);
         }
     } else {
@@ -535,7 +589,7 @@ fn check_transaction_activity(token: &Token) -> Option<FilterRejectionReason> {
     // Check 1-hour transactions
     if let Some(h1) = &txns.h1 {
         let total_1h = h1.buys.unwrap_or(0) + h1.sells.unwrap_or(0);
-        if total_1h < MIN_TRANSACTIONS_1H {
+        if total_1h < filtering_config.min_transactions_1h {
             return Some(FilterRejectionReason::InsufficientTransactions1H);
         }
     } else {
@@ -546,7 +600,10 @@ fn check_transaction_activity(token: &Token) -> Option<FilterRejectionReason> {
 }
 
 /// Check liquidity requirements
-fn check_liquidity_requirements(token: &Token) -> Option<FilterRejectionReason> {
+fn check_liquidity_requirements(
+    token: &Token,
+    filtering_config: &FilteringConfig
+) -> Option<FilterRejectionReason> {
     let liquidity = token.liquidity.as_ref()?;
 
     let liquidity_usd = liquidity.usd?;
@@ -555,11 +612,11 @@ fn check_liquidity_requirements(token: &Token) -> Option<FilterRejectionReason> 
         return Some(FilterRejectionReason::ZeroLiquidity);
     }
 
-    if liquidity_usd < MIN_LIQUIDITY_USD {
+    if liquidity_usd < filtering_config.min_liquidity_usd {
         return Some(FilterRejectionReason::InsufficientLiquidity);
     }
 
-    if liquidity_usd > MAX_LIQUIDITY_USD {
+    if liquidity_usd > filtering_config.max_liquidity_usd {
         return Some(FilterRejectionReason::LiquidityTooHigh);
     }
 
@@ -567,14 +624,17 @@ fn check_liquidity_requirements(token: &Token) -> Option<FilterRejectionReason> 
 }
 
 /// Check market cap requirements
-fn check_market_cap_requirements(token: &Token) -> Option<FilterRejectionReason> {
+fn check_market_cap_requirements(
+    token: &Token,
+    filtering_config: &FilteringConfig
+) -> Option<FilterRejectionReason> {
     let market_cap = token.market_cap?;
 
-    if market_cap < MIN_MARKET_CAP_USD {
+    if market_cap < filtering_config.min_market_cap_usd {
         return Some(FilterRejectionReason::MarketCapTooLow);
     }
 
-    if market_cap > MAX_MARKET_CAP_USD {
+    if market_cap > filtering_config.max_market_cap_usd {
         return Some(FilterRejectionReason::MarketCapTooHigh);
     }
 
@@ -590,9 +650,13 @@ fn check_market_cap_requirements(token: &Token) -> Option<FilterRejectionReason>
 enum FilterRejectionReason {
     NoDecimalsInDatabase,
     SecurityHighRisk,
+    SecurityScoreTooLow,
     SecurityNoData,
     NoHolderData,
     InsufficientHolders,
+    TopHolderConcentration,
+    TopThreeHolderConcentration,
+    LpLockTooLow,
     EmptyName,
     EmptySymbol,
     EmptyLogoUrl,
@@ -615,9 +679,13 @@ impl FilterRejectionReason {
         match self {
             Self::NoDecimalsInDatabase => "no_decimals",
             Self::SecurityHighRisk => "security_high_risk",
+            Self::SecurityScoreTooLow => "security_score_low",
             Self::SecurityNoData => "security_no_data",
             Self::NoHolderData => "no_holder_data",
             Self::InsufficientHolders => "insufficient_holders",
+            Self::TopHolderConcentration => "top_holder_concentration",
+            Self::TopThreeHolderConcentration => "top_three_concentration",
+            Self::LpLockTooLow => "lp_lock_too_low",
             Self::EmptyName => "empty_name",
             Self::EmptySymbol => "empty_symbol",
             Self::EmptyLogoUrl => "empty_logo",

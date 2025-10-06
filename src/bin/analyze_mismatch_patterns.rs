@@ -1,4 +1,4 @@
-use clap::{ Arg, Command };
+use clap::{Arg, Command};
 use std::collections::HashMap;
 
 /// Simplified CSV verification analysis tool
@@ -22,14 +22,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .long("csv-file")
                 .value_name("FILE")
                 .help("Path to the CSV verification results file")
-                .default_value("analysis-exports/verification_results.csv")
+                .default_value("analysis-exports/verification_results.csv"),
         )
         .arg(
             Arg::new("threshold")
                 .long("threshold")
                 .value_name("PERCENT")
                 .help("Minimum percentage difference to consider (default 0.5%)")
-                .default_value("0.5")
+                .default_value("0.5"),
         )
         .get_matches();
 
@@ -51,10 +51,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn load_mismatches(
     csv_file: &str,
-    threshold: f64
+    threshold: f64,
 ) -> Result<Vec<MismatchRecord>, Box<dyn std::error::Error>> {
     use std::fs::File;
-    use std::io::{ BufRead, BufReader };
+    use std::io::{BufRead, BufReader};
 
     let file = File::open(csv_file)?;
     let reader = BufReader::new(file);
@@ -92,7 +92,11 @@ fn load_mismatches(
         }
     }
 
-    println!("📋 Found {} mismatches above {}% threshold", mismatches.len(), threshold);
+    println!(
+        "📋 Found {} mismatches above {}% threshold",
+        mismatches.len(),
+        threshold
+    );
     Ok(mismatches)
 }
 
@@ -105,7 +109,10 @@ fn analyze_patterns(mismatches: &[MismatchRecord]) -> Result<(), Box<dyn std::er
     // Group by router
     let mut router_stats: HashMap<String, Vec<&MismatchRecord>> = HashMap::new();
     for mismatch in mismatches {
-        router_stats.entry(mismatch.router.clone()).or_default().push(mismatch);
+        router_stats
+            .entry(mismatch.router.clone())
+            .or_default()
+            .push(mismatch);
     }
 
     println!("\n📊 Mismatch Analysis by Router:");
@@ -115,10 +122,7 @@ fn analyze_patterns(mismatches: &[MismatchRecord]) -> Result<(), Box<dyn std::er
         println!("\n🔗 Router: {}", router);
         println!("   Count: {}", records.len());
 
-        let total_diff: f64 = records
-            .iter()
-            .map(|r| r.percentage_diff.abs())
-            .sum();
+        let total_diff: f64 = records.iter().map(|r| r.percentage_diff.abs()).sum();
         let avg_diff = total_diff / (records.len() as f64);
         let max_diff: f64 = records
             .iter()
@@ -129,10 +133,7 @@ fn analyze_patterns(mismatches: &[MismatchRecord]) -> Result<(), Box<dyn std::er
         println!("   Maximum difference: {:.2}%", max_diff);
 
         // Analyze amount ranges
-        let amounts: Vec<f64> = records
-            .iter()
-            .map(|r| r.calculated_amount)
-            .collect();
+        let amounts: Vec<f64> = records.iter().map(|r| r.calculated_amount).collect();
         if !amounts.is_empty() {
             let min_amount = amounts.iter().fold(f64::INFINITY, |a, &b| a.min(b));
             let max_amount = amounts.iter().fold(0.0f64, |a, &b| a.max(b));
@@ -141,9 +142,12 @@ fn analyze_patterns(mismatches: &[MismatchRecord]) -> Result<(), Box<dyn std::er
 
         // Show worst cases
         let mut sorted = records.clone();
-        sorted.sort_by(|a, b|
-            b.percentage_diff.abs().partial_cmp(&a.percentage_diff.abs()).unwrap()
-        );
+        sorted.sort_by(|a, b| {
+            b.percentage_diff
+                .abs()
+                .partial_cmp(&a.percentage_diff.abs())
+                .unwrap()
+        });
 
         println!("   Worst mismatches:");
         for (i, record) in sorted.iter().take(3).enumerate() {
@@ -161,10 +165,7 @@ fn analyze_patterns(mismatches: &[MismatchRecord]) -> Result<(), Box<dyn std::er
     // Overall statistics
     println!("\n📈 Overall Statistics:");
     println!("======================");
-    let total_diff: f64 = mismatches
-        .iter()
-        .map(|r| r.percentage_diff.abs())
-        .sum();
+    let total_diff: f64 = mismatches.iter().map(|r| r.percentage_diff.abs()).sum();
     let overall_avg = total_diff / (mismatches.len() as f64);
     let overall_max: f64 = mismatches
         .iter()
@@ -206,17 +207,22 @@ fn analyze_patterns(mismatches: &[MismatchRecord]) -> Result<(), Box<dyn std::er
     for (router, records) in &router_stats {
         if records.len() >= 3 {
             let avg_adjustment =
-                records
-                    .iter()
-                    .map(|r| r.percentage_diff)
-                    .sum::<f64>() / (records.len() as f64);
+                records.iter().map(|r| r.percentage_diff).sum::<f64>() / (records.len() as f64);
             let is_consistent = records
                 .iter()
                 .all(|r| r.percentage_diff.signum() == avg_adjustment.signum());
 
             if is_consistent && avg_adjustment.abs() > 0.1 {
-                let adjustment_type = if avg_adjustment > 0.0 { "increase" } else { "decrease" };
-                let pattern_confidence = if avg_adjustment.abs() < 2.0 { "High" } else { "Medium" };
+                let adjustment_type = if avg_adjustment > 0.0 {
+                    "increase"
+                } else {
+                    "decrease"
+                };
+                let pattern_confidence = if avg_adjustment.abs() < 2.0 {
+                    "High"
+                } else {
+                    "Medium"
+                };
 
                 println!(
                     "🎯 {}: Apply {:.2}% {} (Confidence: {}, {} samples)",

@@ -1,9 +1,9 @@
+use crate::logger::{log, LogTag};
+use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
-use crate::services::{ Service, ServiceHealth, ServiceMetrics };
-use crate::logger::{ log, LogTag };
 
 pub struct PoolFetcherService;
 
@@ -22,36 +22,49 @@ impl Service for PoolFetcherService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
-        log(LogTag::PoolService, "INFO", "Initializing pool fetcher service...");
+        log(
+            LogTag::PoolService,
+            "INFO",
+            "Initializing pool fetcher service...",
+        );
         Ok(())
     }
 
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor
+        monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
-        log(LogTag::PoolService, "INFO", "Starting pool fetcher service...");
+        log(
+            LogTag::PoolService,
+            "INFO",
+            "Starting pool fetcher service...",
+        );
 
         // Get the AccountFetcher component from global state
-        let fetcher = crate::pools
-            ::get_account_fetcher()
+        let fetcher = crate::pools::get_account_fetcher()
             .ok_or("AccountFetcher component not initialized".to_string())?;
 
         // Spawn fetcher task
-        let handle = tokio::spawn(
-            monitor.instrument(async move {
-                fetcher.start_fetcher_task(shutdown).await;
-            })
-        );
+        let handle = tokio::spawn(monitor.instrument(async move {
+            fetcher.start_fetcher_task(shutdown).await;
+        }));
 
-        log(LogTag::PoolService, "SUCCESS", "✅ Pool fetcher service started (instrumented)");
+        log(
+            LogTag::PoolService,
+            "SUCCESS",
+            "✅ Pool fetcher service started (instrumented)",
+        );
 
         Ok(vec![handle])
     }
 
     async fn stop(&mut self) -> Result<(), String> {
-        log(LogTag::PoolService, "INFO", "Pool fetcher service stopping (via shutdown signal)");
+        log(
+            LogTag::PoolService,
+            "INFO",
+            "Pool fetcher service stopping (via shutdown signal)",
+        );
         Ok(())
     }
 

@@ -1,9 +1,9 @@
+use crate::logger::{log, LogTag};
+use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
-use crate::services::{ Service, ServiceHealth, ServiceMetrics };
-use crate::logger::{ log, LogTag };
 
 pub struct PoolsService;
 
@@ -23,21 +23,29 @@ impl Service for PoolsService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
-        log(LogTag::PoolService, "INFO", "Initializing pool components...");
+        log(
+            LogTag::PoolService,
+            "INFO",
+            "Initializing pool components...",
+        );
 
         // Initialize all pool components (database, cache, RPC, components)
-        crate::pools
-            ::initialize_pool_components().await
+        crate::pools::initialize_pool_components()
+            .await
             .map_err(|e| format!("Failed to initialize pool components: {:?}", e))?;
 
-        log(LogTag::PoolService, "SUCCESS", "✅ Pool components initialized");
+        log(
+            LogTag::PoolService,
+            "SUCCESS",
+            "✅ Pool components initialized",
+        );
         Ok(())
     }
 
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor
+        monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
         log(LogTag::PoolService, "INFO", "Starting pool helper tasks...");
 
@@ -48,7 +56,10 @@ impl Service for PoolsService {
         log(
             LogTag::PoolService,
             "SUCCESS",
-            &format!("✅ Pool helper tasks started ({} instrumented handles)", handles.len())
+            &format!(
+                "✅ Pool helper tasks started ({} instrumented handles)",
+                handles.len()
+            ),
         );
 
         // Return handles so ServiceManager can wait for graceful shutdown
@@ -59,8 +70,8 @@ impl Service for PoolsService {
         log(LogTag::PoolService, "INFO", "Stopping pool service...");
 
         // Stop pool service gracefully
-        crate::pools
-            ::stop_pool_service(5).await
+        crate::pools::stop_pool_service(5)
+            .await
             .map_err(|e| format!("Failed to stop pool service: {:?}", e))?;
 
         Ok(())

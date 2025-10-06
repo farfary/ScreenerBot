@@ -1,5 +1,9 @@
-use axum::{ extract::{ Path, Query }, routing::get, Json, Router };
-use serde::{ Deserialize, Serialize };
+use axum::{
+    extract::{Path, Query},
+    routing::get,
+    Json, Router,
+};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::positions;
@@ -112,15 +116,16 @@ async fn get_positions(Query(params): Query<PositionsQuery>) -> Json<Vec<Positio
 
             // Calculate P&L for closed positions
             let (pnl, pnl_percent) = if p.transaction_exit_verified {
-                if
-                    let (Some(exit_price), Some(sol_received)) = (
-                        p.effective_exit_price,
-                        p.sol_received,
-                    )
+                if let (Some(exit_price), Some(sol_received)) =
+                    (p.effective_exit_price, p.sol_received)
                 {
                     let invested = p.entry_size_sol;
                     let pnl_value = sol_received - invested;
-                    let pnl_pct = if invested > 0.0 { (pnl_value / invested) * 100.0 } else { 0.0 };
+                    let pnl_pct = if invested > 0.0 {
+                        (pnl_value / invested) * 100.0
+                    } else {
+                        0.0
+                    };
                     (Some(pnl_value), Some(pnl_pct))
                 } else if let (Some(exit_price), entry_price) = (p.exit_price, p.entry_price) {
                     let pnl_pct = ((exit_price - entry_price) / entry_price) * 100.0;
@@ -191,17 +196,18 @@ async fn get_positions(Query(params): Query<PositionsQuery>) -> Json<Vec<Positio
 }
 
 async fn get_positions_stats() -> Json<PositionsStatsResponse> {
-    let open_positions = positions::db::get_open_positions().await.unwrap_or_default();
-    let closed_positions = positions::db::get_closed_positions().await.unwrap_or_default();
+    let open_positions = positions::db::get_open_positions()
+        .await
+        .unwrap_or_default();
+    let closed_positions = positions::db::get_closed_positions()
+        .await
+        .unwrap_or_default();
 
     let total = open_positions.len() + closed_positions.len();
     let open = open_positions.len();
     let closed = closed_positions.len();
 
-    let total_invested_sol: f64 = open_positions
-        .iter()
-        .map(|p| p.entry_size_sol)
-        .sum();
+    let total_invested_sol: f64 = open_positions.iter().map(|p| p.entry_size_sol).sum();
 
     let total_pnl: f64 = closed_positions
         .iter()
@@ -400,54 +406,56 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
     let decimals = crate::tokens::get_token_decimals(&mint).await;
 
     // 1. Get position data
-    let open_position = positions::db
-        ::get_open_positions().await
+    let open_position = positions::db::get_open_positions()
+        .await
         .ok()
         .and_then(|positions| {
-            positions
-                .into_iter()
-                .find(|p| p.mint == mint)
-                .map(|p| {
-                    let unrealized_pnl = p.current_price.map(|current| {
-                        let current_value = current * p.entry_size_sol;
-                        current_value - p.entry_size_sol
-                    });
+            positions.into_iter().find(|p| p.mint == mint).map(|p| {
+                let unrealized_pnl = p.current_price.map(|current| {
+                    let current_value = current * p.entry_size_sol;
+                    current_value - p.entry_size_sol
+                });
 
-                    let unrealized_pnl_percent = unrealized_pnl.map(
-                        |pnl| (pnl / p.entry_size_sol) * 100.0
-                    );
+                let unrealized_pnl_percent =
+                    unrealized_pnl.map(|pnl| (pnl / p.entry_size_sol) * 100.0);
 
-                    PositionSummary {
-                        id: p.id,
-                        entry_price: p.entry_price,
-                        entry_time: p.entry_time.timestamp(),
-                        entry_size_sol: p.entry_size_sol,
-                        current_price: p.current_price,
-                        unrealized_pnl,
-                        unrealized_pnl_percent,
-                        phantom_confirmations: p.phantom_confirmations,
-                    }
-                })
+                PositionSummary {
+                    id: p.id,
+                    entry_price: p.entry_price,
+                    entry_time: p.entry_time.timestamp(),
+                    entry_size_sol: p.entry_size_sol,
+                    current_price: p.current_price,
+                    unrealized_pnl,
+                    unrealized_pnl_percent,
+                    phantom_confirmations: p.phantom_confirmations,
+                }
+            })
         });
 
-    let closed_positions = positions::db
-        ::get_closed_positions().await
+    let closed_positions = positions::db::get_closed_positions()
+        .await
         .ok()
         .map(|positions| {
-            let matching_positions: Vec<_> = positions
-                .into_iter()
-                .filter(|p| p.mint == mint)
-                .collect();
+            let matching_positions: Vec<_> =
+                positions.into_iter().filter(|p| p.mint == mint).collect();
             let count = matching_positions.len();
             let total_pnl: f64 = matching_positions
                 .iter()
-                .filter_map(|p| { p.sol_received.map(|received| received - p.entry_size_sol) })
+                .filter_map(|p| p.sol_received.map(|received| received - p.entry_size_sol))
                 .sum();
             let wins = matching_positions
                 .iter()
-                .filter(|p| { p.sol_received.map(|r| r > p.entry_size_sol).unwrap_or(false) })
+                .filter(|p| {
+                    p.sol_received
+                        .map(|r| r > p.entry_size_sol)
+                        .unwrap_or(false)
+                })
                 .count();
-            let win_rate = if count > 0 { ((wins as f64) / (count as f64)) * 100.0 } else { 0.0 };
+            let win_rate = if count > 0 {
+                ((wins as f64) / (count as f64)) * 100.0
+            } else {
+                0.0
+            };
             (count, total_pnl, win_rate)
         })
         .unwrap_or((0, 0.0, 0.0));
@@ -469,13 +477,15 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
         name: token.name.clone(),
         decimals,
         logo_url: token.info.as_ref().and_then(|i| i.image_url.clone()),
-        website: token.info
+        website: token
+            .info
             .as_ref()
             .and_then(|i| i.websites.as_ref())
             .and_then(|w| w.first())
             .map(|w| w.url.clone()),
         tags: token.labels.clone().unwrap_or_default(),
-        is_verified: token.labels
+        is_verified: token
+            .labels
             .as_ref()
             .map(|l| l.iter().any(|label| label.to_lowercase() == "verified"))
             .unwrap_or(false),
@@ -484,8 +494,7 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
     // 3. Get current price from pool service
     let price_data = crate::pools::get_pool_price(&mint).map(|price_result| {
         let age_seconds = price_result.timestamp.elapsed().as_secs();
-        let now_unix = std::time::SystemTime
-            ::now()
+        let now_unix = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs() as i64;
@@ -511,8 +520,7 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
     let mut pools_vec = Vec::new();
     if let Some(price_result) = crate::pools::get_pool_price(&mint) {
         let age_seconds = price_result.timestamp.elapsed().as_secs();
-        let now_unix = std::time::SystemTime
-            ::now()
+        let now_unix = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs() as i64;
@@ -522,9 +530,16 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
             pool_address: price_result.pool_address.clone(),
             program_kind: format!(
                 "{:?}",
-                price_result.source_pool.as_ref().unwrap_or(&"Unknown".to_string())
+                price_result
+                    .source_pool
+                    .as_ref()
+                    .unwrap_or(&"Unknown".to_string())
             ),
-            dex_name: price_result.source_pool.as_ref().unwrap_or(&"Unknown".to_string()).clone(),
+            dex_name: price_result
+                .source_pool
+                .as_ref()
+                .unwrap_or(&"Unknown".to_string())
+                .clone(),
             sol_reserves: price_result.sol_reserves,
             token_reserves: price_result.token_reserves,
             price_sol: price_result.price_sol,
@@ -539,13 +554,7 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
         .and_then(|db| db.get_security_info(&mint).ok().flatten())
         .map(|sec| {
             let top_10_concentration = if sec.top_holders.len() >= 10 {
-                Some(
-                    sec.top_holders
-                        .iter()
-                        .take(10)
-                        .map(|h| h.pct)
-                        .sum::<f64>()
-                )
+                Some(sec.top_holders.iter().take(10).map(|h| h.pct).sum::<f64>())
             } else {
                 None
             };
@@ -559,7 +568,8 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
                 creator: sec.creator,
                 total_holders: sec.total_holders,
                 top_10_concentration,
-                risks: sec.risks
+                risks: sec
+                    .risks
                     .iter()
                     .map(|r| RiskInfo {
                         name: r.name.clone(),
@@ -575,35 +585,35 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
     // 7. Get social info from token database
     let social = api_token.as_ref().and_then(|token| {
         token.info.as_ref().map(|info| SocialInfo {
-            website: info.websites
+            website: info
+                .websites
                 .as_ref()
                 .and_then(|w| w.first())
                 .map(|w| w.url.clone()),
-            twitter: info.socials.as_ref().and_then(|socials|
+            twitter: info.socials.as_ref().and_then(|socials| {
                 socials
                     .iter()
                     .find(|s| s.platform.to_lowercase().contains("twitter"))
                     .map(|s| format!("https://twitter.com/{}", s.handle))
-            ),
-            telegram: info.socials.as_ref().and_then(|socials|
+            }),
+            telegram: info.socials.as_ref().and_then(|socials| {
                 socials
                     .iter()
                     .find(|s| s.platform.to_lowercase().contains("telegram"))
                     .map(|s| format!("https://t.me/{}", s.handle))
-            ),
+            }),
         })
     });
 
     // 8. Get position debug data
-    let position_debug = if
-        position_data
-            .as_ref()
-            .and_then(|pd| pd.open_position.as_ref())
-            .is_some()
+    let position_debug = if position_data
+        .as_ref()
+        .and_then(|pd| pd.open_position.as_ref())
+        .is_some()
     {
         // Get full position details
-        let full_position = positions::db
-            ::get_open_positions().await
+        let full_position = positions::db::get_open_positions()
+            .await
             .ok()
             .and_then(|positions| positions.into_iter().find(|p| p.mint == mint));
 

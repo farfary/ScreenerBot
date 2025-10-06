@@ -1,9 +1,9 @@
+use crate::logger::{log, LogTag};
+use crate::services::{Service, ServiceHealth};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
-use crate::services::{ Service, ServiceHealth };
-use crate::logger::{ log, LogTag };
 
 /// OHLCV (Open, High, Low, Close, Volume) data collection service
 ///
@@ -29,8 +29,8 @@ impl Service for OhlcvService {
         log(LogTag::System, "INFO", "Initializing OHLCV service...");
 
         // Initialize OHLCV service (creates database, sets up global instance)
-        crate::tokens::ohlcvs
-            ::init_ohlcv_service().await
+        crate::tokens::ohlcvs::init_ohlcv_service()
+            .await
             .map_err(|e| format!("Failed to initialize OHLCV service: {}", e))?;
 
         log(LogTag::System, "SUCCESS", "✅ OHLCV service initialized");
@@ -40,28 +40,34 @@ impl Service for OhlcvService {
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor
+        monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
         log(LogTag::System, "INFO", "Starting OHLCV monitoring...");
 
         // Get cloned service for background monitoring
-        let service = crate::tokens::ohlcvs
-            ::get_ohlcv_service_clone().await
+        let service = crate::tokens::ohlcvs::get_ohlcv_service_clone()
+            .await
             .map_err(|e| format!("Failed to get OHLCV service: {}", e))?;
 
         // Start background monitoring
         service.start_monitoring(shutdown.clone()).await;
 
         // Create task handle for lifecycle tracking
-        let monitor_handle = tokio::spawn(
-            monitor.instrument(async move {
-                log(LogTag::Ohlcv, "TASK_START", "🚀 OHLCV monitoring task started (instrumented)");
-                shutdown.notified().await;
-                log(LogTag::Ohlcv, "TASK_END", "✅ OHLCV monitoring task ended");
-            })
-        );
+        let monitor_handle = tokio::spawn(monitor.instrument(async move {
+            log(
+                LogTag::Ohlcv,
+                "TASK_START",
+                "🚀 OHLCV monitoring task started (instrumented)",
+            );
+            shutdown.notified().await;
+            log(LogTag::Ohlcv, "TASK_END", "✅ OHLCV monitoring task ended");
+        }));
 
-        log(LogTag::System, "SUCCESS", "✅ OHLCV monitoring started (instrumented)");
+        log(
+            LogTag::System,
+            "SUCCESS",
+            "✅ OHLCV monitoring started (instrumented)",
+        );
 
         Ok(vec![monitor_handle])
     }

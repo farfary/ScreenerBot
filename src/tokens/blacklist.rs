@@ -1,13 +1,13 @@
 use crate::arguments::is_debug_blacklist_enabled;
 use crate::global::TOKENS_DATABASE;
-use crate::logger::{ log, LogTag };
-use chrono::{ DateTime, Duration as ChronoDuration, Utc };
+use crate::logger::{log, LogTag};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use once_cell::sync::Lazy;
 /// Token blacklist system for managing problematic tokens
 /// Uses database storage for persistence and performance
-use rusqlite::{ Connection, Result as SqliteResult };
-use serde::{ Deserialize, Serialize };
-use std::collections::{ HashMap, HashSet };
+use rusqlite::{Connection, Result as SqliteResult};
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
 // =============================================================================
@@ -31,14 +31,14 @@ pub const MAX_NO_ROUTE_FAILURES: u32 = 5;
 
 /// System and stable tokens that should always be excluded from trading
 pub const SYSTEM_STABLE_TOKENS: &[&str] = &[
-    "So11111111111111111111111111111111111111112", // SOL
+    "So11111111111111111111111111111111111111112",  // SOL
     "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
     "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
     "7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj", // stSOL
-    "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So", // mSOL
-    "11111111111111111111111111111111", // System Program (invalid token)
-    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", // Token Program
-    "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb", // Token-2022 Program
+    "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So",  // mSOL
+    "11111111111111111111111111111111",             // System Program (invalid token)
+    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",  // Token Program
+    "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",  // Token-2022 Program
 ];
 
 // =============================================================================
@@ -61,7 +61,7 @@ fn init_blacklist_database() -> SqliteResult<()> {
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         )",
-        []
+        [],
     )?;
 
     // Create liquidity tracking table
@@ -75,7 +75,7 @@ fn init_blacklist_database() -> SqliteResult<()> {
             timestamp TEXT NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY (mint) REFERENCES tokens(mint)
         )",
-        []
+        [],
     )?;
 
     // Create route failure tracking table
@@ -88,15 +88,21 @@ fn init_blacklist_database() -> SqliteResult<()> {
             timestamp TEXT NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY (mint) REFERENCES tokens(mint)
         )",
-        []
+        [],
     )?;
 
     // Create indices for performance
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_blacklist_reason ON blacklist(reason)", [])?;
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_blacklist_updated ON blacklist(updated_at)", [])?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_blacklist_reason ON blacklist(reason)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_blacklist_updated ON blacklist(updated_at)",
+        [],
+    )?;
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_liquidity_tracking_mint ON liquidity_tracking(mint)",
-        []
+        [],
     )?;
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_liquidity_tracking_timestamp ON liquidity_tracking(timestamp)",
@@ -138,8 +144,8 @@ pub enum BlacklistReason {
     ManualBlacklist,
     SystemToken, // System/program tokens
     StableToken, // Stable coins and major tokens
-    ApiError, // Tokens that return API errors (502, etc.)
-    NoRoute, // Tokens that consistently fail due to no routing available
+    ApiError,    // Tokens that return API errors (502, etc.)
+    NoRoute,     // Tokens that consistently fail due to no routing available
 }
 
 /// Individual liquidity check record
@@ -157,14 +163,22 @@ pub struct LiquidityCheck {
 /// Check if token is blacklisted in database
 pub fn is_token_blacklisted_db(mint: &str) -> bool {
     if let Err(e) = init_blacklist_database() {
-        log(LogTag::Blacklist, "ERROR", &format!("Failed to init blacklist database: {}", e));
+        log(
+            LogTag::Blacklist,
+            "ERROR",
+            &format!("Failed to init blacklist database: {}", e),
+        );
         return false;
     }
 
     let conn = match Connection::open(TOKENS_DATABASE) {
         Ok(conn) => conn,
         Err(e) => {
-            log(LogTag::Blacklist, "ERROR", &format!("Failed to connect to database: {}", e));
+            log(
+                LogTag::Blacklist,
+                "ERROR",
+                &format!("Failed to connect to database: {}", e),
+            );
             return false;
         }
     };
@@ -175,7 +189,7 @@ pub fn is_token_blacklisted_db(mint: &str) -> bool {
             log(
                 LogTag::Blacklist,
                 "ERROR",
-                &format!("Failed to prepare blacklist check query: {}", e)
+                &format!("Failed to prepare blacklist check query: {}", e),
             );
             return false;
         }
@@ -187,7 +201,7 @@ pub fn is_token_blacklisted_db(mint: &str) -> bool {
             log(
                 LogTag::Blacklist,
                 "ERROR",
-                &format!("Failed to check blacklist for {}: {}", mint, e)
+                &format!("Failed to check blacklist for {}: {}", mint, e),
             );
             false
         }
@@ -197,14 +211,22 @@ pub fn is_token_blacklisted_db(mint: &str) -> bool {
 /// Add token to blacklist in database
 pub fn add_to_blacklist_db(mint: &str, symbol: &str, reason: BlacklistReason) -> bool {
     if let Err(e) = init_blacklist_database() {
-        log(LogTag::Blacklist, "ERROR", &format!("Failed to init blacklist database: {}", e));
+        log(
+            LogTag::Blacklist,
+            "ERROR",
+            &format!("Failed to init blacklist database: {}", e),
+        );
         return false;
     }
 
     let conn = match Connection::open(TOKENS_DATABASE) {
         Ok(conn) => conn,
         Err(e) => {
-            log(LogTag::Blacklist, "ERROR", &format!("Failed to connect to database: {}", e));
+            log(
+                LogTag::Blacklist,
+                "ERROR",
+                &format!("Failed to connect to database: {}", e),
+            );
             return false;
         }
     };
@@ -235,14 +257,18 @@ pub fn add_to_blacklist_db(mint: &str, symbol: &str, reason: BlacklistReason) ->
             log(
                 LogTag::Blacklist,
                 "ADDED",
-                &format!("Blacklisted {} ({}) - {}", symbol, mint, reason_str)
+                &format!("Blacklisted {} ({}) - {}", symbol, mint, reason_str),
             );
             // Refresh cache after adding to blacklist
             refresh_blacklist_cache();
             true
         }
         Err(e) => {
-            log(LogTag::Blacklist, "ERROR", &format!("Failed to add {} to blacklist: {}", mint, e));
+            log(
+                LogTag::Blacklist,
+                "ERROR",
+                &format!("Failed to add {} to blacklist: {}", mint, e),
+            );
             false
         }
     }
@@ -253,31 +279,47 @@ pub fn track_liquidity_db(
     mint: &str,
     symbol: &str,
     liquidity_usd: f64,
-    token_age_hours: i64
+    token_age_hours: i64,
 ) -> bool {
     if let Err(e) = init_blacklist_database() {
-        log(LogTag::Blacklist, "ERROR", &format!("Failed to init blacklist database: {}", e));
+        log(
+            LogTag::Blacklist,
+            "ERROR",
+            &format!("Failed to init blacklist database: {}", e),
+        );
         return true; // Allow processing if we can't track
     }
 
     let conn = match Connection::open(TOKENS_DATABASE) {
         Ok(conn) => conn,
         Err(e) => {
-            log(LogTag::Blacklist, "ERROR", &format!("Failed to connect to database: {}", e));
+            log(
+                LogTag::Blacklist,
+                "ERROR",
+                &format!("Failed to connect to database: {}", e),
+            );
             return true; // Allow processing if we can't track
         }
     };
 
     // Add liquidity tracking record
     let now = Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string();
-    if
-        let Err(e) = conn.execute(
-            "INSERT INTO liquidity_tracking (mint, symbol, liquidity_usd, token_age_hours, timestamp) 
+    if let Err(e) = conn.execute(
+        "INSERT INTO liquidity_tracking (mint, symbol, liquidity_usd, token_age_hours, timestamp) 
          VALUES (?1, ?2, ?3, ?4, ?5)",
-            [mint, symbol, &liquidity_usd.to_string(), &token_age_hours.to_string(), &now]
-        )
-    {
-        log(LogTag::Blacklist, "ERROR", &format!("Failed to track liquidity for {}: {}", mint, e));
+        [
+            mint,
+            symbol,
+            &liquidity_usd.to_string(),
+            &token_age_hours.to_string(),
+            &now,
+        ],
+    ) {
+        log(
+            LogTag::Blacklist,
+            "ERROR",
+            &format!("Failed to track liquidity for {}: {}", mint, e),
+        );
         return true; // Allow processing if we can't track
     }
 
@@ -301,15 +343,16 @@ pub fn track_liquidity_db(
             }
         };
 
-        let low_count: i64 = match
-            stmt.query_row([mint, &LOW_LIQUIDITY_THRESHOLD.to_string()], |row| { row.get(0) })
-        {
+        let low_count: i64 = match stmt
+            .query_row([mint, &LOW_LIQUIDITY_THRESHOLD.to_string()], |row| {
+                row.get(0)
+            }) {
             Ok(count) => count,
             Err(e) => {
                 log(
                     LogTag::Blacklist,
                     "ERROR",
-                    &format!("Failed to count low liquidity for {}: {}", mint, e)
+                    &format!("Failed to count low liquidity for {}: {}", mint, e),
                 );
                 return true;
             }
@@ -320,11 +363,8 @@ pub fn track_liquidity_db(
             "TRACK",
             &format!(
                 "Low liquidity for {} ({}): ${:.2} USD (count: {})",
-                symbol,
-                mint,
-                liquidity_usd,
-                low_count
-            )
+                symbol, mint, liquidity_usd, low_count
+            ),
         );
 
         if low_count >= (MAX_LOW_LIQUIDITY_COUNT as i64) {
@@ -339,48 +379,52 @@ pub fn track_liquidity_db(
 /// Track route failure for a token in database
 pub fn track_route_failure_db(mint: &str, symbol: &str, error_type: &str) -> bool {
     if let Err(e) = init_blacklist_database() {
-        log(LogTag::Blacklist, "ERROR", &format!("Failed to init blacklist database: {}", e));
+        log(
+            LogTag::Blacklist,
+            "ERROR",
+            &format!("Failed to init blacklist database: {}", e),
+        );
         return true; // Allow processing if we can't track
     }
 
     let conn = match Connection::open(TOKENS_DATABASE) {
         Ok(conn) => conn,
         Err(e) => {
-            log(LogTag::Blacklist, "ERROR", &format!("Failed to connect to database: {}", e));
+            log(
+                LogTag::Blacklist,
+                "ERROR",
+                &format!("Failed to connect to database: {}", e),
+            );
             return true; // Allow processing if we can't track
         }
     };
 
     // Add route failure tracking record
     let now = Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string();
-    if
-        let Err(e) = conn.execute(
-            "INSERT INTO route_failure_tracking (mint, symbol, error_type, timestamp) 
+    if let Err(e) = conn.execute(
+        "INSERT INTO route_failure_tracking (mint, symbol, error_type, timestamp) 
          VALUES (?1, ?2, ?3, ?4)",
-            [mint, symbol, error_type, &now]
-        )
-    {
+        [mint, symbol, error_type, &now],
+    ) {
         log(
             LogTag::Blacklist,
             "ERROR",
-            &format!("Failed to track route failure for {}: {}", mint, e)
+            &format!("Failed to track route failure for {}: {}", mint, e),
         );
         return true; // Allow processing if we can't track
     }
 
     // Count no route failures in the last 7 days
-    let mut stmt = match
-        conn.prepare(
-            "SELECT COUNT(*) FROM route_failure_tracking 
-         WHERE mint = ?1 AND timestamp > datetime('now', '-7 days')"
-        )
-    {
+    let mut stmt = match conn.prepare(
+        "SELECT COUNT(*) FROM route_failure_tracking 
+         WHERE mint = ?1 AND timestamp > datetime('now', '-7 days')",
+    ) {
         Ok(stmt) => stmt,
         Err(e) => {
             log(
                 LogTag::Blacklist,
                 "ERROR",
-                &format!("Failed to prepare route failure count query: {}", e)
+                &format!("Failed to prepare route failure count query: {}", e),
             );
             return true;
         }
@@ -392,7 +436,7 @@ pub fn track_route_failure_db(mint: &str, symbol: &str, error_type: &str) -> boo
             log(
                 LogTag::Blacklist,
                 "ERROR",
-                &format!("Failed to count route failures for {}: {}", mint, e)
+                &format!("Failed to count route failures for {}: {}", mint, e),
             );
             return true;
         }
@@ -403,18 +447,18 @@ pub fn track_route_failure_db(mint: &str, symbol: &str, error_type: &str) -> boo
         "TRACK",
         &format!(
             "Route failure for {} ({}): {} (count: {})",
-            symbol,
-            mint,
-            error_type,
-            failure_count
-        )
+            symbol, mint, error_type, failure_count
+        ),
     );
 
     if failure_count >= (MAX_NO_ROUTE_FAILURES as i64) {
         log(
             LogTag::Blacklist,
             "BLACKLIST",
-            &format!("Blacklisting {} ({}) after {} route failures", symbol, mint, failure_count)
+            &format!(
+                "Blacklisting {} ({}) after {} route failures",
+                symbol, mint, failure_count
+            ),
         );
         add_to_blacklist_db(mint, symbol, BlacklistReason::NoRoute);
         return false; // Don't allow processing
@@ -426,28 +470,41 @@ pub fn track_route_failure_db(mint: &str, symbol: &str, error_type: &str) -> boo
 /// Get blacklist statistics from database
 pub fn get_blacklist_stats_db() -> Option<BlacklistStats> {
     if let Err(e) = init_blacklist_database() {
-        log(LogTag::Blacklist, "ERROR", &format!("Failed to init blacklist database: {}", e));
+        log(
+            LogTag::Blacklist,
+            "ERROR",
+            &format!("Failed to init blacklist database: {}", e),
+        );
         return None;
     }
 
     let conn = match Connection::open(TOKENS_DATABASE) {
         Ok(conn) => conn,
         Err(e) => {
-            log(LogTag::Blacklist, "ERROR", &format!("Failed to connect to database: {}", e));
+            log(
+                LogTag::Blacklist,
+                "ERROR",
+                &format!("Failed to connect to database: {}", e),
+            );
             return None;
         }
     };
 
     // Get total blacklisted count
-    let total_blacklisted: usize = match
-        conn.query_row("SELECT COUNT(*) FROM blacklist", [], |row| { row.get::<_, i64>(0) })
-    {
-        Ok(count) => count as usize,
-        Err(e) => {
-            log(LogTag::Blacklist, "ERROR", &format!("Failed to get blacklist count: {}", e));
-            return None;
-        }
-    };
+    let total_blacklisted: usize =
+        match conn.query_row("SELECT COUNT(*) FROM blacklist", [], |row| {
+            row.get::<_, i64>(0)
+        }) {
+            Ok(count) => count as usize,
+            Err(e) => {
+                log(
+                    LogTag::Blacklist,
+                    "ERROR",
+                    &format!("Failed to get blacklist count: {}", e),
+                );
+                return None;
+            }
+        };
 
     // Get tracked tokens count
     let total_tracked: usize = match
@@ -472,18 +529,22 @@ pub fn get_blacklist_stats_db() -> Option<BlacklistStats> {
             log(
                 LogTag::Blacklist,
                 "ERROR",
-                &format!("Failed to prepare reason breakdown query: {}", e)
+                &format!("Failed to prepare reason breakdown query: {}", e),
             );
             return None;
         }
     };
 
-    let rows = match
-        stmt.query_map([], |row| { Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)) })
-    {
+    let rows = match stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+    }) {
         Ok(rows) => rows,
         Err(e) => {
-            log(LogTag::Blacklist, "ERROR", &format!("Failed to get reason breakdown: {}", e));
+            log(
+                LogTag::Blacklist,
+                "ERROR",
+                &format!("Failed to get reason breakdown: {}", e),
+            );
             return None;
         }
     };
@@ -504,30 +565,36 @@ pub fn get_blacklist_stats_db() -> Option<BlacklistStats> {
 /// Remove old liquidity tracking data (older than 7 days)
 pub fn cleanup_old_blacklist_data() -> bool {
     if let Err(e) = init_blacklist_database() {
-        log(LogTag::Blacklist, "ERROR", &format!("Failed to init blacklist database: {}", e));
+        log(
+            LogTag::Blacklist,
+            "ERROR",
+            &format!("Failed to init blacklist database: {}", e),
+        );
         return false;
     }
 
     let conn = match Connection::open(TOKENS_DATABASE) {
         Ok(conn) => conn,
         Err(e) => {
-            log(LogTag::Blacklist, "ERROR", &format!("Failed to connect to database: {}", e));
+            log(
+                LogTag::Blacklist,
+                "ERROR",
+                &format!("Failed to connect to database: {}", e),
+            );
             return false;
         }
     };
 
-    match
-        conn.execute(
-            "DELETE FROM liquidity_tracking WHERE datetime(timestamp) < datetime('now', '-7 days')",
-            []
-        )
-    {
+    match conn.execute(
+        "DELETE FROM liquidity_tracking WHERE datetime(timestamp) < datetime('now', '-7 days')",
+        [],
+    ) {
         Ok(deleted) => {
             if deleted > 0 {
                 log(
                     LogTag::Blacklist,
                     "CLEANUP",
-                    &format!("Cleaned {} old liquidity tracking records", deleted)
+                    &format!("Cleaned {} old liquidity tracking records", deleted),
                 );
             }
         }
@@ -535,24 +602,22 @@ pub fn cleanup_old_blacklist_data() -> bool {
             log(
                 LogTag::Blacklist,
                 "ERROR",
-                &format!("Failed to cleanup old liquidity tracking data: {}", e)
+                &format!("Failed to cleanup old liquidity tracking data: {}", e),
             );
         }
     }
 
     // Clean up old route failure tracking data
-    match
-        conn.execute(
-            "DELETE FROM route_failure_tracking WHERE datetime(timestamp) < datetime('now', '-7 days')",
-            []
-        )
-    {
+    match conn.execute(
+        "DELETE FROM route_failure_tracking WHERE datetime(timestamp) < datetime('now', '-7 days')",
+        [],
+    ) {
         Ok(deleted) => {
             if deleted > 0 {
                 log(
                     LogTag::Blacklist,
                     "CLEANUP",
-                    &format!("Cleaned {} old route failure tracking records", deleted)
+                    &format!("Cleaned {} old route failure tracking records", deleted),
                 );
             }
             true
@@ -561,7 +626,7 @@ pub fn cleanup_old_blacklist_data() -> bool {
             log(
                 LogTag::Blacklist,
                 "ERROR",
-                &format!("Failed to cleanup old route failure data: {}", e)
+                &format!("Failed to cleanup old route failure data: {}", e),
             );
             false
         }
@@ -571,14 +636,22 @@ pub fn cleanup_old_blacklist_data() -> bool {
 /// Get all blacklisted token mints (for efficient filtering)
 pub fn get_blacklisted_mints() -> Vec<String> {
     if let Err(e) = init_blacklist_database() {
-        log(LogTag::Blacklist, "ERROR", &format!("Failed to init blacklist database: {}", e));
+        log(
+            LogTag::Blacklist,
+            "ERROR",
+            &format!("Failed to init blacklist database: {}", e),
+        );
         return Vec::new();
     }
 
     let conn = match Connection::open(TOKENS_DATABASE) {
         Ok(conn) => conn,
         Err(e) => {
-            log(LogTag::Blacklist, "ERROR", &format!("Failed to connect to database: {}", e));
+            log(
+                LogTag::Blacklist,
+                "ERROR",
+                &format!("Failed to connect to database: {}", e),
+            );
             return Vec::new();
         }
     };
@@ -586,7 +659,11 @@ pub fn get_blacklisted_mints() -> Vec<String> {
     let mut stmt = match conn.prepare("SELECT mint FROM blacklist") {
         Ok(stmt) => stmt,
         Err(e) => {
-            log(LogTag::Blacklist, "ERROR", &format!("Failed to prepare blacklist query: {}", e));
+            log(
+                LogTag::Blacklist,
+                "ERROR",
+                &format!("Failed to prepare blacklist query: {}", e),
+            );
             return Vec::new();
         }
     };
@@ -594,7 +671,11 @@ pub fn get_blacklisted_mints() -> Vec<String> {
     let rows = match stmt.query_map([], |row| row.get::<_, String>(0)) {
         Ok(rows) => rows,
         Err(e) => {
-            log(LogTag::Blacklist, "ERROR", &format!("Failed to get blacklisted mints: {}", e));
+            log(
+                LogTag::Blacklist,
+                "ERROR",
+                &format!("Failed to get blacklisted mints: {}", e),
+            );
             return Vec::new();
         }
     };
@@ -638,14 +719,12 @@ impl Default for BlacklistStats {
 // =============================================================================
 
 /// Simplified blacklist cache for performance
-static TOKEN_BLACKLIST_CACHE: Lazy<Mutex<HashSet<String>>> = Lazy::new(||
-    Mutex::new(HashSet::new())
-);
+static TOKEN_BLACKLIST_CACHE: Lazy<Mutex<HashSet<String>>> =
+    Lazy::new(|| Mutex::new(HashSet::new()));
 
 /// Cache refresh timestamp
-static BLACKLIST_CACHE_LAST_REFRESH: Lazy<Mutex<Option<DateTime<Utc>>>> = Lazy::new(||
-    Mutex::new(None)
-);
+static BLACKLIST_CACHE_LAST_REFRESH: Lazy<Mutex<Option<DateTime<Utc>>>> =
+    Lazy::new(|| Mutex::new(None));
 
 /// Cache refresh interval (5 minutes)
 const CACHE_REFRESH_INTERVAL_MINUTES: i64 = 5;
@@ -657,7 +736,11 @@ fn refresh_blacklist_cache() -> bool {
     let mut cache = match TOKEN_BLACKLIST_CACHE.lock() {
         Ok(cache) => cache,
         Err(e) => {
-            log(LogTag::Blacklist, "ERROR", &format!("Failed to lock blacklist cache: {}", e));
+            log(
+                LogTag::Blacklist,
+                "ERROR",
+                &format!("Failed to lock blacklist cache: {}", e),
+            );
             return false;
         }
     };
@@ -670,7 +753,11 @@ fn refresh_blacklist_cache() -> bool {
     let mut last_refresh = match BLACKLIST_CACHE_LAST_REFRESH.lock() {
         Ok(last) => last,
         Err(e) => {
-            log(LogTag::Blacklist, "ERROR", &format!("Failed to lock cache timestamp: {}", e));
+            log(
+                LogTag::Blacklist,
+                "ERROR",
+                &format!("Failed to lock cache timestamp: {}", e),
+            );
             return false;
         }
     };
@@ -679,7 +766,7 @@ fn refresh_blacklist_cache() -> bool {
     log(
         LogTag::Blacklist,
         "CACHE",
-        &format!("Refreshed blacklist cache with {} tokens", cache.len())
+        &format!("Refreshed blacklist cache with {} tokens", cache.len()),
     );
     true
 }
@@ -739,7 +826,11 @@ pub fn is_token_excluded_from_trading(mint: &str) -> bool {
     // Use cached check for maximum performance
     if is_token_blacklisted_cached(mint) {
         if is_debug_blacklist_enabled() {
-            log(LogTag::Blacklist, "DEBUG", &format!("Blocked trading for {}: blacklisted", mint));
+            log(
+                LogTag::Blacklist,
+                "DEBUG",
+                &format!("Blocked trading for {}: blacklisted", mint),
+            );
         }
         return true;
     }
@@ -753,10 +844,8 @@ pub fn add_decimal_failure_to_blacklist(mint: &str, symbol: &str, attempts: u32)
         "DECIMAL_FAIL",
         &format!(
             "Adding {} ({}) to blacklist after {} decimal fetch attempts",
-            symbol,
-            mint,
-            attempts
-        )
+            symbol, mint, attempts
+        ),
     );
     let result = add_to_blacklist_db(mint, symbol, BlacklistReason::ApiError);
     if result {
@@ -836,7 +925,10 @@ pub fn initialize_system_stable_blacklist() {
     log(
         LogTag::Blacklist,
         "INIT",
-        &format!("System and stable tokens initialized in blacklist database ({} added)", tokens_added)
+        &format!(
+            "System and stable tokens initialized in blacklist database ({} added)",
+            tokens_added
+        ),
     );
 }
 
@@ -863,9 +955,8 @@ pub fn get_blacklist_summary() -> Result<BlacklistSummary, String> {
         return Err(format!("Failed to init blacklist database: {}", e));
     }
 
-    let conn = Connection::open(TOKENS_DATABASE).map_err(|e|
-        format!("Failed to connect to database: {}", e)
-    )?;
+    let conn = Connection::open(TOKENS_DATABASE)
+        .map_err(|e| format!("Failed to connect to database: {}", e))?;
 
     // Get total count
     let total_count: usize = conn

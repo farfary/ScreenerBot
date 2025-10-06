@@ -9,8 +9,8 @@
 /// cargo run --bin debug_entry_single_token -- --token <MINT> --duration 60 --interval 5 --debug-entry --debug-pool-service
 use clap::Parser;
 use screenerbot::arguments::set_cmd_args;
-use screenerbot::logger::{ log, LogTag };
-use screenerbot::pools::{ get_pool_price, set_debug_token_override, stop_pool_service };
+use screenerbot::logger::{log, LogTag};
+use screenerbot::pools::{get_pool_price, set_debug_token_override, stop_pool_service};
 // NOTE: start_pool_service removed - pool service now managed by ServiceManager
 use screenerbot::tokens::decimals::get_token_decimals_from_chain;
 use screenerbot::tokens::dexscreener::init_dexscreener_api;
@@ -77,17 +77,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     set_cmd_args(cmd_args.clone());
 
-    log(LogTag::Entry, "START", &format!("Starting entry test for token {}", args.token));
+    log(
+        LogTag::Entry,
+        "START",
+        &format!("Starting entry test for token {}", args.token),
+    );
 
     // Initialize external APIs used by discovery/fetchers
     if let Err(e) = init_dexscreener_api().await {
-        log(LogTag::Entry, "ERROR", &format!("DexScreener init failed: {}", e));
+        log(
+            LogTag::Entry,
+            "ERROR",
+            &format!("DexScreener init failed: {}", e),
+        );
     }
 
     // Ensure decimals are cached to allow any token math elsewhere if needed
     match get_token_decimals_from_chain(&args.token).await {
         Ok(dec) => log(LogTag::Entry, "INIT", &format!("Token decimals: {}", dec)),
-        Err(e) => log(LogTag::Entry, "WARN", &format!("Failed to fetch decimals: {}", e)),
+        Err(e) => log(
+            LogTag::Entry,
+            "WARN",
+            &format!("Failed to fetch decimals: {}", e),
+        ),
     }
 
     // Focus everything on our single token
@@ -98,9 +110,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log(
         LogTag::Entry,
         "ERROR",
-        "This debug tool is outdated - pool service is now managed by ServiceManager."
+        "This debug tool is outdated - pool service is now managed by ServiceManager.",
     );
-    log(LogTag::Entry, "ERROR", "Please run the main bot with --debug-entry enabled instead.");
+    log(
+        LogTag::Entry,
+        "ERROR",
+        "Please run the main bot with --debug-entry enabled instead.",
+    );
     return Err("Debug tool needs updating for new service architecture".into());
 
     // Periodic checks
@@ -119,15 +135,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "ENTRY_TEST",
                 &format!(
                     "mint={} price={:.12} SOL should_buy={} conf={:.1}% reason={}",
-                    price.mint,
-                    price.price_sol,
-                    approved,
-                    confidence,
-                    reason
-                )
+                    price.mint, price.price_sol, approved, confidence, reason
+                ),
             );
         } else {
-            log(LogTag::Entry, "WAIT", "Price not yet available from pool service");
+            log(
+                LogTag::Entry,
+                "WAIT",
+                "Price not yet available from pool service",
+            );
         }
     }
 

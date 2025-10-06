@@ -1,4 +1,4 @@
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 
 /// Service health status
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

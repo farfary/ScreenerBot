@@ -1,15 +1,21 @@
 use std::sync::Arc;
 
 use axum::{
-    extract::{ ws::{ Message, WebSocket, WebSocketUpgrade }, Query, State },
+    extract::{
+        ws::{Message, WebSocket, WebSocketUpgrade},
+        Query, State,
+    },
     response::Response,
     routing::get,
     Router,
 };
-use futures::{ SinkExt, StreamExt };
+use futures::{SinkExt, StreamExt};
 use serde::Deserialize;
 
-use crate::{ events::{ self, Event, EventCategory, Severity }, webserver::state::AppState };
+use crate::{
+    events::{self, Event, EventCategory, Severity},
+    webserver::state::AppState,
+};
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct WsEventsQuery {
@@ -27,7 +33,7 @@ pub fn routes() -> Router<Arc<AppState>> {
 pub async fn ws_events_handler(
     ws: WebSocketUpgrade,
     Query(params): Query<WsEventsQuery>,
-    State(state): State<Arc<AppState>>
+    State(state): State<Arc<AppState>>,
 ) -> Response {
     state.increment_ws_connections().await;
     ws.on_upgrade(move |socket| handle_events_socket(socket, params, state))
@@ -37,19 +43,16 @@ async fn handle_events_socket(mut socket: WebSocket, params: WsEventsQuery, stat
     // Backfill missed events if last_id provided
     if let Some(after_id) = params.last_id {
         if let Some(db) = events::EVENTS_DB.get() {
-            let category = params.category.as_ref().map(|s| EventCategory::from_string(s));
+            let category = params
+                .category
+                .as_ref()
+                .map(|s| EventCategory::from_string(s));
             let severity = params.severity.as_ref().map(|s| Severity::from_string(s));
             let mint = params.mint.as_deref();
             let reference = params.reference.as_deref();
-            if
-                let Ok(backfill) = db.get_events_since(
-                    after_id,
-                    500,
-                    category,
-                    severity,
-                    mint,
-                    reference
-                ).await
+            if let Ok(backfill) = db
+                .get_events_since(after_id, 500, category, severity, mint, reference)
+                .await
             {
                 for e in backfill {
                     if let Ok(text) = serde_json::to_string(&map_event(&e)) {
@@ -67,9 +70,11 @@ async fn handle_events_socket(mut socket: WebSocket, params: WsEventsQuery, stat
     let mut rx = match events::subscribe() {
         Some(r) => r,
         None => {
-            let _ = socket.send(
-                Message::Text("{\"error\":\"events broadcaster not ready\"}".into())
-            ).await;
+            let _ = socket
+                .send(Message::Text(
+                    "{\"error\":\"events broadcaster not ready\"}".into(),
+                ))
+                .await;
             let _ = socket.close().await;
             state.decrement_ws_connections().await;
             return;
@@ -147,7 +152,8 @@ struct WsEventMessage {
 }
 
 fn map_event(e: &Event) -> WsEventMessage {
-    let message = e.payload
+    let message = e
+        .payload
         .get("message")
         .and_then(|v| v.as_str())
         .unwrap_or("No message")
@@ -161,7 +167,8 @@ fn map_event(e: &Event) -> WsEventMessage {
         mint: e.mint.clone(),
         reference_id: e.reference_id.clone(),
         message,
-        created_at: e.created_at
+        created_at: e
+            .created_at
             .map(|dt| dt.to_rfc3339())
             .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
     }

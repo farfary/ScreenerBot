@@ -1,10 +1,9 @@
-
-use axum::{ extract::State, response::Json, routing::get, Router };
-use serde::{ Deserialize, Serialize };
+use axum::{extract::State, response::Json, routing::get, Router};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+use crate::tokens::blacklist::{get_blacklist_summary, BlacklistSummary};
 use crate::webserver::state::AppState;
-use crate::tokens::blacklist::{ get_blacklist_summary, BlacklistSummary };
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BlacklistStatsResponse {
@@ -29,7 +28,10 @@ async fn get_blacklist_stats() -> Json<BlacklistStatsResponse> {
             by_reason.insert("SystemToken".to_string(), summary.system_token_count);
             by_reason.insert("StableToken".to_string(), summary.stable_token_count);
             by_reason.insert("Manual".to_string(), summary.manual_count);
-            by_reason.insert("PoorPerformance".to_string(), summary.poor_performance_count);
+            by_reason.insert(
+                "PoorPerformance".to_string(),
+                summary.poor_performance_count,
+            );
 
             Json(BlacklistStatsResponse {
                 total_count: summary.total_count,

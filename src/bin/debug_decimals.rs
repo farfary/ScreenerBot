@@ -667,11 +667,7 @@ async fn debug_single_token_fetching(mint_str: &str, symbol: &str) -> DetailedDe
     log(
         LogTag::System,
         "DETAILED",
-        &format!(
-            "🔬 Debugging token: {} ({})",
-            mint_str,
-            symbol
-        ),
+        &format!("🔬 Debugging token: {} ({})", mint_str, symbol),
     );
 
     // Step 1: Validate mint address format
@@ -978,10 +974,7 @@ async fn test_retry_limit_functionality() {
     log(
         LogTag::System,
         "TEST_RETRY",
-        &format!(
-            "Testing retry limit with problematic token: {}",
-            test_mint
-        ),
+        &format!("Testing retry limit with problematic token: {}", test_mint),
     );
 
     // Try to fetch the same token multiple times to test retry limits

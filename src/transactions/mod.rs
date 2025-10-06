@@ -52,31 +52,15 @@ pub mod websocket;
 // Public API exports - Core functionality
 pub use manager::TransactionsManager;
 pub use service::{
-    get_global_transaction_manager,
-    get_transaction,
-    is_global_transaction_service_running,
-    start_global_transaction_service,
-    stop_global_transaction_service,
+    get_global_transaction_manager, get_transaction, is_global_transaction_service_running,
+    start_global_transaction_service, stop_global_transaction_service,
 };
 
 // Public API exports - Types
 pub use types::{
-    AtaAnalysis,
-    AtaOperation,
-    AtaOperationType,
-    CachedAnalysis,
-    DeferredRetry,
-    InstructionInfo,
-    SolBalanceChange,
-    SwapPnLInfo,
-    TokenBalanceChange,
-    TokenSwapInfo,
-    TokenTransfer,
-    Transaction,
-    TransactionDirection,
-    TransactionStats,
-    TransactionStatus,
-    TransactionType,
+    AtaAnalysis, AtaOperation, AtaOperationType, CachedAnalysis, DeferredRetry, InstructionInfo,
+    SolBalanceChange, SwapPnLInfo, TokenBalanceChange, TokenSwapInfo, TokenTransfer, Transaction,
+    TransactionDirection, TransactionStats, TransactionStatus, TransactionType,
 };
 
 // Public API exports - Constants from types
@@ -84,51 +68,32 @@ pub use types::ANALYSIS_CACHE_VERSION;
 
 // Public API exports - Analysis and verification
 pub use analyzer::{
+    confidence_to_score, is_analysis_reliable, AnalysisConfidence, CompleteAnalysis,
     TransactionAnalyzer,
-    CompleteAnalysis,
-    AnalysisConfidence,
-    is_analysis_reliable,
-    confidence_to_score,
 };
 
 pub use verifier::{
-    verify_entry_transaction,
-    verify_exit_transaction,
-    verify_transaction_for_position,
+    verify_entry_transaction, verify_exit_transaction, verify_transaction_for_position,
 };
 
 // Public API exports - Database operations
-pub use database::{ get_transaction_database, init_transaction_database, TransactionDatabase };
+pub use database::{get_transaction_database, init_transaction_database, TransactionDatabase};
 
 // Public API exports - Program IDs and router detection
 pub use program_ids::{
-    detect_router_from_program_id,
-    detect_router_from_logs,
-    is_dex_aggregator_program_id,
-    is_jupiter_program_id,
-    is_mev_tip_address,
-    JUPITER_V6_PROGRAM_ID,
-    PUMP_FUN_AMM_PROGRAM_ID,
+    detect_router_from_logs, detect_router_from_program_id, is_dex_aggregator_program_id,
+    is_jupiter_program_id, is_mev_tip_address, JUPITER_V6_PROGRAM_ID, PUMP_FUN_AMM_PROGRAM_ID,
     PUMP_FUN_LEGACY_PROGRAM_ID,
 };
 
 // Public API exports - Utilities
 pub use utils::{
-    add_signature_to_known_globally,
-    get_pending_transactions_count,
-    is_signature_known_globally,
+    add_signature_to_known_globally, get_pending_transactions_count, is_signature_known_globally,
 };
 
 // Constants re-exported for convenience
 pub use utils::{
-    ATA_RENT_COST_SOL,
-    ATA_RENT_TOLERANCE_LAMPORTS,
-    DEFAULT_COMPUTE_UNIT_PRICE,
-    MIN_PENDING_LAMPORT_DELTA,
-    NORMAL_CHECK_INTERVAL_SECS,
-    PENDING_MAX_AGE_SECS,
-    PROCESS_BATCH_SIZE,
-    RPC_BATCH_SIZE,
-    TRANSACTION_DATA_BATCH_SIZE,
-    WSOL_MINT,
+    ATA_RENT_COST_SOL, ATA_RENT_TOLERANCE_LAMPORTS, DEFAULT_COMPUTE_UNIT_PRICE,
+    MIN_PENDING_LAMPORT_DELTA, NORMAL_CHECK_INTERVAL_SECS, PENDING_MAX_AGE_SECS,
+    PROCESS_BATCH_SIZE, RPC_BATCH_SIZE, TRANSACTION_DATA_BATCH_SIZE, WSOL_MINT,
 };

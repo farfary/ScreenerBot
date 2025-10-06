@@ -15,29 +15,29 @@
 // All analysis returns Result<T, String> with structured logging via LogTag.
 // Confidence scoring ranges from Unknown (<0.4) to High (≥0.8).
 
-pub mod balance;
-pub mod dex;
-pub mod classify;
 pub mod ata;
-pub mod pnl;
+pub mod balance;
+pub mod classify;
+pub mod dex;
 pub mod patterns;
+pub mod pnl;
 
 // Re-export public types for external use
-pub use balance::BalanceAnalysis;
-pub use dex::DexAnalysis;
-pub use classify::TransactionClass;
 pub use ata::AtaAnalysis;
-pub use pnl::PnLAnalysis;
+pub use balance::BalanceAnalysis;
+pub use classify::TransactionClass;
+pub use dex::DexAnalysis;
 pub use patterns::PatternAnalysis;
+pub use pnl::PnLAnalysis;
 
-use serde::{ Serialize, Deserialize };
+use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 
-use crate::logger::{ log, LogTag };
+use crate::logger::{log, LogTag};
 use crate::transactions::types::*;
 
-use self::{ classify::classify_transaction };
+use self::classify::classify_transaction;
 
 // =============================================================================
 // PUBLIC API TYPES
@@ -96,13 +96,16 @@ impl TransactionAnalyzer {
     pub async fn analyze_transaction(
         &self,
         transaction: &Transaction,
-        tx_data: &crate::rpc::TransactionDetails
+        tx_data: &crate::rpc::TransactionDetails,
     ) -> Result<CompleteAnalysis, String> {
         if self.debug_enabled {
             log(
                 LogTag::Transactions,
                 "ANALYZE_START",
-                &format!("Starting complete analysis for tx: {}", transaction.signature)
+                &format!(
+                    "Starting complete analysis for tx: {}",
+                    transaction.signature
+                ),
             );
         }
 
@@ -110,19 +113,12 @@ impl TransactionAnalyzer {
         let balance_analysis = balance::analyze_balance_changes(transaction, tx_data).await?;
 
         // Step 2: Detect DEX interactions
-        let dex_analysis = dex::detect_dex_interactions(
-            transaction,
-            tx_data,
-            &balance_analysis
-        ).await?;
+        let dex_analysis =
+            dex::detect_dex_interactions(transaction, tx_data, &balance_analysis).await?;
 
         // Step 3: Classify transaction
-        let classification = classify_transaction(
-            transaction,
-            tx_data,
-            &balance_analysis,
-            &dex_analysis
-        ).await?;
+        let classification =
+            classify_transaction(transaction, tx_data, &balance_analysis, &dex_analysis).await?;
 
         // Step 4: Analyze ATA operations
         let ata_analysis = ata::analyze_ata_operations(transaction, tx_data).await?;
@@ -133,8 +129,9 @@ impl TransactionAnalyzer {
             tx_data,
             &balance_analysis,
             &classification,
-            &ata_analysis
-        ).await?;
+            &ata_analysis,
+        )
+        .await?;
 
         // Step 6: Detect patterns and assess risk
         let pattern_analysis = patterns::detect_patterns(
@@ -142,8 +139,9 @@ impl TransactionAnalyzer {
             tx_data,
             &balance_analysis,
             &dex_analysis,
-            &classification
-        ).await?;
+            &classification,
+        )
+        .await?;
 
         // Calculate overall confidence
         let confidence = self.calculate_overall_confidence(
@@ -152,7 +150,7 @@ impl TransactionAnalyzer {
             &classification,
             &ata_analysis,
             &pnl_analysis,
-            &pattern_analysis
+            &pattern_analysis,
         );
 
         let analyzed_at = chrono::Utc::now().timestamp();
@@ -167,7 +165,7 @@ impl TransactionAnalyzer {
                     confidence,
                     pattern_analysis.detected_patterns.len(),
                     classification.transaction_type
-                )
+                ),
             );
         }
 
@@ -191,7 +189,7 @@ impl TransactionAnalyzer {
         classification: &TransactionClass,
         ata_analysis: &AtaAnalysis,
         pnl_analysis: &PnLAnalysis,
-        pattern_analysis: &PatternAnalysis
+        pattern_analysis: &PatternAnalysis,
     ) -> AnalysisConfidence {
         // Weight each component confidence
         let weights = [
@@ -203,10 +201,7 @@ impl TransactionAnalyzer {
             (pattern_analysis.confidence, 0.1),
         ];
 
-        let weighted_sum: f64 = weights
-            .iter()
-            .map(|(conf, weight)| conf * weight)
-            .sum();
+        let weighted_sum: f64 = weights.iter().map(|(conf, weight)| conf * weight).sum();
 
         score_to_confidence(weighted_sum)
     }
@@ -215,15 +210,12 @@ impl TransactionAnalyzer {
     pub async fn quick_classify(
         &self,
         transaction: &Transaction,
-        tx_data: &crate::rpc::TransactionDetails
+        tx_data: &crate::rpc::TransactionDetails,
     ) -> Result<classify::TransactionClass, String> {
         // Lightweight analysis for basic classification only
         let balance_changes = balance::extract_balance_changes(transaction, tx_data).await?;
-        let dex_detection = dex::detect_dex_interactions(
-            transaction,
-            tx_data,
-            &balance_changes
-        ).await?;
+        let dex_detection =
+            dex::detect_dex_interactions(transaction, tx_data, &balance_changes).await?;
 
         classify::classify_transaction(transaction, tx_data, &balance_changes, &dex_detection).await
     }
@@ -235,7 +227,10 @@ impl TransactionAnalyzer {
 
 /// Check if analysis confidence meets minimum threshold for reliable results
 pub fn is_analysis_reliable(confidence: &AnalysisConfidence) -> bool {
-    matches!(confidence, AnalysisConfidence::High | AnalysisConfidence::Medium)
+    matches!(
+        confidence,
+        AnalysisConfidence::High | AnalysisConfidence::Medium
+    )
 }
 
 /// Convert confidence to numeric score for comparison and weighting

@@ -13,11 +13,11 @@
 /// - Dry-run mode for testing
 use screenerbot::{
     constants::SOL_MINT,
-    logger::{ init_file_logging, log, LogTag },
+    logger::{init_file_logging, log, LogTag},
     rpc::TokenAccountInfo,
-    swaps::{ execute_best_swap, get_best_quote },
-    tokens::{ get_token_decimals, Token },
-    utils::{ close_single_ata, get_all_token_accounts, get_wallet_address },
+    swaps::{execute_best_swap, get_best_quote},
+    tokens::{get_token_decimals, Token},
+    utils::{close_single_ata, get_all_token_accounts, get_wallet_address},
 };
 use tokio;
 
@@ -55,7 +55,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
     init_file_logging();
 
-    log(LogTag::Swap, "BURN_DUST_START", "🔥 Starting dust token burn tool...");
+    log(
+        LogTag::Swap,
+        "BURN_DUST_START",
+        "🔥 Starting dust token burn tool...",
+    );
 
     // Parse command line arguments
     let args: Vec<String> = std::env::args().collect();
@@ -72,49 +76,72 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         log(
             LogTag::Swap,
             "DRY_RUN",
-            "📋 Running in DRY RUN mode - no actual transactions will be sent"
+            "📋 Running in DRY RUN mode - no actual transactions will be sent",
         );
     }
 
     // Get wallet address
-    let wallet_address = get_wallet_address().map_err(|e|
-        format!("Failed to get wallet address: {}", e)
-    )?;
+    let wallet_address =
+        get_wallet_address().map_err(|e| format!("Failed to get wallet address: {}", e))?;
 
-    log(LogTag::Swap, "WALLET", &format!("🏦 Wallet address: {}", wallet_address));
+    log(
+        LogTag::Swap,
+        "WALLET",
+        &format!("🏦 Wallet address: {}", wallet_address),
+    );
 
     // Step 1: Scan for all token accounts
     let mut stats = BurnStats::default();
 
-    log(LogTag::Swap, "SCAN_START", "🔍 Scanning wallet for token accounts...");
-    let token_accounts = get_all_token_accounts(&wallet_address).await.map_err(|e|
-        format!("Failed to get token accounts: {}", e)
-    )?;
+    log(
+        LogTag::Swap,
+        "SCAN_START",
+        "🔍 Scanning wallet for token accounts...",
+    );
+    let token_accounts = get_all_token_accounts(&wallet_address)
+        .await
+        .map_err(|e| format!("Failed to get token accounts: {}", e))?;
 
     stats.total_tokens_found = token_accounts.len();
     log(
         LogTag::Swap,
         "SCAN_COMPLETE",
-        &format!("📊 Found {} token accounts", stats.total_tokens_found)
+        &format!("📊 Found {} token accounts", stats.total_tokens_found),
     );
 
     if token_accounts.is_empty() {
-        log(LogTag::Swap, "NO_TOKENS", "✅ No token accounts found - wallet is clean");
+        log(
+            LogTag::Swap,
+            "NO_TOKENS",
+            "✅ No token accounts found - wallet is clean",
+        );
         return Ok(());
     }
 
     // Step 2: Identify dust tokens
-    log(LogTag::Swap, "DUST_DETECTION", "🧹 Analyzing tokens for dust detection...");
+    log(
+        LogTag::Swap,
+        "DUST_DETECTION",
+        "🧹 Analyzing tokens for dust detection...",
+    );
     let dust_tokens = identify_dust_tokens(token_accounts).await?;
     stats.dust_tokens_detected = dust_tokens.len();
 
     if dust_tokens.is_empty() {
-        log(LogTag::Swap, "NO_DUST", "✅ No dust tokens detected - wallet is optimized");
+        log(
+            LogTag::Swap,
+            "NO_DUST",
+            "✅ No dust tokens detected - wallet is optimized",
+        );
         return Ok(());
     }
 
     // Display dust tokens found
-    log(LogTag::Swap, "DUST_FOUND", &format!("🗑️ Detected {} dust tokens:", dust_tokens.len()));
+    log(
+        LogTag::Swap,
+        "DUST_FOUND",
+        &format!("🗑️ Detected {} dust tokens:", dust_tokens.len()),
+    );
     for (i, dust) in dust_tokens.iter().enumerate() {
         log(
             LogTag::Swap,
@@ -126,7 +153,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 dust.balance_ui,
                 dust.balance,
                 dust.estimated_value_sol.unwrap_or(0.0)
-            )
+            ),
         );
     }
 
@@ -143,29 +170,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         log(
             LogTag::Swap,
             "DRY_RUN_COMPLETE",
-            &format!("📋 Dry run complete - would burn {} dust tokens", dust_tokens.len())
+            &format!(
+                "📋 Dry run complete - would burn {} dust tokens",
+                dust_tokens.len()
+            ),
         );
         print_dust_summary(&dust_tokens);
         return Ok(());
     }
 
-    log(LogTag::Swap, "BURN_START", "🔥 Starting dust token burn operation...");
+    log(
+        LogTag::Swap,
+        "BURN_START",
+        "🔥 Starting dust token burn operation...",
+    );
     burn_dust_tokens(&dust_tokens, &wallet_address, &mut stats).await?;
 
     // Step 4: Final cleanup - close any remaining empty ATAs
-    log(LogTag::Swap, "CLEANUP_START", "🧹 Performing final ATA cleanup...");
+    log(
+        LogTag::Swap,
+        "CLEANUP_START",
+        "🧹 Performing final ATA cleanup...",
+    );
     cleanup_empty_atas(&wallet_address, &mut stats).await?;
 
     // Step 5: Print final report
     print_final_report(&stats);
 
-    log(LogTag::Swap, "BURN_COMPLETE", "✅ Dust token burn operation completed successfully");
+    log(
+        LogTag::Swap,
+        "BURN_COMPLETE",
+        "✅ Dust token burn operation completed successfully",
+    );
     Ok(())
 }
 
 /// Identify dust tokens based on configured thresholds
 async fn identify_dust_tokens(
-    token_accounts: Vec<TokenAccountInfo>
+    token_accounts: Vec<TokenAccountInfo>,
 ) -> Result<Vec<DustToken>, Box<dyn std::error::Error>> {
     let mut dust_tokens = Vec::new();
 
@@ -192,7 +234,10 @@ async fn identify_dust_tokens(
                 log(
                     LogTag::Swap,
                     "DECIMALS_MISSING",
-                    &format!("⚠️ No decimals cached for token {}, skipping", &account.mint[..8])
+                    &format!(
+                        "⚠️ No decimals cached for token {}, skipping",
+                        &account.mint[..8]
+                    ),
                 );
                 continue;
             }
@@ -226,7 +271,7 @@ async fn identify_dust_tokens(
 async fn burn_dust_tokens(
     dust_tokens: &[DustToken],
     wallet_address: &str,
-    stats: &mut BurnStats
+    stats: &mut BurnStats,
 ) -> Result<(), Box<dyn std::error::Error>> {
     for (i, dust) in dust_tokens.iter().enumerate() {
         log(
@@ -238,7 +283,7 @@ async fn burn_dust_tokens(
                 dust_tokens.len(),
                 &dust.mint[..8],
                 dust.balance_ui
-            )
+            ),
         );
 
         // Create token object for swap
@@ -274,15 +319,15 @@ async fn burn_dust_tokens(
         };
 
         // Get quote using ExactOut mode for complete liquidation
-        match
-            get_best_quote(
-                &dust.mint, // input_mint (token)
-                SOL_MINT, // output_mint (SOL)
-                dust.balance, // input_amount (all tokens)
-                wallet_address, // from_address
-                SLIPPAGE_PERCENT, // slippage
-                "ExactOut" // swap_mode - use ExactOut for complete liquidation
-            ).await
+        match get_best_quote(
+            &dust.mint,       // input_mint (token)
+            SOL_MINT,         // output_mint (SOL)
+            dust.balance,     // input_amount (all tokens)
+            wallet_address,   // from_address
+            SLIPPAGE_PERCENT, // slippage
+            "ExactOut",       // swap_mode - use ExactOut for complete liquidation
+        )
+        .await
         {
             Ok(quote) => {
                 log(
@@ -290,9 +335,8 @@ async fn burn_dust_tokens(
                     "QUOTE_SUCCESS",
                     &format!(
                         "💱 Quote obtained: {} lamports SOL, impact: {:.2}%",
-                        quote.output_amount,
-                        quote.price_impact_pct
-                    )
+                        quote.output_amount, quote.price_impact_pct
+                    ),
                 );
 
                 // Execute the swap
@@ -300,8 +344,8 @@ async fn burn_dust_tokens(
                     Ok(swap_result) => {
                         if swap_result.success {
                             let sol_received =
-                                (swap_result.output_amount.parse::<u64>().unwrap_or(0) as f64) /
-                                1_000_000_000.0;
+                                (swap_result.output_amount.parse::<u64>().unwrap_or(0) as f64)
+                                    / 1_000_000_000.0;
                             stats.tokens_burned += 1;
                             stats.total_sol_received += sol_received;
 
@@ -313,7 +357,7 @@ async fn burn_dust_tokens(
                                     dust.balance_ui,
                                     sol_received,
                                     swap_result.transaction_signature.unwrap_or_default()
-                                )
+                                ),
                             );
                         } else {
                             let error_msg = format!(
@@ -326,11 +370,8 @@ async fn burn_dust_tokens(
                         }
                     }
                     Err(e) => {
-                        let error_msg = format!(
-                            "Swap execution failed for token {}: {}",
-                            &dust.mint[..8],
-                            e
-                        );
+                        let error_msg =
+                            format!("Swap execution failed for token {}: {}", &dust.mint[..8], e);
                         stats.errors.push(error_msg.clone());
                         log(LogTag::Swap, "BURN_ERROR", &format!("❌ {}", error_msg));
                     }
@@ -355,7 +396,7 @@ async fn burn_dust_tokens(
 /// Clean up any remaining empty ATAs after burning
 async fn cleanup_empty_atas(
     wallet_address: &str,
-    stats: &mut BurnStats
+    stats: &mut BurnStats,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Get all token accounts again to find empty ones
     let token_accounts = get_all_token_accounts(wallet_address).await?;
@@ -372,7 +413,7 @@ async fn cleanup_empty_atas(
     log(
         LogTag::Swap,
         "CLOSING_ATAS",
-        &format!("🧹 Closing {} empty ATAs...", empty_accounts.len())
+        &format!("🧹 Closing {} empty ATAs...", empty_accounts.len()),
     );
 
     for account in empty_accounts {
@@ -388,13 +429,17 @@ async fn cleanup_empty_atas(
                         "✅ Closed ATA for {} - Tx: {} - Rent: 0.00203928 SOL",
                         &account.mint[..8],
                         signature
-                    )
+                    ),
                 );
             }
             Err(e) => {
                 let error_msg = format!("Failed to close ATA for {}: {}", &account.mint[..8], e);
                 stats.errors.push(error_msg.clone());
-                log(LogTag::Swap, "ATA_CLOSE_ERROR", &format!("❌ {}", error_msg));
+                log(
+                    LogTag::Swap,
+                    "ATA_CLOSE_ERROR",
+                    &format!("❌ {}", error_msg),
+                );
             }
         }
 
@@ -420,7 +465,10 @@ fn print_help() {
     println!("  --help, -h   Show this help message");
     println!("\nDUST DETECTION CRITERIA:");
     println!("  - Token amount ≤ {} UI tokens", DUST_THRESHOLD_UI);
-    println!("  - Raw balance ≥ {} lamports (minimum for swap)", MIN_SWAP_AMOUNT_LAMPORTS);
+    println!(
+        "  - Raw balance ≥ {} lamports (minimum for swap)",
+        MIN_SWAP_AMOUNT_LAMPORTS
+    );
     println!("  - Excludes tokens without cached decimals");
     println!("\nSAFETY FEATURES:");
     println!("  - Uses ExactOut swap mode for complete liquidation");
@@ -442,7 +490,12 @@ fn confirm_burn_operation(dust_tokens: &[DustToken]) -> bool {
     println!("\nTokens to burn:");
 
     for (i, dust) in dust_tokens.iter().enumerate() {
-        println!("  {}. {} - {} tokens", i + 1, &dust.mint[..8], dust.balance_ui);
+        println!(
+            "  {}. {} - {} tokens",
+            i + 1,
+            &dust.mint[..8],
+            dust.balance_ui
+        );
     }
 
     println!(
@@ -465,7 +518,10 @@ fn print_dust_summary(dust_tokens: &[DustToken]) {
     println!("\n📋 DRY RUN SUMMARY");
     println!("=================");
     println!("Tokens that would be burned: {}", dust_tokens.len());
-    println!("Estimated rent to reclaim: ~{:.6} SOL", (dust_tokens.len() as f64) * 0.00203928);
+    println!(
+        "Estimated rent to reclaim: ~{:.6} SOL",
+        (dust_tokens.len() as f64) * 0.00203928
+    );
 
     println!("\nDust tokens:");
     for (i, dust) in dust_tokens.iter().enumerate() {
@@ -489,7 +545,10 @@ fn print_final_report(stats: &BurnStats) {
     println!("ATAs closed: {}", stats.atas_closed);
     println!("Total SOL received: {:.6}", stats.total_sol_received);
     println!("Total rent reclaimed: {:.6}", stats.total_rent_reclaimed);
-    println!("Total benefit: {:.6} SOL", stats.total_sol_received + stats.total_rent_reclaimed);
+    println!(
+        "Total benefit: {:.6} SOL",
+        stats.total_sol_received + stats.total_rent_reclaimed
+    );
 
     if !stats.errors.is_empty() {
         println!("\n❌ ERRORS ({}):", stats.errors.len());

@@ -82,34 +82,14 @@ pub mod utils;
 
 // Re-export commonly used items for convenience
 pub use schemas::{
-    Config,
-    EventsConfig,
-    FilteringConfig,
-    MonitoringConfig,
-    PositionsConfig,
-    RpcConfig,
-    ServicesConfig,
-    SolPriceConfig,
-    SummaryConfig,
-    SwapsConfig,
-    TokensConfig,
-    TraderConfig,
+    Config, EventsConfig, FilteringConfig, MonitoringConfig, PositionsConfig, RpcConfig,
+    ServicesConfig, SolPriceConfig, SummaryConfig, SwapsConfig, TokensConfig, TraderConfig,
     WebserverConfig,
 };
 
 pub use utils::{
-    get_config_clone,
-    get_wallet_keypair,
-    get_wallet_pubkey,
-    get_wallet_pubkey_string,
-    is_config_initialized,
-    load_config,
-    load_config_from_path,
-    reload_config,
-    reload_config_from_path,
-    save_config,
-    update_config_section,
-    with_config,
-    CONFIG,
+    get_config_clone, get_wallet_keypair, get_wallet_pubkey, get_wallet_pubkey_string,
+    is_config_initialized, load_config, load_config_from_path, reload_config,
+    reload_config_from_path, save_config, update_config_section, with_config, CONFIG,
     CONFIG_FILE_PATH,
 };

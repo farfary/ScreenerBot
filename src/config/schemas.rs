@@ -6,7 +6,6 @@
 /// - Embedded defaults
 /// - Type safety
 /// - Serde support
-
 use crate::config_struct;
 
 // ============================================================================
@@ -87,10 +86,10 @@ config_struct! {
     pub struct PositionsConfig {
         /// Cooldown between position opens (seconds)
         position_open_cooldown_secs: i64 = 5,
-        
+
         /// TTL for pending open swaps (seconds)
         pending_open_ttl_secs: i64 = 120,
-        
+
         /// Extra SOL needed for profit calculations (accounts for priority fees, etc.)
         profit_extra_needed_sol: f64 = 0.0002,
     }
@@ -170,11 +169,11 @@ config_struct! {
         confirmation_backoff_multiplier: f64 = 1.5,
         confirmation_timeout_secs: u64 = 60,
         priority_confirmation_timeout_secs_mod: u64 = 5,
-        
+
         // Rate limit handling
         rate_limit_base_delay_secs: u64 = 5,
         rate_limit_increment_secs: u64 = 2,
-        
+
         // Early attempt delays
         early_attempt_delay_ms: u64 = 1000,
         early_attempts_count: u32 = 3,
@@ -192,7 +191,7 @@ config_struct! {
         jupiter_dynamic_compute_unit_limit: bool = false,
         jupiter_default_priority_fee: u64 = 1000,
         jupiter_default_swap_mode: String = "ExactIn".to_string(),
-        
+
         // Slippage configuration
         slippage_quote_default_pct: f64 = 1.0,
         slippage_exit_profit_shortfall_pct: f64 = 3.0,
@@ -266,7 +265,7 @@ config_struct! {
     pub struct SummaryConfig {
         /// Display refresh interval (seconds)
         summary_display_interval_secs: u64 = 15,
-        
+
         /// Maximum recent closed positions to display
         max_recent_closed_positions: usize = 20,
     }
@@ -331,25 +330,25 @@ config_struct! {
     pub struct TokensTabConfig {
         /// Default page size for token lists
         default_page_size: usize = 50,
-        
+
         /// Maximum page size (enforced limit)
         max_page_size: usize = 200,
-        
+
         /// Auto-refresh interval (milliseconds)
         auto_refresh_interval_ms: u64 = 2000,
-        
+
         /// Price staleness warning threshold (seconds)
         price_staleness_threshold_seconds: u64 = 60,
-        
+
         /// Security score threshold for "secure" view
         secure_token_score_threshold: i32 = 500,
-        
+
         /// Recent token lookback period (hours)
         recent_token_hours: i64 = 24,
-        
+
         /// Enable OHLCV charts
         enable_ohlcv_charts: bool = true,
-        
+
         /// Enable token detail page
         enable_detail_page: bool = true,
     }
@@ -414,40 +413,40 @@ config_struct! {
     pub struct Config {
         /// Main wallet private key (base58 or array format)
         main_wallet_private: String = String::new(),
-        
+
         /// RPC configuration
         rpc: RpcConfig = RpcConfig::default(),
-        
+
         /// Trader configuration
         trader: TraderConfig = TraderConfig::default(),
-        
+
         /// Positions configuration
         positions: PositionsConfig = PositionsConfig::default(),
-        
+
         /// Filtering configuration
         filtering: FilteringConfig = FilteringConfig::default(),
-        
+
         /// Swaps configuration
         swaps: SwapsConfig = SwapsConfig::default(),
-        
+
         /// Tokens configuration
         tokens: TokensConfig = TokensConfig::default(),
-        
+
         /// SOL price service configuration
         sol_price: SolPriceConfig = SolPriceConfig::default(),
-        
+
         /// Summary display configuration
         summary: SummaryConfig = SummaryConfig::default(),
-        
+
         /// Events system configuration
         events: EventsConfig = EventsConfig::default(),
-        
+
         /// Webserver configuration
         webserver: WebserverConfig = WebserverConfig::default(),
-        
+
         /// Services configuration
         services: ServicesConfig = ServicesConfig::default(),
-        
+
         /// Monitoring configuration
         monitoring: MonitoringConfig = MonitoringConfig::default(),
     }

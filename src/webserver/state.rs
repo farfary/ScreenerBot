@@ -2,7 +2,6 @@
 ///
 /// Contains references to core ScreenerBot systems and shared resources
 /// that need to be accessed by route handlers.
-
 use crate::config::WebserverConfig;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -51,7 +50,9 @@ impl AppState {
 
     /// Get server uptime in seconds
     pub fn uptime_seconds(&self) -> u64 {
-        (chrono::Utc::now() - self.startup_time).num_seconds().max(0) as u64
+        (chrono::Utc::now() - self.startup_time)
+            .num_seconds()
+            .max(0) as u64
     }
 
     /// Get all service names from ServiceManager
@@ -78,7 +79,7 @@ impl AppState {
 
     /// Get all services health
     pub async fn get_all_services_health(
-        &self
+        &self,
     ) -> std::collections::HashMap<&'static str, crate::services::ServiceHealth> {
         if let Some(manager_ref) = crate::services::get_service_manager().await {
             if let Some(manager) = manager_ref.read().await.as_ref() {
@@ -90,7 +91,7 @@ impl AppState {
 
     /// Get service metrics (optimized - uses read lock, not write lock)
     pub async fn get_service_metrics(
-        &self
+        &self,
     ) -> std::collections::HashMap<&'static str, crate::services::ServiceMetrics> {
         if let Some(manager_ref) = crate::services::get_service_manager().await {
             if let Some(manager) = manager_ref.read().await.as_ref() {

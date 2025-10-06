@@ -3,14 +3,14 @@
 // This module provides shared utility functions, constants, and helper code
 // used throughout the transactions system.
 
-use chrono::{ DateTime, Utc };
+use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
-use std::collections::{ HashMap, HashSet };
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::global::is_debug_transactions_enabled;
-use crate::logger::{ log, LogTag };
+use crate::logger::{log, LogTag};
 use crate::transactions::types::*;
 
 // =============================================================================
@@ -56,14 +56,12 @@ pub const WSOL_MINT: &str = "So11111111111111111111111111111111111111112";
 // =============================================================================
 
 /// Global known signatures cache for cross-manager coordination
-static GLOBAL_KNOWN_SIGNATURES: Lazy<Arc<Mutex<HashSet<String>>>> = Lazy::new(||
-    Arc::new(Mutex::new(HashSet::new()))
-);
+static GLOBAL_KNOWN_SIGNATURES: Lazy<Arc<Mutex<HashSet<String>>>> =
+    Lazy::new(|| Arc::new(Mutex::new(HashSet::new())));
 
 /// Global pending transactions tracking
-static GLOBAL_PENDING_TRANSACTIONS: Lazy<Arc<Mutex<HashMap<String, DateTime<Utc>>>>> = Lazy::new(||
-    Arc::new(Mutex::new(HashMap::new()))
-);
+static GLOBAL_PENDING_TRANSACTIONS: Lazy<Arc<Mutex<HashMap<String, DateTime<Utc>>>>> =
+    Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
 
 // =============================================================================
 // UTILITY FUNCTIONS
@@ -83,7 +81,11 @@ pub async fn add_signature_to_known_globally(signature: String) {
         log(
             LogTag::Transactions,
             "CACHE_TRACK",
-            &format!("Added signature {} to known cache (total={})", &signature, known_sigs.len())
+            &format!(
+                "Added signature {} to known cache (total={})",
+                &signature,
+                known_sigs.len()
+            ),
         );
     }
 }
@@ -104,7 +106,11 @@ pub async fn get_known_signatures_count() -> usize {
 pub async fn clear_global_known_signatures() {
     let mut known_sigs = GLOBAL_KNOWN_SIGNATURES.lock().await;
     known_sigs.clear();
-    log(LogTag::Transactions, "INFO", "Cleared global known signatures cache");
+    log(
+        LogTag::Transactions,
+        "INFO",
+        "Cleared global known signatures cache",
+    );
 }
 
 /// Add pending transaction globally
@@ -137,7 +143,11 @@ pub async fn cleanup_expired_pending_transactions() -> usize {
             log(
                 LogTag::Transactions,
                 "DEBUG",
-                &format!("Expired pending transaction: {} (age: {}s)", &signature[..8], age_secs)
+                &format!(
+                    "Expired pending transaction: {} (age: {}s)",
+                    &signature[..8],
+                    age_secs
+                ),
             );
             expired_count += 1;
             false
@@ -150,7 +160,7 @@ pub async fn cleanup_expired_pending_transactions() -> usize {
         log(
             LogTag::Transactions,
             "INFO",
-            &format!("Cleaned up {} expired pending transactions", expired_count)
+            &format!("Cleaned up {} expired pending transactions", expired_count),
         );
     }
 
@@ -194,140 +204,136 @@ pub fn format_lamports_change_as_sol(change_lamports: i64) -> String {
 /// Validate that a string is a valid Solana signature
 pub fn is_valid_signature(signature: &str) -> bool {
     // Solana signatures are base58 encoded and should be 88 characters long
-    signature.len() == 88 &&
-        signature
-            .chars()
-            .all(|c| {
-                c.is_ascii_alphanumeric() ||
-                    c == '1' ||
-                    c == '2' ||
-                    c == '3' ||
-                    c == '4' ||
-                    c == '5' ||
-                    c == '6' ||
-                    c == '7' ||
-                    c == '8' ||
-                    c == '9' ||
-                    c == 'A' ||
-                    c == 'B' ||
-                    c == 'C' ||
-                    c == 'D' ||
-                    c == 'E' ||
-                    c == 'F' ||
-                    c == 'G' ||
-                    c == 'H' ||
-                    c == 'J' ||
-                    c == 'K' ||
-                    c == 'L' ||
-                    c == 'M' ||
-                    c == 'N' ||
-                    c == 'P' ||
-                    c == 'Q' ||
-                    c == 'R' ||
-                    c == 'S' ||
-                    c == 'T' ||
-                    c == 'U' ||
-                    c == 'V' ||
-                    c == 'W' ||
-                    c == 'X' ||
-                    c == 'Y' ||
-                    c == 'Z' ||
-                    c == 'a' ||
-                    c == 'b' ||
-                    c == 'c' ||
-                    c == 'd' ||
-                    c == 'e' ||
-                    c == 'f' ||
-                    c == 'g' ||
-                    c == 'h' ||
-                    c == 'i' ||
-                    c == 'j' ||
-                    c == 'k' ||
-                    c == 'm' ||
-                    c == 'n' ||
-                    c == 'o' ||
-                    c == 'p' ||
-                    c == 'q' ||
-                    c == 'r' ||
-                    c == 's' ||
-                    c == 't' ||
-                    c == 'u' ||
-                    c == 'v' ||
-                    c == 'w' ||
-                    c == 'x' ||
-                    c == 'y' ||
-                    c == 'z'
-            })
+    signature.len() == 88
+        && signature.chars().all(|c| {
+            c.is_ascii_alphanumeric()
+                || c == '1'
+                || c == '2'
+                || c == '3'
+                || c == '4'
+                || c == '5'
+                || c == '6'
+                || c == '7'
+                || c == '8'
+                || c == '9'
+                || c == 'A'
+                || c == 'B'
+                || c == 'C'
+                || c == 'D'
+                || c == 'E'
+                || c == 'F'
+                || c == 'G'
+                || c == 'H'
+                || c == 'J'
+                || c == 'K'
+                || c == 'L'
+                || c == 'M'
+                || c == 'N'
+                || c == 'P'
+                || c == 'Q'
+                || c == 'R'
+                || c == 'S'
+                || c == 'T'
+                || c == 'U'
+                || c == 'V'
+                || c == 'W'
+                || c == 'X'
+                || c == 'Y'
+                || c == 'Z'
+                || c == 'a'
+                || c == 'b'
+                || c == 'c'
+                || c == 'd'
+                || c == 'e'
+                || c == 'f'
+                || c == 'g'
+                || c == 'h'
+                || c == 'i'
+                || c == 'j'
+                || c == 'k'
+                || c == 'm'
+                || c == 'n'
+                || c == 'o'
+                || c == 'p'
+                || c == 'q'
+                || c == 'r'
+                || c == 's'
+                || c == 't'
+                || c == 'u'
+                || c == 'v'
+                || c == 'w'
+                || c == 'x'
+                || c == 'y'
+                || c == 'z'
+        })
 }
 
 /// Validate that a string is a valid Solana pubkey
 pub fn is_valid_pubkey(pubkey: &str) -> bool {
     // Solana pubkeys are base58 encoded and should be 32-44 characters long
-    pubkey.len() >= 32 &&
-        pubkey.len() <= 44 &&
-        pubkey
-            .chars()
-            .all(|c| {
-                c.is_ascii_alphanumeric() ||
-                    c == '1' ||
-                    c == '2' ||
-                    c == '3' ||
-                    c == '4' ||
-                    c == '5' ||
-                    c == '6' ||
-                    c == '7' ||
-                    c == '8' ||
-                    c == '9' ||
-                    c == 'A' ||
-                    c == 'B' ||
-                    c == 'C' ||
-                    c == 'D' ||
-                    c == 'E' ||
-                    c == 'F' ||
-                    c == 'G' ||
-                    c == 'H' ||
-                    c == 'J' ||
-                    c == 'K' ||
-                    c == 'L' ||
-                    c == 'M' ||
-                    c == 'N' ||
-                    c == 'P' ||
-                    c == 'Q' ||
-                    c == 'R' ||
-                    c == 'S' ||
-                    c == 'T' ||
-                    c == 'U' ||
-                    c == 'V' ||
-                    c == 'W' ||
-                    c == 'X' ||
-                    c == 'Y' ||
-                    c == 'Z' ||
-                    c == 'a' ||
-                    c == 'b' ||
-                    c == 'c' ||
-                    c == 'd' ||
-                    c == 'e' ||
-                    c == 'f' ||
-                    c == 'g' ||
-                    c == 'h' ||
-                    c == 'i' ||
-                    c == 'j' ||
-                    c == 'k' ||
-                    c == 'm' ||
-                    c == 'n' ||
-                    c == 'o' ||
-                    c == 'p' ||
-                    c == 'q' ||
-                    c == 'r' ||
-                    c == 's' ||
-                    c == 't' ||
-                    c == 'u' ||
-                    c == 'v' ||
-                    c == 'w' ||
-                    c == 'x' ||
-                    c == 'y' ||
-                    c == 'z'
-            })
+    pubkey.len() >= 32
+        && pubkey.len() <= 44
+        && pubkey.chars().all(|c| {
+            c.is_ascii_alphanumeric()
+                || c == '1'
+                || c == '2'
+                || c == '3'
+                || c == '4'
+                || c == '5'
+                || c == '6'
+                || c == '7'
+                || c == '8'
+                || c == '9'
+                || c == 'A'
+                || c == 'B'
+                || c == 'C'
+                || c == 'D'
+                || c == 'E'
+                || c == 'F'
+                || c == 'G'
+                || c == 'H'
+                || c == 'J'
+                || c == 'K'
+                || c == 'L'
+                || c == 'M'
+                || c == 'N'
+                || c == 'P'
+                || c == 'Q'
+                || c == 'R'
+                || c == 'S'
+                || c == 'T'
+                || c == 'U'
+                || c == 'V'
+                || c == 'W'
+                || c == 'X'
+                || c == 'Y'
+                || c == 'Z'
+                || c == 'a'
+                || c == 'b'
+                || c == 'c'
+                || c == 'd'
+                || c == 'e'
+                || c == 'f'
+                || c == 'g'
+                || c == 'h'
+                || c == 'i'
+                || c == 'j'
+                || c == 'k'
+                || c == 'm'
+                || c == 'n'
+                || c == 'o'
+                || c == 'p'
+                || c == 'q'
+                || c == 'r'
+                || c == 's'
+                || c == 't'
+                || c == 'u'
+                || c == 'v'
+                || c == 'w'
+                || c == 'x'
+                || c == 'y'
+                || c == 'z'
+        })
 }
 
 /// Check if mint address is WSOL (wrapped SOL)
@@ -363,7 +369,7 @@ impl DurationMeasure {
             log(
                 LogTag::Transactions,
                 "WARN",
-                &format!("Slow operation '{}': {}ms", self.operation, ms)
+                &format!("Slow operation '{}': {}ms", self.operation, ms),
             );
         }
 
@@ -377,7 +383,7 @@ impl DurationMeasure {
         log(
             LogTag::Transactions,
             "DEBUG",
-            &format!("Operation '{}' completed in {}ms", operation, ms)
+            &format!("Operation '{}' completed in {}ms", operation, ms),
         );
         ms
     }
@@ -398,18 +404,18 @@ pub fn chunk_signatures(signatures: Vec<String>, chunk_size: usize) -> Vec<Vec<S
 /// Merge transaction statistics
 pub fn merge_transaction_stats(
     stats1: TransactionStats,
-    stats2: TransactionStats
+    stats2: TransactionStats,
 ) -> TransactionStats {
     TransactionStats {
         total_transactions: stats1.total_transactions + stats2.total_transactions,
         new_transactions_count: stats1.new_transactions_count + stats2.new_transactions_count,
         known_signatures_count: stats1.known_signatures_count + stats2.known_signatures_count,
-        pending_transactions_count: stats1.pending_transactions_count +
-        stats2.pending_transactions_count,
-        failed_transactions_count: stats1.failed_transactions_count +
-        stats2.failed_transactions_count,
-        successful_transactions_count: stats1.successful_transactions_count +
-        stats2.successful_transactions_count,
+        pending_transactions_count: stats1.pending_transactions_count
+            + stats2.pending_transactions_count,
+        failed_transactions_count: stats1.failed_transactions_count
+            + stats2.failed_transactions_count,
+        successful_transactions_count: stats1.successful_transactions_count
+            + stats2.successful_transactions_count,
     }
 }
 
@@ -419,14 +425,17 @@ pub fn merge_transaction_stats(
 
 /// Create a standardized error message for transaction operations
 pub fn create_transaction_error(operation: &str, signature: &str, error: &str) -> String {
-    format!("Transaction {} failed for {}: {}", operation, signature, error)
+    format!(
+        "Transaction {} failed for {}: {}",
+        operation, signature, error
+    )
 }
 
 /// Create a standardized error message with full address (for debugging)
 pub fn create_transaction_error_with_full_address(
     operation: &str,
     signature: &str,
-    error: &str
+    error: &str,
 ) -> String {
     format!(
         "Transaction {} failed for {}: {}",

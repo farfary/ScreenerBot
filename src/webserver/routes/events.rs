@@ -1,8 +1,8 @@
-use axum::{ extract::Query, routing::get, Json, Router };
-use serde::{ Deserialize, Serialize };
+use axum::{extract::Query, routing::get, Json, Router};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::{ events, webserver::state::AppState };
+use crate::{events, webserver::state::AppState};
 
 fn default_limit() -> usize {
     100
@@ -70,21 +70,32 @@ pub fn routes() -> Router<Arc<AppState>> {
 /// Get latest events (head) with cursor
 async fn get_events_head(Query(params): Query<HeadQuery>) -> Json<EventsListResponse> {
     let limit = params.limit.unwrap_or(200).min(1000);
-    let category = params.category.as_ref().map(|s| events::EventCategory::from_string(s));
-    let severity = params.severity.as_ref().map(|s| events::Severity::from_string(s));
+    let category = params
+        .category
+        .as_ref()
+        .map(|s| events::EventCategory::from_string(s));
+    let severity = params
+        .severity
+        .as_ref()
+        .map(|s| events::Severity::from_string(s));
     let mint = params.mint.as_deref();
     let reference = params.reference.as_deref();
 
-    let db = crate::events::EVENTS_DB.get().expect("events DB not initialized").clone();
+    let db = crate::events::EVENTS_DB
+        .get()
+        .expect("events DB not initialized")
+        .clone();
     let (events_vec, max_id) = db
-        .get_events_head(limit, category, severity, mint, reference).await
+        .get_events_head(limit, category, severity, mint, reference)
+        .await
         .unwrap_or((Vec::new(), 0));
 
     let event_responses: Vec<EventResponse> = events_vec
         .into_iter()
         .map(|e| {
             // Extract message from payload
-            let message = e.payload
+            let message = e
+                .payload
                 .get("message")
                 .and_then(|v| v.as_str())
                 .unwrap_or("No message")
@@ -99,7 +110,8 @@ async fn get_events_head(Query(params): Query<HeadQuery>) -> Json<EventsListResp
                 mint: e.mint,
                 reference_id: e.reference_id,
                 message,
-                created_at: e.created_at
+                created_at: e
+                    .created_at
                     .map(|dt| dt.to_rfc3339())
                     .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
             }
@@ -118,15 +130,25 @@ async fn get_events_head(Query(params): Query<HeadQuery>) -> Json<EventsListResp
 /// Get events newer than a cursor (since)
 async fn get_events_since(Query(params): Query<SinceQuery>) -> Json<EventsListResponse> {
     let limit = params.limit.unwrap_or(200).min(1000);
-    let category = params.category.as_ref().map(|s| events::EventCategory::from_string(s));
-    let severity = params.severity.as_ref().map(|s| events::Severity::from_string(s));
+    let category = params
+        .category
+        .as_ref()
+        .map(|s| events::EventCategory::from_string(s));
+    let severity = params
+        .severity
+        .as_ref()
+        .map(|s| events::Severity::from_string(s));
     let mint = params.mint.as_deref();
     let reference = params.reference.as_deref();
     let after_id = params.after_id;
 
-    let db = crate::events::EVENTS_DB.get().expect("events DB not initialized").clone();
+    let db = crate::events::EVENTS_DB
+        .get()
+        .expect("events DB not initialized")
+        .clone();
     let events_vec = db
-        .get_events_since(after_id, limit, category, severity, mint, reference).await
+        .get_events_since(after_id, limit, category, severity, mint, reference)
+        .await
         .unwrap_or_default();
 
     let mut max_id = after_id;
@@ -138,7 +160,8 @@ async fn get_events_since(Query(params): Query<SinceQuery>) -> Json<EventsListRe
                     max_id = id;
                 }
             }
-            let message = e.payload
+            let message = e
+                .payload
                 .get("message")
                 .and_then(|v| v.as_str())
                 .unwrap_or("No message")
@@ -152,7 +175,8 @@ async fn get_events_since(Query(params): Query<SinceQuery>) -> Json<EventsListRe
                 mint: e.mint,
                 reference_id: e.reference_id,
                 message,
-                created_at: e.created_at
+                created_at: e
+                    .created_at
                     .map(|dt| dt.to_rfc3339())
                     .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
             }
@@ -171,15 +195,25 @@ async fn get_events_since(Query(params): Query<SinceQuery>) -> Json<EventsListRe
 /// Get events older than a cursor (before)
 async fn get_events_before(Query(params): Query<BeforeQuery>) -> Json<EventsListResponse> {
     let limit = params.limit.unwrap_or(200).min(1000);
-    let category = params.category.as_ref().map(|s| events::EventCategory::from_string(s));
-    let severity = params.severity.as_ref().map(|s| events::Severity::from_string(s));
+    let category = params
+        .category
+        .as_ref()
+        .map(|s| events::EventCategory::from_string(s));
+    let severity = params
+        .severity
+        .as_ref()
+        .map(|s| events::Severity::from_string(s));
     let mint = params.mint.as_deref();
     let reference = params.reference.as_deref();
     let before_id = params.before_id;
 
-    let db = crate::events::EVENTS_DB.get().expect("events DB not initialized").clone();
+    let db = crate::events::EVENTS_DB
+        .get()
+        .expect("events DB not initialized")
+        .clone();
     let events_vec = db
-        .get_events_before(before_id, limit, category, severity, mint, reference).await
+        .get_events_before(before_id, limit, category, severity, mint, reference)
+        .await
         .unwrap_or_default();
 
     let mut max_id = 0;
@@ -191,7 +225,8 @@ async fn get_events_before(Query(params): Query<BeforeQuery>) -> Json<EventsList
                     max_id = id;
                 }
             }
-            let message = e.payload
+            let message = e
+                .payload
                 .get("message")
                 .and_then(|v| v.as_str())
                 .unwrap_or("No message")
@@ -205,7 +240,8 @@ async fn get_events_before(Query(params): Query<BeforeQuery>) -> Json<EventsList
                 mint: e.mint,
                 reference_id: e.reference_id,
                 message,
-                created_at: e.created_at
+                created_at: e
+                    .created_at
                     .map(|dt| dt.to_rfc3339())
                     .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
             }
@@ -225,10 +261,8 @@ async fn get_events_before(Query(params): Query<BeforeQuery>) -> Json<EventsList
 async fn get_categories() -> Json<serde_json::Value> {
     let counts = events::count_by_category(24).await.unwrap_or_default();
 
-    Json(
-        serde_json::json!({
+    Json(serde_json::json!({
         "categories": counts,
         "timestamp": chrono::Utc::now().to_rfc3339()
-    })
-    )
+    }))
 }

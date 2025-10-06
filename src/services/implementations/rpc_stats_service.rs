@@ -1,9 +1,9 @@
+use crate::logger::{log, LogTag};
+use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
-use crate::services::{ Service, ServiceHealth, ServiceMetrics };
-use crate::logger::{ log, LogTag };
 
 pub struct RpcStatsService;
 
@@ -29,17 +29,19 @@ impl Service for RpcStatsService {
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor
+        monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
         log(LogTag::System, "INFO", "Starting RPC stats auto-save...");
 
-        let handle = tokio::spawn(
-            monitor.instrument(async move {
-                crate::rpc::start_rpc_stats_auto_save_service(shutdown).await;
-            })
-        );
+        let handle = tokio::spawn(monitor.instrument(async move {
+            crate::rpc::start_rpc_stats_auto_save_service(shutdown).await;
+        }));
 
-        log(LogTag::System, "SUCCESS", "✅ RPC stats service started (instrumented)");
+        log(
+            LogTag::System,
+            "SUCCESS",
+            "✅ RPC stats service started (instrumented)",
+        );
 
         Ok(vec![handle])
     }

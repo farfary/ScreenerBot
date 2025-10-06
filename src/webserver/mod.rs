@@ -6,7 +6,6 @@
 /// - Service monitoring and management interface
 ///
 /// See docs/webserver-dashboard-architecture.md for full design
-
 pub mod routes;
 pub mod server;
 pub mod state;
@@ -14,4 +13,4 @@ pub mod templates;
 pub mod utils;
 
 // Public API for starting/stopping the webserver
-pub use server::{ shutdown, start_server };
+pub use server::{shutdown, start_server};

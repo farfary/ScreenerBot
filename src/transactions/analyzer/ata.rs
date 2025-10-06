@@ -9,15 +9,15 @@
 // - Rent recovery on account closure
 // - Multi-ATA operations in complex transactions
 
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 
-use crate::logger::{ log, LogTag };
-use crate::tokens::decimals::lamports_to_sol;
-use crate::transactions::{ types::*, utils::* };
 use crate::global::is_debug_transactions_enabled;
+use crate::logger::{log, LogTag};
+use crate::tokens::decimals::lamports_to_sol;
+use crate::transactions::{types::*, utils::*};
 
 // =============================================================================
 // ATA ANALYSIS TYPES
@@ -55,10 +55,10 @@ pub struct AtaOperation {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AtaOperationType {
-    Create, // ATA creation
-    Initialize, // Token account initialization
-    Close, // Account closure with rent recovery
-    Transfer, // ATA ownership transfer
+    Create,       // ATA creation
+    Initialize,   // Token account initialization
+    Close,        // Account closure with rent recovery
+    Transfer,     // ATA ownership transfer
     SetAuthority, // Authority change
     CreateNative, // Native SOL account creation
 }
@@ -121,9 +121,9 @@ pub enum AccountType {
 
 /// Standard rent amounts for different account types (in lamports)
 const STANDARD_RENTS: &[(u64, &str)] = &[
-    (2039280, "Standard ATA"), // Most common ATA rent
-    (1461600, "Token Account"), // Basic token account
-    (890880, "Mint Account"), // Token mint account
+    (2039280, "Standard ATA"),     // Most common ATA rent
+    (1461600, "Token Account"),    // Basic token account
+    (890880, "Mint Account"),      // Token mint account
     (1002240, "Multisig Account"), // Multisig account
     (5616720, "Metadata Account"), // NFT metadata account
 ];
@@ -138,13 +138,13 @@ const MAX_EXPECTED_RENT: u64 = 10_000_000_000;
 /// Analyze ATA operations and rent calculations
 pub async fn analyze_ata_operations(
     transaction: &Transaction,
-    tx_data: &crate::rpc::TransactionDetails
+    tx_data: &crate::rpc::TransactionDetails,
 ) -> Result<AtaAnalysis, String> {
     if is_debug_transactions_enabled() {
         log(
             LogTag::Transactions,
             "ATA_ANALYZE",
-            &format!("Analyzing ATA operations for tx: {}", transaction.signature)
+            &format!("Analyzing ATA operations for tx: {}", transaction.signature),
         );
     }
 
@@ -175,7 +175,7 @@ pub async fn analyze_ata_operations(
 /// Extract ATA operations from transaction instructions
 async fn extract_ata_operations(
     transaction: &Transaction,
-    tx_data: &crate::rpc::TransactionDetails
+    tx_data: &crate::rpc::TransactionDetails,
 ) -> Result<Vec<AtaOperation>, String> {
     let mut operations = Vec::new();
 
@@ -194,7 +194,7 @@ async fn extract_ata_operations(
 /// Extract ATA operations from balance changes (rent detection)
 async fn extract_from_balance_changes(
     transaction: &Transaction,
-    tx_data: &crate::rpc::TransactionDetails
+    tx_data: &crate::rpc::TransactionDetails,
 ) -> Result<Vec<AtaOperation>, String> {
     let mut operations = Vec::new();
 
@@ -204,23 +204,33 @@ async fn extract_from_balance_changes(
 
     let empty_pre_balances = Vec::new();
     let empty_post_balances = Vec::new();
-    let pre_balances = tx_data.meta
+    let pre_balances = tx_data
+        .meta
         .as_ref()
         .and_then(|m| Some(m.pre_balances.as_ref()))
         .unwrap_or(&empty_pre_balances);
 
-    let post_balances = tx_data.meta
+    let post_balances = tx_data
+        .meta
         .as_ref()
         .and_then(|m| Some(m.post_balances.as_ref()))
         .unwrap_or(&empty_post_balances);
     // Align to minimum length to handle LUT keys present in balances
     let min_len = std::cmp::min(
         account_keys.len(),
-        std::cmp::min(pre_balances.len(), post_balances.len())
+        std::cmp::min(pre_balances.len(), post_balances.len()),
     );
     let account_keys = account_keys.into_iter().take(min_len).collect::<Vec<_>>();
-    let pre_balances = pre_balances.into_iter().take(min_len).cloned().collect::<Vec<_>>();
-    let post_balances = post_balances.into_iter().take(min_len).cloned().collect::<Vec<_>>();
+    let pre_balances = pre_balances
+        .into_iter()
+        .take(min_len)
+        .cloned()
+        .collect::<Vec<_>>();
+    let post_balances = post_balances
+        .into_iter()
+        .take(min_len)
+        .cloned()
+        .collect::<Vec<_>>();
 
     for (i, account_key) in account_keys.iter().enumerate() {
         let pre_balance = pre_balances[i];
@@ -245,9 +255,8 @@ async fn extract_from_balance_changes(
                         "ATA_RENT_DETECTED",
                         &format!(
                             "account={} change_lamports={} type=Create",
-                            account_key,
-                            change_lamports
-                        )
+                            account_key, change_lamports
+                        ),
                     );
                 }
                 continue;
@@ -269,9 +278,8 @@ async fn extract_from_balance_changes(
                         "ATA_RENT_DETECTED",
                         &format!(
                             "account={} change_lamports={} type=Close",
-                            account_key,
-                            change_lamports
-                        )
+                            account_key, change_lamports
+                        ),
                     );
                 }
                 continue;
@@ -284,7 +292,7 @@ async fn extract_from_balance_changes(
 
 /// Extract ATA operations from instruction analysis
 async fn extract_from_instructions(
-    tx_data: &crate::rpc::TransactionDetails
+    tx_data: &crate::rpc::TransactionDetails,
 ) -> Result<Vec<AtaOperation>, String> {
     let mut operations = Vec::new();
 
@@ -294,7 +302,8 @@ async fn extract_from_instructions(
     // Check outer instructions
     if let Some(instructions) = message.get("instructions").and_then(|v| v.as_array()) {
         for instruction in instructions {
-            if let Some(operation) = analyze_instruction_for_ata(instruction, &account_keys).await? {
+            if let Some(operation) = analyze_instruction_for_ata(instruction, &account_keys).await?
+            {
                 operations.push(operation);
             }
         }
@@ -304,17 +313,13 @@ async fn extract_from_instructions(
     if let Some(meta) = &tx_data.meta {
         if let Some(inner_instructions) = &meta.inner_instructions {
             for inner_ix_group in inner_instructions {
-                if
-                    let Some(instructions) = inner_ix_group
-                        .get("instructions")
-                        .and_then(|v| v.as_array())
+                if let Some(instructions) = inner_ix_group
+                    .get("instructions")
+                    .and_then(|v| v.as_array())
                 {
                     for inner_ix in instructions {
-                        if
-                            let Some(operation) = analyze_instruction_for_ata(
-                                inner_ix,
-                                &account_keys
-                            ).await?
+                        if let Some(operation) =
+                            analyze_instruction_for_ata(inner_ix, &account_keys).await?
                         {
                             operations.push(operation);
                         }
@@ -330,7 +335,7 @@ async fn extract_from_instructions(
 /// Analyze individual instruction for ATA operations
 async fn analyze_instruction_for_ata(
     instruction: &Value,
-    account_keys: &[String]
+    account_keys: &[String],
 ) -> Result<Option<AtaOperation>, String> {
     let program_id_index = instruction
         .get("programIdIndex")
@@ -362,7 +367,7 @@ async fn analyze_instruction_for_ata(
 /// Parse Token program instruction for ATA-related operations
 async fn parse_token_instruction(
     instruction: &Value,
-    account_keys: &[String]
+    account_keys: &[String],
 ) -> Result<Option<AtaOperation>, String> {
     // This would implement detailed Token program instruction parsing
     // For now, return a placeholder
@@ -462,7 +467,7 @@ fn identify_rent_pattern(lamports: u64) -> Option<&'static str> {
 /// Track account creation and closure lifecycle
 async fn track_account_lifecycle(
     operations: &[AtaOperation],
-    tx_data: &crate::rpc::TransactionDetails
+    tx_data: &crate::rpc::TransactionDetails,
 ) -> Result<AccountLifecycle, String> {
     let mut created_accounts = Vec::new();
     let mut closed_accounts = Vec::new();
@@ -564,12 +569,11 @@ fn extract_account_keys(message: &Value) -> Vec<String> {
         // Fallback: array of objects with pubkey field
         keys = array
             .iter()
-            .filter_map(|v|
-                v
-                    .get("pubkey")
+            .filter_map(|v| {
+                v.get("pubkey")
                     .and_then(|p| p.as_str())
                     .map(|s| s.to_string())
-            )
+            })
             .collect();
         return keys;
     }
@@ -584,7 +588,7 @@ fn extract_account_keys(message: &Value) -> Vec<String> {
                 static_keys
                     .iter()
                     .filter_map(|v| v.as_str())
-                    .map(|s| s.to_string())
+                    .map(|s| s.to_string()),
             );
         }
 
@@ -595,7 +599,7 @@ fn extract_account_keys(message: &Value) -> Vec<String> {
                     writable
                         .iter()
                         .filter_map(|v| v.as_str())
-                        .map(|s| s.to_string())
+                        .map(|s| s.to_string()),
                 );
             }
             if let Some(readonly) = loaded.get("readonly").and_then(|v| v.as_array()) {
@@ -603,7 +607,7 @@ fn extract_account_keys(message: &Value) -> Vec<String> {
                     readonly
                         .iter()
                         .filter_map(|v| v.as_str())
-                        .map(|s| s.to_string())
+                        .map(|s| s.to_string()),
                 );
             }
         }

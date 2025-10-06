@@ -1,10 +1,9 @@
 /// Test binary for webserver-only startup
 /// This allows testing events and WebSocket functionality without running the full bot
-
 use screenerbot::{
-    config::{ load_config, get_config_clone },
+    config::{get_config_clone, load_config},
     events,
-    logger::{ log, LogTag },
+    logger::{log, LogTag},
     webserver,
 };
 use std::time::Duration;
@@ -37,8 +36,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Wait for webserver to start
     sleep(Duration::from_millis(500)).await;
 
-    log(LogTag::System, "SUCCESS", "✅ Webserver test started on http://127.0.0.1:8080");
-    log(LogTag::System, "INFO", "Open http://127.0.0.1:8080/events to test");
+    log(
+        LogTag::System,
+        "SUCCESS",
+        "✅ Webserver test started on http://127.0.0.1:8080",
+    );
+    log(
+        LogTag::System,
+        "INFO",
+        "Open http://127.0.0.1:8080/events to test",
+    );
     log(LogTag::System, "INFO", "Press Ctrl+C to stop");
 
     // Simulate some test events every 5 seconds
@@ -57,13 +64,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "test_number": counter,
                     "message": format!("Test event #{}", counter),
                     "timestamp": chrono::Utc::now().to_rfc3339()
-                })
+                }),
             );
 
             if let Err(e) = events::record(event).await {
-                log(LogTag::System, "ERROR", &format!("Failed to record test event: {}", e));
+                log(
+                    LogTag::System,
+                    "ERROR",
+                    &format!("Failed to record test event: {}", e),
+                );
             } else {
-                log(LogTag::System, "DEBUG", &format!("✅ Recorded test event #{}", counter));
+                log(
+                    LogTag::System,
+                    "DEBUG",
+                    &format!("✅ Recorded test event #{}", counter),
+                );
             }
 
             counter += 1;

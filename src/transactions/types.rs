@@ -2,8 +2,8 @@
 // CORE DATA STRUCTURES
 // =============================================================================
 
-use chrono::{ DateTime, Duration, Utc };
-use serde::{ Deserialize, Serialize };
+use chrono::{DateTime, Duration, Utc};
+use serde::{Deserialize, Serialize};
 use tabled::Tabled;
 
 // Analysis cache versioning (bump when snapshot schema changes)
@@ -274,29 +274,29 @@ pub struct InstructionInfo {
 pub struct AtaAnalysis {
     // Raw counts from transaction
     pub total_ata_creations: u32, // Total ATA creations in transaction
-    pub total_ata_closures: u32, // Total ATA closures in transaction
+    pub total_ata_closures: u32,  // Total ATA closures in transaction
 
     // Token-specific counts (for swap analysis)
     pub token_ata_creations: u32, // ATA creations for specific token
-    pub token_ata_closures: u32, // ATA closures for specific token
+    pub token_ata_closures: u32,  // ATA closures for specific token
 
     // WSOL-specific counts (for SOL wrapping/unwrapping)
     pub wsol_ata_creations: u32, // WSOL ATA creations
-    pub wsol_ata_closures: u32, // WSOL ATA closures
+    pub wsol_ata_closures: u32,  // WSOL ATA closures
 
     // Financial impact (in SOL)
-    pub total_rent_spent: f64, // Total SOL spent on ATA creation
+    pub total_rent_spent: f64,     // Total SOL spent on ATA creation
     pub total_rent_recovered: f64, // Total SOL recovered from ATA closure
     pub net_rent_impact: f64, // Net impact: recovered - spent (positive = gained SOL, negative = spent SOL)
 
     // Token-specific financial impact (for accurate swap amounts)
-    pub token_rent_spent: f64, // SOL spent on token ATA creation
-    pub token_rent_recovered: f64, // SOL recovered from token ATA closure
+    pub token_rent_spent: f64,      // SOL spent on token ATA creation
+    pub token_rent_recovered: f64,  // SOL recovered from token ATA closure
     pub token_net_rent_impact: f64, // Net token ATA impact
 
     // WSOL-specific financial impact
-    pub wsol_rent_spent: f64, // SOL spent on WSOL ATA creation
-    pub wsol_rent_recovered: f64, // SOL recovered from WSOL ATA closure
+    pub wsol_rent_spent: f64,      // SOL spent on WSOL ATA creation
+    pub wsol_rent_recovered: f64,  // SOL recovered from WSOL ATA closure
     pub wsol_net_rent_impact: f64, // Net WSOL ATA impact
 
     // Detected operations (for debugging)
@@ -309,8 +309,8 @@ pub struct AtaOperation {
     pub operation_type: AtaOperationType,
     pub account_address: String,
     pub token_mint: String, // The mint this ATA is associated with
-    pub rent_amount: f64, // SOL amount involved (spent or recovered)
-    pub is_wsol: bool, // Whether this is a WSOL ATA
+    pub rent_amount: f64,   // SOL amount involved (spent or recovered)
+    pub is_wsol: bool,      // Whether this is a WSOL ATA
     // Compatibility alias fields for debug tools
     pub mint: String,
     pub rent_cost_sol: Option<f64>,
@@ -371,7 +371,7 @@ pub struct SwapPnLInfo {
     pub ata_closed_count: u32,
 
     pub slot: Option<u64>, // Solana slot number for reliable chronological sorting
-    pub status: String, // Transaction status: "✅ Success", "❌ Failed", "⚠️ Partial", etc.
+    pub status: String,    // Transaction status: "✅ Success", "❌ Failed", "⚠️ Partial", etc.
 
     // Legacy fields used by debug tools
     pub sol_spent: f64,
@@ -486,10 +486,10 @@ pub struct PositionAnalysis {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PositionStatus {
-    Open, // Has remaining tokens, no sells
-    Closed, // No remaining tokens, fully sold
+    Open,             // Has remaining tokens, no sells
+    Closed,           // No remaining tokens, fully sold
     PartiallyReduced, // Has remaining tokens, some sells
-    Oversold, // Negative token balance (sold more than bought)
+    Oversold,         // Negative token balance (sold more than bought)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,8 +1,8 @@
 /// Solana Blockchain Error Classifications
 /// This module provides structured error handling for Solana blockchain-specific errors
 /// replacing the current string-based error approach throughout the codebase.
-use chrono::{ DateTime, Utc };
-use serde::{ Deserialize, Serialize };
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt;
 use tokio::time::Duration;
@@ -188,18 +188,18 @@ pub enum CommitmentLevel {
 /// Network congestion levels
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CongestionLevel {
-    Low, // < 1000 TPS
-    Medium, // 1000-2000 TPS
-    High, // 2000-3000 TPS
+    Low,     // < 1000 TPS
+    Medium,  // 1000-2000 TPS
+    High,    // 2000-3000 TPS
     Extreme, // > 3000 TPS
 }
 
 /// Error severity classification
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd)]
 pub enum ErrorSeverity {
-    Low, // Temporary, auto-recoverable
-    Medium, // May need retry with different strategy
-    High, // Requires attention, affects functionality
+    Low,      // Temporary, auto-recoverable
+    Medium,   // May need retry with different strategy
+    High,     // Requires attention, affects functionality
     Critical, // System failure, immediate action needed
 }
 
@@ -242,12 +242,16 @@ impl BlockchainError {
             BlockchainError::TransactionNotFound { age_seconds, .. } => {
                 match age_seconds {
                     Some(age) if *age > 300 => ErrorSeverity::Medium, // > 5 minutes
-                    Some(age) if *age > 60 => ErrorSeverity::Low, // > 1 minute
-                    _ => ErrorSeverity::Low, // Recent
+                    Some(age) if *age > 60 => ErrorSeverity::Low,     // > 1 minute
+                    _ => ErrorSeverity::Low,                          // Recent
                 }
             }
             BlockchainError::BlockhashExpired { age_seconds, .. } => {
-                if *age_seconds > 300 { ErrorSeverity::Medium } else { ErrorSeverity::Low }
+                if *age_seconds > 300 {
+                    ErrorSeverity::Medium
+                } else {
+                    ErrorSeverity::Low
+                }
             }
             BlockchainError::NetworkCongested { current_tps, .. } => {
                 if *current_tps < 500.0 {
@@ -258,7 +262,10 @@ impl BlockchainError {
                     ErrorSeverity::Medium
                 }
             }
-            BlockchainError::ValidatorUnresponsive { last_response_seconds, .. } => {
+            BlockchainError::ValidatorUnresponsive {
+                last_response_seconds,
+                ..
+            } => {
                 if *last_response_seconds > 300 {
                     ErrorSeverity::High
                 } else {
@@ -268,12 +275,16 @@ impl BlockchainError {
             BlockchainError::InstructionError { error_code, .. } => {
                 match error_code {
                     0x1 => ErrorSeverity::Medium, // InsufficientFunds
-                    0x6 => ErrorSeverity::Low, // InvalidAccountData (may be temporary)
+                    0x6 => ErrorSeverity::Low,    // InvalidAccountData (may be temporary)
                     _ => ErrorSeverity::Medium,
                 }
             }
             BlockchainError::ConfirmationTimeout { waited_seconds, .. } => {
-                if *waited_seconds > 300 { ErrorSeverity::High } else { ErrorSeverity::Medium }
+                if *waited_seconds > 300 {
+                    ErrorSeverity::High
+                } else {
+                    ErrorSeverity::Medium
+                }
             }
             _ => ErrorSeverity::Medium,
         }
@@ -282,53 +293,45 @@ impl BlockchainError {
     /// Get the recommended recovery strategy
     pub fn get_recovery_strategy(&self) -> RecoveryStrategy {
         match self {
-            BlockchainError::BlockhashExpired { .. } =>
-                RecoveryStrategy::RefreshAndRetry {
-                    refresh_blockhash: true,
-                    refresh_account_data: false,
-                    delay_seconds: 1,
+            BlockchainError::BlockhashExpired { .. } => RecoveryStrategy::RefreshAndRetry {
+                refresh_blockhash: true,
+                refresh_account_data: false,
+                delay_seconds: 1,
+            },
+            BlockchainError::TransactionNotFound { age_seconds, .. } => match age_seconds {
+                Some(age) if *age > 300 => RecoveryStrategy::NoRetry,
+                _ => RecoveryStrategy::WaitForConfirmation {
+                    timeout_seconds: 120,
+                    poll_interval_seconds: 10,
                 },
-            BlockchainError::TransactionNotFound { age_seconds, .. } =>
-                match age_seconds {
-                    Some(age) if *age > 300 => RecoveryStrategy::NoRetry,
-                    _ =>
-                        RecoveryStrategy::WaitForConfirmation {
-                            timeout_seconds: 120,
-                            poll_interval_seconds: 10,
-                        },
-                }
-            BlockchainError::NetworkCongested { .. } =>
-                RecoveryStrategy::EscalateFees {
-                    increase_percentage: 50.0,
-                    max_fee_lamports: 100_000,
-                },
-            BlockchainError::ValidatorUnresponsive { .. } =>
-                RecoveryStrategy::SwitchRpcProvider {
-                    preferred_commitment: CommitmentLevel::Confirmed,
-                },
-            BlockchainError::AccountNotFound { .. } =>
-                RecoveryStrategy::Retry {
-                    delay_seconds: 2,
-                    max_attempts: 3,
-                    exponential_backoff: false,
-                },
+            },
+            BlockchainError::NetworkCongested { .. } => RecoveryStrategy::EscalateFees {
+                increase_percentage: 50.0,
+                max_fee_lamports: 100_000,
+            },
+            BlockchainError::ValidatorUnresponsive { .. } => RecoveryStrategy::SwitchRpcProvider {
+                preferred_commitment: CommitmentLevel::Confirmed,
+            },
+            BlockchainError::AccountNotFound { .. } => RecoveryStrategy::Retry {
+                delay_seconds: 2,
+                max_attempts: 3,
+                exponential_backoff: false,
+            },
             BlockchainError::InstructionError { error_code, .. } => {
                 match error_code {
                     0x1 => RecoveryStrategy::NoRetry, // InsufficientFunds - don't retry
-                    _ =>
-                        RecoveryStrategy::Retry {
-                            delay_seconds: 5,
-                            max_attempts: 2,
-                            exponential_backoff: false,
-                        },
+                    _ => RecoveryStrategy::Retry {
+                        delay_seconds: 5,
+                        max_attempts: 2,
+                        exponential_backoff: false,
+                    },
                 }
             }
-            _ =>
-                RecoveryStrategy::Retry {
-                    delay_seconds: 3,
-                    max_attempts: 3,
-                    exponential_backoff: true,
-                },
+            _ => RecoveryStrategy::Retry {
+                delay_seconds: 3,
+                max_attempts: 3,
+                exponential_backoff: true,
+            },
         }
     }
 
@@ -336,10 +339,14 @@ impl BlockchainError {
     pub fn estimated_recovery_time(&self) -> Option<Duration> {
         match self {
             BlockchainError::BlockhashExpired { .. } => Some(Duration::from_secs(30)),
-            BlockchainError::NetworkCongested { estimated_delay_seconds, .. } =>
-                Some(Duration::from_secs(*estimated_delay_seconds)),
-            BlockchainError::CommitmentTooLow { estimated_wait_seconds, .. } =>
-                Some(Duration::from_secs(*estimated_wait_seconds)),
+            BlockchainError::NetworkCongested {
+                estimated_delay_seconds,
+                ..
+            } => Some(Duration::from_secs(*estimated_delay_seconds)),
+            BlockchainError::CommitmentTooLow {
+                estimated_wait_seconds,
+                ..
+            } => Some(Duration::from_secs(*estimated_wait_seconds)),
             BlockchainError::TransactionDropped { .. } => Some(Duration::from_secs(60)),
             BlockchainError::ValidatorBehind { lag_minutes, .. } => {
                 Some(Duration::from_secs(*lag_minutes * 60))
@@ -359,43 +366,53 @@ impl BlockchainError {
     /// Get user-friendly error message
     pub fn user_message(&self) -> String {
         match self {
-            BlockchainError::TransactionNotFound { signature, age_seconds, .. } =>
-                match age_seconds {
-                    Some(age) if *age > 300 =>
-                        format!(
-                            "Transaction {} not found after {} minutes - likely failed",
-                            signature,
-                            age / 60
-                        ),
-                    Some(age) => format!("Transaction {} still processing ({}s)", signature, age),
-                    None => format!("Transaction {} not yet indexed", signature),
-                }
-            BlockchainError::BlockhashExpired { signature, age_seconds, .. } => {
+            BlockchainError::TransactionNotFound {
+                signature,
+                age_seconds,
+                ..
+            } => match age_seconds {
+                Some(age) if *age > 300 => format!(
+                    "Transaction {} not found after {} minutes - likely failed",
+                    signature,
+                    age / 60
+                ),
+                Some(age) => format!("Transaction {} still processing ({}s)", signature, age),
+                None => format!("Transaction {} not yet indexed", signature),
+            },
+            BlockchainError::BlockhashExpired {
+                signature,
+                age_seconds,
+                ..
+            } => {
                 format!(
                     "Transaction {} failed: blockhash expired ({}s old)",
-                    signature
-                        .as_ref()
-                        .map(|s| s)
-                        .map_or("unknown", |v| v),
+                    signature.as_ref().map(|s| s).map_or("unknown", |v| v),
                     age_seconds
                 )
             }
-            BlockchainError::NetworkCongested { current_tps, estimated_delay_seconds, .. } => {
+            BlockchainError::NetworkCongested {
+                current_tps,
+                estimated_delay_seconds,
+                ..
+            } => {
                 format!(
                     "Network congested ({:.0} TPS), estimated delay: {}s",
-                    current_tps,
-                    estimated_delay_seconds
+                    current_tps, estimated_delay_seconds
                 )
             }
-            BlockchainError::InsufficientFunds { signature, required, available } => {
+            BlockchainError::InsufficientFunds {
+                signature,
+                required,
+                available,
+            } => {
                 format!(
                     "Transaction {} failed: insufficient funds (need {} lamports, have {})",
-                    signature,
-                    required,
-                    available
+                    signature, required, available
                 )
             }
-            BlockchainError::AccountNotFound { pubkey, context, .. } => {
+            BlockchainError::AccountNotFound {
+                pubkey, context, ..
+            } => {
                 format!("Account {} not found ({})", pubkey, context)
             }
             _ => format!("{:?}", self), // Fallback to debug format
@@ -414,7 +431,7 @@ impl std::error::Error for BlockchainError {}
 /// Parse structured Solana transaction error from meta.err JSON
 pub fn parse_structured_solana_error(
     error_value: &Value,
-    signature: Option<&str>
+    signature: Option<&str>,
 ) -> SolanaTransactionError {
     match error_value {
         // InstructionError format: {"InstructionError": [index, error_detail]}
@@ -451,7 +468,7 @@ pub fn parse_structured_solana_error(
 fn parse_instruction_error(
     instruction_index: u8,
     error_detail: &Value,
-    raw_error: &Value
+    raw_error: &Value,
 ) -> SolanaTransactionError {
     match error_detail {
         // Custom program errors: {"Custom": 6001}
@@ -492,27 +509,50 @@ fn parse_instruction_error(
 /// Parse transaction-level errors (string errors like "BlockhashNotFound")
 fn parse_transaction_level_error(error_string: &str, raw_error: &Value) -> SolanaTransactionError {
     let (failure_type, description) = match error_string {
-        "BlockhashNotFound" =>
-            (FailureType::Temporary, "Transaction blockhash has expired".to_string()),
-        "AlreadyProcessed" =>
-            (FailureType::Permanent, "Transaction has already been processed".to_string()),
-        "AccountInUse" =>
-            (FailureType::Temporary, "Account is being used by another transaction".to_string()),
-        "InsufficientFundsForFee" =>
-            (FailureType::Permanent, "Insufficient SOL to pay transaction fee".to_string()),
-        "SignatureFailure" =>
-            (FailureType::Permanent, "Transaction signature verification failed".to_string()),
-        "UnsupportedVersion" =>
-            (FailureType::Permanent, "Transaction version is not supported".to_string()),
-        "InvalidAccountIndex" =>
-            (FailureType::Permanent, "Transaction contains invalid account reference".to_string()),
-        "InvalidProgramForExecution" =>
-            (FailureType::Permanent, "Program cannot be used for execution".to_string()),
-        "SanitizeFailure" =>
-            (FailureType::Permanent, "Transaction failed sanitization checks".to_string()),
-        "WouldExceedMaxBlockCostLimit" =>
-            (FailureType::Temporary, "Transaction would exceed block cost limit".to_string()),
-        _ => (FailureType::Uncertain, format!("Unknown transaction error: {}", error_string)),
+        "BlockhashNotFound" => (
+            FailureType::Temporary,
+            "Transaction blockhash has expired".to_string(),
+        ),
+        "AlreadyProcessed" => (
+            FailureType::Permanent,
+            "Transaction has already been processed".to_string(),
+        ),
+        "AccountInUse" => (
+            FailureType::Temporary,
+            "Account is being used by another transaction".to_string(),
+        ),
+        "InsufficientFundsForFee" => (
+            FailureType::Permanent,
+            "Insufficient SOL to pay transaction fee".to_string(),
+        ),
+        "SignatureFailure" => (
+            FailureType::Permanent,
+            "Transaction signature verification failed".to_string(),
+        ),
+        "UnsupportedVersion" => (
+            FailureType::Permanent,
+            "Transaction version is not supported".to_string(),
+        ),
+        "InvalidAccountIndex" => (
+            FailureType::Permanent,
+            "Transaction contains invalid account reference".to_string(),
+        ),
+        "InvalidProgramForExecution" => (
+            FailureType::Permanent,
+            "Program cannot be used for execution".to_string(),
+        ),
+        "SanitizeFailure" => (
+            FailureType::Permanent,
+            "Transaction failed sanitization checks".to_string(),
+        ),
+        "WouldExceedMaxBlockCostLimit" => (
+            FailureType::Temporary,
+            "Transaction would exceed block cost limit".to_string(),
+        ),
+        _ => (
+            FailureType::Uncertain,
+            format!("Unknown transaction error: {}", error_string),
+        ),
     };
 
     SolanaTransactionError {
@@ -529,179 +569,195 @@ fn parse_transaction_level_error(error_string: &str, raw_error: &Value) -> Solan
 fn classify_custom_error(code: u32) -> (FailureType, String, String) {
     match code {
         // DEX Trading Errors (Permanent)
-        6001 =>
-            (
-                FailureType::Permanent,
-                "SlippageExceeded".to_string(),
-                "Price slippage tolerance exceeded".to_string(),
-            ),
-        6002 =>
-            (
-                FailureType::Permanent,
-                "InsufficientLiquidity".to_string(),
-                "Insufficient liquidity in pool".to_string(),
-            ),
-        6003 =>
-            (
-                FailureType::Permanent,
-                "InvalidTokenAccount".to_string(),
-                "Invalid token account provided".to_string(),
-            ),
-        6004 =>
-            (
-                FailureType::Permanent,
-                "InvalidPoolState".to_string(),
-                "AMM pool is in invalid state".to_string(),
-            ),
-        6005 =>
-            (
-                FailureType::Permanent,
-                "InvalidCalculation".to_string(),
-                "Swap calculation failed".to_string(),
-            ),
-        6006 =>
-            (
-                FailureType::Temporary,
-                "PoolSuspended".to_string(),
-                "Trading pool is temporarily suspended".to_string(),
-            ),
-        6007 =>
-            (
-                FailureType::Permanent,
-                "InvalidTokenMint".to_string(),
-                "Invalid token mint provided".to_string(),
-            ),
-        6008 =>
-            (
-                FailureType::Permanent,
-                "InvalidSwapDirection".to_string(),
-                "Invalid swap direction".to_string(),
-            ),
-        6009 =>
-            (
-                FailureType::Temporary,
-                "RouteNotFound".to_string(),
-                "No valid route found for swap".to_string(),
-            ),
-        6010 =>
-            (
-                FailureType::Permanent,
-                "PriceImpactTooHigh".to_string(),
-                "Price impact exceeds maximum allowed".to_string(),
-            ),
+        6001 => (
+            FailureType::Permanent,
+            "SlippageExceeded".to_string(),
+            "Price slippage tolerance exceeded".to_string(),
+        ),
+        6002 => (
+            FailureType::Permanent,
+            "InsufficientLiquidity".to_string(),
+            "Insufficient liquidity in pool".to_string(),
+        ),
+        6003 => (
+            FailureType::Permanent,
+            "InvalidTokenAccount".to_string(),
+            "Invalid token account provided".to_string(),
+        ),
+        6004 => (
+            FailureType::Permanent,
+            "InvalidPoolState".to_string(),
+            "AMM pool is in invalid state".to_string(),
+        ),
+        6005 => (
+            FailureType::Permanent,
+            "InvalidCalculation".to_string(),
+            "Swap calculation failed".to_string(),
+        ),
+        6006 => (
+            FailureType::Temporary,
+            "PoolSuspended".to_string(),
+            "Trading pool is temporarily suspended".to_string(),
+        ),
+        6007 => (
+            FailureType::Permanent,
+            "InvalidTokenMint".to_string(),
+            "Invalid token mint provided".to_string(),
+        ),
+        6008 => (
+            FailureType::Permanent,
+            "InvalidSwapDirection".to_string(),
+            "Invalid swap direction".to_string(),
+        ),
+        6009 => (
+            FailureType::Temporary,
+            "RouteNotFound".to_string(),
+            "No valid route found for swap".to_string(),
+        ),
+        6010 => (
+            FailureType::Permanent,
+            "PriceImpactTooHigh".to_string(),
+            "Price impact exceeds maximum allowed".to_string(),
+        ),
 
         // Orca DEX specific errors
-        34 =>
-            (
-                FailureType::Permanent,
-                "OrcaSlippageExceeded".to_string(),
-                "Orca slippage tolerance exceeded".to_string(),
-            ),
-        35 =>
-            (
-                FailureType::Permanent,
-                "OrcaInvalidSwap".to_string(),
-                "Orca invalid swap parameters".to_string(),
-            ),
+        34 => (
+            FailureType::Permanent,
+            "OrcaSlippageExceeded".to_string(),
+            "Orca slippage tolerance exceeded".to_string(),
+        ),
+        35 => (
+            FailureType::Permanent,
+            "OrcaInvalidSwap".to_string(),
+            "Orca invalid swap parameters".to_string(),
+        ),
 
         // Raydium DEX specific errors
-        6000 =>
-            (
-                FailureType::Permanent,
-                "RaydiumInvalidInput".to_string(),
-                "Raydium invalid input parameters".to_string(),
-            ),
-        6011 =>
-            (
-                FailureType::Permanent,
-                "RaydiumInsufficientFunds".to_string(),
-                "Raydium insufficient funds for swap".to_string(),
-            ),
+        6000 => (
+            FailureType::Permanent,
+            "RaydiumInvalidInput".to_string(),
+            "Raydium invalid input parameters".to_string(),
+        ),
+        6011 => (
+            FailureType::Permanent,
+            "RaydiumInsufficientFunds".to_string(),
+            "Raydium insufficient funds for swap".to_string(),
+        ),
 
         // SPL Token errors
-        0 =>
-            (
-                FailureType::Permanent,
-                "TokenInsufficientFunds".to_string(),
-                "Insufficient token balance".to_string(),
-            ),
-        1 =>
-            (
-                FailureType::Permanent,
-                "TokenInvalidInstruction".to_string(),
-                "Invalid token instruction".to_string(),
-            ),
-        3 =>
-            (
-                FailureType::Permanent,
-                "TokenOwnerMismatch".to_string(),
-                "Token account owner mismatch".to_string(),
-            ),
-        5 =>
-            (
-                FailureType::Permanent,
-                "TokenInvalidAmount".to_string(),
-                "Invalid token amount".to_string(),
-            ),
-        17 =>
-            (
-                FailureType::Permanent,
-                "TokenAccountFrozen".to_string(),
-                "Token account is frozen".to_string(),
-            ),
+        0 => (
+            FailureType::Permanent,
+            "TokenInsufficientFunds".to_string(),
+            "Insufficient token balance".to_string(),
+        ),
+        1 => (
+            FailureType::Permanent,
+            "TokenInvalidInstruction".to_string(),
+            "Invalid token instruction".to_string(),
+        ),
+        3 => (
+            FailureType::Permanent,
+            "TokenOwnerMismatch".to_string(),
+            "Token account owner mismatch".to_string(),
+        ),
+        5 => (
+            FailureType::Permanent,
+            "TokenInvalidAmount".to_string(),
+            "Invalid token amount".to_string(),
+        ),
+        17 => (
+            FailureType::Permanent,
+            "TokenAccountFrozen".to_string(),
+            "Token account is frozen".to_string(),
+        ),
 
         // Generic program errors
-        _ =>
-            (
-                FailureType::Uncertain,
-                format!("CustomError{}", code),
-                format!("Custom program error code: {}", code),
-            ),
+        _ => (
+            FailureType::Uncertain,
+            format!("CustomError{}", code),
+            format!("Custom program error code: {}", code),
+        ),
     }
 }
 
 /// Classify built-in instruction errors
 fn classify_builtin_error(error_name: &str) -> (FailureType, String) {
     match error_name {
-        "GenericError" => (FailureType::Uncertain, "Generic instruction error".to_string()),
-        "InsufficientFunds" =>
-            (FailureType::Permanent, "Insufficient lamports for operation".to_string()),
-        "IncorrectProgramId" =>
-            (FailureType::Permanent, "Incorrect program ID provided".to_string()),
-        "InvalidAccountData" => (FailureType::Permanent, "Account data is invalid".to_string()),
-        "InvalidInstructionData" =>
-            (FailureType::Permanent, "Instruction data is invalid".to_string()),
-        "ReadonlyLamportChange" =>
-            (
-                FailureType::Permanent,
-                "Attempted to change lamports in readonly account".to_string(),
-            ),
-        "ReadonlyDataModified" =>
-            (FailureType::Permanent, "Attempted to modify readonly account data".to_string()),
-        "DuplicateAccountIndex" =>
-            (FailureType::Permanent, "Duplicate account index in instruction".to_string()),
-        "ExecutableModified" =>
-            (FailureType::Permanent, "Attempted to modify executable account".to_string()),
-        "RentEpochModified" =>
-            (FailureType::Permanent, "Attempted to modify rent epoch".to_string()),
-        "NotEnoughAccountKeys" =>
-            (FailureType::Permanent, "Not enough account keys provided".to_string()),
-        "AccountDataSizeChanged" =>
-            (FailureType::Permanent, "Account data size unexpectedly changed".to_string()),
-        "AccountNotExecutable" => (FailureType::Permanent, "Account is not executable".to_string()),
-        "AccountBorrowFailed" => (FailureType::Temporary, "Failed to borrow account".to_string()),
-        "AccountBorrowOutstanding" =>
-            (FailureType::Temporary, "Account has outstanding borrow".to_string()),
-        "DuplicateAccountOutOfSync" =>
-            (FailureType::Permanent, "Duplicate account is out of sync".to_string()),
-        _ => (FailureType::Uncertain, format!("Unknown built-in error: {}", error_name)),
+        "GenericError" => (
+            FailureType::Uncertain,
+            "Generic instruction error".to_string(),
+        ),
+        "InsufficientFunds" => (
+            FailureType::Permanent,
+            "Insufficient lamports for operation".to_string(),
+        ),
+        "IncorrectProgramId" => (
+            FailureType::Permanent,
+            "Incorrect program ID provided".to_string(),
+        ),
+        "InvalidAccountData" => (
+            FailureType::Permanent,
+            "Account data is invalid".to_string(),
+        ),
+        "InvalidInstructionData" => (
+            FailureType::Permanent,
+            "Instruction data is invalid".to_string(),
+        ),
+        "ReadonlyLamportChange" => (
+            FailureType::Permanent,
+            "Attempted to change lamports in readonly account".to_string(),
+        ),
+        "ReadonlyDataModified" => (
+            FailureType::Permanent,
+            "Attempted to modify readonly account data".to_string(),
+        ),
+        "DuplicateAccountIndex" => (
+            FailureType::Permanent,
+            "Duplicate account index in instruction".to_string(),
+        ),
+        "ExecutableModified" => (
+            FailureType::Permanent,
+            "Attempted to modify executable account".to_string(),
+        ),
+        "RentEpochModified" => (
+            FailureType::Permanent,
+            "Attempted to modify rent epoch".to_string(),
+        ),
+        "NotEnoughAccountKeys" => (
+            FailureType::Permanent,
+            "Not enough account keys provided".to_string(),
+        ),
+        "AccountDataSizeChanged" => (
+            FailureType::Permanent,
+            "Account data size unexpectedly changed".to_string(),
+        ),
+        "AccountNotExecutable" => (
+            FailureType::Permanent,
+            "Account is not executable".to_string(),
+        ),
+        "AccountBorrowFailed" => (
+            FailureType::Temporary,
+            "Failed to borrow account".to_string(),
+        ),
+        "AccountBorrowOutstanding" => (
+            FailureType::Temporary,
+            "Account has outstanding borrow".to_string(),
+        ),
+        "DuplicateAccountOutOfSync" => (
+            FailureType::Permanent,
+            "Duplicate account is out of sync".to_string(),
+        ),
+        _ => (
+            FailureType::Uncertain,
+            format!("Unknown built-in error: {}", error_name),
+        ),
     }
 }
 
 /// Helper to create unknown instruction error
 fn create_unknown_instruction_error(
     instruction_index: u8,
-    raw_error: &Value
+    raw_error: &Value,
 ) -> SolanaTransactionError {
     SolanaTransactionError {
         error_type: FailureType::Uncertain,
@@ -727,15 +783,14 @@ pub fn is_temporary_failure(error: &SolanaTransactionError) -> bool {
 pub fn parse_solana_error(
     error_message: &str,
     signature: Option<&str>,
-    context: &str
+    context: &str,
 ) -> BlockchainError {
     let error_lower = error_message.to_lowercase();
     let sig = signature.map(|s| s.to_string());
 
     // Blockhash errors
-    if
-        error_lower.contains("blockhash") &&
-        (error_lower.contains("not found") || error_lower.contains("expired"))
+    if error_lower.contains("blockhash")
+        && (error_lower.contains("not found") || error_lower.contains("expired"))
     {
         return BlockchainError::BlockhashExpired {
             blockhash: extract_blockhash(error_message).unwrap_or_else(|| "unknown".to_string()),

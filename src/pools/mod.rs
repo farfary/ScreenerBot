@@ -20,37 +20,28 @@ pub mod utils; // Utility functions for SOL detection and vault pairing
 
 // Re-export only the public API
 pub use api::{
-    check_price_history_quality,
-    get_available_tokens,
-    get_cache_stats,
-    get_extended_price_history,
-    get_pool_price,
-    get_price_history,
-    get_price_history_stats,
-    load_token_history_into_cache,
+    check_price_history_quality, get_available_tokens, get_cache_stats, get_extended_price_history,
+    get_pool_price, get_price_history, get_price_history_stats, load_token_history_into_cache,
     PriceHistoryStats,
 };
 pub use discovery::{
-    get_canonical_pool_address,
-    PoolDiscovery,
-    ENABLE_DEXSCREENER_DISCOVERY,
-    ENABLE_GECKOTERMINAL_DISCOVERY,
-    ENABLE_RAYDIUM_DISCOVERY,
+    get_canonical_pool_address, PoolDiscovery, ENABLE_DEXSCREENER_DISCOVERY,
+    ENABLE_GECKOTERMINAL_DISCOVERY, ENABLE_RAYDIUM_DISCOVERY,
 };
 pub use service::{
+    get_account_fetcher,
     get_debug_token_override,
-    is_pool_service_running,
-    set_debug_token_override,
-    stop_pool_service,
+    get_pool_analyzer,
+    get_pool_discovery,
+    get_price_calculator,
     // New functions for ServiceManager integration
     initialize_pool_components,
+    is_pool_service_running,
+    set_debug_token_override,
     start_helper_tasks,
-    get_pool_discovery,
-    get_account_fetcher,
-    get_price_calculator,
-    get_pool_analyzer,
+    stop_pool_service,
 };
-pub use types::{ PoolError, PriceResult }; // Expose for configuration access
+pub use types::{PoolError, PriceResult}; // Expose for configuration access
 
 // Internal modules (not exposed)
 mod analyzer;
@@ -72,7 +63,7 @@ pub use fetcher::AccountData;
 /// This function initializes pool components only (no background tasks).
 /// Background tasks are now managed by separate services via ServiceManager.
 pub async fn init_pool_service(
-    shutdown: Arc<Notify>
+    shutdown: Arc<Notify>,
 ) -> Result<tokio::task::JoinHandle<()>, PoolError> {
     initialize_pool_components().await?;
 

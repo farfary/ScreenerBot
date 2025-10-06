@@ -1,16 +1,16 @@
 use crate::global::is_debug_monitor_enabled;
 /// Token monitoring system for periodic updates of database tokens
 /// Updates existing tokens based on liquidity priority and time constraints
-use crate::logger::{ log, LogTag };
+use crate::logger::{log, LogTag};
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::dexscreener::get_global_dexscreener_api;
-use chrono::{ DateTime, Utc };
+use chrono::{DateTime, Utc};
 use futures::TryFutureExt;
 use rand::seq::SliceRandom;
-use std::collections::{ HashMap, HashSet };
-use std::sync::{ Arc, OnceLock };
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, OnceLock};
 use tokio::sync::RwLock;
-use tokio::time::{ sleep, Duration };
+use tokio::time::{sleep, Duration};
 
 // =============================================================================
 // CONFIGURATION CONSTANTS
@@ -95,8 +95,10 @@ impl TokenMonitor {
         let now = Utc::now();
 
         // Get all tokens from database
-        let all_tokens = self.database
-            .get_all_tokens_with_update_time().await
+        let all_tokens = self
+            .database
+            .get_all_tokens_with_update_time()
+            .await
             .map_err(|e| format!("Failed to get tokens from database: {}", e))?;
 
         if all_tokens.is_empty() {
@@ -118,12 +120,14 @@ impl TokenMonitor {
         let mut selected_tokens: Vec<String> = Vec::new();
         let mut selected_set: std::collections::HashSet<String> = std::collections::HashSet::new();
         if NEW_TOKEN_BOOST_PER_CYCLE > 0 {
-            if
-                let Ok(boost_mints) = self.database.get_new_tokens_needing_boost(
+            if let Ok(boost_mints) = self
+                .database
+                .get_new_tokens_needing_boost(
                     NEW_TOKEN_BOOST_MAX_AGE_MINUTES,
                     NEW_TOKEN_BOOST_MIN_STALE_MINUTES,
-                    NEW_TOKEN_BOOST_PER_CYCLE
-                ).await
+                    NEW_TOKEN_BOOST_PER_CYCLE,
+                )
+                .await
             {
                 for mint in boost_mints.into_iter() {
                     if selected_set.insert(mint.clone()) {
@@ -158,12 +162,9 @@ impl TokenMonitor {
         }
 
         // Sort each bucket by age descending (oldest first); tie-breaker by liquidity desc
-        let by_age_then_liq = |a: &(String, f64, i64), b: &(String, f64, i64)| {
-            match b.2.cmp(&a.2) {
-                std::cmp::Ordering::Equal =>
-                    b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal),
-                other => other,
-            }
+        let by_age_then_liq = |a: &(String, f64, i64), b: &(String, f64, i64)| match b.2.cmp(&a.2) {
+            std::cmp::Ordering::Equal => b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal),
+            other => other,
         };
         high.sort_by(by_age_then_liq);
         mid.sort_by(by_age_then_liq);
@@ -198,19 +199,16 @@ impl TokenMonitor {
         }
 
         // Helper to drain up to n mints from a bucket
-        let mut take_from_bucket = |
-            bucket: &mut Vec<(String, f64, i64)>,
-            n: usize,
-            out: &mut Vec<String>
-        | -> usize {
-            let take_n = std::cmp::min(n, bucket.len());
-            for (mint, _liq, _age) in bucket.drain(..take_n) {
-                if selected_set.insert(mint.clone()) {
-                    out.push(mint);
+        let mut take_from_bucket =
+            |bucket: &mut Vec<(String, f64, i64)>, n: usize, out: &mut Vec<String>| -> usize {
+                let take_n = std::cmp::min(n, bucket.len());
+                for (mint, _liq, _age) in bucket.drain(..take_n) {
+                    if selected_set.insert(mint.clone()) {
+                        out.push(mint);
+                    }
                 }
-            }
-            take_n
-        };
+                take_n
+            };
 
         // Take per-bucket quotas
         take_from_bucket(&mut high, q_high, &mut selected_tokens);
@@ -249,7 +247,7 @@ impl TokenMonitor {
             log(
                 LogTag::Monitor,
                 "UPDATE",
-                &format!("Updating {} tokens with fresh data", mints.len())
+                &format!("Updating {} tokens with fresh data", mints.len()),
             );
         }
 
@@ -258,14 +256,17 @@ impl TokenMonitor {
             log(
                 LogTag::Monitor,
                 "API_REQUEST",
-                &format!("Requesting token data from DexScreener API for {} tokens", mints.len())
+                &format!(
+                    "Requesting token data from DexScreener API for {} tokens",
+                    mints.len()
+                ),
             );
         }
 
         let tokens_result = {
-            let api = get_global_dexscreener_api().await.map_err(|e|
-                format!("Failed to get global API client: {}", e)
-            )?;
+            let api = get_global_dexscreener_api()
+                .await
+                .map_err(|e| format!("Failed to get global API client: {}", e))?;
             let mut api_instance = api.lock().await;
             api_instance.get_tokens_info(mints).await
         };
@@ -273,10 +274,8 @@ impl TokenMonitor {
         match tokens_result {
             Ok(tokens) => {
                 // Track which tokens were returned by the API
-                let returned_mints: std::collections::HashSet<String> = tokens
-                    .iter()
-                    .map(|t| t.mint.clone())
-                    .collect();
+                let returned_mints: std::collections::HashSet<String> =
+                    tokens.iter().map(|t| t.mint.clone()).collect();
 
                 // Find tokens that were requested but not returned (no longer exist)
                 let missing_mints: Vec<String> = mints
@@ -297,7 +296,7 @@ impl TokenMonitor {
                                 "API returned {} tokens out of {} requested",
                                 tokens.len(),
                                 mints.len()
-                            )
+                            ),
                         );
                     }
 
@@ -308,7 +307,7 @@ impl TokenMonitor {
                                 log(
                                     LogTag::Monitor,
                                     "SUCCESS",
-                                    &format!("Updated {} tokens in database", tokens.len())
+                                    &format!("Updated {} tokens in database", tokens.len()),
                                 );
                             }
                         }
@@ -316,7 +315,7 @@ impl TokenMonitor {
                             log(
                                 LogTag::Monitor,
                                 "ERROR",
-                                &format!("Failed to update tokens in database: {}", e)
+                                &format!("Failed to update tokens in database: {}", e),
                             );
                             return Err(format!("Database update failed: {}", e));
                         }
@@ -347,7 +346,7 @@ impl TokenMonitor {
                                 "🛡️  Protected {} tokens from deletion due to open positions: {:?}",
                                 protected_tokens.len(),
                                 protected_tokens
-                            )
+                            ),
                         );
                     }
 
@@ -371,7 +370,10 @@ impl TokenMonitor {
                                     log(
                                         LogTag::Monitor,
                                         "CLEANUP_SUCCESS",
-                                        &format!("Deleted {} stale tokens from database", deleted_count)
+                                        &format!(
+                                            "Deleted {} stale tokens from database",
+                                            deleted_count
+                                        ),
                                     );
                                 }
                             }
@@ -379,7 +381,7 @@ impl TokenMonitor {
                                 log(
                                     LogTag::Monitor,
                                     "ERROR",
-                                    &format!("Failed to delete stale tokens: {}", e)
+                                    &format!("Failed to delete stale tokens: {}", e),
                                 );
                                 // Don't fail the entire operation if cleanup fails
                             }
@@ -394,7 +396,11 @@ impl TokenMonitor {
                 })
             }
             Err(e) => {
-                log(LogTag::Monitor, "ERROR", &format!("Failed to get token info from API: {}", e));
+                log(
+                    LogTag::Monitor,
+                    "ERROR",
+                    &format!("Failed to get token info from API: {}", e),
+                );
                 Err(format!("API request failed: {}", e))
             }
         }
@@ -422,10 +428,7 @@ impl TokenMonitor {
         if !tokens_to_update.is_empty() {
             if let Ok(tokens) = self.database.get_tokens_by_mints(&tokens_to_update).await {
                 for t in tokens {
-                    let liq = t.liquidity
-                        .as_ref()
-                        .and_then(|l| l.usd)
-                        .unwrap_or(0.0);
+                    let liq = t.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
                     selected_tiers.add_liquidity(liq);
                 }
             }
@@ -445,7 +448,11 @@ impl TokenMonitor {
                     batches_ok += 1;
                 }
                 Err(e) => {
-                    log(LogTag::Monitor, "BATCH_ERROR", &format!("Batch update failed: {}", e));
+                    log(
+                        LogTag::Monitor,
+                        "BATCH_ERROR",
+                        &format!("Batch update failed: {}", e),
+                    );
                     // Continue with next batch even if one fails
                     batches_failed += 1;
                 }
@@ -501,17 +508,22 @@ impl TokenMonitor {
         if should_print {
             // Compute backlog snapshot once per summary to keep overhead low
             let (over1h, over2h, over7d) = if is_debug_monitor_enabled() {
-                let a = self.database
-                    .get_tokens_needing_update(1).await
+                let a = self
+                    .database
+                    .get_tokens_needing_update(1)
+                    .await
                     .ok()
                     .map(|v| v.len())
                     .unwrap_or(0);
-                let b = self.database
-                    .get_tokens_needing_update(2).await
+                let b = self
+                    .database
+                    .get_tokens_needing_update(2)
+                    .await
                     .ok()
                     .map(|v| v.len())
                     .unwrap_or(0);
-                let c = self.database
+                let c = self
+                    .database
                     .get_tokens_needing_update(168)
                     .await // 7 days = 168 hours
                     .ok()
@@ -591,73 +603,79 @@ impl TokenMonitor {
 /// Start token monitoring background task
 pub async fn start_token_monitoring(
     shutdown: Arc<tokio::sync::Notify>,
-    monitor: tokio_metrics::TaskMonitor
+    monitor: tokio_metrics::TaskMonitor,
 ) -> Result<tokio::task::JoinHandle<()>, String> {
-    log(LogTag::Monitor, "START", "Starting token monitoring background task (instrumented)");
+    log(
+        LogTag::Monitor,
+        "START",
+        "Starting token monitoring background task (instrumented)",
+    );
 
-    let handle = tokio::spawn(
-        monitor.instrument(async move {
-            let mut monitor = match TokenMonitor::new() {
-                Ok(monitor) => {
-                    log(LogTag::Monitor, "INIT", "Token monitor instance created successfully");
-                    monitor
-                }
-                Err(e) => {
-                    log(
-                        LogTag::Monitor,
-                        "ERROR",
-                        &format!("Failed to initialize token monitor: {}", e)
-                    );
-                    return;
-                }
-            };
-
-            // Wait for Transactions system to be ready before starting monitoring
-            let mut last_log = std::time::Instant::now();
-            loop {
-                let tx_ready = crate::global::TRANSACTIONS_SYSTEM_READY.load(
-                    std::sync::atomic::Ordering::SeqCst
+    let handle = tokio::spawn(monitor.instrument(async move {
+        let mut monitor = match TokenMonitor::new() {
+            Ok(monitor) => {
+                log(
+                    LogTag::Monitor,
+                    "INIT",
+                    "Token monitor instance created successfully",
                 );
+                monitor
+            }
+            Err(e) => {
+                log(
+                    LogTag::Monitor,
+                    "ERROR",
+                    &format!("Failed to initialize token monitor: {}", e),
+                );
+                return;
+            }
+        };
 
-                if tx_ready {
-                    log(
-                        LogTag::Monitor,
-                        "READY",
-                        "✅ Transactions ready. Starting token monitoring loop"
-                    );
-                    break;
-                }
+        // Wait for Transactions system to be ready before starting monitoring
+        let mut last_log = std::time::Instant::now();
+        loop {
+            let tx_ready =
+                crate::global::TRANSACTIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst);
 
-                // Log only every 15 seconds
-                if last_log.elapsed() >= std::time::Duration::from_secs(15) {
-                    log(
-                        LogTag::Monitor,
-                        "READY",
-                        "⏳ Waiting for Transactions system to be ready..."
-                    );
-                    last_log = std::time::Instant::now();
-                }
+            if tx_ready {
+                log(
+                    LogTag::Monitor,
+                    "READY",
+                    "✅ Transactions ready. Starting token monitoring loop",
+                );
+                break;
+            }
 
-                tokio::select! {
+            // Log only every 15 seconds
+            if last_log.elapsed() >= std::time::Duration::from_secs(15) {
+                log(
+                    LogTag::Monitor,
+                    "READY",
+                    "⏳ Waiting for Transactions system to be ready...",
+                );
+                last_log = std::time::Instant::now();
+            }
+
+            tokio::select! {
                 _ = shutdown.notified() => {
                     log(LogTag::Monitor, "EXIT", "Token monitoring exiting during dependency wait");
                     return;
                 }
                 _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {}
             }
-            }
+        }
 
-            monitor.start_monitoring_loop(shutdown).await;
-            log(LogTag::Monitor, "EXIT", "Token monitoring task ended");
-        })
-    );
+        monitor.start_monitoring_loop(shutdown).await;
+        log(LogTag::Monitor, "EXIT", "Token monitoring task ended");
+    }));
 
     Ok(handle)
 }
 
 /// Manual monitoring cycle for testing
 pub async fn run_monitoring_cycle_once() -> Result<(), String> {
-    let mut monitor = TokenMonitor::new().map_err(|e| format!("Failed to create monitor: {}", e))?;
+    let mut monitor =
+        TokenMonitor::new().map_err(|e| format!("Failed to create monitor: {}", e))?;
     monitor.run_monitoring_cycle().await
 }
 
@@ -720,7 +738,9 @@ impl TierCounts {
 static MONITOR_STATS: OnceLock<Arc<RwLock<MonitorStats>>> = OnceLock::new();
 
 fn get_monitor_stats_handle() -> Arc<RwLock<MonitorStats>> {
-    MONITOR_STATS.get_or_init(|| Arc::new(RwLock::new(MonitorStats::default()))).clone()
+    MONITOR_STATS
+        .get_or_init(|| Arc::new(RwLock::new(MonitorStats::default())))
+        .clone()
 }
 
 /// Public snapshot for dashboards or tooling
@@ -735,7 +755,11 @@ async fn print_monitor_interval_summary() {
     let stats = get_monitor_stats().await;
 
     // Emoji based on effectiveness
-    let emoji = if stats.interval_updated > 0 { "✅" } else { "⏸️" };
+    let emoji = if stats.interval_updated > 0 {
+        "✅"
+    } else {
+        "⏸️"
+    };
 
     // Average duration per cycle
     let avg_ms = if stats.interval_cycles > 0 {
@@ -764,25 +788,22 @@ async fn print_monitor_interval_summary() {
     );
     let timing_line = format!("  • Avg cycle 🕒  {} ms", avg_ms);
 
-    let backlog_info = if
-        stats.backlog_over_1h > 0 ||
-        stats.backlog_over_2h > 0 ||
-        stats.backlog_over_7d > 0
-    {
-        let mut parts = Vec::new();
-        if stats.backlog_over_1h > 0 {
-            parts.push(format!(">=1h: {}", stats.backlog_over_1h));
-        }
-        if stats.backlog_over_2h > 0 {
-            parts.push(format!(">=2h: {}", stats.backlog_over_2h));
-        }
-        if stats.backlog_over_7d > 0 {
-            parts.push(format!(">=7d: {}", stats.backlog_over_7d));
-        }
-        format!("\n  • Backlog  ⏱️  {}", parts.join("  |  "))
-    } else {
-        String::new()
-    };
+    let backlog_info =
+        if stats.backlog_over_1h > 0 || stats.backlog_over_2h > 0 || stats.backlog_over_7d > 0 {
+            let mut parts = Vec::new();
+            if stats.backlog_over_1h > 0 {
+                parts.push(format!(">=1h: {}", stats.backlog_over_1h));
+            }
+            if stats.backlog_over_2h > 0 {
+                parts.push(format!(">=2h: {}", stats.backlog_over_2h));
+            }
+            if stats.backlog_over_7d > 0 {
+                parts.push(format!(">=7d: {}", stats.backlog_over_7d));
+            }
+            format!("\n  • Backlog  ⏱️  {}", parts.join("  |  "))
+        } else {
+            String::new()
+        };
 
     let body = format!(
         "\n{header}\n{title}\n{header}\n{cycles}\n{selected}\n{updated}\n{timing}{backlog}\n{header}",

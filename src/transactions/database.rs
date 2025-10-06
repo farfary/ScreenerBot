@@ -3,21 +3,21 @@
 // This module provides high-performance SQLite-based caching and persistence
 // for transaction data, replacing the previous JSON file-based approach.
 
-use chrono::{ DateTime, Utc };
+use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
-use r2d2::{ Pool, PooledConnection };
+use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{ params, Connection, OptionalExtension, Result as SqliteResult };
-use serde::{ Deserialize, Serialize };
+use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{ Path, PathBuf };
-use std::sync::atomic::{ AtomicBool, Ordering };
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::global::is_debug_transactions_enabled;
-use crate::logger::{ log, LogTag };
-use crate::transactions::{ types::*, utils::* };
+use crate::logger::{log, LogTag};
+use crate::transactions::{types::*, utils::*};
 
 // =============================================================================
 // DATABASE SCHEMA AND CONSTANTS
@@ -30,8 +30,7 @@ const DATABASE_SCHEMA_VERSION: u32 = 4;
 static DATABASE_INITIALIZED: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
 
 /// Raw transactions table schema - stores blockchain data
-const SCHEMA_RAW_TRANSACTIONS: &str =
-    r#"
+const SCHEMA_RAW_TRANSACTIONS: &str = r#"
 CREATE TABLE IF NOT EXISTS raw_transactions (
     signature TEXT PRIMARY KEY,
     slot INTEGER,
@@ -51,8 +50,7 @@ CREATE TABLE IF NOT EXISTS raw_transactions (
 "#;
 
 /// Processed transactions table schema - stores analysis results
-const SCHEMA_PROCESSED_TRANSACTIONS: &str =
-    r#"
+const SCHEMA_PROCESSED_TRANSACTIONS: &str = r#"
 CREATE TABLE IF NOT EXISTS processed_transactions (
     signature TEXT PRIMARY KEY,
     transaction_type TEXT NOT NULL, -- Serialized TransactionType enum
@@ -91,8 +89,7 @@ CREATE TABLE IF NOT EXISTS processed_transactions (
 "#;
 
 /// Known signatures tracking table
-const SCHEMA_KNOWN_SIGNATURES: &str =
-    r#"
+const SCHEMA_KNOWN_SIGNATURES: &str = r#"
 CREATE TABLE IF NOT EXISTS known_signatures (
     signature TEXT PRIMARY KEY,
     status TEXT NOT NULL DEFAULT 'known',
@@ -101,8 +98,7 @@ CREATE TABLE IF NOT EXISTS known_signatures (
 "#;
 
 /// Deferred retries tracking table
-const SCHEMA_DEFERRED_RETRIES: &str =
-    r#"
+const SCHEMA_DEFERRED_RETRIES: &str = r#"
 CREATE TABLE IF NOT EXISTS deferred_retries (
     signature TEXT PRIMARY KEY,
     next_retry_at TEXT NOT NULL,
@@ -115,8 +111,7 @@ CREATE TABLE IF NOT EXISTS deferred_retries (
 "#;
 
 /// Pending transactions tracking table
-const SCHEMA_PENDING_TRANSACTIONS: &str =
-    r#"
+const SCHEMA_PENDING_TRANSACTIONS: &str = r#"
 CREATE TABLE IF NOT EXISTS pending_transactions (
     signature TEXT PRIMARY KEY,
     added_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -126,8 +121,7 @@ CREATE TABLE IF NOT EXISTS pending_transactions (
 "#;
 
 /// Database metadata table
-const SCHEMA_METADATA: &str =
-    r#"
+const SCHEMA_METADATA: &str = r#"
 CREATE TABLE IF NOT EXISTS db_metadata (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
@@ -136,8 +130,7 @@ CREATE TABLE IF NOT EXISTS db_metadata (
 "#;
 
 /// Bootstrap state table to persist resume cursor and completion flag across restarts
-const SCHEMA_BOOTSTRAP_STATE: &str =
-    r#"
+const SCHEMA_BOOTSTRAP_STATE: &str = r#"
 CREATE TABLE IF NOT EXISTS bootstrap_state (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     backfill_before_cursor TEXT,
@@ -215,8 +208,7 @@ impl TransactionDatabase {
         let data_dir = PathBuf::from("data");
 
         if !data_dir.exists() {
-            std::fs
-                ::create_dir_all(&data_dir)
+            std::fs::create_dir_all(&data_dir)
                 .map_err(|e| format!("Failed to create data directory: {}", e))?;
         }
 
@@ -236,7 +228,7 @@ impl TransactionDatabase {
             log(
                 LogTag::Transactions,
                 "INIT",
-                &format!("Initializing TransactionDatabase at: {}", database_path_str)
+                &format!("Initializing TransactionDatabase at: {}", database_path_str),
             );
         }
 
@@ -264,7 +256,11 @@ impl TransactionDatabase {
         db.initialize_schema().await?;
 
         if log_details {
-            log(LogTag::Transactions, "INIT", "TransactionDatabase initialization complete");
+            log(
+                LogTag::Transactions,
+                "INIT",
+                "TransactionDatabase initialization complete",
+            );
         }
 
         Ok(db)
@@ -275,8 +271,7 @@ impl TransactionDatabase {
         let database_path = path.as_ref().to_path_buf();
 
         if let Some(parent) = database_path.parent() {
-            std::fs
-                ::create_dir_all(parent)
+            std::fs::create_dir_all(parent)
                 .map_err(|e| format!("Failed to create data directory: {}", e))?;
         }
 
@@ -301,24 +296,25 @@ impl TransactionDatabase {
         ];
 
         for table_sql in &tables {
-            conn.execute(table_sql, []).map_err(|e| format!("Failed to create table: {}", e))?;
+            conn.execute(table_sql, [])
+                .map_err(|e| format!("Failed to create table: {}", e))?;
         }
 
         // Create all indexes
         for index_sql in INDEXES {
-            conn.execute(index_sql, []).map_err(|e| format!("Failed to create index: {}", e))?;
+            conn.execute(index_sql, [])
+                .map_err(|e| format!("Failed to create index: {}", e))?;
         }
 
         // Apply lightweight migrations for existing databases
         self.apply_migrations(&conn)?;
 
         // Set or update schema version
-        conn
-            .execute(
-                "INSERT OR REPLACE INTO db_metadata (key, value) VALUES (?1, ?2)",
-                params!["schema_version", self.schema_version.to_string()]
-            )
-            .map_err(|e| format!("Failed to set schema version: {}", e))?;
+        conn.execute(
+            "INSERT OR REPLACE INTO db_metadata (key, value) VALUES (?1, ?2)",
+            params!["schema_version", self.schema_version.to_string()],
+        )
+        .map_err(|e| format!("Failed to set schema version: {}", e))?;
 
         Ok(())
     }
@@ -344,32 +340,31 @@ impl TransactionDatabase {
             }
         }
         if !has_fee_sol {
-            conn
-                .execute(
-                    "ALTER TABLE processed_transactions ADD COLUMN fee_sol REAL NOT NULL DEFAULT 0",
-                    []
-                )
-                .map_err(|e| format!("Failed to add fee_sol column: {}", e))?;
+            conn.execute(
+                "ALTER TABLE processed_transactions ADD COLUMN fee_sol REAL NOT NULL DEFAULT 0",
+                [],
+            )
+            .map_err(|e| format!("Failed to add fee_sol column: {}", e))?;
         }
 
         // Ensure bootstrap_state table exists (idempotent)
-        conn
-            .execute(SCHEMA_BOOTSTRAP_STATE, [])
+        conn.execute(SCHEMA_BOOTSTRAP_STATE, [])
             .map_err(|e| format!("Failed to ensure bootstrap_state table: {}", e))?;
 
         // Ensure the single row exists
-        conn
-            .execute(
-                "INSERT OR IGNORE INTO bootstrap_state (id, full_history_completed) VALUES (1, 0)",
-                []
-            )
-            .map_err(|e| format!("Failed to initialize bootstrap_state row: {}", e))?;
+        conn.execute(
+            "INSERT OR IGNORE INTO bootstrap_state (id, full_history_completed) VALUES (1, 0)",
+            [],
+        )
+        .map_err(|e| format!("Failed to initialize bootstrap_state row: {}", e))?;
         Ok(())
     }
 
     /// Get database connection from pool
     fn get_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
-        self.pool.get().map_err(|e| format!("Failed to get database connection from pool: {}", e))
+        self.pool
+            .get()
+            .map_err(|e| format!("Failed to get database connection from pool: {}", e))
     }
 
     /// Health check - verify database connectivity and basic operations
@@ -378,8 +373,10 @@ impl TransactionDatabase {
 
         // Test basic query
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table'", [], |row|
-                row.get(0)
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table'",
+                [],
+                |row| row.get(0),
             )
             .map_err(|e| format!("Database health check failed: {}", e))?;
 
@@ -404,7 +401,7 @@ impl TransactionDatabase {
             .query_row(
                 "SELECT EXISTS(SELECT 1 FROM known_signatures WHERE signature = ?1)",
                 params![signature],
-                |row| row.get(0)
+                |row| row.get(0),
             )
             .map_err(|e| format!("Failed to check known signature: {}", e))?;
 
@@ -415,12 +412,11 @@ impl TransactionDatabase {
     pub async fn add_known_signature(&self, signature: &str) -> Result<(), String> {
         let conn = self.get_connection()?;
 
-        conn
-            .execute(
-                "INSERT OR IGNORE INTO known_signatures (signature) VALUES (?1)",
-                params![signature]
-            )
-            .map_err(|e| format!("Failed to add known signature: {}", e))?;
+        conn.execute(
+            "INSERT OR IGNORE INTO known_signatures (signature) VALUES (?1)",
+            params![signature],
+        )
+        .map_err(|e| format!("Failed to add known signature: {}", e))?;
 
         Ok(())
     }
@@ -430,7 +426,9 @@ impl TransactionDatabase {
         let conn = self.get_connection()?;
 
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM known_signatures", [], |row| { row.get(0) })
+            .query_row("SELECT COUNT(*) FROM known_signatures", [], |row| {
+                row.get(0)
+            })
             .map_err(|e| format!("Failed to get known signatures count: {}", e))?;
 
         Ok(count as u64)
@@ -444,7 +442,7 @@ impl TransactionDatabase {
             .query_row(
                 "SELECT signature FROM known_signatures ORDER BY added_at DESC LIMIT 1",
                 [],
-                |row| row.get(0)
+                |row| row.get(0),
             )
             .optional()
             .map_err(|e| format!("Failed to get newest known signature: {}", e))?;
@@ -464,7 +462,7 @@ impl TransactionDatabase {
             .query_row(
                 "SELECT signature FROM known_signatures ORDER BY added_at ASC LIMIT 1",
                 [],
-                |row| row.get(0)
+                |row| row.get(0),
             )
             .optional()
             .map_err(|e| format!("Failed to get oldest known signature: {}", e))?;
@@ -495,7 +493,7 @@ impl TransactionDatabase {
     /// Save pending transactions to database
     pub async fn save_pending_transactions(
         &self,
-        pending: &HashMap<String, DateTime<Utc>>
+        pending: &HashMap<String, DateTime<Utc>>,
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
 
@@ -504,15 +502,15 @@ impl TransactionDatabase {
             .map_err(|e| format!("Failed to start transaction: {}", e))?;
 
         for (signature, timestamp) in pending {
-            tx
-                .execute(
-                    "INSERT OR REPLACE INTO pending_transactions (signature, added_at) VALUES (?1, ?2)",
-                    params![signature, timestamp.to_rfc3339()]
-                )
-                .map_err(|e| format!("Failed to save pending transaction: {}", e))?;
+            tx.execute(
+                "INSERT OR REPLACE INTO pending_transactions (signature, added_at) VALUES (?1, ?2)",
+                params![signature, timestamp.to_rfc3339()],
+            )
+            .map_err(|e| format!("Failed to save pending transaction: {}", e))?;
         }
 
-        tx.commit().map_err(|e| format!("Failed to commit pending transactions: {}", e))?;
+        tx.commit()
+            .map_err(|e| format!("Failed to commit pending transactions: {}", e))?;
 
         Ok(())
     }
@@ -534,7 +532,7 @@ impl TransactionDatabase {
                         rusqlite::Error::InvalidColumnType(
                             0,
                             "timestamp".to_string(),
-                            rusqlite::types::Type::Text
+                            rusqlite::types::Type::Text,
                         )
                     })?
                     .with_timezone(&Utc);
@@ -544,9 +542,8 @@ impl TransactionDatabase {
 
         let mut result = HashMap::new();
         for row in rows {
-            let (signature, timestamp) = row.map_err(|e|
-                format!("Failed to parse pending transaction row: {}", e)
-            )?;
+            let (signature, timestamp) =
+                row.map_err(|e| format!("Failed to parse pending transaction row: {}", e))?;
             result.insert(signature, timestamp);
         }
 
@@ -558,7 +555,10 @@ impl TransactionDatabase {
         let conn = self.get_connection()?;
 
         let affected = conn
-            .execute("DELETE FROM pending_transactions WHERE signature = ?1", params![signature])
+            .execute(
+                "DELETE FROM pending_transactions WHERE signature = ?1",
+                params![signature],
+            )
             .map_err(|e| format!("Failed to remove pending transaction: {}", e))?;
 
         Ok(affected > 0)
@@ -569,7 +569,9 @@ impl TransactionDatabase {
         let conn = self.get_connection()?;
 
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM pending_transactions", [], |row| { row.get(0) })
+            .query_row("SELECT COUNT(*) FROM pending_transactions", [], |row| {
+                row.get(0)
+            })
             .map_err(|e| format!("Failed to get pending transactions count: {}", e))?;
 
         Ok(count as u64)
@@ -584,7 +586,7 @@ impl TransactionDatabase {
     /// Load raw transaction JSON blob and deserialize into TransactionDetails (cache-first path)
     pub async fn get_raw_transaction_details(
         &self,
-        signature: &str
+        signature: &str,
     ) -> Result<Option<crate::rpc::TransactionDetails>, String> {
         let conn = self.get_connection()?;
 
@@ -592,7 +594,7 @@ impl TransactionDatabase {
             .query_row(
                 "SELECT raw_transaction_data FROM raw_transactions WHERE signature = ?1",
                 params![signature],
-                |row| row.get(0)
+                |row| row.get(0),
             )
             .optional();
 
@@ -603,14 +605,10 @@ impl TransactionDatabase {
                 }
                 match serde_json::from_str::<crate::rpc::TransactionDetails>(&json_str) {
                     Ok(details) => Ok(Some(details)),
-                    Err(e) =>
-                        Err(
-                            format!(
-                                "Failed to deserialize cached raw transaction for {}: {}",
-                                signature,
-                                e
-                            )
-                        ),
+                    Err(e) => Err(format!(
+                        "Failed to deserialize cached raw transaction for {}: {}",
+                        signature, e
+                    )),
                 }
             }
             Ok(None) => Ok(None),
@@ -630,7 +628,8 @@ impl TransactionDatabase {
             TransactionStatus::Failed(msg) => "Failed",
         };
 
-        let raw_transaction_json = transaction.raw_transaction_data
+        let raw_transaction_json = transaction
+            .raw_transaction_data
             .as_ref()
             .and_then(|value| serde_json::to_string(value).ok());
 
@@ -663,10 +662,8 @@ impl TransactionDatabase {
                 "DB_RAW",
                 &format!(
                     "Stored raw {} (status={}, success={})",
-                    &transaction.signature,
-                    status_str,
-                    transaction.success
-                )
+                    &transaction.signature, status_str, transaction.success
+                ),
             );
         }
 
@@ -676,35 +673,27 @@ impl TransactionDatabase {
     /// Store processed transaction analysis snapshot
     pub async fn store_processed_transaction(
         &self,
-        transaction: &Transaction
+        transaction: &Transaction,
     ) -> Result<(), String> {
         let debug = is_debug_transactions_enabled();
         let conn = self.get_connection()?;
 
         // Serialize complex fields as JSON strings
-        let sol_balance_change_json = serde_json
-            ::to_string(&transaction.sol_balance_changes)
+        let sol_balance_change_json = serde_json::to_string(&transaction.sol_balance_changes)
             .unwrap_or_else(|_| "[]".to_string());
-        let token_balance_changes_json = serde_json
-            ::to_string(&transaction.token_balance_changes)
+        let token_balance_changes_json = serde_json::to_string(&transaction.token_balance_changes)
             .unwrap_or_else(|_| "[]".to_string());
-        let token_swap_info_json = serde_json
-            ::to_string(&transaction.token_swap_info)
+        let token_swap_info_json = serde_json::to_string(&transaction.token_swap_info)
             .unwrap_or_else(|_| "null".to_string());
-        let swap_pnl_info_json = serde_json
-            ::to_string(&transaction.swap_pnl_info)
+        let swap_pnl_info_json = serde_json::to_string(&transaction.swap_pnl_info)
             .unwrap_or_else(|_| "null".to_string());
-        let ata_operations_json = serde_json
-            ::to_string(&transaction.ata_operations)
+        let ata_operations_json =
+            serde_json::to_string(&transaction.ata_operations).unwrap_or_else(|_| "[]".to_string());
+        let token_transfers_json = serde_json::to_string(&transaction.token_transfers)
             .unwrap_or_else(|_| "[]".to_string());
-        let token_transfers_json = serde_json
-            ::to_string(&transaction.token_transfers)
-            .unwrap_or_else(|_| "[]".to_string());
-        let instruction_info_json = serde_json
-            ::to_string(&transaction.instructions)
-            .unwrap_or_else(|_| "[]".to_string());
-        let cached_analysis_json = serde_json
-            ::to_string(&transaction.cached_analysis)
+        let instruction_info_json =
+            serde_json::to_string(&transaction.instructions).unwrap_or_else(|_| "[]".to_string());
+        let cached_analysis_json = serde_json::to_string(&transaction.cached_analysis)
             .unwrap_or_else(|_| "null".to_string());
 
         let tx_type = format!("{:?}", transaction.transaction_type);
@@ -747,7 +736,7 @@ impl TransactionDatabase {
                     transaction.transaction_type,
                     transaction.direction,
                     transaction.fee_sol
-                )
+                ),
             );
         }
 
@@ -767,7 +756,7 @@ impl TransactionDatabase {
         signature: &str,
         status: &str,
         success: bool,
-        error_message: Option<&str>
+        error_message: Option<&str>,
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
 
@@ -798,7 +787,7 @@ impl TransactionDatabase {
                         rusqlite::Error::InvalidColumnType(
                             3,
                             "timestamp".to_string(),
-                            rusqlite::types::Type::Text
+                            rusqlite::types::Type::Text,
                         )
                     })?
                     .with_timezone(&Utc);
@@ -827,7 +816,7 @@ impl TransactionDatabase {
                     // Analysis fields are not cached - calculated fresh
                     ..Transaction::new(row.get::<_, String>(0)?)
                 })
-            }
+            },
         );
 
         match result {
@@ -836,7 +825,10 @@ impl TransactionDatabase {
                     log(
                         LogTag::Transactions,
                         "DB_HIT",
-                        &format!("Cache hit for {} (status={:?})", signature, transaction.status)
+                        &format!(
+                            "Cache hit for {} (status={:?})",
+                            signature, transaction.status
+                        ),
                     );
                 }
                 Ok(Some(transaction))
@@ -854,7 +846,7 @@ impl TransactionDatabase {
             .query_row(
                 "SELECT COUNT(*) FROM raw_transactions WHERE success = true AND status != 'Failed'",
                 [],
-                |row| row.get(0)
+                |row| row.get(0),
             )
             .map_err(|e| format!("Failed to get successful transactions count: {}", e))?;
 
@@ -869,7 +861,7 @@ impl TransactionDatabase {
             .query_row(
                 "SELECT COUNT(*) FROM raw_transactions WHERE success = false OR status = 'Failed'",
                 [],
-                |row| row.get(0)
+                |row| row.get(0),
             )
             .map_err(|e| format!("Failed to get failed transactions count: {}", e))?;
 
@@ -887,28 +879,37 @@ impl TransactionDatabase {
         let conn = self.get_connection()?;
 
         let raw_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM raw_transactions", [], |row| { row.get(0) })
+            .query_row("SELECT COUNT(*) FROM raw_transactions", [], |row| {
+                row.get(0)
+            })
             .unwrap_or(0);
 
         let processed_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM processed_transactions", [], |row| { row.get(0) })
+            .query_row("SELECT COUNT(*) FROM processed_transactions", [], |row| {
+                row.get(0)
+            })
             .unwrap_or(0);
 
         let known_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM known_signatures", [], |row| { row.get(0) })
+            .query_row("SELECT COUNT(*) FROM known_signatures", [], |row| {
+                row.get(0)
+            })
             .unwrap_or(0);
 
         let retries_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM deferred_retries", [], |row| { row.get(0) })
+            .query_row("SELECT COUNT(*) FROM deferred_retries", [], |row| {
+                row.get(0)
+            })
             .unwrap_or(0);
 
         let pending_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM pending_transactions", [], |row| { row.get(0) })
+            .query_row("SELECT COUNT(*) FROM pending_transactions", [], |row| {
+                row.get(0)
+            })
             .unwrap_or(0);
 
         // Get database file size
-        let database_size = std::fs
-            ::metadata(&self.database_path)
+        let database_size = std::fs::metadata(&self.database_path)
             .map(|metadata| metadata.len())
             .unwrap_or(0);
 
@@ -928,19 +929,25 @@ impl TransactionDatabase {
     pub async fn perform_maintenance(&self) -> Result<(), String> {
         let conn = self.get_connection()?;
 
-        log(LogTag::Transactions, "INFO", "Starting database maintenance");
+        log(
+            LogTag::Transactions,
+            "INFO",
+            "Starting database maintenance",
+        );
 
         // Vacuum to reclaim space
-        conn.execute("VACUUM", []).map_err(|e| format!("Failed to vacuum database: {}", e))?;
+        conn.execute("VACUUM", [])
+            .map_err(|e| format!("Failed to vacuum database: {}", e))?;
 
         // Analyze for query optimization
-        conn.execute("ANALYZE", []).map_err(|e| format!("Failed to analyze database: {}", e))?;
+        conn.execute("ANALYZE", [])
+            .map_err(|e| format!("Failed to analyze database: {}", e))?;
 
         // Cleanup old pending transactions (older than 1 day)
         let cleaned_pending = conn
             .execute(
                 "DELETE FROM pending_transactions WHERE added_at < datetime('now', '-1 day')",
-                []
+                [],
             )
             .map_err(|e| format!("Failed to cleanup old pending transactions: {}", e))?;
 
@@ -957,9 +964,8 @@ impl TransactionDatabase {
             "INFO",
             &format!(
                 "Database maintenance complete: cleaned {} pending, {} retries",
-                cleaned_pending,
-                cleaned_retries
-            )
+                cleaned_pending, cleaned_retries
+            ),
         );
 
         Ok(())
@@ -970,11 +976,15 @@ impl TransactionDatabase {
         let conn = self.get_connection()?;
 
         let raw_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM raw_transactions", [], |row| { row.get(0) })
+            .query_row("SELECT COUNT(*) FROM raw_transactions", [], |row| {
+                row.get(0)
+            })
             .unwrap_or(0);
 
         let processed_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM processed_transactions", [], |row| { row.get(0) })
+            .query_row("SELECT COUNT(*) FROM processed_transactions", [], |row| {
+                row.get(0)
+            })
             .unwrap_or(0);
 
         let orphaned: i64 = conn
@@ -988,15 +998,21 @@ impl TransactionDatabase {
         let missing: i64 = raw_count - processed_count;
 
         let pending_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM pending_transactions", [], |row| { row.get(0) })
+            .query_row("SELECT COUNT(*) FROM pending_transactions", [], |row| {
+                row.get(0)
+            })
             .unwrap_or(0);
 
         // Check schema version
         let schema_version_correct = conn
-            .query_row("SELECT value FROM db_metadata WHERE key = 'schema_version'", [], |row| {
-                let version_str: String = row.get(0)?;
-                Ok(version_str == self.schema_version.to_string())
-            })
+            .query_row(
+                "SELECT value FROM db_metadata WHERE key = 'schema_version'",
+                [],
+                |row| {
+                    let version_str: String = row.get(0)?;
+                    Ok(version_str == self.schema_version.to_string())
+                },
+            )
             .unwrap_or(false);
 
         Ok(IntegrityReport {
@@ -1006,7 +1022,7 @@ impl TransactionDatabase {
             missing_processed_transactions: missing.max(0) as u64,
             schema_version_correct,
             foreign_key_violations: 0, // Would require FK check
-            index_integrity_ok: true, // Would require index check
+            index_integrity_ok: true,  // Would require index check
             pending_transactions_count: pending_count as u64,
         })
     }
@@ -1053,12 +1069,11 @@ impl TransactionDatabase {
     /// Update the backfill cursor (the `before` parameter for next page)
     pub async fn set_backfill_cursor(&self, cursor: Option<&str>) -> Result<(), String> {
         let conn = self.get_connection()?;
-        conn
-            .execute(
-                "INSERT OR IGNORE INTO bootstrap_state (id, full_history_completed) VALUES (1, 0)",
-                []
-            )
-            .map_err(|e| format!("Failed to ensure bootstrap_state row: {}", e))?;
+        conn.execute(
+            "INSERT OR IGNORE INTO bootstrap_state (id, full_history_completed) VALUES (1, 0)",
+            [],
+        )
+        .map_err(|e| format!("Failed to ensure bootstrap_state row: {}", e))?;
 
         conn
             .execute(
@@ -1109,17 +1124,16 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::transactions::types::{
-        SolBalanceChange,
-        TransactionDirection,
-        TransactionStatus,
-        TransactionType,
+        SolBalanceChange, TransactionDirection, TransactionStatus, TransactionType,
     };
 
     #[tokio::test]
     async fn upsert_and_fetch_transaction_caches_raw_and_processed() {
         let dir = tempdir().expect("create temp dir");
         let db_path = dir.path().join("transactions.db");
-        let db = TransactionDatabase::new_with_path(&db_path).await.expect("create database");
+        let db = TransactionDatabase::new_with_path(&db_path)
+            .await
+            .expect("create database");
 
         let mut transaction = Transaction::new("test_signature".to_string());
         transaction.slot = Some(12345);
@@ -1144,10 +1158,13 @@ mod tests {
         let raw_json_string = raw_json.to_string();
         transaction.raw_transaction_data = Some(raw_json);
 
-        db.upsert_full_transaction(&transaction).await.expect("upsert transaction");
+        db.upsert_full_transaction(&transaction)
+            .await
+            .expect("upsert transaction");
 
         let fetched = db
-            .get_transaction(&transaction.signature).await
+            .get_transaction(&transaction.signature)
+            .await
             .expect("fetch transaction")
             .expect("transaction exists");
 
@@ -1161,7 +1178,7 @@ mod tests {
             .query_row(
                 "SELECT raw_transaction_data FROM raw_transactions WHERE signature = ?1",
                 [transaction.signature.as_str()],
-                |row| row.get(0)
+                |row| row.get(0),
             )
             .expect("query raw data");
         assert_eq!(stored_raw, Some(raw_json_string));
@@ -1170,7 +1187,7 @@ mod tests {
             .query_row(
                 "SELECT fee_sol FROM processed_transactions WHERE signature = ?1",
                 [transaction.signature.as_str()],
-                |row| row.get(0)
+                |row| row.get(0),
             )
             .expect("query processed fee");
         assert!((stored_fee - transaction.fee_sol).abs() < 1e-12);
@@ -1182,9 +1199,8 @@ mod tests {
 // =============================================================================
 
 /// Global database instance for cross-module access
-static GLOBAL_TRANSACTION_DATABASE: Lazy<Arc<Mutex<Option<Arc<TransactionDatabase>>>>> = Lazy::new(
-    || Arc::new(Mutex::new(None))
-);
+static GLOBAL_TRANSACTION_DATABASE: Lazy<Arc<Mutex<Option<Arc<TransactionDatabase>>>>> =
+    Lazy::new(|| Arc::new(Mutex::new(None)));
 
 /// Initialize global transaction database
 pub async fn init_transaction_database() -> Result<Arc<TransactionDatabase>, String> {
@@ -1194,7 +1210,11 @@ pub async fn init_transaction_database() -> Result<Arc<TransactionDatabase>, Str
     let mut global = GLOBAL_TRANSACTION_DATABASE.lock().await;
     *global = Some(Arc::clone(&db_arc));
 
-    log(LogTag::Transactions, "INFO", "Global transaction database initialized");
+    log(
+        LogTag::Transactions,
+        "INFO",
+        "Global transaction database initialized",
+    );
     Ok(db_arc)
 }
 

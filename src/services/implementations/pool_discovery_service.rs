@@ -1,9 +1,9 @@
+use crate::logger::{log, LogTag};
+use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
-use crate::services::{ Service, ServiceHealth, ServiceMetrics };
-use crate::logger::{ log, LogTag };
 
 pub struct PoolDiscoveryService;
 
@@ -22,36 +22,49 @@ impl Service for PoolDiscoveryService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
-        log(LogTag::PoolService, "INFO", "Initializing pool discovery service...");
+        log(
+            LogTag::PoolService,
+            "INFO",
+            "Initializing pool discovery service...",
+        );
         Ok(())
     }
 
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor
+        monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
-        log(LogTag::PoolService, "INFO", "Starting pool discovery service...");
+        log(
+            LogTag::PoolService,
+            "INFO",
+            "Starting pool discovery service...",
+        );
 
         // Get the PoolDiscovery component from global state
-        let discovery = crate::pools
-            ::get_pool_discovery()
+        let discovery = crate::pools::get_pool_discovery()
             .ok_or("PoolDiscovery component not initialized".to_string())?;
 
         // Spawn discovery task (instrumented)
-        let handle = tokio::spawn(
-            monitor.instrument(async move {
-                discovery.start_discovery_task(shutdown).await;
-            })
-        );
+        let handle = tokio::spawn(monitor.instrument(async move {
+            discovery.start_discovery_task(shutdown).await;
+        }));
 
-        log(LogTag::PoolService, "SUCCESS", "✅ Pool discovery service started (instrumented)");
+        log(
+            LogTag::PoolService,
+            "SUCCESS",
+            "✅ Pool discovery service started (instrumented)",
+        );
 
         Ok(vec![handle])
     }
 
     async fn stop(&mut self) -> Result<(), String> {
-        log(LogTag::PoolService, "INFO", "Pool discovery service stopping (via shutdown signal)");
+        log(
+            LogTag::PoolService,
+            "INFO",
+            "Pool discovery service stopping (via shutdown signal)",
+        );
         Ok(())
     }
 

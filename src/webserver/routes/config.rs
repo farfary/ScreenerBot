@@ -1,16 +1,20 @@
+use axum::http::StatusCode;
 /// Configuration API routes
 ///
 /// Provides REST API endpoints for viewing and managing bot configuration.
 /// All responses follow the standard ScreenerBot API format.
-
-use axum::{ extract::State, response::Response, routing::{ get, patch, post }, Json, Router };
-use serde::{ Deserialize, Serialize };
+use axum::{
+    extract::State,
+    response::Response,
+    routing::{get, patch, post},
+    Json, Router,
+};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use axum::http::StatusCode;
 
-use crate::webserver::state::AppState;
-use crate::webserver::utils::{ success_response, error_response };
 use crate::config;
+use crate::webserver::state::AppState;
+use crate::webserver::utils::{error_response, success_response};
 
 // ============================================================================
 // RESPONSE TYPES (inline per ScreenerBot convention)
@@ -60,18 +64,51 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/config/services", get(get_services_config))
         .route("/config/monitoring", get(get_monitoring_config))
         // PATCH endpoints - Partial updates (use JSON with only fields to update)
-        .route("/config/trader", patch(patch_any_config::<config::TraderConfig>))
-        .route("/config/positions", patch(patch_any_config::<config::PositionsConfig>))
-        .route("/config/filtering", patch(patch_any_config::<config::FilteringConfig>))
-        .route("/config/swaps", patch(patch_any_config::<config::SwapsConfig>))
-        .route("/config/tokens", patch(patch_any_config::<config::TokensConfig>))
+        .route(
+            "/config/trader",
+            patch(patch_any_config::<config::TraderConfig>),
+        )
+        .route(
+            "/config/positions",
+            patch(patch_any_config::<config::PositionsConfig>),
+        )
+        .route(
+            "/config/filtering",
+            patch(patch_any_config::<config::FilteringConfig>),
+        )
+        .route(
+            "/config/swaps",
+            patch(patch_any_config::<config::SwapsConfig>),
+        )
+        .route(
+            "/config/tokens",
+            patch(patch_any_config::<config::TokensConfig>),
+        )
         .route("/config/rpc", patch(patch_any_config::<config::RpcConfig>))
-        .route("/config/sol_price", patch(patch_any_config::<config::SolPriceConfig>))
-        .route("/config/summary", patch(patch_any_config::<config::SummaryConfig>))
-        .route("/config/events", patch(patch_any_config::<config::EventsConfig>))
-        .route("/config/webserver", patch(patch_any_config::<config::WebserverConfig>))
-        .route("/config/services", patch(patch_any_config::<config::ServicesConfig>))
-        .route("/config/monitoring", patch(patch_any_config::<config::MonitoringConfig>))
+        .route(
+            "/config/sol_price",
+            patch(patch_any_config::<config::SolPriceConfig>),
+        )
+        .route(
+            "/config/summary",
+            patch(patch_any_config::<config::SummaryConfig>),
+        )
+        .route(
+            "/config/events",
+            patch(patch_any_config::<config::EventsConfig>),
+        )
+        .route(
+            "/config/webserver",
+            patch(patch_any_config::<config::WebserverConfig>),
+        )
+        .route(
+            "/config/services",
+            patch(patch_any_config::<config::ServicesConfig>),
+        )
+        .route(
+            "/config/monitoring",
+            patch(patch_any_config::<config::MonitoringConfig>),
+        )
         // Utility endpoints
         .route("/config/reload", post(reload_config_from_disk))
         .route("/config/reset", post(reset_config_to_defaults))
@@ -230,40 +267,39 @@ async fn get_monitoring_config() -> Response {
 /// Generic PATCH handler for any config section
 /// Accepts partial JSON updates - only fields provided will be updated
 async fn patch_any_config<T>(Json(updates): Json<serde_json::Value>) -> Response
-    where T: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug + 'static
+where
+    T: serde::Serialize + serde::de::DeserializeOwned + Clone + std::fmt::Debug + 'static,
 {
     // Determine which section based on type T
-    let section_name = std::any::type_name::<T>().split("::").last().unwrap_or("unknown");
+    let section_name = std::any::type_name::<T>()
+        .split("::")
+        .last()
+        .unwrap_or("unknown");
 
     // Prepare the merged config outside closure
     let merge_result: Result<(), String> = (|| {
         // Get current config
-        let current_section = config::with_config(|cfg| {
-            match section_name {
-                "TraderConfig" => serde_json::to_value(&cfg.trader).ok(),
-                "PositionsConfig" => serde_json::to_value(&cfg.positions).ok(),
-                "FilteringConfig" => serde_json::to_value(&cfg.filtering).ok(),
-                "SwapsConfig" => serde_json::to_value(&cfg.swaps).ok(),
-                "TokensConfig" => serde_json::to_value(&cfg.tokens).ok(),
-                "RpcConfig" => serde_json::to_value(&cfg.rpc).ok(),
-                "SolPriceConfig" => serde_json::to_value(&cfg.sol_price).ok(),
-                "SummaryConfig" => serde_json::to_value(&cfg.summary).ok(),
-                "EventsConfig" => serde_json::to_value(&cfg.events).ok(),
-                "WebserverConfig" => serde_json::to_value(&cfg.webserver).ok(),
-                "ServicesConfig" => serde_json::to_value(&cfg.services).ok(),
-                "MonitoringConfig" => serde_json::to_value(&cfg.monitoring).ok(),
-                _ => None,
-            }
+        let current_section = config::with_config(|cfg| match section_name {
+            "TraderConfig" => serde_json::to_value(&cfg.trader).ok(),
+            "PositionsConfig" => serde_json::to_value(&cfg.positions).ok(),
+            "FilteringConfig" => serde_json::to_value(&cfg.filtering).ok(),
+            "SwapsConfig" => serde_json::to_value(&cfg.swaps).ok(),
+            "TokensConfig" => serde_json::to_value(&cfg.tokens).ok(),
+            "RpcConfig" => serde_json::to_value(&cfg.rpc).ok(),
+            "SolPriceConfig" => serde_json::to_value(&cfg.sol_price).ok(),
+            "SummaryConfig" => serde_json::to_value(&cfg.summary).ok(),
+            "EventsConfig" => serde_json::to_value(&cfg.events).ok(),
+            "WebserverConfig" => serde_json::to_value(&cfg.webserver).ok(),
+            "ServicesConfig" => serde_json::to_value(&cfg.services).ok(),
+            "MonitoringConfig" => serde_json::to_value(&cfg.monitoring).ok(),
+            _ => None,
         });
 
         let mut section_json = current_section.ok_or("Failed to serialize current config")?;
 
         // Merge updates into existing config
-        if
-            let (Some(section_obj), Some(updates_obj)) = (
-                section_json.as_object_mut(),
-                updates.as_object(),
-            )
+        if let (Some(section_obj), Some(updates_obj)) =
+            (section_json.as_object_mut(), updates.as_object())
         {
             for (key, value) in updates_obj {
                 section_obj.insert(key.clone(), value.clone());
@@ -277,100 +313,124 @@ async fn patch_any_config<T>(Json(updates): Json<serde_json::Value>) -> Response
         // Validate and deserialize before updating (fail fast on errors)
         match section_name {
             "TraderConfig" => {
-                let new_config: config::TraderConfig = serde_json
-                    ::from_value(section_json)
+                let new_config: config::TraderConfig = serde_json::from_value(section_json)
                     .map_err(|e| format!("Invalid TraderConfig: {}", e))?;
-                config::update_config_section(|cfg| {
-                    cfg.trader = new_config;
-                }, true)?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.trader = new_config;
+                    },
+                    true,
+                )?;
             }
             "PositionsConfig" => {
-                let new_config: config::PositionsConfig = serde_json
-                    ::from_value(section_json)
+                let new_config: config::PositionsConfig = serde_json::from_value(section_json)
                     .map_err(|e| format!("Invalid PositionsConfig: {}", e))?;
-                config::update_config_section(|cfg| {
-                    cfg.positions = new_config;
-                }, true)?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.positions = new_config;
+                    },
+                    true,
+                )?;
             }
             "FilteringConfig" => {
-                let new_config: config::FilteringConfig = serde_json
-                    ::from_value(section_json)
+                let new_config: config::FilteringConfig = serde_json::from_value(section_json)
                     .map_err(|e| format!("Invalid FilteringConfig: {}", e))?;
-                config::update_config_section(|cfg| {
-                    cfg.filtering = new_config;
-                }, true)?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.filtering = new_config;
+                    },
+                    true,
+                )?;
             }
             "SwapsConfig" => {
-                let new_config: config::SwapsConfig = serde_json
-                    ::from_value(section_json)
+                let new_config: config::SwapsConfig = serde_json::from_value(section_json)
                     .map_err(|e| format!("Invalid SwapsConfig: {}", e))?;
-                config::update_config_section(|cfg| {
-                    cfg.swaps = new_config;
-                }, true)?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.swaps = new_config;
+                    },
+                    true,
+                )?;
             }
             "TokensConfig" => {
-                let new_config: config::TokensConfig = serde_json
-                    ::from_value(section_json)
+                let new_config: config::TokensConfig = serde_json::from_value(section_json)
                     .map_err(|e| format!("Invalid TokensConfig: {}", e))?;
-                config::update_config_section(|cfg| {
-                    cfg.tokens = new_config;
-                }, true)?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.tokens = new_config;
+                    },
+                    true,
+                )?;
             }
             "RpcConfig" => {
-                let new_config: config::RpcConfig = serde_json
-                    ::from_value(section_json)
+                let new_config: config::RpcConfig = serde_json::from_value(section_json)
                     .map_err(|e| format!("Invalid RpcConfig: {}", e))?;
-                config::update_config_section(|cfg| {
-                    cfg.rpc = new_config;
-                }, true)?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.rpc = new_config;
+                    },
+                    true,
+                )?;
             }
             "SolPriceConfig" => {
-                let new_config: config::SolPriceConfig = serde_json
-                    ::from_value(section_json)
+                let new_config: config::SolPriceConfig = serde_json::from_value(section_json)
                     .map_err(|e| format!("Invalid SolPriceConfig: {}", e))?;
-                config::update_config_section(|cfg| {
-                    cfg.sol_price = new_config;
-                }, true)?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.sol_price = new_config;
+                    },
+                    true,
+                )?;
             }
             "SummaryConfig" => {
-                let new_config: config::SummaryConfig = serde_json
-                    ::from_value(section_json)
+                let new_config: config::SummaryConfig = serde_json::from_value(section_json)
                     .map_err(|e| format!("Invalid SummaryConfig: {}", e))?;
-                config::update_config_section(|cfg| {
-                    cfg.summary = new_config;
-                }, true)?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.summary = new_config;
+                    },
+                    true,
+                )?;
             }
             "EventsConfig" => {
-                let new_config: config::EventsConfig = serde_json
-                    ::from_value(section_json)
+                let new_config: config::EventsConfig = serde_json::from_value(section_json)
                     .map_err(|e| format!("Invalid EventsConfig: {}", e))?;
-                config::update_config_section(|cfg| {
-                    cfg.events = new_config;
-                }, true)?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.events = new_config;
+                    },
+                    true,
+                )?;
             }
             "WebserverConfig" => {
-                let new_config: config::WebserverConfig = serde_json
-                    ::from_value(section_json)
+                let new_config: config::WebserverConfig = serde_json::from_value(section_json)
                     .map_err(|e| format!("Invalid WebserverConfig: {}", e))?;
-                config::update_config_section(|cfg| {
-                    cfg.webserver = new_config;
-                }, true)?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.webserver = new_config;
+                    },
+                    true,
+                )?;
             }
             "ServicesConfig" => {
-                let new_config: config::ServicesConfig = serde_json
-                    ::from_value(section_json)
+                let new_config: config::ServicesConfig = serde_json::from_value(section_json)
                     .map_err(|e| format!("Invalid ServicesConfig: {}", e))?;
-                config::update_config_section(|cfg| {
-                    cfg.services = new_config;
-                }, true)?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.services = new_config;
+                    },
+                    true,
+                )?;
             }
             "MonitoringConfig" => {
-                let new_config: config::MonitoringConfig = serde_json
-                    ::from_value(section_json)
+                let new_config: config::MonitoringConfig = serde_json::from_value(section_json)
                     .map_err(|e| format!("Invalid MonitoringConfig: {}", e))?;
-                config::update_config_section(|cfg| {
-                    cfg.monitoring = new_config;
-                }, true)?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.monitoring = new_config;
+                    },
+                    true,
+                )?;
             }
             _ => {
                 return Err(format!("Unknown config section: {}", section_name));
@@ -389,13 +449,12 @@ async fn patch_any_config<T>(Json(updates): Json<serde_json::Value>) -> Response
             };
             success_response(response)
         }
-        Err(e) =>
-            error_response(
-                StatusCode::BAD_REQUEST,
-                "CONFIG_UPDATE_FAILED",
-                &format!("Failed to update config: {}", e),
-                None
-            ),
+        Err(e) => error_response(
+            StatusCode::BAD_REQUEST,
+            "CONFIG_UPDATE_FAILED",
+            &format!("Failed to update config: {}", e),
+            None,
+        ),
     }
 }
 
@@ -421,19 +480,17 @@ pub struct UpdateResponse {
 /// POST /api/config/reload - Reload configuration from disk
 async fn reload_config_from_disk() -> Response {
     match config::reload_config() {
-        Ok(_) =>
-            success_response(UpdateResponse {
-                message: "Configuration reloaded from disk successfully".to_string(),
-                saved_to_disk: false,
-                timestamp: chrono::Utc::now().to_rfc3339(),
-            }),
-        Err(e) =>
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "RELOAD_FAILED",
-                &format!("Failed to reload config: {}", e),
-                None
-            ),
+        Ok(_) => success_response(UpdateResponse {
+            message: "Configuration reloaded from disk successfully".to_string(),
+            saved_to_disk: false,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }),
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "RELOAD_FAILED",
+            &format!("Failed to reload config: {}", e),
+            None,
+        ),
     }
 }
 
@@ -443,23 +500,21 @@ async fn reset_config_to_defaults() -> Response {
         |cfg| {
             *cfg = config::Config::default();
         },
-        true // Save to disk
+        true, // Save to disk
     );
 
     match result {
-        Ok(_) =>
-            success_response(UpdateResponse {
-                message: "Configuration reset to defaults successfully".to_string(),
-                saved_to_disk: true,
-                timestamp: chrono::Utc::now().to_rfc3339(),
-            }),
-        Err(e) =>
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "RESET_FAILED",
-                &format!("Failed to reset config: {}", e),
-                None
-            ),
+        Ok(_) => success_response(UpdateResponse {
+            message: "Configuration reset to defaults successfully".to_string(),
+            saved_to_disk: true,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }),
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "RESET_FAILED",
+            &format!("Failed to reset config: {}", e),
+            None,
+        ),
     }
 }
 
@@ -476,11 +531,9 @@ async fn get_config_diff() -> Response {
             match toml::from_str::<config::Config>(&contents) {
                 Ok(disk_config) => {
                     // Compare using JSON serialization for accurate comparison
-                    let memory_json = serde_json
-                        ::to_value(&memory_config)
+                    let memory_json = serde_json::to_value(&memory_config)
                         .unwrap_or_else(|_| serde_json::Value::Null);
-                    let disk_json = serde_json
-                        ::to_value(&disk_config)
+                    let disk_json = serde_json::to_value(&disk_config)
                         .unwrap_or_else(|_| serde_json::Value::Null);
 
                     let has_changes = memory_json != disk_json;
@@ -504,21 +557,19 @@ async fn get_config_diff() -> Response {
                         },
                     })
                 }
-                Err(e) =>
-                    error_response(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "PARSE_ERROR",
-                        &format!("Failed to parse disk config: {}", e),
-                        None
-                    ),
+                Err(e) => error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "PARSE_ERROR",
+                    &format!("Failed to parse disk config: {}", e),
+                    None,
+                ),
             }
         }
-        Err(e) =>
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "READ_ERROR",
-                &format!("Failed to read disk config: {}", e),
-                None
-            ),
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "READ_ERROR",
+            &format!("Failed to read disk config: {}", e),
+            None,
+        ),
     }
 }

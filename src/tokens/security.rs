@@ -71,6 +71,11 @@ pub struct SecurityAnalysis {
     pub holders_safe: bool,
     pub liquidity_adequate: bool,
     pub pump_fun_token: bool,
+    pub top_holder_pct: Option<f64>,
+    pub top_3_holder_pct: Option<f64>,
+    pub top_10_holder_pct: Option<f64>,
+    pub max_lp_locked_pct: Option<f64>,
+    pub total_market_liquidity: Option<f64>,
     pub risks: Vec<String>,
     pub summary: String,
 }
@@ -303,6 +308,11 @@ impl SecurityAnalyzer {
                     holders_safe: false,
                     liquidity_adequate: false,
                     pump_fun_token: false,
+                    top_holder_pct: None,
+                    top_3_holder_pct: None,
+                    top_10_holder_pct: None,
+                    max_lp_locked_pct: None,
+                    total_market_liquidity: None,
                     risks: vec!["Failed to fetch security data".to_string()],
                     summary: "Unable to analyze token security".to_string(),
                 };
@@ -484,31 +494,46 @@ impl SecurityAnalyzer {
         let authorities_safe = mint_authority_safe && freeze_authority_safe;
 
         // Get LP lock percentage (raw data, no thresholds)
-        let max_lp_locked = info.markets
+        let max_lp_locked_pct = info.markets
             .iter()
-            .map(|m| m.lp_locked_pct)
-            .fold(0.0, f64::max);
-        let lp_safe = max_lp_locked > 0.0; // Just check if any LP is locked
+            .filter_map(|m| {
+                let value = m.lp_locked_pct;
+                if value.is_finite() {
+                    Some(value)
+                } else {
+                    None
+                }
+            })
+            .fold(None, |acc: Option<f64>, value| {
+                Some(acc.map_or(value, |prev| prev.max(value)))
+            });
+        let lp_safe = max_lp_locked_pct.unwrap_or(0.0) > 0.0; // Just check if any LP is locked
 
         // Get holder concentration data (raw percentages, no thresholds)
-        let top_holder_pct = info.top_holders
-            .first()
-            .map(|h| h.pct)
-            .unwrap_or(0.0);
-        let top_3_pct: f64 = info.top_holders
+        let holder_pcts: Vec<f64> = info.top_holders
             .iter()
-            .take(3)
-            .map(|h| h.pct)
-            .sum();
-        let top_10_pct: f64 = info.top_holders
-            .iter()
-            .take(10)
-            .map(|h| h.pct)
-            .sum();
-        let holders_safe = !info.top_holders.is_empty(); // Just check if we have holder data
+            .filter_map(|h| if h.pct.is_finite() { Some(h.pct) } else { None })
+            .collect();
+        let top_holder_pct = holder_pcts.get(0).copied();
+        let top_3_pct = if holder_pcts.is_empty() {
+            None
+        } else {
+            Some(holder_pcts.iter().take(3).sum())
+        };
+        let top_10_pct = if holder_pcts.is_empty() {
+            None
+        } else {
+            Some(holder_pcts.iter().take(10).sum())
+        };
+        let holders_safe = !holder_pcts.is_empty(); // Just check if we have holder data
 
         // Basic liquidity check (just verify data exists)
-        let liquidity_adequate = info.total_market_liquidity > 0.0;
+        let total_market_liquidity = if info.total_market_liquidity.is_finite() {
+            Some(info.total_market_liquidity)
+        } else {
+            None
+        };
+        let liquidity_adequate = total_market_liquidity.unwrap_or(0.0) > 0.0;
 
         // Collect danger-level risks from Rugcheck
         for risk in &info.risks {
@@ -529,9 +554,9 @@ impl SecurityAnalyzer {
         let summary = format!(
             "Token analysis: score={}/100, LP={:.1}%, top_holder={:.1}%, liquidity=${:.0}",
             info.score_normalised,
-            max_lp_locked,
-            top_holder_pct,
-            info.total_market_liquidity
+            max_lp_locked_pct.unwrap_or(0.0),
+            top_holder_pct.unwrap_or(0.0),
+            total_market_liquidity.unwrap_or(0.0)
         );
 
         SecurityAnalysis {
@@ -543,6 +568,11 @@ impl SecurityAnalyzer {
             holders_safe,
             liquidity_adequate,
             pump_fun_token,
+            top_holder_pct,
+            top_3_holder_pct: top_3_pct,
+            top_10_holder_pct: top_10_pct,
+            max_lp_locked_pct,
+            total_market_liquidity,
             risks,
             summary,
         }

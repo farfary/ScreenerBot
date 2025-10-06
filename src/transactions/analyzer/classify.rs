@@ -10,14 +10,14 @@
 // 3. Identify complex patterns: LP operations, multi-hop swaps
 // 4. Apply confidence thresholds for reliable classification
 
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::logger::{ log, LogTag };
+use super::{balance::BalanceAnalysis, dex::DexAnalysis, AnalysisConfidence};
+use crate::global::is_debug_transactions_enabled;
+use crate::logger::{log, LogTag};
 use crate::transactions::types::*;
 use crate::transactions::utils::WSOL_MINT;
-use crate::global::is_debug_transactions_enabled;
-use super::{ balance::BalanceAnalysis, dex::DexAnalysis, AnalysisConfidence };
 
 // =============================================================================
 // CLASSIFICATION TYPES
@@ -68,8 +68,8 @@ pub enum ClassifiedType {
 /// Swap direction for buy/sell operations
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SwapDirection {
-    SolToToken, // Buy: SOL -> Token
-    TokenToSol, // Sell: Token -> SOL
+    SolToToken,   // Buy: SOL -> Token
+    TokenToSol,   // Sell: Token -> SOL
     TokenToToken, // Swap: Token A -> Token B
 }
 
@@ -117,9 +117,9 @@ pub struct FlowNode {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum NodeType {
-    Wallet, // User wallet
-    Pool, // Liquidity pool
-    Router, // DEX router
+    Wallet,   // User wallet
+    Pool,     // Liquidity pool
+    Router,   // DEX router
     Treasury, // Protocol treasury
     Unknown,
 }
@@ -151,13 +151,13 @@ pub async fn classify_transaction(
     transaction: &Transaction,
     tx_data: &crate::rpc::TransactionDetails,
     balance_analysis: &BalanceAnalysis,
-    dex_analysis: &DexAnalysis
+    dex_analysis: &DexAnalysis,
 ) -> Result<TransactionClass, String> {
     if is_debug_transactions_enabled() {
         log(
             LogTag::Transactions,
             "CLASSIFY",
-            &format!("Classifying transaction: {}", transaction.signature)
+            &format!("Classifying transaction: {}", transaction.signature),
         );
     }
 
@@ -171,11 +171,8 @@ pub async fn classify_transaction(
     let classification = classify_from_patterns(&flow_patterns, dex_analysis).await?;
 
     // Step 4: Calculate overall confidence
-    let confidence = calculate_classification_confidence(
-        &classification,
-        &flow_analysis,
-        dex_analysis
-    );
+    let confidence =
+        calculate_classification_confidence(&classification, &flow_analysis, dex_analysis);
 
     // Decision summary
     if is_debug_transactions_enabled() {
@@ -184,11 +181,8 @@ pub async fn classify_transaction(
             "CLASSIFY_DECISION",
             &format!(
                 "classification={:?} direction={:?} primary_token={:?} confidence={:?}",
-                classification.0,
-                classification.1,
-                classification.2,
-                confidence
-            )
+                classification.0, classification.1, classification.2, confidence
+            ),
         );
 
         // Debug: summarize nodes, edges, and patterns
@@ -201,7 +195,7 @@ pub async fn classify_transaction(
                 flow_analysis.edges.len(),
                 flow_patterns.len(),
                 dex_analysis.confidence
-            )
+            ),
         );
     }
 
@@ -227,21 +221,17 @@ pub async fn classify_transaction(
 /// Build directed flow graph from balance changes
 async fn build_flow_graph(
     balance_analysis: &BalanceAnalysis,
-    dex_analysis: &DexAnalysis
+    dex_analysis: &DexAnalysis,
 ) -> Result<FlowAnalysis, String> {
     let mut nodes = Vec::new();
     let mut edges = Vec::new();
 
     // Step 1: Create nodes from accounts with balance changes
     for (account, sol_change) in &balance_analysis.sol_changes {
-        let token_changes = balance_analysis.token_changes
+        let token_changes = balance_analysis
+            .token_changes
             .get(account)
-            .map(|changes| {
-                changes
-                    .iter()
-                    .map(|c| (c.mint.clone(), c.change))
-                    .collect()
-            })
+            .map(|changes| changes.iter().map(|c| (c.mint.clone(), c.change)).collect())
             .unwrap_or_default();
 
         let node_type = classify_node_type(account, dex_analysis);
@@ -314,7 +304,7 @@ fn classify_node_type(account: &str, dex_analysis: &DexAnalysis) -> NodeType {
 async fn detect_flow_patterns(
     flow_analysis: &FlowAnalysis,
     tx_data: &crate::rpc::TransactionDetails,
-    dex_analysis: &DexAnalysis
+    dex_analysis: &DexAnalysis,
 ) -> Result<Vec<FlowPattern>, String> {
     let mut patterns = Vec::new();
 
@@ -330,7 +320,10 @@ async fn detect_flow_patterns(
     // Instruction-aware fallback: if no clear swap patterns were found yet, but we
     // observe inner transferChecked credits of WSOL, infer a token->SOL sell by
     // pairing the largest negative non-WSOL token change with SOL out.
-    if !patterns.iter().any(|p| matches!(p.pattern_type, PatternType::SimpleSwap)) {
+    if !patterns
+        .iter()
+        .any(|p| matches!(p.pattern_type, PatternType::SimpleSwap))
+    {
         let wsol_ui = sum_inner_wsol_transferchecked_ui(tx_data);
         if wsol_ui > 0.0 {
             let sol_mint = WSOL_MINT;
@@ -369,14 +362,18 @@ async fn detect_flow_patterns(
     // Aggregator-aware fallback: if still no SimpleSwap pattern and a known aggregator
     // (e.g., Jupiter) is present among program IDs, infer a token->SOL sell by pairing the
     // largest negative non-WSOL token change with SOL, even if no WSOL credits are visible.
-    if !patterns.iter().any(|p| matches!(p.pattern_type, PatternType::SimpleSwap)) {
+    if !patterns
+        .iter()
+        .any(|p| matches!(p.pattern_type, PatternType::SimpleSwap))
+    {
         let has_aggregator = {
             // Prioritize explicit detected Jupiter, otherwise check program IDs
             let jup_detected = matches!(
                 dex_analysis.detected_dex,
                 Some(super::dex::DetectedDex::Jupiter)
             );
-            let jup_in_programs = dex_analysis.program_ids
+            let jup_in_programs = dex_analysis
+                .program_ids
                 .iter()
                 .any(|pid| pid == crate::transactions::program_ids::JUPITER_V6_PROGRAM_ID);
             jup_detected || jup_in_programs
@@ -420,13 +417,17 @@ async fn detect_flow_patterns(
     // Aggregator-aware buy fallback: if still no SimpleSwap pattern and a known aggregator
     // is present among program IDs, infer a SOL->token buy by selecting the dominant positive
     // non-WSOL token change even when SOL leg signals are weak or ambiguous.
-    if !patterns.iter().any(|p| matches!(p.pattern_type, PatternType::SimpleSwap)) {
+    if !patterns
+        .iter()
+        .any(|p| matches!(p.pattern_type, PatternType::SimpleSwap))
+    {
         let has_aggregator = {
             let jup_detected = matches!(
                 dex_analysis.detected_dex,
                 Some(super::dex::DetectedDex::Jupiter)
             );
-            let jup_in_programs = dex_analysis.program_ids
+            let jup_in_programs = dex_analysis
+                .program_ids
                 .iter()
                 .any(|pid| pid == crate::transactions::program_ids::JUPITER_V6_PROGRAM_ID);
             jup_detected || jup_in_programs
@@ -513,7 +514,7 @@ async fn detect_swap_patterns(flow_analysis: &FlowAnalysis) -> Result<Vec<FlowPa
 
 /// Detect transfer patterns (simple movements)
 async fn detect_transfer_patterns(
-    flow_analysis: &FlowAnalysis
+    flow_analysis: &FlowAnalysis,
 ) -> Result<Vec<FlowPattern>, String> {
     let mut patterns = Vec::new();
 
@@ -541,7 +542,7 @@ async fn detect_transfer_patterns(
 
 /// Detect liquidity provision/removal patterns
 async fn detect_liquidity_patterns(
-    flow_analysis: &FlowAnalysis
+    flow_analysis: &FlowAnalysis,
 ) -> Result<Vec<FlowPattern>, String> {
     let mut patterns = Vec::new();
 
@@ -549,14 +550,8 @@ async fn detect_liquidity_patterns(
     for node in &flow_analysis.nodes {
         if node.token_changes.len() >= 2 && matches!(node.node_type, NodeType::Pool) {
             // Determine if adding or removing liquidity based on change direction
-            let positive_changes = node.token_changes
-                .values()
-                .filter(|&&v| v > 0.0)
-                .count();
-            let negative_changes = node.token_changes
-                .values()
-                .filter(|&&v| v < 0.0)
-                .count();
+            let positive_changes = node.token_changes.values().filter(|&&v| v > 0.0).count();
+            let negative_changes = node.token_changes.values().filter(|&&v| v < 0.0).count();
 
             if positive_changes > 0 && negative_changes == 0 {
                 // All positive = liquidity addition
@@ -594,8 +589,16 @@ async fn detect_liquidity_patterns(
 /// Classify transaction based on detected patterns
 async fn classify_from_patterns(
     patterns: &[FlowPattern],
-    dex_analysis: &DexAnalysis
-) -> Result<(ClassifiedType, Option<SwapDirection>, Option<String>, Option<String>), String> {
+    dex_analysis: &DexAnalysis,
+) -> Result<
+    (
+        ClassifiedType,
+        Option<SwapDirection>,
+        Option<String>,
+        Option<String>,
+    ),
+    String,
+> {
     if patterns.is_empty() {
         return Ok((ClassifiedType::Unknown, None, None, None));
     }
@@ -603,7 +606,11 @@ async fn classify_from_patterns(
     // Find the highest confidence pattern
     let dominant_pattern = patterns
         .iter()
-        .max_by(|a, b| a.confidence.partial_cmp(&b.confidence).unwrap_or(std::cmp::Ordering::Equal))
+        .max_by(|a, b| {
+            a.confidence
+                .partial_cmp(&b.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
         .unwrap();
     let sol_mint = WSOL_MINT;
 
@@ -635,33 +642,30 @@ async fn classify_from_patterns(
                 ))
             }
         }
-        PatternType::TokenTransfer | PatternType::SolTransfer => {
-            Ok((ClassifiedType::Transfer, None, Some(dominant_pattern.from_token.clone()), None))
-        }
-        PatternType::LiquidityAdd => {
-            Ok((
-                ClassifiedType::AddLiquidity,
-                None,
-                Some(dominant_pattern.from_token.clone()),
-                None,
-            ))
-        }
-        PatternType::LiquidityRemove => {
-            Ok((
-                ClassifiedType::RemoveLiquidity,
-                None,
-                Some(dominant_pattern.to_token.clone()),
-                None,
-            ))
-        }
-        PatternType::MultiHopSwap => {
-            Ok((
-                ClassifiedType::Swap,
-                Some(SwapDirection::TokenToToken),
-                Some(dominant_pattern.from_token.clone()),
-                Some(dominant_pattern.to_token.clone()),
-            ))
-        }
+        PatternType::TokenTransfer | PatternType::SolTransfer => Ok((
+            ClassifiedType::Transfer,
+            None,
+            Some(dominant_pattern.from_token.clone()),
+            None,
+        )),
+        PatternType::LiquidityAdd => Ok((
+            ClassifiedType::AddLiquidity,
+            None,
+            Some(dominant_pattern.from_token.clone()),
+            None,
+        )),
+        PatternType::LiquidityRemove => Ok((
+            ClassifiedType::RemoveLiquidity,
+            None,
+            Some(dominant_pattern.to_token.clone()),
+            None,
+        )),
+        PatternType::MultiHopSwap => Ok((
+            ClassifiedType::Swap,
+            Some(SwapDirection::TokenToToken),
+            Some(dominant_pattern.from_token.clone()),
+            Some(dominant_pattern.to_token.clone()),
+        )),
     }
 }
 
@@ -671,9 +675,14 @@ async fn classify_from_patterns(
 
 /// Calculate overall classification confidence
 fn calculate_classification_confidence(
-    classification: &(ClassifiedType, Option<SwapDirection>, Option<String>, Option<String>),
+    classification: &(
+        ClassifiedType,
+        Option<SwapDirection>,
+        Option<String>,
+        Option<String>,
+    ),
     flow_analysis: &FlowAnalysis,
-    dex_analysis: &DexAnalysis
+    dex_analysis: &DexAnalysis,
 ) -> AnalysisConfidence {
     let mut confidence_factors = Vec::new();
 
@@ -728,10 +737,7 @@ fn calculate_flow_confidence(nodes: &[FlowNode], edges: &[FlowEdge]) -> f64 {
     factors += 1;
 
     // Factor 3: Balance between inflows and outflows
-    let total_amount: f64 = edges
-        .iter()
-        .map(|e| e.amount)
-        .sum();
+    let total_amount: f64 = edges.iter().map(|e| e.amount).sum();
     if total_amount > 0.0 {
         score += 0.3;
     }
@@ -769,16 +775,11 @@ fn sum_inner_wsol_transferchecked_ui(tx_data: &crate::rpc::TransactionDetails) -
             for ix in ixs {
                 if let Some(parsed) = ix.get("parsed") {
                     if let Some(info) = parsed.get("info") {
-                        let mint = info
-                            .get("mint")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("");
+                        let mint = info.get("mint").and_then(|v| v.as_str()).unwrap_or("");
                         if mint == WSOL_MINT {
                             if let Some(token_amount) = info.get("tokenAmount") {
-                                if
-                                    let Some(ui) = token_amount
-                                        .get("uiAmount")
-                                        .and_then(|v| v.as_f64())
+                                if let Some(ui) =
+                                    token_amount.get("uiAmount").and_then(|v| v.as_f64())
                                 {
                                     if ui > 0.0 {
                                         total_ui += ui;

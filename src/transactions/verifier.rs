@@ -81,8 +81,7 @@ pub async fn verify_transaction_for_position(
         "VERIFY",
         &format!(
             "Verifying transaction {} for position (expected: {:?})",
-            signature,
-            expected_type
+            signature, expected_type
         ),
     );
 

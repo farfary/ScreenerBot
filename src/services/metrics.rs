@@ -1,11 +1,11 @@
-use serde::{ Deserialize, Serialize };
-use sysinfo::{ System, Pid };
-use tokio_metrics::TaskMonitor;
+use futures::StreamExt;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{ Mutex, Notify };
-use std::time::{ Instant, Duration };
-use futures::StreamExt;
+use std::time::{Duration, Instant};
+use sysinfo::{Pid, System};
+use tokio::sync::{Mutex, Notify};
+use tokio_metrics::TaskMonitor;
 
 /// Service resource metrics with accurate per-service tracking
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -130,7 +130,7 @@ impl MetricsCollector {
         &self,
         service_name: &'static str,
         monitor: TaskMonitor,
-        shutdown: Arc<Notify>
+        shutdown: Arc<Notify>,
     ) {
         // Initialize storage
         let mut start_times = self.service_start_times.lock().await;
@@ -155,7 +155,7 @@ impl MetricsCollector {
                     _ = interval_timer.tick() => {
                         // Sample cumulative metrics
                         let metrics_snapshot = monitor.cumulative();
-                        
+
                         // Update storage with current cumulative values
                         let mut storage = accumulated_metrics.lock().await;
                         if let Some(metrics) = storage.get_mut(&service_name) {
@@ -254,7 +254,7 @@ impl MetricsCollector {
     /// Collect metrics for all services efficiently (single refresh, no &mut needed)
     pub async fn collect_all(
         &self,
-        service_names: &[&'static str]
+        service_names: &[&'static str],
     ) -> HashMap<&'static str, ServiceMetrics> {
         // Refresh system info ONCE for all services - async-safe
         {
@@ -317,21 +317,24 @@ impl MetricsCollector {
                 .map(|start| start.elapsed().as_secs())
                 .unwrap_or(0);
 
-            metrics.insert(name, ServiceMetrics {
-                process_cpu_percent: cpu,
-                process_memory_bytes: memory,
-                task_count,
-                total_polls,
-                total_poll_duration_ns: total_poll_duration,
-                mean_poll_duration_ns: mean_poll_duration,
-                total_idle_duration_ns: total_idle_duration,
-                mean_idle_duration_ns: mean_idle_duration,
-                uptime_seconds: uptime,
-                operations_total: 0,
-                operations_per_second: 0.0,
-                errors_total: 0,
-                custom_metrics: HashMap::new(),
-            });
+            metrics.insert(
+                name,
+                ServiceMetrics {
+                    process_cpu_percent: cpu,
+                    process_memory_bytes: memory,
+                    task_count,
+                    total_polls,
+                    total_poll_duration_ns: total_poll_duration,
+                    mean_poll_duration_ns: mean_poll_duration,
+                    total_idle_duration_ns: total_idle_duration,
+                    mean_idle_duration_ns: mean_idle_duration,
+                    uptime_seconds: uptime,
+                    operations_total: 0,
+                    operations_per_second: 0.0,
+                    errors_total: 0,
+                    custom_metrics: HashMap::new(),
+                },
+            );
         }
 
         metrics

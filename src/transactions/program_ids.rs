@@ -115,12 +115,19 @@ pub fn detect_router_from_logs(log_messages: &[String]) -> Option<&'static str> 
 
 /// Get all known Jupiter program IDs for validation
 pub fn get_jupiter_program_ids() -> &'static [&'static str] {
-    &[JUPITER_V6_PROGRAM_ID, JUPITER_V4_PROGRAM_ID, JUPITER_V3_PROGRAM_ID]
+    &[
+        JUPITER_V6_PROGRAM_ID,
+        JUPITER_V4_PROGRAM_ID,
+        JUPITER_V3_PROGRAM_ID,
+    ]
 }
 
 /// Check if a program ID belongs to Jupiter
 pub fn is_jupiter_program_id(program_id: &str) -> bool {
-    matches!(program_id, JUPITER_V6_PROGRAM_ID | JUPITER_V4_PROGRAM_ID | JUPITER_V3_PROGRAM_ID)
+    matches!(
+        program_id,
+        JUPITER_V6_PROGRAM_ID | JUPITER_V4_PROGRAM_ID | JUPITER_V3_PROGRAM_ID
+    )
 }
 
 /// Check if a program ID belongs to any known DEX aggregator

@@ -3,16 +3,16 @@
 // This module contains the main TransactionsManager struct that coordinates
 // all transaction-related operations for the ScreenerBot trading system.
 
-use chrono::{ DateTime, Utc };
+use chrono::{DateTime, Utc};
 use solana_sdk::pubkey::Pubkey;
-use std::collections::{ HashMap, HashSet };
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use tokio::sync::{ Mutex, Notify };
+use tokio::sync::{Mutex, Notify};
 
 use crate::global::is_debug_transactions_enabled;
-use crate::logger::{ log, LogTag };
+use crate::logger::{log, LogTag};
 use crate::tokens::TokenDatabase;
-use crate::transactions::{ database::TransactionDatabase, types::*, utils::* };
+use crate::transactions::{database::TransactionDatabase, types::*, utils::*};
 
 // =============================================================================
 // TRANSACTIONS MANAGER STRUCT
@@ -73,39 +73,42 @@ impl TransactionsManager {
                 &format!(
                     "Creating TransactionsManager for wallet: {}",
                     &wallet_pubkey.to_string()
-                )
+                ),
             );
         }
 
         // Initialize transaction database (and register globally for processor/on-demand access)
-        let transaction_database = match
-            crate::transactions::database::init_transaction_database().await
-        {
-            Ok(db_arc) => {
-                if debug_enabled {
+        let transaction_database =
+            match crate::transactions::database::init_transaction_database().await {
+                Ok(db_arc) => {
+                    if debug_enabled {
+                        log(
+                            LogTag::Transactions,
+                            "INFO",
+                            "Transaction database initialized successfully",
+                        );
+                    }
+                    Some(db_arc)
+                }
+                Err(e) => {
                     log(
                         LogTag::Transactions,
-                        "INFO",
-                        "Transaction database initialized successfully"
+                        "WARN",
+                        &format!("Failed to initialize transaction database: {}", e),
                     );
+                    None
                 }
-                Some(db_arc)
-            }
-            Err(e) => {
-                log(
-                    LogTag::Transactions,
-                    "WARN",
-                    &format!("Failed to initialize transaction database: {}", e)
-                );
-                None
-            }
-        };
+            };
 
         // Initialize token database integration
         let token_database = match TokenDatabase::new() {
             Ok(db) => {
                 if debug_enabled {
-                    log(LogTag::Transactions, "INFO", "Token database integration initialized");
+                    log(
+                        LogTag::Transactions,
+                        "INFO",
+                        "Token database integration initialized",
+                    );
                 }
                 Some(Arc::new(Mutex::new(db)))
             }
@@ -113,7 +116,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "WARN",
-                    &format!("Failed to initialize token database integration: {}", e)
+                    &format!("Failed to initialize token database integration: {}", e),
                 );
                 None
             }
@@ -150,7 +153,7 @@ impl TransactionsManager {
                         log(
                             LogTag::Transactions,
                             "INFO",
-                            &format!("Loaded {} known signatures from database", count)
+                            &format!("Loaded {} known signatures from database", count),
                         );
                     }
                 }
@@ -158,7 +161,7 @@ impl TransactionsManager {
                     log(
                         LogTag::Transactions,
                         "WARN",
-                        &format!("Failed to load known signatures count: {}", e)
+                        &format!("Failed to load known signatures count: {}", e),
                     );
                 }
             }
@@ -176,7 +179,7 @@ impl TransactionsManager {
                             &format!(
                                 "Loaded {} pending transactions from database",
                                 self.pending_transactions.len()
-                            )
+                            ),
                         );
                     }
                 }
@@ -184,7 +187,7 @@ impl TransactionsManager {
                     log(
                         LogTag::Transactions,
                         "WARN",
-                        &format!("Failed to load pending transactions: {}", e)
+                        &format!("Failed to load pending transactions: {}", e),
                     );
                 }
             }
@@ -203,7 +206,7 @@ impl TransactionsManager {
                     "TransactionsManager initialized for wallet: {} (known transactions: {})",
                     &self.wallet_pubkey.to_string(),
                     self.total_transactions
-                )
+                ),
             );
         }
 
@@ -219,7 +222,7 @@ impl TransactionsManager {
             log(
                 LogTag::Transactions,
                 "DEBUG",
-                "WebSocket initialization skipped (will be integrated in service module)"
+                "WebSocket initialization skipped (will be integrated in service module)",
             );
         }
 
@@ -228,7 +231,11 @@ impl TransactionsManager {
 
     /// Shutdown the manager and cleanup resources
     pub async fn shutdown(&mut self) -> Result<(), String> {
-        log(LogTag::Transactions, "INFO", "TransactionsManager shutting down...");
+        log(
+            LogTag::Transactions,
+            "INFO",
+            "TransactionsManager shutting down...",
+        );
 
         self.is_running = false;
 
@@ -238,7 +245,11 @@ impl TransactionsManager {
         // Close WebSocket connection if active
         if let Some(shutdown) = self.websocket_shutdown.take() {
             shutdown.notify_waiters();
-            log(LogTag::Transactions, "DEBUG", "WebSocket shutdown signal sent");
+            log(
+                LogTag::Transactions,
+                "DEBUG",
+                "WebSocket shutdown signal sent",
+            );
         }
 
         // Cleanup deferred retries
@@ -246,16 +257,23 @@ impl TransactionsManager {
 
         // Save pending transactions to database
         if let Some(ref db) = self.transaction_database {
-            if let Err(e) = db.save_pending_transactions(&self.pending_transactions).await {
+            if let Err(e) = db
+                .save_pending_transactions(&self.pending_transactions)
+                .await
+            {
                 log(
                     LogTag::Transactions,
                     "WARN",
-                    &format!("Failed to save pending transactions during shutdown: {}", e)
+                    &format!("Failed to save pending transactions during shutdown: {}", e),
                 );
             }
         }
 
-        log(LogTag::Transactions, "INFO", "TransactionsManager shutdown complete");
+        log(
+            LogTag::Transactions,
+            "INFO",
+            "TransactionsManager shutdown complete",
+        );
         Ok(())
     }
 }
@@ -325,7 +343,7 @@ impl TransactionsManager {
                     log(
                         LogTag::Transactions,
                         "WARN",
-                        &format!("Failed to add signature to database: {}", e)
+                        &format!("Failed to add signature to database: {}", e),
                     );
                 }
             }
@@ -373,7 +391,7 @@ impl TransactionsManager {
             log(
                 LogTag::Transactions,
                 "DEBUG",
-                &format!("Added pending transaction: {}", &signature)
+                &format!("Added pending transaction: {}", &signature),
             );
         }
     }
@@ -388,7 +406,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "DEBUG",
-                    &format!("Removed pending transaction: {}", signature)
+                    &format!("Removed pending transaction: {}", signature),
                 );
             }
         }
@@ -413,9 +431,8 @@ impl TransactionsManager {
                         "DEBUG",
                         &format!(
                             "Expired pending transaction: {} (age: {}s)",
-                            signature,
-                            age_secs
-                        )
+                            signature, age_secs
+                        ),
                     );
                 }
                 expired_count += 1;
@@ -429,7 +446,7 @@ impl TransactionsManager {
             log(
                 LogTag::Transactions,
                 "INFO",
-                &format!("Cleaned up {} expired pending transactions", expired_count)
+                &format!("Cleaned up {} expired pending transactions", expired_count),
             );
 
             // Also cleanup global pending cache
@@ -461,10 +478,7 @@ impl TransactionsManager {
             log(
                 LogTag::Transactions,
                 "DEBUG",
-                &format!(
-                    "Added deferred retry for signature: {}",
-                    &signature
-                )
+                &format!("Added deferred retry for signature: {}", &signature),
             );
         }
     }
@@ -495,10 +509,7 @@ impl TransactionsManager {
                             log(
                                 LogTag::Transactions,
                                 "WARN",
-                                &format!(
-                                    "Exhausted retries for signature: {}",
-                                    signature
-                                )
+                                &format!("Exhausted retries for signature: {}", signature),
                             );
                         }
                     }
@@ -526,10 +537,7 @@ impl TransactionsManager {
                 log(
                     LogTag::Transactions,
                     "DEBUG",
-                    &format!(
-                        "Removed deferred retry for signature: {}",
-                        signature
-                    )
+                    &format!("Removed deferred retry for signature: {}", signature),
                 );
             }
         }

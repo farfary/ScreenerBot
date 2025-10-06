@@ -11,9 +11,9 @@
 //! Use this to understand how different platforms charge fees and move tokens,
 //! so we can accurately extract swap amounts without hardcoding percentages.
 
-use std::{ collections::HashMap, str::FromStr };
+use std::{collections::HashMap, str::FromStr};
 
-use anyhow::{ anyhow, Context, Result };
+use anyhow::{anyhow, Context, Result};
 use clap::Parser;
 use colored::*;
 use serde_json::Value;
@@ -22,11 +22,9 @@ use solana_sdk::pubkey::Pubkey;
 use screenerbot::{
     arguments::set_cmd_args,
     events,
-    pools::swap::types::constants::{ WSOL_MINT },
+    pools::swap::types::constants::WSOL_MINT,
     transactions::{
-        database::init_transaction_database,
-        processor::TransactionProcessor,
-        types::{ Transaction },
+        database::init_transaction_database, processor::TransactionProcessor, types::Transaction,
     },
 };
 
@@ -130,9 +128,9 @@ async fn main() -> Result<()> {
         eprintln!("Warning: Events system not initialized: {}", e);
     }
 
-    init_transaction_database().await.map_err(|e|
-        anyhow!("Failed to initialize transactions database: {}", e)
-    )?;
+    init_transaction_database()
+        .await
+        .map_err(|e| anyhow!("Failed to initialize transactions database: {}", e))?;
 
     let wallet_pubkey = Pubkey::from_str(&args.wallet).context("Invalid wallet pubkey")?;
 
@@ -141,12 +139,15 @@ async fn main() -> Result<()> {
 
     // Process the transaction to get all analysis data
     let transaction = processor
-        .process_transaction(&args.signature).await
+        .process_transaction(&args.signature)
+        .await
         .map_err(|e| anyhow!("Failed to process transaction {}: {}", args.signature, e))?;
 
     println!(
         "{}",
-        format!("=== Transaction Pattern Analysis: {} ===", args.signature).bold().cyan()
+        format!("=== Transaction Pattern Analysis: {} ===", args.signature)
+            .bold()
+            .cyan()
     );
     println!("Wallet: {}", args.wallet.green());
 
@@ -174,7 +175,7 @@ async fn main() -> Result<()> {
 async fn analyze_transaction(
     transaction: &Transaction,
     wallet_pubkey: &Pubkey,
-    args: &Args
+    args: &Args,
 ) -> Result<TransactionAnalysis> {
     let mut analysis = TransactionAnalysis {
         signature: transaction.signature.clone(),
@@ -211,7 +212,7 @@ async fn analyze_transaction(
 }
 
 fn analyze_program_interactions(
-    instructions: &[screenerbot::transactions::types::InstructionInfo]
+    instructions: &[screenerbot::transactions::types::InstructionInfo],
 ) -> Vec<ProgramInteraction> {
     let mut program_counts: HashMap<String, ProgramInteraction> = HashMap::new();
 
@@ -234,25 +235,22 @@ fn analyze_program_interactions(
 
 fn analyze_balance_changes(
     transaction: &Transaction,
-    wallet_pubkey: &Pubkey
+    wallet_pubkey: &Pubkey,
 ) -> Result<Vec<BalanceChangeDetail>> {
     let mut changes = Vec::new();
 
     // Process SOL balance changes
     for sol_change in &transaction.sol_balance_changes {
         let is_wallet = sol_change.account.to_string() == wallet_pubkey.to_string();
-        let account_type = classify_account_type(
-            &sol_change.account.to_string(),
-            SOL_MINT,
-            is_wallet
-        );
+        let account_type =
+            classify_account_type(&sol_change.account.to_string(), SOL_MINT, is_wallet);
 
         changes.push(BalanceChangeDetail {
             account: sol_change.account.to_string(),
             mint: SOL_MINT.to_string(),
             pre_balance: (sol_change.pre_balance * 1_000_000_000.0) as u64, // Convert to lamports
             post_balance: (sol_change.post_balance * 1_000_000_000.0) as u64, // Convert to lamports
-            change: (sol_change.change * 1_000_000_000.0) as i64, // Convert to lamports
+            change: (sol_change.change * 1_000_000_000.0) as i64,           // Convert to lamports
             ui_change: sol_change.change,
             decimals: 9,
             is_wallet,
@@ -266,11 +264,8 @@ fn analyze_balance_changes(
         // Since TokenBalanceChange doesn't have account/owner fields, we'll use placeholder values
         let account_placeholder = format!("TokenAccount-{}", &token_change.mint[..8]);
         let is_wallet = false; // We can't determine this without account info
-        let account_type = classify_account_type(
-            &account_placeholder,
-            &token_change.mint,
-            is_wallet
-        );
+        let account_type =
+            classify_account_type(&account_placeholder, &token_change.mint, is_wallet);
 
         let pre_bal = token_change.pre_balance.unwrap_or(0.0);
         let post_bal = token_change.post_balance.unwrap_or(0.0);
@@ -299,14 +294,14 @@ fn classify_account_type(account: &str, mint: &str, is_wallet: bool) -> String {
 
     // Known program IDs
     let known_programs = [
-        "11111111111111111111111111111111", // System Program
-        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", // SPL Token Program
+        "11111111111111111111111111111111",             // System Program
+        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",  // SPL Token Program
         "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL", // Associated Token Program
-        "ComputeBudget111111111111111111111111111111", // Compute Budget Program
-        "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4", // Jupiter v6
-        "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB", // Jupiter v4
-        "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P", // Pump.fun
-        "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA", // Pump.fun AMM
+        "ComputeBudget111111111111111111111111111111",  // Compute Budget Program
+        "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",  // Jupiter v6
+        "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB",  // Jupiter v4
+        "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",  // Pump.fun
+        "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",  // Pump.fun AMM
         "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8", // Raydium AMM v4
         "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1", // Raydium AMM v5
     ];
@@ -354,9 +349,8 @@ fn extract_transfer_patterns(balance_changes: &[BalanceChangeDetail]) -> Vec<Tra
                 let sent_amount = -sender.change as u64;
                 let received_amount = receiver.change as u64;
 
-                if
-                    sent_amount >= received_amount &&
-                    sent_amount - received_amount < sent_amount / 100
+                if sent_amount >= received_amount
+                    && sent_amount - received_amount < sent_amount / 100
                 {
                     // Likely a direct transfer with possible fee
                     patterns.push(TransferPattern {
@@ -409,8 +403,7 @@ fn classify_and_extract_fees(analysis: &mut TransactionAnalysis, transaction: &T
     // Use the transaction processor's classification
     analysis.classification = format!(
         "{:?} ({:?})",
-        transaction.transaction_type,
-        transaction.direction
+        transaction.transaction_type, transaction.direction
     );
 }
 
@@ -418,9 +411,8 @@ fn extract_ata_rent_operations(analysis: &mut TransactionAnalysis) {
     const ATA_RENT_LAMPORTS: i64 = 2_039_280;
 
     for change in &analysis.balance_changes {
-        if
-            change.mint == SOL_MINT &&
-            (change.change == ATA_RENT_LAMPORTS || change.change == -ATA_RENT_LAMPORTS)
+        if change.mint == SOL_MINT
+            && (change.change == ATA_RENT_LAMPORTS || change.change == -ATA_RENT_LAMPORTS)
         {
             analysis.ata_rent_changes.push(change.clone());
         }
@@ -430,9 +422,8 @@ fn extract_ata_rent_operations(analysis: &mut TransactionAnalysis) {
 fn find_platform_fees(analysis: &mut TransactionAnalysis) {
     // Look for transfers that go to known platform fee collectors or unusual patterns
     for pattern in &analysis.transfer_patterns {
-        if
-            pattern.transfer_type == "platform_fee" ||
-            (pattern.transfer_type == "fee" && !pattern.from_account.ends_with("wallet"))
+        if pattern.transfer_type == "platform_fee"
+            || (pattern.transfer_type == "fee" && !pattern.from_account.ends_with("wallet"))
         {
             analysis.potential_platform_fees.push(pattern.clone());
         }
@@ -450,11 +441,7 @@ fn print_analysis_summary(analysis: &TransactionAnalysis, args: &Args) {
             println!(
                 "  {} {} {:.9} SOL",
                 rent.account,
-                if rent.change > 0 {
-                    "received"
-                } else {
-                    "paid"
-                },
+                if rent.change > 0 { "received" } else { "paid" },
                 rent.ui_change.abs()
             );
         }
@@ -505,7 +492,11 @@ fn print_analysis_summary(analysis: &TransactionAnalysis, args: &Args) {
             } else if change.mint == WSOL_MINT {
                 "WSOL".to_string()
             } else {
-                format!("{}...{}", &change.mint[..8], &change.mint[change.mint.len() - 8..])
+                format!(
+                    "{}...{}",
+                    &change.mint[..8],
+                    &change.mint[change.mint.len() - 8..]
+                )
             };
 
             println!(
@@ -531,12 +522,15 @@ fn print_analysis_summary(analysis: &TransactionAnalysis, args: &Args) {
             } else if pattern.mint == WSOL_MINT {
                 "WSOL".to_string()
             } else {
-                format!("{}...{}", &pattern.mint[..8], &pattern.mint[pattern.mint.len() - 8..])
+                format!(
+                    "{}...{}",
+                    &pattern.mint[..8],
+                    &pattern.mint[pattern.mint.len() - 8..]
+                )
             };
 
-            let amount_ui =
-                (pattern.amount as f64) /
-                (10f64).powi(if pattern.mint == SOL_MINT { 9 } else { 6 });
+            let amount_ui = (pattern.amount as f64)
+                / (10f64).powi(if pattern.mint == SOL_MINT { 9 } else { 6 });
 
             println!(
                 "  {} {:.9} {} → {} ({})",

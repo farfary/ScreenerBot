@@ -1,24 +1,19 @@
 /// Jupiter Router Implementation
 /// Handles swap quotes and execution via Jupiter DEX router
 /// Based on official Jupiter API documentation: https://dev.jup.ag/docs/swap-api/
-
 use crate::config::with_config;
 use crate::constants::SOL_MINT;
 use crate::errors::ScreenerBotError;
-use crate::global::{ is_debug_api_enabled, is_debug_swaps_enabled };
-use crate::logger::{ log, LogTag };
+use crate::global::{is_debug_api_enabled, is_debug_swaps_enabled};
+use crate::logger::{log, LogTag};
 use crate::swaps::types::{
-    JupiterQuoteResponse,
-    JupiterSwapResponse,
-    RawTransaction,
-    SwapData,
-    SwapQuote,
+    JupiterQuoteResponse, JupiterSwapResponse, RawTransaction, SwapData, SwapQuote,
 };
-use crate::tokens::decimals::{ get_token_decimals_from_chain, SOL_DECIMALS };
+use crate::tokens::decimals::{get_token_decimals_from_chain, SOL_DECIMALS};
 use crate::tokens::Token;
 
 use reqwest;
-use tokio::time::{ timeout, Duration };
+use tokio::time::{timeout, Duration};
 
 /// Jupiter swap result structure
 #[derive(Debug)]
@@ -31,7 +26,7 @@ pub struct JupiterSwapResult {
     pub fee_lamports: u64,
     pub execution_time: f64,
     pub effective_price: Option<f64>, // Price per token in SOL
-    pub swap_data: Option<SwapData>, // Complete swap data for reference
+    pub swap_data: Option<SwapData>,  // Complete swap data for reference
     pub error: Option<String>,
 }
 
@@ -40,7 +35,7 @@ pub struct JupiterSwapResult {
 pub async fn jupiter_sign_and_send_transaction(
     swap_transaction_base64: &str,
     priority_fee_lamports: Option<u64>,
-    compute_unit_limit: Option<u64>
+    compute_unit_limit: Option<u64>,
 ) -> Result<String, ScreenerBotError> {
     if is_debug_swaps_enabled() {
         log(
@@ -53,7 +48,7 @@ pub async fn jupiter_sign_and_send_transaction(
                 swap_transaction_base64.len(),
                 priority_fee_lamports,
                 compute_unit_limit
-            )
+            ),
         );
     }
 
@@ -61,20 +56,22 @@ pub async fn jupiter_sign_and_send_transaction(
         log(
             LogTag::Swap,
             "JUPITER_SIGNING",
-            "✍️ Jupiter: Signing transaction with wallet keypair..."
+            "✍️ Jupiter: Signing transaction with wallet keypair...",
         );
     }
 
     // Get RPC client and sign+send+confirm transaction
     let rpc_client = crate::rpc::get_rpc_client();
-    let signature = rpc_client.sign_send_and_confirm_transaction(swap_transaction_base64).await?;
+    let signature = rpc_client
+        .sign_send_and_confirm_transaction(swap_transaction_base64)
+        .await?;
 
     // Confirmed signature returned
     if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "JUPITER_CONFIRMED",
-            &format!("✅ Jupiter: Transaction confirmed: {}", &signature[..8])
+            &format!("✅ Jupiter: Transaction confirmed: {}", &signature[..8]),
         );
     }
 
@@ -87,7 +84,7 @@ pub async fn get_jupiter_quote(
     output_mint: &str,
     input_amount: u64,
     slippage: f64,
-    swap_mode: &str
+    swap_mode: &str,
 ) -> Result<SwapData, ScreenerBotError> {
     if is_debug_swaps_enabled() {
         log(
@@ -110,7 +107,7 @@ pub async fn get_jupiter_quote(
                     &output_mint[..8]
                 },
                 slippage
-            )
+            ),
         );
     }
 
@@ -121,7 +118,7 @@ pub async fn get_jupiter_quote(
         ("outputMint".to_string(), output_mint.to_string()),
         ("amount".to_string(), input_amount.to_string()),
         ("slippageBps".to_string(), slippage_bps.to_string()),
-        ("swapMode".to_string(), swap_mode.to_string())
+        ("swapMode".to_string(), swap_mode.to_string()),
     ];
 
     let jupiter_quote_api = with_config(|cfg| cfg.swaps.jupiter_quote_api.clone());
@@ -136,17 +133,25 @@ pub async fn get_jupiter_quote(
     );
 
     if is_debug_swaps_enabled() {
-        log(LogTag::Swap, "JUPITER_URL", &format!("🌐 Jupiter API URL: {}", url));
+        log(
+            LogTag::Swap,
+            "JUPITER_URL",
+            &format!("🌐 Jupiter API URL: {}", url),
+        );
 
         log(
             LogTag::Swap,
             "JUPITER_FINAL_URL_DEBUG",
-            &format!("🔗 Final Jupiter URL being called: {}", url)
+            &format!("🔗 Final Jupiter URL being called: {}", url),
         );
     }
 
     if is_debug_swaps_enabled() {
-        log(LogTag::Swap, "JUPITER_API", &format!("Jupiter Quote URL: {}", url));
+        log(
+            LogTag::Swap,
+            "JUPITER_API",
+            &format!("Jupiter Quote URL: {}", url),
+        );
     }
 
     let quote_timeout_secs = with_config(|cfg| cfg.swaps.quote_timeout_secs);
@@ -161,18 +166,19 @@ pub async fn get_jupiter_quote(
   Input Amount: {} lamports
   Slippage BPS: {}
   Timeout: {}s",
-                url,
-                input_amount,
-                slippage_bps,
-                quote_timeout_secs
-            )
+                url, input_amount, slippage_bps, quote_timeout_secs
+            ),
         );
     }
 
     let client = reqwest::Client::new();
 
     if is_debug_swaps_enabled() {
-        log(LogTag::Swap, "JUPITER_REQUEST_SEND", "📤 Jupiter: Sending quote request...");
+        log(
+            LogTag::Swap,
+            "JUPITER_REQUEST_SEND",
+            "📤 Jupiter: Sending quote request...",
+        );
 
         log(
             LogTag::Swap,
@@ -184,39 +190,42 @@ pub async fn get_jupiter_quote(
   • Amount: {} lamports
   • Slippage: {}% ({} BPS)
   • Swap Mode: {}",
-                input_mint,
-                output_mint,
-                input_amount,
-                slippage,
-                slippage_bps,
-                swap_mode
-            )
+                input_mint, output_mint, input_amount, slippage, slippage_bps, swap_mode
+            ),
         );
     }
 
-    let response = timeout(Duration::from_secs(quote_timeout_secs), client.get(&url).send()).await
-        .map_err(|_| {
-            if is_debug_swaps_enabled() {
-                log(LogTag::Swap, "JUPITER_TIMEOUT", "⏰ Jupiter quote request timeout");
-            }
-            ScreenerBotError::api_error("Jupiter quote request timeout".to_string())
-        })?
-        .map_err(|e| {
-            if is_debug_swaps_enabled() {
-                log(
-                    LogTag::Swap,
-                    "JUPITER_NETWORK_ERROR",
-                    &format!("❌ Jupiter network error: {}", e)
-                );
-            }
-            ScreenerBotError::network_error(e.to_string())
-        })?;
+    let response = timeout(
+        Duration::from_secs(quote_timeout_secs),
+        client.get(&url).send(),
+    )
+    .await
+    .map_err(|_| {
+        if is_debug_swaps_enabled() {
+            log(
+                LogTag::Swap,
+                "JUPITER_TIMEOUT",
+                "⏰ Jupiter quote request timeout",
+            );
+        }
+        ScreenerBotError::api_error("Jupiter quote request timeout".to_string())
+    })?
+    .map_err(|e| {
+        if is_debug_swaps_enabled() {
+            log(
+                LogTag::Swap,
+                "JUPITER_NETWORK_ERROR",
+                &format!("❌ Jupiter network error: {}", e),
+            );
+        }
+        ScreenerBotError::network_error(e.to_string())
+    })?;
 
     if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "JUPITER_RESPONSE_STATUS",
-            &format!("📡 Jupiter API Response - Status: {}", response.status())
+            &format!("📡 Jupiter API Response - Status: {}", response.status()),
         );
     }
 
@@ -235,15 +244,22 @@ pub async fn get_jupiter_quote(
                     status,
                     status.canonical_reason().unwrap_or("Unknown"),
                     body_snippet.replace('\n', " ")
-                )
+                ),
             );
         }
-        return Err(ScreenerBotError::api_error(format!("Jupiter API error: {}", status)));
+        return Err(ScreenerBotError::api_error(format!(
+            "Jupiter API error: {}",
+            status
+        )));
     }
 
     // Parse response
     if is_debug_swaps_enabled() {
-        log(LogTag::Swap, "JUPITER_PARSING", "🔄 Jupiter: Parsing JSON response...");
+        log(
+            LogTag::Swap,
+            "JUPITER_PARSING",
+            "🔄 Jupiter: Parsing JSON response...",
+        );
     }
 
     let quote_response: JupiterQuoteResponse = response.json().await.map_err(|e| {
@@ -251,7 +267,7 @@ pub async fn get_jupiter_quote(
             log(
                 LogTag::Swap,
                 "JUPITER_PARSE_ERROR",
-                &format!("❌ Jupiter Response parsing failed: {}", e)
+                &format!("❌ Jupiter Response parsing failed: {}", e),
             );
         }
         ScreenerBotError::invalid_response(format!("Failed to parse Jupiter quote response: {}", e))
@@ -290,7 +306,7 @@ pub async fn get_jupiter_quote(
                 quote_response.out_amount,
                 quote_response.price_impact_pct,
                 quote_response.time_taken.unwrap_or(0.0)
-            )
+            ),
         );
     }
 
@@ -303,7 +319,7 @@ pub async fn get_jupiter_swap_transaction(
     quote: &SwapData,
     user_public_key: &str,
     dynamic_compute_unit_limit: bool,
-    priority_fee_lamports: Option<u64>
+    priority_fee_lamports: Option<u64>,
 ) -> Result<JupiterSwapResponse, ScreenerBotError> {
     if is_debug_swaps_enabled() {
         log(
@@ -321,7 +337,7 @@ pub async fn get_jupiter_swap_transaction(
                 } else {
                     &quote.quote.output_mint[..8]
                 }
-            )
+            ),
         );
     }
 
@@ -329,8 +345,7 @@ pub async fn get_jupiter_swap_transaction(
     let jupiter_quote = convert_swap_data_to_jupiter_quote(quote)?;
 
     // Build request body
-    let mut request_body =
-        serde_json::json!({
+    let mut request_body = serde_json::json!({
         "quoteResponse": jupiter_quote,
         "userPublicKey": user_public_key,
         "dynamicComputeUnitLimit": dynamic_compute_unit_limit,
@@ -344,7 +359,7 @@ pub async fn get_jupiter_swap_transaction(
             log(
                 LogTag::Swap,
                 "JUPITER_PRIORITY_FEE",
-                &format!("💰 Jupiter: Adding priority fee: {} lamports", fee)
+                &format!("💰 Jupiter: Adding priority fee: {} lamports", fee),
             );
         }
     }
@@ -371,34 +386,38 @@ pub async fn get_jupiter_swap_transaction(
         log(
             LogTag::Swap,
             "JUPITER_BUILD_SENDING",
-            &format!("📡 Jupiter: Sending transaction build request to {}", jupiter_swap_api)
+            &format!(
+                "📡 Jupiter: Sending transaction build request to {}",
+                jupiter_swap_api
+            ),
         );
     }
 
     let response = timeout(
         Duration::from_secs(api_timeout_secs),
-        client.post(&jupiter_swap_api).json(&request_body).send()
-    ).await
-        .map_err(|_| {
-            if is_debug_swaps_enabled() {
-                log(
-                    LogTag::Swap,
-                    "JUPITER_BUILD_TIMEOUT",
-                    "⏰ Jupiter swap transaction build timeout"
-                );
-            }
-            ScreenerBotError::api_error("Jupiter swap transaction timeout".to_string())
-        })?
-        .map_err(|e| {
-            if is_debug_swaps_enabled() {
-                log(
-                    LogTag::Swap,
-                    "JUPITER_BUILD_NETWORK_ERROR",
-                    &format!("❌ Jupiter build network error: {}", e)
-                );
-            }
-            ScreenerBotError::network_error(e.to_string())
-        })?;
+        client.post(&jupiter_swap_api).json(&request_body).send(),
+    )
+    .await
+    .map_err(|_| {
+        if is_debug_swaps_enabled() {
+            log(
+                LogTag::Swap,
+                "JUPITER_BUILD_TIMEOUT",
+                "⏰ Jupiter swap transaction build timeout",
+            );
+        }
+        ScreenerBotError::api_error("Jupiter swap transaction timeout".to_string())
+    })?
+    .map_err(|e| {
+        if is_debug_swaps_enabled() {
+            log(
+                LogTag::Swap,
+                "JUPITER_BUILD_NETWORK_ERROR",
+                &format!("❌ Jupiter build network error: {}", e),
+            );
+        }
+        ScreenerBotError::network_error(e.to_string())
+    })?;
 
     let response_status = response.status();
 
@@ -406,7 +425,10 @@ pub async fn get_jupiter_swap_transaction(
         log(
             LogTag::Swap,
             "JUPITER_BUILD_RESPONSE_STATUS",
-            &format!("📡 Jupiter Build API Response - Status: {}", response_status)
+            &format!(
+                "📡 Jupiter Build API Response - Status: {}",
+                response_status
+            ),
         );
     }
 
@@ -417,22 +439,24 @@ pub async fn get_jupiter_swap_transaction(
             log(
                 LogTag::Swap,
                 "JUPITER_BUILD_ERROR",
-                &format!("❌ Jupiter Build API Error: {} - {}", response_status, error_text)
+                &format!(
+                    "❌ Jupiter Build API Error: {} - {}",
+                    response_status, error_text
+                ),
             );
         }
 
-        return Err(
-            ScreenerBotError::api_error(
-                format!("Jupiter swap API error {}: {}", response_status, error_text)
-            )
-        );
+        return Err(ScreenerBotError::api_error(format!(
+            "Jupiter swap API error {}: {}",
+            response_status, error_text
+        )));
     }
     let swap_response: JupiterSwapResponse = response.json().await.map_err(|e| {
         if is_debug_swaps_enabled() {
             log(
                 LogTag::Swap,
                 "JUPITER_BUILD_PARSE_ERROR",
-                &format!("❌ Jupiter Build Response parsing failed: {}", e)
+                &format!("❌ Jupiter Build Response parsing failed: {}", e),
             );
         }
         ScreenerBotError::invalid_response(format!("Failed to parse Jupiter swap response: {}", e))
@@ -445,7 +469,7 @@ pub async fn get_jupiter_swap_transaction(
             &format!(
                 "✅ Jupiter transaction built successfully (priority fee: {} lamports)",
                 swap_response.prioritization_fee_lamports
-            )
+            ),
         );
     }
 
@@ -457,7 +481,7 @@ pub async fn execute_jupiter_swap(
     token: &Token,
     input_mint: &str,
     output_mint: &str,
-    swap_data: SwapData
+    swap_data: SwapData,
 ) -> Result<JupiterSwapResult, ScreenerBotError> {
     let wallet_address = crate::utils::get_wallet_address()?;
 
@@ -477,14 +501,13 @@ pub async fn execute_jupiter_swap(
             } else {
                 &output_mint[..8]
             }
-        )
+        ),
     );
 
     let start_time = std::time::Instant::now();
 
-    let jupiter_dynamic_compute_unit_limit = with_config(
-        |cfg| cfg.swaps.jupiter_dynamic_compute_unit_limit
-    );
+    let jupiter_dynamic_compute_unit_limit =
+        with_config(|cfg| cfg.swaps.jupiter_dynamic_compute_unit_limit);
     let jupiter_default_priority_fee = with_config(|cfg| cfg.swaps.jupiter_default_priority_fee);
 
     // Get swap transaction from Jupiter
@@ -492,27 +515,35 @@ pub async fn execute_jupiter_swap(
         &swap_data,
         &wallet_address,
         jupiter_dynamic_compute_unit_limit,
-        Some(jupiter_default_priority_fee) // default priority fee
-    ).await?;
+        Some(jupiter_default_priority_fee), // default priority fee
+    )
+    .await?;
 
     // Sign and send transaction using Jupiter-specific method
     let transaction_signature = jupiter_sign_and_send_transaction(
         &jupiter_tx.swap_transaction,
         Some(jupiter_tx.prioritization_fee_lamports),
-        None
-    ).await?;
+        None,
+    )
+    .await?;
 
     log(
         LogTag::Swap,
         "JUPITER_PENDING",
-        &format!("🟡 Jupiter transaction submitted! TX: {} - Now adding to monitoring service...", transaction_signature)
+        &format!(
+            "🟡 Jupiter transaction submitted! TX: {} - Now adding to monitoring service...",
+            transaction_signature
+        ),
     );
 
     // Simplified approach - no complex transaction monitoring
     log(
         LogTag::Swap,
         "JUPITER_TRANSACTION_SUCCESS",
-        &format!("📝 Jupiter swap transaction completed: {}", &transaction_signature[..8])
+        &format!(
+            "📝 Jupiter swap transaction completed: {}",
+            &transaction_signature[..8]
+        ),
     );
 
     // Record swap event for durability
@@ -523,8 +554,9 @@ pub async fn execute_jupiter_swap(
         swap_data.quote.in_amount.parse().unwrap_or(0),
         swap_data.quote.out_amount.parse().unwrap_or(0),
         true,
-        None
-    ).await;
+        None,
+    )
+    .await;
 
     // Return success result with quote data
     let execution_time = start_time.elapsed().as_secs_f64();
@@ -545,20 +577,24 @@ pub async fn execute_jupiter_swap(
 
 /// Converts Jupiter quote response to unified SwapData format
 async fn convert_jupiter_quote_to_swap_data(
-    jupiter_quote: JupiterQuoteResponse
+    jupiter_quote: JupiterQuoteResponse,
 ) -> Result<SwapData, ScreenerBotError> {
     // Create SwapQuote from Jupiter response
     // CRITICAL FIX: Get actual token decimals instead of hardcoding to 9
     let input_decimals = if jupiter_quote.input_mint == SOL_MINT {
         SOL_DECIMALS
     } else {
-        get_token_decimals_from_chain(&jupiter_quote.input_mint).await.unwrap_or(SOL_DECIMALS)
+        get_token_decimals_from_chain(&jupiter_quote.input_mint)
+            .await
+            .unwrap_or(SOL_DECIMALS)
     };
 
     let output_decimals = if jupiter_quote.output_mint == SOL_MINT {
         SOL_DECIMALS
     } else {
-        get_token_decimals_from_chain(&jupiter_quote.output_mint).await.unwrap_or(SOL_DECIMALS)
+        get_token_decimals_from_chain(&jupiter_quote.output_mint)
+            .await
+            .unwrap_or(SOL_DECIMALS)
     };
 
     if is_debug_swaps_enabled() {
@@ -573,7 +609,7 @@ async fn convert_jupiter_quote_to_swap_data(
                 input_decimals,
                 &jupiter_quote.output_mint[..8],
                 output_decimals
-            )
+            ),
         );
     }
 
@@ -587,9 +623,9 @@ async fn convert_jupiter_quote_to_swap_data(
         out_decimals: output_decimals as u8,
         swap_mode: jupiter_quote.swap_mode,
         slippage_bps: jupiter_quote.slippage_bps.to_string(),
-        platform_fee: jupiter_quote.platform_fee.map(|pf|
-            serde_json::to_string(&pf).unwrap_or_default()
-        ),
+        platform_fee: jupiter_quote
+            .platform_fee
+            .map(|pf| serde_json::to_string(&pf).unwrap_or_default()),
         price_impact_pct: jupiter_quote.price_impact_pct,
         route_plan: serde_json::Value::Array(jupiter_quote.route_plan),
         context_slot: jupiter_quote.context_slot,
@@ -617,9 +653,11 @@ async fn convert_jupiter_quote_to_swap_data(
 
 /// Converts SwapData back to Jupiter quote format for transaction building
 fn convert_swap_data_to_jupiter_quote(
-    swap_data: &SwapData
+    swap_data: &SwapData,
 ) -> Result<JupiterQuoteResponse, ScreenerBotError> {
-    let slippage_bps: u16 = swap_data.quote.slippage_bps
+    let slippage_bps: u16 = swap_data
+        .quote
+        .slippage_bps
         .parse()
         .map_err(|_| ScreenerBotError::invalid_response("Invalid slippage_bps".to_string()))?;
 
@@ -636,7 +674,9 @@ fn convert_swap_data_to_jupiter_quote(
         other_amount_threshold: swap_data.quote.other_amount_threshold.clone(),
         swap_mode: swap_data.quote.swap_mode.clone(),
         slippage_bps,
-        platform_fee: swap_data.quote.platform_fee
+        platform_fee: swap_data
+            .quote
+            .platform_fee
             .as_ref()
             .and_then(|pf| serde_json::from_str(pf).ok()),
         price_impact_pct: swap_data.quote.price_impact_pct.clone(),
@@ -649,40 +689,53 @@ fn convert_swap_data_to_jupiter_quote(
 /// Validates Jupiter quote response for completeness and safety
 pub fn validate_jupiter_quote(quote: &SwapData) -> Result<(), ScreenerBotError> {
     if quote.quote.input_mint.is_empty() {
-        return Err(ScreenerBotError::invalid_response("Missing input mint".to_string()));
+        return Err(ScreenerBotError::invalid_response(
+            "Missing input mint".to_string(),
+        ));
     }
 
     if quote.quote.output_mint.is_empty() {
-        return Err(ScreenerBotError::invalid_response("Missing output mint".to_string()));
+        return Err(ScreenerBotError::invalid_response(
+            "Missing output mint".to_string(),
+        ));
     }
 
-    let in_amount: u64 = quote.quote.in_amount
+    let in_amount: u64 = quote
+        .quote
+        .in_amount
         .parse()
         .map_err(|_| ScreenerBotError::invalid_response("Invalid in_amount".to_string()))?;
 
-    let out_amount: u64 = quote.quote.out_amount
+    let out_amount: u64 = quote
+        .quote
+        .out_amount
         .parse()
         .map_err(|_| ScreenerBotError::invalid_response("Invalid out_amount".to_string()))?;
 
     if in_amount == 0 {
-        return Err(ScreenerBotError::invalid_response("Zero input amount".to_string()));
+        return Err(ScreenerBotError::invalid_response(
+            "Zero input amount".to_string(),
+        ));
     }
 
     if out_amount == 0 {
-        return Err(ScreenerBotError::invalid_response("Zero output amount".to_string()));
+        return Err(ScreenerBotError::invalid_response(
+            "Zero output amount".to_string(),
+        ));
     }
 
     // Check for reasonable price impact (less than 50%)
-    let price_impact: f64 = quote.quote.price_impact_pct
+    let price_impact: f64 = quote
+        .quote
+        .price_impact_pct
         .parse()
         .map_err(|_| ScreenerBotError::invalid_response("Invalid price impact".to_string()))?;
 
     if price_impact > 50.0 {
-        return Err(
-            ScreenerBotError::invalid_response(
-                format!("Price impact too high: {:.2}%", price_impact)
-            )
-        );
+        return Err(ScreenerBotError::invalid_response(format!(
+            "Price impact too high: {:.2}%",
+            price_impact
+        )));
     }
 
     Ok(())

@@ -11,12 +11,12 @@ use solana_sdk::signature::Signature;
 use solana_transaction_status::UiTransactionEncoding;
 use std::collections::HashMap;
 use std::str::FromStr;
-use std::time::{ Duration, Instant };
+use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
-use crate::logger::{ log, LogTag };
+use crate::logger::{log, LogTag};
 use crate::rpc::get_rpc_client;
-use crate::transactions::{ types::*, utils::* };
+use crate::transactions::{types::*, utils::*};
 
 // =============================================================================
 // FETCHER CONFIGURATION
@@ -94,7 +94,7 @@ impl TransactionFetcher {
     pub async fn fetch_recent_signatures(
         &self,
         wallet_pubkey: Pubkey,
-        limit: usize
+        limit: usize,
     ) -> Result<Vec<String>, String> {
         let start_time = Instant::now();
 
@@ -105,18 +105,15 @@ impl TransactionFetcher {
                 "Fetching {} recent signatures for wallet: {}",
                 limit,
                 &wallet_pubkey.to_string()
-            )
+            ),
         );
 
         let rpc_client = get_rpc_client();
 
         // Use optimized signature fetching with rate limiting
-        let signatures = self.fetch_signatures_with_retry(
-            &rpc_client,
-            wallet_pubkey,
-            limit,
-            None
-        ).await?;
+        let signatures = self
+            .fetch_signatures_with_retry(&rpc_client, wallet_pubkey, limit, None)
+            .await?;
 
         let duration = start_time.elapsed();
 
@@ -128,7 +125,7 @@ impl TransactionFetcher {
                 signatures.len(),
                 duration.as_millis(),
                 &wallet_pubkey.to_string()
-            )
+            ),
         );
 
         Ok(signatures)
@@ -140,13 +137,16 @@ impl TransactionFetcher {
         rpc_client: &crate::rpc::RpcClient,
         wallet_pubkey: Pubkey,
         limit: usize,
-        before: Option<&str>
+        before: Option<&str>,
     ) -> Result<Vec<String>, String> {
         let mut attempts = 0;
         let mut delay = self.config.retry_base_delay_ms;
 
         loop {
-            match self.fetch_signatures_batch(rpc_client, wallet_pubkey, limit, before).await {
+            match self
+                .fetch_signatures_batch(rpc_client, wallet_pubkey, limit, before)
+                .await
+            {
                 Ok(signatures) => {
                     if attempts > 0 {
                         log(
@@ -156,7 +156,7 @@ impl TransactionFetcher {
                                 "Signature fetch succeeded after {} retries for wallet: {}",
                                 attempts,
                                 &wallet_pubkey.to_string()
-                            )
+                            ),
                         );
                     }
                     return Ok(signatures);
@@ -164,9 +164,10 @@ impl TransactionFetcher {
                 Err(e) => {
                     attempts += 1;
                     if attempts >= self.config.max_retries {
-                        return Err(
-                            format!("Failed to fetch signatures after {} attempts: {}", attempts, e)
-                        );
+                        return Err(format!(
+                            "Failed to fetch signatures after {} attempts: {}",
+                            attempts, e
+                        ));
                     }
 
                     log(
@@ -174,10 +175,8 @@ impl TransactionFetcher {
                         "WARN",
                         &format!(
                             "Signature fetch attempt {} failed, retrying in {}ms: {}",
-                            attempts,
-                            delay,
-                            e
-                        )
+                            attempts, delay, e
+                        ),
                     );
 
                     sleep(Duration::from_millis(delay)).await;
@@ -193,17 +192,15 @@ impl TransactionFetcher {
         rpc_client: &crate::rpc::RpcClient,
         wallet_pubkey: Pubkey,
         limit: usize,
-        before: Option<&str>
+        before: Option<&str>,
     ) -> Result<Vec<String>, String> {
         // Use the existing RPC client method
         let sig_infos = rpc_client
-            .get_wallet_signatures_main_rpc(&wallet_pubkey, limit, before).await
+            .get_wallet_signatures_main_rpc(&wallet_pubkey, limit, before)
+            .await
             .map_err(|e| format!("RPC signature fetch failed: {}", e))?;
 
-        let signatures: Vec<String> = sig_infos
-            .into_iter()
-            .map(|info| info.signature)
-            .collect();
+        let signatures: Vec<String> = sig_infos.into_iter().map(|info| info.signature).collect();
 
         Ok(signatures)
     }
@@ -213,7 +210,7 @@ impl TransactionFetcher {
         &self,
         wallet_pubkey: Pubkey,
         limit: usize,
-        before: Option<&str>
+        before: Option<&str>,
     ) -> Result<Vec<String>, String> {
         let start_time = Instant::now();
 
@@ -225,17 +222,14 @@ impl TransactionFetcher {
                 limit,
                 &wallet_pubkey.to_string(),
                 before.map(|sig| sig).unwrap_or_else(|| "latest")
-            )
+            ),
         );
 
         let rpc_client = get_rpc_client();
 
-        let signatures = self.fetch_signatures_with_retry(
-            &rpc_client,
-            wallet_pubkey,
-            limit,
-            before
-        ).await?;
+        let signatures = self
+            .fetch_signatures_with_retry(&rpc_client, wallet_pubkey, limit, before)
+            .await?;
 
         let duration = start_time.elapsed();
 
@@ -247,7 +241,7 @@ impl TransactionFetcher {
                 signatures.len(),
                 duration.as_millis(),
                 &wallet_pubkey.to_string()
-            )
+            ),
         );
 
         Ok(signatures)
@@ -262,7 +256,7 @@ impl TransactionFetcher {
     /// Fetch transaction details with retry logic
     pub async fn fetch_transaction_details(
         &self,
-        signature: &str
+        signature: &str,
     ) -> Result<crate::rpc::TransactionDetails, String> {
         let start_time = Instant::now();
 
@@ -275,7 +269,11 @@ impl TransactionFetcher {
             log(
                 LogTag::Transactions,
                 "SLOW",
-                &format!("Slow transaction fetch: {} took {}ms", signature, duration.as_millis())
+                &format!(
+                    "Slow transaction fetch: {} took {}ms",
+                    signature,
+                    duration.as_millis()
+                ),
             );
         }
 
@@ -285,7 +283,7 @@ impl TransactionFetcher {
     /// Fetch transaction details with automatic retry
     async fn fetch_transaction_details_with_retry(
         &self,
-        signature: &str
+        signature: &str,
     ) -> Result<crate::rpc::TransactionDetails, String> {
         let mut attempts = 0;
         let mut delay = self.config.retry_base_delay_ms;
@@ -299,9 +297,8 @@ impl TransactionFetcher {
                             "INFO",
                             &format!(
                                 "Transaction details fetch succeeded after {} retries: {}",
-                                attempts,
-                                signature
-                            )
+                                attempts, signature
+                            ),
                         );
                     }
                     return Ok(details);
@@ -309,13 +306,10 @@ impl TransactionFetcher {
                 Err(e) => {
                     attempts += 1;
                     if attempts >= self.config.max_retries {
-                        return Err(
-                            format!(
-                                "Failed to fetch transaction details after {} attempts: {}",
-                                attempts,
-                                e
-                            )
-                        );
+                        return Err(format!(
+                            "Failed to fetch transaction details after {} attempts: {}",
+                            attempts, e
+                        ));
                     }
 
                     // Don't retry for "not found" errors
@@ -328,10 +322,8 @@ impl TransactionFetcher {
                         "WARN",
                         &format!(
                             "Transaction details fetch attempt {} failed, retrying in {}ms: {}",
-                            attempts,
-                            delay,
-                            e
-                        )
+                            attempts, delay, e
+                        ),
                     );
 
                     sleep(Duration::from_millis(delay)).await;
@@ -344,20 +336,21 @@ impl TransactionFetcher {
     /// Fetch single transaction details from RPC
     async fn fetch_single_transaction_details(
         &self,
-        signature: &str
+        signature: &str,
     ) -> Result<crate::rpc::TransactionDetails, String> {
         let rpc_client = get_rpc_client();
 
         // Use existing RPC client method
         rpc_client
-            .get_transaction_details(signature).await
+            .get_transaction_details(signature)
+            .await
             .map_err(|e| format!("Failed to fetch transaction details: {}", e))
     }
 
     /// Fetch multiple transaction details concurrently with rate limiting
     pub async fn fetch_multiple_transaction_details(
         &self,
-        signatures: Vec<String>
+        signatures: Vec<String>,
     ) -> HashMap<String, Result<crate::rpc::TransactionDetails, String>> {
         let start_time = Instant::now();
         let total_count = signatures.len();
@@ -365,7 +358,7 @@ impl TransactionFetcher {
         log(
             LogTag::Transactions,
             "BATCH_FETCH",
-            &format!("Fetching details for {} transactions", total_count)
+            &format!("Fetching details for {} transactions", total_count),
         );
 
         let mut results = HashMap::new();
@@ -408,7 +401,7 @@ impl TransactionFetcher {
                     total_chunks,
                     chunk_len,
                     chunk_duration.as_millis()
-                )
+                ),
             );
 
             // Add delay between chunks to avoid rate limiting
@@ -418,10 +411,7 @@ impl TransactionFetcher {
         }
 
         let total_duration = start_time.elapsed();
-        let success_count = results
-            .values()
-            .filter(|r| r.is_ok())
-            .count();
+        let success_count = results.values().filter(|r| r.is_ok()).count();
 
         log(
             LogTag::Transactions,
@@ -436,7 +426,7 @@ impl TransactionFetcher {
                 } else {
                     0
                 }
-            )
+            ),
         );
 
         results
@@ -489,9 +479,8 @@ impl FetcherMetrics {
             self.avg_signature_fetch_ms = if self.signature_fetches == 1 {
                 duration_ms
             } else {
-                (self.avg_signature_fetch_ms * ((self.signature_fetches - 1) as f64) +
-                    duration_ms) /
-                    (self.signature_fetches as f64)
+                (self.avg_signature_fetch_ms * ((self.signature_fetches - 1) as f64) + duration_ms)
+                    / (self.signature_fetches as f64)
             };
         } else {
             self.failed_operations += 1;
@@ -508,8 +497,8 @@ impl FetcherMetrics {
             self.avg_detail_fetch_ms = if self.detail_fetches == 1 {
                 duration_ms
             } else {
-                (self.avg_detail_fetch_ms * ((self.detail_fetches - 1) as f64) + duration_ms) /
-                    (self.detail_fetches as f64)
+                (self.avg_detail_fetch_ms * ((self.detail_fetches - 1) as f64) + duration_ms)
+                    / (self.detail_fetches as f64)
             };
         } else {
             self.failed_operations += 1;
@@ -527,8 +516,8 @@ impl FetcherMetrics {
         if total_operations == 0 {
             100.0
         } else {
-            (((total_operations - self.failed_operations) as f64) / (total_operations as f64)) *
-                100.0
+            (((total_operations - self.failed_operations) as f64) / (total_operations as f64))
+                * 100.0
         }
     }
 
@@ -562,7 +551,7 @@ impl BatchSignatureFetcher {
     pub async fn fetch_all_signatures(
         &self,
         wallet_pubkey: Pubkey,
-        max_signatures: Option<usize>
+        max_signatures: Option<usize>,
     ) -> Result<Vec<String>, String> {
         let mut all_signatures = Vec::new();
         let mut before: Option<String> = None;
@@ -574,12 +563,15 @@ impl BatchSignatureFetcher {
                 break;
             }
 
-            let batch_signatures = self.fetcher.fetch_signatures_with_retry(
-                &get_rpc_client(),
-                wallet_pubkey,
-                batch_limit,
-                before.as_deref()
-            ).await?;
+            let batch_signatures = self
+                .fetcher
+                .fetch_signatures_with_retry(
+                    &get_rpc_client(),
+                    wallet_pubkey,
+                    batch_limit,
+                    before.as_deref(),
+                )
+                .await?;
 
             if batch_signatures.is_empty() {
                 break; // No more signatures
@@ -611,7 +603,7 @@ impl BatchSignatureFetcher {
                 "Fetched {} total signatures for wallet: {}",
                 all_signatures.len(),
                 &wallet_pubkey.to_string()
-            )
+            ),
         );
 
         Ok(all_signatures)

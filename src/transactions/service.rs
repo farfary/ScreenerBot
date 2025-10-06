@@ -3,24 +3,20 @@
 // This module provides the main background service that coordinates
 // real-time transaction monitoring, WebSocket integration, and periodic processing.
 
-use chrono::{ DateTime, Utc };
-use futures::stream::{ StreamExt, FuturesUnordered };
+use chrono::{DateTime, Utc};
+use futures::stream::{FuturesUnordered, StreamExt};
 use once_cell::sync::Lazy;
-use std::collections::{ HashMap, HashSet };
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{ Mutex, Notify };
-use tokio::time::{ interval, timeout, sleep };
+use tokio::sync::{Mutex, Notify};
+use tokio::time::{interval, sleep, timeout};
 
 use crate::global::is_debug_transactions_enabled;
-use crate::logger::{ log, LogTag };
+use crate::logger::{log, LogTag};
 use crate::transactions::{
-    fetcher::TransactionFetcher,
-    manager::TransactionsManager,
-    processor::TransactionProcessor,
-    types::*,
-    utils::*,
-    websocket,
+    fetcher::TransactionFetcher, manager::TransactionsManager, processor::TransactionProcessor,
+    types::*, utils::*, websocket,
 };
 
 // =============================================================================
@@ -97,14 +93,18 @@ impl Default for ServiceConfig {
 /// Returns JoinHandle so ServiceManager can wait for graceful shutdown.
 pub async fn start_global_transaction_service(
     wallet_pubkey: solana_sdk::pubkey::Pubkey,
-    monitor: tokio_metrics::TaskMonitor
+    monitor: tokio_metrics::TaskMonitor,
 ) -> Result<tokio::task::JoinHandle<()>, String> {
     let mut running = SERVICE_RUNNING.lock().await;
     if *running {
         return Err("Transaction service is already running".to_string());
     }
 
-    log(LogTag::Transactions, "INFO", "Starting global transaction service...");
+    log(
+        LogTag::Transactions,
+        "INFO",
+        "Starting global transaction service...",
+    );
 
     // Create and initialize manager
     let mut manager = TransactionsManager::new(wallet_pubkey).await?;
@@ -140,11 +140,12 @@ pub async fn start_global_transaction_service(
             &format!(
                 "Newest observed signature: {} (oldest: {})",
                 first_sig,
-                bootstrap_stats.oldest_signature
+                bootstrap_stats
+                    .oldest_signature
                     .as_ref()
                     .map(|sig| sig)
                     .map_or("unknown", |v| v)
-            )
+            ),
         );
     }
 
@@ -165,23 +166,32 @@ pub async fn start_global_transaction_service(
     drop(running);
 
     // Start service task WITH INSTRUMENTATION and return handle so ServiceManager can wait for graceful shutdown
-    let service_handle = tokio::spawn(
-        monitor.instrument(async move {
-            if let Err(e) = run_transaction_service(config).await {
-                log(LogTag::Transactions, "ERROR", &format!("Transaction service error: {}", e));
-            }
-        })
-    );
+    let service_handle = tokio::spawn(monitor.instrument(async move {
+        if let Err(e) = run_transaction_service(config).await {
+            log(
+                LogTag::Transactions,
+                "ERROR",
+                &format!("Transaction service error: {}", e),
+            );
+        }
+    }));
 
     log(
         LogTag::Transactions,
         "INFO",
-        &format!("Global transaction service started for wallet: {}", &wallet_pubkey.to_string())
+        &format!(
+            "Global transaction service started for wallet: {}",
+            &wallet_pubkey.to_string()
+        ),
     );
 
     // Signal that transactions system is ready
     crate::global::TRANSACTIONS_SYSTEM_READY.store(true, std::sync::atomic::Ordering::SeqCst);
-    log(LogTag::Transactions, "INFO", "🟢 Transactions system ready (instrumented)");
+    log(
+        LogTag::Transactions,
+        "INFO",
+        "🟢 Transactions system ready (instrumented)",
+    );
 
     Ok(service_handle)
 }
@@ -193,7 +203,11 @@ pub async fn stop_global_transaction_service() -> Result<(), String> {
         return Ok(()); // Already stopped
     }
 
-    log(LogTag::Transactions, "INFO", "Stopping global transaction service...");
+    log(
+        LogTag::Transactions,
+        "INFO",
+        "Stopping global transaction service...",
+    );
 
     // Signal shutdown
     SHUTDOWN_NOTIFY.notify_waiters();
@@ -212,7 +226,11 @@ pub async fn stop_global_transaction_service() -> Result<(), String> {
         manager.shutdown().await?;
     }
 
-    log(LogTag::Transactions, "INFO", "Global transaction service stopped");
+    log(
+        LogTag::Transactions,
+        "INFO",
+        "Global transaction service stopped",
+    );
     Ok(())
 }
 
@@ -261,17 +279,16 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
                         log(
                             LogTag::Transactions,
                             "CACHE_REFRESH",
-                            &format!("Processed {} on-demand and refreshed cache", signature)
+                            &format!("Processed {} on-demand and refreshed cache", signature),
                         );
                     }
                     return Ok(Some(tx));
                 }
                 Err(e) => {
                     let el = e.to_lowercase();
-                    let indexing_delay =
-                        el.contains("not yet indexed") ||
-                        el.contains("not found") ||
-                        el.contains("transaction not available");
+                    let indexing_delay = el.contains("not yet indexed")
+                        || el.contains("not found")
+                        || el.contains("transaction not available");
 
                     if debug {
                         log(
@@ -282,7 +299,7 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
                                 signature,
                                 attempts + 1,
                                 e
-                            )
+                            ),
                         );
                     }
 
@@ -302,7 +319,7 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
         log(
             LogTag::Transactions,
             "CACHE_MISS",
-            &format!("No transaction data available for {}", signature)
+            &format!("No transaction data available for {}", signature),
         );
     }
 
@@ -336,12 +353,16 @@ struct BootstrapStats {
 
 /// Perform full transaction history bootstrap before marking system ready
 async fn perform_initial_transaction_bootstrap(
-    manager_arc: &Arc<Mutex<TransactionsManager>>
+    manager_arc: &Arc<Mutex<TransactionsManager>>,
 ) -> Result<BootstrapStats, String> {
     let bootstrap_timer = std::time::Instant::now();
     let (wallet_pubkey, debug, transaction_db) = {
         let mgr = manager_arc.lock().await;
-        (mgr.wallet_pubkey, mgr.debug_enabled, mgr.transaction_database.clone())
+        (
+            mgr.wallet_pubkey,
+            mgr.debug_enabled,
+            mgr.transaction_database.clone(),
+        )
     };
     let fetcher = TransactionFetcher::new();
     let processor = Arc::new(TransactionProcessor::new(wallet_pubkey));
@@ -356,7 +377,7 @@ async fn perform_initial_transaction_bootstrap(
                 log(
                     LogTag::Transactions,
                     "BOOTSTRAP",
-                    &format!("Reconciled {} processed->known signatures", added)
+                    &format!("Reconciled {} processed->known signatures", added),
                 );
             }
         }
@@ -387,7 +408,7 @@ async fn perform_initial_transaction_bootstrap(
                 log(
                     LogTag::Transactions,
                     "WARN",
-                    &format!("Failed to load bootstrap state: {}", e)
+                    &format!("Failed to load bootstrap state: {}", e),
                 );
                 // Fallback to default behavior (FULL with checkpoint on oldest-known if any)
                 checkpoint_signature = None;
@@ -403,11 +424,15 @@ async fn perform_initial_transaction_bootstrap(
             &wallet_pubkey.to_string(),
             &bootstrap_mode,
             batch_limit
-        )
+        ),
     );
 
     if let Some(ref checkpoint) = checkpoint_signature {
-        log(LogTag::Transactions, "BOOTSTRAP", &format!("📌 Checkpoint: {}...", &checkpoint[..8]));
+        log(
+            LogTag::Transactions,
+            "BOOTSTRAP",
+            &format!("📌 Checkpoint: {}...", &checkpoint[..8]),
+        );
     }
 
     // =========================================================================
@@ -423,7 +448,7 @@ async fn perform_initial_transaction_bootstrap(
     log(
         LogTag::Transactions,
         "BOOTSTRAP_PHASE1",
-        &format!("📥 Phase 1: Collecting {} signatures...", phase1_label)
+        &format!("📥 Phase 1: Collecting {} signatures...", phase1_label),
     );
 
     let mut all_signatures: Vec<String> = Vec::new();
@@ -436,18 +461,16 @@ async fn perform_initial_transaction_bootstrap(
     let mut reached_chain_end = false;
 
     loop {
-        let signatures = fetcher.fetch_signatures_page(
-            wallet_pubkey,
-            batch_limit,
-            before.as_deref()
-        ).await?;
+        let signatures = fetcher
+            .fetch_signatures_page(wallet_pubkey, batch_limit, before.as_deref())
+            .await?;
 
         if signatures.is_empty() {
             if debug {
                 log(
                     LogTag::Transactions,
                     "BOOTSTRAP_PHASE1",
-                    "No additional signatures returned from RPC"
+                    "No additional signatures returned from RPC",
                 );
             }
             reached_chain_end = true;
@@ -470,7 +493,7 @@ async fn perform_initial_transaction_bootstrap(
                         &format!(
                             "✅ Hit checkpoint signature - stopping at page {}",
                             stats.total_rpc_pages
-                        )
+                        ),
                     );
                     break;
                 }
@@ -487,7 +510,7 @@ async fn perform_initial_transaction_bootstrap(
             if bootstrap_mode == "INCREMENTAL" {
                 all_signatures.extend(signatures.clone());
                 // Only one page needed in forward incremental
-                if signatures.len() < batch_limit {/* done anyway */}
+                if signatures.len() < batch_limit { /* done anyway */ }
                 break;
             } else {
                 all_signatures.extend(signatures.clone());
@@ -508,7 +531,7 @@ async fn perform_initial_transaction_bootstrap(
                 page_count,
                 all_signatures.len(),
                 phase1_timer.elapsed().as_secs()
-            )
+            ),
         );
 
         before = signatures.last().cloned();
@@ -520,7 +543,7 @@ async fn perform_initial_transaction_bootstrap(
                     log(
                         LogTag::Transactions,
                         "WARN",
-                        &format!("Failed to persist backfill cursor: {}", e)
+                        &format!("Failed to persist backfill cursor: {}", e),
                     );
                 }
             }
@@ -574,7 +597,7 @@ async fn perform_initial_transaction_bootstrap(
     log(
         LogTag::Transactions,
         "BOOTSTRAP_PHASE2",
-        "⚙️  Phase 2: Filtering and processing new transactions..."
+        "⚙️  Phase 2: Filtering and processing new transactions...",
     );
 
     let phase2_timer = std::time::Instant::now();
@@ -595,7 +618,7 @@ async fn perform_initial_transaction_bootstrap(
                         log(
                             LogTag::Transactions,
                             "WARN",
-                            &format!("Failed to query known status for {}: {}", signature, e)
+                            &format!("Failed to query known status for {}: {}", signature, e),
                         );
                         stats.errors += 1;
                     }
@@ -637,7 +660,7 @@ async fn perform_initial_transaction_bootstrap(
     for batch_start in (0..signatures_to_process.len()).step_by(CONCURRENT_BATCH_SIZE) {
         let batch_end = std::cmp::min(
             batch_start + CONCURRENT_BATCH_SIZE,
-            signatures_to_process.len()
+            signatures_to_process.len(),
         );
         let batch = &signatures_to_process[batch_start..batch_end];
 
@@ -650,18 +673,19 @@ async fn perform_initial_transaction_bootstrap(
             futures.push(async move {
                 let result = timeout(
                     Duration::from_secs(TRANSACTION_TIMEOUT_SECS),
-                    proc.process_transaction(&sig)
-                ).await;
+                    proc.process_transaction(&sig),
+                )
+                .await;
 
                 match result {
                     Ok(inner_result) => (sig.clone(), inner_result),
-                    Err(_) =>
-                        (
-                            sig.clone(),
-                            Err(
-                                format!("Transaction processing timed out after {}s", TRANSACTION_TIMEOUT_SECS)
-                            ),
-                        ),
+                    Err(_) => (
+                        sig.clone(),
+                        Err(format!(
+                            "Transaction processing timed out after {}s",
+                            TRANSACTION_TIMEOUT_SECS
+                        )),
+                    ),
                 }
             });
         }
@@ -675,7 +699,7 @@ async fn perform_initial_transaction_bootstrap(
                             log(
                                 LogTag::Transactions,
                                 "WARN",
-                                &format!("Failed to persist known signature {}: {}", signature, e)
+                                &format!("Failed to persist known signature {}: {}", signature, e),
                             );
                             errors += 1;
                         }
@@ -694,9 +718,8 @@ async fn perform_initial_transaction_bootstrap(
                         "WARN",
                         &format!(
                             "Failed to process bootstrap transaction {}: {} (will retry)",
-                            signature,
-                            e
-                        )
+                            signature, e
+                        ),
                     );
                     errors += 1;
                     failed_signatures.push((signature.clone(), e));
@@ -737,7 +760,7 @@ async fn perform_initial_transaction_bootstrap(
             total_to_process,
             errors,
             phase2_timer.elapsed().as_secs()
-        )
+        ),
     );
 
     // =========================================================================
@@ -754,7 +777,7 @@ async fn perform_initial_transaction_bootstrap(
                 "🔄 Phase 3: Retrying {} failed transactions (max {} attempts per transaction)",
                 failed_signatures.len(),
                 MAX_RETRY_ATTEMPTS
-            )
+            ),
         );
 
         for attempt in 1..=MAX_RETRY_ATTEMPTS {
@@ -773,7 +796,7 @@ async fn perform_initial_transaction_bootstrap(
                     MAX_RETRY_ATTEMPTS,
                     failed_signatures.len(),
                     delay_secs
-                )
+                ),
             );
 
             // Wait before retrying (exponential backoff)
@@ -785,10 +808,8 @@ async fn perform_initial_transaction_bootstrap(
 
             // Process failed signatures in batches
             for batch_start in (0..failed_signatures.len()).step_by(CONCURRENT_BATCH_SIZE) {
-                let batch_end = std::cmp::min(
-                    batch_start + CONCURRENT_BATCH_SIZE,
-                    failed_signatures.len()
-                );
+                let batch_end =
+                    std::cmp::min(batch_start + CONCURRENT_BATCH_SIZE, failed_signatures.len());
                 let batch = &failed_signatures[batch_start..batch_end];
 
                 let mut futures = FuturesUnordered::new();
@@ -799,18 +820,19 @@ async fn perform_initial_transaction_bootstrap(
                     futures.push(async move {
                         let result = timeout(
                             Duration::from_secs(TRANSACTION_TIMEOUT_SECS),
-                            proc.process_transaction(&sig)
-                        ).await;
+                            proc.process_transaction(&sig),
+                        )
+                        .await;
 
                         match result {
                             Ok(inner_result) => (sig.clone(), inner_result),
-                            Err(_) =>
-                                (
-                                    sig.clone(),
-                                    Err(
-                                        format!("Transaction processing timed out after {}s", TRANSACTION_TIMEOUT_SECS)
-                                    ),
-                                ),
+                            Err(_) => (
+                                sig.clone(),
+                                Err(format!(
+                                    "Transaction processing timed out after {}s",
+                                    TRANSACTION_TIMEOUT_SECS
+                                )),
+                            ),
                         }
                     });
                 }
@@ -825,9 +847,8 @@ async fn perform_initial_transaction_bootstrap(
                                         "WARN",
                                         &format!(
                                             "Failed to persist known signature {}: {}",
-                                            signature,
-                                            e
-                                        )
+                                            signature, e
+                                        ),
                                     );
                                 }
                             }
@@ -856,7 +877,7 @@ async fn perform_initial_transaction_bootstrap(
                     attempt,
                     retry_successful,
                     failed_signatures.len()
-                )
+                ),
             );
         }
 
@@ -868,9 +889,8 @@ async fn perform_initial_transaction_bootstrap(
                 "BOOTSTRAP_RETRY",
                 &format!(
                     "⚠️  {} transactions permanently failed after {} retry attempts",
-                    permanently_failed,
-                    MAX_RETRY_ATTEMPTS
-                )
+                    permanently_failed, MAX_RETRY_ATTEMPTS
+                ),
             );
 
             if debug {
@@ -884,7 +904,7 @@ async fn perform_initial_transaction_bootstrap(
                             .map(|(sig, _)| sig)
                             .take(10)
                             .collect::<Vec<_>>()
-                    )
+                    ),
                 );
             }
         }
@@ -906,7 +926,7 @@ async fn perform_initial_transaction_bootstrap(
                 log(
                     LogTag::Transactions,
                     "WARN",
-                    &format!("Failed to refresh known signatures count: {}", e)
+                    &format!("Failed to refresh known signatures count: {}", e),
                 );
                 stats.errors += 1;
             }
@@ -923,7 +943,7 @@ async fn perform_initial_transaction_bootstrap(
                     log(
                         LogTag::Transactions,
                         "WARN",
-                        &format!("Failed to mark full history completed: {}", e)
+                        &format!("Failed to mark full history completed: {}", e),
                     );
                 } else {
                     // Clear cursor since we reached chain end
@@ -931,7 +951,7 @@ async fn perform_initial_transaction_bootstrap(
                         log(
                             LogTag::Transactions,
                             "WARN",
-                            &format!("Failed to clear backfill cursor: {}", e)
+                            &format!("Failed to clear backfill cursor: {}", e),
                         );
                     }
                     log(
@@ -946,7 +966,7 @@ async fn perform_initial_transaction_bootstrap(
                     log(
                         LogTag::Transactions,
                         "WARN",
-                        &format!("Failed to persist final backfill cursor: {}", e)
+                        &format!("Failed to persist final backfill cursor: {}", e),
                     );
                 }
             }
@@ -998,7 +1018,11 @@ async fn perform_initial_transaction_bootstrap(
     log(LogTag::Transactions, "BOOTSTRAP_COMPLETE", &summary);
 
     if debug {
-        log(LogTag::Transactions, "DEBUG", &format!("Bootstrap stats: {:?}", stats));
+        log(
+            LogTag::Transactions,
+            "DEBUG",
+            &format!("Bootstrap stats: {:?}", stats),
+        );
     }
 
     Ok(stats)
@@ -1017,7 +1041,7 @@ async fn run_transaction_service(config: ServiceConfig) -> Result<(), String> {
             "Transaction service running for wallet: {} (interval: {}s)",
             &config.wallet_pubkey.to_string(),
             config.check_interval_secs
-        )
+        ),
     );
 
     // Initialize service components
@@ -1042,7 +1066,11 @@ async fn run_transaction_service(config: ServiceConfig) -> Result<(), String> {
     // no transactions have occurred yet
     if websocket_receiver.is_some() {
         metrics.update_websocket_activity();
-        log(LogTag::Transactions, "INFO", "WebSocket initialized successfully - marking as active");
+        log(
+            LogTag::Transactions,
+            "INFO",
+            "WebSocket initialized successfully - marking as active",
+        );
     }
 
     // Create WebSocket health check interval (every 15 seconds)
@@ -1097,10 +1125,10 @@ async fn run_transaction_service(config: ServiceConfig) -> Result<(), String> {
             // WebSocket health check (every 15 seconds)
             _ = ws_health_check_interval.tick() => {
                 metrics.update_websocket_health_check();
-                
+
                 if config.enable_websocket {
                     let ws_exists = websocket_receiver.is_some();
-                    
+
                     if !ws_exists {
                         // WebSocket doesn't exist - try to establish it
                         // This is the ONLY case where we reconnect
@@ -1109,7 +1137,7 @@ async fn run_transaction_service(config: ServiceConfig) -> Result<(), String> {
                             "INFO",
                             "🔌 No WebSocket connection - attempting to establish..."
                         );
-                        
+
                         match initialize_websocket_monitoring(config.wallet_pubkey).await {
                             Ok(new_receiver) => {
                                 websocket_receiver = new_receiver;
@@ -1171,7 +1199,11 @@ async fn run_transaction_service(config: ServiceConfig) -> Result<(), String> {
         }
     }
 
-    log(LogTag::Transactions, "INFO", "Transaction service loop ended");
+    log(
+        LogTag::Transactions,
+        "INFO",
+        "Transaction service loop ended",
+    );
     Ok(())
 }
 
@@ -1184,7 +1216,7 @@ async fn perform_periodic_check(
     config: &ServiceConfig,
     processor: &Arc<TransactionProcessor>,
     fetcher: &Arc<TransactionFetcher>,
-    metrics: &mut ServiceMetrics
+    metrics: &mut ServiceMetrics,
 ) -> Result<(), String> {
     let start_time = std::time::Instant::now();
 
@@ -1215,7 +1247,7 @@ async fn perform_periodic_check(
                 expired_count,
                 retry_count,
                 fallback_count
-            )
+            ),
         );
     }
 
@@ -1225,7 +1257,7 @@ async fn perform_periodic_check(
 /// Process deferred retries that are ready for re-processing
 async fn process_deferred_retries(
     config: &ServiceConfig,
-    processor: &Arc<TransactionProcessor>
+    processor: &Arc<TransactionProcessor>,
 ) -> Result<usize, String> {
     // This would integrate with the manager's deferred retry system
     // For now, return 0 as placeholder
@@ -1236,7 +1268,7 @@ async fn process_deferred_retries(
 async fn perform_fallback_transaction_check(
     config: &ServiceConfig,
     fetcher: &Arc<TransactionFetcher>,
-    processor: &Arc<TransactionProcessor>
+    processor: &Arc<TransactionProcessor>,
 ) -> Result<usize, String> {
     let debug = is_debug_transactions_enabled();
     let pending_txs_count = get_pending_transactions_count().await;
@@ -1253,7 +1285,9 @@ async fn perform_fallback_transaction_check(
     );
 
     // Fetch recent transactions
-    let signatures = fetcher.fetch_recent_signatures(config.wallet_pubkey, 100).await?;
+    let signatures = fetcher
+        .fetch_recent_signatures(config.wallet_pubkey, 100)
+        .await?;
     let fetched_count = signatures.len();
 
     let mut new_count = 0;
@@ -1270,7 +1304,10 @@ async fn perform_fallback_transaction_check(
                     log(
                         LogTag::Transactions,
                         "WARN",
-                        &format!("Failed to process fallback transaction {}: {}", &signature, e)
+                        &format!(
+                            "Failed to process fallback transaction {}: {}",
+                            &signature, e
+                        ),
                     );
                 }
             }
@@ -1281,7 +1318,7 @@ async fn perform_fallback_transaction_check(
         log(
             LogTag::Transactions,
             "INFO",
-            &format!("Fallback check found {} new transactions", new_count)
+            &format!("Fallback check found {} new transactions", new_count),
         );
     } else if debug {
         let known = get_known_signatures_count().await;
@@ -1290,9 +1327,8 @@ async fn perform_fallback_transaction_check(
             "DEBUG",
             &format!(
                 "Fallback check processed 0 new transactions (known cache: {}, fetched: {})",
-                known,
-                fetched_count
-            )
+                known, fetched_count
+            ),
         );
     }
 
@@ -1305,7 +1341,7 @@ async fn perform_fallback_transaction_check(
 
 /// Initialize WebSocket monitoring for real-time transaction notifications
 async fn initialize_websocket_monitoring(
-    wallet_pubkey: solana_sdk::pubkey::Pubkey
+    wallet_pubkey: solana_sdk::pubkey::Pubkey,
 ) -> Result<Option<tokio::sync::mpsc::UnboundedReceiver<String>>, String> {
     // Determine WS URL: prefer Helius if API key is present in config; else default
     let ws_url = {
@@ -1335,14 +1371,15 @@ async fn initialize_websocket_monitoring(
     log(
         LogTag::Transactions,
         "WEBSOCKET",
-        &format!("Initializing WebSocket monitoring (url: {})", ws_url_log)
+        &format!("Initializing WebSocket monitoring (url: {})", ws_url_log),
     );
 
     let receiver = websocket::start_websocket_monitoring(
         wallet_pubkey.to_string(),
         ws_url,
-        SHUTDOWN_NOTIFY.clone()
-    ).await?;
+        SHUTDOWN_NOTIFY.clone(),
+    )
+    .await?;
 
     Ok(Some(receiver))
 }
@@ -1354,12 +1391,12 @@ async fn initialize_websocket_monitoring(
 async fn handle_websocket_transaction(
     config: &ServiceConfig,
     processor: &Arc<TransactionProcessor>,
-    signature: String
+    signature: String,
 ) -> Result<(), String> {
     log(
         LogTag::Transactions,
         "WEBSOCKET",
-        &format!("Processing WebSocket transaction: {}", &signature)
+        &format!("Processing WebSocket transaction: {}", &signature),
     );
 
     // Add to pending transactions for monitoring
@@ -1374,14 +1411,20 @@ async fn handle_websocket_transaction(
             log(
                 LogTag::Transactions,
                 "WEBSOCKET",
-                &format!("Successfully processed WebSocket transaction: {}", &signature)
+                &format!(
+                    "Successfully processed WebSocket transaction: {}",
+                    &signature
+                ),
             );
         }
         Err(e) => {
             log(
                 LogTag::Transactions,
                 "ERROR",
-                &format!("Failed to process WebSocket transaction {}: {}", &signature, e)
+                &format!(
+                    "Failed to process WebSocket transaction {}: {}",
+                    &signature, e
+                ),
             );
         }
     }
@@ -1429,7 +1472,7 @@ impl ServiceMetrics {
         duration: Duration,
         expired_count: usize,
         retry_count: usize,
-        fallback_count: usize
+        fallback_count: usize,
     ) {
         self.last_periodic_check = Some(Utc::now());
         self.periodic_check_count += 1;
@@ -1438,9 +1481,9 @@ impl ServiceMetrics {
         self.average_check_duration_ms = if self.periodic_check_count == 1 {
             duration_ms
         } else {
-            (self.average_check_duration_ms * ((self.periodic_check_count - 1) as f64) +
-                duration_ms) /
-                (self.periodic_check_count as f64)
+            (self.average_check_duration_ms * ((self.periodic_check_count - 1) as f64)
+                + duration_ms)
+                / (self.periodic_check_count as f64)
         };
     }
 
@@ -1502,7 +1545,7 @@ async fn perform_health_check(metrics: &mut ServiceMetrics) -> Result<(), String
             log(
                 LogTag::Transactions,
                 "WARN",
-                &format!("No periodic check in {} seconds", time_since_check)
+                &format!("No periodic check in {} seconds", time_since_check),
             );
         }
     }
@@ -1525,7 +1568,7 @@ async fn perform_health_check(metrics: &mut ServiceMetrics) -> Result<(), String
                 metrics.websocket_transaction_count,
                 metrics.error_count,
                 metrics.average_check_duration_ms
-            )
+            ),
         );
     }
 
@@ -1551,7 +1594,7 @@ async fn should_perform_fallback_check(metrics: &ServiceMetrics) -> bool {
             log(
                 LogTag::Transactions,
                 "DEBUG",
-                "Skipping fallback: no pending transactions or verifications (idle state)"
+                "Skipping fallback: no pending transactions or verifications (idle state)",
             );
         }
         return false;
@@ -1603,7 +1646,7 @@ async fn should_perform_fallback_check(metrics: &ServiceMetrics) -> bool {
                     log(
                         LogTag::Transactions,
                         "DEBUG",
-                        &format!("Waiting for WebSocket to connect (uptime: {}s)", uptime)
+                        &format!("Waiting for WebSocket to connect (uptime: {}s)", uptime),
                     );
                 }
                 false
