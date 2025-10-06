@@ -2484,10 +2484,10 @@ fn common_scripts() -> &'static str {
                 }
                 
                 // Update UI based on response
-                const status = data.data?.status || {};
+                const status = data.status || data.data?.status || {};
                 updateTraderUI(status.enabled, status.running);
                 
-                const message = data.data?.message || data.message || 
+                const message = data.message || data.data?.message || 
                     (isRunning ? 'Trader stopped successfully' : 'Trader started successfully');
                 showToast(`✅ ${message}`);
                 

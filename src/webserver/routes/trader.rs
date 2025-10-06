@@ -2,8 +2,8 @@ use axum::{ extract::State, http::StatusCode, response::Response, routing::{ get
 use serde::{ Deserialize, Serialize };
 use std::sync::Arc;
 
-use crate::config::{ update_config_section, with_config };
-use crate::trader::{ is_trader_running, start_trader, stop_trader_gracefully };
+use crate::config::with_config;
+use crate::trader::{ is_trader_running, start_trader, stop_trader_gracefully, TraderControlError };
 use crate::webserver::state::AppState;
 use crate::webserver::utils::{ error_response, success_response };
 
@@ -45,26 +45,15 @@ async fn get_trader_status() -> Response {
 
 /// POST /api/trader/start - Start the trader
 async fn start_trader_handler() -> Response {
-    // Check if already enabled in config
-    let enabled = with_config(|cfg| cfg.trader.enabled);
-
-    if !enabled {
-        // Update config to enable trader
-        if
-            let Err(e) = update_config_section(|cfg| {
-                cfg.trader.enabled = true;
-            }, true)
-        {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Config Error",
-                &format!("Failed to update config: {}", e),
-                None
-            );
-        }
+    if is_trader_running() {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "Trader Error",
+            "Trader is already running",
+            None
+        );
     }
 
-    // Start the trader
     match start_trader().await {
         Ok(_) => {
             let status = TraderStatusResponse {
@@ -80,33 +69,32 @@ async fn start_trader_handler() -> Response {
 
             success_response(response)
         }
-        Err(e) =>
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Trader Error",
-                &format!("Failed to start trader: {}", e),
-                None
-            ),
+        Err(err) => {
+            let (status, message) = match err {
+                TraderControlError::ConfigUpdate(e) =>
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to update trader config: {}", e),
+                    ),
+                other => (StatusCode::BAD_REQUEST, other.to_string()),
+            };
+
+            error_response(status, "Trader Error", &message, None)
+        }
     }
 }
 
 /// POST /api/trader/stop - Stop the trader
 async fn stop_trader_handler() -> Response {
-    // Update config to disable trader
-    if
-        let Err(e) = update_config_section(|cfg| {
-            cfg.trader.enabled = false;
-        }, true)
-    {
+    if !is_trader_running() {
         return error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Config Error",
-            &format!("Failed to update config: {}", e),
+            StatusCode::BAD_REQUEST,
+            "Trader Error",
+            "Trader is already stopped",
             None
         );
     }
 
-    // Stop the trader
     match stop_trader_gracefully().await {
         Ok(_) => {
             let status = TraderStatusResponse {
@@ -122,13 +110,21 @@ async fn stop_trader_handler() -> Response {
 
             success_response(response)
         }
-        Err(e) =>
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Trader Error",
-                &format!("Failed to stop trader: {}", e),
-                None
-            ),
+        Err(err) => {
+            let (status, message) = match err {
+                TraderControlError::ConfigUpdate(e) =>
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to update trader config: {}", e),
+                    ),
+                TraderControlError::AlreadyStopped =>
+                    (StatusCode::BAD_REQUEST, "Trader is already stopped".to_string()),
+                TraderControlError::AlreadyRunning =>
+                    (StatusCode::BAD_REQUEST, "Trader is already running".to_string()),
+            };
+
+            error_response(status, "Trader Error", &message, None)
+        }
     }
 }
 

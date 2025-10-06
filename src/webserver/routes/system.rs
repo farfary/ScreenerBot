@@ -1,4 +1,4 @@
-use axum::{ extract::State, http::StatusCode, response::Response, routing::post, Router };
+use axum::{extract::State, http::StatusCode, response::Response, routing::post, Router};
 use serde::Serialize;
 use std::env;
 use std::process::Command;
@@ -7,10 +7,10 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::Instant;
 
-use crate::logger::{ log, LogTag };
+use crate::logger::{log, LogTag};
 use crate::trader::CRITICAL_OPERATIONS_IN_PROGRESS;
 use crate::webserver::state::AppState;
-use crate::webserver::utils::{ error_response, success_response };
+use crate::webserver::utils::{error_response, success_response};
 
 // =============================================================================
 // RESPONSE TYPES
@@ -34,7 +34,11 @@ async fn reboot_system() -> Response {
     let timeout = Instant::now() + Duration::from_secs(30);
     while CRITICAL_OPERATIONS_IN_PROGRESS.load(Ordering::SeqCst) > 0 {
         if Instant::now() > timeout {
-            log(LogTag::Webserver, "WARN", "Timeout waiting for critical operations during reboot");
+            log(
+                LogTag::Webserver,
+                "WARN",
+                "Timeout waiting for critical operations during reboot",
+            );
             break;
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
@@ -48,7 +52,7 @@ async fn reboot_system() -> Response {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "System Error",
                 &format!("Failed to get current executable path: {}", e),
-                None
+                None,
             );
         }
     };
@@ -58,7 +62,11 @@ async fn reboot_system() -> Response {
     log(
         LogTag::Webserver,
         "INFO",
-        &format!("Restarting process: {} with args: {:?}", current_exe.display(), args)
+        &format!(
+            "Restarting process: {} with args: {:?}",
+            current_exe.display(),
+            args
+        ),
     );
 
     // Spawn async task to perform restart after response is sent
@@ -70,30 +78,46 @@ async fn reboot_system() -> Response {
         #[cfg(unix)]
         {
             use std::os::unix::process::CommandExt;
-            log(LogTag::Webserver, "INFO", "Executing Unix exec() for process replacement");
+            log(
+                LogTag::Webserver,
+                "INFO",
+                "Executing Unix exec() for process replacement",
+            );
 
             let error = Command::new(current_exe).args(&args).exec(); // This replaces the current process
 
             // If exec returns, it failed
-            log(LogTag::Webserver, "ERROR", &format!("Failed to exec new process: {}", error));
+            log(
+                LogTag::Webserver,
+                "ERROR",
+                &format!("Failed to exec new process: {}", error),
+            );
             std::process::exit(1);
         }
 
         #[cfg(windows)]
         {
-            log(LogTag::Webserver, "INFO", "Spawning new process on Windows and exiting current");
+            log(
+                LogTag::Webserver,
+                "INFO",
+                "Spawning new process on Windows and exiting current",
+            );
 
             match Command::new(current_exe).args(&args).spawn() {
                 Ok(_) => {
                     log(
                         LogTag::Webserver,
                         "INFO",
-                        "New process spawned successfully, exiting current process"
+                        "New process spawned successfully, exiting current process",
                     );
                     std::process::exit(0);
                 }
                 Err(e) => {
-                    log(LogTag::Webserver, "ERROR", &format!("Failed to spawn new process: {}", e));
+                    log(
+                        LogTag::Webserver,
+                        "ERROR",
+                        &format!("Failed to spawn new process: {}", e),
+                    );
                     std::process::exit(1);
                 }
             }

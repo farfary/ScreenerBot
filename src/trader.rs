@@ -41,7 +41,7 @@
 // NOTE: All trading configuration parameters are now in src/config/schemas.rs
 // Access via: with_config(|cfg| cfg.trader.parameter_name)
 // =============================================================================
-use crate::config::with_config;
+use crate::config::{ update_config_section, with_config };
 use crate::global::is_debug_trader_enabled;
 use crate::logger::{ log, LogTag };
 use crate::pools::{ get_pool_price, PriceResult };
@@ -62,7 +62,7 @@ use futures::FutureExt; // for now_or_never on shutdown future
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::sync::atomic::{ AtomicBool, AtomicUsize, Ordering };
+use std::sync::atomic::{ AtomicUsize, Ordering };
 use std::sync::Arc;
 use std::sync::RwLock as StdRwLock;
 use std::time::Duration;
@@ -82,14 +82,6 @@ use crate::positions::db;
 /// Static global: tracks critical trading operations in progress to prevent force shutdown
 pub static CRITICAL_OPERATIONS_IN_PROGRESS: Lazy<Arc<std::sync::atomic::AtomicUsize>> = Lazy::new(||
     Arc::new(std::sync::atomic::AtomicUsize::new(0))
-);
-
-/// Trader-specific shutdown signal (separate from global shutdown)
-pub static TRADER_SHUTDOWN_SIGNAL: Lazy<Arc<Notify>> = Lazy::new(|| Arc::new(Notify::new()));
-
-/// Indicates whether trader background tasks are currently running
-pub static TRADER_RUNNING: Lazy<Arc<std::sync::atomic::AtomicBool>> = Lazy::new(||
-    Arc::new(std::sync::atomic::AtomicBool::new(false))
 );
 
 /// Global tracker: number of buy operations currently in-flight (reserved but not yet reflected in open positions)
@@ -2190,21 +2182,41 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 // TRADER RUNTIME CONTROL FUNCTIONS
 // =============================================================================
 
+#[derive(Debug)]
+pub enum TraderControlError {
+    AlreadyRunning,
+    AlreadyStopped,
+    ConfigUpdate(String),
+}
+
+impl std::fmt::Display for TraderControlError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TraderControlError::AlreadyRunning => write!(f, "Trader is already running"),
+            TraderControlError::AlreadyStopped => write!(f, "Trader is already stopped"),
+            TraderControlError::ConfigUpdate(err) => write!(f, "Config update failed: {}", err),
+        }
+    }
+}
+
+impl std::error::Error for TraderControlError {}
+
 /// Check if the trader is currently running
 pub fn is_trader_running() -> bool {
-    TRADER_RUNNING.load(Ordering::SeqCst)
+    with_config(|cfg| cfg.trader.enabled)
 }
 
 /// Stop the trader gracefully by signaling shutdown and waiting for tasks to complete
-pub async fn stop_trader_gracefully() -> Result<(), String> {
-    if !is_trader_running() {
-        return Err("Trader is not running".to_string());
+pub async fn stop_trader_gracefully() -> Result<(), TraderControlError> {
+    if !with_config(|cfg| cfg.trader.enabled) {
+        return Err(TraderControlError::AlreadyStopped);
     }
 
-    log(LogTag::Trader, "INFO", "Stopping trader gracefully...");
+    log(LogTag::Trader, "INFO", "Disabling trader operations...");
 
-    // Signal trader-specific shutdown
-    TRADER_SHUTDOWN_SIGNAL.notify_waiters();
+    update_config_section(|cfg| {
+        cfg.trader.enabled = false;
+    }, true).map_err(TraderControlError::ConfigUpdate)?;
 
     // Wait for critical operations to complete (max 30 seconds)
     let timeout = Instant::now() + Duration::from_secs(30);
@@ -2220,45 +2232,24 @@ pub async fn stop_trader_gracefully() -> Result<(), String> {
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
 
-    // Mark trader as stopped
-    TRADER_RUNNING.store(false, Ordering::SeqCst);
-
-    log(LogTag::Trader, "INFO", "Trader stopped successfully");
+    log(LogTag::Trader, "INFO", "Trader operations disabled");
 
     Ok(())
 }
 
 /// Start the trader by spawning monitoring tasks
-pub async fn start_trader() -> Result<(), String> {
-    if is_trader_running() {
-        return Err("Trader is already running".to_string());
+pub async fn start_trader() -> Result<(), TraderControlError> {
+    if with_config(|cfg| cfg.trader.enabled) {
+        return Err(TraderControlError::AlreadyRunning);
     }
 
-    log(LogTag::Trader, "INFO", "Starting trader...");
+    log(LogTag::Trader, "INFO", "Enabling trader operations...");
 
-    // Reset trader shutdown signal
-    // Create a new Arc<Notify> to replace the old one
-    let new_shutdown = Arc::new(Notify::new());
+    update_config_section(|cfg| {
+        cfg.trader.enabled = true;
+    }, true).map_err(TraderControlError::ConfigUpdate)?;
 
-    // Mark trader as running
-    TRADER_RUNNING.store(true, Ordering::SeqCst);
-
-    // Spawn monitoring tasks
-    tokio::spawn({
-        let shutdown = new_shutdown.clone();
-        async move {
-            monitor_new_entries(shutdown).await;
-        }
-    });
-
-    tokio::spawn({
-        let shutdown = new_shutdown.clone();
-        async move {
-            monitor_open_positions(shutdown).await;
-        }
-    });
-
-    log(LogTag::Trader, "INFO", "Trader started successfully");
+    log(LogTag::Trader, "INFO", "Trader operations enabled");
 
     Ok(())
 }

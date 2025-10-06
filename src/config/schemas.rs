@@ -132,8 +132,8 @@ config_struct! {
 
         // Security requirements
         min_security_score: i32 = 10,
-        max_top_holder_pct: f64 = 15.0,
-        max_top_3_holders_pct: f64 = 5.0,
+    max_top_holder_pct: f64 = 15.0,
+    max_top_3_holders_pct: f64 = 35.0,
         min_pumpfun_lp_lock_pct: f64 = 50.0,
         min_regular_lp_lock_pct: f64 = 50.0,
         min_unique_holders: u32 = 500,
