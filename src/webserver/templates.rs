@@ -1040,23 +1040,34 @@ fn common_styles() -> &'static str {
         .token-modal .modal-sidebar {
             width: 280px;
             min-width: 280px;
+            flex: 0 0 280px;
             background: #1a1f2e;
             border-left: 1px solid #2d3748;
             display: flex;
             flex-direction: column;
+            gap: 16px;
+            padding: 16px;
             overflow-y: auto;
+            align-self: stretch;
+            min-height: 0;
         }
 
         /* Chart Area */
         .token-modal .modal-chart-container {
             flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
             padding: 12px 16px;
             background: #0a0e14;
             position: relative;
             min-height: 400px;
+            min-width: 0;
+            overflow: hidden;
         }
 
         .token-modal .chart-canvas {
+            flex: 1;
             width: 100%;
             height: 100%;
         }
@@ -1115,20 +1126,26 @@ fn common_styles() -> &'static str {
         /* Tab Content */
         .token-modal .modal-content {
             flex: 1;
-            overflow-y: auto;
-            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
             padding: 12px 14px;
             background: #0f1419;
             min-height: 0;
+            overflow: hidden;
+            position: relative;
         }
 
         .token-modal .tab-pane {
             display: none;
-            min-height: min-content;
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
         }
 
         .token-modal .tab-pane.active {
-            display: block;
+            display: flex;
+            flex-direction: column;
             animation: fadeInContent 0.3s ease;
         }
 
@@ -1158,6 +1175,8 @@ fn common_styles() -> &'static str {
 
             .token-modal .modal-sidebar {
                 width: 100%;
+                min-width: 0;
+                flex: none;
                 border-left: none;
                 border-top: 1px solid #2d3748;
                 max-height: 300px;
@@ -1166,23 +1185,27 @@ fn common_styles() -> &'static str {
 
         /* Custom Scrollbar */
         .token-modal .modal-content::-webkit-scrollbar,
-        .token-modal .modal-sidebar::-webkit-scrollbar {
+        .token-modal .modal-sidebar::-webkit-scrollbar,
+        .token-modal .tab-pane::-webkit-scrollbar {
             width: 8px;
         }
 
         .token-modal .modal-content::-webkit-scrollbar-track,
-        .token-modal .modal-sidebar::-webkit-scrollbar-track {
+        .token-modal .modal-sidebar::-webkit-scrollbar-track,
+        .token-modal .tab-pane::-webkit-scrollbar-track {
             background: #1a1f2e;
         }
 
         .token-modal .modal-content::-webkit-scrollbar-thumb,
-        .token-modal .modal-sidebar::-webkit-scrollbar-thumb {
+        .token-modal .modal-sidebar::-webkit-scrollbar-thumb,
+        .token-modal .tab-pane::-webkit-scrollbar-thumb {
             background: #334155;
             border-radius: 4px;
         }
 
         .token-modal .modal-content::-webkit-scrollbar-thumb:hover,
-        .token-modal .modal-sidebar::-webkit-scrollbar-thumb:hover {
+        .token-modal .modal-sidebar::-webkit-scrollbar-thumb:hover,
+        .token-modal .tab-pane::-webkit-scrollbar-thumb:hover {
             background: #475569;
         }
 
