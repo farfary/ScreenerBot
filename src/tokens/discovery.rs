@@ -1933,66 +1933,73 @@ async fn print_discovery_cycle_summary(
 
 /// Start token discovery background task
 pub async fn start_token_discovery(
-    shutdown: Arc<tokio::sync::Notify>
+    shutdown: Arc<tokio::sync::Notify>,
+    monitor: tokio_metrics::TaskMonitor
 ) -> Result<tokio::task::JoinHandle<()>, String> {
-    log(LogTag::System, "START", "Starting token discovery background task");
+    log(LogTag::System, "START", "Starting token discovery background task (instrumented)");
 
-    let handle = tokio::spawn(async move {
-        let mut discovery = match TokenDiscovery::new() {
-            Ok(discovery) => {
-                if is_debug_discovery_enabled() {
-                    log(LogTag::Discovery, "INIT", "Discovery instance created successfully");
+    let handle = tokio::spawn(
+        monitor.instrument(async move {
+            let mut discovery = match TokenDiscovery::new() {
+                Ok(discovery) => {
+                    if is_debug_discovery_enabled() {
+                        log(LogTag::Discovery, "INIT", "Discovery instance created successfully");
+                    }
+                    discovery
                 }
-                discovery
-            }
-            Err(e) => {
-                log(LogTag::Discovery, "ERROR", &format!("Failed to initialize discovery: {}", e));
-                return;
-            }
-        };
+                Err(e) => {
+                    log(
+                        LogTag::Discovery,
+                        "ERROR",
+                        &format!("Failed to initialize discovery: {}", e)
+                    );
+                    return;
+                }
+            };
 
-        // Wait for Transactions system to be ready before starting discovery
-        let mut last_log = std::time::Instant::now();
-        loop {
-            let tx_ready = crate::global::TRANSACTIONS_SYSTEM_READY.load(
-                std::sync::atomic::Ordering::SeqCst
-            );
+            // Wait for Transactions system to be ready before starting discovery
+            let mut last_log = std::time::Instant::now();
+            loop {
+                let tx_ready = crate::global::TRANSACTIONS_SYSTEM_READY.load(
+                    std::sync::atomic::Ordering::SeqCst
+                );
 
-            if tx_ready {
-                if is_debug_discovery_enabled() {
+                if tx_ready {
+                    if is_debug_discovery_enabled() {
+                        log(
+                            LogTag::Discovery,
+                            "READY",
+                            "✅ Transactions ready. Starting discovery loop"
+                        );
+                    }
+                    break;
+                }
+
+                // Log only every 15 seconds
+                if last_log.elapsed() >= std::time::Duration::from_secs(15) {
                     log(
                         LogTag::Discovery,
                         "READY",
-                        "✅ Transactions ready. Starting discovery loop"
+                        "⏳ Waiting for Transactions system to be ready..."
                     );
+                    last_log = std::time::Instant::now();
                 }
-                break;
-            }
 
-            // Log only every 15 seconds
-            if last_log.elapsed() >= std::time::Duration::from_secs(15) {
-                log(
-                    LogTag::Discovery,
-                    "READY",
-                    "⏳ Waiting for Transactions system to be ready..."
-                );
-                last_log = std::time::Instant::now();
-            }
-
-            tokio::select! {
+                tokio::select! {
                 _ = shutdown.notified() => {
                     log(LogTag::Discovery, "EXIT", "Discovery exiting during dependency wait");
                     return;
                 }
                 _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {}
             }
-        }
+            }
 
-        discovery.start_discovery_loop(shutdown).await;
-        if is_debug_discovery_enabled() {
-            log(LogTag::Discovery, "EXIT", "Discovery task ended");
-        }
-    });
+            discovery.start_discovery_loop(shutdown).await;
+            if is_debug_discovery_enabled() {
+                log(LogTag::Discovery, "EXIT", "Discovery task ended");
+            }
+        })
+    );
 
     Ok(handle)
 }

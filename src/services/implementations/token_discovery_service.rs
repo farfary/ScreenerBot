@@ -34,15 +34,19 @@ impl Service for TokenDiscoveryService {
         Ok(())
     }
 
-    async fn start(&mut self, shutdown: Arc<Notify>) -> Result<Vec<JoinHandle<()>>, String> {
+    async fn start(
+        &mut self,
+        shutdown: Arc<Notify>,
+        monitor: tokio_metrics::TaskMonitor
+    ) -> Result<Vec<JoinHandle<()>>, String> {
         log(LogTag::System, "INFO", "Starting token discovery service...");
 
         // Start token discovery task
         let handle = crate::tokens::discovery
-            ::start_token_discovery(shutdown).await
+            ::start_token_discovery(shutdown, monitor).await
             .map_err(|e| format!("Failed to start token discovery: {}", e))?;
 
-        log(LogTag::System, "SUCCESS", "✅ Token discovery service started");
+        log(LogTag::System, "SUCCESS", "✅ Token discovery service started (instrumented)");
 
         Ok(vec![handle])
     }

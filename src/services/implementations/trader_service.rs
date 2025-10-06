@@ -34,22 +34,31 @@ impl Service for TraderService {
         Ok(())
     }
 
-    async fn start(&mut self, shutdown: Arc<Notify>) -> Result<Vec<JoinHandle<()>>, String> {
+    async fn start(
+        &mut self,
+        shutdown: Arc<Notify>,
+        monitor: tokio_metrics::TaskMonitor
+    ) -> Result<Vec<JoinHandle<()>>, String> {
         log(LogTag::System, "INFO", "Starting trader service...");
 
-        // Start entry monitor
+        // Start entry monitor (instrumented)
         let shutdown_entry = shutdown.clone();
-        let entry_handle = tokio::spawn(async move {
-            crate::trader::monitor_new_entries(shutdown_entry).await;
-        });
+        let monitor_entry = monitor.clone();
+        let entry_handle = tokio::spawn(
+            monitor_entry.instrument(async move {
+                crate::trader::monitor_new_entries(shutdown_entry).await;
+            })
+        );
 
-        // Start positions monitor
+        // Start positions monitor (instrumented)
         let shutdown_positions = shutdown.clone();
-        let positions_handle = tokio::spawn(async move {
-            crate::trader::monitor_open_positions(shutdown_positions).await;
-        });
+        let positions_handle = tokio::spawn(
+            monitor.instrument(async move {
+                crate::trader::monitor_open_positions(shutdown_positions).await;
+            })
+        );
 
-        log(LogTag::System, "SUCCESS", "✅ Trader service started");
+        log(LogTag::System, "SUCCESS", "✅ Trader service started (2 instrumented tasks)");
 
         Ok(vec![entry_handle, positions_handle])
     }

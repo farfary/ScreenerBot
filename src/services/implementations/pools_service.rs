@@ -34,17 +34,21 @@ impl Service for PoolsService {
         Ok(())
     }
 
-    async fn start(&mut self, shutdown: Arc<Notify>) -> Result<Vec<JoinHandle<()>>, String> {
+    async fn start(
+        &mut self,
+        shutdown: Arc<Notify>,
+        monitor: tokio_metrics::TaskMonitor
+    ) -> Result<Vec<JoinHandle<()>>, String> {
         log(LogTag::PoolService, "INFO", "Starting pool helper tasks...");
 
         // Start helper background tasks (health monitor, database cleanup, gap cleanup)
         // Note: Main pool tasks (discovery, fetcher, calculator, analyzer) are started by separate services
-        let handles = crate::pools::start_helper_tasks(shutdown).await;
+        let handles = crate::pools::start_helper_tasks(shutdown, monitor).await;
 
         log(
             LogTag::PoolService,
             "SUCCESS",
-            &format!("✅ Pool helper tasks started ({} handles)", handles.len())
+            &format!("✅ Pool helper tasks started ({} instrumented handles)", handles.len())
         );
 
         // Return handles so ServiceManager can wait for graceful shutdown

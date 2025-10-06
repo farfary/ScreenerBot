@@ -26,7 +26,11 @@ impl Service for PoolAnalyzerService {
         Ok(())
     }
 
-    async fn start(&mut self, shutdown: Arc<Notify>) -> Result<Vec<JoinHandle<()>>, String> {
+    async fn start(
+        &mut self,
+        shutdown: Arc<Notify>,
+        monitor: tokio_metrics::TaskMonitor
+    ) -> Result<Vec<JoinHandle<()>>, String> {
         log(LogTag::PoolService, "INFO", "Starting pool analyzer service...");
 
         // Get the PoolAnalyzer component from global state
@@ -35,11 +39,13 @@ impl Service for PoolAnalyzerService {
             .ok_or("PoolAnalyzer component not initialized".to_string())?;
 
         // Spawn analyzer task
-        let handle = tokio::spawn(async move {
-            analyzer.start_analyzer_task(shutdown).await;
-        });
+        let handle = tokio::spawn(
+            monitor.instrument(async move {
+                analyzer.start_analyzer_task(shutdown).await;
+            })
+        );
 
-        log(LogTag::PoolService, "SUCCESS", "✅ Pool analyzer service started");
+        log(LogTag::PoolService, "SUCCESS", "✅ Pool analyzer service started (instrumented)");
 
         Ok(vec![handle])
     }

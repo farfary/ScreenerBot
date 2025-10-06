@@ -30,7 +30,11 @@ impl Service for WebserverService {
         Ok(())
     }
 
-    async fn start(&mut self, shutdown: Arc<Notify>) -> Result<Vec<JoinHandle<()>>, String> {
+    async fn start(
+        &mut self,
+        shutdown: Arc<Notify>,
+        monitor: tokio_metrics::TaskMonitor
+    ) -> Result<Vec<JoinHandle<()>>, String> {
         log(LogTag::System, "INFO", "🌐 Starting webserver dashboard...");
 
         // Get webserver config from main config system
@@ -39,11 +43,13 @@ impl Service for WebserverService {
         let host = webserver_config.host.clone();
         let port = webserver_config.port;
 
-        let handle = tokio::spawn(async move {
-            if let Err(e) = crate::webserver::start_server(webserver_config).await {
-                log(LogTag::System, "ERROR", &format!("Webserver failed to start: {}", e));
-            }
-        });
+        let handle = tokio::spawn(
+            monitor.instrument(async move {
+                if let Err(e) = crate::webserver::start_server(webserver_config).await {
+                    log(LogTag::System, "ERROR", &format!("Webserver failed to start: {}", e));
+                }
+            })
+        );
 
         // Brief delay to let server initialize
         tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
@@ -51,7 +57,7 @@ impl Service for WebserverService {
         log(
             LogTag::System,
             "SUCCESS",
-            &format!("✅ Webserver started on http://{}:{}", host, port)
+            &format!("✅ Webserver started (instrumented) on http://{}:{}", host, port)
         );
 
         Ok(vec![handle])

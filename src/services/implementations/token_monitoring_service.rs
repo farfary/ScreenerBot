@@ -26,15 +26,19 @@ impl Service for TokenMonitoringService {
         Ok(())
     }
 
-    async fn start(&mut self, shutdown: Arc<Notify>) -> Result<Vec<JoinHandle<()>>, String> {
+    async fn start(
+        &mut self,
+        shutdown: Arc<Notify>,
+        monitor: tokio_metrics::TaskMonitor
+    ) -> Result<Vec<JoinHandle<()>>, String> {
         log(LogTag::System, "INFO", "Starting token monitoring service...");
 
         // Start token monitoring task
         let handle = crate::tokens::monitor
-            ::start_token_monitoring(shutdown).await
+            ::start_token_monitoring(shutdown, monitor).await
             .map_err(|e| format!("Failed to start token monitoring: {}", e))?;
 
-        log(LogTag::System, "SUCCESS", "✅ Token monitoring service started");
+        log(LogTag::System, "SUCCESS", "✅ Token monitoring service started (instrumented)");
 
         Ok(vec![handle])
     }

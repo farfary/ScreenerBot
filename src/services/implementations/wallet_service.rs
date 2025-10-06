@@ -26,12 +26,16 @@ impl Service for WalletService {
         Ok(())
     }
 
-    async fn start(&mut self, shutdown: Arc<Notify>) -> Result<Vec<JoinHandle<()>>, String> {
+    async fn start(
+        &mut self,
+        shutdown: Arc<Notify>,
+        monitor: tokio_metrics::TaskMonitor
+    ) -> Result<Vec<JoinHandle<()>>, String> {
         log(LogTag::System, "INFO", "Starting wallet monitoring...");
 
-        let handle = crate::wallet::start_wallet_monitoring_service(shutdown).await;
+        let handle = crate::wallet::start_wallet_monitoring_service(shutdown, monitor).await;
 
-        log(LogTag::System, "SUCCESS", "✅ Wallet service started");
+        log(LogTag::System, "SUCCESS", "✅ Wallet service started (instrumented)");
 
         Ok(vec![handle])
     }

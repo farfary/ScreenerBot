@@ -3043,6 +3043,24 @@ pub fn services_content() -> String {
                 <div class="summary-label">Unhealthy</div>
                 <div class="summary-value error" id="unhealthyServices">-</div>
             </div>
+            <div class="summary-card" title="Process-wide CPU (all services share the same process)">
+                <div class="summary-label">Process CPU</div>
+                <div class="summary-value" id="processCpu">-</div>
+            </div>
+            <div class="summary-card" title="Process-wide memory (all services share the same process)">
+                <div class="summary-label">Process Memory</div>
+                <div class="summary-value" id="processMemory">-</div>
+            </div>
+        </div>
+        
+        <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">
+            <strong>ℹ️ About Service Metrics:</strong>
+            <ul style="margin: 0.5rem 0 0 1.5rem; color: var(--text-muted);">
+                <li><strong>Activity</strong>: Shows how busy each service is based on poll time ratio (better than CPU for async tasks)</li>
+                <li><strong>Process CPU/Memory</strong>: All services run in a single async process and share these resources</li>
+                <li><strong>Avg Poll Time</strong>: How long each service spends working when polled</li>
+                <li><strong>Tasks</strong>: Number of instrumented async tasks per service</li>
+            </ul>
         </div>
         
         <div class="table-scroll">
@@ -3054,8 +3072,8 @@ pub fn services_content() -> String {
                         <th style="min-width: 80px;">Priority</th>
                         <th style="min-width: 90px;">Enabled</th>
                         <th style="min-width: 120px;">Uptime</th>
-                        <th style="min-width: 110px;" title="Process-wide CPU (shared)">CPU</th>
-                        <th style="min-width: 120px;" title="Process-wide memory (shared)">Memory</th>
+                        <th style="min-width: 110px;" title="Service activity based on poll time ratio (better than CPU for async tasks)">Activity</th>
+                        <th style="min-width: 120px;" title="Average time spent in each poll">Avg Poll Time</th>
                         <th style="min-width: 100px;">Tasks</th>
                         <th style="min-width: 220px;">Dependencies</th>
                     </tr>
@@ -3225,6 +3243,15 @@ pub fn services_content() -> String {
             document.getElementById('healthyServices').textContent = servicesData.summary.healthy_services;
             document.getElementById('startingServices').textContent = servicesData.summary.starting_services;
             document.getElementById('unhealthyServices').textContent = servicesData.summary.unhealthy_services;
+            
+            // Update process-wide metrics (get from first service, they're all the same)
+            if (servicesData.services && servicesData.services.length > 0) {
+                const firstService = servicesData.services[0];
+                const cpu = (firstService.metrics.process_cpu_percent || 0).toFixed(1);
+                const memory = formatBytes(firstService.metrics.process_memory_bytes || 0);
+                document.getElementById('processCpu').textContent = cpu + '%';
+                document.getElementById('processMemory').textContent = memory;
+            }
 
             const tbody = document.getElementById('servicesTableBody');
             if (!tbody) return;
@@ -3235,9 +3262,33 @@ pub fn services_content() -> String {
                     : '<span class="detail-value">None</span>';
                 
                 const m = service.metrics;
+                
+                // Calculate activity percentage (poll time / total time)
+                const totalTime = (m.total_poll_duration_ns || 0) + (m.total_idle_duration_ns || 0);
+                const activityPercent = totalTime > 0 
+                    ? ((m.total_poll_duration_ns || 0) / totalTime * 100).toFixed(1)
+                    : '0.0';
+                
+                // Get activity status
+                const activityValue = parseFloat(activityPercent);
+                const activityStatus = activityValue > 80 ? 'Very Active' 
+                    : activityValue > 50 ? 'Active'
+                    : activityValue > 20 ? 'Moderate'
+                    : activityValue > 5 ? 'Light'
+                    : 'Idle';
+                
+                // Color code activity
+                const activityColor = activityValue > 80 ? '#10b981' 
+                    : activityValue > 50 ? '#3b82f6'
+                    : activityValue > 20 ? '#f59e0b'
+                    : activityValue > 5 ? '#6b7280'
+                    : '#9ca3af';
+                
                 const taskInfo = m.task_count > 0 
-                    ? `${m.task_count} tasks, ${formatDuration(m.mean_poll_duration_ns)} poll, ${formatDuration(m.mean_idle_duration_ns)} idle`
+                    ? `${m.task_count} tasks\nPoll: ${formatDuration(m.mean_poll_duration_ns)}\nIdle: ${formatDuration(m.mean_idle_duration_ns)}\nTotal Polls: ${m.total_polls || 0}`
                     : 'No instrumented tasks';
+                
+                const avgPollTime = formatDuration(m.mean_poll_duration_ns || 0);
                 
                 return `
                     <tr>
@@ -3246,8 +3297,11 @@ pub fn services_content() -> String {
                         <td>${service.priority}</td>
                         <td>${service.enabled ? '✅ Enabled' : '❌ Disabled'}</td>
                         <td>${formatUptime(service.uptime_seconds)}</td>
-                        <td title="Process-wide CPU (shared across all services)">${(m.process_cpu_percent || 0).toFixed(1)}%</td>
-                        <td title="Process-wide memory (shared across all services)">${formatBytes(m.process_memory_bytes)}</td>
+                        <td title="Activity: ${activityStatus}\nPoll time ratio shows how busy this service is">
+                            <span style="color: ${activityColor}; font-weight: 600;">${activityPercent}%</span>
+                            <span style="font-size: 0.75rem; color: var(--text-muted);"> (${activityStatus})</span>
+                        </td>
+                        <td title="Average duration per poll">${avgPollTime}</td>
                         <td title="${taskInfo}">${m.task_count} tasks</td>
                         <td>${deps}</td>
                     </tr>

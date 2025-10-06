@@ -33,13 +33,19 @@ impl Service for LearningService {
         Ok(())
     }
 
-    async fn start(&mut self, shutdown: Arc<Notify>) -> Result<Vec<JoinHandle<()>>, String> {
-        log(LogTag::System, "INFO", "Learning service started");
+    async fn start(
+        &mut self,
+        shutdown: Arc<Notify>,
+        monitor: tokio_metrics::TaskMonitor
+    ) -> Result<Vec<JoinHandle<()>>, String> {
+        log(LogTag::System, "INFO", "Learning service started (instrumented)");
 
         // Learning system doesn't spawn background tasks currently
-        let handle = tokio::spawn(async move {
-            shutdown.notified().await;
-        });
+        let handle = tokio::spawn(
+            monitor.instrument(async move {
+                shutdown.notified().await;
+            })
+        );
 
         Ok(vec![handle])
     }

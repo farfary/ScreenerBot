@@ -810,21 +810,29 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
 }
 
 /// Background service for wallet monitoring
-pub async fn start_wallet_monitoring_service(shutdown: Arc<Notify>) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
-        log(LogTag::Wallet, "START", "Wallet monitoring service started");
+pub async fn start_wallet_monitoring_service(
+    shutdown: Arc<Notify>,
+    monitor: tokio_metrics::TaskMonitor
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(
+        monitor.instrument(async move {
+            log(LogTag::Wallet, "START", "Wallet monitoring service started (instrumented)");
 
-        // Initialize database
-        if let Err(e) = initialize_wallet_database().await {
-            log(LogTag::Wallet, "ERROR", &format!("Failed to initialize wallet database: {}", e));
-            return;
-        }
+            // Initialize database
+            if let Err(e) = initialize_wallet_database().await {
+                log(
+                    LogTag::Wallet,
+                    "ERROR",
+                    &format!("Failed to initialize wallet database: {}", e)
+                );
+                return;
+            }
 
-        let mut interval = tokio::time::interval(Duration::from_secs(60)); // 1 minute
-        let mut cleanup_counter = 0;
+            let mut interval = tokio::time::interval(Duration::from_secs(60)); // 1 minute
+            let mut cleanup_counter = 0;
 
-        loop {
-            tokio::select! {
+            loop {
+                tokio::select! {
                 _ = shutdown.notified() => {
                     log(LogTag::Wallet, "SHUTDOWN", "Wallet monitoring service shutting down");
                     break;
@@ -886,10 +894,11 @@ pub async fn start_wallet_monitoring_service(shutdown: Arc<Notify>) -> tokio::ta
                     }
                 }
             }
-        }
+            }
 
-        log(LogTag::Wallet, "STOPPED", "Wallet monitoring service stopped");
-    })
+            log(LogTag::Wallet, "STOPPED", "Wallet monitoring service stopped");
+        })
+    )
 }
 
 // =============================================================================

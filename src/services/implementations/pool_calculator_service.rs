@@ -26,7 +26,11 @@ impl Service for PoolCalculatorService {
         Ok(())
     }
 
-    async fn start(&mut self, shutdown: Arc<Notify>) -> Result<Vec<JoinHandle<()>>, String> {
+    async fn start(
+        &mut self,
+        shutdown: Arc<Notify>,
+        monitor: tokio_metrics::TaskMonitor
+    ) -> Result<Vec<JoinHandle<()>>, String> {
         log(LogTag::PoolService, "INFO", "Starting pool calculator service...");
 
         // Get the PriceCalculator component from global state
@@ -35,11 +39,13 @@ impl Service for PoolCalculatorService {
             .ok_or("PriceCalculator component not initialized".to_string())?;
 
         // Spawn calculator task
-        let handle = tokio::spawn(async move {
-            calculator.start_calculator_task(shutdown).await;
-        });
+        let handle = tokio::spawn(
+            monitor.instrument(async move {
+                calculator.start_calculator_task(shutdown).await;
+            })
+        );
 
-        log(LogTag::PoolService, "SUCCESS", "✅ Pool calculator service started");
+        log(LogTag::PoolService, "SUCCESS", "✅ Pool calculator service started (instrumented)");
 
         Ok(vec![handle])
     }

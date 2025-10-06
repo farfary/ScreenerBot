@@ -129,24 +129,8 @@ impl TokensSystem {
         })
     }
 
-    /// Start all background tasks
-    pub async fn start_background_tasks(
-        &mut self,
-        shutdown: Arc<Notify>
-    ) -> Result<Vec<tokio::task::JoinHandle<()>>, String> {
-        let mut handles = Vec::new();
-
-        // Start discovery task
-        log(LogTag::System, "START", "Starting token discovery task...");
-        let discovery_handle = start_token_discovery(shutdown.clone()).await?;
-        handles.push(discovery_handle);
-
-        // Note: OHLCV monitoring is now managed by ServiceManager as a separate service
-
-        log(LogTag::System, "SUCCESS", "All tokens system background tasks started");
-
-        Ok(handles)
-    }
+    // REMOVED: start_background_tasks() - background tasks now managed by separate services
+    // (token_discovery_service.rs, ohlcv_service.rs, token_monitoring_service.rs)
 
     /// Get system statistics
     pub async fn get_system_stats(&self) -> Result<TokensSystemStats, String> {

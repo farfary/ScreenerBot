@@ -172,7 +172,8 @@ pub fn is_sol_price_service_running() -> bool {
 ///
 /// Returns JoinHandle so ServiceManager can wait for graceful shutdown.
 pub async fn start_sol_price_service(
-    shutdown: Arc<Notify>
+    shutdown: Arc<Notify>,
+    monitor: tokio_metrics::TaskMonitor
 ) -> Result<tokio::task::JoinHandle<()>, String> {
     log(LogTag::SolPrice, "STARTUP", "🚀 Starting SOL price service");
 
@@ -180,11 +181,13 @@ pub async fn start_sol_price_service(
     SERVICE_RUNNING.store(true, std::sync::atomic::Ordering::SeqCst);
 
     // Spawn the background task and return handle
-    let handle = tokio::spawn(async move {
-        sol_price_task(shutdown).await;
-    });
+    let handle = tokio::spawn(
+        monitor.instrument(async move {
+            sol_price_task(shutdown).await;
+        })
+    );
 
-    log(LogTag::SolPrice, "SUCCESS", "✅ SOL price service started");
+    log(LogTag::SolPrice, "SUCCESS", "✅ SOL price service started (instrumented)");
     Ok(handle)
 }
 

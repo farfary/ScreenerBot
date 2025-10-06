@@ -26,14 +26,20 @@ impl Service for RpcStatsService {
         Ok(())
     }
 
-    async fn start(&mut self, shutdown: Arc<Notify>) -> Result<Vec<JoinHandle<()>>, String> {
+    async fn start(
+        &mut self,
+        shutdown: Arc<Notify>,
+        monitor: tokio_metrics::TaskMonitor
+    ) -> Result<Vec<JoinHandle<()>>, String> {
         log(LogTag::System, "INFO", "Starting RPC stats auto-save...");
 
-        let handle = tokio::spawn(async move {
-            crate::rpc::start_rpc_stats_auto_save_service(shutdown).await;
-        });
+        let handle = tokio::spawn(
+            monitor.instrument(async move {
+                crate::rpc::start_rpc_stats_auto_save_service(shutdown).await;
+            })
+        );
 
-        log(LogTag::System, "SUCCESS", "✅ RPC stats service started");
+        log(LogTag::System, "SUCCESS", "✅ RPC stats service started (instrumented)");
 
         Ok(vec![handle])
     }

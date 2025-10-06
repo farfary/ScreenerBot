@@ -347,31 +347,42 @@ pub fn get_debug_token_override() -> Option<Vec<String>> {
 /// Called by PoolsService after all pool sub-services are started.
 ///
 /// Returns JoinHandles so ServiceManager can wait for graceful shutdown.
-pub async fn start_helper_tasks(shutdown: Arc<Notify>) -> Vec<tokio::task::JoinHandle<()>> {
+pub async fn start_helper_tasks(
+    shutdown: Arc<Notify>,
+    monitor: tokio_metrics::TaskMonitor
+) -> Vec<tokio::task::JoinHandle<()>> {
     let mut handles = Vec::new();
 
     // Start service health monitor
     let shutdown_monitor = shutdown.clone();
+    let monitor_1 = monitor.clone();
     handles.push(
-        tokio::spawn(async move {
-            run_service_health_monitor(shutdown_monitor).await;
-        })
+        tokio::spawn(
+            monitor_1.instrument(async move {
+                run_service_health_monitor(shutdown_monitor).await;
+            })
+        )
     );
 
     // Start database cleanup task
     let shutdown_cleanup = shutdown.clone();
+    let monitor_2 = monitor.clone();
     handles.push(
-        tokio::spawn(async move {
-            run_database_cleanup_task(shutdown_cleanup).await;
-        })
+        tokio::spawn(
+            monitor_2.instrument(async move {
+                run_database_cleanup_task(shutdown_cleanup).await;
+            })
+        )
     );
 
     // Start gap detection and cleanup task
     let shutdown_gap_cleanup = shutdown.clone();
     handles.push(
-        tokio::spawn(async move {
-            run_gap_cleanup_task(shutdown_gap_cleanup).await;
-        })
+        tokio::spawn(
+            monitor.instrument(async move {
+                run_gap_cleanup_task(shutdown_gap_cleanup).await;
+            })
+        )
     );
 
     // Set readiness flag

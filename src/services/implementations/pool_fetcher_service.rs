@@ -26,7 +26,11 @@ impl Service for PoolFetcherService {
         Ok(())
     }
 
-    async fn start(&mut self, shutdown: Arc<Notify>) -> Result<Vec<JoinHandle<()>>, String> {
+    async fn start(
+        &mut self,
+        shutdown: Arc<Notify>,
+        monitor: tokio_metrics::TaskMonitor
+    ) -> Result<Vec<JoinHandle<()>>, String> {
         log(LogTag::PoolService, "INFO", "Starting pool fetcher service...");
 
         // Get the AccountFetcher component from global state
@@ -35,11 +39,13 @@ impl Service for PoolFetcherService {
             .ok_or("AccountFetcher component not initialized".to_string())?;
 
         // Spawn fetcher task
-        let handle = tokio::spawn(async move {
-            fetcher.start_fetcher_task(shutdown).await;
-        });
+        let handle = tokio::spawn(
+            monitor.instrument(async move {
+                fetcher.start_fetcher_task(shutdown).await;
+            })
+        );
 
-        log(LogTag::PoolService, "SUCCESS", "✅ Pool fetcher service started");
+        log(LogTag::PoolService, "SUCCESS", "✅ Pool fetcher service started (instrumented)");
 
         Ok(vec![handle])
     }

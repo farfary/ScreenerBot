@@ -33,14 +33,20 @@ impl Service for SecurityService {
         Ok(())
     }
 
-    async fn start(&mut self, shutdown: Arc<Notify>) -> Result<Vec<JoinHandle<()>>, String> {
+    async fn start(
+        &mut self,
+        shutdown: Arc<Notify>,
+        monitor: tokio_metrics::TaskMonitor
+    ) -> Result<Vec<JoinHandle<()>>, String> {
         log(LogTag::System, "INFO", "Starting security monitoring...");
 
-        let handle = tokio::spawn(async move {
-            crate::tokens::security::start_security_monitoring(shutdown).await;
-        });
+        let handle = tokio::spawn(
+            monitor.instrument(async move {
+                crate::tokens::security::start_security_monitoring(shutdown).await;
+            })
+        );
 
-        log(LogTag::System, "SUCCESS", "✅ Security service started");
+        log(LogTag::System, "SUCCESS", "✅ Security service started (instrumented)");
 
         Ok(vec![handle])
     }

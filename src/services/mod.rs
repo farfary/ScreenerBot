@@ -45,8 +45,12 @@ pub trait Service: Send + Sync {
         Ok(())
     }
 
-    /// Start the service
-    async fn start(&mut self, shutdown: Arc<Notify>) -> Result<Vec<JoinHandle<()>>, String>;
+    /// Start the service with TaskMonitor for metrics instrumentation
+    async fn start(
+        &mut self,
+        shutdown: Arc<Notify>,
+        monitor: tokio_metrics::TaskMonitor
+    ) -> Result<Vec<JoinHandle<()>>, String>;
 
     /// Stop the service
     async fn stop(&mut self) -> Result<(), String> {
@@ -117,20 +121,26 @@ impl ServiceManager {
 
         // Initialize and start each service
         for service_name in ordered {
+            // Get TaskMonitor FIRST (before any mutable borrow)
+            let monitor = self.get_task_monitor(service_name);
+
             if let Some(service) = self.services.get_mut(service_name) {
                 log(LogTag::System, "INFO", &format!("Initializing service: {}", service_name));
                 service.initialize().await?;
 
                 log(LogTag::System, "INFO", &format!("Starting service: {}", service_name));
-                let handles = service.start(self.shutdown.clone()).await?;
+                let handles = service.start(self.shutdown.clone(), monitor.clone()).await?;
                 self.handles.insert(service_name, handles);
-
-                // Start monitoring with TaskMonitor
-                let monitor = self.get_task_monitor(service_name);
-                self.metrics_collector.start_monitoring(service_name, monitor);
 
                 log(LogTag::System, "SUCCESS", &format!("✅ Service started: {}", service_name));
             }
+
+            // Register monitor with metrics collector and start intervals() background task
+            self.metrics_collector.start_monitoring(
+                service_name,
+                monitor,
+                self.shutdown.clone()
+            ).await;
         }
 
         log(LogTag::System, "SUCCESS", "✅ All services started successfully");

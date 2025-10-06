@@ -96,7 +96,8 @@ impl Default for ServiceConfig {
 ///
 /// Returns JoinHandle so ServiceManager can wait for graceful shutdown.
 pub async fn start_global_transaction_service(
-    wallet_pubkey: solana_sdk::pubkey::Pubkey
+    wallet_pubkey: solana_sdk::pubkey::Pubkey,
+    monitor: tokio_metrics::TaskMonitor
 ) -> Result<tokio::task::JoinHandle<()>, String> {
     let mut running = SERVICE_RUNNING.lock().await;
     if *running {
@@ -163,12 +164,14 @@ pub async fn start_global_transaction_service(
     *running = true;
     drop(running);
 
-    // Start service task and return handle so ServiceManager can wait for graceful shutdown
-    let service_handle = tokio::spawn(async move {
-        if let Err(e) = run_transaction_service(config).await {
-            log(LogTag::Transactions, "ERROR", &format!("Transaction service error: {}", e));
-        }
-    });
+    // Start service task WITH INSTRUMENTATION and return handle so ServiceManager can wait for graceful shutdown
+    let service_handle = tokio::spawn(
+        monitor.instrument(async move {
+            if let Err(e) = run_transaction_service(config).await {
+                log(LogTag::Transactions, "ERROR", &format!("Transaction service error: {}", e));
+            }
+        })
+    );
 
     log(
         LogTag::Transactions,
@@ -178,7 +181,7 @@ pub async fn start_global_transaction_service(
 
     // Signal that transactions system is ready
     crate::global::TRANSACTIONS_SYSTEM_READY.store(true, std::sync::atomic::Ordering::SeqCst);
-    log(LogTag::Transactions, "INFO", "🟢 Transactions system ready");
+    log(LogTag::Transactions, "INFO", "🟢 Transactions system ready (instrumented)");
 
     Ok(service_handle)
 }

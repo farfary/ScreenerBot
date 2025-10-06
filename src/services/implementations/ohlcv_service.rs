@@ -37,7 +37,11 @@ impl Service for OhlcvService {
         Ok(())
     }
 
-    async fn start(&mut self, shutdown: Arc<Notify>) -> Result<Vec<JoinHandle<()>>, String> {
+    async fn start(
+        &mut self,
+        shutdown: Arc<Notify>,
+        monitor: tokio_metrics::TaskMonitor
+    ) -> Result<Vec<JoinHandle<()>>, String> {
         log(LogTag::System, "INFO", "Starting OHLCV monitoring...");
 
         // Get cloned service for background monitoring
@@ -49,13 +53,15 @@ impl Service for OhlcvService {
         service.start_monitoring(shutdown.clone()).await;
 
         // Create task handle for lifecycle tracking
-        let monitor_handle = tokio::spawn(async move {
-            log(LogTag::Ohlcv, "TASK_START", "🚀 OHLCV monitoring task started");
-            shutdown.notified().await;
-            log(LogTag::Ohlcv, "TASK_END", "✅ OHLCV monitoring task ended");
-        });
+        let monitor_handle = tokio::spawn(
+            monitor.instrument(async move {
+                log(LogTag::Ohlcv, "TASK_START", "🚀 OHLCV monitoring task started (instrumented)");
+                shutdown.notified().await;
+                log(LogTag::Ohlcv, "TASK_END", "✅ OHLCV monitoring task ended");
+            })
+        );
 
-        log(LogTag::System, "SUCCESS", "✅ OHLCV monitoring started");
+        log(LogTag::System, "SUCCESS", "✅ OHLCV monitoring started (instrumented)");
 
         Ok(vec![monitor_handle])
     }

@@ -26,14 +26,20 @@ impl Service for AtaCleanupService {
         Ok(())
     }
 
-    async fn start(&mut self, shutdown: Arc<Notify>) -> Result<Vec<JoinHandle<()>>, String> {
+    async fn start(
+        &mut self,
+        shutdown: Arc<Notify>,
+        monitor: tokio_metrics::TaskMonitor
+    ) -> Result<Vec<JoinHandle<()>>, String> {
         log(LogTag::System, "INFO", "Starting ATA cleanup service...");
 
-        let handle = tokio::spawn(async move {
-            crate::ata_cleanup::start_ata_cleanup_service(shutdown).await;
-        });
+        let handle = tokio::spawn(
+            monitor.instrument(async move {
+                crate::ata_cleanup::start_ata_cleanup_service(shutdown).await;
+            })
+        );
 
-        log(LogTag::System, "SUCCESS", "✅ ATA cleanup service started");
+        log(LogTag::System, "SUCCESS", "✅ ATA cleanup service started (instrumented)");
 
         Ok(vec![handle])
     }

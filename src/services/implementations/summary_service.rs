@@ -35,22 +35,30 @@ impl Service for SummaryService {
         Ok(())
     }
 
-    async fn start(&mut self, shutdown: Arc<Notify>) -> Result<Vec<JoinHandle<()>>, String> {
+    async fn start(
+        &mut self,
+        shutdown: Arc<Notify>,
+        monitor: tokio_metrics::TaskMonitor
+    ) -> Result<Vec<JoinHandle<()>>, String> {
         if !is_summary_enabled() {
             // Return empty handle if not enabled
-            let handle = tokio::spawn(async move {
-                shutdown.notified().await;
-            });
+            let handle = tokio::spawn(
+                monitor.instrument(async move {
+                    shutdown.notified().await;
+                })
+            );
             return Ok(vec![handle]);
         }
 
         log(LogTag::System, "INFO", "Starting summary display...");
 
-        let handle = tokio::spawn(async move {
-            crate::summary::summary_loop(shutdown).await;
-        });
+        let handle = tokio::spawn(
+            monitor.instrument(async move {
+                crate::summary::summary_loop(shutdown).await;
+            })
+        );
 
-        log(LogTag::System, "SUCCESS", "✅ Summary service started");
+        log(LogTag::System, "SUCCESS", "✅ Summary service started (instrumented)");
 
         Ok(vec![handle])
     }

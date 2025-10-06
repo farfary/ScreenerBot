@@ -590,60 +590,67 @@ impl TokenMonitor {
 
 /// Start token monitoring background task
 pub async fn start_token_monitoring(
-    shutdown: Arc<tokio::sync::Notify>
+    shutdown: Arc<tokio::sync::Notify>,
+    monitor: tokio_metrics::TaskMonitor
 ) -> Result<tokio::task::JoinHandle<()>, String> {
-    log(LogTag::Monitor, "START", "Starting token monitoring background task");
+    log(LogTag::Monitor, "START", "Starting token monitoring background task (instrumented)");
 
-    let handle = tokio::spawn(async move {
-        let mut monitor = match TokenMonitor::new() {
-            Ok(monitor) => {
-                log(LogTag::Monitor, "INIT", "Token monitor instance created successfully");
-                monitor
-            }
-            Err(e) => {
-                log(
-                    LogTag::Monitor,
-                    "ERROR",
-                    &format!("Failed to initialize token monitor: {}", e)
+    let handle = tokio::spawn(
+        monitor.instrument(async move {
+            let mut monitor = match TokenMonitor::new() {
+                Ok(monitor) => {
+                    log(LogTag::Monitor, "INIT", "Token monitor instance created successfully");
+                    monitor
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Monitor,
+                        "ERROR",
+                        &format!("Failed to initialize token monitor: {}", e)
+                    );
+                    return;
+                }
+            };
+
+            // Wait for Transactions system to be ready before starting monitoring
+            let mut last_log = std::time::Instant::now();
+            loop {
+                let tx_ready = crate::global::TRANSACTIONS_SYSTEM_READY.load(
+                    std::sync::atomic::Ordering::SeqCst
                 );
-                return;
-            }
-        };
 
-        // Wait for Transactions system to be ready before starting monitoring
-        let mut last_log = std::time::Instant::now();
-        loop {
-            let tx_ready = crate::global::TRANSACTIONS_SYSTEM_READY.load(
-                std::sync::atomic::Ordering::SeqCst
-            );
+                if tx_ready {
+                    log(
+                        LogTag::Monitor,
+                        "READY",
+                        "✅ Transactions ready. Starting token monitoring loop"
+                    );
+                    break;
+                }
 
-            if tx_ready {
-                log(
-                    LogTag::Monitor,
-                    "READY",
-                    "✅ Transactions ready. Starting token monitoring loop"
-                );
-                break;
-            }
+                // Log only every 15 seconds
+                if last_log.elapsed() >= std::time::Duration::from_secs(15) {
+                    log(
+                        LogTag::Monitor,
+                        "READY",
+                        "⏳ Waiting for Transactions system to be ready..."
+                    );
+                    last_log = std::time::Instant::now();
+                }
 
-            // Log only every 15 seconds
-            if last_log.elapsed() >= std::time::Duration::from_secs(15) {
-                log(LogTag::Monitor, "READY", "⏳ Waiting for Transactions system to be ready...");
-                last_log = std::time::Instant::now();
-            }
-
-            tokio::select! {
+                tokio::select! {
                 _ = shutdown.notified() => {
                     log(LogTag::Monitor, "EXIT", "Token monitoring exiting during dependency wait");
                     return;
                 }
                 _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {}
             }
-        }
+            }
 
-        monitor.start_monitoring_loop(shutdown).await;
-        log(LogTag::Monitor, "EXIT", "Token monitoring task ended");
-    });
+            monitor.start_monitoring_loop(shutdown).await;
+            log(LogTag::Monitor, "EXIT", "Token monitoring task ended");
+        })
+    );
 
     Ok(handle)
 }

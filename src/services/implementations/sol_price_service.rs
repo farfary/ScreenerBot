@@ -26,14 +26,18 @@ impl Service for SolPriceService {
         Ok(())
     }
 
-    async fn start(&mut self, shutdown: Arc<Notify>) -> Result<Vec<JoinHandle<()>>, String> {
+    async fn start(
+        &mut self,
+        shutdown: Arc<Notify>,
+        monitor: tokio_metrics::TaskMonitor
+    ) -> Result<Vec<JoinHandle<()>>, String> {
         log(LogTag::System, "INFO", "Starting SOL price tracking...");
 
         let handle = crate::sol_price
-            ::start_sol_price_service(shutdown.clone()).await
+            ::start_sol_price_service(shutdown.clone(), monitor).await
             .map_err(|e| format!("Failed to start SOL price service: {}", e))?;
 
-        log(LogTag::System, "SUCCESS", "✅ SOL price service started (1 handle)");
+        log(LogTag::System, "SUCCESS", "✅ SOL price service started (1 instrumented handle)");
 
         // Return price_task handle so ServiceManager can wait for graceful shutdown
         Ok(vec![handle])
