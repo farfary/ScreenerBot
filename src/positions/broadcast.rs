@@ -1,5 +1,5 @@
 use super::types::Position;
-use chrono::{ DateTime, Utc };
+use chrono::{DateTime, Utc};
 use once_cell::sync::OnceCell;
 use serde::Serialize;
 use tokio::sync::broadcast;
@@ -53,7 +53,10 @@ pub fn initialize_positions_broadcaster() -> broadcast::Receiver<PositionUpdate>
         Err(_) => {
             log::warn!("⚠️ Positions broadcaster already initialized");
             // Return a new subscription if already initialized
-            POSITIONS_BROADCAST_TX.get().expect("Broadcaster exists").subscribe()
+            POSITIONS_BROADCAST_TX
+                .get()
+                .expect("Broadcaster exists")
+                .subscribe()
         }
     }
 }
@@ -116,7 +119,8 @@ pub fn emit_balance_changed(sol: f64, usdc: f64) {
 
 /// Get broadcast statistics (subscriber count)
 pub fn get_subscriber_count() -> usize {
-    POSITIONS_BROADCAST_TX.get()
+    POSITIONS_BROADCAST_TX
+        .get()
         .map(|tx| tx.receiver_count())
         .unwrap_or(0)
 }

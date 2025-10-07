@@ -1,5 +1,5 @@
 use crate::pools::types::PriceResult;
-use chrono::{ DateTime, Utc };
+use chrono::{DateTime, Utc};
 use once_cell::sync::OnceCell;
 use serde::Serialize;
 use tokio::sync::broadcast;
@@ -34,7 +34,10 @@ pub fn initialize_prices_broadcaster() -> broadcast::Receiver<PriceUpdate> {
         Err(_) => {
             log::warn!("⚠️ Prices broadcaster already initialized");
             // Return a new subscription if already initialized
-            PRICES_BROADCAST_TX.get().expect("Broadcaster exists").subscribe()
+            PRICES_BROADCAST_TX
+                .get()
+                .expect("Broadcaster exists")
+                .subscribe()
         }
     }
 }
@@ -61,7 +64,8 @@ pub fn emit_price_update(mint: String, price_result: PriceResult) {
 
 /// Get broadcast statistics (subscriber count)
 pub fn get_subscriber_count() -> usize {
-    PRICES_BROADCAST_TX.get()
+    PRICES_BROADCAST_TX
+        .get()
         .map(|tx| tx.receiver_count())
         .unwrap_or(0)
 }

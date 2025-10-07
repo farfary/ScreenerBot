@@ -358,6 +358,8 @@ impl ServiceManager {
                 for (key, value) in service_specific.custom_metrics {
                     base_metrics.custom_metrics.insert(key, value);
                 }
+
+                base_metrics.sanitize();
             }
         }
 

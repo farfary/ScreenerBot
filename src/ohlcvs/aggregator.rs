@@ -1,6 +1,6 @@
 // Timeframe aggregation logic
 
-use crate::ohlcvs::types::{ OhlcvDataPoint, OhlcvError, OhlcvResult, Timeframe };
+use crate::ohlcvs::types::{OhlcvDataPoint, OhlcvError, OhlcvResult, Timeframe};
 use std::collections::HashMap;
 
 pub struct OhlcvAggregator;
@@ -9,7 +9,7 @@ impl OhlcvAggregator {
     /// Aggregate 1-minute data to a higher timeframe
     pub fn aggregate(
         data: &[OhlcvDataPoint],
-        target_timeframe: Timeframe
+        target_timeframe: Timeframe,
     ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
         if data.is_empty() {
             return Ok(Vec::new());
@@ -69,10 +69,7 @@ impl OhlcvAggregator {
             .iter()
             .map(|p| p.low)
             .fold(f64::INFINITY, f64::min);
-        let volume: f64 = sorted_points
-            .iter()
-            .map(|p| p.volume)
-            .sum();
+        let volume: f64 = sorted_points.iter().map(|p| p.volume).sum();
 
         Some(OhlcvDataPoint {
             timestamp,
@@ -172,15 +169,13 @@ impl OhlcvAggregator {
     pub fn resample(
         data: &[OhlcvDataPoint],
         from_timeframe: Timeframe,
-        to_timeframe: Timeframe
+        to_timeframe: Timeframe,
     ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
         // Can only downsample (smaller -> larger timeframe)
         if to_timeframe.to_seconds() < from_timeframe.to_seconds() {
-            return Err(
-                OhlcvError::InvalidTimeframe(
-                    "Cannot upsample data, only downsample supported".to_string()
-                )
-            );
+            return Err(OhlcvError::InvalidTimeframe(
+                "Cannot upsample data, only downsample supported".to_string(),
+            ));
         }
 
         if from_timeframe == to_timeframe {
@@ -196,22 +191,19 @@ impl OhlcvAggregator {
             return None;
         }
 
-        let total_volume: f64 = data
-            .iter()
-            .map(|p| p.volume)
-            .sum();
+        let total_volume: f64 = data.iter().map(|p| p.volume).sum();
         if total_volume == 0.0 {
             return None;
         }
 
-        let vwap: f64 =
-            data
-                .iter()
-                .map(|p| {
-                    let typical_price = (p.high + p.low + p.close) / 3.0;
-                    typical_price * p.volume
-                })
-                .sum::<f64>() / total_volume;
+        let vwap: f64 = data
+            .iter()
+            .map(|p| {
+                let typical_price = (p.high + p.low + p.close) / 3.0;
+                typical_price * p.volume
+            })
+            .sum::<f64>()
+            / total_volume;
 
         Some(vwap)
     }

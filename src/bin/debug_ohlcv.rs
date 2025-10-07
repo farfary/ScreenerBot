@@ -3,7 +3,7 @@
 // Usage:
 //   cargo run --bin debug_ohlcv -- --help
 
-use clap::{ Parser, Subcommand };
+use clap::{Parser, Subcommand};
 use reqwest;
 use serde::Deserialize;
 use serde_json;
@@ -125,7 +125,11 @@ async fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::TestApi { pool, timeframe, limit } => {
+        Commands::TestApi {
+            pool,
+            timeframe,
+            limit,
+        } => {
             test_api(&pool, &timeframe, limit).await;
         }
         Commands::TestMapping => {
@@ -137,7 +141,11 @@ async fn main() {
         Commands::TestInit => {
             test_init().await;
         }
-        Commands::TestFetch { mint, timeframe, limit } => {
+        Commands::TestFetch {
+            mint,
+            timeframe,
+            limit,
+        } => {
             test_fetch(&mint, &timeframe, limit).await;
         }
         Commands::TestPools { mint } => {
@@ -149,7 +157,11 @@ async fn main() {
         Commands::TestMetrics => {
             test_metrics().await;
         }
-        Commands::TestWorkflow { pool, timeframe, limit } => {
+        Commands::TestWorkflow {
+            pool,
+            timeframe,
+            limit,
+        } => {
             test_workflow(&pool, &timeframe, limit).await;
         }
     }
@@ -165,9 +177,7 @@ async fn test_api(pool: &str, timeframe: &str, limit: usize) {
 
     let url = format!(
         "https://api.geckoterminal.com/api/v2/networks/solana/pools/{}/ohlcv/{}?limit={}",
-        pool,
-        timeframe,
-        limit
+        pool, timeframe, limit
     );
 
     println!("📡 Request URL:");
@@ -177,7 +187,12 @@ async fn test_api(pool: &str, timeframe: &str, limit: usize) {
     println!("⏳ Fetching data...");
 
     let client = reqwest::Client::new();
-    let response = match client.get(&url).header("Accept", "application/json").send().await {
+    let response = match client
+        .get(&url)
+        .header("Accept", "application/json")
+        .send()
+        .await
+    {
         Ok(resp) => resp,
         Err(e) => {
             println!("❌ Request failed: {}", e);
@@ -207,7 +222,10 @@ async fn test_api(pool: &str, timeframe: &str, limit: usize) {
                     println!("  Title:  {}", error.title);
                 }
             } else if let Some(data) = api_response.data {
-                println!("✅ Success! Received {} candles", data.attributes.ohlcv_list.len());
+                println!(
+                    "✅ Success! Received {} candles",
+                    data.attributes.ohlcv_list.len()
+                );
                 println!();
                 println!("📈 Sample Data:");
                 println!("  Format: [timestamp, open, high, low, close, volume]");
@@ -253,7 +271,7 @@ fn test_timeframe_mapping() {
         ("Hour1", Timeframe::Hour1),
         ("Hour4", Timeframe::Hour4),
         ("Hour12", Timeframe::Hour12),
-        ("Day1", Timeframe::Day1)
+        ("Day1", Timeframe::Day1),
     ];
 
     println!("📊 Internal → API Parameter Mapping:");
@@ -289,13 +307,20 @@ async fn test_parsing(pool: &str) {
     use screenerbot::ohlcvs::OhlcvDataPoint;
 
     // Fetch real data
-    let url =
-        format!("https://api.geckoterminal.com/api/v2/networks/solana/pools/{}/ohlcv/minute?limit=5", pool);
+    let url = format!(
+        "https://api.geckoterminal.com/api/v2/networks/solana/pools/{}/ohlcv/minute?limit=5",
+        pool
+    );
 
     println!("📡 Fetching data from API...");
 
     let client = reqwest::Client::new();
-    let response = match client.get(&url).header("Accept", "application/json").send().await {
+    let response = match client
+        .get(&url)
+        .header("Accept", "application/json")
+        .send()
+        .await
+    {
         Ok(resp) => resp,
         Err(e) => {
             println!("❌ Request failed: {}", e);
@@ -341,8 +366,7 @@ async fn test_parsing(pool: &str) {
                         println!(
                             "    Timestamp: {} ({})",
                             point.timestamp,
-                            chrono::DateTime
-                                ::from_timestamp(point.timestamp, 0)
+                            chrono::DateTime::from_timestamp(point.timestamp, 0)
                                 .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
                                 .unwrap_or_else(|| "Invalid".to_string())
                         );
@@ -400,9 +424,18 @@ async fn test_init() {
     println!("📊 Initial Metrics:");
     println!("  Monitored tokens:      {}", metrics.tokens_monitored);
     println!("  Total pools tracked:   {}", metrics.pools_tracked);
-    println!("  API calls/min:         {:.2}", metrics.api_calls_per_minute);
-    println!("  Cache hit rate:        {:.1}%", metrics.cache_hit_rate * 100.0);
-    println!("  Avg fetch latency:     {:.2} ms", metrics.average_fetch_latency_ms);
+    println!(
+        "  API calls/min:         {:.2}",
+        metrics.api_calls_per_minute
+    );
+    println!(
+        "  Cache hit rate:        {:.1}%",
+        metrics.cache_hit_rate * 100.0
+    );
+    println!(
+        "  Avg fetch latency:     {:.2} ms",
+        metrics.average_fetch_latency_ms
+    );
     println!("  Gaps detected:         {}", metrics.gaps_detected);
     println!("  Gaps filled:           {}", metrics.gaps_filled);
     println!("  Data points stored:    {}", metrics.data_points_stored);
@@ -413,7 +446,7 @@ async fn test_init() {
 
 /// Test fetching OHLCV data from database
 async fn test_fetch(mint: &str, timeframe_str: &str, limit: usize) {
-    use screenerbot::ohlcvs::{ self, Timeframe };
+    use screenerbot::ohlcvs::{self, Timeframe};
 
     println!("🔍 Testing OHLCV Data Fetch");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -457,8 +490,7 @@ async fn test_fetch(mint: &str, timeframe_str: &str, limit: usize) {
                     println!("  Candle {}:", i + 1);
 
                     // Format timestamp as readable date
-                    let dt = chrono::DateTime
-                        ::from_timestamp(point.timestamp, 0)
+                    let dt = chrono::DateTime::from_timestamp(point.timestamp, 0)
                         .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
                         .unwrap_or_else(|| "Invalid timestamp".to_string());
 
@@ -468,7 +500,10 @@ async fn test_fetch(mint: &str, timeframe_str: &str, limit: usize) {
                     println!("    Low:       ${:.8}", point.low);
                     println!("    Close:     ${:.8}", point.close);
                     println!("    Volume:    ${:.2}", point.volume);
-                    println!("    Valid:     {}", if point.is_valid() { "✅" } else { "❌" });
+                    println!(
+                        "    Valid:     {}",
+                        if point.is_valid() { "✅" } else { "❌" }
+                    );
                     println!();
                 }
 
@@ -515,8 +550,14 @@ async fn test_pools(mint: &str) {
                     println!("    Address:   {}", pool.address);
                     println!("    DEX:       {}", pool.dex);
                     println!("    Liquidity: ${:.2}", pool.liquidity);
-                    println!("    Default:   {}", if pool.is_default { "✅" } else { "  " });
-                    println!("    Healthy:   {}", if pool.is_healthy { "✅" } else { "❌" });
+                    println!(
+                        "    Default:   {}",
+                        if pool.is_default { "✅" } else { "  " }
+                    );
+                    println!(
+                        "    Healthy:   {}",
+                        if pool.is_healthy { "✅" } else { "❌" }
+                    );
                     if let Some(last_fetch) = pool.last_successful_fetch {
                         println!("    Last Fetch: {}", last_fetch.format("%Y-%m-%d %H:%M:%S"));
                     }
@@ -534,7 +575,7 @@ async fn test_pools(mint: &str) {
 
 /// Test monitoring functions (add/remove/status)
 async fn test_monitor(mint: &str, action: &str) {
-    use screenerbot::ohlcvs::{ self, Priority };
+    use screenerbot::ohlcvs::{self, Priority};
 
     println!("🔍 Testing Token Monitoring");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -649,16 +690,31 @@ async fn test_metrics() {
     println!("📊 OHLCV Service Metrics:");
     println!("  Monitored Tokens:      {}", metrics.tokens_monitored);
     println!("  Pools Tracked:         {}", metrics.pools_tracked);
-    println!("  API Calls/min:         {:.2}", metrics.api_calls_per_minute);
-    println!("  Cache Hit Rate:        {:.1}%", metrics.cache_hit_rate * 100.0);
-    println!("  Avg Fetch Latency:     {:.2} ms", metrics.average_fetch_latency_ms);
+    println!(
+        "  API Calls/min:         {:.2}",
+        metrics.api_calls_per_minute
+    );
+    println!(
+        "  Cache Hit Rate:        {:.1}%",
+        metrics.cache_hit_rate * 100.0
+    );
+    println!(
+        "  Avg Fetch Latency:     {:.2} ms",
+        metrics.average_fetch_latency_ms
+    );
     println!("  Gaps Detected:         {}", metrics.gaps_detected);
     println!("  Gaps Filled:           {}", metrics.gaps_filled);
     println!("  Data Points Stored:    {}", metrics.data_points_stored);
-    println!("  Database Size:         {:.2} MB", metrics.database_size_mb);
+    println!(
+        "  Database Size:         {:.2} MB",
+        metrics.database_size_mb
+    );
 
     if let Some(oldest) = metrics.oldest_data_timestamp {
-        println!("  Oldest Data:           {}", oldest.format("%Y-%m-%d %H:%M:%S"));
+        println!(
+            "  Oldest Data:           {}",
+            oldest.format("%Y-%m-%d %H:%M:%S")
+        );
     }
 
     println!();
@@ -667,7 +723,7 @@ async fn test_metrics() {
 
 /// End-to-end workflow test: Fetch data directly from API and parse
 async fn test_workflow(pool: &str, timeframe_str: &str, limit: usize) {
-    use screenerbot::ohlcvs::{ Timeframe, OhlcvDataPoint };
+    use screenerbot::ohlcvs::{OhlcvDataPoint, Timeframe};
 
     println!("🔍 Testing End-to-End OHLCV Workflow");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -702,16 +758,18 @@ async fn test_workflow(pool: &str, timeframe_str: &str, limit: usize) {
     println!("📡 Fetching data from GeckoTerminal API...");
     let url = format!(
         "https://api.geckoterminal.com/api/v2/networks/solana/pools/{}/ohlcv/{}?limit={}",
-        pool,
-        api_param,
-        limit
+        pool, api_param, limit
     );
 
     let client = reqwest::Client::new();
     match client.get(&url).send().await {
         Ok(response) => {
             let status = response.status();
-            println!("  Status: {} {}", status.as_u16(), status.canonical_reason().unwrap_or(""));
+            println!(
+                "  Status: {} {}",
+                status.as_u16(),
+                status.canonical_reason().unwrap_or("")
+            );
 
             if status.is_success() {
                 match response.json::<ApiResponse>().await {
@@ -739,21 +797,18 @@ async fn test_workflow(pool: &str, timeframe_str: &str, limit: usize) {
 
                                     if point.is_valid() {
                                         if i < 3 {
-                                            let dt = chrono::DateTime
-                                                ::from_timestamp(point.timestamp, 0)
-                                                .map(|dt|
-                                                    dt.format("%Y-%m-%d %H:%M:%S").to_string()
-                                                )
-                                                .unwrap_or_else(|| "Invalid".to_string());
+                                            let dt = chrono::DateTime::from_timestamp(
+                                                point.timestamp,
+                                                0,
+                                            )
+                                            .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+                                            .unwrap_or_else(|| "Invalid".to_string());
 
                                             println!("  Candle {}: ✅", i + 1);
                                             println!("    Time:   {} ({})", point.timestamp, dt);
                                             println!(
                                                 "    O/H/L/C: ${:.8} / ${:.8} / ${:.8} / ${:.8}",
-                                                point.open,
-                                                point.high,
-                                                point.low,
-                                                point.close
+                                                point.open, point.high, point.low, point.close
                                             );
                                             println!("    Volume:  ${:.2}", point.volume);
                                             println!();

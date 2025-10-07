@@ -1,19 +1,19 @@
 use axum::{
-    extract::{ Path, State },
+    extract::{Path, State},
     http::StatusCode,
-    response::{ IntoResponse, Response },
+    response::{IntoResponse, Response},
     routing::get,
     Router,
 };
-use chrono::{ DateTime, Utc };
-use serde::{ Deserialize, Serialize };
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::{
     arguments::is_debug_webserver_enabled,
-    logger::{ log, LogTag },
-    services::{ ServiceHealth, ServiceMetrics },
-    webserver::{ state::AppState, utils::success_response },
+    logger::{log, LogTag},
+    services::{ServiceHealth, ServiceMetrics},
+    webserver::{state::AppState, utils::success_response},
 };
 
 // ================================================================================================
@@ -74,6 +74,103 @@ pub struct ServicesSummary {
 }
 
 // ================================================================================================
+// Snapshot Helpers
+// ================================================================================================
+
+/// Build a complete services overview snapshot directly from the global ServiceManager
+pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
+    use crate::services::get_service_manager;
+
+    let mut services = Vec::new();
+    let mut dependency_graph = Vec::new();
+    let mut summary = ServicesSummary {
+        total_services: 0,
+        enabled_services: 0,
+        healthy_services: 0,
+        degraded_services: 0,
+        unhealthy_services: 0,
+        starting_services: 0,
+        all_healthy: true,
+    };
+
+    if let Some(manager_ref) = get_service_manager().await {
+        if let Some(manager) = manager_ref.read().await.as_ref() {
+            let service_names = manager.get_all_service_names();
+            let health_map = manager.get_health().await;
+            let metrics_map = manager.get_metrics().await;
+
+            for name in service_names {
+                if let Some(service) = manager.get_service(name) {
+                    let priority = service.priority();
+                    let dependencies = service
+                        .dependencies()
+                        .iter()
+                        .map(|dep| dep.to_string())
+                        .collect::<Vec<_>>();
+                    let enabled = manager.is_service_enabled(name);
+                    let health = health_map
+                        .get(name)
+                        .cloned()
+                        .unwrap_or(ServiceHealth::Unhealthy(
+                            "Health status unavailable".to_string(),
+                        ));
+                    let metrics = metrics_map
+                        .get(name)
+                        .cloned()
+                        .unwrap_or_else(ServiceMetrics::default)
+                        .sanitized();
+                    let uptime_seconds = metrics.uptime_seconds;
+
+                    if enabled {
+                        summary.enabled_services += 1;
+                    }
+
+                    match &health {
+                        ServiceHealth::Healthy => summary.healthy_services += 1,
+                        ServiceHealth::Degraded(_) => summary.degraded_services += 1,
+                        ServiceHealth::Unhealthy(_) => summary.unhealthy_services += 1,
+                        ServiceHealth::Starting => summary.starting_services += 1,
+                        ServiceHealth::Stopping => summary.unhealthy_services += 1,
+                    }
+
+                    dependency_graph.push(ServiceDependencyNode {
+                        name: name.to_string(),
+                        priority,
+                        dependencies: dependencies.clone(),
+                        health: health.clone(),
+                    });
+
+                    services.push(ServiceDetailResponse {
+                        name: name.to_string(),
+                        priority,
+                        dependencies,
+                        enabled,
+                        health,
+                        metrics,
+                        uptime_seconds,
+                    });
+                }
+            }
+        }
+    }
+
+    services.sort_by_key(|service| service.priority);
+    dependency_graph.sort_by_key(|service| service.priority);
+
+    summary.total_services = services.len();
+    summary.all_healthy = summary.unhealthy_services == 0
+        && summary.degraded_services == 0
+        && summary.starting_services == 0;
+
+    ServicesOverviewResponse {
+        services,
+        dependency_graph,
+        summary,
+        timestamp: Utc::now(),
+    }
+}
+
+// ================================================================================================
 // Route Handlers
 // ================================================================================================
 
@@ -87,68 +184,20 @@ pub fn routes() -> Router<Arc<AppState>> {
 
 /// GET /api/services
 /// List all services with their current status
-async fn list_services(State(state): State<Arc<AppState>>) -> Response {
+async fn list_services(State(_state): State<Arc<AppState>>) -> Response {
     if is_debug_webserver_enabled() {
         log(LogTag::Webserver, "DEBUG", "Fetching all services list");
     }
 
-    let service_names = state.get_all_services().await;
-    let health_map = state.get_all_services_health().await;
-    let metrics_map = state.get_service_metrics().await;
-
-    let mut services = Vec::new();
-    let mut healthy_count = 0;
-    let mut unhealthy_count = 0;
-    let mut starting_count = 0;
-
-    for name in service_names {
-        if let Some(details) = state.get_service_details(name).await {
-            let health = health_map
-                .get(name)
-                .cloned()
-                .unwrap_or(ServiceHealth::Unhealthy("Health status unavailable".to_string()));
-            let metrics = metrics_map.get(name).cloned().unwrap_or_default();
-
-            // Count health statuses
-            match &health {
-                ServiceHealth::Healthy => {
-                    healthy_count += 1;
-                }
-                ServiceHealth::Unhealthy(_) | ServiceHealth::Degraded(_) => {
-                    unhealthy_count += 1;
-                }
-                ServiceHealth::Starting => {
-                    starting_count += 1;
-                }
-                _ => {}
-            }
-
-            let uptime = metrics.uptime_seconds;
-            services.push(ServiceDetailResponse {
-                name: name.to_string(),
-                priority: details.priority,
-                dependencies: details.dependencies
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
-                enabled: details.enabled,
-                health,
-                metrics,
-                uptime_seconds: uptime,
-            });
-        }
-    }
-
-    // Sort by priority
-    services.sort_by_key(|s| s.priority);
-
+    let overview = gather_services_overview_snapshot().await;
+    let unhealthy_count = overview.summary.unhealthy_services + overview.summary.degraded_services;
     let response = ServicesListResponse {
-        total_count: services.len(),
-        healthy_count,
+        services: overview.services.clone(),
+        total_count: overview.summary.total_services,
+        healthy_count: overview.summary.healthy_services,
         unhealthy_count,
-        starting_count,
-        services,
-        timestamp: Utc::now(),
+        starting_count: overview.summary.starting_services,
+        timestamp: overview.timestamp,
     };
 
     success_response(response)
@@ -156,136 +205,32 @@ async fn list_services(State(state): State<Arc<AppState>>) -> Response {
 
 /// GET /api/services/:name
 /// Get detailed information about a specific service
-async fn get_service(Path(name): Path<String>, State(state): State<Arc<AppState>>) -> Response {
-    log(LogTag::Webserver, "DEBUG", &format!("Fetching service details for: {}", name));
+async fn get_service(Path(name): Path<String>, State(_state): State<Arc<AppState>>) -> Response {
+    log(
+        LogTag::Webserver,
+        "DEBUG",
+        &format!("Fetching service details for: {}", name),
+    );
 
-    // Get service details
-    let details = match state.get_service_details(&name).await {
-        Some(d) => d,
-        None => {
-            return (StatusCode::NOT_FOUND, format!("Service '{}' not found", name)).into_response();
-        }
-    };
+    let overview = gather_services_overview_snapshot().await;
 
-    // Get health and metrics
-    let health = state
-        .get_service_health(&name).await
-        .unwrap_or(ServiceHealth::Unhealthy("Health status unavailable".to_string()));
-
-    let metrics_map = state.get_service_metrics().await;
-    let metrics = metrics_map.get(name.as_str()).cloned().unwrap_or_default();
-    let uptime = metrics.uptime_seconds;
-
-    let response = ServiceDetailResponse {
-        name: name.clone(),
-        priority: details.priority,
-        dependencies: details.dependencies
-            .iter()
-            .map(|s| s.to_string())
-            .collect(),
-        enabled: details.enabled,
-        health,
-        metrics,
-        uptime_seconds: uptime,
-    };
-
-    success_response(response)
+    match overview.services.into_iter().find(|svc| svc.name == name) {
+        Some(service) => success_response(service),
+        None => (
+            StatusCode::NOT_FOUND,
+            format!("Service '{}' not found", name),
+        )
+            .into_response(),
+    }
 }
 
 /// GET /api/services/overview
 /// Complete services overview with dependency graph and summary
-async fn services_overview(State(state): State<Arc<AppState>>) -> Response {
-    log(LogTag::Webserver, "DEBUG", "Fetching complete services overview");
-
-    let service_names = state.get_all_services().await;
-    let health_map = state.get_all_services_health().await;
-    let metrics_map = state.get_service_metrics().await;
-
-    let mut services = Vec::new();
-    let mut dependency_graph = Vec::new();
-    let mut enabled_count = 0;
-    let mut healthy_count = 0;
-    let mut degraded_count = 0;
-    let mut unhealthy_count = 0;
-    let mut starting_count = 0;
-
-    for name in service_names {
-        if let Some(details) = state.get_service_details(name).await {
-            let health = health_map
-                .get(name)
-                .cloned()
-                .unwrap_or(ServiceHealth::Unhealthy("Health status unavailable".to_string()));
-            let metrics = metrics_map.get(name).cloned().unwrap_or_default();
-
-            if details.enabled {
-                enabled_count += 1;
-            }
-
-            // Count health statuses
-            match &health {
-                ServiceHealth::Healthy => {
-                    healthy_count += 1;
-                }
-                ServiceHealth::Degraded(_) => {
-                    degraded_count += 1;
-                }
-                ServiceHealth::Unhealthy(_) => {
-                    unhealthy_count += 1;
-                }
-                ServiceHealth::Starting => {
-                    starting_count += 1;
-                }
-                _ => {}
-            }
-
-            // Build dependency graph node
-            dependency_graph.push(ServiceDependencyNode {
-                name: name.to_string(),
-                priority: details.priority,
-                dependencies: details.dependencies
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
-                health: health.clone(),
-            });
-
-            // Build full service detail
-            let uptime = metrics.uptime_seconds;
-            services.push(ServiceDetailResponse {
-                name: name.to_string(),
-                priority: details.priority,
-                dependencies: details.dependencies
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
-                enabled: details.enabled,
-                health,
-                metrics,
-                uptime_seconds: uptime,
-            });
-        }
-    }
-
-    // Sort by priority
-    services.sort_by_key(|s| s.priority);
-    dependency_graph.sort_by_key(|s| s.priority);
-
-    let summary = ServicesSummary {
-        total_services: services.len(),
-        enabled_services: enabled_count,
-        healthy_services: healthy_count,
-        degraded_services: degraded_count,
-        unhealthy_services: unhealthy_count,
-        starting_services: starting_count,
-        all_healthy: unhealthy_count == 0 && degraded_count == 0 && starting_count == 0,
-    };
-
-    let response = ServicesOverviewResponse {
-        services,
-        dependency_graph,
-        summary,
-        timestamp: Utc::now(),
-    };
-
-    success_response(response)
+async fn services_overview(State(_state): State<Arc<AppState>>) -> Response {
+    log(
+        LogTag::Webserver,
+        "DEBUG",
+        "Fetching complete services overview",
+    );
+    success_response(gather_services_overview_snapshot().await)
 }

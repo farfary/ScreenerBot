@@ -6,13 +6,13 @@ use crate::ohlcvs::database::OhlcvDatabase;
 use crate::ohlcvs::fetcher::OhlcvFetcher;
 use crate::ohlcvs::gaps::GapManager;
 use crate::ohlcvs::manager::PoolManager;
-use crate::ohlcvs::priorities::{ ActivityType, PriorityManager };
-use crate::ohlcvs::types::{ OhlcvError, OhlcvResult, Priority, Timeframe, TokenOhlcvConfig };
+use crate::ohlcvs::priorities::{ActivityType, PriorityManager};
+use crate::ohlcvs::types::{OhlcvError, OhlcvResult, Priority, Timeframe, TokenOhlcvConfig};
 use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tokio::time::{ interval, sleep, Duration, Instant };
+use tokio::time::{interval, sleep, Duration, Instant};
 
 pub struct OhlcvMonitor {
     db: Arc<OhlcvDatabase>,
@@ -30,7 +30,7 @@ impl OhlcvMonitor {
         fetcher: Arc<OhlcvFetcher>,
         cache: Arc<OhlcvCache>,
         pool_manager: Arc<PoolManager>,
-        gap_manager: Arc<GapManager>
+        gap_manager: Arc<GapManager>,
     ) -> Self {
         Self {
             db,
@@ -80,8 +80,7 @@ impl OhlcvMonitor {
                         // The monitor loop will retry discovery later
                         eprintln!(
                             "[OHLCV Monitor] Warning: Pool discovery failed for {}: {}",
-                            mint,
-                            e
+                            mint, e
                         );
                         Vec::new()
                     }
@@ -128,24 +127,25 @@ impl OhlcvMonitor {
     pub async fn record_activity(
         &self,
         mint: &str,
-        activity_type: ActivityType
+        activity_type: ActivityType,
     ) -> OhlcvResult<()> {
         let mut active = self.active_tokens.write().await;
         if let Some(config) = active.get_mut(mint) {
             config.mark_activity();
 
             // Update priority based on activity
-            let new_priority = PriorityManager::update_priority_on_activity(
-                config.priority,
-                activity_type
-            );
+            let new_priority =
+                PriorityManager::update_priority_on_activity(config.priority, activity_type);
             config.priority = new_priority;
             config.fetch_frequency = new_priority.base_interval();
 
             self.db.upsert_monitor_config(config)?;
 
             // Trigger immediate fetch for high-priority activities
-            if matches!(activity_type, ActivityType::PositionOpened | ActivityType::DataRequested) {
+            if matches!(
+                activity_type,
+                ActivityType::PositionOpened | ActivityType::DataRequested
+            ) {
                 self.fetch_token_data(mint).await?;
             }
         }
@@ -226,7 +226,9 @@ impl OhlcvMonitor {
     async fn process_token(&self, mint: &str) -> OhlcvResult<()> {
         let action = {
             let active = self.active_tokens.read().await;
-            let config = active.get(mint).ok_or_else(|| OhlcvError::NotFound(mint.to_string()))?;
+            let config = active
+                .get(mint)
+                .ok_or_else(|| OhlcvError::NotFound(mint.to_string()))?;
 
             // Get recommended action based on priority and activity
             PriorityManager::get_recommended_action(config)
@@ -251,7 +253,9 @@ impl OhlcvMonitor {
         // Check if we should try pool discovery (using backoff logic)
         let (has_pools, should_retry_discovery) = {
             let active = self.active_tokens.read().await;
-            let config = active.get(mint).ok_or_else(|| OhlcvError::NotFound(mint.to_string()))?;
+            let config = active
+                .get(mint)
+                .ok_or_else(|| OhlcvError::NotFound(mint.to_string()))?;
             let has = config.get_best_pool().is_some();
             let should_retry = !has && config.should_retry_pool_discovery();
             (has, should_retry)
@@ -270,8 +274,7 @@ impl OhlcvMonitor {
 
                         println!(
                             "[OHLCV Monitor] ✅ Pool discovery succeeded for {} after {} failures",
-                            mint,
-                            config.consecutive_pool_failures
+                            mint, config.consecutive_pool_failures
                         );
                     }
                 }
@@ -296,22 +299,26 @@ impl OhlcvMonitor {
                         }
                     }
 
-                    return Err(
-                        OhlcvError::PoolNotFound(format!("No pools available for token: {}", mint))
-                    );
+                    return Err(OhlcvError::PoolNotFound(format!(
+                        "No pools available for token: {}",
+                        mint
+                    )));
                 }
             }
         } else if !has_pools {
             // In backoff period - skip silently
-            return Err(
-                OhlcvError::PoolNotFound(format!("Token {} in discovery backoff period", mint))
-            );
+            return Err(OhlcvError::PoolNotFound(format!(
+                "Token {} in discovery backoff period",
+                mint
+            )));
         }
 
         // Get token config with pools
         let (pool_address, priority, batch_size) = {
             let active = self.active_tokens.read().await;
-            let config = active.get(mint).ok_or_else(|| OhlcvError::NotFound(mint.to_string()))?;
+            let config = active
+                .get(mint)
+                .ok_or_else(|| OhlcvError::NotFound(mint.to_string()))?;
 
             // Get best pool
             let pool = config
@@ -325,12 +332,10 @@ impl OhlcvMonitor {
         };
 
         // Fetch 1-minute data (base timeframe) with priority-based batch size
-        let data = self.fetcher.fetch_immediate(
-            &pool_address,
-            Timeframe::Minute1,
-            None,
-            batch_size
-        ).await;
+        let data = self
+            .fetcher
+            .fetch_immediate(&pool_address, Timeframe::Minute1, None, batch_size)
+            .await;
 
         match data {
             Ok(data_points) => {
@@ -354,7 +359,7 @@ impl OhlcvMonitor {
                         mint,
                         Some(&pool_address),
                         Timeframe::Minute1,
-                        data_points.clone()
+                        data_points.clone(),
                     )?;
 
                     // Generate aggregated timeframes and cache them
@@ -366,19 +371,16 @@ impl OhlcvMonitor {
                         Timeframe::Hour12,
                         Timeframe::Day1,
                     ] {
-                        if
-                            let Ok(aggregated) = OhlcvAggregator::aggregate(
-                                &data_points,
-                                *timeframe
-                            )
+                        if let Ok(aggregated) = OhlcvAggregator::aggregate(&data_points, *timeframe)
                         {
                             self.db.cache_aggregated_data(
                                 mint,
                                 &pool_address,
                                 *timeframe,
-                                &aggregated
+                                &aggregated,
                             )?;
-                            self.cache.put(mint, Some(&pool_address), *timeframe, aggregated)?;
+                            self.cache
+                                .put(mint, Some(&pool_address), *timeframe, aggregated)?;
                         }
                     }
 
@@ -445,12 +447,10 @@ impl OhlcvMonitor {
 
             // Get open positions to determine priority
             let open_positions = match crate::positions::state::get_open_positions().await {
-                positions if !positions.is_empty() => {
-                    positions
-                        .into_iter()
-                        .map(|p| p.mint)
-                        .collect::<std::collections::HashSet<_>>()
-                }
+                positions if !positions.is_empty() => positions
+                    .into_iter()
+                    .map(|p| p.mint)
+                    .collect::<std::collections::HashSet<_>>(),
                 _ => std::collections::HashSet::new(),
             };
 
@@ -472,8 +472,7 @@ impl OhlcvMonitor {
                         if let Err(e) = self.update_priority(mint, Priority::Critical).await {
                             eprintln!(
                                 "[OHLCV Sync] Failed to upgrade priority for {}: {}",
-                                mint,
-                                e
+                                mint, e
                             );
                         } else {
                             upgraded += 1;
@@ -499,10 +498,8 @@ impl OhlcvMonitor {
 
             // Optional: Remove tokens no longer in Pool Service
             // (Keep tokens that were manually added or have positions)
-            let available_set: std::collections::HashSet<_> = available_mints
-                .iter()
-                .cloned()
-                .collect();
+            let available_set: std::collections::HashSet<_> =
+                available_mints.iter().cloned().collect();
             let mut removed = 0;
 
             let active_tokens = self.active_tokens.read().await;

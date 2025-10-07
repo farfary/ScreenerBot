@@ -1,7 +1,7 @@
 // Core types for OHLCV module
 
-use chrono::{ DateTime, Utc };
-use serde::{ Deserialize, Serialize };
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::time::Duration;
 
@@ -62,7 +62,7 @@ impl Timeframe {
             Timeframe::Hour1,
             Timeframe::Hour4,
             Timeframe::Hour12,
-            Timeframe::Day1
+            Timeframe::Day1,
         ]
     }
 
@@ -124,12 +124,12 @@ impl OhlcvDataPoint {
 
     /// Validates that the OHLCV data is consistent
     pub fn is_valid(&self) -> bool {
-        self.high >= self.low &&
-            self.open >= self.low &&
-            self.open <= self.high &&
-            self.close >= self.low &&
-            self.close <= self.high &&
-            self.volume >= 0.0
+        self.high >= self.low
+            && self.open >= self.low
+            && self.open <= self.high
+            && self.close >= self.low
+            && self.close <= self.high
+            && self.volume >= 0.0
     }
 }
 
@@ -251,12 +251,11 @@ impl TokenOhlcvConfig {
     }
 
     pub fn get_best_pool(&self) -> Option<&PoolConfig> {
-        self.pools
-            .iter()
-            .filter(|p| p.is_healthy())
-            .max_by(|a, b| {
-                a.liquidity.partial_cmp(&b.liquidity).unwrap_or(std::cmp::Ordering::Equal)
-            })
+        self.pools.iter().filter(|p| p.is_healthy()).max_by(|a, b| {
+            a.liquidity
+                .partial_cmp(&b.liquidity)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
     }
 
     pub fn mark_activity(&mut self) {
@@ -299,9 +298,9 @@ impl TokenOhlcvConfig {
 
         // Exponential backoff intervals
         let backoff_secs = match self.consecutive_pool_failures {
-            1 => 300, // 5 minutes
-            2 => 900, // 15 minutes
-            3 => 3600, // 1 hour
+            1 => 300,   // 5 minutes
+            2 => 900,   // 15 minutes
+            3 => 3600,  // 1 hour
             4 => 21600, // 6 hours
             _ => 86400, // 24 hours (max)
         };
@@ -403,10 +402,7 @@ pub enum OhlcvError {
     RateLimitExceeded,
     PoolNotFound(String),
     InvalidTimeframe(String),
-    DataGap {
-        start: i64,
-        end: i64,
-    },
+    DataGap { start: i64, end: i64 },
     CacheError(String),
     NotFound(String),
 }

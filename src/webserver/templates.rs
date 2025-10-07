@@ -2024,7 +2024,7 @@ fn nav_tabs(active: &str) -> String {
         ("positions", "💰 Positions"),
         ("tokens", "🪙 Tokens"),
         ("events", "📡 Events"),
-        ("config", "⚙️ Config")
+        ("config", "⚙️ Config"),
     ];
 
     tabs.iter()
@@ -2033,9 +2033,7 @@ fn nav_tabs(active: &str) -> String {
             // Use data-page attribute for client-side routing (SPA)
             format!(
                 "<a href=\"#\" data-page=\"{}\" class=\"tab{}\">{}</a>",
-                name,
-                active_class,
-                label
+                name, active_class, label
             )
         })
         .collect::<Vec<_>>()
@@ -7606,26 +7604,201 @@ pub fn services_content() -> String {
         var servicesData = null;
         var sortKey = 'priority';
         var sortDir = 'asc';
+        var servicesWsBound = false;
+        var servicesFallbackInterval = null;
 
-        async function loadServices() {
+        async function loadServices(options = {}) {
+            const { showLoader = false } = options;
+
             try {
-                const response = await fetch('/api/services/overview');
-                const data = await response.json();
-                servicesData = data; // direct
-                bindToolbarEventsOnce();
-                renderServicesTable();
-                bindSortHandlersOnce();
-            } catch (error) {
-                console.error('Failed to load services:', error);
-                const tbody = document.getElementById('servicesTableBody');
-                if (tbody) {
-                    tbody.innerHTML = `
-                        <tr>
-                            <td colspan="12" style="text-align:center; padding: 20px; color: #ef4444;">Failed to load services</td>
-                        </tr>
-                    `;
+                console.debug('[Services] loadServices invoked', {
+                    showLoader,
+                    timestamp: new Date().toISOString(),
+                    fallbackEnabled: Boolean(servicesFallbackInterval)
+                });
+                if (showLoader) {
+                    setServicesLoading();
                 }
+
+                const response = await fetch('/api/services/overview', {
+                    headers: { 'X-Requested-With': 'fetch' }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                console.debug('[Services] HTTP snapshot received', {
+                    serviceCount: Array.isArray(data?.services) ? data.services.length : 0,
+                    summary: data?.summary || null
+                });
+                handleServicesSnapshot(data);
+            } catch (error) {
+                console.error('[Services] Failed to load services', {
+                    message: error?.message || String(error),
+                    stack: error?.stack,
+                    timestamp: new Date().toISOString()
+                });
+                showServicesError('Failed to load services data');
             }
+        }
+
+        function setServicesLoading() {
+            const tbody = document.getElementById('servicesTableBody');
+            if (!tbody) return;
+            console.debug('[Services] Setting loading state for table body');
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="12" style="text-align:center; padding: 20px; color: var(--text-muted);">
+                        Loading services…
+                    </td>
+                </tr>
+            `;
+        }
+
+        function showServicesError(message) {
+            const tbody = document.getElementById('servicesTableBody');
+            if (!tbody) return;
+            console.warn('[Services] Displaying error state', {
+                message,
+                timestamp: new Date().toISOString()
+            });
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="12" style="text-align:center; padding: 20px; color: #ef4444;">
+                        ${message}
+                    </td>
+                </tr>
+            `;
+        }
+
+        function handleServicesSnapshot(snapshot) {
+            if (!snapshot || !Array.isArray(snapshot.services)) {
+                console.warn('[Services] Received malformed snapshot', {
+                    hasServicesArray: Array.isArray(snapshot?.services),
+                    keys: snapshot ? Object.keys(snapshot) : []
+                });
+                showServicesError('No services available');
+                return;
+            }
+
+            servicesData = snapshot;
+            console.debug('[Services] Snapshot applied', {
+                serviceCount: snapshot.services.length,
+                summary: snapshot.summary,
+                receivedAt: new Date().toISOString()
+            });
+            bindToolbarEventsOnce();
+            bindSortHandlersOnce();
+            renderServicesTable();
+        }
+
+        function startServicesFallback(intervalMs = 15000) {
+            if (servicesFallbackInterval) {
+                console.debug('[Services] Fallback polling already active', {
+                    intervalMs,
+                    startedAt: servicesFallbackInterval._startedAt || null
+                });
+                return;
+            }
+            servicesFallbackInterval = setInterval(() => {
+                loadServices({ showLoader: false });
+            }, intervalMs);
+            servicesFallbackInterval._startedAt = Date.now();
+            console.warn('[Services] Fallback polling enabled', {
+                intervalMs,
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        function stopServicesFallback() {
+            if (!servicesFallbackInterval) return;
+            console.debug('[Services] Fallback polling stopped', {
+                startedAt: servicesFallbackInterval._startedAt || null,
+                durationMs: servicesFallbackInterval._startedAt ? Date.now() - servicesFallbackInterval._startedAt : null
+            });
+            clearInterval(servicesFallbackInterval);
+            servicesFallbackInterval = null;
+        }
+
+        function initServicesWebSocket() {
+            if (typeof WsHub === 'undefined') {
+                console.warn('[Services] WsHub unavailable, switching to HTTP polling');
+                startServicesFallback(10000);
+                return;
+            }
+
+            if (servicesWsBound) return;
+            servicesWsBound = true;
+            console.debug('[Services] Binding websocket handlers', {
+                isConnected: typeof WsHub.isConnected === 'function' ? WsHub.isConnected() : null
+            });
+
+            const onSnapshot = (snapshot) => {
+                console.debug('[Services] WebSocket snapshot received', {
+                    serviceCount: Array.isArray(snapshot?.services) ? snapshot.services.length : 0,
+                    summary: snapshot?.summary || null
+                });
+                stopServicesFallback();
+                handleServicesSnapshot(snapshot);
+            };
+
+            const onWarning = (payload) => {
+                if (payload.channel === 'services') {
+                    console.warn('[Services] WebSocket warning', {
+                        message: payload.message,
+                        timestamp: new Date().toISOString()
+                    });
+                    startServicesFallback(10000);
+                }
+            };
+
+            const onDisconnect = () => {
+                console.warn('[Services] WebSocket disconnected, enabling fallback polling', {
+                    timestamp: new Date().toISOString()
+                });
+                startServicesFallback(10000);
+            };
+
+            const onReconnect = () => {
+                console.info('[Services] WebSocket reconnected, refreshing snapshot');
+                stopServicesFallback();
+                loadServices({ showLoader: false });
+            };
+
+            WsHub.subscribe('services', onSnapshot);
+            WsHub.subscribe('_warning', onWarning);
+            WsHub.subscribe('_disconnected', onDisconnect);
+            WsHub.subscribe('_failed', onDisconnect);
+            WsHub.subscribe('_connected', onReconnect);
+
+            if (!WsHub.isConnected()) {
+                console.debug('[Services] WebSocket not connected yet, enabling fallback');
+                startServicesFallback(10000);
+            }
+
+            if (window.Router && typeof Router.registerCleanup === 'function') {
+                Router.registerCleanup(() => {
+                    servicesWsBound = false;
+                    console.debug('[Services] Cleaning up websocket handlers due to route change');
+                    WsHub.unsubscribe('services', onSnapshot);
+                    WsHub.unsubscribe('_warning', onWarning);
+                    WsHub.unsubscribe('_disconnected', onDisconnect);
+                    WsHub.unsubscribe('_failed', onDisconnect);
+                    WsHub.unsubscribe('_connected', onReconnect);
+                    stopServicesFallback();
+                });
+            }
+
+            window.addEventListener('beforeunload', () => {
+                console.debug('[Services] Unbinding websocket handlers before unload');
+                WsHub.unsubscribe('services', onSnapshot);
+                WsHub.unsubscribe('_warning', onWarning);
+                WsHub.unsubscribe('_disconnected', onDisconnect);
+                WsHub.unsubscribe('_failed', onDisconnect);
+                WsHub.unsubscribe('_connected', onReconnect);
+            }, { once: true });
         }
 
         function currentFilters() {
@@ -7688,19 +7861,22 @@ pub fn services_content() -> String {
             document.getElementById('totalServices').textContent = servicesData.summary.total_services;
             document.getElementById('healthyServices').textContent = servicesData.summary.healthy_services;
             document.getElementById('startingServices').textContent = servicesData.summary.starting_services;
-            document.getElementById('unhealthyServices').textContent = servicesData.summary.unhealthy_services;
+            const unhealthyTotal = (servicesData.summary.unhealthy_services || 0) + (servicesData.summary.degraded_services || 0);
+            document.getElementById('unhealthyServices').textContent = unhealthyTotal;
 
             // Process-wide metrics
             if (servicesData.services && servicesData.services.length > 0) {
                 const m0 = servicesData.services[0].metrics || {};
-                document.getElementById('processCpu').textContent = `${(m0.process_cpu_percent||0).toFixed(1)}%`;
+                const cpu = Number.isFinite(m0.process_cpu_percent) ? m0.process_cpu_percent : 0;
+                document.getElementById('processCpu').textContent = `${cpu.toFixed(1)}%`;
                 document.getElementById('processMemory').textContent = formatBytes(m0.process_memory_bytes||0);
             }
 
             const tbody = document.getElementById('servicesTableBody');
             if (!tbody) return;
 
-            const rows = filteredAndSortedServices().map(service => {
+            const filtered = filteredAndSortedServices();
+            const rows = filtered.map(service => {
                 const m = service.metrics || {};
                 const deps = service.dependencies && service.dependencies.length
                     ? service.dependencies.map(dep => `<span class=\"dependency-badge\">${dep}</span>`).join(' ')
@@ -7734,6 +7910,15 @@ pub fn services_content() -> String {
                     </tr>`;
             }).join('');
 
+            const filters = currentFilters();
+            const renderedCount = rows ? filtered.length : 0;
+            console.debug('[Services] Table rendered', {
+                renderedCount,
+                totalServices: servicesData.services.length,
+                sortKey,
+                sortDir,
+                filters
+            });
             tbody.innerHTML = rows || `
                 <tr>
                     <td colspan="12" style="text-align:center; padding: 20px; color: var(--text-muted);">No services</td>
@@ -7742,13 +7927,33 @@ pub fn services_content() -> String {
 
         function bindToolbarEventsOnce() {
             if (bindToolbarEventsOnce._bound) return; bindToolbarEventsOnce._bound = true;
-            document.getElementById('serviceSearch')?.addEventListener('input', renderServicesTable);
-            document.getElementById('statusFilter')?.addEventListener('change', renderServicesTable);
-            document.getElementById('enabledOnly')?.addEventListener('change', renderServicesTable);
+            console.debug('[Services] Binding toolbar filters');
+            document.getElementById('serviceSearch')?.addEventListener('input', (event) => {
+                console.debug('[Services] Search filter updated', {
+                    value: event.target?.value || '',
+                    timestamp: new Date().toISOString()
+                });
+                renderServicesTable();
+            });
+            document.getElementById('statusFilter')?.addEventListener('change', (event) => {
+                console.debug('[Services] Status filter changed', {
+                    value: event.target?.value || 'all',
+                    timestamp: new Date().toISOString()
+                });
+                renderServicesTable();
+            });
+            document.getElementById('enabledOnly')?.addEventListener('change', (event) => {
+                console.debug('[Services] Enabled filter toggled', {
+                    checked: Boolean(event.target?.checked),
+                    timestamp: new Date().toISOString()
+                });
+                renderServicesTable();
+            });
         }
 
         function bindSortHandlersOnce() {
             if (bindSortHandlersOnce._bound) return; bindSortHandlersOnce._bound = true;
+            console.debug('[Services] Binding table sort handlers');
             document.querySelectorAll('#servicesTable thead th[data-sort]').forEach(th => {
                 th.addEventListener('click', () => {
                     const key = th.getAttribute('data-sort');
@@ -7756,6 +7961,11 @@ pub fn services_content() -> String {
                     if (sortKey === key) { sortDir = (sortDir === 'asc') ? 'desc' : 'asc'; } else { sortKey = key; sortDir = 'asc'; }
                     document.querySelectorAll('#servicesTable thead th[data-sort]').forEach(h => h.classList.remove('asc','desc'));
                     th.classList.add(sortDir);
+                    console.debug('[Services] Sort updated', {
+                        sortKey,
+                        sortDir,
+                        timestamp: new Date().toISOString()
+                    });
                     renderServicesTable();
                 });
             });
@@ -7808,18 +8018,19 @@ pub fn services_content() -> String {
             return `${(nanos / 1000000000).toFixed(2)}s`;
         }
 
-        function refreshServices() { loadServices(); }
+        function refreshServices() {
+            console.info('[Services] Manual refresh requested');
+            loadServices({ showLoader: true });
+        }
 
         // Global init function for Router to call during SPA navigation
         window.initServicesPage = function() {
-            console.log('[Services] Initializing page');
-            loadServices();
-            var servicesRefreshInterval = setInterval(loadServices, 5000);
-            if (window.Router && typeof Router.registerCleanup === 'function') {
-                Router.registerCleanup(() => {
-                    clearInterval(servicesRefreshInterval);
-                });
-            }
+            console.log('[Services] Initializing page', {
+                timestamp: new Date().toISOString(),
+                fromSpaNavigation: Boolean(window.Router?.getCurrentRoute)
+            });
+            loadServices({ showLoader: true });
+            initServicesWebSocket();
         };
 
         // Execute initialization immediately (works for both initial load and SPA navigation)

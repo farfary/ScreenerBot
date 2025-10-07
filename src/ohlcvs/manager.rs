@@ -1,7 +1,7 @@
 // Pool manager for multi-pool support and failover
 
 use crate::ohlcvs::database::OhlcvDatabase;
-use crate::ohlcvs::types::{ OhlcvError, OhlcvResult, PoolConfig, PoolMetadata };
+use crate::ohlcvs::types::{OhlcvError, OhlcvResult, PoolConfig, PoolMetadata};
 use std::cmp::Ordering;
 use std::sync::Arc;
 
@@ -20,7 +20,7 @@ impl PoolManager {
         mint: &str,
         pool_address: &str,
         dex: &str,
-        liquidity: f64
+        liquidity: f64,
     ) -> OhlcvResult<()> {
         let pool = PoolConfig::new(pool_address.to_string(), dex.to_string(), liquidity);
         self.db.upsert_pool(mint, &pool)?;
@@ -46,7 +46,11 @@ impl PoolManager {
         let best = pools
             .into_iter()
             .filter(|p| p.is_healthy() && p.liquidity.is_finite())
-            .max_by(|a, b| { a.liquidity.partial_cmp(&b.liquidity).unwrap_or(Ordering::Less) });
+            .max_by(|a, b| {
+                a.liquidity
+                    .partial_cmp(&b.liquidity)
+                    .unwrap_or(Ordering::Less)
+            });
 
         Ok(best)
     }
@@ -112,58 +116,60 @@ impl PoolManager {
 
         // Perform blocking SQLite work off the async runtime
         let mint_owned = mint.to_string();
-        let discovered: OhlcvResult<Vec<PoolConfig>> = task
-            ::spawn_blocking(move || {
-                // Open pools.db (Pool Service database)
-                // Use read-only to avoid writer locks and configure for read speed
-                let mut pools_db = Connection::open_with_flags(
-                    "data/pools.db",
-                    rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY
-                ).map_err(|e|
-                    OhlcvError::DatabaseError(format!("Failed to open pools.db: {}", e))
-                )?;
-                let _ = pools_db.pragma_update(None, "query_only", "1");
-                let _ = pools_db.pragma_update(None, "cache_size", 20000);
-                let _ = pools_db.pragma_update(None, "temp_store", "memory");
+        let discovered: OhlcvResult<Vec<PoolConfig>> = task::spawn_blocking(move || {
+            // Open pools.db (Pool Service database)
+            // Use read-only to avoid writer locks and configure for read speed
+            let mut pools_db = Connection::open_with_flags(
+                "data/pools.db",
+                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+            )
+            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to open pools.db: {}", e)))?;
+            let _ = pools_db.pragma_update(None, "query_only", "1");
+            let _ = pools_db.pragma_update(None, "cache_size", 20000);
+            let _ = pools_db.pragma_update(None, "temp_store", "memory");
 
-                // Query for pools associated with this mint
-                let mut stmt = pools_db
-                    .prepare(
-                        "SELECT DISTINCT pool_address \
+            // Query for pools associated with this mint
+            let mut stmt = pools_db
+                .prepare(
+                    "SELECT DISTINCT pool_address \
              FROM price_history \
              WHERE mint = ? \
              ORDER BY timestamp_unix DESC \
-             LIMIT 10"
-                    )
-                    .map_err(|e|
-                        OhlcvError::DatabaseError(format!("Failed to prepare query: {}", e))
-                    )?;
+             LIMIT 10",
+                )
+                .map_err(|e| {
+                    OhlcvError::DatabaseError(format!("Failed to prepare query: {}", e))
+                })?;
 
-                let mut pools = Vec::new();
-                let rows = stmt
-                    .query_map([mint_owned.as_str()], |row| row.get::<_, String>(0))
-                    .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {}", e)))?;
+            let mut pools = Vec::new();
+            let rows = stmt
+                .query_map([mint_owned.as_str()], |row| row.get::<_, String>(0))
+                .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {}", e)))?;
 
-                for row in rows {
-                    if let Ok(pool_address) = row {
-                        // Create pool config (DEX/liquidity unknown from price_history)
-                        pools.push(PoolConfig::new(pool_address, "dexscreener".to_string(), 0.0));
-                    }
+            for row in rows {
+                if let Ok(pool_address) = row {
+                    // Create pool config (DEX/liquidity unknown from price_history)
+                    pools.push(PoolConfig::new(
+                        pool_address,
+                        "dexscreener".to_string(),
+                        0.0,
+                    ));
                 }
+            }
 
-                if pools.is_empty() {
-                    return Err(
-                        OhlcvError::PoolNotFound(
-                            format!("No pools found in Pool Service for token: {}", mint_owned)
-                        )
-                    );
-                }
+            if pools.is_empty() {
+                return Err(OhlcvError::PoolNotFound(format!(
+                    "No pools found in Pool Service for token: {}",
+                    mint_owned
+                )));
+            }
 
-                Ok(pools)
-            }).await
-            .map_err(|e|
-                OhlcvError::DatabaseError(format!("Join error during pool discovery: {}", e))
-            )?;
+            Ok(pools)
+        })
+        .await
+        .map_err(|e| {
+            OhlcvError::DatabaseError(format!("Join error during pool discovery: {}", e))
+        })?;
 
         // Unwrap inner result from blocking task
         let discovered = discovered?;
@@ -187,15 +193,13 @@ impl PoolManager {
     /// Health check all pools for a token
     pub async fn check_pool_health(&self, mint: &str) -> OhlcvResult<Vec<(String, bool)>> {
         let pools = self.get_pools(mint).await?;
-        Ok(
-            pools
-                .into_iter()
-                .map(|p| {
-                    let address = p.address.clone();
-                    (address, p.is_healthy())
-                })
-                .collect()
-        )
+        Ok(pools
+            .into_iter()
+            .map(|p| {
+                let address = p.address.clone();
+                (address, p.is_healthy())
+            })
+            .collect())
     }
 
     /// Reset failure count for a pool (for manual recovery)
@@ -208,14 +212,8 @@ impl PoolManager {
         let pools = self.get_pools(mint).await?;
 
         let total_pools = pools.len();
-        let healthy_pools = pools
-            .iter()
-            .filter(|p| p.is_healthy())
-            .count();
-        let total_liquidity: f64 = pools
-            .iter()
-            .map(|p| p.liquidity)
-            .sum();
+        let healthy_pools = pools.iter().filter(|p| p.is_healthy()).count();
+        let total_liquidity: f64 = pools.iter().map(|p| p.liquidity).sum();
         let has_default = pools.iter().any(|p| p.is_default);
 
         Ok(PoolStats {

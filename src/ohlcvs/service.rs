@@ -1,7 +1,7 @@
 // Main OHLCV service implementation
 
 use crate::arguments::is_debug_ohlcv_enabled;
-use crate::logger::{ log, LogTag };
+use crate::logger::{log, LogTag};
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::cache::OhlcvCache;
 use crate::ohlcvs::database::OhlcvDatabase;
@@ -11,18 +11,12 @@ use crate::ohlcvs::manager::PoolManager;
 use crate::ohlcvs::monitor::OhlcvMonitor;
 use crate::ohlcvs::priorities::ActivityType;
 use crate::ohlcvs::types::{
-    OhlcvDataPoint,
-    OhlcvError,
-    OhlcvMetrics,
-    OhlcvResult,
-    PoolMetadata,
-    Priority,
-    Timeframe,
+    OhlcvDataPoint, OhlcvError, OhlcvMetrics, OhlcvResult, PoolMetadata, Priority, Timeframe,
 };
 use chrono::Utc;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::{ Notify, OnceCell };
+use tokio::sync::{Notify, OnceCell};
 use tokio::task::JoinHandle;
 
 static OHLCV_SERVICE: OnceCell<Arc<OhlcvServiceImpl>> = OnceCell::const_new();
@@ -45,15 +39,13 @@ impl OhlcvServiceImpl {
         let cache = Arc::new(OhlcvCache::new());
         let pool_manager = Arc::new(PoolManager::new(Arc::clone(&db)));
         let gap_manager = Arc::new(GapManager::new(Arc::clone(&db), Arc::clone(&fetcher)));
-        let monitor = Arc::new(
-            OhlcvMonitor::new(
-                Arc::clone(&db),
-                Arc::clone(&fetcher),
-                Arc::clone(&cache),
-                Arc::clone(&pool_manager),
-                Arc::clone(&gap_manager)
-            )
-        );
+        let monitor = Arc::new(OhlcvMonitor::new(
+            Arc::clone(&db),
+            Arc::clone(&fetcher),
+            Arc::clone(&cache),
+            Arc::clone(&pool_manager),
+            Arc::clone(&gap_manager),
+        ));
 
         Ok(Self {
             db,
@@ -72,7 +64,7 @@ impl OhlcvServiceImpl {
         pool_address: Option<&str>,
         limit: usize,
         from_timestamp: Option<i64>,
-        to_timestamp: Option<i64>
+        to_timestamp: Option<i64>,
     ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
         // Determine pool to use
         let pool = if let Some(addr) = pool_address {
@@ -85,9 +77,8 @@ impl OhlcvServiceImpl {
                 selected_pool = self.pool_manager.get_best_pool(mint).await?;
             }
 
-            let default_pool = selected_pool.ok_or_else(||
-                OhlcvError::PoolNotFound(mint.to_string())
-            )?;
+            let default_pool =
+                selected_pool.ok_or_else(|| OhlcvError::PoolNotFound(mint.to_string()))?;
 
             default_pool.address.clone()
         };
@@ -101,8 +92,8 @@ impl OhlcvServiceImpl {
             let filtered: Vec<OhlcvDataPoint> = cached_data
                 .into_iter()
                 .filter(|d| {
-                    (from_timestamp.is_none() || d.timestamp >= from_timestamp.unwrap()) &&
-                        (to_timestamp.is_none() || d.timestamp <= to_timestamp.unwrap())
+                    (from_timestamp.is_none() || d.timestamp >= from_timestamp.unwrap())
+                        && (to_timestamp.is_none() || d.timestamp <= to_timestamp.unwrap())
                 })
                 .collect();
 
@@ -121,7 +112,7 @@ impl OhlcvServiceImpl {
                 timeframe,
                 from_timestamp,
                 to_timestamp,
-                limit
+                limit,
             )?;
 
             if !aggregated.is_empty() {
@@ -129,7 +120,9 @@ impl OhlcvServiceImpl {
                 aggregated.sort_by_key(|d| d.timestamp);
 
                 // Update cache with normalized data
-                let _ = self.cache.put(mint, Some(&pool), timeframe, aggregated.clone());
+                let _ = self
+                    .cache
+                    .put(mint, Some(&pool), timeframe, aggregated.clone());
 
                 // Take last N entries (most recent)
                 let start_idx = aggregated.len().saturating_sub(limit);
@@ -143,7 +136,7 @@ impl OhlcvServiceImpl {
             Some(&pool),
             from_timestamp,
             to_timestamp,
-            limit * 1000
+            limit * 1000,
         )?; // Fetch more for aggregation
 
         if raw_data.is_empty() {
@@ -174,20 +167,22 @@ impl OhlcvServiceImpl {
 }
 
 async fn get_or_init_service() -> OhlcvResult<Arc<OhlcvServiceImpl>> {
-    let service = OHLCV_SERVICE.get_or_try_init(|| async {
-        if is_debug_ohlcv_enabled() {
-            log(LogTag::Ohlcv, "INIT", "Initializing OHLCV runtime");
-        }
+    let service = OHLCV_SERVICE
+        .get_or_try_init(|| async {
+            if is_debug_ohlcv_enabled() {
+                log(LogTag::Ohlcv, "INIT", "Initializing OHLCV runtime");
+            }
 
-        // Use config for DB path
-        let db_path = PathBuf::from("data").join("ohlcvs.db");
-        let service_impl = OhlcvServiceImpl::new(db_path)?;
+            // Use config for DB path
+            let db_path = PathBuf::from("data").join("ohlcvs.db");
+            let service_impl = OhlcvServiceImpl::new(db_path)?;
 
-        if is_debug_ohlcv_enabled() {
-            log(LogTag::Ohlcv, "SUCCESS", "OHLCV runtime ready");
-        }
-        Ok::<Arc<OhlcvServiceImpl>, OhlcvError>(Arc::new(service_impl))
-    }).await?;
+            if is_debug_ohlcv_enabled() {
+                log(LogTag::Ohlcv, "SUCCESS", "OHLCV runtime ready");
+            }
+            Ok::<Arc<OhlcvServiceImpl>, OhlcvError>(Arc::new(service_impl))
+        })
+        .await?;
 
     Ok(Arc::clone(service))
 }
@@ -199,7 +194,7 @@ impl OhlcvService {
 
     pub async fn start(
         shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor
+        monitor: tokio_metrics::TaskMonitor,
     ) -> OhlcvResult<Vec<JoinHandle<()>>> {
         let service = get_or_init_service().await?;
 
@@ -208,25 +203,27 @@ impl OhlcvService {
         // Start background monitoring tasks before awaiting shutdown
         monitor_instance.clone().start().await?;
         if is_debug_ohlcv_enabled() {
-            log(LogTag::Ohlcv, "TASK_START", "OHLCV monitoring tasks started");
+            log(
+                LogTag::Ohlcv,
+                "TASK_START",
+                "OHLCV monitoring tasks started",
+            );
         }
 
-        let shutdown_task = tokio::spawn(
-            monitor.instrument(async move {
-                shutdown.notified().await;
-                if is_debug_ohlcv_enabled() {
-                    log(
-                        LogTag::Ohlcv,
-                        "TASK_STOP",
-                        "Shutdown signal received for OHLCV monitoring"
-                    );
-                }
-                monitor_instance.stop().await;
-                if is_debug_ohlcv_enabled() {
-                    log(LogTag::Ohlcv, "TASK_END", "OHLCV monitoring tasks stopped");
-                }
-            })
-        );
+        let shutdown_task = tokio::spawn(monitor.instrument(async move {
+            shutdown.notified().await;
+            if is_debug_ohlcv_enabled() {
+                log(
+                    LogTag::Ohlcv,
+                    "TASK_STOP",
+                    "Shutdown signal received for OHLCV monitoring",
+                );
+            }
+            monitor_instance.stop().await;
+            if is_debug_ohlcv_enabled() {
+                log(LogTag::Ohlcv, "TASK_END", "OHLCV monitoring tasks stopped");
+            }
+        }));
 
         Ok(vec![shutdown_task])
     }
@@ -245,11 +242,20 @@ pub async fn get_ohlcv_data(
     pool_address: Option<&str>,
     limit: usize,
     from_timestamp: Option<i64>,
-    to_timestamp: Option<i64>
+    to_timestamp: Option<i64>,
 ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
     let service = get_or_init_service().await?;
 
-    service.get_ohlcv_data(mint, timeframe, pool_address, limit, from_timestamp, to_timestamp).await
+    service
+        .get_ohlcv_data(
+            mint,
+            timeframe,
+            pool_address,
+            limit,
+            from_timestamp,
+            to_timestamp,
+        )
+        .await
 }
 
 pub async fn get_available_pools(mint: &str) -> OhlcvResult<Vec<PoolMetadata>> {
@@ -261,21 +267,25 @@ pub async fn get_available_pools(mint: &str) -> OhlcvResult<Vec<PoolMetadata>> {
 pub async fn get_data_gaps(mint: &str, timeframe: Timeframe) -> OhlcvResult<Vec<(i64, i64)>> {
     let service = get_or_init_service().await?;
 
-    let gaps = service.gap_manager.get_unfilled_gaps(mint, timeframe).await?;
+    let gaps = service
+        .gap_manager
+        .get_unfilled_gaps(mint, timeframe)
+        .await?;
 
-    Ok(
-        gaps
-            .into_iter()
-            .map(|g| (g.start_timestamp, g.end_timestamp))
-            .collect()
-    )
+    Ok(gaps
+        .into_iter()
+        .map(|g| (g.start_timestamp, g.end_timestamp))
+        .collect())
 }
 
 pub async fn request_refresh(mint: &str) -> OhlcvResult<()> {
     let service = get_or_init_service().await?;
 
     // Record activity
-    service.monitor.record_activity(mint, ActivityType::DataRequested).await?;
+    service
+        .monitor
+        .record_activity(mint, ActivityType::DataRequested)
+        .await?;
 
     // Force refresh
     service.monitor.force_refresh(mint).await
@@ -313,8 +323,8 @@ pub async fn has_data(mint: &str) -> OhlcvResult<bool> {
     let mint_owned = mint.to_string();
 
     // Wrap sync DB call in spawn_blocking to prevent blocking async runtime
-    tokio::task
-        ::spawn_blocking(move || { service_clone.has_data(&mint_owned) }).await
+    tokio::task::spawn_blocking(move || service_clone.has_data(&mint_owned))
+        .await
         .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {}", e)))?
 }
 
@@ -322,10 +332,18 @@ async fn get_metrics_impl(service: &OhlcvServiceImpl) -> OhlcvMetrics {
     let stats = service.monitor.get_stats().await;
 
     let tokens_monitored = stats.total_tokens;
-    let pools_tracked = service.db.get_pool_count().unwrap_or(0);
-    let data_points_stored = service.db.get_data_point_count().unwrap_or(0);
-    let gaps_detected = service.db.get_gap_count(false).unwrap_or(0);
-    let gaps_filled = service.db.get_gap_count(true).unwrap_or(0);
+    // Offload synchronous DB calls to blocking threads to avoid stalling async runtime
+    let db = Arc::clone(&service.db);
+    let (pools_tracked, data_points_stored, gaps_detected, gaps_filled) =
+        tokio::task::spawn_blocking(move || {
+            let pools = db.get_pool_count().unwrap_or(0);
+            let points = db.get_data_point_count().unwrap_or(0);
+            let gaps_det = db.get_gap_count(false).unwrap_or(0);
+            let gaps_fill = db.get_gap_count(true).unwrap_or(0);
+            (pools, points, gaps_det, gaps_fill)
+        })
+        .await
+        .unwrap_or((0, 0, 0, 0));
 
     // Calculate database size (rough estimate)
     let database_size_bytes = (data_points_stored as u128).saturating_mul(64);

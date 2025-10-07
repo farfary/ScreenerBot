@@ -34,6 +34,25 @@ pub struct ServiceMetrics {
 }
 
 impl ServiceMetrics {
+    /// Ensure all numeric fields are finite before serialization
+    pub fn sanitize(&mut self) {
+        if !self.process_cpu_percent.is_finite() {
+            self.process_cpu_percent = 0.0;
+        }
+
+        if !self.operations_per_second.is_finite() {
+            self.operations_per_second = 0.0;
+        }
+
+        self.custom_metrics.retain(|_, value| value.is_finite());
+    }
+
+    /// Return a sanitized copy of the metrics
+    pub fn sanitized(mut self) -> Self {
+        self.sanitize();
+        self
+    }
+
     /// Calculate service activity as percentage of total time spent polling (working)
     /// This is a much better indicator than CPU for async services in a single process.
     pub fn activity_percent(&self) -> f32 {
@@ -173,10 +192,14 @@ impl MetricsCollector {
 
     /// Collect metrics for a specific service (async-safe, no &mut needed)
     pub async fn collect_for_service(&self, name: &str) -> ServiceMetrics {
-        // Refresh system info once (process-wide metrics) - async-safe
+        // Refresh system info in blocking pool to avoid stalling async runtime
         {
-            let mut sys = self.system.lock().await;
-            sys.refresh_all();
+            let sys_arc = self.system.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                let mut sys = sys_arc.blocking_lock();
+                sys.refresh_all();
+            })
+            .await;
         }
 
         // Get current process (shared across all services) - async-safe
@@ -249,6 +272,7 @@ impl MetricsCollector {
             errors_total: 0,
             custom_metrics: HashMap::new(),
         }
+        .sanitized()
     }
 
     /// Collect metrics for all services efficiently (single refresh, no &mut needed)
@@ -256,10 +280,14 @@ impl MetricsCollector {
         &self,
         service_names: &[&'static str],
     ) -> HashMap<&'static str, ServiceMetrics> {
-        // Refresh system info ONCE for all services - async-safe
+        // Refresh system info ONCE for all services in blocking pool
         {
-            let mut sys = self.system.lock().await;
-            sys.refresh_all();
+            let sys_arc = self.system.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                let mut sys = sys_arc.blocking_lock();
+                sys.refresh_all();
+            })
+            .await;
         }
 
         // Get process info once
@@ -274,9 +302,15 @@ impl MetricsCollector {
 
         let mut metrics = HashMap::new();
 
-        // Lock once for all services
-        let storage = self.accumulated_metrics.lock().await;
-        let start_times = self.service_start_times.lock().await;
+        // Snapshot metrics maps quickly, then drop locks before heavy loop
+        let storage_snapshot = {
+            let storage = self.accumulated_metrics.lock().await;
+            storage.clone()
+        };
+        let start_times_snapshot = {
+            let start_times = self.service_start_times.lock().await;
+            start_times.clone()
+        };
 
         for &name in service_names {
             // Get accumulated task metrics from intervals() collector
@@ -287,7 +321,7 @@ impl MetricsCollector {
                 mean_poll_duration,
                 total_idle_duration,
                 mean_idle_duration,
-            ) = if let Some(accumulated) = storage.get(name) {
+            ) = if let Some(accumulated) = storage_snapshot.get(name) {
                 let mean_poll = if accumulated.total_polls > 0 {
                     accumulated.total_poll_duration_ns / accumulated.total_polls
                 } else {
@@ -312,7 +346,7 @@ impl MetricsCollector {
             };
 
             // Calculate uptime
-            let uptime = start_times
+            let uptime = start_times_snapshot
                 .get(name)
                 .map(|start| start.elapsed().as_secs())
                 .unwrap_or(0);
@@ -333,10 +367,47 @@ impl MetricsCollector {
                     operations_per_second: 0.0,
                     errors_total: 0,
                     custom_metrics: HashMap::new(),
-                },
+                }
+                .sanitized(),
             );
         }
 
         metrics
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ServiceMetrics;
+    use std::collections::HashMap;
+
+    #[test]
+    fn sanitizes_non_finite_values() {
+        let mut metrics = ServiceMetrics {
+            process_cpu_percent: f32::NAN,
+            process_memory_bytes: 0,
+            task_count: 0,
+            total_polls: 0,
+            total_poll_duration_ns: 0,
+            mean_poll_duration_ns: 0,
+            total_idle_duration_ns: 0,
+            mean_idle_duration_ns: 0,
+            uptime_seconds: 0,
+            operations_total: 0,
+            operations_per_second: f32::INFINITY,
+            errors_total: 0,
+            custom_metrics: HashMap::from([
+                ("valid".to_string(), 1.0),
+                ("nan".to_string(), f64::NAN),
+                ("inf".to_string(), f64::INFINITY),
+            ]),
+        };
+
+        metrics.sanitize();
+
+        assert!(metrics.process_cpu_percent.is_finite());
+        assert!(metrics.operations_per_second.is_finite());
+        assert_eq!(metrics.custom_metrics.len(), 1);
+        assert_eq!(metrics.custom_metrics.get("valid"), Some(&1.0));
     }
 }
