@@ -554,6 +554,7 @@ struct WsEventMessage {
     mint: Option<String>,
     reference_id: Option<String>,
     message: String,
+    payload: serde_json::Value,
     created_at: String,
 }
 
@@ -572,6 +573,7 @@ fn map_event(e: &Event) -> WsEventMessage {
         mint: e.mint.clone(),
         reference_id: e.reference_id.clone(),
         message,
+        payload: e.payload.clone(),
         created_at: e.created_at
             .map(|dt| dt.to_rfc3339())
             .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),

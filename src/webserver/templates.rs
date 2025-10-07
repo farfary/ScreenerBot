@@ -5146,6 +5146,115 @@ pub fn events_content() -> String {
             <span id="eventsCountText" style="color: var(--text-secondary); font-size: 0.9em;">Loading...</span>
             <button id="refreshEvents" class="btn btn-primary">🔄 Refresh</button>
         </div>
+        <style>
+            .event-ref-cell {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                font-family: monospace;
+            }
+
+            .event-ref {
+                color: var(--text-primary);
+                max-width: 140px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .event-ref-copy {
+                background: none;
+                border: none;
+                color: var(--link-color);
+                cursor: pointer;
+                font-size: 0.8em;
+                padding: 2px 4px;
+                border-radius: 4px;
+                transition: color 0.2s ease;
+            }
+
+            .event-ref-copy:hover,
+            .event-ref-copy:focus {
+                color: var(--link-hover);
+                outline: none;
+            }
+
+            .event-message-cell {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+
+            .event-message-text {
+                flex: 1;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                color: var(--text-primary);
+            }
+
+            .event-detail-btn {
+                background: none;
+                border: 1px solid var(--border-color);
+                color: var(--text-secondary);
+                cursor: pointer;
+                font-size: 0.75em;
+                padding: 2px 6px;
+                border-radius: 4px;
+                transition: all 0.2s ease;
+            }
+
+            .event-detail-btn:hover,
+            .event-detail-btn:focus {
+                color: var(--link-color);
+                border-color: var(--link-color);
+                outline: none;
+            }
+
+            .event-detail-modal {
+                max-width: 680px;
+                width: calc(100% - 48px);
+            }
+
+            .event-detail-meta {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+                gap: 12px;
+                margin-bottom: 16px;
+            }
+
+            .event-detail-meta .meta-label {
+                display: block;
+                font-size: 0.75em;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                color: var(--text-muted);
+            }
+
+            .event-detail-meta .meta-value {
+                display: block;
+                font-size: 0.9em;
+                color: var(--text-primary);
+                word-break: break-all;
+                margin-top: 2px;
+            }
+
+            .event-detail-json-wrapper {
+                background: var(--bg-card);
+                border: 1px solid var(--border-color);
+                border-radius: 8px;
+                max-height: 320px;
+                overflow: auto;
+            }
+
+            .event-detail-json {
+                margin: 0;
+                padding: 12px;
+                font-size: 0.85em;
+                line-height: 1.4;
+                color: var(--text-primary);
+            }
+        </style>
         <div class="table-scroll">
             <table class="table" id="eventsTable">
                 <thead>
@@ -5167,6 +5276,43 @@ pub fn events_content() -> String {
                 </tbody>
             </table>
         </div>
+        <div id="eventDetailModal" class="modal-overlay">
+            <div class="modal-content event-detail-modal">
+                <div class="modal-header">
+                    <span class="modal-title" id="eventDetailTitle">Event Details</span>
+                    <button id="eventDetailClose" class="modal-close" type="button" aria-label="Close">
+                        ×
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="event-detail-meta">
+                        <div>
+                            <span class="meta-label">Category</span>
+                            <span class="meta-value" id="eventDetailCategory">-</span>
+                        </div>
+                        <div>
+                            <span class="meta-label">Severity</span>
+                            <span class="meta-value" id="eventDetailSeverity">-</span>
+                        </div>
+                        <div>
+                            <span class="meta-label">Time</span>
+                            <span class="meta-value" id="eventDetailTime">-</span>
+                        </div>
+                        <div>
+                            <span class="meta-label">Reference</span>
+                            <span class="meta-value" id="eventDetailReference">-</span>
+                        </div>
+                        <div>
+                            <span class="meta-label">Mint</span>
+                            <span class="meta-value" id="eventDetailMint">-</span>
+                        </div>
+                    </div>
+                    <div class="event-detail-json-wrapper">
+                        <pre id="eventDetailPayload" class="event-detail-json">Loading...</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
     
     <script>
@@ -5174,11 +5320,17 @@ pub fn events_content() -> String {
     let eventsRefreshInterval = null;
     let maxEventId = 0;
     let connectionStatus = 'connecting'; // 'connecting', 'connected', 'disconnected', 'error'
+    const eventsStore = new Map();
+    const EVENT_MAX_RECORDS = 1000;
+    let eventsLoadInFlight = false;
+    let pendingEventsLoad = false;
+    let searchDebounceHandle = null;
         
         // Update connection status indicator
         function updateConnectionStatus(status, message) {
             connectionStatus = status;
             const indicator = document.getElementById('eventsCountText');
+            if (!indicator) return;
             const colors = {
                 connecting: 'var(--text-secondary)',
                 connected: 'var(--badge-online)',
@@ -5191,24 +5343,123 @@ pub fn events_content() -> String {
                 disconnected: '⚠️',
                 error: '❌'
             };
-            if (indicator) {
-                indicator.style.color = colors[status] || 'var(--text-secondary)';
-                indicator.textContent = `${icons[status]} ${message}`;
-            }
+            const defaults = {
+                connecting: 'Connecting…',
+                connected: 'Connected',
+                disconnected: 'Disconnected',
+                error: 'Error'
+            };
+            const icon = icons[status] || 'ℹ️';
+            const text = message || defaults[status] || 'Status unavailable';
+            indicator.style.color = colors[status] || 'var(--text-secondary)';
+            indicator.textContent = `${icon} ${text}`;
+            indicator.dataset.status = status;
+            indicator.title = text;
         }
         
-        // Load events from API
-        async function loadEvents() {
-            try {
-                const category = document.getElementById('categoryFilter').value;
-                const severity = document.getElementById('severityFilter').value;
-                const params = new URLSearchParams();
-                params.set('limit', '200');
-                if (category) params.set('category', category);
-                if (severity) params.set('severity', severity);
+        function clearEventsCache() {
+            eventsStore.clear();
+            allEventsData = [];
+        }
 
-                let url = '';
-                if (maxEventId === 0) {
+        function normalizeEvent(raw) {
+            if (!raw || typeof raw !== 'object') return null;
+            const severity = (raw.severity || '').toLowerCase();
+            const message = raw.message ?? 'No message';
+            return {
+                ...raw,
+                severity,
+                message,
+                payload: raw.payload ?? null,
+            };
+        }
+
+        function hasEventChanged(existing, next) {
+            if (!existing) return true;
+            return (
+                existing.message !== next.message ||
+                existing.severity !== next.severity ||
+                existing.category !== next.category ||
+                existing.subtype !== next.subtype ||
+                existing.reference_id !== next.reference_id ||
+                existing.event_time !== next.event_time ||
+                existing.mint !== next.mint ||
+                JSON.stringify(existing.payload) !== JSON.stringify(next.payload)
+            );
+        }
+
+        function matchesActiveFilters(event) {
+            const category = document.getElementById('categoryFilter')?.value || '';
+            const severity = document.getElementById('severityFilter')?.value || '';
+            if (category && event.category !== category) return false;
+            if (severity && event.severity !== severity) return false;
+            return true;
+        }
+
+        function mergeEvents(events) {
+            if (!Array.isArray(events) || events.length === 0) {
+                return false;
+            }
+
+            let updated = false;
+            for (const raw of events) {
+                const event = normalizeEvent(raw);
+                if (!event || typeof event.id !== 'number') continue;
+                if (!matchesActiveFilters(event)) continue;
+                const eventId = Number(event.id);
+                const existing = eventsStore.get(eventId);
+                if (hasEventChanged(existing, event)) {
+                    eventsStore.set(eventId, event);
+                    updated = true;
+                }
+            }
+
+            if (!updated) {
+                return false;
+            }
+
+            const orderedIds = Array.from(eventsStore.keys()).sort((a, b) => b - a);
+            if (orderedIds.length > EVENT_MAX_RECORDS) {
+                for (let i = EVENT_MAX_RECORDS; i < orderedIds.length; i++) {
+                    eventsStore.delete(orderedIds[i]);
+                }
+                orderedIds.length = EVENT_MAX_RECORDS;
+            }
+
+            allEventsData = orderedIds.map(id => eventsStore.get(id));
+            renderEvents();
+            return true;
+        }
+
+        function stopEventsRefresh() {
+            if (eventsRefreshInterval) {
+                clearInterval(eventsRefreshInterval);
+                eventsRefreshInterval = null;
+            }
+        }
+
+        // Load events from API
+        async function loadEvents(options = {}) {
+            const { force = false } = options;
+            if (eventsLoadInFlight) {
+                if (force) {
+                    pendingEventsLoad = true;
+                }
+                return;
+            }
+
+            const category = document.getElementById('categoryFilter').value;
+            const severity = document.getElementById('severityFilter').value;
+            const params = new URLSearchParams();
+            params.set('limit', '200');
+            if (category) params.set('category', category);
+            if (severity) params.set('severity', severity);
+
+            let url = '';
+            const isInitialLoad = force || maxEventId === 0;
+            try {
+                eventsLoadInFlight = true;
+                if (isInitialLoad) {
                     url = `/api/events/head?${params.toString()}`;
                     updateConnectionStatus('connecting', 'Loading events...');
                 } else {
@@ -5216,41 +5467,51 @@ pub fn events_content() -> String {
                     url = `/api/events/since?${params.toString()}`;
                 }
 
-                const res = await fetch(url);
+                const res = await fetch(url, { cache: 'no-cache' });
                 if (!res.ok) {
                     throw new Error(`HTTP ${res.status}: ${res.statusText}`);
                 }
-                
+
                 const data = await res.json();
-                if (maxEventId === 0) {
-                    allEventsData = data.events || [];
-                } else {
-                    allEventsData = (data.events || []).concat(allEventsData);
+                const payload = Array.isArray(data.events) ? data.events : [];
+
+                if (isInitialLoad) {
+                    clearEventsCache();
                 }
-                maxEventId = Math.max(maxEventId, data.max_id || 0);
-                renderEvents(allEventsData);
-                
-                // Update status based on WsHub connection state
+
+                const added = mergeEvents(payload);
+                if (added) {
+                    const highestFromPayload = payload.reduce((max, evt) => (
+                        evt && typeof evt.id === 'number' ? Math.max(max, evt.id) : max
+                    ), 0);
+                    maxEventId = Math.max(maxEventId, data.max_id || 0, highestFromPayload);
+                } else if (isInitialLoad) {
+                    renderEvents();
+                    maxEventId = Math.max(maxEventId, data.max_id || 0);
+                }
+
+                const totalEvents = allEventsData.length;
+                const countLabel = formatEventCountLabel(totalEvents);
                 if (typeof WsHub !== 'undefined' && WsHub.isConnected()) {
-                    updateConnectionStatus('connected', `${allEventsData.length} events (realtime)`);
+                    updateConnectionStatus('connected', `Realtime • ${countLabel}`);
+                    stopEventsRefresh();
                 } else {
-                    updateConnectionStatus('connected', `${allEventsData.length} events (polling)`);
+                    updateConnectionStatus('connected', `Polling • ${countLabel}`);
                 }
-                
-                // Save filter state
+
                 AppState.save('events_category', category);
                 AppState.save('events_severity', severity);
-                
+
             } catch (error) {
                 console.error('Failed to load events:', error);
-                
+
                 let errorMsg = 'Failed to connect to server';
                 if (error.message.includes('Failed to fetch')) {
                     errorMsg = 'Server not responding - check if bot is running';
                 } else if (error.message.includes('HTTP')) {
                     errorMsg = `Server error: ${error.message}`;
                 }
-                
+
                 document.getElementById('eventsTableBody').innerHTML = `
                     <tr>
                         <td colspan="6" style="text-align: center; padding: 40px;">
@@ -5262,14 +5523,54 @@ pub fn events_content() -> String {
                     </tr>
                 `;
                 updateConnectionStatus('error', errorMsg);
+                startEventsRefresh(3000);
+            } finally {
+                eventsLoadInFlight = false;
+                if (pendingEventsLoad) {
+                    pendingEventsLoad = false;
+                    loadEvents();
+                }
             }
         }
         
         // Render events in table
-        function renderEvents(events) {
+        function getSearchTerm() {
+            return (document.getElementById('eventSearch')?.value || '').toLowerCase();
+        }
+
+        function matchesSearch(event, searchTerm) {
+            if (!searchTerm) return true;
+            const haystacks = [
+                event.category,
+                event.subtype,
+                event.message,
+                event.reference_id,
+                event.mint
+            ];
+            return haystacks.some(value =>
+                typeof value === 'string' && value.toLowerCase().includes(searchTerm)
+            );
+        }
+
+        function formatEventCountLabel(count) {
+            const safe = Number.isFinite(count) ? count : 0;
+            const plural = safe === 1 ? 'event' : 'events';
+            return `${safe.toLocaleString()} ${plural}`;
+        }
+
+        function formatReferenceSnippet(value) {
+            if (typeof value !== 'string') return '';
+            if (value.length <= 12) return value;
+            return `${value.slice(0, 6)}…${value.slice(-6)}`;
+        }
+
+        function renderEvents(forcedEvents) {
             const tbody = document.getElementById('eventsTableBody');
-            
-            if (!events || events.length === 0) {
+            const searchTerm = getSearchTerm();
+            const events = Array.isArray(forcedEvents) ? forcedEvents : allEventsData;
+            const filtered = events.filter(event => matchesSearch(event, searchTerm));
+
+            if (!filtered || filtered.length === 0) {
                 const message = connectionStatus === 'error' 
                     ? '⚠️ Error loading events. Please check server status.' 
                     : connectionStatus === 'connecting'
@@ -5286,12 +5587,21 @@ pub fn events_content() -> String {
                 return;
             }
             
-            tbody.innerHTML = events.map(event => {
+            tbody.innerHTML = filtered.map(event => {
                 const time = formatTimeAgo(new Date(event.event_time));
                 const severityColor = getSeverityColor(event.severity);
-                const shortRef = event.reference_id 
-                    ? event.reference_id.substring(0, 8) + '...' 
-                    : '-';
+                let referenceCell = '-';
+                if (event.reference_id) {
+                    const snippet = escapeHtml(formatReferenceSnippet(event.reference_id));
+                    const full = escapeHtml(event.reference_id);
+                    const encoded = encodeURIComponent(event.reference_id);
+                    referenceCell = `
+                        <span class="event-ref" title="${full}">${snippet}</span>
+                        <button class="event-ref-copy" type="button" data-ref="${encoded}" title="Copy reference">📋</button>
+                    `;
+                }
+                const messageText = escapeHtml(event.message);
+                const detailButton = `<button class="event-detail-btn" type="button" data-event-id="${event.id}" title="View full event">Details</button>`;
                 
                 return `
                     <tr style="border-bottom: 1px solid var(--border-color);">
@@ -5304,13 +5614,18 @@ pub fn events_content() -> String {
                         <td style="padding: 10px; font-size: 0.9em;">${event.subtype || '-'}</td>
                         <td style="padding: 10px;">
                             <span style="background: ${severityColor}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85em;">
-                                ${event.severity}
+                                ${event.severity.toUpperCase()}
                             </span>
                         </td>
-                        <td style="padding: 10px; max-width: 400px; overflow: hidden; text-overflow: ellipsis;">
-                            ${escapeHtml(event.message)}
+                        <td style="padding: 10px; max-width: 420px;">
+                            <div class="event-message-cell">
+                                <span class="event-message-text" title="${messageText}">${messageText}</span>
+                                ${detailButton}
+                            </div>
                         </td>
-                        <td style="padding: 10px; font-family: monospace; font-size: 0.85em;">${shortRef}</td>
+                        <td style="padding: 10px; font-size: 0.85em;">
+                            <span class="event-ref-cell">${referenceCell}</span>
+                        </td>
                     </tr>
                 `;
             }).join('');
@@ -5318,33 +5633,33 @@ pub fn events_content() -> String {
         
         // Get color for severity
         function getSeverityColor(severity) {
+            const key = (severity || '').toLowerCase();
             const colors = {
-                'Info': 'var(--badge-online)',
-                'Warn': 'var(--badge-loading)',
-                'Error': 'var(--badge-error)',
-                'Debug': '#6b7280'
+                info: 'var(--badge-online)',
+                warn: 'var(--badge-loading)',
+                error: 'var(--badge-error)',
+                debug: '#6b7280'
             };
-            return colors[severity] || '#6b7280';
+            return colors[key] || '#6b7280';
         }
         
         // Search events
         document.getElementById('eventSearch').addEventListener('input', (e) => {
             const searchTerm = e.target.value.toLowerCase();
             AppState.save('events_search', searchTerm);
-            
-            const filtered = allEventsData.filter(event => 
-                event.category.toLowerCase().includes(searchTerm) ||
-                (event.subtype && event.subtype.toLowerCase().includes(searchTerm)) ||
-                event.message.toLowerCase().includes(searchTerm) ||
-                (event.reference_id && event.reference_id.toLowerCase().includes(searchTerm))
-            );
-            renderEvents(filtered);
+            if (searchDebounceHandle) {
+                clearTimeout(searchDebounceHandle);
+            }
+            searchDebounceHandle = setTimeout(() => {
+                renderEvents();
+            }, 120);
         });
         
         // Filter by category
         document.getElementById('categoryFilter').addEventListener('change', () => {
             maxEventId = 0; // Reset to get fresh data with new filter
             allEventsData = [];
+            clearEventsCache();
             loadEvents();
         });
         
@@ -5352,11 +5667,94 @@ pub fn events_content() -> String {
         document.getElementById('severityFilter').addEventListener('change', () => {
             maxEventId = 0; // Reset to get fresh data with new filter
             allEventsData = [];
+            clearEventsCache();
             loadEvents();
         });
         
         // Refresh button
         document.getElementById('refreshEvents').addEventListener('click', loadEvents);
+
+        // Reference copy handler
+        document.getElementById('eventsTableBody').addEventListener('click', async (event) => {
+            const copyBtn = event.target.closest('.event-ref-copy');
+            if (copyBtn) {
+                const encoded = copyBtn.getAttribute('data-ref');
+                if (!encoded) return;
+                const reference = decodeURIComponent(encoded);
+                try {
+                    await navigator.clipboard.writeText(reference);
+                    showToast('✅ Reference copied to clipboard');
+                } catch (err) {
+                    console.error('Failed to copy reference:', err);
+                    showToast('❌ Failed to copy reference', 'error');
+                }
+                return;
+            }
+
+            const detailBtn = event.target.closest('.event-detail-btn');
+            if (detailBtn) {
+                const idAttr = detailBtn.getAttribute('data-event-id');
+                const eventId = Number(idAttr);
+                if (Number.isFinite(eventId)) {
+                    openEventDetailModal(eventId);
+                }
+            }
+        });
+
+        const eventDetailModal = document.getElementById('eventDetailModal');
+        const eventDetailClose = document.getElementById('eventDetailClose');
+
+        function openEventDetailModal(eventId) {
+            if (!eventDetailModal) return;
+            const eventData = eventsStore.get(eventId);
+            if (!eventData) {
+                showToast('❌ Event details unavailable', 'error');
+                return;
+            }
+
+            document.getElementById('eventDetailTitle').textContent = `${(eventData.category || 'event').toUpperCase()} • #${eventData.id}`;
+            document.getElementById('eventDetailCategory').textContent = (eventData.category || '-').toUpperCase();
+            document.getElementById('eventDetailSeverity').textContent = (eventData.severity || '-').toUpperCase();
+            document.getElementById('eventDetailTime').textContent = eventData.event_time ? new Date(eventData.event_time).toLocaleString() : '-';
+            document.getElementById('eventDetailReference').textContent = eventData.reference_id || '—';
+            document.getElementById('eventDetailMint').textContent = eventData.mint || '—';
+
+            const payloadEl = document.getElementById('eventDetailPayload');
+            if (eventData.payload !== null && eventData.payload !== undefined) {
+                try {
+                    payloadEl.textContent = JSON.stringify(eventData.payload, null, 2);
+                } catch (err) {
+                    console.error('Failed to stringify payload:', err);
+                    payloadEl.textContent = 'Unable to render payload.';
+                }
+            } else {
+                payloadEl.textContent = 'No payload data available.';
+            }
+
+            eventDetailModal.classList.add('show');
+        }
+
+        function closeEventDetailModal() {
+            if (!eventDetailModal) return;
+            eventDetailModal.classList.remove('show');
+        }
+
+        if (eventDetailClose) {
+            eventDetailClose.addEventListener('click', closeEventDetailModal);
+        }
+        if (eventDetailModal) {
+            eventDetailModal.addEventListener('click', (event) => {
+                if (event.target === eventDetailModal) {
+                    closeEventDetailModal();
+                }
+            });
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && eventDetailModal && eventDetailModal.classList.contains('show')) {
+                closeEventDetailModal();
+            }
+        });
         
         // Time formatting
         function formatTimeAgo(date) {
@@ -5378,11 +5776,11 @@ pub fn events_content() -> String {
         }
         
         // Silent refresh every second
-        function startEventsRefresh() {
-            if (eventsRefreshInterval) clearInterval(eventsRefreshInterval);
+        function startEventsRefresh(intervalMs = 2000) {
+            if (eventsRefreshInterval) return;
             eventsRefreshInterval = setInterval(() => {
                 loadEvents();
-            }, 1000);
+            }, intervalMs);
         }
 
         // Handle incoming event from WebSocket
@@ -5391,17 +5789,19 @@ pub fn events_content() -> String {
             if (event.warning === 'lagged') {
                 console.warn('[Events] WebSocket lagged, catching up via HTTP');
                 updateConnectionStatus('disconnected', 'Connection lagged, catching up...');
+                startEventsRefresh(1500);
                 loadEvents();
                 return;
             }
             
             // Add new event to list
             if (event && typeof event.id === 'number') {
+                if (!matchesActiveFilters(normalizeEvent(event))) {
+                    return;
+                }
                 maxEventId = Math.max(maxEventId, event.id);
-                allEventsData.unshift(event);
-                if (allEventsData.length > 1000) allEventsData.pop();
-                renderEvents(allEventsData);
-                updateConnectionStatus('connected', `${allEventsData.length} events (realtime)`);
+                mergeEvents([event]);
+                updateConnectionStatus('connected', `Realtime • ${formatEventCountLabel(allEventsData.length)}`);
             }
         }
         
@@ -5409,8 +5809,24 @@ pub fn events_content() -> String {
         function handleWebSocketWarning(data) {
             if (data.channel === 'events') {
                 console.warn('[Events] Channel warning:', data);
-                updateConnectionStatus('disconnected', 'Catching up...');
+                updateConnectionStatus('disconnected', `Polling • ${formatEventCountLabel(allEventsData.length)}`);
+                startEventsRefresh(2000);
                 loadEvents();
+            }
+        }
+
+        function handleEventsDisconnect() {
+            console.warn('[Events] WebSocket disconnected, switching to polling');
+            updateConnectionStatus('disconnected', `Polling • ${formatEventCountLabel(allEventsData.length)}`);
+            startEventsRefresh(3000);
+        }
+
+        function handleEventsReconnect() {
+            console.log('[Events] WebSocket reconnected');
+            stopEventsRefresh();
+            updateConnectionStatus('connected', `Realtime • ${formatEventCountLabel(allEventsData.length)}`);
+            if (!allEventsData.length) {
+                loadEvents({ force: true });
             }
         }
         
@@ -5418,16 +5834,16 @@ pub fn events_content() -> String {
         if (typeof WsHub !== 'undefined') {
             WsHub.subscribe('events', handleEventsWebSocket);
             WsHub.subscribe('_warning', handleWebSocketWarning);
+            WsHub.subscribe('_disconnected', handleEventsDisconnect);
+            WsHub.subscribe('_failed', handleEventsDisconnect);
+            WsHub.subscribe('_connected', handleEventsReconnect);
             console.log('[Events] Subscribed to WebSocket events channel');
             
             // Update status based on WsHub connection state
             if (WsHub.isConnected()) {
-                updateConnectionStatus('connected', `${allEventsData.length} events (realtime)`);
+                updateConnectionStatus('connected', `Realtime • ${formatEventCountLabel(allEventsData.length)}`);
                 // Stop HTTP polling if running
-                if (eventsRefreshInterval) {
-                    clearInterval(eventsRefreshInterval);
-                    eventsRefreshInterval = null;
-                }
+                stopEventsRefresh();
             } else {
                 updateConnectionStatus('connecting', 'Connecting to WebSocket...');
             }
@@ -5436,6 +5852,9 @@ pub fn events_content() -> String {
             window.addEventListener('beforeunload', () => {
                 WsHub.unsubscribe('events', handleEventsWebSocket);
                 WsHub.unsubscribe('_warning', handleWebSocketWarning);
+                WsHub.unsubscribe('_disconnected', handleEventsDisconnect);
+                WsHub.unsubscribe('_failed', handleEventsDisconnect);
+                WsHub.unsubscribe('_connected', handleEventsReconnect);
             });
         } else {
             console.warn('[Events] WsHub not available, falling back to HTTP polling');
@@ -5453,7 +5872,7 @@ pub fn events_content() -> String {
         if (savedSearch) document.getElementById('eventSearch').value = savedSearch;
         
     // Initial load
-    loadEvents();
+    loadEvents({ force: true });
     </script>
     "#.to_string()
 }
