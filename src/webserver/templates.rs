@@ -3568,68 +3568,503 @@ pub fn positions_content() -> String {
 pub fn tokens_content() -> String {
     r#"
     <script>
-        // Initialize Tokens tab sub-tabs and toolbar on page load
-        document.addEventListener('DOMContentLoaded', function() {
+        const TOKENS_VIEWS = ['pool', 'all', 'passed', 'rejected', 'blacklisted', 'positions', 'secure', 'recent'];
+        const VIEW_LABELS = {
+            pool: 'with available prices',
+            all: 'in database',
+            passed: 'that passed filtering',
+            rejected: 'rejected by filtering',
+            blacklisted: 'blacklisted',
+            positions: 'with open positions',
+            secure: 'secure',
+            recent: 'recently updated',
+        };
+
+        const tokensState = {
+            view: 'pool',
+            sortBy: 'symbol',
+            sortDir: 'asc',
+            searchTerm: '',
+        };
+
+        let allTokensData = [];
+        let tokensRefreshInterval = null;
+        let tokensRequestController = null;
+        let tokensLoading = false;
+        let searchDebounceHandle = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            hydrateTokensState();
             initTokensSubTabs();
             initTokensToolbar();
+            setupSortableHeaders();
+            attachGlobalListeners();
+            loadTokens({ reason: 'initial', force: true });
+            startTokensRefresh();
         });
-        
+
+        function hydrateTokensState() {
+            const savedView = window.sessionStorage.getItem('tokens.view');
+            if (savedView && TOKENS_VIEWS.includes(savedView)) {
+                tokensState.view = savedView;
+            }
+
+            const savedSearch = window.sessionStorage.getItem('tokens.search');
+            if (typeof savedSearch === 'string') {
+                tokensState.searchTerm = savedSearch;
+            }
+        }
+
+        function attachGlobalListeners() {
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+        }
+
+        function handleVisibilityChange() {
+            if (document.visibilityState === 'hidden') {
+                stopTokensRefresh();
+            } else {
+                startTokensRefresh();
+                loadTokens({ reason: 'visibility', force: true });
+            }
+        }
+
         function initTokensSubTabs() {
             const subTabsContainer = document.getElementById('subTabsContainer');
             if (!subTabsContainer) return;
-            
-            subTabsContainer.innerHTML = `
-                <button class="sub-tab active" data-view="pool" onclick="switchTokensSubTab('pool')">
-                    💧 Pool Service
-                </button>
-                <button class="sub-tab" data-view="all" onclick="switchTokensSubTab('all')">
-                    📋 All Tokens
-                </button>
-                <button class="sub-tab" data-view="passed" onclick="switchTokensSubTab('passed')">
-                    ✅ Passed
-                </button>
-                <button class="sub-tab" data-view="rejected" onclick="switchTokensSubTab('rejected')">
-                    ⛔ Rejected
-                </button>
-                <button class="sub-tab" data-view="blacklisted" onclick="switchTokensSubTab('blacklisted')">
-                    🚫 Blacklisted
-                </button>
-            `;
+
+            const views = [
+                { id: 'pool', label: '💧 Pool Service' },
+                { id: 'all', label: '📋 All Tokens' },
+                { id: 'passed', label: '✅ Passed' },
+                { id: 'rejected', label: '⛔ Rejected' },
+                { id: 'blacklisted', label: '🚫 Blacklisted' },
+            ];
+
+            subTabsContainer.innerHTML = views
+                .map(view => `
+                    <button class="sub-tab ${view.id === tokensState.view ? 'active' : ''}" data-view="${view.id}">
+                        ${view.label}
+                    </button>
+                `)
+                .join('');
+
+            subTabsContainer
+                .querySelectorAll('.sub-tab')
+                .forEach(button => {
+                    button.addEventListener('click', () => switchTokensSubTab(button.dataset.view));
+                });
+
             subTabsContainer.style.display = 'flex';
         }
-        
+
+        function switchTokensSubTab(view) {
+            if (!view || tokensState.view === view) return;
+
+            tokensState.view = view;
+            window.sessionStorage.setItem('tokens.view', view);
+
+            document
+                .querySelectorAll('#subTabsContainer .sub-tab')
+                .forEach(tab => {
+                    tab.classList.toggle('active', tab.dataset.view === view);
+                });
+
+            loadTokens({ reason: 'view-change', force: true });
+        }
+
         function initTokensToolbar() {
             const toolbarContainer = document.getElementById('toolbarContainer');
             if (!toolbarContainer) return;
-            
+
             toolbarContainer.innerHTML = `
-                <input type="text" id="searchInput" placeholder="Search by symbol or mint..." 
-                       style="flex: 1; max-width: 300px; padding: 6px 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9em; background: var(--bg-primary); color: var(--text-primary);">
+                <input
+                    type="text"
+                    id="searchInput"
+                    placeholder="Search by symbol or mint..."
+                    style="flex: 1; max-width: 300px; padding: 6px 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9em; background: var(--bg-primary); color: var(--text-primary);"
+                >
                 <div class="spacer"></div>
                 <span id="tokenCount" style="color: var(--text-secondary); font-size: 0.9em; font-weight: 500;">Loading...</span>
-                <button onclick="loadTokens()" class="btn btn-primary" style="padding: 6px 12px;">
+                <button id="tokensRefreshBtn" class="btn btn-primary" style="padding: 6px 12px;">
                     🔄 Refresh
                 </button>
-                <button onclick="exportTokens()" class="btn btn-secondary" style="padding: 6px 12px;">
+                <button id="tokensExportBtn" class="btn btn-secondary" style="padding: 6px 12px;">
                     📥 Export
                 </button>
             `;
             toolbarContainer.style.display = 'flex';
+
+            const searchInput = toolbarContainer.querySelector('#searchInput');
+            if (searchInput) {
+                searchInput.value = tokensState.searchTerm;
+                searchInput.addEventListener('input', handleSearchInput);
+            }
+
+            const refreshBtn = toolbarContainer.querySelector('#tokensRefreshBtn');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', () => loadTokens({ reason: 'manual-refresh', force: true }));
+            }
+
+            const exportBtn = toolbarContainer.querySelector('#tokensExportBtn');
+            if (exportBtn) {
+                exportBtn.addEventListener('click', exportTokens);
+            }
         }
-        
-        function switchTokensSubTab(view) {
-            // Update sub-tab active state
-            document.querySelectorAll('.sub-tab').forEach(tab => {
-                tab.classList.toggle('active', tab.dataset.view === view);
-            });
-            
-            // Call the existing view switching logic
-            switchTokensView(view);
+
+        function handleSearchInput(event) {
+            tokensState.searchTerm = event.target.value.trim();
+            window.sessionStorage.setItem('tokens.search', tokensState.searchTerm);
+
+            applySearchFilter();
+
+            if (searchDebounceHandle) {
+                clearTimeout(searchDebounceHandle);
+            }
+            searchDebounceHandle = setTimeout(() => {
+                loadTokens({ reason: 'search', force: true });
+            }, 350);
         }
-        
+
         function exportTokens() {
-            // Placeholder for export functionality
             alert('Export functionality - to be implemented');
+        }
+
+        async function loadTokens(options = {}) {
+            const { reason = 'manual', force = false } = options;
+            const isAutoRefresh = reason === 'interval';
+            const searchInput = document.getElementById('searchInput');
+
+            if (isAutoRefresh && !force) {
+                if (document.visibilityState === 'hidden') return;
+                if (document.querySelector('.dropdown-menu.show')) return;
+                if (searchInput && document.activeElement === searchInput) return;
+            }
+
+            if (tokensLoading && !force) {
+                return;
+            }
+
+            if (tokensRequestController) {
+                tokensRequestController.abort();
+            }
+
+            tokensRequestController = new AbortController();
+            tokensLoading = true;
+
+            const params = new URLSearchParams({
+                view: tokensState.view,
+                search: tokensState.searchTerm,
+                sort_by: tokensState.sortBy,
+                sort_dir: tokensState.sortDir,
+                page: '1',
+                page_size: '1000',
+            });
+
+            try {
+                const res = await fetch(`/api/tokens/list?${params.toString()}`, {
+                    signal: tokensRequestController.signal,
+                });
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}`);
+                }
+
+                const data = await res.json();
+                allTokensData = Array.isArray(data.items) ? data.items : [];
+                updateTokenCount(data.total);
+                applySearchFilter();
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    return;
+                }
+                console.error('Failed to load tokens:', error);
+                showTokensError('Failed to load tokens');
+            } finally {
+                tokensLoading = false;
+            }
+        }
+
+        function showTokensError(message) {
+            const tbody = document.getElementById('tokensTableBody');
+            if (!tbody) return;
+            tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 20px; color: #ef4444;">${message}</td></tr>`;
+        }
+
+        function updateTokenCount(total) {
+            const label = document.getElementById('tokenCount');
+            if (!label) return;
+
+            const parsedTotal = Number(total);
+            const totalValue = Number.isFinite(parsedTotal) ? parsedTotal : allTokensData.length;
+            const viewLabel = VIEW_LABELS[tokensState.view] || '';
+            label.textContent = viewLabel ? `${totalValue} tokens ${viewLabel}` : `${totalValue} tokens`;
+        }
+
+        function applySearchFilter() {
+            const search = tokensState.searchTerm.toLowerCase();
+            if (!search) {
+                renderTokens(allTokensData);
+                return;
+            }
+
+            const filtered = allTokensData.filter(token => {
+                const symbol = (token.symbol || '').toString().toLowerCase();
+                const mint = (token.mint || '').toString().toLowerCase();
+                const name = (token.name || '').toString().toLowerCase();
+                return symbol.includes(search) || mint.includes(search) || name.includes(search);
+            });
+
+            renderTokens(filtered);
+        }
+
+        function renderTokens(tokens) {
+            const tbody = document.getElementById('tokensTableBody');
+            if (!tbody) return;
+
+            const openState = captureOpenDropdownState();
+
+            if (!tokens || tokens.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 20px; color: #94a3b8;">No tokens found for view: ${tokensState.view}</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = tokens.map(createTokenRowHtml).join('');
+            restoreDropdownState(openState);
+        }
+
+        function captureOpenDropdownState() {
+            const menu = document.querySelector('.dropdown-menu.show');
+            if (!menu) return null;
+            const row = menu.closest('tr[data-mint]');
+            if (!row) return null;
+            return { mint: row.dataset.mint };
+        }
+
+        function restoreDropdownState(state) {
+            if (!state || !state.mint) return;
+            const container = document.querySelector(`.dropdown-container[data-mint="${state.mint}"]`);
+            if (!container) return;
+
+            const btn = container.querySelector('.dropdown-btn');
+            const menu = container.querySelector('.dropdown-menu');
+            if (!btn || !menu) return;
+
+            openDropdownMenu(btn, menu);
+        }
+
+        function createTokenRowHtml(token) {
+            const mint = token.mint;
+            const symbol = escapeHtml(token.symbol || '');
+            const name = token.name ? escapeHtml(token.name) : '';
+            const timeAgo = token.price_updated_at ? formatTimeAgo(token.price_updated_at) : 'N/A';
+            const priceDisplay = formatPriceSol(token.price_sol);
+            const liquidity = formatCurrencyUSD(token.liquidity_usd);
+            const vol24h = formatCurrencyUSD(token.volume_24h);
+            const fdv = formatCurrencyUSD(token.fdv);
+            const marketCap = formatCurrencyUSD(token.market_cap);
+            const ch1h = formatPercent(token.price_change_h1);
+            const ch24h = formatPercent(token.price_change_h24);
+            const security = renderSecurity(token.security_score, token.rugged);
+            const status = renderStatusBadges(token);
+            const logo = safeLogoHtml(token.logo_url, token.symbol);
+
+            return `
+                <tr data-mint="${mint}" onclick="openTokenDetail('${mint}')" style="cursor:pointer;" title="Click to view details">
+                    <td>
+                        <div style="display:flex; align-items:center; gap:12px; min-width:0;">
+                            ${logo}
+                            <div style="display:flex; flex-direction:column; gap:1px; min-width:0;">
+                                <div style="font-weight:600; color:#667eea; font-size:0.95em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 260px;">${symbol}</div>
+                                <div style="font-size:0.8em; color:#94a3b8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 260px;">${name}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="num" style="font-weight:600;" title="${token.price_sol ?? ''}">${priceDisplay}</td>
+                    <td class="num" title="${token.liquidity_usd ?? ''}">${liquidity}</td>
+                    <td class="num" title="${token.volume_24h ?? ''}">${vol24h}</td>
+                    <td class="num" title="${token.fdv ?? ''}">${fdv}</td>
+                    <td class="num" title="${token.market_cap ?? ''}">${marketCap}</td>
+                    <td class="num" title="${token.price_change_h1 ?? ''}">${ch1h}</td>
+                    <td class="num" title="${token.price_change_h24 ?? ''}">${ch24h}</td>
+                    <td class="num" title="${token.security_score ?? ''}">${security}</td>
+                    <td>${status}</td>
+                    <td style="font-size: 0.85em; color: #64748b;">${timeAgo}</td>
+                    <td onclick="event.stopPropagation();">
+                        <div class="dropdown-container" data-mint="${mint}">
+                            <button class="dropdown-btn" type="button" onclick="toggleDropdown(event)" aria-label="Actions">⋮</button>
+                            <div class="dropdown-menu">
+                                <button onclick="copyMint('${mint}')" class="dropdown-item">📋 Copy Mint</button>
+                                <button onclick="openGMGN('${mint}')" class="dropdown-item">🔗 Open GMGN</button>
+                                <button onclick="openDexScreener('${mint}')" class="dropdown-item">📊 Open DexScreener</button>
+                                <button onclick="openSolscan('${mint}')" class="dropdown-item">🔍 Open Solscan</button>
+                                <button onclick="openTokenDetail('${mint}')" class="dropdown-item">🔎 View Details</button>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }
+
+        function openDropdownMenu(btn, menu) {
+            const rect = btn.getBoundingClientRect();
+            const menuWidth = Math.max(200, menu.offsetWidth || 200);
+            const viewportWidth = window.innerWidth;
+            const rightSpace = viewportWidth - rect.right;
+
+            menu.classList.add('show');
+            menu.style.position = 'fixed';
+            menu.style.top = `${Math.round(rect.bottom + 4)}px`;
+            if (rightSpace < menuWidth) {
+                menu.style.left = `${Math.max(8, Math.round(rect.right - menuWidth))}px`;
+                menu.style.right = '';
+            } else {
+                menu.style.left = `${Math.round(rect.left)}px`;
+                menu.style.right = '';
+            }
+            menu.style.width = `${menuWidth}px`;
+        }
+
+        function startTokensRefresh() {
+            if (tokensRefreshInterval) clearInterval(tokensRefreshInterval);
+            tokensRefreshInterval = setInterval(() => {
+                loadTokens({ reason: 'interval', force: false });
+            }, 2000);
+        }
+
+        function stopTokensRefresh() {
+            if (tokensRefreshInterval) {
+                clearInterval(tokensRefreshInterval);
+                tokensRefreshInterval = null;
+            }
+        }
+
+        function setupSortableHeaders() {
+            const thead = document.querySelector('#tokensTable thead');
+            if (!thead) return;
+            thead.addEventListener('click', (e) => {
+                const th = e.target.closest('th.sortable');
+                if (!th) return;
+                const key = th.getAttribute('data-sort-key');
+                if (!key) return;
+                if (tokensState.sortBy === key) {
+                    tokensState.sortDir = (tokensState.sortDir === 'asc') ? 'desc' : 'asc';
+                } else {
+                    tokensState.sortBy = key;
+                    tokensState.sortDir = (key === 'symbol') ? 'asc' : 'desc';
+                }
+                updateSortIndicators();
+                loadTokens({ reason: 'sort', force: true });
+            });
+            updateSortIndicators();
+        }
+
+        function updateSortIndicators() {
+            const indicators = document.querySelectorAll('#tokensTable .sort-indicator');
+            indicators.forEach(el => { el.textContent = ''; });
+            const id = `sort-indicator-${tokensState.sortBy}`;
+            const el = document.getElementById(id);
+            if (el) el.textContent = tokensState.sortDir === 'asc' ? '▲' : '▼';
+        }
+
+        function safeLogoHtml(url, symbol) {
+            let fallback = '?';
+            if (symbol && typeof symbol === 'string') {
+                for (const ch of symbol) {
+                    const u = ch.toUpperCase();
+                    if (/^[A-Z0-9]$/.test(u)) { fallback = u; break; }
+                }
+            }
+            if (!url) {
+                return `<div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85em;flex-shrink:0;">${fallback}</div>`;
+            }
+            const esc = (s) => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            return `<img src="${esc(url)}" alt="${esc(symbol || '')}" width="32" height="32" style="border-radius:8px;object-fit:cover;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,0.1);" onerror="fallbackLogo(this, '${fallback}')">`;
+        }
+
+        function fallbackLogo(img, letter) {
+            try {
+                img.onerror = null;
+                const div = document.createElement('div');
+                div.style.width = '32px';
+                div.style.height = '32px';
+                div.style.borderRadius = '8px';
+                div.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                div.style.color = 'white';
+                div.style.display = 'flex';
+                div.style.alignItems = 'center';
+                div.style.justifyContent = 'center';
+                div.style.fontWeight = '700';
+                div.style.fontSize = '0.85em';
+                div.style.flexShrink = '0';
+                div.textContent = (letter && /^[A-Z0-9]$/.test(letter)) ? letter : '?';
+                img.replaceWith(div);
+            } catch (_) { /* no-op */ }
+        }
+
+        function formatPriceSol(price) {
+            if (price === null || price === undefined) return 'N/A';
+            if (!Number.isFinite(price)) return 'N/A';
+            if (price === 0) return '0';
+            return price < 0.000001 ? price.toExponential(4) : price.toFixed(8);
+        }
+
+        function formatCurrencyUSD(value) {
+            if (value === null || value === undefined || !Number.isFinite(value)) return '—';
+            const abs = Math.abs(value);
+            let v = value;
+            let suffix = '';
+            if (abs >= 1_000_000_000) { v = value / 1_000_000_000; suffix = 'B'; }
+            else if (abs >= 1_000_000) { v = value / 1_000_000; suffix = 'M'; }
+            else if (abs >= 1_000) { v = value / 1_000; suffix = 'K'; }
+            return `$${v.toFixed(2)}${suffix}`;
+        }
+
+        function formatPercent(value) {
+            if (value === null || value === undefined || !Number.isFinite(value)) return '<span>—</span>';
+            const cls = value > 0 ? 'color: #16a34a;' : (value < 0 ? 'color:#ef4444;' : 'color:inherit;');
+            const sign = value > 0 ? '+' : '';
+            return `<span style="${cls}">${sign}${value.toFixed(2)}%</span>`;
+        }
+
+        function renderSecurity(score, rugged) {
+            if (rugged === true) {
+                return `<span class="badge" style="background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;">RUG</span>`;
+            }
+            if (score === null || score === undefined) return '—';
+            let color = '#64748b';
+            if (score >= 700) color = '#16a34a';
+            else if (score >= 500) color = '#22c55e';
+            else if (score >= 300) color = '#f59e0b';
+            else color = '#ef4444';
+            return `<span style="font-weight:600;color:${color}">${score}</span>`;
+        }
+
+        function renderStatusBadges(token) {
+            const badges = [];
+            if (token.has_pool_price) badges.push('<span class="badge" style="background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;">POOL</span>');
+            if (token.has_ohlcv) badges.push('<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;">OHLCV</span>');
+            if (token.has_open_position) badges.push('<span class="badge" style="background:#fde68a;color:#92400e;border:1px solid #fcd34d;">POS</span>');
+            if (token.blacklisted) badges.push('<span class="badge" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;">BL</span>');
+            return badges.join(' ');
+        }
+
+        function formatTimeAgo(timestamp) {
+            if (!timestamp || !Number.isFinite(timestamp)) return '-';
+            const seconds = Math.max(0, Math.floor(Date.now() / 1000) - timestamp);
+            
+            if (seconds < 60) return `${seconds}s ago`;
+            if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+            if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+            return `${Math.floor(seconds / 86400)}d ago`;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function openTokenDetail(mint) {
+            window.open(`/api/tokens/${mint}`, '_blank');
         }
     </script>
     
