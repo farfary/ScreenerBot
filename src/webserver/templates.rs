@@ -3615,13 +3615,31 @@ pub fn status_content() -> String {
     </div>
     
     <script>
+        function escapeHtml(str) {
+            if (typeof str !== 'string') return '';
+            return str
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
         async function loadStatusData() {
             try {
                 const [statusRes, metricsRes] = await Promise.all([
                     fetch('/api/status'),
                     fetch('/api/status/metrics')
                 ]);
-                
+
+                if (!statusRes.ok) {
+                    throw new Error(`Status request failed (${statusRes.status})`);
+                }
+
+                if (!metricsRes.ok) {
+                    throw new Error(`Metrics request failed (${metricsRes.status})`);
+                }
+
                 const status = await statusRes.json();
                 const metrics = await metricsRes.json();
                 
@@ -3643,27 +3661,40 @@ pub fn status_content() -> String {
                 
                 // Update services
                 const servicesList = document.getElementById('servicesList');
-                const serviceNames = {
-                    tokens: 'Tokens System',
-                    positions: 'Positions Manager',
-                    pools: 'Pool Service',
-                    transactions: 'Transactions',
-                    security: 'Security Analyzer'
-                };
-                
-                servicesList.innerHTML = Object.entries(serviceNames).map(([key, name]) => {
-                    const isReady = status.services[key] || false;
-                    const dotClass = isReady ? 'ready' : 'not-ready';
-                    return `
-                        <div class="service-item">
-                            <span>${name}</span>
-                            <span class="status-dot ${dotClass}"></span>
-                        </div>
-                    `;
-                }).join('');
+                const servicesData = (status && status.services) || {};
+                const serviceEntries = [
+                    { key: 'tokens_system', label: 'Tokens System' },
+                    { key: 'positions_system', label: 'Positions Manager' },
+                    { key: 'pool_service', label: 'Pool Service' },
+                    { key: 'transactions_system', label: 'Transactions' },
+                    { key: 'security_analyzer', label: 'Security Analyzer' }
+                ];
+
+                if (servicesList) {
+                    const rendered = serviceEntries
+                        .map(({ key, label }) => {
+                            const svc = servicesData[key] || {};
+                            const ready = svc.ready === true;
+                            const dotClass = ready ? 'ready' : 'not-ready';
+                            const tooltip = svc.error ? ` title="${escapeHtml(svc.error)}"` : '';
+                            return `
+                                <div class="service-item"${tooltip}>
+                                    <span>${label}</span>
+                                    <span class="status-dot ${dotClass}"></span>
+                                </div>
+                            `;
+                        })
+                        .join('');
+
+                    servicesList.innerHTML = rendered || '<div class="loading-text">No service data available</div>';
+                }
                 
             } catch (error) {
                 console.error('Failed to load status data:', error);
+                const servicesList = document.getElementById('servicesList');
+                if (servicesList) {
+                    servicesList.innerHTML = '<div class="loading-text">Failed to load services</div>';
+                }
             }
         }
         
