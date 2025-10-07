@@ -3552,155 +3552,143 @@ pub fn home_content() -> String {
 /// Status page content
 pub fn status_content() -> String {
     r#"
-    <div class="grid">
-        <div class="card">
-            <div class="card-header">
-                <span class="card-icon">💻</span>
-                <span class="card-title">System Info</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Memory Usage</span>
-                <span class="metric-value loading-text" id="memory">Loading...</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">CPU Usage</span>
-                <span class="metric-value loading-text" id="cpu">Loading...</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Active Threads</span>
-                <span class="metric-value loading-text" id="threads">Loading...</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Process Memory</span>
-                <span class="metric-value loading-text" id="procMem">Loading...</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Process CPU</span>
-                <span class="metric-value loading-text" id="procCpu">Loading...</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">System Memory</span>
-                <span class="metric-value loading-text" id="sysMem">Loading...</span>
-            </div>
-        </div>
-        
-        <div class="card">
-            <div class="card-header">
-                <span class="card-icon">📡</span>
-                <span class="card-title">RPC Stats</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Total Calls</span>
-                <span class="metric-value loading-text" id="rpcCalls">Loading...</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Success Rate</span>
-                <span class="metric-value loading-text" id="successRate">Loading...</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">WebSocket Conns</span>
-                <span class="metric-value loading-text" id="wsConns">Loading...</span>
-            </div>
-        </div>
-    </div>
-    
-    <div class="card">
-        <div class="card-header">
-            <span class="card-icon">⚙️</span>
-            <span class="card-title">Services Status</span>
-        </div>
-        <div class="service-list" id="servicesList">
-            <div class="loading-text">Loading services...</div>
-        </div>
-    </div>
-    
     <script>
-        function escapeHtml(str) {
-            if (typeof str !== 'string') return '';
-            return str
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#39;');
-        }
+        const STATUS_VIEWS = ['system', 'rpc', 'transactions', 'positions', 'pools', 'discovery', 'ohlcvs', 'events', 'wallet', 'trader', 'sol_price', 'webserver', 'rl_learner'];
+        
+        const statusState = {
+            view: 'system',
+        };
 
-        async function loadStatusData() {
-            try {
-                const [statusRes, metricsRes] = await Promise.all([
-                    fetch('/api/status'),
-                    fetch('/api/status/metrics')
-                ]);
+        document.addEventListener('DOMContentLoaded', () => {
+            hydrateStatusState();
+            initStatusSubTabs();
+            loadStatusContent();
+        });
 
-                if (!statusRes.ok) {
-                    throw new Error(`Status request failed (${statusRes.status})`);
-                }
-
-                if (!metricsRes.ok) {
-                    throw new Error(`Metrics request failed (${metricsRes.status})`);
-                }
-
-                const status = await statusRes.json();
-                const metrics = await metricsRes.json();
-                
-                // Update metrics
-                document.getElementById('memory').textContent = metrics.system_memory_used_mb + ' MB';
-                document.getElementById('cpu').textContent = metrics.cpu_system_percent.toFixed(1) + '%';
-                document.getElementById('threads').textContent = metrics.active_threads;
-                document.getElementById('rpcCalls').textContent = formatNumber(metrics.rpc_calls_total);
-                document.getElementById('successRate').textContent = metrics.rpc_success_rate.toFixed(1) + '%';
-                document.getElementById('wsConns').textContent = metrics.ws_connections;
-
-                // Detailed metrics
-                document.getElementById('procMem').textContent = metrics.process_memory_mb + ' MB';
-                document.getElementById('procCpu').textContent = metrics.cpu_process_percent.toFixed(1) + '%';
-                document.getElementById('sysMem').textContent = metrics.system_memory_used_mb + ' / ' + metrics.system_memory_total_mb + ' MB';
-                
-                // Remove loading class
-                document.querySelectorAll('.loading-text').forEach(el => el.classList.remove('loading-text'));
-                
-                // Update services
-                const servicesList = document.getElementById('servicesList');
-                const servicesData = (status && status.services) || {};
-                const serviceEntries = [
-                    { key: 'tokens_system', label: 'Tokens System' },
-                    { key: 'positions_system', label: 'Positions Manager' },
-                    { key: 'pool_service', label: 'Pool Service' },
-                    { key: 'transactions_system', label: 'Transactions' },
-                    { key: 'security_analyzer', label: 'Security Analyzer' }
-                ];
-
-                if (servicesList) {
-                    const rendered = serviceEntries
-                        .map(({ key, label }) => {
-                            const svc = servicesData[key] || {};
-                            const ready = svc.ready === true;
-                            const dotClass = ready ? 'ready' : 'not-ready';
-                            const tooltip = svc.error ? ` title="${escapeHtml(svc.error)}"` : '';
-                            return `
-                                <div class="service-item"${tooltip}>
-                                    <span>${label}</span>
-                                    <span class="status-dot ${dotClass}"></span>
-                                </div>
-                            `;
-                        })
-                        .join('');
-
-                    servicesList.innerHTML = rendered || '<div class="loading-text">No service data available</div>';
-                }
-                
-            } catch (error) {
-                console.error('Failed to load status data:', error);
-                const servicesList = document.getElementById('servicesList');
-                if (servicesList) {
-                    servicesList.innerHTML = '<div class="loading-text">Failed to load services</div>';
-                }
+        function hydrateStatusState() {
+            const savedView = window.sessionStorage.getItem('status.view');
+            if (savedView && STATUS_VIEWS.includes(savedView)) {
+                statusState.view = savedView;
             }
         }
-        
-        loadStatusData();
-        setInterval(loadStatusData, 5000);
+
+        function initStatusSubTabs() {
+            const subTabsContainer = document.getElementById('subTabsContainer');
+            if (!subTabsContainer) return;
+
+            const views = [
+                { id: 'system', label: '💻 System' },
+                { id: 'rpc', label: '📡 RPC' },
+                { id: 'transactions', label: '💱 Transactions' },
+                { id: 'positions', label: '💰 Positions' },
+                { id: 'pools', label: '🏊 Pools' },
+                { id: 'discovery', label: '🔍 Discovery' },
+                { id: 'ohlcvs', label: '📊 OHLCVS' },
+                { id: 'events', label: '📡 Events' },
+                { id: 'wallet', label: '👛 Wallet' },
+                { id: 'trader', label: '🤖 Trader' },
+                { id: 'sol_price', label: '💵 SOL Price' },
+                { id: 'webserver', label: '🌐 Webserver' },
+                { id: 'rl_learner', label: '🧠 RL Learner' },
+            ];
+
+            subTabsContainer.innerHTML = views
+                .map(view => `
+                    <button class="sub-tab ${view.id === statusState.view ? 'active' : ''}" data-view="${view.id}">
+                        ${view.label}
+                    </button>
+                `)
+                .join('');
+
+            subTabsContainer
+                .querySelectorAll('.sub-tab')
+                .forEach(button => {
+                    button.addEventListener('click', () => switchStatusSubTab(button.dataset.view));
+                });
+
+            subTabsContainer.style.display = 'flex';
+        }
+
+        function switchStatusSubTab(view) {
+            if (!view || statusState.view === view) return;
+
+            statusState.view = view;
+            window.sessionStorage.setItem('status.view', view);
+
+            document
+                .querySelectorAll('#subTabsContainer .sub-tab')
+                .forEach(tab => {
+                    tab.classList.toggle('active', tab.dataset.view === view);
+                });
+
+            loadStatusContent();
+        }
+
+        function loadStatusContent() {
+            const contentContainer = document.getElementById('statusContent');
+            if (!contentContainer) return;
+
+            // Render placeholder content based on current view
+            const viewTitles = {
+                system: 'System Information',
+                rpc: 'RPC Statistics',
+                transactions: 'Transaction Processing',
+                positions: 'Position Management',
+                pools: 'Pool Service',
+                discovery: 'Token Discovery',
+                ohlcvs: 'OHLCV Data',
+                events: 'Event System',
+                wallet: 'Wallet Status',
+                trader: 'Trading Engine',
+                sol_price: 'SOL Price Tracking',
+                webserver: 'Webserver Metrics',
+                rl_learner: 'Reinforcement Learning'
+            };
+
+            const viewIcons = {
+                system: '💻',
+                rpc: '📡',
+                transactions: '💱',
+                positions: '💰',
+                pools: '🏊',
+                discovery: '🔍',
+                ohlcvs: '📊',
+                events: '📡',
+                wallet: '👛',
+                trader: '🤖',
+                sol_price: '💵',
+                webserver: '🌐',
+                rl_learner: '🧠'
+            };
+
+            const icon = viewIcons[statusState.view] || '📊';
+            const title = viewTitles[statusState.view] || 'Status';
+
+            contentContainer.innerHTML = `
+                <div class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">${icon}</span>
+                            <span class="card-title">${title}</span>
+                        </div>
+                        <div style="padding: 40px; text-align: center; color: var(--text-secondary);">
+                            <div style="font-size: 3em; margin-bottom: 16px;">${icon}</div>
+                            <div style="font-size: 1.1em; font-weight: 600; margin-bottom: 8px;">${title}</div>
+                            <div style="font-size: 0.9em;">Content for this section will be implemented here</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
     </script>
+
+    <div id="statusContent">
+        <div class="page-section">
+            <div style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
+                <div class="loading-text">Loading status...</div>
+            </div>
+        </div>
+    </div>
     "#.to_string()
 }
 
