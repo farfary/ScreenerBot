@@ -7,24 +7,22 @@
 /// - status: System status snapshots (always-on)
 ///
 /// Clients subscribe to specific channels and receive only relevant updates.
-use std::{collections::HashSet, sync::Arc};
+use std::{ collections::HashSet, sync::Arc };
 
 use axum::{
-    extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
-        Query, State,
-    },
+    extract::{ ws::{ Message, WebSocket, WebSocketUpgrade }, Query, State },
     response::Response,
     routing::get,
     Router,
 };
-use futures::{SinkExt, StreamExt};
-use serde::{Deserialize, Serialize};
+use futures::{ SinkExt, StreamExt };
+use serde::{ Deserialize, Serialize };
 
 use crate::{
-    events::{self, Event, EventCategory, Severity},
-    pools, positions,
-    webserver::{routes::services::ServicesOverviewResponse, state::AppState, status_broadcast},
+    events::{ self, Event, EventCategory, Severity },
+    pools,
+    positions,
+    webserver::{ routes::services::ServicesOverviewResponse, state::AppState, status_broadcast },
 };
 
 #[derive(Debug, Deserialize, Clone)]
@@ -81,9 +79,7 @@ enum ServerMessage {
 }
 
 pub fn routes() -> Router<Arc<AppState>> {
-    Router::new()
-        .route("/ws", get(ws_hub_handler))
-        .route("/ws/events", get(ws_events_handler)) // Keep for backward compatibility
+    Router::new().route("/ws", get(ws_hub_handler)).route("/ws/events", get(ws_events_handler)) // Keep for backward compatibility
 }
 
 /// Centralized WebSocket hub handler
@@ -96,7 +92,7 @@ pub async fn ws_hub_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppSta
 pub async fn ws_events_handler(
     ws: WebSocketUpgrade,
     Query(params): Query<WsEventsQuery>,
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>
 ) -> Response {
     state.increment_ws_connections().await;
     ws.on_upgrade(move |socket| handle_events_socket(socket, params, state))
@@ -122,44 +118,27 @@ async fn handle_hub_socket(socket: WebSocket, state: Arc<AppState>) {
     let has_services = services_rx.is_some();
 
     if !has_events {
-        let _ = send_error(
-            &mut sender,
-            "Events broadcaster not ready",
-            "EVENTS_NOT_READY",
-        )
-        .await;
+        let _ = send_error(&mut sender, "Events broadcaster not ready", "EVENTS_NOT_READY").await;
     }
     if !has_positions {
         let _ = send_error(
             &mut sender,
             "Positions broadcaster not ready",
-            "POSITIONS_NOT_READY",
-        )
-        .await;
+            "POSITIONS_NOT_READY"
+        ).await;
     }
     if !has_prices {
-        let _ = send_error(
-            &mut sender,
-            "Prices broadcaster not ready",
-            "PRICES_NOT_READY",
-        )
-        .await;
+        let _ = send_error(&mut sender, "Prices broadcaster not ready", "PRICES_NOT_READY").await;
     }
     if !has_status {
-        let _ = send_error(
-            &mut sender,
-            "Status broadcaster not ready",
-            "STATUS_NOT_READY",
-        )
-        .await;
+        let _ = send_error(&mut sender, "Status broadcaster not ready", "STATUS_NOT_READY").await;
     }
     if !has_services {
         let _ = send_error(
             &mut sender,
             "Services broadcaster not ready",
-            "SERVICES_NOT_READY",
-        )
-        .await;
+            "SERVICES_NOT_READY"
+        ).await;
     }
 
     // Auto-subscribe to status (always-on channel)
@@ -293,21 +272,17 @@ async fn handle_hub_socket(socket: WebSocket, state: Arc<AppState>) {
 async fn handle_client_message(
     msg: ClientMessage,
     subscriptions: &mut HashSet<String>,
-    sender: &mut futures::stream::SplitSink<WebSocket, Message>,
+    sender: &mut futures::stream::SplitSink<WebSocket, Message>
 ) {
     match msg {
-        ClientMessage::Subscribe {
-            channel,
-            filters: _,
-        } => {
+        ClientMessage::Subscribe { channel, filters: _ } => {
             // Validate channel
             if !is_valid_channel(&channel) {
                 let _ = send_error(
                     sender,
                     &format!("Unknown channel: {}", channel),
-                    "INVALID_CHANNEL",
-                )
-                .await;
+                    "INVALID_CHANNEL"
+                ).await;
                 return;
             }
 
@@ -316,18 +291,16 @@ async fn handle_client_message(
             let _ = send_subscribed(
                 sender,
                 &channel,
-                &format!("Successfully subscribed to {}", channel),
-            )
-            .await;
+                &format!("Successfully subscribed to {}", channel)
+            ).await;
         }
         ClientMessage::Unsubscribe { channel } => {
             subscriptions.remove(&channel);
             let _ = send_unsubscribed(
                 sender,
                 &channel,
-                &format!("Successfully unsubscribed from {}", channel),
-            )
-            .await;
+                &format!("Successfully unsubscribed from {}", channel)
+            ).await;
         }
         ClientMessage::Ping => {
             let _ = send_pong(sender).await;
@@ -337,16 +310,13 @@ async fn handle_client_message(
 
 /// Check if channel is valid
 fn is_valid_channel(channel: &str) -> bool {
-    matches!(
-        channel,
-        "events" | "positions" | "prices" | "services" | "status"
-    )
+    matches!(channel, "events" | "positions" | "prices" | "services" | "status")
 }
 
 /// Forward event to client
 async fn forward_event(
     sender: &mut futures::stream::SplitSink<WebSocket, Message>,
-    event: &Event,
+    event: &Event
 ) -> Result<(), axum::Error> {
     let data = map_event(event);
     let msg = ServerMessage::Data {
@@ -365,7 +335,7 @@ async fn forward_event(
 /// Forward position update to client
 async fn forward_position(
     sender: &mut futures::stream::SplitSink<WebSocket, Message>,
-    update: &positions::PositionUpdate,
+    update: &positions::PositionUpdate
 ) -> Result<(), axum::Error> {
     let msg = ServerMessage::Data {
         channel: "positions".to_string(),
@@ -383,7 +353,7 @@ async fn forward_position(
 /// Forward price update to client
 async fn forward_price(
     sender: &mut futures::stream::SplitSink<WebSocket, Message>,
-    update: &pools::PriceUpdate,
+    update: &pools::PriceUpdate
 ) -> Result<(), axum::Error> {
     let msg = ServerMessage::Data {
         channel: "prices".to_string(),
@@ -401,7 +371,7 @@ async fn forward_price(
 /// Forward services snapshot to client
 async fn forward_services(
     sender: &mut futures::stream::SplitSink<WebSocket, Message>,
-    snapshot: &ServicesOverviewResponse,
+    snapshot: &ServicesOverviewResponse
 ) -> Result<(), axum::Error> {
     let msg = ServerMessage::Data {
         channel: "services".to_string(),
@@ -419,7 +389,7 @@ async fn forward_services(
 /// Forward status snapshot to client
 async fn forward_status(
     sender: &mut futures::stream::SplitSink<WebSocket, Message>,
-    snapshot: &status_broadcast::StatusSnapshot,
+    snapshot: &status_broadcast::StatusSnapshot
 ) -> Result<(), axum::Error> {
     let msg = ServerMessage::Data {
         channel: "status".to_string(),
@@ -438,7 +408,7 @@ async fn forward_status(
 async fn send_subscribed(
     sender: &mut futures::stream::SplitSink<WebSocket, Message>,
     channel: &str,
-    message: &str,
+    message: &str
 ) -> Result<(), axum::Error> {
     let msg = ServerMessage::Subscribed {
         channel: channel.to_string(),
@@ -456,7 +426,7 @@ async fn send_subscribed(
 async fn send_unsubscribed(
     sender: &mut futures::stream::SplitSink<WebSocket, Message>,
     channel: &str,
-    message: &str,
+    message: &str
 ) -> Result<(), axum::Error> {
     let msg = ServerMessage::Unsubscribed {
         channel: channel.to_string(),
@@ -474,7 +444,7 @@ async fn send_unsubscribed(
 async fn send_error(
     sender: &mut futures::stream::SplitSink<WebSocket, Message>,
     message: &str,
-    code: &str,
+    code: &str
 ) -> Result<(), axum::Error> {
     let msg = ServerMessage::Error {
         message: message.to_string(),
@@ -493,7 +463,7 @@ async fn send_warning(
     sender: &mut futures::stream::SplitSink<WebSocket, Message>,
     channel: &str,
     message: &str,
-    recommendation: &str,
+    recommendation: &str
 ) -> Result<(), axum::Error> {
     let msg = ServerMessage::Warning {
         channel: channel.to_string(),
@@ -510,7 +480,7 @@ async fn send_warning(
 
 /// Send pong message
 async fn send_pong(
-    sender: &mut futures::stream::SplitSink<WebSocket, Message>,
+    sender: &mut futures::stream::SplitSink<WebSocket, Message>
 ) -> Result<(), axum::Error> {
     let msg = ServerMessage::Pong;
 
@@ -525,16 +495,19 @@ async fn handle_events_socket(mut socket: WebSocket, params: WsEventsQuery, stat
     // Backfill missed events if last_id provided
     if let Some(after_id) = params.last_id {
         if let Some(db) = events::EVENTS_DB.get() {
-            let category = params
-                .category
-                .as_ref()
-                .map(|s| EventCategory::from_string(s));
+            let category = params.category.as_ref().map(|s| EventCategory::from_string(s));
             let severity = params.severity.as_ref().map(|s| Severity::from_string(s));
             let mint = params.mint.as_deref();
             let reference = params.reference.as_deref();
-            if let Ok(backfill) = db
-                .get_events_since(after_id, 500, category, severity, mint, reference)
-                .await
+            if
+                let Ok(backfill) = db.get_events_since(
+                    after_id,
+                    500,
+                    category,
+                    severity,
+                    mint,
+                    reference
+                ).await
             {
                 for e in backfill {
                     if let Ok(text) = serde_json::to_string(&map_event(&e)) {
@@ -552,11 +525,9 @@ async fn handle_events_socket(mut socket: WebSocket, params: WsEventsQuery, stat
     let mut rx = match events::subscribe() {
         Some(r) => r,
         None => {
-            let _ = socket
-                .send(Message::Text(
-                    "{\"error\":\"events broadcaster not ready\"}".into(),
-                ))
-                .await;
+            let _ = socket.send(
+                Message::Text("{\"error\":\"events broadcaster not ready\"}".into())
+            ).await;
             let _ = socket.close().await;
             state.decrement_ws_connections().await;
             return;
@@ -635,8 +606,7 @@ struct WsEventMessage {
 }
 
 fn map_event(e: &Event) -> WsEventMessage {
-    let message = e
-        .payload
+    let message = e.payload
         .get("message")
         .and_then(|v| v.as_str())
         .unwrap_or("No message")
@@ -651,8 +621,7 @@ fn map_event(e: &Event) -> WsEventMessage {
         reference_id: e.reference_id.clone(),
         message,
         payload: e.payload.clone(),
-        created_at: e
-            .created_at
+        created_at: e.created_at
             .map(|dt| dt.to_rfc3339())
             .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
     }

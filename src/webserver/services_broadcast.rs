@@ -1,9 +1,10 @@
 use once_cell::sync::OnceCell;
 use tokio::sync::broadcast;
-use tokio::time::{interval, Duration};
+use tokio::time::{ interval, Duration };
 
 use crate::webserver::routes::services::{
-    gather_services_overview_snapshot, ServicesOverviewResponse,
+    gather_services_overview_snapshot,
+    ServicesOverviewResponse,
 };
 
 const SERVICES_BROADCAST_CAPACITY: usize = 64;
@@ -17,10 +18,7 @@ pub fn initialize_services_broadcaster() -> broadcast::Receiver<ServicesOverview
 
     match SERVICES_BROADCAST_TX.set(tx) {
         Ok(_) => rx,
-        Err(_) => SERVICES_BROADCAST_TX
-            .get()
-            .expect("Services broadcaster exists")
-            .subscribe(),
+        Err(_) => SERVICES_BROADCAST_TX.get().expect("Services broadcaster exists").subscribe(),
     }
 }
 
@@ -35,10 +33,7 @@ pub fn start_services_broadcaster(interval_secs: u64) -> tokio::task::JoinHandle
         initialize_services_broadcaster();
     }
 
-    let tx = SERVICES_BROADCAST_TX
-        .get()
-        .expect("Services broadcaster initialized")
-        .clone();
+    let tx = SERVICES_BROADCAST_TX.get().expect("Services broadcaster initialized").clone();
 
     tokio::spawn(async move {
         let mut ticker = interval(Duration::from_secs(interval_secs.max(1)));

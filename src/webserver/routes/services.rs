@@ -1,19 +1,19 @@
 use axum::{
-    extract::{Path, State},
+    extract::{ Path, State },
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::{ IntoResponse, Response },
     routing::get,
     Router,
 };
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use chrono::{ DateTime, Utc };
+use serde::{ Deserialize, Serialize };
 use std::sync::Arc;
 
 use crate::{
     arguments::is_debug_webserver_enabled,
-    logger::{log, LogTag},
-    services::{ServiceHealth, ServiceMetrics},
-    webserver::{state::AppState, utils::success_response},
+    logger::{ log, LogTag },
+    services::{ ServiceHealth, ServiceMetrics },
+    webserver::{ state::AppState, utils::success_response },
 };
 
 // ================================================================================================
@@ -111,9 +111,9 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
                     let health = health_map
                         .get(name)
                         .cloned()
-                        .unwrap_or(ServiceHealth::Unhealthy(
-                            "Health status unavailable".to_string(),
-                        ));
+                        .unwrap_or(
+                            ServiceHealth::Unhealthy("Health status unavailable".to_string())
+                        );
                     let metrics = metrics_map
                         .get(name)
                         .cloned()
@@ -126,11 +126,21 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
                     }
 
                     match &health {
-                        ServiceHealth::Healthy => summary.healthy_services += 1,
-                        ServiceHealth::Degraded(_) => summary.degraded_services += 1,
-                        ServiceHealth::Unhealthy(_) => summary.unhealthy_services += 1,
-                        ServiceHealth::Starting => summary.starting_services += 1,
-                        ServiceHealth::Stopping => summary.unhealthy_services += 1,
+                        ServiceHealth::Healthy => {
+                            summary.healthy_services += 1;
+                        }
+                        ServiceHealth::Degraded(_) => {
+                            summary.degraded_services += 1;
+                        }
+                        ServiceHealth::Unhealthy(_) => {
+                            summary.unhealthy_services += 1;
+                        }
+                        ServiceHealth::Starting => {
+                            summary.starting_services += 1;
+                        }
+                        ServiceHealth::Stopping => {
+                            summary.unhealthy_services += 1;
+                        }
                     }
 
                     dependency_graph.push(ServiceDependencyNode {
@@ -158,9 +168,10 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
     dependency_graph.sort_by_key(|service| service.priority);
 
     summary.total_services = services.len();
-    summary.all_healthy = summary.unhealthy_services == 0
-        && summary.degraded_services == 0
-        && summary.starting_services == 0;
+    summary.all_healthy =
+        summary.unhealthy_services == 0 &&
+        summary.degraded_services == 0 &&
+        summary.starting_services == 0;
 
     ServicesOverviewResponse {
         services,
@@ -206,31 +217,19 @@ async fn list_services(State(_state): State<Arc<AppState>>) -> Response {
 /// GET /api/services/:name
 /// Get detailed information about a specific service
 async fn get_service(Path(name): Path<String>, State(_state): State<Arc<AppState>>) -> Response {
-    log(
-        LogTag::Webserver,
-        "DEBUG",
-        &format!("Fetching service details for: {}", name),
-    );
+    log(LogTag::Webserver, "DEBUG", &format!("Fetching service details for: {}", name));
 
     let overview = gather_services_overview_snapshot().await;
 
     match overview.services.into_iter().find(|svc| svc.name == name) {
         Some(service) => success_response(service),
-        None => (
-            StatusCode::NOT_FOUND,
-            format!("Service '{}' not found", name),
-        )
-            .into_response(),
+        None => (StatusCode::NOT_FOUND, format!("Service '{}' not found", name)).into_response(),
     }
 }
 
 /// GET /api/services/overview
 /// Complete services overview with dependency graph and summary
 async fn services_overview(State(_state): State<Arc<AppState>>) -> Response {
-    log(
-        LogTag::Webserver,
-        "DEBUG",
-        "Fetching complete services overview",
-    );
+    log(LogTag::Webserver, "DEBUG", "Fetching complete services overview");
     success_response(gather_services_overview_snapshot().await)
 }

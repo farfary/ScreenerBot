@@ -3,19 +3,20 @@ pub mod implementations;
 mod metrics;
 
 pub use health::ServiceHealth;
-pub use metrics::{MetricsCollector, ServiceMetrics};
+pub use metrics::{ MetricsCollector, ServiceMetrics };
 
-use crate::logger::{log, LogTag};
+use crate::logger::{ log, LogTag };
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::LazyLock;
-use tokio::sync::{Notify, RwLock};
+use tokio::sync::{ Notify, RwLock };
 use tokio::task::JoinHandle;
 
 /// Global ServiceManager instance for webserver and other components access
-static GLOBAL_SERVICE_MANAGER: LazyLock<Arc<RwLock<Option<ServiceManager>>>> =
-    LazyLock::new(|| Arc::new(RwLock::new(None)));
+static GLOBAL_SERVICE_MANAGER: LazyLock<Arc<RwLock<Option<ServiceManager>>>> = LazyLock::new(||
+    Arc::new(RwLock::new(None))
+);
 
 /// Core service trait that all services must implement
 #[async_trait]
@@ -48,7 +49,7 @@ pub trait Service: Send + Sync {
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor,
+        monitor: tokio_metrics::TaskMonitor
     ) -> Result<Vec<JoinHandle<()>>, String>;
 
     /// Stop the service
@@ -105,27 +106,18 @@ impl ServiceManager {
         log(LogTag::System, "INFO", "Starting all services...");
 
         // Filter enabled services
-        let enabled_services: Vec<&'static str> = self
-            .services
+        let enabled_services: Vec<&'static str> = self.services
             .iter()
             .filter(|(_, service)| service.is_enabled())
             .map(|(name, _)| *name)
             .collect();
 
-        log(
-            LogTag::System,
-            "INFO",
-            &format!("Enabled services: {:?}", enabled_services),
-        );
+        log(LogTag::System, "INFO", &format!("Enabled services: {:?}", enabled_services));
 
         // Resolve dependencies and order by priority
         let ordered = self.resolve_startup_order(&enabled_services)?;
 
-        log(
-            LogTag::System,
-            "INFO",
-            &format!("Service startup order: {:?}", ordered),
-        );
+        log(LogTag::System, "INFO", &format!("Service startup order: {:?}", ordered));
 
         // Initialize and start each service
         for service_name in ordered {
@@ -133,41 +125,25 @@ impl ServiceManager {
             let monitor = self.get_task_monitor(service_name);
 
             if let Some(service) = self.services.get_mut(service_name) {
-                log(
-                    LogTag::System,
-                    "INFO",
-                    &format!("Initializing service: {}", service_name),
-                );
+                log(LogTag::System, "INFO", &format!("Initializing service: {}", service_name));
                 service.initialize().await?;
 
-                log(
-                    LogTag::System,
-                    "INFO",
-                    &format!("Starting service: {}", service_name),
-                );
-                let handles = service
-                    .start(self.shutdown.clone(), monitor.clone())
-                    .await?;
+                log(LogTag::System, "INFO", &format!("Starting service: {}", service_name));
+                let handles = service.start(self.shutdown.clone(), monitor.clone()).await?;
                 self.handles.insert(service_name, handles);
 
-                log(
-                    LogTag::System,
-                    "SUCCESS",
-                    &format!("✅ Service started: {}", service_name),
-                );
+                log(LogTag::System, "SUCCESS", &format!("✅ Service started: {}", service_name));
             }
 
             // Register monitor with metrics collector and start intervals() background task
-            self.metrics_collector
-                .start_monitoring(service_name, monitor, self.shutdown.clone())
-                .await;
+            self.metrics_collector.start_monitoring(
+                service_name,
+                monitor,
+                self.shutdown.clone()
+            ).await;
         }
 
-        log(
-            LogTag::System,
-            "SUCCESS",
-            "✅ All services started successfully",
-        );
+        log(LogTag::System, "SUCCESS", "✅ All services started successfully");
         Ok(())
     }
 
@@ -186,17 +162,13 @@ impl ServiceManager {
         // Stop each service
         for service_name in ordered {
             if let Some(service) = self.services.get_mut(service_name) {
-                log(
-                    LogTag::System,
-                    "INFO",
-                    &format!("Stopping service: {}", service_name),
-                );
+                log(LogTag::System, "INFO", &format!("Stopping service: {}", service_name));
 
                 if let Err(e) = service.stop().await {
                     log(
                         LogTag::System,
                         "WARN",
-                        &format!("Service stop error for {}: {}", service_name, e),
+                        &format!("Service stop error for {}: {}", service_name, e)
                     );
                 }
 
@@ -217,7 +189,7 @@ impl ServiceManager {
                                             service_name,
                                             idx + 1,
                                             handle_count
-                                        ),
+                                        )
                                     );
                                 }
                             }
@@ -231,7 +203,7 @@ impl ServiceManager {
                                         idx + 1,
                                         handle_count,
                                         e
-                                    ),
+                                    )
                                 );
                             }
                             Err(_) => {
@@ -244,33 +216,25 @@ impl ServiceManager {
                                         idx + 1,
                                         handle_count,
                                         timeout_duration.as_secs()
-                                    ),
+                                    )
                                 );
                             }
                         }
                     }
                 }
 
-                log(
-                    LogTag::System,
-                    "SUCCESS",
-                    &format!("✅ Service stopped: {}", service_name),
-                );
+                log(LogTag::System, "SUCCESS", &format!("✅ Service stopped: {}", service_name));
             }
         }
 
-        log(
-            LogTag::System,
-            "SUCCESS",
-            "✅ All services stopped successfully",
-        );
+        log(LogTag::System, "SUCCESS", "✅ All services stopped successfully");
         Ok(())
     }
 
     /// Resolve service startup order
     fn resolve_startup_order(
         &self,
-        services: &[&'static str],
+        services: &[&'static str]
     ) -> Result<Vec<&'static str>, String> {
         use std::collections::HashSet;
 
@@ -283,17 +247,14 @@ impl ServiceManager {
             services: &'a HashMap<&'static str, Box<dyn Service>>,
             ordered: &mut Vec<&'static str>,
             visited: &mut HashSet<&'static str>,
-            visiting: &mut HashSet<&'static str>,
+            visiting: &mut HashSet<&'static str>
         ) -> Result<(), String> {
             if visited.contains(name) {
                 return Ok(());
             }
 
             if visiting.contains(name) {
-                return Err(format!(
-                    "Circular dependency detected for service: {}",
-                    name
-                ));
+                return Err(format!("Circular dependency detected for service: {}", name));
             }
 
             visiting.insert(name);
@@ -312,17 +273,16 @@ impl ServiceManager {
         }
 
         for &service_name in services {
-            visit(
-                service_name,
-                &self.services,
-                &mut ordered,
-                &mut visited,
-                &mut visiting,
-            )?;
+            visit(service_name, &self.services, &mut ordered, &mut visited, &mut visiting)?;
         }
 
         // Sort by priority
-        ordered.sort_by_key(|name| self.services.get(name).map(|s| s.priority()).unwrap_or(100));
+        ordered.sort_by_key(|name|
+            self.services
+                .get(name)
+                .map(|s| s.priority())
+                .unwrap_or(100)
+        );
 
         Ok(ordered)
     }
@@ -393,11 +353,7 @@ impl ServiceManager {
 pub async fn init_global_service_manager(manager: ServiceManager) {
     let mut global = GLOBAL_SERVICE_MANAGER.write().await;
     *global = Some(manager);
-    log(
-        LogTag::System,
-        "INFO",
-        "✅ Global ServiceManager initialized",
-    );
+    log(LogTag::System, "INFO", "✅ Global ServiceManager initialized");
 }
 
 /// Get reference to global ServiceManager
