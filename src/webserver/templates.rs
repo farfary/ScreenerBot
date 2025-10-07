@@ -2036,8 +2036,8 @@ fn nav_tabs(active: &str) -> String {
 /// Common JavaScript functions
 fn common_scripts() -> &'static str {
     r#"
-        // State Manager - Browser Storage
-        const AppState = {
+        // State Manager - Browser Storage (globally accessible)
+        window.AppState = {
             save(key, value) {
                 try {
                     localStorage.setItem(`screenerbot_${key}`, JSON.stringify(value));
@@ -2075,8 +2075,8 @@ fn common_scripts() -> &'static str {
             }
         };
         
-        // WebSocket Hub - Centralized real-time updates
-        const WsHub = {
+        // WebSocket Hub - Centralized real-time updates (globally accessible)
+        window.WsHub = {
             conn: null,
             enabled: true,
             attempts: 0,
@@ -2253,6 +2253,11 @@ fn common_scripts() -> &'static str {
                     case WebSocket.CLOSED: return 'disconnected';
                     default: return 'unknown';
                 }
+            },
+            
+            // Check if connected
+            isConnected() {
+                return this.conn && this.conn.readyState === WebSocket.OPEN;
             }
         };
         
