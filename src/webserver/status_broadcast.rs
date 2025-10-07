@@ -101,9 +101,14 @@ async fn gather_status_snapshot() -> StatusSnapshot {
             .count()
     };
 
-    // Balances (placeholder - will be updated when wallet function is available)
-    let sol_balance = 0.0; // TODO: Wire to actual wallet balance
-    let usdc_balance = 0.0;
+    // Balances - get from wallet module
+    let sol_balance = crate::wallet
+        ::get_current_wallet_status().await
+        .ok()
+        .flatten()
+        .map(|s| s.sol_balance)
+        .unwrap_or(0.0);
+    let usdc_balance = 0.0; // TODO: Wire USDC balance when available
 
     // Services health
     let mut services = HashMap::new();

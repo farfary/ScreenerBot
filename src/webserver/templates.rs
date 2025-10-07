@@ -4586,19 +4586,20 @@ pub fn tokens_content() -> String {
     </div>
     
     <script>
-        let allTokensData = [];
-        let tokensRefreshInterval = null;
-        let tokensRequestController = null;
-        let tokensLoading = false;
-    let tokensView = 'pool';
-    let sortBy = 'symbol';
-    let sortDir = 'asc';
+        // ALL TOKEN FUNCTIONALITY REMOVED - SEE LINES 3756-5496 FOR COMPLETE IMPLEMENTATION
+        // This duplicate block has been removed to avoid conflicts
+    </script>
+
+    <!-- WebSocket real-time price updates script is at the end of the main tokens section above -->
+    
+    <script>
+        // ====================================================================
+        // WebSocket real-time price updates
+        // ====================================================================
         
-        async function loadTokens() {
-            // Skip refresh if dropdown is currently open to prevent it from disappearing
-            if (document.querySelector('.dropdown-menu.show')) {
-                return;
-            }
+        function handlePriceUpdate(data) {
+            // Update cache if token is already loaded
+            const tokenInList = allTokensData.find(t => t.mint === data.mint);
             if (tokensLoading) {
                 // Avoid stacking if a previous request is still in flight
                 return;
@@ -5438,6 +5439,64 @@ pub fn tokens_content() -> String {
             const sign = value > 0 ? '+' : '';
             return `${sign}${value.toFixed(2)}%`;
         }
+
+        // ====================================================================
+        // WebSocket real-time price updates
+        // ====================================================================
+        
+        function handlePriceUpdate(data) {
+            // Update cache if token is already loaded
+            const tokenInList = allTokensData.find(t => t.mint === data.mint);
+            if (tokenInList) {
+                tokenInList.price_sol = data.price_sol;
+                tokenInList.liquidity_usd = data.liquidity_usd;
+                tokenInList.price_updated_at = data.updated_at || new Date().toISOString();
+                
+                // Update the row if visible (avoid full re-render)
+                const row = document.querySelector(`tr[data-mint="${data.mint}"]`);
+                if (row) {
+                    const priceCell = row.cells[1]; // Price column
+                    const liquidityCell = row.cells[2]; // Liquidity column
+                    const timeCell = row.cells[10]; // Last updated column
+                    
+                    if (priceCell) {
+                        priceCell.innerHTML = formatPriceSol(data.price_sol);
+                        priceCell.style.animation = 'highlight 0.6s ease-out';
+                        setTimeout(() => priceCell.style.animation = '', 600);
+                    }
+                    if (liquidityCell) {
+                        liquidityCell.innerHTML = formatCurrencyUSD(data.liquidity_usd);
+                    }
+                    if (timeCell) {
+                        timeCell.textContent = 'Just now';
+                    }
+                }
+            }
+            
+            // Update modal if currently viewing this token
+            if (currentModalMint === data.mint) {
+                const priceEl = document.getElementById('detail-price');
+                const liquidityEl = document.getElementById('detail-liquidity');
+                const sidebarPriceEl = document.getElementById('sidebar-price');
+                const sidebarLiqEl = document.getElementById('sidebar-liq');
+                
+                if (priceEl) priceEl.textContent = formatPriceSol(data.price_sol);
+                if (liquidityEl) liquidityEl.textContent = formatCurrencyUSD(data.liquidity_usd);
+                if (sidebarPriceEl) sidebarPriceEl.textContent = formatPriceSol(data.price_sol);
+                if (sidebarLiqEl) sidebarLiqEl.textContent = formatCurrencyUSD(data.liquidity_usd);
+            }
+        }
+        
+        // Subscribe to WebSocket price updates
+        if (typeof WsHub !== 'undefined') {
+            WsHub.subscribe('prices', handlePriceUpdate);
+            console.log('[Tokens] Subscribed to WebSocket price updates');
+            
+            // Cleanup on page unload
+            window.addEventListener('beforeunload', () => {
+                WsHub.unsubscribe('prices', handlePriceUpdate);
+            });
+        }
     </script>
     "#.to_string()
 }
@@ -5501,7 +5560,6 @@ pub fn events_content() -> String {
     let allEventsData = [];
     let eventsRefreshInterval = null;
     let maxEventId = 0;
-    let ws = { conn: null, enabled: true, attempts: 0 };
     let connectionStatus = 'connecting'; // 'connecting', 'connected', 'disconnected', 'error'
         
         // Update connection status indicator
@@ -5559,8 +5617,8 @@ pub fn events_content() -> String {
                 maxEventId = Math.max(maxEventId, data.max_id || 0);
                 renderEvents(allEventsData);
                 
-                // Update status based on WebSocket state
-                if (ws.conn && ws.conn.readyState === WebSocket.OPEN) {
+                // Update status based on WsHub connection state
+                if (typeof WsHub !== 'undefined' && WsHub.isConnected()) {
                     updateConnectionStatus('connected', `${allEventsData.length} events (realtime)`);
                 } else {
                     updateConnectionStatus('connected', `${allEventsData.length} events (polling)`);
@@ -5674,24 +5732,14 @@ pub fn events_content() -> String {
         document.getElementById('categoryFilter').addEventListener('change', () => {
             maxEventId = 0; // Reset to get fresh data with new filter
             allEventsData = [];
-            if (ws.conn) {
-                ws.conn.close();
-                ws.conn = null;
-            }
             loadEvents();
-            if (ws.enabled) startEventsWebSocket();
         });
         
         // Filter by severity
         document.getElementById('severityFilter').addEventListener('change', () => {
             maxEventId = 0; // Reset to get fresh data with new filter
             allEventsData = [];
-            if (ws.conn) {
-                ws.conn.close();
-                ws.conn = null;
-            }
             loadEvents();
-            if (ws.enabled) startEventsWebSocket();
         });
         
         // Refresh button
@@ -5724,88 +5772,62 @@ pub fn events_content() -> String {
             }, 1000);
         }
 
-        function startEventsWebSocket() {
-            if (!ws.enabled || ws.conn) return;
-            const params = new URLSearchParams();
-            const category = document.getElementById('categoryFilter').value;
-            const severity = document.getElementById('severityFilter').value;
-            if (category) params.set('category', category);
-            if (severity) params.set('severity', severity);
-            if (maxEventId > 0) params.set('last_id', String(maxEventId));
-            const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-            const url = `${proto}://${location.host}/api/ws/events?${params.toString()}`;
-            
-            console.log('Connecting WebSocket:', url);
-            updateConnectionStatus('connecting', 'Connecting WebSocket...');
-            
-            try {
-                ws.conn = new WebSocket(url);
-                
-                ws.conn.onopen = () => {
-                    console.log('WebSocket connected');
-                    ws.attempts = 0;
-                    updateConnectionStatus('connected', `${allEventsData.length} events (realtime)`);
-                    if (eventsRefreshInterval) { 
-                        clearInterval(eventsRefreshInterval); 
-                        eventsRefreshInterval = null; 
-                    }
-                };
-                
-                ws.conn.onmessage = (ev) => {
-                    try {
-                        const e = JSON.parse(ev.data);
-                        if (e.warning === 'lagged') {
-                            console.warn('WebSocket lagged, recommend HTTP catch-up');
-                            updateConnectionStatus('disconnected', 'Connection lagged, catching up...');
-                            loadEvents();
-                            return;
-                        }
-                        if (e && typeof e.id === 'number') {
-                            maxEventId = Math.max(maxEventId, e.id);
-                            allEventsData.unshift(e);
-                            if (allEventsData.length > 1000) allEventsData.pop();
-                            renderEvents(allEventsData);
-                            updateConnectionStatus('connected', `${allEventsData.length} events (realtime)`);
-                        }
-                    } catch (err) {
-                        console.error('WebSocket message parse error:', err);
-                    }
-                };
-                
-                ws.conn.onclose = () => { 
-                    console.log('WebSocket closed');
-                    ws.conn = null; 
-                    updateConnectionStatus('disconnected', 'Reconnecting...');
-                    reconnectWS(); 
-                };
-                
-                ws.conn.onerror = (err) => { 
-                    console.error('WebSocket error:', err);
-                    try { ws.conn && ws.conn.close(); } catch {};
-                    ws.conn = null; 
-                    reconnectWS(); 
-                };
-            } catch (err) { 
-                console.error('WebSocket creation failed:', err);
-                reconnectWS(); 
-            }
-        }
-
-        function reconnectWS() {
-            ws.attempts++;
-            const delay = Math.min(1000 * Math.pow(2, ws.attempts), 15000);
-            
-            console.log(`WebSocket reconnect attempt ${ws.attempts}, delay: ${delay}ms`);
-            
-            if (ws.attempts > 5) {
-                console.warn('WebSocket reconnect failed after 5 attempts, falling back to HTTP polling');
-                ws.enabled = false;
-                updateConnectionStatus('disconnected', `${allEventsData.length} events (polling)`);
-                startEventsRefresh();
+        // Handle incoming event from WebSocket
+        function handleEventsWebSocket(event) {
+            // Handle lag warning
+            if (event.warning === 'lagged') {
+                console.warn('[Events] WebSocket lagged, catching up via HTTP');
+                updateConnectionStatus('disconnected', 'Connection lagged, catching up...');
+                loadEvents();
                 return;
             }
             
-            setTimeout(() => startEventsWebSocket(), delay);
+            // Add new event to list
+            if (event && typeof event.id === 'number') {
+                maxEventId = Math.max(maxEventId, event.id);
+                allEventsData.unshift(event);
+                if (allEventsData.length > 1000) allEventsData.pop();
+                renderEvents(allEventsData);
+                updateConnectionStatus('connected', `${allEventsData.length} events (realtime)`);
+            }
+        }
+        
+        // Handle WebSocket warnings (lag detection)
+        function handleWebSocketWarning(data) {
+            if (data.channel === 'events') {
+                console.warn('[Events] Channel warning:', data);
+                updateConnectionStatus('disconnected', 'Catching up...');
+                loadEvents();
+            }
+        }
+        
+        // Subscribe to WebSocket events
+        if (typeof WsHub !== 'undefined') {
+            WsHub.subscribe('events', handleEventsWebSocket);
+            WsHub.subscribe('_warning', handleWebSocketWarning);
+            console.log('[Events] Subscribed to WebSocket events channel');
+            
+            // Update status based on WsHub connection state
+            if (WsHub.isConnected()) {
+                updateConnectionStatus('connected', `${allEventsData.length} events (realtime)`);
+                // Stop HTTP polling if running
+                if (eventsRefreshInterval) {
+                    clearInterval(eventsRefreshInterval);
+                    eventsRefreshInterval = null;
+                }
+            } else {
+                updateConnectionStatus('connecting', 'Connecting to WebSocket...');
+            }
+            
+            // Cleanup on page unload
+            window.addEventListener('beforeunload', () => {
+                WsHub.unsubscribe('events', handleEventsWebSocket);
+                WsHub.unsubscribe('_warning', handleWebSocketWarning);
+            });
+        } else {
+            console.warn('[Events] WsHub not available, falling back to HTTP polling');
+            updateConnectionStatus('disconnected', 'WebSocket unavailable (polling)');
+            startEventsRefresh();
         }
         
         // Restore saved filters
@@ -5819,8 +5841,6 @@ pub fn events_content() -> String {
         
     // Initial load
     loadEvents();
-    startEventsWebSocket();
-    if (ws.enabled === false) startEventsRefresh();
     </script>
     "#.to_string()
 }
