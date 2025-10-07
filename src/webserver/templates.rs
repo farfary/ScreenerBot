@@ -6839,6 +6839,92 @@ const SECTION_INFO = {
     events: { icon: '📝', title: 'Events', fields: 1 }
 };
 
+const INTEGER_FIELDS = {
+    trader: new Set([
+        'max_open_positions',
+        'position_close_cooldown_minutes',
+        'entry_monitor_interval_secs',
+        'position_monitor_interval_secs',
+        'semaphore_acquire_timeout_secs',
+        'token_check_task_timeout_secs',
+        'token_check_collection_timeout_secs',
+        'token_check_handle_timeout_secs',
+        'sell_operations_collection_timeout_secs',
+        'sell_operation_smart_timeout_secs',
+        'sell_semaphore_acquire_timeout_secs',
+        'sell_task_handle_timeout_secs',
+        'entry_cycle_min_wait_ms',
+        'token_processing_shutdown_check_ms',
+        'task_shutdown_check_ms',
+        'sell_operation_shutdown_check_ms',
+        'collection_shutdown_check_ms',
+        'entry_check_concurrency'
+    ]),
+    positions: new Set([
+        'position_open_cooldown_secs',
+        'pending_open_ttl_secs'
+    ]),
+    filtering: new Set([
+        'filter_cache_ttl_secs',
+        'target_filtered_tokens',
+        'max_tokens_to_process',
+        'min_token_age_minutes',
+        'min_transactions_5min',
+        'min_transactions_1h',
+        'min_security_score',
+        'min_unique_holders'
+    ]),
+    swaps: new Set([
+        'quote_timeout_secs',
+        'api_timeout_secs',
+        'retry_attempts',
+        'transaction_confirmation_timeout_secs',
+        'priority_confirmation_timeout_secs',
+        'transaction_confirmation_max_attempts',
+        'priority_confirmation_max_attempts',
+        'transaction_confirmation_retry_delay_ms',
+        'priority_confirmation_retry_delay_ms',
+        'fast_failure_threshold_attempts',
+        'initial_confirmation_delay_ms',
+        'max_confirmation_delay_secs',
+        'confirmation_timeout_secs',
+        'priority_confirmation_timeout_secs_mod',
+        'rate_limit_base_delay_secs',
+        'rate_limit_increment_secs',
+        'early_attempt_delay_ms',
+        'early_attempts_count',
+        'jupiter_default_priority_fee'
+    ]),
+    tokens: new Set([
+        'dexscreener_rate_limit_per_minute',
+        'dexscreener_discovery_rate_limit',
+        'max_tokens_per_api_call',
+        'raydium_rate_limit_per_minute',
+        'geckoterminal_rate_limit_per_minute',
+        'max_tokens_per_batch',
+        'max_accounts_per_call',
+        'max_decimal_retry_attempts',
+        'min_age_hours',
+        'max_low_liquidity_count',
+        'max_no_route_failures',
+        'cache_refresh_interval_minutes',
+        'max_ohlcv_age_hours',
+        'max_memory_cache_entries',
+        'max_ohlcv_limit',
+        'default_ohlcv_limit',
+        'max_update_interval_hours',
+        'new_token_boost_max_age_minutes',
+        'max_pattern_length'
+    ]),
+    sol_price: new Set(['price_refresh_interval_secs']),
+    summary: new Set(['summary_display_interval_secs', 'max_recent_closed_positions']),
+    events: new Set(['batch_timeout_ms'])
+};
+
+function isIntegerField(sectionName, fieldKey) {
+    return INTEGER_FIELDS[sectionName]?.has(fieldKey) || false;
+}
+
 // =============================================================================
 // DYNAMIC RENDERING ENGINE
 // =============================================================================
@@ -6923,6 +7009,7 @@ function renderCategory(sectionName, catName, fields) {
 
 function renderField(sectionName, field) {
     const fieldId = `${sectionName}_${field.key}`;
+    const requiresInteger = isIntegerField(sectionName, field.key);
     let inputHTML = '';
     
     if (field.type === 'boolean') {
@@ -6941,12 +7028,13 @@ function renderField(sectionName, field) {
             <input type="text" id="${fieldId}" oninput="validateField(this)">
         `;
     } else { // number
+        const integerAttr = requiresInteger ? ' data-integer="true"' : '';
         inputHTML = `
             <input type="number" id="${fieldId}"
                 ${field.min !== undefined ? `min="${field.min}"` : ''}
                 ${field.max !== undefined ? `max="${field.max}"` : ''}
                 ${field.step ? `step="${field.step}"` : ''}
-                oninput="validateField(this)">
+                oninput="validateField(this)"${integerAttr}>
         `;
     }
     
@@ -7029,9 +7117,10 @@ async function saveSection(sectionName) {
         inputs.forEach(input => {
             const key = input.id.replace(`${sectionName}_`, '');
             let value = input.value;
+            const requiresInteger = input.dataset.integer === 'true';
             
             if (input.type === 'number') {
-                value = parseFloat(value);
+                value = requiresInteger ? parseInt(value, 10) : parseFloat(value);
             } else if (input.tagName === 'SELECT') {
                 value = value === 'true';
             } else if (input.tagName === 'TEXTAREA') {
@@ -7091,6 +7180,7 @@ function validateField(input) {
     
     const errorEl = input.parentElement.querySelector('.field-error');
     const errors = [];
+    const requiresInteger = input.dataset.integer === 'true';
     
     if (metadata.type === 'number') {
         const value = parseFloat(input.value);
@@ -7102,6 +7192,9 @@ function validateField(input) {
             }
             if (metadata.max !== undefined && value > metadata.max) {
                 errors.push(`Max: ${metadata.max}`);
+            }
+            if (requiresInteger && !Number.isInteger(value)) {
+                errors.push('Must be an integer');
             }
         }
     }
@@ -7196,15 +7289,23 @@ async function importConfig(file) {
         if (!confirm(`Import configuration from ${file.name}? This will update ALL settings.`)) {
             return;
         }
+
+        const skippedKeys = ['timestamp'];
         
         // Update each section
         for (const [section, data] of Object.entries(config)) {
-            if (SECTION_INFO[section]) {
+            if (skippedKeys.includes(section) || typeof data !== 'object' || data === null) {
+                continue;
+            }
+
+            try {
                 await fetch(`/api/config/${section}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
                 });
+            } catch (sectionError) {
+                console.error(`Failed to import section ${section}:`, sectionError);
             }
         }
         
@@ -7261,14 +7362,54 @@ async function viewDiff() {
     try {
         const response = await fetch('/api/config/diff');
         const result = await response.json();
-        
+
+        if (!response.ok) {
+            throw new Error(result.error?.message || 'Failed to fetch diff');
+        }
+
         if (!result.has_changes) {
             body.innerHTML = '<p style="text-align:center;">No changes detected - memory and disk configs match</p>';
             return;
         }
-        
+
+        if (!result.memory || !result.disk) {
+            body.innerHTML = '<p style="color:#f5576c;text-align:center;">Diff data unavailable</p>';
+            return;
+        }
+
         // Build diff table
-        let tableHTML = `
+        let diffRows = '';
+
+        for (const [section, memData] of Object.entries(result.memory)) {
+            if (!memData || typeof memData !== 'object') continue;
+            const diskData = result.disk[section] || {};
+            const fieldKeys = new Set([
+                ...Object.keys(memData),
+                ...Object.keys(diskData)
+            ]);
+
+            fieldKeys.forEach(key => {
+                const memValue = memData[key];
+                const diskValue = diskData[key];
+                if (JSON.stringify(memValue) !== JSON.stringify(diskValue)) {
+                    diffRows += `
+                        <tr>
+                            <td>${section}</td>
+                            <td>${key}</td>
+                            <td class="new-value">${JSON.stringify(memValue)}</td>
+                            <td class="old-value">${JSON.stringify(diskValue)}</td>
+                        </tr>
+                    `;
+                }
+            });
+        }
+
+        if (!diffRows) {
+            body.innerHTML = '<p style="text-align:center;">Changes detected but could not be itemized.</p>';
+            return;
+        }
+
+        body.innerHTML = `
             <table class="diff-table">
                 <thead>
                     <tr>
@@ -7279,26 +7420,10 @@ async function viewDiff() {
                     </tr>
                 </thead>
                 <tbody>
+                    ${diffRows}
+                </tbody>
+            </table>
         `;
-        
-        for (const [section, memData] of Object.entries(result.memory)) {
-            const diskData = result.disk[section] || {};
-            for (const [key, memValue] of Object.entries(memData)) {
-                if (JSON.stringify(memValue) !== JSON.stringify(diskData[key])) {
-                    tableHTML += `
-                        <tr>
-                            <td>${section}</td>
-                            <td>${key}</td>
-                            <td class="new-value">${JSON.stringify(memValue)}</td>
-                            <td class="old-value">${JSON.stringify(diskData[key])}</td>
-                        </tr>
-                    `;
-                }
-            }
-        }
-        
-        tableHTML += '</tbody></table>';
-        body.innerHTML = tableHTML;
     } catch (error) {
         body.innerHTML = `<p style="color:#f5576c;text-align:center;">Error: ${error.message}</p>`;
     }
