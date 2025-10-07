@@ -25,7 +25,7 @@ pub struct OhlcvStatsSnapshot {
 }
 
 /// RPC statistics snapshot with detailed metrics
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, serde::Deserialize)]
 pub struct RpcStatsSnapshot {
     pub total_calls: u64,
     pub total_errors: u64,

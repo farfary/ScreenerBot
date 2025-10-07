@@ -3775,6 +3775,33 @@ pub fn status_content() -> String {
             subTabsContainer.style.display = 'flex';
         }
 
+        // Ensure sub-tabs are present and visible (defensive; handles race or prior page scripts)
+        function ensureStatusSubTabsVisible() {
+            const subTabsContainer = document.getElementById('subTabsContainer');
+            if (!subTabsContainer) return;
+
+            // If container is empty or still hidden, (re)initialize
+            const needsInit = subTabsContainer.children.length === 0;
+            const hidden = getComputedStyle(subTabsContainer).display === 'none' || subTabsContainer.style.display === 'none';
+
+            if (needsInit) {
+                initStatusSubTabs();
+            }
+
+            if (hidden) {
+                subTabsContainer.style.display = 'flex';
+            }
+
+            // Align active tab styling to current state if already mounted
+            if (!needsInit) {
+                document
+                    .querySelectorAll('#subTabsContainer .sub-tab')
+                    .forEach(tab => {
+                        tab.classList.toggle('active', tab.dataset.view === statusState.view);
+                    });
+            }
+        }
+
         function switchStatusSubTab(view) {
             if (!view || statusState.view === view) return;
 
@@ -3805,6 +3832,8 @@ pub fn status_content() -> String {
         function handleStatusUpdate(data) {
             console.log('[Status] Received update:', data);
             statusState.currentData = data;
+            // Make sure sub-tabs are shown even if initial mount was skipped
+            ensureStatusSubTabsVisible();
             renderStatusContent();
         }
 
@@ -3822,7 +3851,7 @@ pub fn status_content() -> String {
                     services,
                     metrics
                 };
-
+                ensureStatusSubTabsVisible();
                 renderStatusContent();
             } catch (error) {
                 console.error('[Status] Failed to load initial data:', error);
