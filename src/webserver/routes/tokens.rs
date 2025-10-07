@@ -1119,11 +1119,21 @@ async fn get_rejected_tokens() -> Result<Vec<TokenSummary>, String> {
         return Ok(Vec::new());
     }
 
-    // Extract mints from rejected tokens
-    let rejected_mints: Vec<String> = rejected
-        .iter()
-        .map(|r| r.mint.clone())
-        .collect();
+    // Deduplicate by mint while preserving most recent rejection
+    let mut seen = HashSet::new();
+    let mut rejected_mints: Vec<String> = Vec::new();
+    for entry in rejected.iter().rev() {
+        let mint = &entry.mint;
+        if !seen.contains(mint) {
+            seen.insert(mint.clone());
+            rejected_mints.push(mint.clone());
+        }
+    }
+    rejected_mints.reverse();
+
+    if rejected_mints.is_empty() {
+        return Ok(Vec::new());
+    }
 
     let db = TokenDatabase::new().map_err(|e| e.to_string())?;
     let tokens = db.get_tokens_by_mints(&rejected_mints).await.map_err(|e| e.to_string())?;
@@ -1148,11 +1158,21 @@ async fn get_passed_tokens() -> Result<Vec<TokenSummary>, String> {
         return Ok(Vec::new());
     }
 
-    // Extract mints from passed tokens
-    let passed_mints: Vec<String> = passed
-        .iter()
-        .map(|p| p.mint.clone())
-        .collect();
+    // Deduplicate by mint while preserving most recent pass result
+    let mut seen = HashSet::new();
+    let mut passed_mints: Vec<String> = Vec::new();
+    for entry in passed.iter().rev() {
+        let mint = &entry.mint;
+        if !seen.contains(mint) {
+            seen.insert(mint.clone());
+            passed_mints.push(mint.clone());
+        }
+    }
+    passed_mints.reverse();
+
+    if passed_mints.is_empty() {
+        return Ok(Vec::new());
+    }
 
     let db = TokenDatabase::new().map_err(|e| e.to_string())?;
     let tokens = db.get_tokens_by_mints(&passed_mints).await.map_err(|e| e.to_string())?;

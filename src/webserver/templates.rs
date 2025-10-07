@@ -2188,10 +2188,13 @@ fn common_scripts() -> &'static str {
                     this.listeners[channel] = [];
                 }
                 this.listeners[channel].push(callback);
-                this.subscriptions.add(channel);
+                const isInternal = typeof channel === 'string' && channel.startsWith('_');
+                if (!isInternal) {
+                    this.subscriptions.add(channel);
+                }
                 
                 // Send subscribe message if connected
-                if (this.conn && this.conn.readyState === WebSocket.OPEN) {
+                if (!isInternal && this.conn && this.conn.readyState === WebSocket.OPEN) {
                     this.send({ type: 'subscribe', channel });
                 }
             },
@@ -2202,10 +2205,13 @@ fn common_scripts() -> &'static str {
                     this.listeners[channel] = this.listeners[channel].filter(cb => cb !== callback);
                     if (this.listeners[channel].length === 0) {
                         delete this.listeners[channel];
-                        this.subscriptions.delete(channel);
+                        const isInternal = typeof channel === 'string' && channel.startsWith('_');
+                        if (!isInternal) {
+                            this.subscriptions.delete(channel);
+                        }
                         
                         // Send unsubscribe message if connected
-                        if (this.conn && this.conn.readyState === WebSocket.OPEN) {
+                        if (!isInternal && this.conn && this.conn.readyState === WebSocket.OPEN) {
                             this.send({ type: 'unsubscribe', channel });
                         }
                     }
@@ -4254,6 +4260,25 @@ pub fn tokens_content() -> String {
             return token;
         }
 
+        function dedupeTokensByMint(tokens) {
+            if (!Array.isArray(tokens) || tokens.length === 0) {
+                return [];
+            }
+
+            const seen = new Set();
+            const deduped = [];
+
+            for (const token of tokens) {
+                if (!token || typeof token !== 'object') continue;
+                const mint = token.mint;
+                if (!mint || seen.has(mint)) continue;
+                seen.add(mint);
+                deduped.push(token);
+            }
+
+            return deduped;
+        }
+
         async function loadTokens(options = {}) {
             const { reason = 'manual', force = false } = options;
             const isAutoRefresh = reason === 'interval';
@@ -4295,8 +4320,9 @@ pub fn tokens_content() -> String {
 
                 const data = await res.json();
                 const items = Array.isArray(data.items) ? data.items : [];
-                allTokensData = items.map(normalizeTokenFromApi);
-                updateTokenCount(data.total);
+                const normalized = items.map(normalizeTokenFromApi);
+                allTokensData = dedupeTokensByMint(normalized);
+                updateTokenCount(data.total ?? allTokensData.length);
                 applySearchFilter();
             } catch (error) {
                 if (error.name === 'AbortError') {
