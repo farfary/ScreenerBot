@@ -155,10 +155,6 @@ async fn gather_status_snapshot() -> StatusSnapshot {
     // System metrics
     let (cpu_percent, memory_mb) = get_system_metrics();
 
-    // RPC stats (placeholder)
-    let rpc_requests = 0; // TODO: Wire to actual RPC stats
-    let rpc_errors = 0;
-
     // WebSocket connections
     let ws_connections = crate::webserver::state::get_ws_connection_count().await;
 

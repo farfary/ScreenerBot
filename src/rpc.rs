@@ -650,6 +650,34 @@ impl RpcStats {
                             }
                         }
 
+                        // Merge error stats
+                        for (url, count) in loaded_stats.errors_per_url {
+                            *self.errors_per_url.entry(url).or_insert(0) += count;
+                        }
+
+                        for (method, count) in loaded_stats.errors_per_method {
+                            *self.errors_per_method.entry(method).or_insert(0) += count;
+                        }
+
+                        // Merge response time sums
+                        for (url, sum_ms) in loaded_stats.response_time_sum_ms_per_url {
+                            *self.response_time_sum_ms_per_url.entry(url).or_insert(0) += sum_ms;
+                        }
+
+                        for (method, sum_ms) in loaded_stats.response_time_sum_ms_per_method {
+                            *self.response_time_sum_ms_per_method.entry(method).or_insert(0) +=
+                                sum_ms;
+                        }
+
+                        // Merge timed call counts
+                        for (url, count) in loaded_stats.timed_calls_per_url {
+                            *self.timed_calls_per_url.entry(url).or_insert(0) += count;
+                        }
+
+                        for (method, count) in loaded_stats.timed_calls_per_method {
+                            *self.timed_calls_per_method.entry(method).or_insert(0) += count;
+                        }
+
                         log(
                             LogTag::Rpc,
                             "STATS",
@@ -1153,6 +1181,20 @@ impl RpcClient {
         }
     }
 
+    /// Record an RPC error for statistics
+    fn record_error(&self, url: &str, method: &str) {
+        if let Ok(mut stats) = self.stats.lock() {
+            stats.record_error(url, method);
+        }
+    }
+
+    /// Record response time for an RPC call
+    fn record_response_time(&self, url: &str, method: &str, duration_ms: u64) {
+        if let Ok(mut stats) = self.stats.lock() {
+            stats.record_response_time(url, method, duration_ms);
+        }
+    }
+
     /// Wait for rate limit with adaptive backoff
     /// Now applies to all RPC URLs in the round-robin list
     async fn wait_for_rate_limit(&self) {
@@ -1311,6 +1353,7 @@ impl RpcClient {
 
     /// Get single account data
     pub async fn get_account(&self, pubkey: &Pubkey) -> Result<Account, String> {
+        let start = std::time::Instant::now();
         self.wait_for_rate_limit().await;
         self.record_call("get_account");
 
@@ -1318,7 +1361,7 @@ impl RpcClient {
         let client = self.prepare_next_rpc_call();
         let current_url = self.url();
 
-        tokio::task
+        let result = tokio::task
             ::spawn_blocking({
                 let pubkey = *pubkey;
                 let url = current_url.clone();
@@ -1339,7 +1382,20 @@ impl RpcClient {
                     })
                 }
             }).await
-            .map_err(|e| format!("Task error: {}", e))?
+            .map_err(|e| format!("Task error: {}", e))?;
+
+        let duration_ms = start.elapsed().as_millis() as u64;
+        match &result {
+            Ok(_) => {
+                self.record_response_time(&current_url, "get_account", duration_ms);
+                self.record_success(Some(&current_url));
+            }
+            Err(_) => {
+                self.record_error(&current_url, "get_account");
+            }
+        }
+
+        result
     }
 
     /// Get single account data with custom commitment level (for debugging)
@@ -1348,10 +1404,12 @@ impl RpcClient {
         pubkey: &Pubkey,
         commitment: CommitmentConfig
     ) -> Result<Account, String> {
+        let start = std::time::Instant::now();
         self.wait_for_rate_limit().await;
         self.record_call("get_account_with_commitment");
         let url = self.url().to_string();
-        tokio::task
+
+        let result = tokio::task
             ::spawn_blocking({
                 let client = SolanaRpcClient::new_with_commitment(url.clone(), commitment);
                 let pubkey = *pubkey;
@@ -1373,7 +1431,20 @@ impl RpcClient {
                     })
                 }
             }).await
-            .map_err(|e| format!("Task error: {}", e))?
+            .map_err(|e| format!("Task error: {}", e))?;
+
+        let duration_ms = start.elapsed().as_millis() as u64;
+        match &result {
+            Ok(_) => {
+                self.record_response_time(&url, "get_account_with_commitment", duration_ms);
+                self.record_success(Some(&url));
+            }
+            Err(_) => {
+                self.record_error(&url, "get_account_with_commitment");
+            }
+        }
+
+        result
     }
 
     /// Get multiple accounts data (batch request for efficiency)
@@ -1387,6 +1458,7 @@ impl RpcClient {
 
         // Use round-robin RPC rotation - get next URL from client
         let current_url = self.rotate_to_next_url();
+        let start = std::time::Instant::now();
 
         if is_debug_rpc_enabled() {
             log(
@@ -1438,8 +1510,10 @@ impl RpcClient {
             }).await
             .map_err(|e| format!("Task error: {}", e))?;
 
+        let duration_ms = start.elapsed().as_millis() as u64;
         match &result {
             Ok(_) => {
+                self.record_response_time(&current_url, "get_multiple_accounts", duration_ms);
                 self.record_success(Some(&current_url));
                 if is_debug_rpc_enabled() {
                     log(
@@ -1450,6 +1524,7 @@ impl RpcClient {
                 }
             }
             Err(e) => {
+                self.record_error(&current_url, "get_multiple_accounts");
                 if e.starts_with("rate_limit:") {
                     self.record_429_error(Some(&current_url));
                     log(LogTag::Rpc, "WARN", "Rate limited on RPC for batch request");
@@ -1464,15 +1539,30 @@ impl RpcClient {
 
     /// Get current slot
     pub async fn get_slot(&self) -> Result<u64, String> {
+        let start = std::time::Instant::now();
+        let current_url = self.url();
         self.wait_for_rate_limit().await;
         self.record_call("get_slot");
 
-        tokio::task
+        let result = tokio::task
             ::spawn_blocking({
                 let client = self.client.clone();
                 move || { client.get_slot().map_err(|e| format!("Failed to get slot: {}", e)) }
             }).await
-            .map_err(|e| format!("Task error: {}", e))?
+            .map_err(|e| format!("Task error: {}", e))?;
+
+        let duration_ms = start.elapsed().as_millis() as u64;
+        match &result {
+            Ok(_) => {
+                self.record_response_time(&current_url, "get_slot", duration_ms);
+                self.record_success(Some(&current_url));
+            }
+            Err(_) => {
+                self.record_error(&current_url, "get_slot");
+            }
+        }
+
+        result
     }
 
     /// Get SOL balance for wallet address using round-robin RPC rotation
@@ -1487,6 +1577,7 @@ impl RpcClient {
 
         // Use round-robin RPC rotation - get next URL from client
         let current_url = self.rotate_to_next_url();
+        let start = std::time::Instant::now();
 
         if is_debug_wallet_enabled() || is_debug_rpc_enabled() {
             log(
@@ -1502,7 +1593,7 @@ impl RpcClient {
 
         let client = reqwest::Client::new();
 
-        match
+        let result: Result<f64, ()> = match
             client
                 .post(&current_url)
                 .header("Content-Type", "application/json")
@@ -1518,6 +1609,12 @@ impl RpcClient {
                                     let balance_sol = lamports_to_sol(balance_lamports);
 
                                     // Record successful call
+                                    let duration_ms = start.elapsed().as_millis() as u64;
+                                    self.record_response_time(
+                                        &current_url,
+                                        "getBalance",
+                                        duration_ms
+                                    );
                                     self.record_success(Some(&current_url));
 
                                     if is_debug_wallet_enabled() || is_debug_rpc_enabled() {
@@ -1547,6 +1644,7 @@ impl RpcClient {
                         &format!("HTTP error {} for SOL balance", response.status())
                     );
                 }
+                Err(())
             }
             Err(e) => {
                 let error_msg = e.to_string();
@@ -1558,7 +1656,13 @@ impl RpcClient {
                 } else {
                     log(LogTag::Rpc, "ERROR", &format!("Failed to get SOL balance: {}", e));
                 }
+                Err(())
             }
+        };
+
+        // Record error if we failed
+        if result.is_err() {
+            self.record_error(&current_url, "getBalance");
         }
 
         Err(
@@ -1768,6 +1872,7 @@ impl RpcClient {
 
         // Use round-robin RPC rotation - get next URL from client
         let current_url = self.rotate_to_next_url();
+        let start = std::time::Instant::now();
 
         if is_debug_rpc_enabled() {
             log(LogTag::Rpc, "BLOCKHASH", "Fetching latest blockhash from RPC");
@@ -1822,7 +1927,13 @@ impl RpcClient {
                                             .and_then(|b| b.as_str())
                                     {
                                         if let Ok(blockhash) = Hash::from_str(blockhash_str) {
-                                            // Record successful call
+                                            // Record successful call with timing
+                                            let duration_ms = start.elapsed().as_millis() as u64;
+                                            self.record_response_time(
+                                                &current_url,
+                                                "getLatestBlockhash",
+                                                duration_ms
+                                            );
                                             self.record_success(Some(&current_url));
 
                                             if is_debug_rpc_enabled() {
@@ -1888,6 +1999,9 @@ impl RpcClient {
                 }
             }
         }
+
+        // Record error for failed call
+        self.record_error(&current_url, "getLatestBlockhash");
 
         // If we reach here, the call failed but it may be a rate limit - next call will use next RPC
         Err(
@@ -2178,6 +2292,7 @@ impl RpcClient {
 
         // Use round-robin RPC rotation - get next URL from client
         let current_url = self.rotate_to_next_url();
+        let start = std::time::Instant::now();
 
         if is_debug_rpc_enabled() {
             log(LogTag::Rpc, "TX_SEND", "Sending transaction to RPC");
@@ -2201,7 +2316,13 @@ impl RpcClient {
                     if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
                         if let Some(result) = rpc_response.get("result") {
                             if let Some(signature) = result.as_str() {
-                                // Record successful call
+                                // Record successful call with timing
+                                let duration_ms = start.elapsed().as_millis() as u64;
+                                self.record_response_time(
+                                    &current_url,
+                                    "sendTransaction",
+                                    duration_ms
+                                );
                                 self.record_success(Some(&current_url));
 
                                 log(
@@ -2260,6 +2381,9 @@ impl RpcClient {
                 }
             }
         }
+
+        // Record error for failed call
+        self.record_error(&current_url, "sendTransaction");
 
         Err(
             ScreenerBotError::Blockchain(crate::errors::BlockchainError::TransactionDropped {
@@ -3345,6 +3469,7 @@ impl RpcClient {
 
         // Use round-robin RPC rotation - get next URL from client
         let current_url = self.rotate_to_next_url();
+        let start = std::time::Instant::now();
 
         if is_debug_rpc_enabled() {
             log(
@@ -3511,7 +3636,9 @@ impl RpcClient {
                         block_time,
                     };
 
-                    // Record successful call
+                    // Record successful call with timing
+                    let duration_ms = start.elapsed().as_millis() as u64;
+                    self.record_response_time(&current_url, "getTransaction", duration_ms);
                     self.record_success(Some(&current_url));
 
                     if is_debug_rpc_enabled() {
@@ -3547,6 +3674,9 @@ impl RpcClient {
                 )
             );
         }
+
+        // Record error for failed call
+        self.record_error(&current_url, "getTransaction");
 
         Err(
             ScreenerBotError::RpcProvider(RpcProviderError::MalformedResponse {
