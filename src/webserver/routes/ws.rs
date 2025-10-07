@@ -11,7 +11,8 @@ use std::{ collections::HashSet, sync::Arc };
 
 use axum::{
     extract::{ ws::{ Message, WebSocket, WebSocketUpgrade }, Query, State },
-    response::Response,
+    http::StatusCode,
+    response::{ IntoResponse, Response },
     routing::get,
     Router,
 };
@@ -24,7 +25,11 @@ use crate::{
     logger::{ log, LogTag },
     pools,
     positions,
-    webserver::{ routes::services::ServicesOverviewResponse, state::AppState, status_broadcast },
+    webserver::{
+        routes::services::{ gather_services_overview_snapshot, ServicesOverviewResponse },
+        state::AppState,
+        status_broadcast,
+    },
 };
 
 #[derive(Debug, Deserialize, Clone)]
@@ -93,6 +98,27 @@ pub fn routes() -> Router<Arc<AppState>> {
 
 /// Centralized WebSocket hub handler
 pub async fn ws_hub_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> Response {
+    // Enforce maximum concurrent WebSocket connections from config
+    let current = state.ws_connection_count().await;
+    let max_allowed = state.config.websocket.max_connections;
+    if current >= max_allowed {
+        if is_debug_webserver_enabled() {
+            log(
+                LogTag::Webserver,
+                "DEBUG",
+                &format!(
+                    "Rejecting WebSocket upgrade: connection limit reached (current={} max={})",
+                    current,
+                    max_allowed
+                )
+            );
+        }
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            "WebSocket connection limit reached",
+        ).into_response();
+    }
+
     state.increment_ws_connections().await;
     log_ws_connection_change(&state, "Hub WebSocket connection opened").await;
     ws.on_upgrade(move |socket| handle_hub_socket(socket, state))
@@ -299,6 +325,17 @@ async fn handle_hub_socket(socket: WebSocket, state: Arc<AppState>) {
                 if subscriptions.contains("services") {
                     match services_snapshot {
                         Ok(snapshot) => {
+                            if is_debug_webserver_enabled() {
+                                log(
+                                    LogTag::Webserver,
+                                    "DEBUG",
+                                    &format!(
+                                        "Hub received services snapshot from broadcaster (services={}, unhealthy={})",
+                                        snapshot.services.len(),
+                                        snapshot.summary.unhealthy_services + snapshot.summary.degraded_services
+                                    )
+                                );
+                            }
                             let _ = forward_services(&mut sender, &snapshot).await;
                         }
                         Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
@@ -375,6 +412,43 @@ async fn handle_client_message(
                 &channel,
                 &format!("Successfully subscribed to {}", channel)
             ).await;
+
+            // Proactively push an immediate snapshot for channels that benefit from catch-up
+            if channel == "services" {
+                if is_debug_webserver_enabled() {
+                    log(
+                        LogTag::Webserver,
+                        "DEBUG",
+                        "Preparing immediate services snapshot push on subscribe"
+                    );
+                }
+                // Gather and forward the latest services overview snapshot right away
+                let snapshot = gather_services_overview_snapshot().await;
+                if let Err(_e) = forward_services(sender, &snapshot).await {
+                    if is_debug_webserver_enabled() {
+                        log(
+                            LogTag::Webserver,
+                            "DEBUG",
+                            &format!(
+                                "Failed to forward immediate services snapshot (services={}, unhealthy={})",
+                                snapshot.services.len(),
+                                snapshot.summary.unhealthy_services +
+                                    snapshot.summary.degraded_services
+                            )
+                        );
+                    }
+                } else if is_debug_webserver_enabled() {
+                    log(
+                        LogTag::Webserver,
+                        "DEBUG",
+                        &format!(
+                            "Immediate services snapshot forwarded (services={}, unhealthy={})",
+                            snapshot.services.len(),
+                            snapshot.summary.unhealthy_services + snapshot.summary.degraded_services
+                        )
+                    );
+                }
+            }
         }
         ClientMessage::Unsubscribe { channel } => {
             subscriptions.remove(&channel);
@@ -469,6 +543,17 @@ async fn forward_services(
     sender: &mut futures::stream::SplitSink<WebSocket, Message>,
     snapshot: &ServicesOverviewResponse
 ) -> Result<(), axum::Error> {
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "DEBUG",
+            &format!(
+                "Forwarding services snapshot to client (services={}, unhealthy={})",
+                snapshot.services.len(),
+                snapshot.summary.unhealthy_services + snapshot.summary.degraded_services
+            )
+        );
+    }
     let msg = ServerMessage::Data {
         channel: "services".to_string(),
         data: serde_json::to_value(snapshot).unwrap_or_default(),

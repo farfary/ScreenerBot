@@ -34,7 +34,19 @@ pub fn initialize_services_broadcaster() -> broadcast::Receiver<ServicesOverview
 
 /// Subscribe to services snapshot stream
 pub fn subscribe() -> Option<broadcast::Receiver<ServicesOverviewResponse>> {
-    SERVICES_BROADCAST_TX.get().map(|tx| tx.subscribe())
+    let rx = SERVICES_BROADCAST_TX.get().map(|tx| tx.subscribe());
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "DEBUG",
+            &format!(
+                "New services broadcast subscriber created (active_tx={}, has_rx={})",
+                SERVICES_BROADCAST_TX.get().is_some(),
+                rx.is_some()
+            )
+        );
+    }
+    rx
 }
 
 /// Start periodic broadcast of services overview snapshots

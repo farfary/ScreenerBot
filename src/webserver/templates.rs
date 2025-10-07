@@ -2090,12 +2090,15 @@ fn common_scripts() -> &'static str {
             enabled: true,
             attempts: 0,
             maxAttempts: 5,
+            isConnecting: false,
             subscriptions: new Set(),
             listeners: {}, // channel -> [callback, callback, ...]
             
             // Initialize connection
             connect() {
-                if (this.conn && this.conn.readyState === WebSocket.OPEN) return;
+                // Prevent duplicate simultaneous connections
+                if (this.isConnecting) return;
+                if (this.conn && (this.conn.readyState === WebSocket.OPEN || this.conn.readyState === WebSocket.CONNECTING)) return;
                 
                 const proto = location.protocol === 'https:' ? 'wss' : 'ws';
                 const url = `${proto}://${location.host}/api/ws`;
@@ -2103,11 +2106,13 @@ fn common_scripts() -> &'static str {
                 console.log('[WsHub] Connecting:', url);
                 
                 try {
+                    this.isConnecting = true;
                     this.conn = new WebSocket(url);
                     
                     this.conn.onopen = () => {
                         console.log('[WsHub] Connected');
                         this.attempts = 0;
+                        this.isConnecting = false;
                         
                         // Resubscribe to all channels
                         for (const channel of this.subscriptions) {
@@ -2129,6 +2134,7 @@ fn common_scripts() -> &'static str {
                     
                     this.conn.onclose = () => {
                         console.log('[WsHub] Closed');
+                        this.isConnecting = false;
                         this.conn = null;
                         this.emit('_disconnected', {});
                         this.reconnect();
@@ -2136,12 +2142,14 @@ fn common_scripts() -> &'static str {
                     
                     this.conn.onerror = (err) => {
                         console.error('[WsHub] Error:', err);
+                        this.isConnecting = false;
                         try { this.conn && this.conn.close(); } catch {};
                         this.conn = null;
                         this.reconnect();
                     };
                 } catch (err) {
                     console.error('[WsHub] Creation failed:', err);
+                    this.isConnecting = false;
                     this.reconnect();
                 }
             },
@@ -2153,6 +2161,11 @@ fn common_scripts() -> &'static str {
                 
                 console.log(`[WsHub] Reconnect attempt ${this.attempts}, delay: ${delay}ms`);
                 
+                // Avoid reconnect spam if already connected/connecting
+                if (this.conn && (this.conn.readyState === WebSocket.OPEN || this.conn.readyState === WebSocket.CONNECTING || this.isConnecting)) {
+                    return;
+                }
+
                 if (this.maxAttempts > 0 && this.attempts > this.maxAttempts) {
                     console.warn('[WsHub] Reconnect still failing, continuing retries with max backoff');
                     this.attempts = this.maxAttempts;
@@ -2281,8 +2294,16 @@ fn common_scripts() -> &'static str {
         
         // Initialize WebSocket Hub on page load (ONCE - persists across navigation)
         document.addEventListener('DOMContentLoaded', () => {
-            WsHub.connect();
-            WsHub.startHeartbeat();
+            if (!window.__wsHubInitialized) {
+                window.__wsHubInitialized = true;
+                WsHub.connect();
+                WsHub.startHeartbeat();
+            } else {
+                // If already initialized, ensure a single connection remains
+                if (!WsHub.isConnected()) {
+                    WsHub.connect();
+                }
+            }
         });
         
         // Client-Side Router - SPA Architecture
@@ -7612,15 +7633,80 @@ pub fn services_content() -> String {
         var sortDir = 'asc';
         var servicesWsBound = false;
         var servicesFallbackInterval = null;
+        var servicesPageInitialized = false;
+        var activeFetchController = null;
+        var activeFetchTimeout = null;
+
+        // Global window-scoped state to survive/reconcile SPA script reloads
+        if (!window.__servicesGlobals) {
+            window.__servicesGlobals = { intervalId: null, fetchController: null, fetchTimeoutId: null };
+        } else {
+            // Best-effort cleanup of any dangling work from previous script instance
+            try {
+                if (window.__servicesGlobals.intervalId) {
+                    clearInterval(window.__servicesGlobals.intervalId);
+                    window.__servicesGlobals.intervalId = null;
+                    console.debug('[Services] 🧹 Cleared stale global polling interval on init');
+                }
+                if (window.__servicesGlobals.fetchTimeoutId) {
+                    clearTimeout(window.__servicesGlobals.fetchTimeoutId);
+                    window.__servicesGlobals.fetchTimeoutId = null;
+                }
+                if (window.__servicesGlobals.fetchController) {
+                    window.__servicesGlobals.fetchController.abort();
+                    window.__servicesGlobals.fetchController = null;
+                    console.debug('[Services] 🧹 Aborted stale global fetch on init');
+                }
+            } catch (e) { console.warn('[Services] Cleanup error (ignored):', e); }
+        }
+
+        function setActiveFetch(controller, timeoutId) {
+            activeFetchController = controller;
+            activeFetchTimeout = timeoutId;
+            window.__servicesGlobals.fetchController = controller;
+            window.__servicesGlobals.fetchTimeoutId = timeoutId;
+        }
+
+        function clearActiveFetch(reason, shouldAbort = true) {
+            if (activeFetchTimeout) {
+                clearTimeout(activeFetchTimeout);
+                activeFetchTimeout = null;
+            }
+            if (shouldAbort && activeFetchController) {
+                try { activeFetchController.abort(); } catch (_) {}
+            }
+            activeFetchController = null;
+            // Clear window globals too
+            if (window.__servicesGlobals.fetchTimeoutId) {
+                clearTimeout(window.__servicesGlobals.fetchTimeoutId);
+                window.__servicesGlobals.fetchTimeoutId = null;
+            }
+            if (shouldAbort && window.__servicesGlobals.fetchController) {
+                try { window.__servicesGlobals.fetchController.abort(); } catch (_) {}
+            }
+            window.__servicesGlobals.fetchController = null;
+            if (reason) {
+                console.debug('[Services] Cleared active fetch', { reason, aborted: shouldAbort });
+            }
+        }
 
         async function loadServices(options = {}) {
             const { showLoader = false } = options;
 
+            // Cancel any existing fetch (local and window-global) before starting a new one
+            if (activeFetchController || window.__servicesGlobals.fetchController) {
+                console.warn('[Services] 🛑 Cancelling previous fetch before starting new one');
+                clearActiveFetch('new-request');
+            }
+
             const controller = new AbortController();
+            // track both locally and globally to reconcile across script reloads
+            
             const timeoutId = setTimeout(() => {
                 console.warn('[Services] ⏰ Fetch timeout after 5s, aborting request');
                 controller.abort();
             }, 5000);
+            setActiveFetch(controller, timeoutId);
 
             try {
                 console.log('[Services] 🔄 Starting services fetch', {
@@ -7642,6 +7728,9 @@ pub fn services_content() -> String {
                 });
                 clearTimeout(timeoutId);
                 const fetchDuration = performance.now() - fetchStart;
+                
+                // Clear the active fetch tracking
+                clearActiveFetch('success', false);
 
                 console.log('[Services] ✅ Fetch completed', {
                     status: response.status,
@@ -7674,7 +7763,8 @@ pub fn services_content() -> String {
                 
                 handleServicesSnapshot(data);
             } catch (error) {
-                clearTimeout(timeoutId);
+                // Clear tracking without aborting again
+                clearActiveFetch('error', false);
                 
                 const isAborted = error?.name === 'AbortError';
                 const errorDetails = {
@@ -7688,6 +7778,12 @@ pub fn services_content() -> String {
                 };
                 
                 console.error('[Services] ❌ Failed to load services', errorDetails);
+                
+                // Don't show error UI if this was cancelled intentionally (not a timeout)
+                if (isAborted && (error?.message?.includes('without reason') || error?.message?.includes('The user aborted a request.'))) {
+                    console.info('[Services] Fetch cancelled (likely due to navigation or dedupe)');
+                    return;
+                }
                 
                 if (isAborted) {
                     showServicesError('Request timed out after 5s - try refreshing');
@@ -7760,10 +7856,12 @@ pub fn services_content() -> String {
         }
 
         function startServicesFallback(intervalMs = 30000) {
-            if (servicesFallbackInterval) {
+            // Always stop any existing interval (local or global)
+            stopServicesFallback();
+            if (servicesFallbackInterval || window.__servicesGlobals.intervalId) {
                 console.debug('[Services] Fallback polling already active', {
                     intervalMs,
-                    startedAt: servicesFallbackInterval._startedAt || null
+                    startedAt: (servicesFallbackInterval && servicesFallbackInterval._startedAt) || (window.__servicesGlobals._startedAt) || null
                 });
                 return;
             }
@@ -7772,6 +7870,9 @@ pub fn services_content() -> String {
                 loadServices({ showLoader: false });
             }, intervalMs);
             servicesFallbackInterval._startedAt = Date.now();
+            // Mirror to window global to allow cleanup from other script instances
+            window.__servicesGlobals.intervalId = servicesFallbackInterval;
+            window.__servicesGlobals._startedAt = servicesFallbackInterval._startedAt;
             console.warn('[Services] Fallback polling enabled', {
                 intervalMs,
                 timestamp: new Date().toISOString()
@@ -7779,13 +7880,19 @@ pub fn services_content() -> String {
         }
 
         function stopServicesFallback() {
-            if (!servicesFallbackInterval) return;
-            console.debug('[Services] Fallback polling stopped', {
-                startedAt: servicesFallbackInterval._startedAt || null,
-                durationMs: servicesFallbackInterval._startedAt ? Date.now() - servicesFallbackInterval._startedAt : null
-            });
-            clearInterval(servicesFallbackInterval);
-            servicesFallbackInterval = null;
+            if (servicesFallbackInterval) {
+                console.debug('[Services] Fallback polling stopped', {
+                    startedAt: servicesFallbackInterval._startedAt || null,
+                    durationMs: servicesFallbackInterval._startedAt ? Date.now() - servicesFallbackInterval._startedAt : null
+                });
+                clearInterval(servicesFallbackInterval);
+                servicesFallbackInterval = null;
+            }
+            if (window.__servicesGlobals.intervalId) {
+                clearInterval(window.__servicesGlobals.intervalId);
+                window.__servicesGlobals.intervalId = null;
+                console.debug('[Services] Stopped global fallback interval');
+            }
         }
 
         function initServicesWebSocket() {
@@ -7795,9 +7902,25 @@ pub fn services_content() -> String {
                 timestamp: new Date().toISOString()
             });
 
+            // Ensure we always register route cleanup, regardless of WsHub availability
+            if (window.Router && typeof Router.registerCleanup === 'function' && !window.__servicesGlobals._cleanupRegistered) {
+                Router.registerCleanup(() => {
+                    servicesWsBound = false;
+                    servicesPageInitialized = false;
+                    console.debug('[Services] Route cleanup: resetting init flags');
+                    // Cancel any active fetch globally
+                    clearActiveFetch('route-change');
+                    // Stop any polling
+                    stopServicesFallback();
+                    window.__servicesGlobals._cleanupRegistered = false;
+                });
+                window.__servicesGlobals._cleanupRegistered = true;
+                console.debug('[Services] Registered route cleanup handler');
+            }
+
             if (typeof WsHub === 'undefined') {
                 console.warn('[Services] ⚠️ WsHub unavailable, switching to HTTP polling');
-                startServicesFallback(10000);
+                startServicesFallback(30000);
                 return;
             }
 
@@ -7841,16 +7964,29 @@ pub fn services_content() -> String {
             };
 
             const onReconnect = () => {
-                console.info('[Services] WebSocket reconnected, refreshing snapshot');
+                console.info('[Services] WebSocket reconnected, refreshing snapshot and resubscribing');
                 stopServicesFallback();
-                loadServices({ showLoader: false });
+                // Resubscribe to services channel after reconnect to get immediate snapshot
+                if (WsHub.isConnected()) {
+                    WsHub.send({ type: 'subscribe', channel: 'services' });
+                }
             };
 
+            // CRITICAL: Bind listener FIRST, then send subscribe message
+            // This ensures we capture the immediate snapshot pushed by the backend
             WsHub.subscribe('services', onSnapshot);
             WsHub.subscribe('_warning', onWarning);
             WsHub.subscribe('_disconnected', onDisconnect);
             WsHub.subscribe('_failed', onDisconnect);
             WsHub.subscribe('_connected', onReconnect);
+
+            // Now send the subscribe request - backend will push immediate snapshot
+            if (WsHub.isConnected()) {
+                console.log('[Services] 📤 Sending subscribe request to backend');
+                WsHub.send({ type: 'subscribe', channel: 'services' });
+            } else {
+                console.warn('[Services] Not connected yet, will subscribe on connect');
+            }
 
             if (!WsHub.isConnected()) {
                 console.debug('[Services] WebSocket not connected yet, enabling fallback');
@@ -7860,13 +7996,15 @@ pub fn services_content() -> String {
             if (window.Router && typeof Router.registerCleanup === 'function') {
                 Router.registerCleanup(() => {
                     servicesWsBound = false;
+                    servicesPageInitialized = false;
                     console.debug('[Services] Cleaning up websocket handlers due to route change');
-                    WsHub.unsubscribe('services', onSnapshot);
-                    WsHub.unsubscribe('_warning', onWarning);
-                    WsHub.unsubscribe('_disconnected', onDisconnect);
-                    WsHub.unsubscribe('_failed', onDisconnect);
-                    WsHub.unsubscribe('_connected', onReconnect);
+                    try { WsHub.unsubscribe('services', onSnapshot); } catch(_){}
+                    try { WsHub.unsubscribe('_warning', onWarning); } catch(_){}
+                    try { WsHub.unsubscribe('_disconnected', onDisconnect); } catch(_){}
+                    try { WsHub.unsubscribe('_failed', onDisconnect); } catch(_){}
+                    try { WsHub.unsubscribe('_connected', onReconnect); } catch(_){}
                     stopServicesFallback();
+                    clearActiveFetch('route-change');
                 });
             }
 
@@ -8138,6 +8276,16 @@ pub fn services_content() -> String {
 
         // Global init function for Router to call during SPA navigation
         window.initServicesPage = function() {
+            // Prevent double initialization
+            if (servicesPageInitialized) {
+                console.info('[Services] ℹ️ Page already initialized, skipping duplicate init', {
+                    timestamp: new Date().toISOString(),
+                    fromSpaNavigation: Boolean(window.Router?.getCurrentRoute)
+                });
+                return;
+            }
+            
+            servicesPageInitialized = true;
             console.log('[Services] 🚀 Initializing page', {
                 timestamp: new Date().toISOString(),
                 fromSpaNavigation: Boolean(window.Router?.getCurrentRoute),
