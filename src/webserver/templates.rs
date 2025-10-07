@@ -512,53 +512,53 @@ fn common_styles() -> &'static str {
     r#"
         /* CSS Variables for Theming */
         :root {
-            /* Light mode (default) */
-            --bg-primary: #f5f7fa;
+            /* Light mode (default) - Professional Navy/Steel Blue */
+            --bg-primary: #f8f9fb;
             --bg-secondary: #ffffff;
             --bg-card: #ffffff;
-            --bg-card-hover: #f8fafc;
-            --text-primary: #2d3748;
-            --text-secondary: #718096;
-            --text-muted: #a0aec0;
-            --border-color: #e2e8f0;
-            --header-bg: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --bg-card-hover: #f0f2f6;
+            --text-primary: #1f2937;
+            --text-secondary: #6b7280;
+            --text-muted: #9ca3af;
+            --border-color: #d1d5db;
+            --header-bg: linear-gradient(135deg, #0f4c81 0%, #1565c0 100%);
             --header-text: #ffffff;
-            --link-color: #667eea;
-            --link-hover: #5568d3;
+            --link-color: #1565c0;
+            --link-hover: #0f4c81;
             --badge-online: #10b981;
-            --badge-error: #ef4444;
+            --badge-error: #d32f2f;
             --badge-loading: #f59e0b;
             --shadow-sm: rgba(0,0,0,0.05);
             --shadow-md: rgba(0,0,0,0.1);
             --shadow-lg: rgba(0,0,0,0.2);
-            --table-header-bg: #f8fafc;
-            --table-header-text: #475569;
-            --service-item-bg: #f8fafc;
+            --table-header-bg: #f0f2f6;
+            --table-header-text: #374151;
+            --service-item-bg: #f0f2f6;
         }
         
-        /* Dark mode */
+        /* Dark mode - Professional Graphite/Cyan */
         [data-theme="dark"] {
-            --bg-primary: #1a202c;
-            --bg-secondary: #2d3748;
-            --bg-card: #2d3748;
-            --bg-card-hover: #374151;
-            --text-primary: #e2e8f0;
-            --text-secondary: #cbd5e0;
-            --text-muted: #718096;
-            --border-color: #4a5568;
-            --header-bg: linear-gradient(135deg, #4c51bf 0%, #553c9a 100%);
+            --bg-primary: #111827;
+            --bg-secondary: #1f2937;
+            --bg-card: #1f2937;
+            --bg-card-hover: #273247;
+            --text-primary: #e5e7eb;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            --border-color: #334155;
+            --header-bg: linear-gradient(135deg, #0d324d 0%, #0e4e6d 100%);
             --header-text: #ffffff;
-            --link-color: #818cf8;
-            --link-hover: #a5b4fc;
-            --badge-online: #34d399;
-            --badge-error: #f87171;
-            --badge-loading: #fbbf24;
+            --link-color: #38bdf8;
+            --link-hover: #0ea5e9;
+            --badge-online: #10b981;
+            --badge-error: #ef4444;
+            --badge-loading: #eab308;
             --shadow-sm: rgba(0,0,0,0.2);
             --shadow-md: rgba(0,0,0,0.3);
             --shadow-lg: rgba(0,0,0,0.5);
-            --table-header-bg: #374151;
-            --table-header-text: #cbd5e0;
-            --service-item-bg: #374151;
+            --table-header-bg: #273247;
+            --table-header-text: #d1d5db;
+            --service-item-bg: #273247;
         }
         
         * {
@@ -1178,7 +1178,7 @@ fn common_styles() -> &'static str {
 
         .token-modal .modal-tab.active {
             background: #1a1f2e;
-            color: #667eea;
+            color: #38bdf8;
         }
 
         .token-modal .modal-tab.active::after {
@@ -1188,7 +1188,7 @@ fn common_styles() -> &'static str {
             left: 0;
             right: 0;
             height: 2px;
-            background: #667eea;
+            background: #38bdf8;
         }
 
         /* Tab Content */
@@ -1422,7 +1422,7 @@ fn common_styles() -> &'static str {
 
         .token-modal .quick-action-btn:hover {
             background: #334155;
-            border-color: #667eea;
+            border-color: #38bdf8;
             transform: translateX(4px);
         }
 
@@ -1527,7 +1527,7 @@ fn common_styles() -> &'static str {
 
         .progress-fill {
             height: 100%;
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(90deg, #1565c0 0%, #0f4c81 100%);
             transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
         }
         
@@ -4499,7 +4499,7 @@ pub fn tokens_content() -> String {
                         <div style="display:flex; align-items:center; gap:12px; min-width:0;">
                             ${logo}
                             <div style="display:flex; flex-direction:column; gap:1px; min-width:0;">
-                                <div style="font-weight:600; color:#667eea; font-size:0.95em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 260px;">${symbol}</div>
+                                <div style="font-weight:600; color:var(--link-color); font-size:0.95em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 260px;">${symbol}</div>
                                 <div style="font-size:0.8em; color:#94a3b8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 260px;">${name}</div>
                             </div>
                         </div>
@@ -4600,7 +4600,7 @@ pub fn tokens_content() -> String {
                 }
             }
             if (!url) {
-                return `<div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85em;flex-shrink:0;">${fallback}</div>`;
+                return `<div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg, #1565c0 0%, #0f4c81 100%);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85em;flex-shrink:0;">${fallback}</div>`;
             }
             const esc = (s) => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
             return `<img src="${esc(url)}" alt="${esc(symbol || '')}" width="32" height="32" style="border-radius:8px;object-fit:cover;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,0.1);" onerror="fallbackLogo(this, '${fallback}')">`;
@@ -4613,7 +4613,7 @@ pub fn tokens_content() -> String {
                 div.style.width = '32px';
                 div.style.height = '32px';
                 div.style.borderRadius = '8px';
-                div.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                div.style.background = 'linear-gradient(135deg, #1565c0 0%, #0f4c81 100%)';
                 div.style.color = 'white';
                 div.style.display = 'flex';
                 div.style.alignItems = 'center';
@@ -5815,9 +5815,9 @@ pub fn config_content() -> String {
             border-color: rgba(255, 255, 255, 0.3);
         }
         
-        .toolbar-btn.primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; }
+        .toolbar-btn.primary { background: linear-gradient(135deg, #1565c0 0%, #0f4c81 100%); border: none; }
         .toolbar-btn.success { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border: none; }
-        .toolbar-btn.danger { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border: none; }
+        .toolbar-btn.danger { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); border: none; }
         
         .filter-chips {
             display: flex;
@@ -5835,8 +5835,8 @@ pub fn config_content() -> String {
         }
         
         .chip.active {
-            background: rgba(102, 126, 234, 0.3);
-            border-color: #667eea;
+            background: rgba(21, 101, 192, 0.3);
+            border-color: #1565c0;
         }
         
         .config-card {
@@ -5986,7 +5986,7 @@ pub fn config_content() -> String {
         .field select:focus,
         .field textarea:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: #1565c0;
             background: rgba(15, 15, 25, 0.9);
         }
         
@@ -5995,8 +5995,8 @@ pub fn config_content() -> String {
         }
         
         .field input.invalid {
-            border-color: #f5576c;
-            background: rgba(245, 87, 108, 0.08);
+            border-color: #ef4444;
+            background: rgba(239, 68, 68, 0.08);
         }
         
         .field-hint {
