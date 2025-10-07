@@ -3585,6 +3585,12 @@ pub fn tokens_content() -> String {
                 <button class="sub-tab" data-view="all" onclick="switchTokensSubTab('all')">
                     📋 All Tokens
                 </button>
+                <button class="sub-tab" data-view="passed" onclick="switchTokensSubTab('passed')">
+                    ✅ Passed
+                </button>
+                <button class="sub-tab" data-view="rejected" onclick="switchTokensSubTab('rejected')">
+                    ⛔ Rejected
+                </button>
                 <button class="sub-tab" data-view="blacklisted" onclick="switchTokensSubTab('blacklisted')">
                     🚫 Blacklisted
                 </button>
