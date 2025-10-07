@@ -7628,678 +7628,444 @@ pub fn services_content() -> String {
     </style>
 
     <script>
-        var servicesData = null;
-        var sortKey = 'priority';
-        var sortDir = 'asc';
-        var servicesWsBound = false;
-        var servicesFallbackInterval = null;
-        var servicesPageInitialized = false;
-        var activeFetchController = null;
-        var activeFetchTimeout = null;
+        // Prevent multiple script instances from interfering
+        (function() {
+            // Check if already initialized
+            if (window.__servicesPageVersion === 2) {
+                console.log('[Services] Page script already loaded, skipping');
+                return;
+            }
+            window.__servicesPageVersion = 2;
 
-        // Global window-scoped state to survive/reconcile SPA script reloads
-        if (!window.__servicesGlobals) {
-            window.__servicesGlobals = { intervalId: null, fetchController: null, fetchTimeoutId: null };
-        } else {
-            // Best-effort cleanup of any dangling work from previous script instance
-            try {
-                if (window.__servicesGlobals.intervalId) {
-                    clearInterval(window.__servicesGlobals.intervalId);
-                    window.__servicesGlobals.intervalId = null;
-                    console.debug('[Services] 🧹 Cleared stale global polling interval on init');
+            var servicesData = null;
+            var sortKey = 'priority';
+            var sortDir = 'asc';
+            var servicesWsBound = false;
+            var servicesFallbackInterval = null;
+            var activeFetchController = null;
+            var activeFetchTimeout = null;
+            var cleanupRegistered = false;
+            var wsHandlers = { onSnapshot: null, onDisconnect: null, onReconnect: null };
+            function clearActiveFetch(reason, shouldAbort = true) {
+                if (activeFetchTimeout) {
+                    clearTimeout(activeFetchTimeout);
+                    activeFetchTimeout = null;
                 }
-                if (window.__servicesGlobals.fetchTimeoutId) {
-                    clearTimeout(window.__servicesGlobals.fetchTimeoutId);
-                    window.__servicesGlobals.fetchTimeoutId = null;
-                }
-                if (window.__servicesGlobals.fetchController) {
-                    window.__servicesGlobals.fetchController.abort();
-                    window.__servicesGlobals.fetchController = null;
-                    console.debug('[Services] 🧹 Aborted stale global fetch on init');
-                }
-            } catch (e) { console.warn('[Services] Cleanup error (ignored):', e); }
-        }
-
-        function setActiveFetch(controller, timeoutId) {
-            activeFetchController = controller;
-            activeFetchTimeout = timeoutId;
-            window.__servicesGlobals.fetchController = controller;
-            window.__servicesGlobals.fetchTimeoutId = timeoutId;
-        }
-
-        function clearActiveFetch(reason, shouldAbort = true) {
-            if (activeFetchTimeout) {
-                clearTimeout(activeFetchTimeout);
-                activeFetchTimeout = null;
-            }
-            if (shouldAbort && activeFetchController) {
-                try { activeFetchController.abort(); } catch (_) {}
-            }
-            activeFetchController = null;
-            // Clear window globals too
-            if (window.__servicesGlobals.fetchTimeoutId) {
-                clearTimeout(window.__servicesGlobals.fetchTimeoutId);
-                window.__servicesGlobals.fetchTimeoutId = null;
-            }
-            if (shouldAbort && window.__servicesGlobals.fetchController) {
-                try { window.__servicesGlobals.fetchController.abort(); } catch (_) {}
-            }
-            window.__servicesGlobals.fetchController = null;
-            if (reason) {
-                console.debug('[Services] Cleared active fetch', { reason, aborted: shouldAbort });
-            }
-        }
-
-        async function loadServices(options = {}) {
-            const { showLoader = false } = options;
-
-            // Cancel any existing fetch (local and window-global) before starting a new one
-            if (activeFetchController || window.__servicesGlobals.fetchController) {
-                console.warn('[Services] 🛑 Cancelling previous fetch before starting new one');
-                clearActiveFetch('new-request');
-            }
-
-            const controller = new AbortController();
-            // track both locally and globally to reconcile across script reloads
-            
-            const timeoutId = setTimeout(() => {
-                console.warn('[Services] ⏰ Fetch timeout after 5s, aborting request');
-                controller.abort();
-            }, 5000);
-            setActiveFetch(controller, timeoutId);
-
-            try {
-                console.log('[Services] 🔄 Starting services fetch', {
-                    showLoader,
-                    timestamp: new Date().toISOString(),
-                    fallbackEnabled: Boolean(servicesFallbackInterval),
-                    url: '/api/services/overview'
-                });
-                
-                if (showLoader) {
-                    setServicesLoading();
-                }
-
-                const fetchStart = performance.now();
-                const response = await fetch('/api/services/overview', {
-                    headers: { 'X-Requested-With': 'fetch' },
-                    signal: controller.signal,
-                    cache: 'no-cache'
-                });
-                clearTimeout(timeoutId);
-                const fetchDuration = performance.now() - fetchStart;
-                
-                // Clear the active fetch tracking
-                clearActiveFetch('success', false);
-
-                console.log('[Services] ✅ Fetch completed', {
-                    status: response.status,
-                    ok: response.ok,
-                    statusText: response.statusText,
-                    durationMs: fetchDuration.toFixed(2),
-                    headers: {
-                        contentType: response.headers.get('content-type'),
-                        contentLength: response.headers.get('content-length')
+                if (activeFetchController) {
+                    if (shouldAbort) {
+                        try {
+                            activeFetchController.abort();
+                        } catch (_) {}
                     }
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    activeFetchController = null;
                 }
-
-                const parseStart = performance.now();
-                const data = await response.json();
-                const parseDuration = performance.now() - parseStart;
-                
-                console.log('[Services] 📦 Response parsed', {
-                    serviceCount: Array.isArray(data?.services) ? data.services.length : 0,
-                    hasServices: Boolean(data?.services),
-                    hasSummary: Boolean(data?.summary),
-                    hasDependencyGraph: Boolean(data?.dependency_graph),
-                    summary: data?.summary || null,
-                    parseDurationMs: parseDuration.toFixed(2),
-                    dataKeys: data ? Object.keys(data) : []
-                });
-                
-                handleServicesSnapshot(data);
-            } catch (error) {
-                // Clear tracking without aborting again
-                clearActiveFetch('error', false);
-                
-                const isAborted = error?.name === 'AbortError';
-                const errorDetails = {
-                    message: error?.message || String(error),
-                    name: error?.name,
-                    stack: error?.stack,
-                    timestamp: new Date().toISOString(),
-                    errorType: error?.constructor?.name,
-                    isAborted,
-                    wasTimeout: isAborted
-                };
-                
-                console.error('[Services] ❌ Failed to load services', errorDetails);
-                
-                // Don't show error UI if this was cancelled intentionally (not a timeout)
-                if (isAborted && (error?.message?.includes('without reason') || error?.message?.includes('The user aborted a request.'))) {
-                    console.info('[Services] Fetch cancelled (likely due to navigation or dedupe)');
-                    return;
+                if (reason) {
+                    console.debug('[Services] Cleared active fetch:', reason, 'abort:', shouldAbort);
                 }
+            }
+
+            async function loadServices(options = {}) {
+                const { showLoader = false } = options;
+
+                // Cancel any existing fetch before starting
+                clearActiveFetch('new-request');
+
+                const controller = new AbortController();
+                activeFetchController = controller;
                 
-                if (isAborted) {
-                    showServicesError('Request timed out after 5s - try refreshing');
-                } else {
+                activeFetchTimeout = setTimeout(() => {
+                    console.warn('[Services] ⏰ Fetch timeout after 5s');
+                    controller.abort();
+                }, 5000);
+
+                try {
+                    console.log('[Services] 🔄 Starting services fetch', {
+                        showLoader,
+                        timestamp: new Date().toISOString()
+                    });
+                    
+                    if (showLoader) {
+                        setServicesLoading();
+                    }
+
+                    const response = await fetch('/api/services/overview', {
+                        headers: { 'X-Requested-With': 'fetch' },
+                        signal: controller.signal,
+                        cache: 'no-cache'
+                    });
+                    
+                    clearTimeout(activeFetchTimeout);
+                    activeFetchTimeout = null;
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    const data = await response.json();
+                    clearActiveFetch('success', false);
+                    
+                    console.log('[Services] ✅ Data loaded', {
+                        serviceCount: data?.services?.length || 0
+                    });
+                    
+                    handleServicesSnapshot(data);
+                    
+                } catch (error) {
+                    clearActiveFetch('error', false);
+                    
+                    if (error?.name === 'AbortError') {
+                        console.debug('[Services] Fetch aborted');
+                        // Don't show error for intentional aborts
+                        return;
+                    }
+                    
+                    console.error('[Services] ❌ Failed to load services:', error);
                     showServicesError('Failed to load services: ' + (error?.message || 'Network error'));
                 }
             }
-        }
 
-        function setServicesLoading() {
-            const tbody = document.getElementById('servicesTableBody');
-            if (!tbody) return;
-            console.debug('[Services] Setting loading state for table body');
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="12" style="text-align:center; padding: 20px; color: var(--text-muted);">
-                        Loading services…
-                    </td>
-                </tr>
-            `;
-        }
-
-        function showServicesError(message) {
-            const tbody = document.getElementById('servicesTableBody');
-            if (!tbody) return;
-            console.warn('[Services] Displaying error state', {
-                message,
-                timestamp: new Date().toISOString()
-            });
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="12" style="text-align:center; padding: 20px; color: #ef4444;">
-                        ${message}
-                    </td>
-                </tr>
-            `;
-        }
-
-        function handleServicesSnapshot(snapshot) {
-            console.log('[Services] 🔍 Processing snapshot', {
-                hasSnapshot: Boolean(snapshot),
-                hasServicesArray: Array.isArray(snapshot?.services),
-                serviceCount: Array.isArray(snapshot?.services) ? snapshot.services.length : 0,
-                keys: snapshot ? Object.keys(snapshot) : [],
-                timestamp: new Date().toISOString()
-            });
-
-            if (!snapshot || !Array.isArray(snapshot.services)) {
-                console.warn('[Services] ⚠️ Received malformed snapshot', {
-                    hasServicesArray: Array.isArray(snapshot?.services),
-                    keys: snapshot ? Object.keys(snapshot) : [],
-                    snapshotType: typeof snapshot
-                });
-                showServicesError('No services available');
-                return;
+            function setServicesLoading() {
+                const tbody = document.getElementById('servicesTableBody');
+                if (!tbody) return;
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="12" style="text-align:center; padding: 20px; color: var(--text-muted);">
+                            Loading services...
+                        </td>
+                    </tr>
+                `;
             }
 
-            servicesData = snapshot;
-            console.log('[Services] ✅ Snapshot applied to servicesData', {
-                serviceCount: snapshot.services.length,
-                summary: snapshot.summary,
-                firstServiceName: snapshot.services[0]?.name,
-                lastServiceName: snapshot.services[snapshot.services.length - 1]?.name,
-                receivedAt: new Date().toISOString()
-            });
-            
-            bindToolbarEventsOnce();
-            bindSortHandlersOnce();
-            renderServicesTable();
-        }
-
-        function startServicesFallback(intervalMs = 30000) {
-            // Always stop any existing interval (local or global)
-            stopServicesFallback();
-            if (servicesFallbackInterval || window.__servicesGlobals.intervalId) {
-                console.debug('[Services] Fallback polling already active', {
-                    intervalMs,
-                    startedAt: (servicesFallbackInterval && servicesFallbackInterval._startedAt) || (window.__servicesGlobals._startedAt) || null
-                });
-                return;
-            }
-            servicesFallbackInterval = setInterval(() => {
-                console.log('[Services] 🔁 Polling services via fallback HTTP');
-                loadServices({ showLoader: false });
-            }, intervalMs);
-            servicesFallbackInterval._startedAt = Date.now();
-            // Mirror to window global to allow cleanup from other script instances
-            window.__servicesGlobals.intervalId = servicesFallbackInterval;
-            window.__servicesGlobals._startedAt = servicesFallbackInterval._startedAt;
-            console.warn('[Services] Fallback polling enabled', {
-                intervalMs,
-                timestamp: new Date().toISOString()
-            });
-        }
-
-        function stopServicesFallback() {
-            if (servicesFallbackInterval) {
-                console.debug('[Services] Fallback polling stopped', {
-                    startedAt: servicesFallbackInterval._startedAt || null,
-                    durationMs: servicesFallbackInterval._startedAt ? Date.now() - servicesFallbackInterval._startedAt : null
-                });
-                clearInterval(servicesFallbackInterval);
-                servicesFallbackInterval = null;
-            }
-            if (window.__servicesGlobals.intervalId) {
-                clearInterval(window.__servicesGlobals.intervalId);
-                window.__servicesGlobals.intervalId = null;
-                console.debug('[Services] Stopped global fallback interval');
-            }
-        }
-
-        function initServicesWebSocket() {
-            console.log('[Services] 🔌 Initializing WebSocket integration', {
-                hasWsHub: typeof WsHub !== 'undefined',
-                servicesWsBound,
-                timestamp: new Date().toISOString()
-            });
-
-            // Ensure we always register route cleanup, regardless of WsHub availability
-            if (window.Router && typeof Router.registerCleanup === 'function' && !window.__servicesGlobals._cleanupRegistered) {
-                Router.registerCleanup(() => {
-                    servicesWsBound = false;
-                    servicesPageInitialized = false;
-                    console.debug('[Services] Route cleanup: resetting init flags');
-                    // Cancel any active fetch globally
-                    clearActiveFetch('route-change');
-                    // Stop any polling
-                    stopServicesFallback();
-                    window.__servicesGlobals._cleanupRegistered = false;
-                });
-                window.__servicesGlobals._cleanupRegistered = true;
-                console.debug('[Services] Registered route cleanup handler');
+            function showServicesError(message) {
+                const tbody = document.getElementById('servicesTableBody');
+                if (!tbody) return;
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="12" style="text-align:center; padding: 20px; color: #ef4444;">
+                            ${message}
+                        </td>
+                    </tr>
+                `;
             }
 
-            if (typeof WsHub === 'undefined') {
-                console.warn('[Services] ⚠️ WsHub unavailable, switching to HTTP polling');
-                startServicesFallback(30000);
-                return;
-            }
-
-            if (servicesWsBound) {
-                console.log('[Services] ℹ️ WebSocket handlers already bound, skipping');
-                return;
-            }
-            
-            servicesWsBound = true;
-            console.log('[Services] ✅ Binding websocket handlers', {
-                isConnected: typeof WsHub.isConnected === 'function' ? WsHub.isConnected() : null,
-                hasSubscribe: typeof WsHub.subscribe === 'function'
-            });
-
-            const onSnapshot = (snapshot) => {
-                console.log('[Services] 📬 WebSocket snapshot received', {
-                    serviceCount: Array.isArray(snapshot?.services) ? snapshot.services.length : 0,
-                    summary: snapshot?.summary || null,
-                    hasData: Boolean(snapshot),
-                    timestamp: new Date().toISOString()
-                });
-                stopServicesFallback();
-                handleServicesSnapshot(snapshot);
-            };
-
-            const onWarning = (payload) => {
-                if (payload.channel === 'services') {
-                    console.warn('[Services] WebSocket warning', {
-                        message: payload.message,
-                        timestamp: new Date().toISOString()
-                    });
-                    startServicesFallback(30000);
+            function handleServicesSnapshot(snapshot) {
+                if (!snapshot || !Array.isArray(snapshot.services)) {
+                    showServicesError('No services available');
+                    return;
                 }
-            };
 
-            const onDisconnect = () => {
-                console.warn('[Services] WebSocket disconnected, enabling fallback polling', {
-                    timestamp: new Date().toISOString()
+                servicesData = snapshot;
+                console.log('[Services] ✅ Snapshot applied', {
+                    serviceCount: snapshot.services.length
                 });
-                startServicesFallback(30000);
-            };
+                
+                bindToolbarEventsOnce();
+                bindSortHandlersOnce();
+                renderServicesTable();
+            }
 
-            const onReconnect = () => {
-                console.info('[Services] WebSocket reconnected, refreshing snapshot and resubscribing');
+            function startServicesFallback(intervalMs = 30000) {
                 stopServicesFallback();
-                // Resubscribe to services channel after reconnect to get immediate snapshot
+                servicesFallbackInterval = setInterval(() => {
+                    console.log('[Services] 🔁 Polling services via fallback HTTP');
+                    loadServices({ showLoader: false });
+                }, intervalMs);
+                console.debug('[Services] Fallback polling enabled');
+            }
+
+            function stopServicesFallback() {
+                if (servicesFallbackInterval) {
+                    clearInterval(servicesFallbackInterval);
+                    servicesFallbackInterval = null;
+                    console.debug('[Services] Fallback polling stopped');
+                }
+            }
+
+            function initServicesWebSocket() {
+                console.log('[Services] 🔌 Initializing WebSocket integration');
+                if (window.Router && typeof Router.registerCleanup === 'function' && !cleanupRegistered) {
+                    Router.registerCleanup(() => {
+                        servicesWsBound = false;
+                        cleanupRegistered = false;
+                        console.debug('[Services] Cleanup triggered');
+                        if (typeof WsHub !== 'undefined') {
+                            const { onSnapshot, onDisconnect, onReconnect } = wsHandlers;
+                            if (onSnapshot) { try { WsHub.unsubscribe('services', onSnapshot); } catch (_) {} }
+                            if (onDisconnect) { try { WsHub.unsubscribe('_disconnected', onDisconnect); } catch (_) {} }
+                            if (onReconnect) { try { WsHub.unsubscribe('_connected', onReconnect); } catch (_) {} }
+                        }
+                        wsHandlers = { onSnapshot: null, onDisconnect: null, onReconnect: null };
+                        stopServicesFallback();
+                        clearActiveFetch('cleanup');
+                    });
+                    cleanupRegistered = true;
+                }
+
+                if (typeof WsHub === 'undefined') {
+                    console.warn('[Services] ⚠️ WsHub unavailable, using HTTP polling');
+                    startServicesFallback(30000);
+                    return;
+                }
+
+                if (servicesWsBound) {
+                    console.debug('[Services] WebSocket already bound');
+                    return;
+                }
+                
+                servicesWsBound = true;
+
+                const onSnapshot = (snapshot) => {
+                    console.log('[Services] 📬 WebSocket snapshot received');
+                    stopServicesFallback();
+                    handleServicesSnapshot(snapshot);
+                };
+
+                const onDisconnect = () => {
+                    console.warn('[Services] WebSocket disconnected, enabling fallback');
+                    startServicesFallback(30000);
+                };
+
+                const onReconnect = () => {
+                    console.info('[Services] WebSocket reconnected');
+                    stopServicesFallback();
+                    if (WsHub.isConnected()) {
+                        WsHub.send({ type: 'subscribe', channel: 'services' });
+                    }
+                };
+
+                wsHandlers = { onSnapshot, onDisconnect, onReconnect };
+
+                WsHub.subscribe('services', onSnapshot);
+                WsHub.subscribe('_disconnected', onDisconnect);
+                WsHub.subscribe('_connected', onReconnect);
+
+                // Send subscribe request
                 if (WsHub.isConnected()) {
+                    console.log('[Services] 📤 Subscribing to services channel');
                     WsHub.send({ type: 'subscribe', channel: 'services' });
                 }
-            };
 
-            // CRITICAL: Bind listener FIRST, then send subscribe message
-            // This ensures we capture the immediate snapshot pushed by the backend
-            WsHub.subscribe('services', onSnapshot);
-            WsHub.subscribe('_warning', onWarning);
-            WsHub.subscribe('_disconnected', onDisconnect);
-            WsHub.subscribe('_failed', onDisconnect);
-            WsHub.subscribe('_connected', onReconnect);
-
-            // Now send the subscribe request - backend will push immediate snapshot
-            if (WsHub.isConnected()) {
-                console.log('[Services] 📤 Sending subscribe request to backend');
-                WsHub.send({ type: 'subscribe', channel: 'services' });
-            } else {
-                console.warn('[Services] Not connected yet, will subscribe on connect');
+                // Register cleanup
+                // Cleanup already registered above when available
             }
 
-            if (!WsHub.isConnected()) {
-                console.debug('[Services] WebSocket not connected yet, enabling fallback');
-                startServicesFallback(30000);
+            function currentFilters() {
+                const q = (document.getElementById('serviceSearch')?.value || '').toLowerCase();
+                const status = document.getElementById('statusFilter')?.value || 'all';
+                const enabledOnly = document.getElementById('enabledOnly')?.checked || false;
+                return { q, status, enabledOnly };
             }
 
-            if (window.Router && typeof Router.registerCleanup === 'function') {
-                Router.registerCleanup(() => {
-                    servicesWsBound = false;
-                    servicesPageInitialized = false;
-                    console.debug('[Services] Cleaning up websocket handlers due to route change');
-                    try { WsHub.unsubscribe('services', onSnapshot); } catch(_){}
-                    try { WsHub.unsubscribe('_warning', onWarning); } catch(_){}
-                    try { WsHub.unsubscribe('_disconnected', onDisconnect); } catch(_){}
-                    try { WsHub.unsubscribe('_failed', onDisconnect); } catch(_){}
-                    try { WsHub.unsubscribe('_connected', onReconnect); } catch(_){}
-                    stopServicesFallback();
-                    clearActiveFetch('route-change');
+            function filteredAndSortedServices() {
+                if (!servicesData) return [];
+                const { q, status, enabledOnly } = currentFilters();
+                let arr = servicesData.services.slice();
+
+                // Filter
+                arr = arr.filter(s => {
+                    const matchesText = !q || s.name.toLowerCase().includes(q);
+                    const matchesStatus = status === 'all' || (s.health?.status === status);
+                    const matchesEnabled = !enabledOnly || s.enabled;
+                    return matchesText && matchesStatus && matchesEnabled;
                 });
-            }
 
-            window.addEventListener('beforeunload', () => {
-                console.debug('[Services] Unbinding websocket handlers before unload');
-                WsHub.unsubscribe('services', onSnapshot);
-                WsHub.unsubscribe('_warning', onWarning);
-                WsHub.unsubscribe('_disconnected', onDisconnect);
-                WsHub.unsubscribe('_failed', onDisconnect);
-                WsHub.unsubscribe('_connected', onReconnect);
-            }, { once: true });
-        }
-
-        function currentFilters() {
-            const q = (document.getElementById('serviceSearch')?.value || '').toLowerCase();
-            const status = document.getElementById('statusFilter')?.value || 'all';
-            const enabledOnly = document.getElementById('enabledOnly')?.checked || false;
-            return { q, status, enabledOnly };
-        }
-
-        function filteredAndSortedServices() {
-            if (!servicesData) return [];
-            const { q, status, enabledOnly } = currentFilters();
-            let arr = servicesData.services.slice();
-
-            // Filter
-            arr = arr.filter(s => {
-                const matchesText = !q || s.name.toLowerCase().includes(q);
-                const matchesStatus = status === 'all' || (s.health?.status === status);
-                const matchesEnabled = !enabledOnly || s.enabled;
-                return matchesText && matchesStatus && matchesEnabled;
-            });
-
-            // Sort
-            const getKey = (s) => {
-                const m = s.metrics || {};
-                switch (sortKey) {
-                    case 'name': return s.name || '';
-                    case 'health': return healthRank(s.health?.status);
-                    case 'priority': return s.priority || 0;
-                    case 'enabled': return s.enabled ? 1 : 0;
-                    case 'uptime': return s.uptime_seconds || 0;
-                    case 'activity': {
-                        const total = (m.total_poll_duration_ns||0)+(m.total_idle_duration_ns||0);
-                        return total>0 ? (m.total_poll_duration_ns||0)/total : 0;
+                // Sort
+                const getKey = (s) => {
+                    const m = s.metrics || {};
+                    switch (sortKey) {
+                        case 'name': return s.name || '';
+                        case 'health': return healthRank(s.health?.status);
+                        case 'priority': return s.priority || 0;
+                        case 'enabled': return s.enabled ? 1 : 0;
+                        case 'uptime': return s.uptime_seconds || 0;
+                        case 'activity': {
+                            const total = (m.total_poll_duration_ns||0)+(m.total_idle_duration_ns||0);
+                            return total>0 ? (m.total_poll_duration_ns||0)/total : 0;
+                        }
+                        case 'poll': return m.mean_poll_duration_ns || 0;
+                        case 'pps': return (s.uptime_seconds>0) ? (m.total_polls||0)/s.uptime_seconds : 0;
+                        case 'tasks': return m.task_count || 0;
+                        case 'ops': return m.operations_per_second || 0;
+                        case 'errors': return m.errors_total || 0;
+                        default: return s.priority || 0;
                     }
-                    case 'poll': return m.mean_poll_duration_ns || 0;
-                    case 'pps': return (s.uptime_seconds>0) ? (m.total_polls||0)/s.uptime_seconds : 0;
-                    case 'tasks': return m.task_count || 0;
-                    case 'ops': return m.operations_per_second || 0;
-                    case 'errors': return m.errors_total || 0;
-                    default: return s.priority || 0;
+                };
+
+                arr.sort((a,b) => {
+                    const ka = getKey(a);
+                    const kb = getKey(b);
+                    if (ka < kb) return sortDir === 'asc' ? -1 : 1;
+                    if (ka > kb) return sortDir === 'asc' ? 1 : -1;
+                    return 0;
+                });
+
+                return arr;
+            }
+
+            function renderServicesTable() {
+                if (!servicesData) return;
+
+                // Update summary chips
+                document.getElementById('totalServices').textContent = servicesData.summary.total_services;
+                document.getElementById('healthyServices').textContent = servicesData.summary.healthy_services;
+                document.getElementById('startingServices').textContent = servicesData.summary.starting_services;
+                const unhealthyTotal = (servicesData.summary.unhealthy_services || 0) + (servicesData.summary.degraded_services || 0);
+                document.getElementById('unhealthyServices').textContent = unhealthyTotal;
+
+                // Process-wide metrics
+                if (servicesData.services && servicesData.services.length > 0) {
+                    const m0 = servicesData.services[0].metrics || {};
+                    const cpu = Number.isFinite(m0.process_cpu_percent) ? m0.process_cpu_percent : 0;
+                    document.getElementById('processCpu').textContent = `${cpu.toFixed(1)}%`;
+                    document.getElementById('processMemory').textContent = formatBytes(m0.process_memory_bytes||0);
                 }
+
+                const tbody = document.getElementById('servicesTableBody');
+                if (!tbody) return;
+
+                const filtered = filteredAndSortedServices();
+                const rows = filtered.map(service => {
+                    const m = service.metrics || {};
+                    const deps = service.dependencies && service.dependencies.length
+                        ? service.dependencies.map(dep => `<span class="dependency-badge">${dep}</span>`).join(' ')
+                        : '<span class="detail-value">None</span>';
+
+                    const total = (m.total_poll_duration_ns||0)+(m.total_idle_duration_ns||0);
+                    const activity = total>0 ? ((m.total_poll_duration_ns||0)/total*100) : 0;
+                    const activityColor = activity>80 ? '#10b981' : activity>50 ? '#3b82f6' : activity>20 ? '#f59e0b' : activity>5 ? '#6b7280' : '#9ca3af';
+                    const avgPoll = formatDuration(m.mean_poll_duration_ns||0);
+                    const pps = service.uptime_seconds>0 ? ((m.total_polls||0)/service.uptime_seconds).toFixed(2) : '0.00';
+
+                    const taskInfo = m.task_count>0 ? `${m.task_count} tasks\nPoll: ${formatDuration(m.mean_poll_duration_ns)}\nIdle: ${formatDuration(m.mean_idle_duration_ns)}\nTotal Polls: ${m.total_polls||0}` : 'No instrumented tasks';
+
+                    return `
+                        <tr>
+                            <td style="font-weight:600;">${service.name}</td>
+                            <td><span class="badge ${getHealthBadgeClass(service.health)}">${getHealthStatus(service.health)}</span></td>
+                            <td>${service.priority}</td>
+                            <td>${service.enabled ? '✅' : '❌'}</td>
+                            <td>${formatUptime(service.uptime_seconds)}</td>
+                            <td class="activity-cell" title="${activity.toFixed(1)}% busy">
+                                <div class="activity-track"><div class="activity-fill" style="width:${activity.toFixed(1)}%; background:${activityColor}"></div></div>
+                                <div class="activity-meta"><span>${activity.toFixed(1)}%</span><span>${m.total_polls||0} polls</span></div>
+                            </td>
+                            <td title="Average duration per poll">${avgPoll}</td>
+                            <td title="Polls per second">${pps}</td>
+                            <td title="${taskInfo}">${m.task_count||0}</td>
+                            <td title="Operations per second">${(m.operations_per_second||0).toFixed(2)}</td>
+                            <td title="Total errors">${m.errors_total||0}</td>
+                            <td>${deps}</td>
+                        </tr>`;
+                }).join('');
+                
+                tbody.innerHTML = rows || `
+                    <tr>
+                        <td colspan="12" style="text-align:center; padding: 20px; color: var(--text-muted);">No services</td>
+                    </tr>`;
+            }
+
+            function bindToolbarEventsOnce() {
+                if (bindToolbarEventsOnce._bound) return; 
+                bindToolbarEventsOnce._bound = true;
+                
+                document.getElementById('serviceSearch')?.addEventListener('input', renderServicesTable);
+                document.getElementById('statusFilter')?.addEventListener('change', renderServicesTable);
+                document.getElementById('enabledOnly')?.addEventListener('change', renderServicesTable);
+            }
+
+            function bindSortHandlersOnce() {
+                if (bindSortHandlersOnce._bound) return;
+                bindSortHandlersOnce._bound = true;
+                
+                document.querySelectorAll('#servicesTable thead th[data-sort]').forEach(th => {
+                    th.addEventListener('click', () => {
+                        const key = th.getAttribute('data-sort');
+                        if (!key) return;
+                        if (sortKey === key) {
+                            sortDir = (sortDir === 'asc') ? 'desc' : 'asc';
+                        } else {
+                            sortKey = key;
+                            sortDir = 'asc';
+                        }
+                        document.querySelectorAll('#servicesTable thead th[data-sort]').forEach(h => {
+                            h.classList.remove('asc','desc');
+                        });
+                        th.classList.add(sortDir);
+                        renderServicesTable();
+                    });
+                });
+            }
+
+            function healthRank(status) {
+                switch (status) {
+                    case 'healthy': return 3;
+                    case 'degraded': return 2;
+                    case 'starting': return 1;
+                    case 'unhealthy': return 0;
+                    default: return -1;
+                }
+            }
+
+            function getHealthStatus(health) {
+                if (health?.status === 'healthy') return '✅ Healthy';
+                if (health?.status === 'starting') return '⏳ Starting';
+                if (health?.status === 'degraded') return '⚠️ Degraded';
+                if (health?.status === 'unhealthy') return '❌ Unhealthy';
+                return '⏸️ ' + (health?.status || 'unknown');
+            }
+
+            function getHealthBadgeClass(health) {
+                if (health?.status === 'healthy') return 'success';
+                if (health?.status === 'starting') return 'warning';
+                if (health?.status === 'degraded') return 'warning';
+                if (health?.status === 'unhealthy') return 'error';
+                return 'secondary';
+            }
+
+            function formatUptime(seconds) {
+                if (!seconds || seconds < 60) return `${seconds||0}s`;
+                if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+                if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+                return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`;
+            }
+
+            function formatBytes(bytes) {
+                if (!bytes || bytes < 1024) return `${bytes||0} B`;
+                if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+                if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(1)} MB`;
+                return `${(bytes / 1073741824).toFixed(2)} GB`;
+            }
+
+            function formatDuration(nanos) {
+                if (!nanos || nanos < 1000) return `${nanos||0}ns`;
+                if (nanos < 1000000) return `${(nanos / 1000).toFixed(1)}µs`;
+                if (nanos < 1000000000) return `${(nanos / 1000000).toFixed(1)}ms`;
+                return `${(nanos / 1000000000).toFixed(2)}s`;
+            }
+
+            window.refreshServices = function() {
+                console.info('[Services] Manual refresh requested');
+                loadServices({ showLoader: true });
             };
 
-            arr.sort((a,b) => {
-                const ka = getKey(a);
-                const kb = getKey(b);
-                if (ka < kb) return sortDir === 'asc' ? -1 : 1;
-                if (ka > kb) return sortDir === 'asc' ? 1 : -1;
-                return 0;
-            });
-
-            return arr;
-        }
-
-        function renderServicesTable() {
-            console.log('[Services] 🎨 Starting table render', {
-                hasServicesData: Boolean(servicesData),
-                serviceCount: servicesData?.services?.length || 0,
-                sortKey,
-                sortDir,
-                timestamp: new Date().toISOString()
-            });
-
-            if (!servicesData) {
-                console.warn('[Services] ⚠️ Render aborted: servicesData is null');
-                return;
-            }
-
-            // Update compact summary chips
-            document.getElementById('totalServices').textContent = servicesData.summary.total_services;
-            document.getElementById('healthyServices').textContent = servicesData.summary.healthy_services;
-            document.getElementById('startingServices').textContent = servicesData.summary.starting_services;
-            const unhealthyTotal = (servicesData.summary.unhealthy_services || 0) + (servicesData.summary.degraded_services || 0);
-            document.getElementById('unhealthyServices').textContent = unhealthyTotal;
-
-            console.log('[Services] 📊 Summary chips updated', {
-                total: servicesData.summary.total_services,
-                healthy: servicesData.summary.healthy_services,
-                starting: servicesData.summary.starting_services,
-                unhealthy: unhealthyTotal
-            });
-
-            // Process-wide metrics
-            if (servicesData.services && servicesData.services.length > 0) {
-                const m0 = servicesData.services[0].metrics || {};
-                const cpu = Number.isFinite(m0.process_cpu_percent) ? m0.process_cpu_percent : 0;
-                document.getElementById('processCpu').textContent = `${cpu.toFixed(1)}%`;
-                document.getElementById('processMemory').textContent = formatBytes(m0.process_memory_bytes||0);
+            // Global init function for Router
+            window.initServicesPage = function() {
+                console.log('[Services] 🚀 Initializing page');
                 
-                console.log('[Services] 💻 Process metrics updated', {
-                    cpu: cpu.toFixed(1),
-                    memory: formatBytes(m0.process_memory_bytes||0)
-                });
+                // Clean up any previous state
+                clearActiveFetch('init');
+                stopServicesFallback();
+                
+                // Start fresh
+                loadServices({ showLoader: true });
+                initServicesWebSocket();
+            };
+
+            // Initialize immediately if not in SPA mode
+            if (!window.Router) {
+                initServicesPage();
             }
-
-            const tbody = document.getElementById('servicesTableBody');
-            if (!tbody) {
-                console.error('[Services] ❌ Table body element not found');
-                return;
-            }
-
-            const filtered = filteredAndSortedServices();
-            console.log('[Services] 🔍 Filtered services', {
-                originalCount: servicesData.services.length,
-                filteredCount: filtered.length
-            });
-            const rows = filtered.map(service => {
-                const m = service.metrics || {};
-                const deps = service.dependencies && service.dependencies.length
-                    ? service.dependencies.map(dep => `<span class=\"dependency-badge\">${dep}</span>`).join(' ')
-                    : '<span class="detail-value">None</span>';
-
-                const total = (m.total_poll_duration_ns||0)+(m.total_idle_duration_ns||0);
-                const activity = total>0 ? ((m.total_poll_duration_ns||0)/total*100) : 0;
-                const activityColor = activity>80 ? '#10b981' : activity>50 ? '#3b82f6' : activity>20 ? '#f59e0b' : activity>5 ? '#6b7280' : '#9ca3af';
-                const avgPoll = formatDuration(m.mean_poll_duration_ns||0);
-                const pps = service.uptime_seconds>0 ? ((m.total_polls||0)/service.uptime_seconds).toFixed(2) : '0.00';
-
-                const taskInfo = m.task_count>0 ? `${m.task_count} tasks\nPoll: ${formatDuration(m.mean_poll_duration_ns)}\nIdle: ${formatDuration(m.mean_idle_duration_ns)}\nTotal Polls: ${m.total_polls||0}` : 'No instrumented tasks';
-
-                return `
-                    <tr>
-                        <td style="font-weight:600;">${service.name}</td>
-                        <td><span class="badge ${getHealthBadgeClass(service.health)}">${getHealthStatus(service.health)}</span></td>
-                        <td>${service.priority}</td>
-                        <td>${service.enabled ? '✅' : '❌'}</td>
-                        <td>${formatUptime(service.uptime_seconds)}</td>
-                        <td class="activity-cell" title="${activity.toFixed(1)}% busy">
-                            <div class="activity-track"><div class="activity-fill" style="width:${activity.toFixed(1)}%; background:${activityColor}"></div></div>
-                            <div class="activity-meta"><span>${activity.toFixed(1)}%</span><span>${m.total_polls||0} polls</span></div>
-                        </td>
-                        <td title="Average duration per poll">${avgPoll}</td>
-                        <td title="Polls per second">${pps}</td>
-                        <td title="${taskInfo}">${m.task_count||0}</td>
-                        <td title="Operations per second">${(m.operations_per_second||0).toFixed(2)}</td>
-                        <td title="Total errors">${m.errors_total||0}</td>
-                        <td>${deps}</td>
-                    </tr>`;
-            }).join('');
-
-            const filters = currentFilters();
-            const renderedCount = rows ? filtered.length : 0;
-            
-            console.log('[Services] ✅ Table rendered', {
-                renderedCount,
-                totalServices: servicesData.services.length,
-                sortKey,
-                sortDir,
-                filters,
-                rowsGenerated: Boolean(rows),
-                timestamp: new Date().toISOString()
-            });
-            
-            tbody.innerHTML = rows || `
-                <tr>
-                    <td colspan="12" style="text-align:center; padding: 20px; color: var(--text-muted);">No services</td>
-                </tr>`;
-        }
-
-        function bindToolbarEventsOnce() {
-            if (bindToolbarEventsOnce._bound) return; bindToolbarEventsOnce._bound = true;
-            console.debug('[Services] Binding toolbar filters');
-            document.getElementById('serviceSearch')?.addEventListener('input', (event) => {
-                console.debug('[Services] Search filter updated', {
-                    value: event.target?.value || '',
-                    timestamp: new Date().toISOString()
-                });
-                renderServicesTable();
-            });
-            document.getElementById('statusFilter')?.addEventListener('change', (event) => {
-                console.debug('[Services] Status filter changed', {
-                    value: event.target?.value || 'all',
-                    timestamp: new Date().toISOString()
-                });
-                renderServicesTable();
-            });
-            document.getElementById('enabledOnly')?.addEventListener('change', (event) => {
-                console.debug('[Services] Enabled filter toggled', {
-                    checked: Boolean(event.target?.checked),
-                    timestamp: new Date().toISOString()
-                });
-                renderServicesTable();
-            });
-        }
-
-        function bindSortHandlersOnce() {
-            if (bindSortHandlersOnce._bound) return; bindSortHandlersOnce._bound = true;
-            console.debug('[Services] Binding table sort handlers');
-            document.querySelectorAll('#servicesTable thead th[data-sort]').forEach(th => {
-                th.addEventListener('click', () => {
-                    const key = th.getAttribute('data-sort');
-                    if (!key) return;
-                    if (sortKey === key) { sortDir = (sortDir === 'asc') ? 'desc' : 'asc'; } else { sortKey = key; sortDir = 'asc'; }
-                    document.querySelectorAll('#servicesTable thead th[data-sort]').forEach(h => h.classList.remove('asc','desc'));
-                    th.classList.add(sortDir);
-                    console.debug('[Services] Sort updated', {
-                        sortKey,
-                        sortDir,
-                        timestamp: new Date().toISOString()
-                    });
-                    renderServicesTable();
-                });
-            });
-        }
-
-        function healthRank(status) {
-            switch (status) {
-                case 'healthy': return 3;
-                case 'degraded': return 2;
-                case 'starting': return 1;
-                case 'unhealthy': return 0;
-                default: return -1;
-            }
-        }
-
-        function getHealthStatus(health) {
-            if (health?.status === 'healthy') return '✅ Healthy';
-            if (health?.status === 'starting') return '⏳ Starting';
-            if (health?.status === 'degraded') return '⚠️ Degraded';
-            if (health?.status === 'unhealthy') return '❌ Unhealthy';
-            return '⏸️ ' + (health?.status || 'unknown');
-        }
-
-        function getHealthBadgeClass(health) {
-            if (health?.status === 'healthy') return 'success';
-            if (health?.status === 'starting') return 'warning';
-            if (health?.status === 'degraded') return 'warning';
-            if (health?.status === 'unhealthy') return 'error';
-            return 'secondary';
-        }
-
-        function formatUptime(seconds) {
-            if (!seconds || seconds < 60) return `${seconds||0}s`;
-            if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-            if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
-            return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`;
-        }
-
-        function formatBytes(bytes) {
-            if (!bytes || bytes < 1024) return `${bytes||0} B`;
-            if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
-            if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(1)} MB`;
-            return `${(bytes / 1073741824).toFixed(2)} GB`;
-        }
-
-        function formatDuration(nanos) {
-            if (!nanos || nanos < 1000) return `${nanos||0}ns`;
-            if (nanos < 1000000) return `${(nanos / 1000).toFixed(1)}µs`;
-            if (nanos < 1000000000) return `${(nanos / 1000000).toFixed(1)}ms`;
-            return `${(nanos / 1000000000).toFixed(2)}s`;
-        }
-
-        function refreshServices() {
-            console.info('[Services] Manual refresh requested');
-            loadServices({ showLoader: true });
-        }
-
-        // Global init function for Router to call during SPA navigation
-        window.initServicesPage = function() {
-            // Prevent double initialization
-            if (servicesPageInitialized) {
-                console.info('[Services] ℹ️ Page already initialized, skipping duplicate init', {
-                    timestamp: new Date().toISOString(),
-                    fromSpaNavigation: Boolean(window.Router?.getCurrentRoute)
-                });
-                return;
-            }
-            
-            servicesPageInitialized = true;
-            console.log('[Services] 🚀 Initializing page', {
-                timestamp: new Date().toISOString(),
-                fromSpaNavigation: Boolean(window.Router?.getCurrentRoute),
-                currentRoute: window.Router?.getCurrentRoute?.(),
-                hasServicesData: Boolean(servicesData),
-                wsBound: servicesWsBound
-            });
-            loadServices({ showLoader: true });
-            initServicesWebSocket();
-        };
-
-        // Execute initialization immediately (works for both initial load and SPA navigation)
-        console.log('[Services] 🎬 Executing immediate initialization');
-        initServicesPage();
+        })();
     </script>
     "#.to_string()
 }
