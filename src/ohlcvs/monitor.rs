@@ -53,6 +53,7 @@ impl OhlcvMonitor {
         tokio::spawn(self.clone().gap_fill_loop());
         tokio::spawn(self.clone().cleanup_loop());
         tokio::spawn(self.clone().cache_maintenance_loop());
+        tokio::spawn(self.clone().sync_pool_service_tokens());
 
         Ok(())
     }
@@ -425,6 +426,117 @@ impl OhlcvMonitor {
                 }
 
                 sleep(Duration::from_secs(1)).await;
+            }
+        }
+    }
+
+    async fn sync_pool_service_tokens(self: Arc<Self>) {
+        let mut tick = interval(Duration::from_secs(300)); // Every 5 minutes
+
+        loop {
+            tick.tick().await;
+
+            if *self.shutdown_signal.read().await {
+                break;
+            }
+
+            // Get all tokens with available prices from Pool Service (same list Trader monitors)
+            let available_mints = crate::pools::get_available_tokens();
+
+            // Get open positions to determine priority
+            let open_positions = match crate::positions::state::get_open_positions().await {
+                positions if !positions.is_empty() => {
+                    positions
+                        .into_iter()
+                        .map(|p| p.mint)
+                        .collect::<std::collections::HashSet<_>>()
+                }
+                _ => std::collections::HashSet::new(),
+            };
+
+            let mut added = 0;
+            let mut upgraded = 0;
+            let mut already_monitored = 0;
+
+            // Add or upgrade tokens from Pool Service
+            for mint in &available_mints {
+                let active_tokens = self.active_tokens.read().await;
+
+                if let Some(config) = active_tokens.get(mint) {
+                    // Token already monitored
+                    already_monitored += 1;
+
+                    // Upgrade to Critical if has open position
+                    if open_positions.contains(mint) && config.priority != Priority::Critical {
+                        drop(active_tokens);
+                        if let Err(e) = self.update_priority(mint, Priority::Critical).await {
+                            eprintln!(
+                                "[OHLCV Sync] Failed to upgrade priority for {}: {}",
+                                mint,
+                                e
+                            );
+                        } else {
+                            upgraded += 1;
+                        }
+                    }
+                } else {
+                    // New token - add with appropriate priority
+                    drop(active_tokens);
+
+                    let priority = if open_positions.contains(mint) {
+                        Priority::Critical
+                    } else {
+                        Priority::Low
+                    };
+
+                    if let Err(e) = self.add_token(mint.clone(), priority).await {
+                        eprintln!("[OHLCV Sync] Failed to add token {}: {}", mint, e);
+                    } else {
+                        added += 1;
+                    }
+                }
+            }
+
+            // Optional: Remove tokens no longer in Pool Service
+            // (Keep tokens that were manually added or have positions)
+            let available_set: std::collections::HashSet<_> = available_mints
+                .iter()
+                .cloned()
+                .collect();
+            let mut removed = 0;
+
+            let active_tokens = self.active_tokens.read().await;
+            let tokens_to_check: Vec<String> = active_tokens.keys().cloned().collect();
+            drop(active_tokens);
+
+            for mint in tokens_to_check {
+                // Don't remove if has open position
+                if open_positions.contains(&mint) {
+                    continue;
+                }
+
+                // Don't remove if still in Pool Service
+                if available_set.contains(&mint) {
+                    continue;
+                }
+
+                // Remove stale token
+                if let Err(e) = self.remove_token(&mint).await {
+                    eprintln!("[OHLCV Sync] Failed to remove token {}: {}", mint, e);
+                } else {
+                    removed += 1;
+                }
+            }
+
+            if added > 0 || upgraded > 0 || removed > 0 {
+                println!(
+                    "[OHLCV Sync] Pool Service sync: {} available, {} added, {} upgraded, {} removed, {} already monitored",
+                    available_mints.len(),
+                    added,
+                    upgraded,
+                    removed,
+                    already_monitored
+                );
             }
         }
     }
