@@ -34,7 +34,10 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
                 <span id="themeText">Dark</span>
             </button>
             <div class="status-indicator">
-                <span id="statusBadge" class="badge loading">⏳ Loading...</span>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <span id="wsBadge" class="badge loading" title="WebSocket Connection">🔌 WS</span>
+                    <span id="botBadge" class="badge loading" title="Bot Status">🤖 BOT</span>
+                </div>
             </div>
         </div>
     </div>
@@ -2307,22 +2310,63 @@ fn common_scripts() -> &'static str {
         
         let statusPollInterval = null;
 
-        function setStatusBadge(state, message) {
-            const badge = document.getElementById('statusBadge');
+        function setWsBadge(state, message) {
+            const badge = document.getElementById('wsBadge');
             if (!badge) return;
 
             switch (state) {
-                case 'online':
+                case 'connected':
                     badge.className = 'badge online';
-                    badge.innerHTML = message || '✓ Online';
+                    badge.innerHTML = message || '🔌 Connected';
+                    badge.title = 'WebSocket: Connected';
                     break;
-                case 'error':
+                case 'disconnected':
                     badge.className = 'badge error';
-                    badge.innerHTML = message || '✗ Error';
+                    badge.innerHTML = message || '🔌 Offline';
+                    badge.title = 'WebSocket: Disconnected';
+                    break;
+                case 'connecting':
+                    badge.className = 'badge loading';
+                    badge.innerHTML = message || '🔌 Connecting';
+                    badge.title = 'WebSocket: Connecting...';
                     break;
                 default:
                     badge.className = 'badge loading';
-                    badge.innerHTML = message || '⏳ Starting...';
+                    badge.innerHTML = message || '🔌 WS';
+                    badge.title = 'WebSocket: Unknown';
+                    break;
+            }
+        }
+
+        function setBotBadge(state, message) {
+            const badge = document.getElementById('botBadge');
+            if (!badge) return;
+
+            switch (state) {
+                case 'running':
+                    badge.className = 'badge online';
+                    badge.innerHTML = message || '🤖 Running';
+                    badge.title = 'Bot: Running';
+                    break;
+                case 'stopped':
+                    badge.className = 'badge error';
+                    badge.innerHTML = message || '🤖 Stopped';
+                    badge.title = 'Bot: Stopped';
+                    break;
+                case 'error':
+                    badge.className = 'badge error';
+                    badge.innerHTML = message || '🤖 Error';
+                    badge.title = 'Bot: Error';
+                    break;
+                case 'starting':
+                    badge.className = 'badge loading';
+                    badge.innerHTML = message || '🤖 Starting';
+                    badge.title = 'Bot: Starting...';
+                    break;
+                default:
+                    badge.className = 'badge loading';
+                    badge.innerHTML = message || '🤖 BOT';
+                    badge.title = 'Bot: Unknown';
                     break;
             }
         }
@@ -2350,14 +2394,28 @@ fn common_scripts() -> &'static str {
             return null;
         }
 
-        function renderStatusBadgeFromSnapshot(snapshot) {
+        function renderStatusBadgesFromSnapshot(snapshot) {
+            if (!snapshot || typeof snapshot !== 'object') {
+                setBotBadge('error', '🤖 Error');
+                return;
+            }
+
+            // Update bot status badge
             const allReady = deriveAllReady(snapshot);
+            const tradingEnabled = snapshot.trading_enabled;
+            
             if (allReady === true) {
-                setStatusBadge('online', '✓ Online');
+                if (tradingEnabled === true) {
+                    setBotBadge('running', '🤖 Running');
+                } else if (tradingEnabled === false) {
+                    setBotBadge('stopped', '🤖 Stopped');
+                } else {
+                    setBotBadge('running', '🤖 Ready');
+                }
             } else if (allReady === false) {
-                setStatusBadge('loading', '⏳ Starting...');
+                setBotBadge('starting', '🤖 Starting');
             } else {
-                setStatusBadge('loading', '⏳ Connecting...');
+                setBotBadge('starting', '🤖 Connecting');
             }
         }
 
@@ -2366,11 +2424,11 @@ fn common_scripts() -> &'static str {
                 const res = await fetch('/api/status');
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
-                renderStatusBadgeFromSnapshot(data);
+                renderStatusBadgesFromSnapshot(data);
                 return data;
             } catch (error) {
                 console.warn('Failed to fetch status snapshot:', error);
-                setStatusBadge('error', '✗ Error');
+                setBotBadge('error', '🤖 Error');
                 return null;
             }
         }
@@ -2412,22 +2470,35 @@ fn common_scripts() -> &'static str {
             const handleStatusUpdate = (snapshot) => {
                 if (!snapshot) return;
                 stopStatusPolling();
-                renderStatusBadgeFromSnapshot(snapshot);
+                renderStatusBadgesFromSnapshot(snapshot);
             };
 
             const handleStatusDisconnect = () => {
+                setWsBadge('disconnected', '🔌 Offline');
                 startStatusPolling();
             };
 
             const handleStatusReconnect = () => {
+                setWsBadge('connected', '🔌 Connected');
                 stopStatusPolling();
                 fetchStatusSnapshot();
+            };
+            
+            const handleStatusConnecting = () => {
+                setWsBadge('connecting', '🔌 Connecting');
             };
 
             WsHub.subscribe('status', handleStatusUpdate);
             WsHub.subscribe('_disconnected', handleStatusDisconnect);
             WsHub.subscribe('_failed', handleStatusDisconnect);
             WsHub.subscribe('_connected', handleStatusReconnect);
+            
+            // Set initial WebSocket badge state
+            if (WsHub.isConnected()) {
+                setWsBadge('connected', '🔌 Connected');
+            } else {
+                setWsBadge('connecting', '🔌 Connecting');
+            }
 
             window.addEventListener('beforeunload', () => {
                 WsHub.unsubscribe('status', handleStatusUpdate);
@@ -2435,6 +2506,9 @@ fn common_scripts() -> &'static str {
                 WsHub.unsubscribe('_failed', handleStatusDisconnect);
                 WsHub.unsubscribe('_connected', handleStatusReconnect);
             });
+        } else {
+            // No WebSocket available
+            setWsBadge('disconnected', '🔌 N/A');
         }
         
         // Dropdown Menu Functions
