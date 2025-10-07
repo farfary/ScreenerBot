@@ -2024,7 +2024,7 @@ fn nav_tabs(active: &str) -> String {
         ("positions", "💰 Positions"),
         ("tokens", "🪙 Tokens"),
         ("events", "📡 Events"),
-        ("config", "⚙️ Config"),
+        ("config", "⚙️ Config")
     ];
 
     tabs.iter()
@@ -2033,7 +2033,9 @@ fn nav_tabs(active: &str) -> String {
             // Use data-page attribute for client-side routing (SPA)
             format!(
                 "<a href=\"#\" data-page=\"{}\" class=\"tab{}\">{}</a>",
-                name, active_class, label
+                name,
+                active_class,
+                label
             )
         })
         .collect::<Vec<_>>()
@@ -3673,117 +3675,121 @@ pub fn home_content() -> String {
     
     <script>
         async function loadHomeData() {
+            const sentinel = document.getElementById('openPositions');
+            if (!sentinel) {
+                return;
+            }
+
+            const getMetric = (id) => document.getElementById(id);
+            const setMetric = (id, value) => {
+                const el = getMetric(id);
+                if (!el) {
+                    return null;
+                }
+                el.textContent = value;
+                el.classList.remove('loading-text');
+                return el;
+            };
+
             try {
                 const res = await fetch('/api/dashboard/overview');
                 const data = await res.json();
-                
+
                 // Trading Overview
                 const openPos = data.positions.open_positions;
-                const maxPos = 2; // Will be fetched from config
-                document.getElementById('openPositions').textContent = `${openPos}/${maxPos}`;
-                document.getElementById('openPositions').classList.remove('loading-text');
-                
-                document.getElementById('totalInvested').textContent = `${data.positions.total_invested_sol.toFixed(4)} SOL`;
-                document.getElementById('totalInvested').classList.remove('loading-text');
-                
+                const interimMaxPos = 2; // Placeholder until config fetch completes
+                const openPositionsEl = setMetric('openPositions', `${openPos}/${interimMaxPos}`);
+
+                setMetric('totalInvested', `${data.positions.total_invested_sol.toFixed(4)} SOL`);
+
                 const pnl = data.positions.total_pnl;
-                const pnlEl = document.getElementById('totalPnl');
-                pnlEl.textContent = `${pnl >= 0 ? '+' : ''}${pnl.toFixed(4)} SOL`;
-                pnlEl.style.color = pnl >= 0 ? '#00ff00' : '#ff4444';
-                pnlEl.classList.remove('loading-text');
-                
-                document.getElementById('winRate').textContent = `${data.positions.win_rate.toFixed(1)}%`;
-                document.getElementById('winRate').classList.remove('loading-text');
-                
+                const pnlEl = setMetric('totalPnl', `${pnl >= 0 ? '+' : ''}${pnl.toFixed(4)} SOL`);
+                if (pnlEl) {
+                    pnlEl.style.color = pnl >= 0 ? '#00ff00' : '#ff4444';
+                }
+
+                setMetric('winRate', `${data.positions.win_rate.toFixed(1)}%`);
+
                 // Wallet Status
-                document.getElementById('solBalance').textContent = `${data.wallet.sol_balance.toFixed(4)} SOL`;
-                document.getElementById('solBalance').classList.remove('loading-text');
-                
-                document.getElementById('tokenCount').textContent = `${data.wallet.total_tokens_count} tokens`;
-                document.getElementById('tokenCount').classList.remove('loading-text');
-                
+                setMetric('solBalance', `${data.wallet.sol_balance.toFixed(4)} SOL`);
+                setMetric('tokenCount', `${data.wallet.total_tokens_count} tokens`);
+
                 const walletTime = data.wallet.last_updated ? new Date(data.wallet.last_updated).toLocaleTimeString() : 'N/A';
-                document.getElementById('walletUpdated').textContent = walletTime;
-                document.getElementById('walletUpdated').classList.remove('loading-text');
-                
+                setMetric('walletUpdated', walletTime);
+
                 // System Health
                 const allReady = data.system.all_services_ready;
-                const servicesEl = document.getElementById('servicesStatus');
-                servicesEl.textContent = allReady ? '●●●●● All Ready' : '○ Starting...';
-                servicesEl.style.color = allReady ? '#00ff00' : '#ffaa00';
-                servicesEl.classList.remove('loading-text');
-                
-                document.getElementById('rpcRate').textContent = `${data.rpc.calls_per_second.toFixed(1)}/sec`;
-                document.getElementById('rpcRate').classList.remove('loading-text');
-                
+                const servicesEl = setMetric('servicesStatus', allReady ? '●●●●● All Ready' : '○ Starting...');
+                if (servicesEl) {
+                    servicesEl.style.color = allReady ? '#00ff00' : '#ffaa00';
+                }
+
+                setMetric('rpcRate', `${data.rpc.calls_per_second.toFixed(1)}/sec`);
+
+                const cpuEl = getMetric('homeCpu');
+                const memEl = getMetric('homeMem');
+
                 // Fetch detailed system metrics for CPU/memory
                 try {
                     const mres = await fetch('/api/status/metrics');
                     const m = await mres.json();
-                    const cpuEl = document.getElementById('homeCpu');
-                    const memEl = document.getElementById('homeMem');
-                    cpuEl.textContent = `${m.cpu_system_percent.toFixed(1)}%`;
-                    memEl.textContent = `${m.system_memory_used_mb} / ${m.system_memory_total_mb} MB`;
-                    cpuEl.classList.remove('loading-text');
-                    memEl.classList.remove('loading-text');
+                    if (cpuEl) {
+                        cpuEl.textContent = `${m.cpu_system_percent.toFixed(1)}%`;
+                        cpuEl.classList.remove('loading-text');
+                    }
+                    if (memEl) {
+                        memEl.textContent = `${m.system_memory_used_mb} / ${m.system_memory_total_mb} MB`;
+                        memEl.classList.remove('loading-text');
+                    }
                 } catch (e) {
                     // fallback: use simplified fields from overview
-                    const cpuEl = document.getElementById('homeCpu');
-                    const memEl = document.getElementById('homeMem');
-                    cpuEl.textContent = `${data.system.cpu_percent.toFixed(1)}%`;
-                    memEl.textContent = `${data.system.memory_mb.toFixed(0)} MB`;
-                    cpuEl.classList.remove('loading-text');
-                    memEl.classList.remove('loading-text');
+                    if (cpuEl) {
+                        cpuEl.textContent = `${data.system.cpu_percent.toFixed(1)}%`;
+                        cpuEl.classList.remove('loading-text');
+                    }
+                    if (memEl) {
+                        memEl.textContent = `${data.system.memory_mb.toFixed(0)} MB`;
+                        memEl.classList.remove('loading-text');
+                    }
                 }
-                
-                document.getElementById('systemUptime').textContent = data.system.uptime_formatted;
-                document.getElementById('systemUptime').classList.remove('loading-text');
-                
+
+                setMetric('systemUptime', data.system.uptime_formatted);
+
                 // Performance Summary
-                document.getElementById('totalPositions').textContent = data.positions.total_positions;
-                document.getElementById('totalPositions').classList.remove('loading-text');
-                
-                document.getElementById('closedPositions').textContent = data.positions.closed_positions;
-                document.getElementById('closedPositions').classList.remove('loading-text');
-                
+                setMetric('totalPositions', data.positions.total_positions);
+                setMetric('closedPositions', data.positions.closed_positions);
+
                 const allTimePnl = data.positions.total_pnl;
-                const allTimePnlEl = document.getElementById('allTimePnl');
-                allTimePnlEl.textContent = `${allTimePnl >= 0 ? '+' : ''}${allTimePnl.toFixed(4)} SOL`;
-                allTimePnlEl.style.color = allTimePnl >= 0 ? '#00ff00' : '#ff4444';
-                allTimePnlEl.classList.remove('loading-text');
-                
-                document.getElementById('overallWinRate').textContent = `${data.positions.win_rate.toFixed(1)}%`;
-                document.getElementById('overallWinRate').classList.remove('loading-text');
-                
+                const allTimePnlEl = setMetric('allTimePnl', `${allTimePnl >= 0 ? '+' : ''}${allTimePnl.toFixed(4)} SOL`);
+                if (allTimePnlEl) {
+                    allTimePnlEl.style.color = allTimePnl >= 0 ? '#00ff00' : '#ff4444';
+                }
+
+                setMetric('overallWinRate', `${data.positions.win_rate.toFixed(1)}%`);
+
                 // Monitoring
-                document.getElementById('tokensTracked').textContent = data.monitoring.tokens_tracked;
-                document.getElementById('tokensTracked').classList.remove('loading-text');
-                
-                document.getElementById('blacklisted').textContent = data.blacklist.total_blacklisted;
-                document.getElementById('blacklisted').classList.remove('loading-text');
-                
-                document.getElementById('entryInterval').textContent = `Every ${data.monitoring.entry_check_interval_secs}s`;
-                document.getElementById('entryInterval').classList.remove('loading-text');
-                
-                document.getElementById('positionInterval').textContent = `Every ${data.monitoring.position_monitor_interval_secs}s`;
-                document.getElementById('positionInterval').classList.remove('loading-text');
-                
+                setMetric('tokensTracked', data.monitoring.tokens_tracked);
+                setMetric('blacklisted', data.blacklist.total_blacklisted);
+                setMetric('entryInterval', `Every ${data.monitoring.entry_check_interval_secs}s`);
+                setMetric('positionInterval', `Every ${data.monitoring.position_monitor_interval_secs}s`);
+
                 // Load trading config
-                const configRes = await fetch('/api/trading/config');
-                const config = await configRes.json();
-                
-                document.getElementById('maxPositions').textContent = config.trading_limits.max_open_positions;
-                document.getElementById('maxPositions').classList.remove('loading-text');
-                
-                document.getElementById('tradeSize').textContent = `${config.trading_limits.trade_size_sol} SOL`;
-                document.getElementById('tradeSize').classList.remove('loading-text');
-                
-                document.getElementById('stopLoss').textContent = `${config.risk_management.stop_loss_percent}%`;
-                document.getElementById('stopLoss').classList.remove('loading-text');
-                
-                document.getElementById('minProfit').textContent = `${config.profit_targets.base_min_profit_percent}%`;
-                document.getElementById('minProfit').classList.remove('loading-text');
-                
+                try {
+                    const configRes = await fetch('/api/trading/config');
+                    const config = await configRes.json();
+
+                    const maxPositionsEl = setMetric('maxPositions', config.trading_limits.max_open_positions);
+                    setMetric('tradeSize', `${config.trading_limits.trade_size_sol} SOL`);
+                    setMetric('stopLoss', `${config.risk_management.stop_loss_percent}%`);
+                    setMetric('minProfit', `${config.profit_targets.base_min_profit_percent}%`);
+
+                    if (maxPositionsEl && openPositionsEl) {
+                        openPositionsEl.textContent = `${openPos}/${config.trading_limits.max_open_positions}`;
+                    }
+                } catch (configError) {
+                    console.warn('Failed to load trading config:', configError);
+                }
+
             } catch (error) {
                 console.error('Failed to load home data:', error);
             }
