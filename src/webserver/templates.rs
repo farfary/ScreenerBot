@@ -4204,7 +4204,9 @@ pub fn tokens_content() -> String {
             searchTerm: '',
         };
 
-    let allTokensData = [];
+        let allTokensData = [];
+    let currentModalMint = null;
+    let tokenModalData = null;
         let tokensRefreshInterval = null;
         let tokensRequestController = null;
         let tokensLoading = false;
@@ -4230,6 +4232,293 @@ pub fn tokens_content() -> String {
             if (typeof savedSearch === 'string') {
                 tokensState.searchTerm = savedSearch;
             }
+        }
+
+        function getTokenByMint(mint) {
+            if (!mint) return null;
+            return allTokensData.find(token => token?.mint === mint) || null;
+        }
+
+        async function fetchTokenDetail(mint) {
+            try {
+                const res = await fetch(`/api/tokens/${mint}`);
+                if (!res.ok) throw new Error(`Token request failed (${res.status})`);
+                const data = await res.json();
+                return data;
+            } catch (error) {
+                console.error('Failed to fetch token detail:', error);
+                showToast('❌ Failed to load token details', 'error');
+                return null;
+            }
+        }
+
+        function formatCompactNumber(value, digits = 2) {
+            if (!Number.isFinite(value)) return '—';
+            return Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: digits }).format(value);
+        }
+
+        function formatBooleanFlag(value, unknownLabel = 'Unknown') {
+            if (value === true) return 'Yes';
+            if (value === false) return 'No';
+            return unknownLabel;
+        }
+
+        function setText(id, value) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value;
+        }
+
+        function setHtml(id, value) {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = value;
+        }
+
+        function renderSidebarBadges(token) {
+            const badges = [];
+            if (token?.has_pool_price) badges.push('<span class="badge" style="background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;">POOL</span>');
+            if (token?.has_ohlcv) badges.push('<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;">OHLCV</span>');
+            if (token?.has_open_position) badges.push('<span class="badge" style="background:#fde68a;color:#92400e;border:1px solid #fcd34d;">POS</span>');
+            if (token?.blacklisted) badges.push('<span class="badge" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;">BL</span>');
+            return badges.join(' ');
+        }
+
+        function renderRiskFactors(risks) {
+            if (!Array.isArray(risks) || risks.length === 0) {
+                return '<div style="color:#94a3b8;">No risk factors reported.</div>';
+            }
+
+            return risks
+                .map(risk => {
+                    const level = (risk.level || '').toUpperCase();
+                    const prefix = level ? `[${level}] ` : '';
+                    const title = risk.name || risk.title || 'Risk factor';
+                    const description = risk.description || '—';
+                    return `
+                        <div class="risk-item">
+                            <div class="risk-item-title">${prefix}${title}</div>
+                            <div class="risk-item-desc">${description}</div>
+                        </div>
+                    `;
+                })
+                .join('');
+        }
+
+        function populateTokenModal(token, detail) {
+            if (!token) return;
+
+            const detailData = detail || {};
+            const price = Number.isFinite(detailData.price_sol) ? Number(detailData.price_sol) : Number(token.price_sol);
+            const change24h = Number.isFinite(detailData.price_change_h24) ? Number(detailData.price_change_h24) : Number(token.price_change_h24);
+            const changeCls = change24h > 0 ? 'positive' : change24h < 0 ? 'negative' : '';
+
+            const logoEl = document.getElementById('modalTokenLogo');
+            if (logoEl) {
+                if (token.logo_url) {
+                    logoEl.src = token.logo_url;
+                    logoEl.style.display = 'block';
+                } else {
+                    logoEl.src = '';
+                    logoEl.style.display = 'none';
+                }
+            }
+
+            setText('modalTokenSymbol', token.symbol || detailData.symbol || '—');
+            setText('modalTokenName', token.name || detailData.name || '—');
+            setText('modalTokenPrice', Number.isFinite(price) ? formatPriceSol(price) : '—');
+
+            const changeEl = document.getElementById('modalTokenChange');
+            if (changeEl) {
+                changeEl.textContent = Number.isFinite(change24h) ? formatPercentValue(change24h) : '—';
+                changeEl.classList.remove('positive', 'negative');
+                if (changeCls) changeEl.classList.add(changeCls);
+            }
+
+            setText('detail-mint', detailData.mint || token.mint || '—');
+            setText('detail-decimals', detailData.decimals ?? '—');
+            setText('detail-verified', formatBooleanFlag(detailData.verified, '—'));
+            setText('detail-blacklisted', formatBooleanFlag(detailData.blacklisted ?? token.blacklisted, '—'));
+            setText('detail-launch-date', detailData.launch_date || '—');
+
+            const liquidityValue = detailData.liquidity_usd ?? token.liquidity_usd;
+            const volume24hValue = detailData.volume_24h ?? token.volume_24h;
+            const volume6hValue = detailData.volume_6h ?? detailData.volume_h6;
+            const volume1hValue = detailData.volume_1h ?? detailData.volume_h1;
+            const fdvValue = detailData.fdv ?? token.fdv;
+            const marketCapValue = detailData.market_cap ?? token.market_cap;
+
+            setText('detail-liquidity', formatCurrencyUSD(liquidityValue));
+            setText('detail-volume24h', formatCurrencyUSD(volume24hValue));
+            setText('detail-volume6h', formatCurrencyUSD(volume6hValue));
+            setText('detail-volume1h', formatCurrencyUSD(volume1hValue));
+            setText('detail-fdv', formatCurrencyUSD(fdvValue));
+            setText('detail-marketcap', formatCurrencyUSD(marketCapValue));
+
+            const dexLabel = detailData.pool_dex || detailData.pool?.dex;
+            const poolAddress = detailData.pool_address || detailData.pool?.address;
+            const solReserves = detailData.pool_reserves_sol ?? detailData.pool?.sol_reserves;
+            const tokenReserves = detailData.pool_reserves_token ?? detailData.pool?.token_reserves;
+            const confidence = detailData.price_confidence ?? detailData.pool?.confidence;
+            const poolAge = detailData.pool_age || detailData.pool?.age;
+
+            setText('detail-dex', dexLabel || '—');
+            setText('detail-pool', poolAddress || '—');
+            setText('detail-sol-reserves', formatCompactNumber(solReserves));
+            setText('detail-token-reserves', formatCompactNumber(tokenReserves));
+            setText(
+                'detail-confidence',
+                Number.isFinite(confidence) ? Number(confidence).toFixed(2) : '—'
+            );
+            setText('detail-pool-age', poolAge || '—');
+
+            const change5m = detailData.price_change_m5 ?? detailData.price_changes?.change_5m;
+            const change1h = detailData.price_change_h1 ?? token.price_change_h1 ?? detailData.price_changes?.change_1h;
+            const change6h = detailData.price_change_h6 ?? detailData.price_changes?.change_6h;
+            const change24hValue = detailData.price_change_h24 ?? token.price_change_h24 ?? detailData.price_changes?.change_24h;
+
+            setText('detail-change5m', change5m !== undefined ? formatPercentValue(change5m) : '—');
+            setText('detail-change1h', change1h !== undefined ? formatPercentValue(change1h) : '—');
+            setText('detail-change6h', change6h !== undefined ? formatPercentValue(change6h) : '—');
+            setText('detail-change24h', change24hValue !== undefined ? formatPercentValue(change24hValue) : '—');
+
+            const buys24hRaw = detailData.txns?.h24?.buys ?? detailData.buys_24h;
+            const sells24hRaw = detailData.txns?.h24?.sells ?? detailData.sells_24h;
+            const buys24h = Number(buys24hRaw);
+            const sells24h = Number(sells24hRaw);
+            const hasBuys = Number.isFinite(buys24h);
+            const hasSells = Number.isFinite(sells24h);
+            const netFlow = hasBuys && hasSells ? buys24h - sells24h : Number(detailData.net_flow);
+            const ratio = hasBuys && hasSells && sells24h !== 0
+                ? buys24h / sells24h
+                : Number(detailData.buy_sell_ratio);
+
+            setText('detail-buys24h', hasBuys ? Math.round(buys24h) : '—');
+            setText('detail-sells24h', hasSells ? Math.round(sells24h) : '—');
+            setText('detail-ratio', Number.isFinite(ratio) ? ratio.toFixed(2) : '—');
+            if (Number.isFinite(netFlow)) {
+                const sign = netFlow > 0 ? '+' : netFlow < 0 ? '-' : '';
+                setText('detail-netflow', `${sign}${Math.abs(Math.round(netFlow))}`);
+            } else {
+                setText('detail-netflow', '—');
+            }
+
+            const securityScore = Number(detailData.security_score);
+            const rugged = detailData.rugged;
+            const badge = document.getElementById('security-badge');
+            if (badge) {
+                const statusClass = rugged === true ? 'critical' : securityScore >= 700 ? 'excellent' : securityScore >= 500 ? 'good' : securityScore >= 300 ? 'warning' : 'critical';
+                badge.className = `security-badge ${statusClass}`.trim();
+            }
+
+            const progress = document.getElementById('security-progress');
+            if (progress) {
+                let pct = Number(detailData.security_score_normalized);
+                if (!Number.isFinite(pct)) {
+                    pct = Number(detailData.security_score);
+                    if (Number.isFinite(pct)) {
+                        pct = Math.max(0, Math.min(100, pct / 10.0));
+                    }
+                }
+                if (!Number.isFinite(pct)) pct = 0;
+                pct = Math.max(0, Math.min(100, pct));
+                progress.style.width = `${pct}%`;
+            }
+
+            setHtml('security-score-value', Number.isFinite(securityScore) ? `${securityScore}` : '—');
+            const securitySummary = detailData.security_summary || (rugged ? '⚠️ Token flagged as rugged.' : 'No security summary available.');
+            setHtml('security-status', securitySummary);
+            setText('detail-mint-auth', detailData.mint_authority ?? 'Unknown');
+            setText('detail-freeze-auth', detailData.freeze_authority ?? 'Unknown');
+            setText('detail-holders', detailData.total_holders ?? '—');
+            const top10Raw = detailData.top_10_concentration;
+            if (top10Raw === null || top10Raw === undefined) {
+                setText('detail-top10', '—');
+            } else {
+                const top10Num = Number(top10Raw);
+                if (Number.isFinite(top10Num)) {
+                    const display = top10Num <= 1 ? top10Num * 100 : top10Num;
+                    setText('detail-top10', `${display.toFixed(2)}%`);
+                } else {
+                    setText('detail-top10', `${top10Raw}`);
+                }
+            }
+            setHtml('risk-factors-list', renderRiskFactors(detailData.security_risks));
+
+            setText('sidebar-price', Number.isFinite(price) ? formatPriceSol(price) : '—');
+            setText('sidebar-volume', formatCurrencyUSD(volume24hValue));
+            setText('sidebar-liq', formatCurrencyUSD(liquidityValue));
+            setText('sidebar-mcap', formatCurrencyUSD(marketCapValue));
+
+            const statusFlags = {
+                has_pool_price: detailData.has_pool_price ?? token.has_pool_price,
+                has_ohlcv: detailData.has_ohlcv ?? token.has_ohlcv,
+                has_open_position: detailData.has_open_position ?? token.has_open_position,
+                blacklisted: detailData.blacklisted ?? token.blacklisted,
+            };
+            setHtml('sidebar-badges', renderSidebarBadges(statusFlags));
+
+            const modal = document.getElementById('tokenModal');
+            if (modal) {
+                modal.classList.add('visible');
+            }
+        }
+
+        function resetTokenModal() {
+            const modal = document.getElementById('tokenModal');
+            if (modal) {
+                modal.classList.remove('visible');
+            }
+            currentModalMint = null;
+            tokenModalData = null;
+        }
+
+        async function openTokenModal(mint) {
+            if (!mint) return;
+            const cached = getTokenByMint(mint);
+            const detail = await fetchTokenDetail(mint);
+            if (!detail || !cached) return;
+            currentModalMint = mint;
+            tokenModalData = { token: cached, detail };
+            populateTokenModal(cached, detail);
+        }
+
+        function closeTokenModal(event) {
+            if (event && event.target && event.target !== event.currentTarget) {
+                return;
+            }
+            resetTokenModal();
+        }
+
+        function switchModalTab(tabId) {
+            const content = document.querySelectorAll('.tab-pane');
+            const tabs = document.querySelectorAll('.modal-tab');
+            content.forEach(pane => {
+                pane.classList.toggle('active', pane.id === `tab-${tabId}`);
+            });
+            tabs.forEach(tab => {
+                tab.classList.toggle('active', tab.textContent.includes(tabId.charAt(0).toUpperCase()));
+            });
+        }
+
+        function copyMintFromModal() {
+            if (!currentModalMint) return;
+            navigator.clipboard.writeText(currentModalMint)
+                .then(() => showToast('✅ Mint copied'))
+                .catch(() => showToast('❌ Failed to copy mint', 'error'));
+        }
+
+        function openDexScreenerFromModal() {
+            if (!currentModalMint) return;
+            openDexScreener(currentModalMint);
+        }
+
+        function openGMGNFromModal() {
+            if (!currentModalMint) return;
+            openGMGN(currentModalMint);
+        }
+
+        function openSolscanFromModal() {
+            if (!currentModalMint) return;
+            openSolscan(currentModalMint);
         }
 
         function attachGlobalListeners() {
@@ -4675,6 +4964,15 @@ pub fn tokens_content() -> String {
             return `$${v.toFixed(2)}${suffix}`;
         }
 
+        function formatPercentValue(value) {
+            if (value === null || value === undefined) return '—';
+            const num = Number(value);
+            if (!Number.isFinite(num)) return '—';
+            const sign = num > 0 ? '+' : (num < 0 ? '-' : '');
+            const magnitude = Math.abs(num).toFixed(2);
+            return `${sign}${magnitude}%`;
+        }
+
         function formatPercent(value) {
             if (value === null || value === undefined || !Number.isFinite(value)) return '<span>—</span>';
             const cls = value > 0 ? 'color: #16a34a;' : (value < 0 ? 'color:#ef4444;' : 'color:inherit;');
@@ -4721,7 +5019,8 @@ pub fn tokens_content() -> String {
         }
 
         function openTokenDetail(mint) {
-            window.open(`/api/tokens/${mint}`, '_blank');
+            if (!mint) return;
+            openTokenModal(mint);
         }
     </script>
     
@@ -5111,16 +5410,57 @@ pub fn tokens_content() -> String {
             }
 
             if (currentModalMint === mint) {
-                const priceEl = document.getElementById('detail-price');
-                const liquidityEl = document.getElementById('detail-liquidity');
+                const modalPriceEl = document.getElementById('modalTokenPrice');
                 const sidebarPriceEl = document.getElementById('sidebar-price');
+                const liquidityEl = document.getElementById('detail-liquidity');
                 const sidebarLiqEl = document.getElementById('sidebar-liq');
+                const confidenceEl = document.getElementById('detail-confidence');
+                const solReservesEl = document.getElementById('detail-sol-reserves');
+                const tokenReservesEl = document.getElementById('detail-token-reserves');
+                const poolAddressEl = document.getElementById('detail-pool');
 
-                if (priceEl && Number.isFinite(updatedPriceSol)) {
-                    priceEl.textContent = formatPriceSol(updatedPriceSol);
+                if (tokenModalData && tokenModalData.token && Number.isFinite(updatedPriceSol)) {
+                    tokenModalData.token.price_sol = updatedPriceSol;
+                }
+                if (tokenModalData && tokenModalData.detail) {
+                    if (Number.isFinite(updatedPriceSol)) {
+                        tokenModalData.detail.price_sol = updatedPriceSol;
+                    }
+                    if (Number.isFinite(priceResult.confidence)) {
+                        tokenModalData.detail.price_confidence = priceResult.confidence;
+                    }
+                    if (Number.isFinite(priceResult.sol_reserves)) {
+                        tokenModalData.detail.pool_reserves_sol = priceResult.sol_reserves;
+                    }
+                    if (Number.isFinite(priceResult.token_reserves)) {
+                        tokenModalData.detail.pool_reserves_token = priceResult.token_reserves;
+                    }
+                    if (priceResult.pool_address) {
+                        tokenModalData.detail.pool_address = priceResult.pool_address;
+                    }
+                    if (updatedTimestamp !== null) {
+                        tokenModalData.detail.price_updated_at = updatedTimestamp;
+                    }
+                }
+
+                if (modalPriceEl && Number.isFinite(updatedPriceSol)) {
+                    modalPriceEl.textContent = formatPriceSol(updatedPriceSol);
                 }
                 if (sidebarPriceEl && Number.isFinite(updatedPriceSol)) {
                     sidebarPriceEl.textContent = formatPriceSol(updatedPriceSol);
+                }
+
+                if (confidenceEl && Number.isFinite(priceResult.confidence)) {
+                    confidenceEl.textContent = priceResult.confidence.toFixed(2);
+                }
+                if (solReservesEl && Number.isFinite(priceResult.sol_reserves)) {
+                    solReservesEl.textContent = formatCompactNumber(priceResult.sol_reserves);
+                }
+                if (tokenReservesEl && Number.isFinite(priceResult.token_reserves)) {
+                    tokenReservesEl.textContent = formatCompactNumber(priceResult.token_reserves);
+                }
+                if (poolAddressEl && priceResult.pool_address) {
+                    poolAddressEl.textContent = priceResult.pool_address;
                 }
 
                 if (Number.isFinite(tokenInList?.liquidity_usd)) {
