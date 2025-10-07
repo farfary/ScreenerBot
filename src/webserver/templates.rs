@@ -3967,19 +3967,21 @@ pub fn status_content() -> String {
     </style>
 
     <script>
-        const STATUS_VIEWS = ['system', 'rpc', 'transactions', 'positions', 'pools', 'discovery', 'ohlcvs', 'events', 'wallet', 'trader', 'sol_price', 'webserver', 'rl_learner'];
+        var STATUS_VIEWS = ['system', 'rpc', 'transactions', 'positions', 'pools', 'discovery', 'ohlcvs', 'events', 'wallet', 'trader', 'sol_price', 'webserver', 'rl_learner'];
         
-        const statusState = {
+        var statusState = window.statusState || {
             view: 'system',
             currentData: null,
         };
 
-        document.addEventListener('DOMContentLoaded', () => {
+        // Global init function for Router to call during SPA navigation
+        window.initStatusPage = function() {
+            console.log('[Status] Initializing page');
             hydrateStatusState();
             initStatusSubTabs();
             initStatusWebSocket();
             loadInitialStatusData();
-        });
+        };
 
         function hydrateStatusState() {
             const savedView = window.sessionStorage.getItem('status.view');
@@ -4843,6 +4845,9 @@ pub fn status_content() -> String {
                 return 'N/A';
             }
         }
+
+        // Execute initialization immediately (works for both initial load and SPA navigation)
+        initStatusPage();
     </script>
 
     <div id="statusContent">
@@ -4915,11 +4920,11 @@ pub fn positions_content() -> String {
     </div>
 
     <script>
-    const positionsStore = new Map();
-    let positionsLoading = false;
-    let positionsInitialized = false;
-    let positionsFallbackInterval = null;
-    let positionsRequestController = null;
+    var positionsStore = window.positionsStore || new Map();
+    var positionsLoading = false;
+    var positionsInitialized = false;
+    var positionsFallbackInterval = null;
+    var positionsRequestController = null;
 
         // Format number with decimals
         function formatNumber(num, decimals = 2) {
@@ -5299,7 +5304,10 @@ pub fn positions_content() -> String {
             }
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
+        // Global init function for Router to call during SPA navigation
+        window.initPositionsPage = function() {
+            console.log('[Positions] Initializing page');
+            
             const searchInput = document.getElementById('searchInput');
             if (searchInput) {
                 searchInput.addEventListener('input', () => {
@@ -5347,7 +5355,10 @@ pub fn positions_content() -> String {
             }
 
             loadPositions({ reason: 'initial', force: true });
-        });
+        };
+
+        // Execute initialization immediately (works for both initial load and SPA navigation)
+        initPositionsPage();
     </script>
     "#.to_string()
 }
@@ -5356,8 +5367,8 @@ pub fn positions_content() -> String {
 pub fn tokens_content() -> String {
     r#"
     <script>
-        const TOKENS_VIEWS = ['pool', 'all', 'passed', 'rejected', 'blacklisted', 'positions', 'secure', 'recent'];
-        const VIEW_LABELS = {
+        var TOKENS_VIEWS = ['pool', 'all', 'passed', 'rejected', 'blacklisted', 'positions', 'secure', 'recent'];
+        var VIEW_LABELS = {
             pool: 'with available prices',
             all: 'in database',
             passed: 'that passed filtering',
@@ -5368,22 +5379,24 @@ pub fn tokens_content() -> String {
             recent: 'recently updated',
         };
 
-        const tokensState = {
+        var tokensState = window.tokensState || {
             view: 'pool',
             sortBy: 'symbol',
             sortDir: 'asc',
             searchTerm: '',
         };
 
-        let allTokensData = [];
-    let currentModalMint = null;
-    let tokenModalData = null;
-        let tokensRefreshInterval = null;
-        let tokensRequestController = null;
-        let tokensLoading = false;
-        let searchDebounceHandle = null;
+        var allTokensData = [];
+        var currentModalMint = null;
+        var tokenModalData = null;
+        var tokensRefreshInterval = null;
+        var tokensRequestController = null;
+        var tokensLoading = false;
+        var searchDebounceHandle = null;
 
-        document.addEventListener('DOMContentLoaded', () => {
+        // Global init function for Router to call during SPA navigation
+        window.initTokensPage = function() {
+            console.log('[Tokens] Initializing page');
             hydrateTokensState();
             initTokensSubTabs();
             initTokensToolbar();
@@ -5391,7 +5404,7 @@ pub fn tokens_content() -> String {
             attachGlobalListeners();
             loadTokens({ reason: 'initial', force: true });
             startTokensRefresh();
-        });
+        };
 
         function hydrateTokensState() {
             const savedView = window.sessionStorage.getItem('tokens.view');
@@ -6690,6 +6703,9 @@ pub fn tokens_content() -> String {
                 WsHub.unsubscribe('prices', handlePriceUpdate);
             });
         }
+
+        // Execute initialization immediately (works for both initial load and SPA navigation)
+        initTokensPage();
     </script>
     "#.to_string()
 }
@@ -6896,15 +6912,15 @@ pub fn events_content() -> String {
     </div>
     
     <script>
-    let allEventsData = [];
-    let eventsRefreshInterval = null;
-    let maxEventId = 0;
-    let connectionStatus = 'connecting'; // 'connecting', 'connected', 'disconnected', 'error'
-    const eventsStore = new Map();
-    const EVENT_MAX_RECORDS = 1000;
-    let eventsLoadInFlight = false;
-    let pendingEventsLoad = false;
-    let searchDebounceHandle = null;
+    var allEventsData = [];
+    var eventsRefreshInterval = null;
+    var maxEventId = 0;
+    var connectionStatus = 'connecting'; // 'connecting', 'connected', 'disconnected', 'error'
+    var eventsStore = window.eventsStore || new Map();
+    var EVENT_MAX_RECORDS = 1000;
+    var eventsLoadInFlight = false;
+    var pendingEventsLoad = false;
+    var searchDebounceHandle = null;
         
         // Update connection status indicator
         function updateConnectionStatus(status, message) {
@@ -7461,17 +7477,36 @@ pub fn events_content() -> String {
             startEventsRefresh();
         }
         
-        // Restore saved filters
-        const savedCategory = AppState.load('events_category', '');
-        const savedSeverity = AppState.load('events_severity', '');
-        const savedSearch = AppState.load('events_search', '');
+        // Global init function for Router to call during SPA navigation
+        window.initEventsPage = function() {
+            console.log('[Events] Initializing page');
+            
+            // Restore saved filters (wait for DOM to be ready)
+            const categoryFilter = document.getElementById('categoryFilter');
+            const severityFilter = document.getElementById('severityFilter');
+            const searchInput = document.getElementById('eventSearch');
+            
+            if (categoryFilter) {
+                const savedCategory = AppState.load('events_category', '');
+                if (savedCategory) categoryFilter.value = savedCategory;
+            }
+            
+            if (severityFilter) {
+                const savedSeverity = AppState.load('events_severity', '');
+                if (savedSeverity) severityFilter.value = savedSeverity;
+            }
+            
+            if (searchInput) {
+                const savedSearch = AppState.load('events_search', '');
+                if (savedSearch) searchInput.value = savedSearch;
+            }
+            
+            // Initial load
+            loadEvents({ force: true });
+        };
         
-        if (savedCategory) document.getElementById('categoryFilter').value = savedCategory;
-        if (savedSeverity) document.getElementById('severityFilter').value = savedSeverity;
-        if (savedSearch) document.getElementById('eventSearch').value = savedSearch;
-        
-    // Initial load
-    loadEvents({ force: true });
+        // Execute initialization immediately (works for both initial load and SPA navigation)
+        initEventsPage();
     </script>
     "#.to_string()
 }
@@ -7565,9 +7600,9 @@ pub fn services_content() -> String {
     </style>
 
     <script>
-        let servicesData = null;
-        let sortKey = 'priority';
-        let sortDir = 'asc';
+        var servicesData = null;
+        var sortKey = 'priority';
+        var sortDir = 'asc';
 
         async function loadServices() {
             try {
@@ -7772,13 +7807,20 @@ pub fn services_content() -> String {
 
         function refreshServices() { loadServices(); }
 
-        loadServices();
-        const servicesRefreshInterval = setInterval(loadServices, 5000);
-        if (window.Router && typeof Router.registerCleanup === 'function') {
-            Router.registerCleanup(() => {
-                clearInterval(servicesRefreshInterval);
-            });
-        }
+        // Global init function for Router to call during SPA navigation
+        window.initServicesPage = function() {
+            console.log('[Services] Initializing page');
+            loadServices();
+            var servicesRefreshInterval = setInterval(loadServices, 5000);
+            if (window.Router && typeof Router.registerCleanup === 'function') {
+                Router.registerCleanup(() => {
+                    clearInterval(servicesRefreshInterval);
+                });
+            }
+        };
+
+        // Execute initialization immediately (works for both initial load and SPA navigation)
+        initServicesPage();
     </script>
     "#.to_string()
 }
@@ -8260,7 +8302,7 @@ pub fn config_content() -> String {
         // =============================================================================
 // CONFIGURATION METADATA - Single source of truth for all 155 fields
 // =============================================================================
-const CONFIG_METADATA = {
+var CONFIG_METADATA = window.CONFIG_METADATA || {
     trader: {
         max_open_positions: { type: 'number', label: 'Max Open Positions', hint: 'Max simultaneous positions (2-5 conservative)', min: 1, max: 100, unit: 'positions', impact: 'critical', category: 'Core Trading' },
         trade_size_sol: { type: 'number', label: 'Trade Size', hint: 'SOL per position (0.005-0.01 for testing)', min: 0.001, max: 10, step: 0.001, unit: 'SOL', impact: 'critical', category: 'Core Trading' },
@@ -8431,7 +8473,7 @@ const CONFIG_METADATA = {
     }
 };
 
-const SECTION_INFO = {
+var SECTION_INFO = window.SECTION_INFO || {
     trader: { icon: '🤖', title: 'Trader', fields: 33 },
     positions: { icon: '💰', title: 'Positions', fields: 3 },
     filtering: { icon: '🔍', title: 'Filtering', fields: 17 },
@@ -8443,7 +8485,7 @@ const SECTION_INFO = {
     events: { icon: '📝', title: 'Events', fields: 1 }
 };
 
-const INTEGER_FIELDS = {
+var INTEGER_FIELDS = window.INTEGER_FIELDS || {
     trader: new Set([
         'max_open_positions',
         'position_close_cooldown_minutes',
@@ -9071,20 +9113,25 @@ function showStatus(element, type, message) {
 // INITIALIZATION
 // =============================================================================
 
-window.addEventListener('DOMContentLoaded', () => {
+// Global init function for Router to call during SPA navigation
+window.initConfigPage = function() {
+    console.log('[Config] Initializing page');
     renderAllSections();
     
     // Auto-expand first section
     const firstSection = Object.keys(SECTION_INFO)[0];
     toggleSection(firstSection);
-});
+    
+    // Close modal when clicking outside
+    document.addEventListener('click', (e) => {
+        if (e.target.id === 'diffModal') {
+            closeDiffModal();
+        }
+    });
+};
 
-// Close modal when clicking outside
-document.addEventListener('click', (e) => {
-    if (e.target.id === 'diffModal') {
-        closeDiffModal();
-    }
-});
+// Execute initialization immediately (works for both initial load and SPA navigation)
+initConfigPage();
     </script>
     "#.to_string()
 }
