@@ -2299,25 +2299,85 @@ fn common_scripts() -> &'static str {
             }
         }
         
-        // Update status badge
-        async function updateStatusBadge() {
+        let statusPollInterval = null;
+
+        function setStatusBadge(state, message) {
+            const badge = document.getElementById('statusBadge');
+            if (!badge) return;
+
+            switch (state) {
+                case 'online':
+                    badge.className = 'badge online';
+                    badge.innerHTML = message || '✓ Online';
+                    break;
+                case 'error':
+                    badge.className = 'badge error';
+                    badge.innerHTML = message || '✗ Error';
+                    break;
+                default:
+                    badge.className = 'badge loading';
+                    badge.innerHTML = message || '⏳ Starting...';
+                    break;
+            }
+        }
+
+        function deriveAllReady(payload) {
+            if (!payload || typeof payload !== 'object') return null;
+
+            if (typeof payload.all_ready === 'boolean') {
+                return payload.all_ready;
+            }
+
+            if (payload.services) {
+                if (typeof payload.services.all_ready === 'boolean') {
+                    return payload.services.all_ready;
+                }
+
+                const serviceStatuses = Object.values(payload.services);
+                if (serviceStatuses.length > 0) {
+                    return serviceStatuses.every(status =>
+                        typeof status === 'string' && status.toLowerCase().includes('healthy')
+                    );
+                }
+            }
+
+            return null;
+        }
+
+        function renderStatusBadgeFromSnapshot(snapshot) {
+            const allReady = deriveAllReady(snapshot);
+            if (allReady === true) {
+                setStatusBadge('online', '✓ Online');
+            } else if (allReady === false) {
+                setStatusBadge('loading', '⏳ Starting...');
+            } else {
+                setStatusBadge('loading', '⏳ Connecting...');
+            }
+        }
+
+        async function fetchStatusSnapshot() {
             try {
                 const res = await fetch('/api/status');
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
-                const badge = document.getElementById('statusBadge');
-                
-                if (data.all_ready) {
-                    badge.className = 'badge online';
-                    badge.innerHTML = '✓ Online';
-                } else {
-                    badge.className = 'badge loading';
-                    badge.innerHTML = '⏳ Starting...';
-                }
+                renderStatusBadgeFromSnapshot(data);
+                return data;
             } catch (error) {
-                const badge = document.getElementById('statusBadge');
-                badge.className = 'badge error';
-                badge.innerHTML = '✗ Error';
+                console.warn('Failed to fetch status snapshot:', error);
+                setStatusBadge('error', '✗ Error');
+                return null;
             }
+        }
+
+        function startStatusPolling(intervalMs = 5000) {
+            if (statusPollInterval) return;
+            statusPollInterval = setInterval(fetchStatusSnapshot, intervalMs);
+        }
+
+        function stopStatusPolling() {
+            if (!statusPollInterval) return;
+            clearInterval(statusPollInterval);
+            statusPollInterval = null;
         }
         
         // Format uptime
@@ -2339,8 +2399,37 @@ fn common_scripts() -> &'static str {
         }
         
     // Initialize (refresh silently every 1s)
-    updateStatusBadge();
-    setInterval(updateStatusBadge, 1000);
+    fetchStatusSnapshot();
+    startStatusPolling();
+
+        if (typeof WsHub !== 'undefined') {
+            const handleStatusUpdate = (snapshot) => {
+                if (!snapshot) return;
+                stopStatusPolling();
+                renderStatusBadgeFromSnapshot(snapshot);
+            };
+
+            const handleStatusDisconnect = () => {
+                startStatusPolling();
+            };
+
+            const handleStatusReconnect = () => {
+                stopStatusPolling();
+                fetchStatusSnapshot();
+            };
+
+            WsHub.subscribe('status', handleStatusUpdate);
+            WsHub.subscribe('_disconnected', handleStatusDisconnect);
+            WsHub.subscribe('_failed', handleStatusDisconnect);
+            WsHub.subscribe('_connected', handleStatusReconnect);
+
+            window.addEventListener('beforeunload', () => {
+                WsHub.unsubscribe('status', handleStatusUpdate);
+                WsHub.unsubscribe('_disconnected', handleStatusDisconnect);
+                WsHub.unsubscribe('_failed', handleStatusDisconnect);
+                WsHub.unsubscribe('_connected', handleStatusReconnect);
+            });
+        }
         
         // Dropdown Menu Functions
         function toggleDropdown(event) {
@@ -3525,7 +3614,7 @@ pub fn positions_content() -> String {
     <div class="page-section">
         <div class="toolbar">
             <span style="font-weight:600;">💰 Positions</span>
-            <select id="statusFilter" onchange="loadPositions()" style="padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9em; background: var(--bg-primary); color: var(--text-primary);">
+            <select id="statusFilter" onchange="loadPositions({ reason: 'filter-change', force: true })" style="padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9em; background: var(--bg-primary); color: var(--text-primary);">
                 <option value="all">All</option>
                 <option value="open" selected>Open</option>
                 <option value="closed">Closed</option>
@@ -3534,7 +3623,7 @@ pub fn positions_content() -> String {
                    style="flex: 1; min-width: 200px; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9em; background: var(--bg-primary); color: var(--text-primary);">
             <div class="spacer"></div>
             <span id="positionCount" style="color: var(--text-secondary); font-size: 0.9em;">Loading...</span>
-            <button onclick="loadPositions()" class="btn btn-primary">🔄 Refresh</button>
+            <button onclick="loadPositions({ reason: 'manual-refresh', force: true })" class="btn btn-primary">🔄 Refresh</button>
         </div>
         <div class="table-scroll">
             <table class="table" id="positionsTable">
@@ -3564,7 +3653,11 @@ pub fn positions_content() -> String {
     </div>
 
     <script>
-    let autoRefreshInterval = null;
+    const positionsStore = new Map();
+    let positionsLoading = false;
+    let positionsInitialized = false;
+    let positionsFallbackInterval = null;
+    let positionsRequestController = null;
 
         // Format number with decimals
         function formatNumber(num, decimals = 2) {
@@ -3604,13 +3697,14 @@ pub fn positions_content() -> String {
 
         // Format timestamp
         function formatTime(timestamp) {
-            if (!timestamp) return '-';
-            const date = new Date(timestamp * 1000);
-            return date.toLocaleString('en-US', { 
-                month: 'short', 
-                day: 'numeric', 
-                hour: '2-digit', 
-                minute: '2-digit' 
+            if (!timestamp && timestamp !== 0) return '-';
+            const date = new Date(Number(timestamp) * 1000);
+            if (Number.isNaN(date.getTime())) return '-';
+            return date.toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
             });
         }
 
@@ -3620,137 +3714,357 @@ pub fn positions_content() -> String {
             return address.substring(0, 8) + '...' + address.substring(address.length - 6);
         }
 
-        // Stats removed in compact layout
+        function getCurrentStatusFilter() {
+            const select = document.getElementById('statusFilter');
+            return select ? select.value : 'all';
+        }
 
-        // Load positions
-        async function loadPositions() {
-            // Skip refresh if dropdown is currently open to prevent it from disappearing
-            if (document.querySelector('.dropdown-menu.show')) {
-                return;
+        function getSearchTerm() {
+            const input = document.getElementById('searchInput');
+            return input ? input.value.toLowerCase().trim() : '';
+        }
+
+        function isDropdownOpen() {
+            return Boolean(document.querySelector('.dropdown-menu.show'));
+        }
+
+        function parsePossibleTimestamp(value) {
+            if (value === null || value === undefined) return null;
+            if (typeof value === 'number' && Number.isFinite(value)) {
+                return value;
             }
-            
-            const statusFilter = document.getElementById('statusFilter').value;
-            const searchInput = document.getElementById('searchInput').value.toLowerCase();
-            
-            try {
-                const response = await fetch(`/api/positions?status=${statusFilter}&limit=1000`);
-                const positions = await response.json();
-                
-                // Filter by search input
-                const filteredPositions = positions.filter(pos => {
-                    if (!searchInput) return true;
-                    return pos.symbol.toLowerCase().includes(searchInput) ||
-                           pos.name.toLowerCase().includes(searchInput) ||
-                           pos.mint.toLowerCase().includes(searchInput);
-                });
-
-                const tbody = document.getElementById('positionsTableBody');
-                
-                if (filteredPositions.length === 0) {
-                    tbody.innerHTML = `
-                        <tr>
-                            <td colspan="10" style="text-align: center; padding: 20px; color: #64748b;">
-                                No positions found
-                            </td>
-                        </tr>
-                    `;
-                    document.getElementById('positionCount').textContent = '0 positions';
-                    return;
+            if (typeof value === 'string' && value.trim() !== '') {
+                const numeric = Number(value);
+                if (Number.isFinite(numeric)) {
+                    return numeric;
                 }
 
-                tbody.innerHTML = filteredPositions.map(pos => {
-                    const isOpen = !pos.transaction_exit_verified;
-                    const statusBadge = pos.synthetic_exit 
-                        ? '<span class="status-badge status-synthetic">SYNTHETIC</span>'
-                        : (isOpen 
-                            ? '<span class="status-badge status-open">OPEN</span>'
-                            : '<span class="status-badge status-closed">CLOSED</span>');
-                    
-                    const currentOrExitPrice = isOpen 
-                        ? (pos.current_price ? formatNumber(pos.current_price, 8) : '-')
-                        : (pos.effective_exit_price || pos.exit_price ? formatNumber(pos.effective_exit_price || pos.exit_price, 8) : '-');
-                    
-                    const pnl = isOpen ? pos.unrealized_pnl : pos.pnl;
-                    const pnlPercent = isOpen ? pos.unrealized_pnl_percent : pos.pnl_percent;
-                    
-                    return `
-                        <tr>
-                            <td>${statusBadge}</td>
-                            <td><strong>${pos.symbol}</strong></td>
-                            <td style="font-size: 0.85em;">${pos.name}</td>
-                            <td>${formatNumber(pos.effective_entry_price || pos.entry_price, 8)}</td>
-                            <td>${currentOrExitPrice}</td>
-                            <td>${formatSOL(pos.entry_size_sol)}</td>
-                            <td>${formatPnL(pnl)}</td>
-                            <td>${formatPercent(pnlPercent)}</td>
-                            <td style="font-size: 0.85em;">${formatTime(pos.entry_time)}</td>
-                            <td>
-                                <div class="dropdown-container">
-                                    <button class="dropdown-btn" onclick="toggleDropdown(event)" aria-label="Actions">
-                                        ⋮
-                                    </button>
-                                    <div class="dropdown-menu">
-                                        <button onclick="copyDebugInfo('${pos.mint}', 'position')" class="dropdown-item">
-                                            📋 Copy Debug Info
-                                        </button>
-                                        <button onclick="copyMint('${pos.mint}')" class="dropdown-item">
-                                            📋 Copy Mint
-                                        </button>
-                                        <button onclick="openGMGN('${pos.mint}')" class="dropdown-item">
-                                            🔗 Open GMGN
-                                        </button>
-                                        <button onclick="openDexScreener('${pos.mint}')" class="dropdown-item">
-                                            📊 Open DexScreener
-                                        </button>
-                                        <button onclick="openSolscan('${pos.mint}')" class="dropdown-item">
-                                            🔍 Open Solscan
-                                        </button>
-                                        <button onclick="showDebugModal('${pos.mint}', 'position')" class="dropdown-item">
-                                            🐛 Debug Info
-                                        </button>
-                                    </div>
-                                </div>
-                            </td>
-                        </tr>
-                    `;
-                }).join('');
+                const parsed = Date.parse(value);
+                if (Number.isFinite(parsed)) {
+                    return Math.floor(parsed / 1000);
+                }
+            }
+            return null;
+        }
 
-                document.getElementById('positionCount').textContent = `${filteredPositions.length} positions`;
-                
+        function normalizePositionFromApi(raw) {
+            if (!raw || typeof raw !== 'object') return raw;
+            const position = { ...raw };
+
+            position.entry_time = parsePossibleTimestamp(position.entry_time);
+            position.exit_time = parsePossibleTimestamp(position.exit_time);
+            position.current_price_updated = parsePossibleTimestamp(position.current_price_updated);
+
+            return position;
+        }
+
+        function getPositionKey(position) {
+            if (!position) return null;
+
+            if (position.id !== undefined && position.id !== null) {
+                return `id:${position.id}`;
+            }
+
+            if (position.mint) {
+                const entry = position.entry_time ?? position.created_at ?? '';
+                return `mint:${position.mint}:${entry}`;
+            }
+
+            return null;
+        }
+
+        function matchesStatusFilter(position, filterValue) {
+            if (filterValue === 'all') return true;
+            const isOpen = !position.transaction_exit_verified;
+            if (filterValue === 'open') {
+                return isOpen;
+            }
+            if (filterValue === 'closed') {
+                return !isOpen;
+            }
+            return true;
+        }
+
+        function matchesSearchFilter(position, searchTerm) {
+            if (!searchTerm) return true;
+            const fields = [position.symbol, position.name, position.mint];
+            return fields.some(field => field && field.toLowerCase().includes(searchTerm));
+        }
+
+        function shouldIncludeInCurrentFilter(position) {
+            return matchesStatusFilter(position, getCurrentStatusFilter());
+        }
+
+        function renderPositionRow(pos) {
+            const isOpen = !pos.transaction_exit_verified;
+            const statusBadge = pos.synthetic_exit
+                ? '<span class="status-badge status-synthetic">SYNTHETIC</span>'
+                : (isOpen
+                    ? '<span class="status-badge status-open">OPEN</span>'
+                    : '<span class="status-badge status-closed">CLOSED</span>');
+
+            const currentOrExitPrice = isOpen
+                ? (pos.current_price ? formatNumber(pos.current_price, 8) : '-')
+                : (pos.effective_exit_price || pos.exit_price ? formatNumber(pos.effective_exit_price || pos.exit_price, 8) : '-');
+
+            const pnl = isOpen ? pos.unrealized_pnl : pos.pnl;
+            const pnlPercent = isOpen ? pos.unrealized_pnl_percent : pos.pnl_percent;
+
+            return `
+                <tr data-position-key="${getPositionKey(pos) || ''}">
+                    <td>${statusBadge}</td>
+                    <td><strong>${pos.symbol}</strong></td>
+                    <td style="font-size: 0.85em;">${pos.name}</td>
+                    <td>${formatNumber(pos.effective_entry_price || pos.entry_price, 8)}</td>
+                    <td>${currentOrExitPrice}</td>
+                    <td>${formatSOL(pos.entry_size_sol)}</td>
+                    <td>${formatPnL(pnl)}</td>
+                    <td>${formatPercent(pnlPercent)}</td>
+                    <td style="font-size: 0.85em;">${formatTime(pos.entry_time)}</td>
+                    <td>
+                        <div class="dropdown-container">
+                            <button class="dropdown-btn" onclick="toggleDropdown(event)" aria-label="Actions">
+                                ⋮
+                            </button>
+                            <div class="dropdown-menu">
+                                <button onclick="copyDebugInfo('${pos.mint}', 'position')" class="dropdown-item">
+                                    📋 Copy Debug Info
+                                </button>
+                                <button onclick="copyMint('${pos.mint}')" class="dropdown-item">
+                                    📋 Copy Mint
+                                </button>
+                                <button onclick="openGMGN('${pos.mint}')" class="dropdown-item">
+                                    🔗 Open GMGN
+                                </button>
+                                <button onclick="openDexScreener('${pos.mint}')" class="dropdown-item">
+                                    📊 Open DexScreener
+                                </button>
+                                <button onclick="openSolscan('${pos.mint}')" class="dropdown-item">
+                                    🔍 Open Solscan
+                                </button>
+                                <button onclick="showDebugModal('${pos.mint}', 'position')" class="dropdown-item">
+                                    🐛 Debug Info
+                                </button>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }
+
+        function updatePositionCount(count) {
+            const label = document.getElementById('positionCount');
+            if (!label) return;
+            const value = Number.isFinite(count) ? count : positionsStore.size;
+            label.textContent = `${value} ${value === 1 ? 'position' : 'positions'}`;
+        }
+
+        function renderEmptyState(message, color = '#64748b') {
+            const tbody = document.getElementById('positionsTableBody');
+            if (!tbody) return;
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="10" style="text-align: center; padding: 20px; color: ${color};">
+                        ${message}
+                    </td>
+                </tr>
+            `;
+        }
+
+        function startPositionsFallback(intervalMs = 3000) {
+            if (positionsFallbackInterval) return;
+            positionsFallbackInterval = setInterval(() => {
+                loadPositions({ reason: 'fallback' });
+            }, intervalMs);
+        }
+
+        function stopPositionsFallback() {
+            if (!positionsFallbackInterval) return;
+            clearInterval(positionsFallbackInterval);
+            positionsFallbackInterval = null;
+        }
+
+        function renderPositionsTable() {
+            const tbody = document.getElementById('positionsTableBody');
+            if (!tbody) return;
+
+            if (!positionsInitialized && positionsStore.size === 0) {
+                renderEmptyState('Loading positions...');
+                return;
+            }
+
+            const statusFilter = getCurrentStatusFilter();
+            const searchTerm = getSearchTerm();
+
+            const rows = Array.from(positionsStore.values())
+                .filter(pos => matchesStatusFilter(pos, statusFilter))
+                .filter(pos => matchesSearchFilter(pos, searchTerm))
+                .sort((a, b) => {
+                    const aTime = a.entry_time ?? 0;
+                    const bTime = b.entry_time ?? 0;
+                    return bTime - aTime;
+                });
+
+            if (rows.length === 0) {
+                renderEmptyState('No positions found');
+                updatePositionCount(0);
+                return;
+            }
+
+            tbody.innerHTML = rows.map(renderPositionRow).join('');
+            updatePositionCount(rows.length);
+        }
+
+        function syncPositionsStore(positions) {
+            positionsStore.clear();
+            positions.forEach(pos => {
+                const normalized = normalizePositionFromApi(pos);
+                const key = getPositionKey(normalized);
+                if (key) {
+                    positionsStore.set(key, normalized);
+                }
+            });
+        }
+
+        function handlePositionBroadcast(update) {
+            if (!update || typeof update !== 'object') return;
+
+            // Receiving live updates means WebSocket is active
+            stopPositionsFallback();
+
+            if (update.type === 'balance_changed') {
+                return;
+            }
+
+            if (!update.position) {
+                console.warn('[Positions] Update missing position payload:', update);
+                return;
+            }
+
+            const normalized = normalizePositionFromApi(update.position);
+            const key = getPositionKey(normalized);
+            if (!key) {
+                console.warn('[Positions] Unable to derive key for update:', update);
+                return;
+            }
+
+            if (shouldIncludeInCurrentFilter(normalized)) {
+                positionsStore.set(key, normalized);
+            } else {
+                positionsStore.delete(key);
+            }
+
+            positionsInitialized = true;
+            renderPositionsTable();
+        }
+
+        function handlePositionsWarning(message) {
+            if (!message || message.channel !== 'positions') return;
+            console.warn('[Positions] WebSocket warning received:', message);
+            startPositionsFallback();
+            loadPositions({ reason: 'ws-warning', force: true });
+        }
+
+        function handlePositionsDisconnect() {
+            startPositionsFallback();
+        }
+
+        function handlePositionsReconnect() {
+            stopPositionsFallback();
+            loadPositions({ reason: 'ws-reconnect', force: true });
+        }
+
+        async function loadPositions(options = {}) {
+            const { reason = 'manual', force = false } = options;
+
+            if (!force && isDropdownOpen()) {
+                return;
+            }
+
+            if (positionsLoading && !force) {
+                return;
+            }
+
+            const statusFilter = getCurrentStatusFilter();
+
+            if (positionsStore.size === 0 && !positionsInitialized) {
+                renderEmptyState('Loading positions...');
+            }
+
+            positionsLoading = true;
+
+            if (positionsRequestController) {
+                positionsRequestController.abort();
+            }
+
+            positionsRequestController = new AbortController();
+
+            try {
+                const response = await fetch(`/api/positions?status=${statusFilter}&limit=1000`, {
+                    signal: positionsRequestController.signal
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const positions = await response.json();
+                const array = Array.isArray(positions) ? positions : [];
+
+                syncPositionsStore(array);
+                positionsInitialized = true;
+                renderPositionsTable();
             } catch (error) {
+                if (error.name === 'AbortError') {
+                    return;
+                }
                 console.error('Failed to load positions:', error);
-                const tbody = document.getElementById('positionsTableBody');
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="10" style="text-align: center; padding: 20px; color: #ef4444;">
-                            ⚠️ Failed to load positions
-                        </td>
-                    </tr>
-                `;
+                if (!positionsInitialized || positionsStore.size === 0) {
+                    renderEmptyState('⚠️ Failed to load positions', '#ef4444');
+                    updatePositionCount(0);
+                }
+            } finally {
+                positionsRequestController = null;
+                positionsLoading = false;
             }
         }
 
-        // Setup auto-refresh
-        function setupAutoRefresh() {
-            if (autoRefreshInterval) {
-                clearInterval(autoRefreshInterval);
-            }
-            
-            autoRefreshInterval = setInterval(() => {
-                loadPositions();
-            }, 1000);
-        }
-
-        // Search on input
         document.addEventListener('DOMContentLoaded', () => {
             const searchInput = document.getElementById('searchInput');
-            searchInput.addEventListener('input', () => {
-                loadPositions();
-            });
+            if (searchInput) {
+                searchInput.addEventListener('input', () => {
+                    renderPositionsTable();
+                });
+            }
 
-            // Initial load and silent refresh
-            loadPositions();
-            setupAutoRefresh();
+            if (typeof WsHub !== 'undefined') {
+                const wsDataHandler = (payload) => handlePositionBroadcast(payload);
+                const wsWarningHandler = (message) => handlePositionsWarning(message);
+                const wsDisconnectHandler = () => handlePositionsDisconnect();
+                const wsReconnectHandler = () => handlePositionsReconnect();
+
+                WsHub.subscribe('positions', wsDataHandler);
+                WsHub.subscribe('_warning', wsWarningHandler);
+                WsHub.subscribe('_disconnected', wsDisconnectHandler);
+                WsHub.subscribe('_failed', wsDisconnectHandler);
+                WsHub.subscribe('_connected', wsReconnectHandler);
+
+                if (!WsHub.isConnected()) {
+                    startPositionsFallback();
+                }
+
+                window.addEventListener('beforeunload', () => {
+                    WsHub.unsubscribe('positions', wsDataHandler);
+                    WsHub.unsubscribe('_warning', wsWarningHandler);
+                    WsHub.unsubscribe('_disconnected', wsDisconnectHandler);
+                    WsHub.unsubscribe('_failed', wsDisconnectHandler);
+                    WsHub.unsubscribe('_connected', wsReconnectHandler);
+                });
+            } else {
+                console.warn('[Positions] WsHub not available, enabling HTTP polling fallback.');
+                startPositionsFallback();
+            }
+
+            loadPositions({ reason: 'initial', force: true });
         });
     </script>
     "#.to_string()
@@ -3779,7 +4093,7 @@ pub fn tokens_content() -> String {
             searchTerm: '',
         };
 
-        let allTokensData = [];
+    let allTokensData = [];
         let tokensRefreshInterval = null;
         let tokensRequestController = null;
         let tokensLoading = false;
@@ -3921,6 +4235,25 @@ pub fn tokens_content() -> String {
             alert('Export functionality - to be implemented');
         }
 
+        function normalizeTokenFromApi(rawToken) {
+            if (!rawToken || typeof rawToken !== 'object') return rawToken;
+            const token = { ...rawToken };
+
+            if (token.price_updated_at) {
+                const numericTimestamp = Number(token.price_updated_at);
+                if (Number.isFinite(numericTimestamp)) {
+                    token.price_updated_at = numericTimestamp;
+                } else {
+                    const parsed = Date.parse(token.price_updated_at);
+                    token.price_updated_at = Number.isFinite(parsed) ? Math.floor(parsed / 1000) : null;
+                }
+            } else {
+                token.price_updated_at = null;
+            }
+
+            return token;
+        }
+
         async function loadTokens(options = {}) {
             const { reason = 'manual', force = false } = options;
             const isAutoRefresh = reason === 'interval';
@@ -3961,7 +4294,8 @@ pub fn tokens_content() -> String {
                 }
 
                 const data = await res.json();
-                allTokensData = Array.isArray(data.items) ? data.items : [];
+                const items = Array.isArray(data.items) ? data.items : [];
+                allTokensData = items.map(normalizeTokenFromApi);
                 updateTokenCount(data.total);
                 applySearchFilter();
             } catch (error) {
@@ -4595,46 +4929,74 @@ pub fn tokens_content() -> String {
         // WebSocket real-time price updates
         // ====================================================================
         
-        function handlePriceUpdate(data) {
-            // Update cache if token is already loaded
-            const tokenInList = allTokensData.find(t => t.mint === data.mint);
+        function handlePriceUpdate(message) {
+            if (!message || typeof message !== 'object') return;
+            const { mint, price_result: priceResult, timestamp } = message;
+            if (!mint || !priceResult || typeof priceResult !== 'object') return;
+
+            const tokenInList = allTokensData.find(t => t.mint === mint);
+            const updatedPriceSol = Number(priceResult.price_sol);
+            const updatedPriceUsd = Number(priceResult.price_usd);
+            const updatedTimestamp = (() => {
+                if (Number.isFinite(priceResult.timestamp)) return Number(priceResult.timestamp);
+                if (typeof timestamp === 'string') {
+                    const parsed = Date.parse(timestamp);
+                    if (Number.isFinite(parsed)) return Math.floor(parsed / 1000);
+                }
+                return null;
+            })();
+
             if (tokenInList) {
-                tokenInList.price_sol = data.price_sol;
-                tokenInList.liquidity_usd = data.liquidity_usd;
-                tokenInList.price_updated_at = data.updated_at || new Date().toISOString();
-                
-                // Update the row if visible (avoid full re-render)
-                const row = document.querySelector(`tr[data-mint="${data.mint}"]`);
+                if (Number.isFinite(updatedPriceSol)) {
+                    tokenInList.price_sol = updatedPriceSol;
+                }
+                if (Number.isFinite(updatedPriceUsd)) {
+                    tokenInList.price_usd = updatedPriceUsd;
+                }
+                if (updatedTimestamp !== null) {
+                    tokenInList.price_updated_at = updatedTimestamp;
+                }
+
+                const row = document.querySelector(`tr[data-mint="${mint}"]`);
                 if (row) {
-                    const priceCell = row.cells[1]; // Price column
-                    const liquidityCell = row.cells[2]; // Liquidity column
-                    const timeCell = row.cells[10]; // Last updated column
-                    
-                    if (priceCell) {
-                        priceCell.innerHTML = formatPriceSol(data.price_sol);
+                    const priceCell = row.cells?.[1];
+                    const liquidityCell = row.cells?.[2];
+                    const timeCell = row.cells?.[10];
+
+                    if (priceCell && Number.isFinite(updatedPriceSol)) {
+                        priceCell.innerHTML = formatPriceSol(updatedPriceSol);
                         priceCell.style.animation = 'highlight 0.6s ease-out';
-                        setTimeout(() => priceCell.style.animation = '', 600);
+                        setTimeout(() => { priceCell.style.animation = ''; }, 600);
                     }
-                    if (liquidityCell) {
-                        liquidityCell.innerHTML = formatCurrencyUSD(data.liquidity_usd);
+
+                    if (liquidityCell && Number.isFinite(tokenInList.liquidity_usd)) {
+                        liquidityCell.innerHTML = formatCurrencyUSD(tokenInList.liquidity_usd);
                     }
-                    if (timeCell) {
-                        timeCell.textContent = 'Just now';
+
+                    if (timeCell && updatedTimestamp !== null) {
+                        timeCell.textContent = formatTimeAgo(updatedTimestamp);
                     }
                 }
             }
-            
-            // Update modal if currently viewing this token
-            if (currentModalMint === data.mint) {
+
+            if (currentModalMint === mint) {
                 const priceEl = document.getElementById('detail-price');
                 const liquidityEl = document.getElementById('detail-liquidity');
                 const sidebarPriceEl = document.getElementById('sidebar-price');
                 const sidebarLiqEl = document.getElementById('sidebar-liq');
-                
-                if (priceEl) priceEl.textContent = formatPriceSol(data.price_sol);
-                if (liquidityEl) liquidityEl.textContent = formatCurrencyUSD(data.liquidity_usd);
-                if (sidebarPriceEl) sidebarPriceEl.textContent = formatPriceSol(data.price_sol);
-                if (sidebarLiqEl) sidebarLiqEl.textContent = formatCurrencyUSD(data.liquidity_usd);
+
+                if (priceEl && Number.isFinite(updatedPriceSol)) {
+                    priceEl.textContent = formatPriceSol(updatedPriceSol);
+                }
+                if (sidebarPriceEl && Number.isFinite(updatedPriceSol)) {
+                    sidebarPriceEl.textContent = formatPriceSol(updatedPriceSol);
+                }
+
+                if (Number.isFinite(tokenInList?.liquidity_usd)) {
+                    const formatted = formatCurrencyUSD(tokenInList.liquidity_usd);
+                    if (liquidityEl) liquidityEl.textContent = formatted;
+                    if (sidebarLiqEl) sidebarLiqEl.textContent = formatted;
+                }
             }
         }
         
