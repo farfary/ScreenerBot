@@ -7616,6 +7616,12 @@ pub fn services_content() -> String {
         async function loadServices(options = {}) {
             const { showLoader = false } = options;
 
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => {
+                console.warn('[Services] ⏰ Fetch timeout after 5s, aborting request');
+                controller.abort();
+            }, 5000);
+
             try {
                 console.log('[Services] 🔄 Starting services fetch', {
                     showLoader,
@@ -7630,8 +7636,11 @@ pub fn services_content() -> String {
 
                 const fetchStart = performance.now();
                 const response = await fetch('/api/services/overview', {
-                    headers: { 'X-Requested-With': 'fetch' }
+                    headers: { 'X-Requested-With': 'fetch' },
+                    signal: controller.signal,
+                    cache: 'no-cache'
                 });
+                clearTimeout(timeoutId);
                 const fetchDuration = performance.now() - fetchStart;
 
                 console.log('[Services] ✅ Fetch completed', {
@@ -7665,13 +7674,26 @@ pub fn services_content() -> String {
                 
                 handleServicesSnapshot(data);
             } catch (error) {
-                console.error('[Services] ❌ Failed to load services', {
+                clearTimeout(timeoutId);
+                
+                const isAborted = error?.name === 'AbortError';
+                const errorDetails = {
                     message: error?.message || String(error),
+                    name: error?.name,
                     stack: error?.stack,
                     timestamp: new Date().toISOString(),
-                    errorType: error?.constructor?.name
-                });
-                showServicesError('Failed to load services data: ' + (error?.message || 'Unknown error'));
+                    errorType: error?.constructor?.name,
+                    isAborted,
+                    wasTimeout: isAborted
+                };
+                
+                console.error('[Services] ❌ Failed to load services', errorDetails);
+                
+                if (isAborted) {
+                    showServicesError('Request timed out after 5s - try refreshing');
+                } else {
+                    showServicesError('Failed to load services: ' + (error?.message || 'Network error'));
+                }
             }
         }
 
@@ -7737,7 +7759,7 @@ pub fn services_content() -> String {
             renderServicesTable();
         }
 
-        function startServicesFallback(intervalMs = 15000) {
+        function startServicesFallback(intervalMs = 30000) {
             if (servicesFallbackInterval) {
                 console.debug('[Services] Fallback polling already active', {
                     intervalMs,
@@ -7746,6 +7768,7 @@ pub fn services_content() -> String {
                 return;
             }
             servicesFallbackInterval = setInterval(() => {
+                console.log('[Services] 🔁 Polling services via fallback HTTP');
                 loadServices({ showLoader: false });
             }, intervalMs);
             servicesFallbackInterval._startedAt = Date.now();
@@ -7806,7 +7829,7 @@ pub fn services_content() -> String {
                         message: payload.message,
                         timestamp: new Date().toISOString()
                     });
-                    startServicesFallback(10000);
+                    startServicesFallback(30000);
                 }
             };
 
@@ -7814,7 +7837,7 @@ pub fn services_content() -> String {
                 console.warn('[Services] WebSocket disconnected, enabling fallback polling', {
                     timestamp: new Date().toISOString()
                 });
-                startServicesFallback(10000);
+                startServicesFallback(30000);
             };
 
             const onReconnect = () => {
@@ -7831,7 +7854,7 @@ pub fn services_content() -> String {
 
             if (!WsHub.isConnected()) {
                 console.debug('[Services] WebSocket not connected yet, enabling fallback');
-                startServicesFallback(10000);
+                startServicesFallback(30000);
             }
 
             if (window.Router && typeof Router.registerCleanup === 'function') {

@@ -332,23 +332,45 @@ async fn get_service(Path(name): Path<String>, State(_state): State<Arc<AppState
 /// GET /api/services/overview
 /// Complete services overview with dependency graph and summary
 async fn services_overview(State(_state): State<Arc<AppState>>) -> Response {
+    use std::time::Instant;
+
+    let start = Instant::now();
+
     if is_debug_webserver_enabled() {
         log(LogTag::Webserver, "DEBUG", "Fetching complete services overview");
     }
 
     let overview = gather_services_overview_snapshot().await;
+    let gather_duration = start.elapsed();
 
     if is_debug_webserver_enabled() {
         log(
             LogTag::Webserver,
             "DEBUG",
             &format!(
-                "Overview payload ready: services={}, dependencies={}",
+                "Overview payload ready: services={}, dependencies={}, gather_time={}ms",
                 overview.services.len(),
-                overview.dependency_graph.len()
+                overview.dependency_graph.len(),
+                gather_duration.as_millis()
             )
         );
     }
 
-    success_response(overview)
+    let response = success_response(overview);
+    let total_duration = start.elapsed();
+
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "DEBUG",
+            &format!(
+                "Overview response ready: total_time={}ms (gather={}ms, serialize={}ms)",
+                total_duration.as_millis(),
+                gather_duration.as_millis(),
+                (total_duration - gather_duration).as_millis()
+            )
+        );
+    }
+
+    response
 }
