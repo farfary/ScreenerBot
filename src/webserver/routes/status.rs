@@ -12,6 +12,7 @@ use std::sync::Arc;
 use sysinfo::System;
 
 use crate::{
+    arguments::is_debug_webserver_enabled,
     global::{
         are_core_services_ready,
         get_pending_services,
@@ -120,7 +121,9 @@ async fn health_check() -> Response {
 /// GET /api/status
 /// Complete system status including services and metrics
 async fn system_status(State(state): State<Arc<AppState>>) -> Response {
-    log(LogTag::Webserver, "DEBUG", "Fetching complete system status");
+    if is_debug_webserver_enabled() {
+        log(LogTag::Webserver, "DEBUG", "Fetching complete system status");
+    }
 
     let uptime = state.uptime_seconds();
     let services = get_service_status_internal();

@@ -1,11 +1,12 @@
-use crate::logger::{log, LogTag};
-use crate::ohlcvs::{ActivityType, Priority};
-use crate::services::{Service, ServiceHealth};
+use crate::arguments::is_debug_ohlcv_enabled;
+use crate::logger::{ log, LogTag };
+use crate::ohlcvs::{ ActivityType, Priority };
+use crate::services::{ Service, ServiceHealth };
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
-use tokio::time::{sleep, Duration};
+use tokio::time::{ sleep, Duration };
 
 /// OHLCV (Open, High, Low, Close, Volume) data collection service
 ///
@@ -30,8 +31,8 @@ impl Service for OhlcvService {
     async fn initialize(&mut self) -> Result<(), String> {
         log(LogTag::System, "INFO", "Initializing OHLCV service...");
 
-        crate::ohlcvs::OhlcvService::initialize()
-            .await
+        crate::ohlcvs::OhlcvService
+            ::initialize().await
             .map_err(|e| format!("Failed to initialize OHLCV service: {}", e))?;
 
         log(LogTag::System, "SUCCESS", "✅ OHLCV service initialized");
@@ -41,12 +42,12 @@ impl Service for OhlcvService {
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor,
+        monitor: tokio_metrics::TaskMonitor
     ) -> Result<Vec<JoinHandle<()>>, String> {
         log(LogTag::System, "INFO", "Starting OHLCV monitoring...");
 
-        let mut handles = crate::ohlcvs::OhlcvService::start(shutdown.clone(), monitor.clone())
-            .await
+        let mut handles = crate::ohlcvs::OhlcvService
+            ::start(shutdown.clone(), monitor.clone()).await
             .map_err(|e| format!("Failed to start OHLCV runtime: {}", e))?;
 
         let autop_monitor = monitor.clone();
@@ -57,13 +58,21 @@ impl Service for OhlcvService {
 
                 tokio::select! {
                     _ = autop_shutdown.notified() => {
-                        log(LogTag::Ohlcv, "AUTO_POPULATE_EXIT", "Shutdown received before OHLCV auto-populate");
+                        if is_debug_ohlcv_enabled() {
+                            log(LogTag::Ohlcv, "AUTO_POPULATE_EXIT", "Shutdown received before OHLCV auto-populate");
+                        }
                         return;
                     }
                     _ = sleep(Duration::from_secs(5)) => {}
                 }
 
-                log(LogTag::Ohlcv, "AUTO_POPULATE", "Adding open positions to OHLCV monitoring...");
+                if is_debug_ohlcv_enabled() {
+                    log(
+                        LogTag::Ohlcv,
+                        "AUTO_POPULATE",
+                        "Adding open positions to OHLCV monitoring..."
+                    );
+                }
 
                 let open_positions = crate::positions::get_open_positions().await;
                 for position in &open_positions {
@@ -73,11 +82,13 @@ impl Service for OhlcvService {
                             Priority::Critical
                         ).await
                     {
-                        log(
-                            LogTag::Ohlcv,
-                            "ERROR",
-                            &format!("Failed to add {} to monitoring: {}", position.mint, e)
-                        );
+                        if is_debug_ohlcv_enabled() {
+                            log(
+                                LogTag::Ohlcv,
+                                "ERROR",
+                                &format!("Failed to add {} to monitoring: {}", position.mint, e)
+                            );
+                        }
                         continue;
                     }
 
@@ -87,29 +98,32 @@ impl Service for OhlcvService {
                             ActivityType::PositionOpened
                         ).await
                     {
-                        log(
-                            LogTag::Ohlcv,
-                            "ERROR",
-                            &format!("Failed to record activity for {}: {}", position.mint, e)
-                        );
+                        if is_debug_ohlcv_enabled() {
+                            log(
+                                LogTag::Ohlcv,
+                                "ERROR",
+                                &format!("Failed to record activity for {}: {}", position.mint, e)
+                            );
+                        }
                     }
                 }
 
-                log(
-                    LogTag::Ohlcv,
-                    "AUTO_POPULATE_DONE",
-                    &format!("✅ Added {} open positions to OHLCV monitoring", open_positions.len())
-                );
+                if is_debug_ohlcv_enabled() {
+                    log(
+                        LogTag::Ohlcv,
+                        "AUTO_POPULATE_DONE",
+                        &format!(
+                            "✅ Added {} open positions to OHLCV monitoring",
+                            open_positions.len()
+                        )
+                    );
+                }
             })
         );
 
         handles.push(autop_handle);
 
-        log(
-            LogTag::System,
-            "SUCCESS",
-            "✅ OHLCV monitoring started (instrumented)",
-        );
+        log(LogTag::System, "SUCCESS", "✅ OHLCV monitoring started (instrumented)");
 
         Ok(handles)
     }

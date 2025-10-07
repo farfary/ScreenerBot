@@ -9,6 +9,7 @@ use tokio::sync::Notify;
 use tower_http::compression::CompressionLayer;
 
 use crate::{
+    arguments::is_debug_webserver_enabled,
     config::WebserverConfig,
     logger::{ log, LogTag },
     webserver::{ routes, state::AppState },
@@ -26,33 +27,51 @@ pub async fn start_server(config: WebserverConfig) -> Result<(), String> {
     // Validate configuration
     config.validate().map_err(|e| format!("Invalid webserver config: {}", e))?;
 
-    log(LogTag::Webserver, "INFO", &format!("🌐 Starting webserver on {}", config.bind_address()));
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "INFO",
+            &format!("🌐 Starting webserver on {}", config.bind_address())
+        );
+    }
 
     // Create application state
     let state = Arc::new(AppState::new(config.clone()));
 
     // Initialize WebSocket broadcast systems
-    log(LogTag::Webserver, "INFO", "Initializing WebSocket broadcast systems...");
+    if is_debug_webserver_enabled() {
+        log(LogTag::Webserver, "INFO", "Initializing WebSocket broadcast systems...");
+    }
 
     // Initialize positions broadcaster
     crate::positions::initialize_positions_broadcaster();
-    log(LogTag::Webserver, "INFO", "✅ Positions broadcast system initialized");
+    if is_debug_webserver_enabled() {
+        log(LogTag::Webserver, "INFO", "✅ Positions broadcast system initialized");
+    }
 
     // Initialize prices broadcaster
     crate::pools::initialize_prices_broadcaster();
-    log(LogTag::Webserver, "INFO", "✅ Prices broadcast system initialized");
+    if is_debug_webserver_enabled() {
+        log(LogTag::Webserver, "INFO", "✅ Prices broadcast system initialized");
+    }
 
     // Initialize status broadcaster
     crate::webserver::initialize_status_broadcaster();
-    log(LogTag::Webserver, "INFO", "✅ Status broadcast system initialized");
+    if is_debug_webserver_enabled() {
+        log(LogTag::Webserver, "INFO", "✅ Status broadcast system initialized");
+    }
 
     // Start status broadcaster task (every 2 seconds)
     let _status_handle = crate::webserver::start_status_broadcaster(2);
-    log(LogTag::Webserver, "INFO", "✅ Status broadcast task started (interval: 2s)");
+    if is_debug_webserver_enabled() {
+        log(LogTag::Webserver, "INFO", "✅ Status broadcast task started (interval: 2s)");
+    }
 
     // Set global app state for WebSocket connection tracking
     crate::webserver::state::set_global_app_state(Arc::clone(&state));
-    log(LogTag::Webserver, "INFO", "✅ Global app state configured");
+    if is_debug_webserver_enabled() {
+        log(LogTag::Webserver, "INFO", "✅ Global app state configured");
+    }
 
     // Build the router
     let app = build_app(state.clone());
@@ -68,13 +87,21 @@ pub async fn start_server(config: WebserverConfig) -> Result<(), String> {
         format!("Failed to bind to {}: {}", addr, e)
     )?;
 
-    log(LogTag::Webserver, "INFO", &format!("✅ Webserver listening on http://{}", addr));
-    log(LogTag::Webserver, "INFO", &format!("📊 API endpoints available at http://{}/api", addr));
+    if is_debug_webserver_enabled() {
+        log(LogTag::Webserver, "INFO", &format!("✅ Webserver listening on http://{}", addr));
+        log(
+            LogTag::Webserver,
+            "INFO",
+            &format!("📊 API endpoints available at http://{}/api", addr)
+        );
+    }
 
     // Run the server with graceful shutdown
     let shutdown_signal = async {
         SHUTDOWN_NOTIFY.notified().await;
-        log(LogTag::Webserver, "INFO", "Received shutdown signal, stopping webserver...");
+        if is_debug_webserver_enabled() {
+            log(LogTag::Webserver, "INFO", "Received shutdown signal, stopping webserver...");
+        }
     };
 
     axum
@@ -82,14 +109,18 @@ pub async fn start_server(config: WebserverConfig) -> Result<(), String> {
         .with_graceful_shutdown(shutdown_signal).await
         .map_err(|e| format!("Server error: {}", e))?;
 
-    log(LogTag::Webserver, "INFO", "✅ Webserver stopped gracefully");
+    if is_debug_webserver_enabled() {
+        log(LogTag::Webserver, "INFO", "✅ Webserver stopped gracefully");
+    }
 
     Ok(())
 }
 
 /// Trigger webserver shutdown
 pub fn shutdown() {
-    log(LogTag::Webserver, "INFO", "Triggering webserver shutdown...");
+    if is_debug_webserver_enabled() {
+        log(LogTag::Webserver, "INFO", "Triggering webserver shutdown...");
+    }
     SHUTDOWN_NOTIFY.notify_one();
 }
 

@@ -1,18 +1,19 @@
 use axum::{
-    extract::{Path, State},
+    extract::{ Path, State },
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::{ IntoResponse, Response },
     routing::get,
     Router,
 };
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use chrono::{ DateTime, Utc };
+use serde::{ Deserialize, Serialize };
 use std::sync::Arc;
 
 use crate::{
-    logger::{log, LogTag},
-    services::{ServiceHealth, ServiceMetrics},
-    webserver::{state::AppState, utils::success_response},
+    arguments::is_debug_webserver_enabled,
+    logger::{ log, LogTag },
+    services::{ ServiceHealth, ServiceMetrics },
+    webserver::{ state::AppState, utils::success_response },
 };
 
 // ================================================================================================
@@ -87,7 +88,9 @@ pub fn routes() -> Router<Arc<AppState>> {
 /// GET /api/services
 /// List all services with their current status
 async fn list_services(State(state): State<Arc<AppState>>) -> Response {
-    log(LogTag::Webserver, "DEBUG", "Fetching all services list");
+    if is_debug_webserver_enabled() {
+        log(LogTag::Webserver, "DEBUG", "Fetching all services list");
+    }
 
     let service_names = state.get_all_services().await;
     let health_map = state.get_all_services_health().await;
@@ -103,9 +106,7 @@ async fn list_services(State(state): State<Arc<AppState>>) -> Response {
             let health = health_map
                 .get(name)
                 .cloned()
-                .unwrap_or(ServiceHealth::Unhealthy(
-                    "Health status unavailable".to_string(),
-                ));
+                .unwrap_or(ServiceHealth::Unhealthy("Health status unavailable".to_string()));
             let metrics = metrics_map.get(name).cloned().unwrap_or_default();
 
             // Count health statuses
@@ -126,7 +127,10 @@ async fn list_services(State(state): State<Arc<AppState>>) -> Response {
             services.push(ServiceDetailResponse {
                 name: name.to_string(),
                 priority: details.priority,
-                dependencies: details.dependencies.iter().map(|s| s.to_string()).collect(),
+                dependencies: details.dependencies
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
                 enabled: details.enabled,
                 health,
                 metrics,
@@ -153,31 +157,20 @@ async fn list_services(State(state): State<Arc<AppState>>) -> Response {
 /// GET /api/services/:name
 /// Get detailed information about a specific service
 async fn get_service(Path(name): Path<String>, State(state): State<Arc<AppState>>) -> Response {
-    log(
-        LogTag::Webserver,
-        "DEBUG",
-        &format!("Fetching service details for: {}", name),
-    );
+    log(LogTag::Webserver, "DEBUG", &format!("Fetching service details for: {}", name));
 
     // Get service details
     let details = match state.get_service_details(&name).await {
         Some(d) => d,
         None => {
-            return (
-                StatusCode::NOT_FOUND,
-                format!("Service '{}' not found", name),
-            )
-                .into_response();
+            return (StatusCode::NOT_FOUND, format!("Service '{}' not found", name)).into_response();
         }
     };
 
     // Get health and metrics
     let health = state
-        .get_service_health(&name)
-        .await
-        .unwrap_or(ServiceHealth::Unhealthy(
-            "Health status unavailable".to_string(),
-        ));
+        .get_service_health(&name).await
+        .unwrap_or(ServiceHealth::Unhealthy("Health status unavailable".to_string()));
 
     let metrics_map = state.get_service_metrics().await;
     let metrics = metrics_map.get(name.as_str()).cloned().unwrap_or_default();
@@ -186,7 +179,10 @@ async fn get_service(Path(name): Path<String>, State(state): State<Arc<AppState>
     let response = ServiceDetailResponse {
         name: name.clone(),
         priority: details.priority,
-        dependencies: details.dependencies.iter().map(|s| s.to_string()).collect(),
+        dependencies: details.dependencies
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
         enabled: details.enabled,
         health,
         metrics,
@@ -199,11 +195,7 @@ async fn get_service(Path(name): Path<String>, State(state): State<Arc<AppState>
 /// GET /api/services/overview
 /// Complete services overview with dependency graph and summary
 async fn services_overview(State(state): State<Arc<AppState>>) -> Response {
-    log(
-        LogTag::Webserver,
-        "DEBUG",
-        "Fetching complete services overview",
-    );
+    log(LogTag::Webserver, "DEBUG", "Fetching complete services overview");
 
     let service_names = state.get_all_services().await;
     let health_map = state.get_all_services_health().await;
@@ -222,9 +214,7 @@ async fn services_overview(State(state): State<Arc<AppState>>) -> Response {
             let health = health_map
                 .get(name)
                 .cloned()
-                .unwrap_or(ServiceHealth::Unhealthy(
-                    "Health status unavailable".to_string(),
-                ));
+                .unwrap_or(ServiceHealth::Unhealthy("Health status unavailable".to_string()));
             let metrics = metrics_map.get(name).cloned().unwrap_or_default();
 
             if details.enabled {
@@ -252,7 +242,10 @@ async fn services_overview(State(state): State<Arc<AppState>>) -> Response {
             dependency_graph.push(ServiceDependencyNode {
                 name: name.to_string(),
                 priority: details.priority,
-                dependencies: details.dependencies.iter().map(|s| s.to_string()).collect(),
+                dependencies: details.dependencies
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
                 health: health.clone(),
             });
 
@@ -261,7 +254,10 @@ async fn services_overview(State(state): State<Arc<AppState>>) -> Response {
             services.push(ServiceDetailResponse {
                 name: name.to_string(),
                 priority: details.priority,
-                dependencies: details.dependencies.iter().map(|s| s.to_string()).collect(),
+                dependencies: details.dependencies
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
                 enabled: details.enabled,
                 health,
                 metrics,

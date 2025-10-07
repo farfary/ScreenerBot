@@ -1,5 +1,6 @@
 // Main OHLCV service implementation
 
+use crate::arguments::is_debug_ohlcv_enabled;
 use crate::logger::{ log, LogTag };
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::cache::OhlcvCache;
@@ -174,13 +175,17 @@ impl OhlcvServiceImpl {
 
 async fn get_or_init_service() -> OhlcvResult<Arc<OhlcvServiceImpl>> {
     let service = OHLCV_SERVICE.get_or_try_init(|| async {
-        log(LogTag::Ohlcv, "INIT", "Initializing OHLCV runtime");
+        if is_debug_ohlcv_enabled() {
+            log(LogTag::Ohlcv, "INIT", "Initializing OHLCV runtime");
+        }
 
         // Use config for DB path
         let db_path = PathBuf::from("data").join("ohlcvs.db");
         let service_impl = OhlcvServiceImpl::new(db_path)?;
 
-        log(LogTag::Ohlcv, "SUCCESS", "OHLCV runtime ready");
+        if is_debug_ohlcv_enabled() {
+            log(LogTag::Ohlcv, "SUCCESS", "OHLCV runtime ready");
+        }
         Ok::<Arc<OhlcvServiceImpl>, OhlcvError>(Arc::new(service_impl))
     }).await?;
 
@@ -202,14 +207,24 @@ impl OhlcvService {
 
         // Start background monitoring tasks before awaiting shutdown
         monitor_instance.clone().start().await?;
-        log(LogTag::Ohlcv, "TASK_START", "OHLCV monitoring tasks started");
+        if is_debug_ohlcv_enabled() {
+            log(LogTag::Ohlcv, "TASK_START", "OHLCV monitoring tasks started");
+        }
 
         let shutdown_task = tokio::spawn(
             monitor.instrument(async move {
                 shutdown.notified().await;
-                log(LogTag::Ohlcv, "TASK_STOP", "Shutdown signal received for OHLCV monitoring");
+                if is_debug_ohlcv_enabled() {
+                    log(
+                        LogTag::Ohlcv,
+                        "TASK_STOP",
+                        "Shutdown signal received for OHLCV monitoring"
+                    );
+                }
                 monitor_instance.stop().await;
-                log(LogTag::Ohlcv, "TASK_END", "OHLCV monitoring tasks stopped");
+                if is_debug_ohlcv_enabled() {
+                    log(LogTag::Ohlcv, "TASK_END", "OHLCV monitoring tasks stopped");
+                }
             })
         );
 

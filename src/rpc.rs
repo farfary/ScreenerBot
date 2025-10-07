@@ -209,7 +209,13 @@ pub async fn get_ata_rent_lamports() -> Result<u64, ScreenerBotError> {
             Ok(cache) => cache,
             Err(_) => {
                 // If we can't get the cache lock, fall back to default value
-                log(LogTag::Rpc, "WARN", "ATA rent cache lock contention - using default ATA rent");
+                if is_debug_rpc_enabled() {
+                    log(
+                        LogTag::Rpc,
+                        "WARN",
+                        "ATA rent cache lock contention - using default ATA rent"
+                    );
+                }
                 return Ok(2039280); // Default ATA rent: 0.00203928 SOL
             }
         };
@@ -277,48 +283,62 @@ pub async fn get_ata_rent_lamports() -> Result<u64, ScreenerBotError> {
                                             cached_at: Instant::now(),
                                         });
                                     } else {
-                                        log(
-                                            LogTag::Rpc,
-                                            "WARN",
-                                            "Failed to update ATA rent cache - lock contention"
-                                        );
+                                        if is_debug_rpc_enabled() {
+                                            log(
+                                                LogTag::Rpc,
+                                                "WARN",
+                                                "Failed to update ATA rent cache - lock contention"
+                                            );
+                                        }
                                     }
                                 }
 
-                                log(
-                                    LogTag::Rpc,
-                                    "ATA_RENT",
-                                    &format!(
-                                        "Retrieved ATA rent from RPC: {} lamports ({:.9} SOL)",
-                                        rent_lamports,
-                                        lamports_to_sol(rent_lamports)
-                                    )
-                                );
+                                if is_debug_rpc_enabled() {
+                                    log(
+                                        LogTag::Rpc,
+                                        "ATA_RENT",
+                                        &format!(
+                                            "Retrieved ATA rent from RPC: {} lamports ({:.9} SOL)",
+                                            rent_lamports,
+                                            lamports_to_sol(rent_lamports)
+                                        )
+                                    );
+                                }
 
                                 return Ok(rent_lamports);
                             }
                         }
 
-                        log(LogTag::Rpc, "WARN", "RPC response missing result for ATA rent");
+                        if is_debug_rpc_enabled() {
+                            log(LogTag::Rpc, "WARN", "RPC response missing result for ATA rent");
+                        }
                     }
                     Err(e) => {
-                        log(
-                            LogTag::Rpc,
-                            "WARN",
-                            &format!("Failed to parse ATA rent RPC response: {}", e)
-                        );
+                        if is_debug_rpc_enabled() {
+                            log(
+                                LogTag::Rpc,
+                                "WARN",
+                                &format!("Failed to parse ATA rent RPC response: {}", e)
+                            );
+                        }
                     }
                 }
             } else if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
                 // Record 429 error for adaptive rate limiting
                 rpc_client.record_429_error(Some(&current_url));
-                log(LogTag::Rpc, "WARN", "Rate limited on RPC");
+                if is_debug_rpc_enabled() {
+                    log(LogTag::Rpc, "WARN", "Rate limited on RPC");
+                }
             } else {
-                log(LogTag::Rpc, "WARN", &format!("RPC error status: {}", response.status()));
+                if is_debug_rpc_enabled() {
+                    log(LogTag::Rpc, "WARN", &format!("RPC error status: {}", response.status()));
+                }
             }
         }
         Err(e) => {
-            log(LogTag::Rpc, "WARN", &format!("Failed to connect to RPC: {}", e));
+            if is_debug_rpc_enabled() {
+                log(LogTag::Rpc, "WARN", &format!("Failed to connect to RPC: {}", e));
+            }
         }
     }
 
@@ -691,17 +711,21 @@ impl RpcStats {
                         Ok(())
                     }
                     Err(e) => {
-                        log(
-                            LogTag::Rpc,
-                            "WARNING",
-                            &format!("Failed to parse RPC stats file, starting fresh: {}", e)
-                        );
+                        if is_debug_rpc_enabled() {
+                            log(
+                                LogTag::Rpc,
+                                "WARNING",
+                                &format!("Failed to parse RPC stats file, starting fresh: {}", e)
+                            );
+                        }
                         Ok(())
                     }
                 }
             }
             Err(_) => {
-                log(LogTag::Rpc, "INFO", "No existing RPC stats file found, starting fresh");
+                if is_debug_rpc_enabled() {
+                    log(LogTag::Rpc, "INFO", "No existing RPC stats file found, starting fresh");
+                }
                 Ok(())
             }
         }
@@ -846,7 +870,7 @@ impl RpcRateLimiter {
                 self.current_interval = self.base_interval;
                 // Only log rate limit reset if we actually had 429 errors to recover from
                 // This prevents spam when using premium-only RPC mode
-                if had_previous_429s {
+                if had_previous_429s && is_debug_rpc_enabled() {
                     log(LogTag::Rpc, "RATE_LIMIT", "Rate limit backoff reset to normal");
                 }
             } else {
@@ -895,7 +919,9 @@ impl RpcRateLimiter {
         self.current_interval = self.base_interval;
         self.consecutive_429s = 0;
         self.consecutive_successes = 0;
-        log(LogTag::Rpc, "RATE_LIMIT", "Rate limiter reset");
+        if is_debug_rpc_enabled() {
+            log(LogTag::Rpc, "RATE_LIMIT", "Rate limiter reset");
+        }
     }
 
     /// Set a custom interval for a specific URL (useful for premium RPCs)
@@ -939,7 +965,9 @@ impl RpcClient {
     /// Create new RPC client with configuration from config.toml
     pub fn new() -> Self {
         Self::from_config().unwrap_or_else(|e| {
-            log(LogTag::Rpc, "ERROR", &format!("Failed to load config: {}", e));
+            if is_debug_rpc_enabled() {
+                log(LogTag::Rpc, "ERROR", &format!("Failed to load config: {}", e));
+            }
             log(
                 LogTag::Rpc,
                 "FATAL",
@@ -1045,7 +1073,9 @@ impl RpcClient {
         match self.current_url.lock() {
             Ok(url) => url.clone(),
             Err(_) => {
-                log(LogTag::Rpc, "WARN", "Failed to lock current_url - using first URL");
+                if is_debug_rpc_enabled() {
+                    log(LogTag::Rpc, "WARN", "Failed to lock current_url - using first URL");
+                }
                 self.rpc_urls.get(0).unwrap_or(&"".to_string()).clone()
             }
         }
@@ -1061,7 +1091,9 @@ impl RpcClient {
         match self.stats.try_lock() {
             Ok(stats) => stats.clone(),
             Err(_) => {
-                log(LogTag::Rpc, "WARN", "RPC stats lock contention - returning default stats");
+                if is_debug_rpc_enabled() {
+                    log(LogTag::Rpc, "WARN", "RPC stats lock contention - returning default stats");
+                }
                 RpcStats::default()
             }
         }
@@ -1072,7 +1104,13 @@ impl RpcClient {
         match self.stats.try_lock() {
             Ok(mut stats) => stats.save_to_disk(),
             Err(_) => {
-                log(LogTag::Rpc, "WARN", "RPC stats lock contention during save - stats not saved");
+                if is_debug_rpc_enabled() {
+                    log(
+                        LogTag::Rpc,
+                        "WARN",
+                        "RPC stats lock contention during save - stats not saved"
+                    );
+                }
                 Err("Failed to acquire stats lock for saving".to_string())
             }
         }
@@ -1097,7 +1135,9 @@ impl RpcClient {
                 new_url
             }
             _ => {
-                log(LogTag::Rpc, "WARN", "Failed to rotate URL - lock contention");
+                if is_debug_rpc_enabled() {
+                    log(LogTag::Rpc, "WARN", "Failed to rotate URL - lock contention");
+                }
                 self.rpc_urls.get(0).unwrap_or(&"".to_string()).clone()
             }
         };
@@ -1122,7 +1162,9 @@ impl RpcClient {
                 self.rpc_urls.get(next_index).unwrap_or(&"".to_string()).clone()
             }
             Err(_) => {
-                log(LogTag::Rpc, "WARN", "Failed to get next URL - lock contention");
+                if is_debug_rpc_enabled() {
+                    log(LogTag::Rpc, "WARN", "Failed to get next URL - lock contention");
+                }
                 self.rpc_urls.get(0).unwrap_or(&"".to_string()).clone()
             }
         }
@@ -1133,7 +1175,9 @@ impl RpcClient {
         match self.current_url_index.lock() {
             Ok(index) => *index,
             Err(_) => {
-                log(LogTag::Rpc, "WARN", "Failed to get URL index - lock contention");
+                if is_debug_rpc_enabled() {
+                    log(LogTag::Rpc, "WARN", "Failed to get URL index - lock contention");
+                }
                 0
             }
         }
@@ -1527,9 +1571,13 @@ impl RpcClient {
                 self.record_error(&current_url, "get_multiple_accounts");
                 if e.starts_with("rate_limit:") {
                     self.record_429_error(Some(&current_url));
-                    log(LogTag::Rpc, "WARN", "Rate limited on RPC for batch request");
+                    if is_debug_rpc_enabled() {
+                        log(LogTag::Rpc, "WARN", "Rate limited on RPC for batch request");
+                    }
                 } else {
-                    log(LogTag::Rpc, "WARN", &format!("Failed to fetch accounts: {}", e));
+                    if is_debug_rpc_enabled() {
+                        log(LogTag::Rpc, "WARN", &format!("Failed to fetch accounts: {}", e));
+                    }
                 }
             }
         }
@@ -3173,11 +3221,13 @@ impl RpcClient {
             self.record_success(Some(&current_url));
         }
 
-        log(
-            LogTag::Rpc,
-            "ATA",
-            &format!("Found {} total token accounts for wallet", all_accounts.len())
-        );
+        if is_debug_rpc_enabled() {
+            log(
+                LogTag::Rpc,
+                "ATA",
+                &format!("Found {} total token accounts for wallet", all_accounts.len())
+            );
+        }
 
         Ok(all_accounts)
     }

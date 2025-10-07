@@ -1,4 +1,4 @@
-use crate::logger::{log, LogTag};
+use crate::logger::{ log, LogTag };
 /// Centralized argument handling system for ScreenerBot
 ///
 /// This module consolidates all command-line argument parsing and debug flag checking
@@ -39,7 +39,9 @@ pub fn get_cmd_args() -> Vec<String> {
 
 /// Checks if a specific argument is present in the command line
 pub fn has_arg(arg: &str) -> bool {
-    get_cmd_args().iter().any(|a| a == arg)
+    get_cmd_args()
+        .iter()
+        .any(|a| a == arg)
 }
 
 /// Gets the value of a command-line argument that follows a flag
@@ -247,6 +249,11 @@ pub fn is_debug_security_enabled() -> bool {
     has_arg("--debug-security")
 }
 
+/// Webserver operations debug mode
+pub fn is_debug_webserver_enabled() -> bool {
+    has_arg("--debug-webserver")
+}
+
 /// Dry-run mode - simulates trading without executing actual transactions
 pub fn is_dry_run_enabled() -> bool {
     has_arg("--dry-run")
@@ -341,6 +348,7 @@ pub fn print_help() {
     println!("    --debug-security          Security operations debug mode");
     println!("    --debug-trader            Trader module debug mode");
     println!("    --debug-transactions      Transactions module debug mode");
+    println!("    --debug-webserver         Webserver operations debug mode");
     println!("    --debug-websocket         WebSocket connection debug mode");
     println!("    --debug-wallet            Wallet operations debug mode");
     println!();
@@ -363,39 +371,40 @@ pub fn print_help() {
 
 /// Checks if any debug mode is enabled
 pub fn is_any_debug_enabled() -> bool {
-    is_debug_filtering_enabled()
-        || is_debug_profit_enabled()
-        || is_debug_pool_prices_enabled()
-        || is_debug_pool_calculator_enabled()
-        || is_debug_pool_discovery_enabled()
-        || is_debug_pool_analyzer_enabled()
-        || is_debug_pool_cache_enabled()
-        || is_debug_pool_fetcher_enabled()
-        || is_debug_pool_decoders_enabled()
-        || is_debug_pool_cleanup_enabled()
-        || is_debug_pool_monitor_enabled()
-        || is_debug_pool_service_enabled()
-        || is_debug_pool_tokens_enabled()
-        || is_debug_trader_enabled()
-        || is_debug_api_enabled()
-        || is_debug_monitor_enabled()
-        || is_debug_discovery_enabled()
-        || is_debug_price_service_enabled()
-        || is_debug_sol_price_enabled()
-        || is_debug_entry_enabled()
-        || is_debug_ohlcv_enabled()
-        || is_debug_wallet_enabled()
-        || is_debug_swaps_enabled()
-        || is_debug_decimals_enabled()
-        || is_debug_summary_enabled()
-        || is_debug_summary_logging_enabled()
-        || is_debug_transactions_enabled()
-        || is_debug_websocket_enabled()
-        || is_debug_rpc_enabled()
-        || is_debug_positions_enabled()
-        || is_debug_ata_enabled()
-        || is_debug_blacklist_enabled()
-        || is_debug_security_enabled()
+    is_debug_filtering_enabled() ||
+        is_debug_profit_enabled() ||
+        is_debug_pool_prices_enabled() ||
+        is_debug_pool_calculator_enabled() ||
+        is_debug_pool_discovery_enabled() ||
+        is_debug_pool_analyzer_enabled() ||
+        is_debug_pool_cache_enabled() ||
+        is_debug_pool_fetcher_enabled() ||
+        is_debug_pool_decoders_enabled() ||
+        is_debug_pool_cleanup_enabled() ||
+        is_debug_pool_monitor_enabled() ||
+        is_debug_pool_service_enabled() ||
+        is_debug_pool_tokens_enabled() ||
+        is_debug_trader_enabled() ||
+        is_debug_api_enabled() ||
+        is_debug_monitor_enabled() ||
+        is_debug_discovery_enabled() ||
+        is_debug_price_service_enabled() ||
+        is_debug_sol_price_enabled() ||
+        is_debug_entry_enabled() ||
+        is_debug_ohlcv_enabled() ||
+        is_debug_wallet_enabled() ||
+        is_debug_swaps_enabled() ||
+        is_debug_decimals_enabled() ||
+        is_debug_summary_enabled() ||
+        is_debug_summary_logging_enabled() ||
+        is_debug_transactions_enabled() ||
+        is_debug_websocket_enabled() ||
+        is_debug_rpc_enabled() ||
+        is_debug_positions_enabled() ||
+        is_debug_ata_enabled() ||
+        is_debug_blacklist_enabled() ||
+        is_debug_security_enabled() ||
+        is_debug_webserver_enabled()
 }
 
 /// Gets a list of all enabled debug modes
@@ -489,6 +498,9 @@ pub fn get_enabled_debug_modes() -> Vec<&'static str> {
     if is_debug_security_enabled() {
         modes.push("security");
     }
+    if is_debug_webserver_enabled() {
+        modes.push("webserver");
+    }
     if is_dry_run_enabled() {
         modes.push("dry-run");
     }
@@ -508,21 +520,13 @@ pub fn get_enabled_debug_modes() -> Vec<&'static str> {
 /// Prints debug information about current arguments and enabled debug modes
 pub fn print_debug_info() {
     let args = get_cmd_args();
-    log(
-        LogTag::System,
-        "DEBUG",
-        &format!("Command-line arguments: {:?}", args),
-    );
+    log(LogTag::System, "DEBUG", &format!("Command-line arguments: {:?}", args));
 
     let enabled_modes = get_enabled_debug_modes();
     if enabled_modes.is_empty() {
         log(LogTag::System, "DEBUG", "No debug modes enabled");
     } else {
-        log(
-            LogTag::System,
-            "DEBUG",
-            &format!("Enabled debug modes: {:?}", enabled_modes),
-        );
+        log(LogTag::System, "DEBUG", &format!("Enabled debug modes: {:?}", enabled_modes));
     }
 }
 
