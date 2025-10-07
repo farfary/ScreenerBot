@@ -4458,24 +4458,44 @@ pub fn tokens_content() -> String {
 
             const modal = document.getElementById('tokenModal');
             if (modal) {
-                modal.classList.add('visible');
+                modal.classList.add('active');
+                console.log('Modal opened successfully');
+            } else {
+                console.error('Modal element not found!');
             }
         }
 
         function resetTokenModal() {
             const modal = document.getElementById('tokenModal');
             if (modal) {
-                modal.classList.remove('visible');
+                modal.classList.remove('active');
             }
             currentModalMint = null;
             tokenModalData = null;
         }
 
         async function openTokenModal(mint) {
-            if (!mint) return;
+            if (!mint) {
+                console.warn('openTokenModal: no mint provided');
+                return;
+            }
+            
+            console.log('openTokenModal: opening modal for', mint);
+            
             const cached = getTokenByMint(mint);
+            if (!cached) {
+                console.warn('openTokenModal: token not found in cache', mint);
+                showToast('❌ Token not found in cache', 'error');
+                return;
+            }
+            
             const detail = await fetchTokenDetail(mint);
-            if (!detail || !cached) return;
+            if (!detail) {
+                console.warn('openTokenModal: failed to fetch token detail', mint);
+                return; // fetchTokenDetail already shows error toast
+            }
+            
+            console.log('openTokenModal: populating modal with data', { cached, detail });
             currentModalMint = mint;
             tokenModalData = { token: cached, detail };
             populateTokenModal(cached, detail);
@@ -5020,7 +5040,10 @@ pub fn tokens_content() -> String {
 
         function openTokenDetail(mint) {
             if (!mint) return;
-            openTokenModal(mint);
+            openTokenModal(mint).catch(err => {
+                console.error('Failed to open token modal:', err);
+                showToast('❌ Failed to open token details', 'error');
+            });
         }
     </script>
     
