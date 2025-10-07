@@ -1,5 +1,5 @@
-use crate::webserver::{state::AppState, templates};
-use axum::{response::Html, Router};
+use crate::webserver::{ state::AppState, templates };
+use axum::{ response::Html, Router };
 use std::sync::Arc;
 
 pub mod blacklist;
@@ -69,11 +69,7 @@ async fn services_page() -> Html<String> {
 /// Config page handler
 async fn config_page() -> Html<String> {
     let content = templates::config_content();
-    Html(templates::base_template(
-        "Configuration",
-        "config",
-        &content,
-    ))
+    Html(templates::base_template("Configuration", "config", &content))
 }
 
 fn api_routes() -> Router<Arc<AppState>> {
@@ -91,4 +87,21 @@ fn api_routes() -> Router<Arc<AppState>> {
         .merge(ohlcv::ohlcv_routes())
         .nest("/trader", trader::routes())
         .nest("/system", system::routes())
+        .route("/pages/:page", axum::routing::get(get_page_content))
+}
+
+/// SPA page content handler - returns just the content HTML (not full template)
+async fn get_page_content(axum::extract::Path(page): axum::extract::Path<String>) -> Html<String> {
+    let content = match page.as_str() {
+        "home" => templates::home_content(),
+        "status" => templates::status_content(),
+        "positions" => templates::positions_content(),
+        "tokens" => templates::tokens_content(),
+        "events" => templates::events_content(),
+        "services" => templates::services_content(),
+        "config" => templates::config_content(),
+        _ => format!("<h1>Page Not Found: {}</h1>", page),
+    };
+
+    Html(content)
 }

@@ -2030,7 +2030,13 @@ fn nav_tabs(active: &str) -> String {
     tabs.iter()
         .map(|(name, label)| {
             let active_class = if *name == active { " active" } else { "" };
-            format!(r#"<a href="/{}" class="tab{}">{}</a>"#, name, active_class, label)
+            // Use data-page attribute for client-side routing (SPA)
+            format!(
+                "<a href=\"#\" data-page=\"{}\" class=\"tab{}\">{}</a>",
+                name,
+                active_class,
+                label
+            )
         })
         .collect::<Vec<_>>()
         .join("\n        ")
@@ -2270,20 +2276,199 @@ fn common_scripts() -> &'static str {
             }
         };
         
-        // Initialize WebSocket Hub on page load
+        // Initialize WebSocket Hub on page load (ONCE - persists across navigation)
         document.addEventListener('DOMContentLoaded', () => {
             WsHub.connect();
             WsHub.startHeartbeat();
         });
         
-        // Save active tab on navigation
-        document.addEventListener('DOMContentLoaded', () => {
-            const currentPath = window.location.pathname;
-            const tab = currentPath === '/' ? 'home' : currentPath.substring(1);
-            AppState.save('lastTab', tab);
+        // Client-Side Router - SPA Architecture
+        window.Router = {
+            currentPage: null,
+            _timeoutMs: 10000,
             
-            // Clean up sub-tabs and toolbar for pages that don't use them
+            async loadPage(pageName) {
+                console.log('[Router] Loading page:', pageName);
+                
+                // Update current page
+                this.currentPage = pageName;
+                
+                // Update active tab styling
+                document.querySelectorAll('nav .tab').forEach(tab => {
+                    const tabPage = tab.getAttribute('data-page');
+                    if (tabPage === pageName) {
+                        tab.classList.add('active');
+                    } else {
+                        tab.classList.remove('active');
+                    }
+                });
+                
+                const mainContent = document.querySelector('main');
+                if (mainContent) {
+                    mainContent.setAttribute('data-loading', 'true');
+                    mainContent.innerHTML = `
+                        <div class="page-loading" style="padding: 2rem; text-align: center;">
+                            <div style="font-size: 1.1rem; color: var(--text-secondary);">
+                                Loading ${pageName}...
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // Fetch page content from API with timeout protection
+                try {
+                    const html = await this.fetchPageContent(pageName, this._timeoutMs);
+
+                    if (!mainContent) {
+                        console.error('[Router] Main content container not found');
+                        return;
+                    }
+
+                    mainContent.innerHTML = html;
+                    this.executeEmbeddedScripts(mainContent);
+
+                    // Re-initialize page-specific scripts
+                    this.initPageScripts(pageName);
+
+                    // Clean up sub-tabs and toolbar for pages that don't use them
+                    cleanupTabContainers();
+
+                    // Update browser history only if path actually changed
+                    const targetUrl = pageName === 'home' ? '/' : `/${pageName}`;
+                    if (window.location.pathname !== targetUrl) {
+                        window.history.pushState({ page: pageName }, '', targetUrl);
+                    }
+
+                    // Save last visited tab
+                    AppState.save('lastTab', pageName);
+
+                    console.log('[Router] Page loaded successfully:', pageName);
+                } catch (error) {
+                    console.error('[Router] Failed to load page:', pageName, error);
+                    
+                    // Show error in main content
+                    if (mainContent) {
+                        mainContent.removeAttribute('data-loading');
+                        mainContent.innerHTML = `
+                            <div style="padding: 2rem; text-align: center;">
+                                <h2 style="color: #ef4444;">⚠️ Failed to Load Page</h2>
+                                <p style="color: #9ca3af; margin-top: 1rem;">
+                                    ${error.message}
+                                </p>
+                                <button onclick="Router.loadPage('${pageName}')" 
+                                    style="margin-top: 1rem; padding: 0.5rem 1rem; 
+                                           background: #3b82f6; color: white; border: none; 
+                                           border-radius: 0.5rem; cursor: pointer;">
+                                    Retry
+                                </button>
+                            </div>
+                        `;
+                    }
+                }
+                
+                if (mainContent) {
+                    mainContent.removeAttribute('data-loading');
+                }
+            },
+            
+            async fetchPageContent(pageName, timeoutMs = 10000) {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+                const url = `/api/pages/${pageName}`;
+
+                try {
+                    const response = await fetch(url, { signal: controller.signal, headers: { 'X-Requested-With': 'fetch' } });
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    return await response.text();
+                } catch (error) {
+                    if (error.name === 'AbortError') {
+                        throw new Error(`Request timed out after ${Math.round(timeoutMs / 1000)}s`);
+                    }
+                    throw error;
+                } finally {
+                    clearTimeout(timeoutId);
+                }
+            },
+            
+            executeEmbeddedScripts(container) {
+                if (!container) return;
+
+                const scripts = container.querySelectorAll('script');
+                scripts.forEach((script) => {
+                    const newScript = document.createElement('script');
+                    Array.from(script.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
+
+                    if (script.src) {
+                        newScript.src = script.src;
+                    } else {
+                        newScript.textContent = script.textContent;
+                    }
+
+                    script.parentNode?.replaceChild(newScript, script);
+                });
+            },
+            
+            initPageScripts(pageName) {
+                // Re-initialize page-specific functionality after dynamic load
+                switch (pageName) {
+                    case 'status':
+                        if (typeof initStatusSubTabs === 'function') initStatusSubTabs();
+                        if (typeof ensureStatusSubTabsVisible === 'function') ensureStatusSubTabsVisible();
+                        break;
+                    case 'tokens':
+                        if (typeof initTokensPage === 'function') initTokensPage();
+                        break;
+                    case 'positions':
+                        if (typeof initPositionsPage === 'function') initPositionsPage();
+                        break;
+                    case 'events':
+                        if (typeof initEventsPage === 'function') initEventsPage();
+                        break;
+                    case 'config':
+                        if (typeof initConfigPage === 'function') initConfigPage();
+                        break;
+                    case 'services':
+                        if (typeof initServicesPage === 'function') initServicesPage();
+                        break;
+                }
+            }
+        };
+        
+        // Initialize router on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            // Set initial page from URL
+            const currentPath = window.location.pathname;
+            const initialPage = currentPath === '/' ? 'home' : currentPath.substring(1);
+            Router.currentPage = initialPage;
+            
+            // Intercept all navigation link clicks
+            document.addEventListener('click', (e) => {
+                const target = e.target.closest('a[data-page]');
+                if (target) {
+                    e.preventDefault();
+                    const pageName = target.getAttribute('data-page');
+                    Router.loadPage(pageName);
+                }
+            });
+            
+            // Handle browser back/forward buttons
+            window.addEventListener('popstate', (e) => {
+                if (e.state && e.state.page) {
+                    Router.loadPage(e.state.page);
+                } else {
+                    const path = window.location.pathname;
+                    const page = path === '/' ? 'home' : path.substring(1);
+                    Router.loadPage(page);
+                }
+            });
+            
+            // Save initial state
+            AppState.save('lastTab', initialPage);
             cleanupTabContainers();
+            
+            console.log('[Router] Initialized - SPA mode active');
         });
         
         // Helper function to hide sub-tabs/toolbar containers
