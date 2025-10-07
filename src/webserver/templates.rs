@@ -2286,12 +2286,48 @@ fn common_scripts() -> &'static str {
         window.Router = {
             currentPage: null,
             _timeoutMs: 10000,
+            cleanupHandlers: [],
+            
+            registerCleanup(handler) {
+                if (typeof handler === 'function') {
+                    this.cleanupHandlers.push(handler);
+                }
+                return handler;
+            },
+
+            runCleanupHandlers() {
+                while (this.cleanupHandlers.length) {
+                    const handler = this.cleanupHandlers.pop();
+                    try {
+                        handler();
+                    } catch (err) {
+                        console.error('[Router] Cleanup handler failed:', err);
+                    }
+                }
+            },
+
+            trackInterval(intervalId) {
+                if (intervalId != null) {
+                    this.registerCleanup(() => clearInterval(intervalId));
+                }
+                return intervalId;
+            },
+
+            trackTimeout(timeoutId) {
+                if (timeoutId != null) {
+                    this.registerCleanup(() => clearTimeout(timeoutId));
+                }
+                return timeoutId;
+            },
             
             async loadPage(pageName) {
                 console.log('[Router] Loading page:', pageName);
                 
                 // Update current page
                 this.currentPage = pageName;
+
+                // Run cleanup handlers for previous page before loading new content
+                this.runCleanupHandlers();
                 
                 // Update active tab styling
                 document.querySelectorAll('nav .tab').forEach(tab => {
@@ -2651,6 +2687,12 @@ fn common_scripts() -> &'static str {
     fetchStatusSnapshot();
     startStatusPolling();
 
+    if (window.Router && typeof Router.registerCleanup === 'function') {
+        Router.registerCleanup(() => {
+            stopStatusPolling();
+        });
+    }
+
         if (typeof WsHub !== 'undefined') {
             const handleStatusUpdate = (snapshot) => {
                 if (!snapshot) return;
@@ -2677,6 +2719,15 @@ fn common_scripts() -> &'static str {
             WsHub.subscribe('_disconnected', handleStatusDisconnect);
             WsHub.subscribe('_failed', handleStatusDisconnect);
             WsHub.subscribe('_connected', handleStatusReconnect);
+
+            if (window.Router && typeof Router.registerCleanup === 'function') {
+                Router.registerCleanup(() => {
+                    WsHub.unsubscribe('status', handleStatusUpdate);
+                    WsHub.unsubscribe('_disconnected', handleStatusDisconnect);
+                    WsHub.unsubscribe('_failed', handleStatusDisconnect);
+                    WsHub.unsubscribe('_connected', handleStatusReconnect);
+                });
+            }
             
             // Set initial WebSocket badge state
             if (WsHub.isConnected()) {
@@ -3232,6 +3283,15 @@ fn common_scripts() -> &'static str {
             // Start polling trader status
             updateTraderStatus();
             traderStatusPollInterval = setInterval(updateTraderStatus, 2000);
+
+            if (window.Router && typeof Router.registerCleanup === 'function') {
+                Router.registerCleanup(() => {
+                    if (traderStatusPollInterval) {
+                        clearInterval(traderStatusPollInterval);
+                        traderStatusPollInterval = null;
+                    }
+                });
+            }
         }
         
         // Update trader status from API
@@ -3729,7 +3789,12 @@ pub fn home_content() -> String {
         }
         
         loadHomeData();
-        setInterval(loadHomeData, 1000);
+        const homeDataInterval = setInterval(loadHomeData, 1000);
+        if (window.Router && typeof Router.registerCleanup === 'function') {
+            Router.registerCleanup(() => {
+                clearInterval(homeDataInterval);
+            });
+        }
     </script>
     "#.to_string()
 }
@@ -5073,6 +5138,15 @@ pub fn positions_content() -> String {
             positionsFallbackInterval = setInterval(() => {
                 loadPositions({ reason: 'fallback' });
             }, intervalMs);
+
+            if (window.Router && typeof Router.registerCleanup === 'function') {
+                Router.registerCleanup(() => {
+                    if (positionsFallbackInterval) {
+                        clearInterval(positionsFallbackInterval);
+                        positionsFallbackInterval = null;
+                    }
+                });
+            }
         }
 
         function stopPositionsFallback() {
@@ -5247,6 +5321,17 @@ pub fn positions_content() -> String {
 
                 if (!WsHub.isConnected()) {
                     startPositionsFallback();
+                }
+
+                if (window.Router && typeof Router.registerCleanup === 'function') {
+                    Router.registerCleanup(() => {
+                        stopPositionsFallback();
+                        WsHub.unsubscribe('positions', wsDataHandler);
+                        WsHub.unsubscribe('_warning', wsWarningHandler);
+                        WsHub.unsubscribe('_disconnected', wsDisconnectHandler);
+                        WsHub.unsubscribe('_failed', wsDisconnectHandler);
+                        WsHub.unsubscribe('_connected', wsReconnectHandler);
+                    });
                 }
 
                 window.addEventListener('beforeunload', () => {
@@ -5980,6 +6065,15 @@ pub fn tokens_content() -> String {
             tokensRefreshInterval = setInterval(() => {
                 loadTokens({ reason: 'interval', force: false });
             }, 2000);
+
+            if (window.Router && typeof Router.registerCleanup === 'function') {
+                Router.registerCleanup(() => {
+                    if (tokensRefreshInterval) {
+                        clearInterval(tokensRefreshInterval);
+                        tokensRefreshInterval = null;
+                    }
+                });
+            }
         }
 
         function stopTokensRefresh() {
@@ -6585,6 +6679,12 @@ pub fn tokens_content() -> String {
             WsHub.subscribe('prices', handlePriceUpdate);
             console.log('[Tokens] Subscribed to WebSocket price updates');
             
+            if (window.Router && typeof Router.registerCleanup === 'function') {
+                Router.registerCleanup(() => {
+                    WsHub.unsubscribe('prices', handlePriceUpdate);
+                });
+            }
+
             // Cleanup on page unload
             window.addEventListener('beforeunload', () => {
                 WsHub.unsubscribe('prices', handlePriceUpdate);
@@ -7261,6 +7361,15 @@ pub fn events_content() -> String {
             eventsRefreshInterval = setInterval(() => {
                 loadEvents();
             }, intervalMs);
+
+            if (window.Router && typeof Router.registerCleanup === 'function') {
+                Router.registerCleanup(() => {
+                    if (eventsRefreshInterval) {
+                        clearInterval(eventsRefreshInterval);
+                        eventsRefreshInterval = null;
+                    }
+                });
+            }
         }
 
         // Handle incoming event from WebSocket
@@ -7318,6 +7427,16 @@ pub fn events_content() -> String {
             WsHub.subscribe('_failed', handleEventsDisconnect);
             WsHub.subscribe('_connected', handleEventsReconnect);
             console.log('[Events] Subscribed to WebSocket events channel');
+
+            if (window.Router && typeof Router.registerCleanup === 'function') {
+                Router.registerCleanup(() => {
+                    WsHub.unsubscribe('events', handleEventsWebSocket);
+                    WsHub.unsubscribe('_warning', handleWebSocketWarning);
+                    WsHub.unsubscribe('_disconnected', handleEventsDisconnect);
+                    WsHub.unsubscribe('_failed', handleEventsDisconnect);
+                    WsHub.unsubscribe('_connected', handleEventsReconnect);
+                });
+            }
             
             // Update status based on WsHub connection state
             if (WsHub.isConnected()) {
@@ -7654,7 +7773,12 @@ pub fn services_content() -> String {
         function refreshServices() { loadServices(); }
 
         loadServices();
-        setInterval(loadServices, 5000);
+        const servicesRefreshInterval = setInterval(loadServices, 5000);
+        if (window.Router && typeof Router.registerCleanup === 'function') {
+            Router.registerCleanup(() => {
+                clearInterval(servicesRefreshInterval);
+            });
+        }
     </script>
     "#.to_string()
 }
