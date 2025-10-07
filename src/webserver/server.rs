@@ -11,27 +11,28 @@ use tower_http::compression::CompressionLayer;
 use crate::{
     arguments::is_debug_webserver_enabled,
     config::WebserverConfig,
-    logger::{ log, LogTag },
-    webserver::{ routes, state::AppState },
+    logger::{log, LogTag},
+    webserver::{routes, state::AppState},
 };
 
 /// Global shutdown notifier
-static SHUTDOWN_NOTIFY: once_cell::sync::Lazy<Arc<Notify>> = once_cell::sync::Lazy::new(||
-    Arc::new(Notify::new())
-);
+static SHUTDOWN_NOTIFY: once_cell::sync::Lazy<Arc<Notify>> =
+    once_cell::sync::Lazy::new(|| Arc::new(Notify::new()));
 
 /// Start the webserver
 ///
 /// This function blocks until the server is shut down
 pub async fn start_server(config: WebserverConfig) -> Result<(), String> {
     // Validate configuration
-    config.validate().map_err(|e| format!("Invalid webserver config: {}", e))?;
+    config
+        .validate()
+        .map_err(|e| format!("Invalid webserver config: {}", e))?;
 
     if is_debug_webserver_enabled() {
         log(
             LogTag::Webserver,
             "INFO",
-            &format!("🌐 Starting webserver on {}", config.bind_address())
+            &format!("🌐 Starting webserver on {}", config.bind_address()),
         );
     }
 
@@ -40,43 +41,71 @@ pub async fn start_server(config: WebserverConfig) -> Result<(), String> {
 
     // Initialize WebSocket broadcast systems
     if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "INFO", "Initializing WebSocket broadcast systems...");
+        log(
+            LogTag::Webserver,
+            "INFO",
+            "Initializing WebSocket broadcast systems...",
+        );
     }
 
     // Initialize positions broadcaster
     crate::positions::initialize_positions_broadcaster();
     if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "INFO", "✅ Positions broadcast system initialized");
+        log(
+            LogTag::Webserver,
+            "INFO",
+            "✅ Positions broadcast system initialized",
+        );
     }
 
     // Initialize prices broadcaster
     crate::pools::initialize_prices_broadcaster();
     if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "INFO", "✅ Prices broadcast system initialized");
+        log(
+            LogTag::Webserver,
+            "INFO",
+            "✅ Prices broadcast system initialized",
+        );
     }
 
     // Initialize status broadcaster
     crate::webserver::initialize_status_broadcaster();
     if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "INFO", "✅ Status broadcast system initialized");
+        log(
+            LogTag::Webserver,
+            "INFO",
+            "✅ Status broadcast system initialized",
+        );
     }
 
     // Start status broadcaster task (every 2 seconds)
     let _status_handle = crate::webserver::start_status_broadcaster(2);
     if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "INFO", "✅ Status broadcast task started (interval: 2s)");
+        log(
+            LogTag::Webserver,
+            "INFO",
+            "✅ Status broadcast task started (interval: 2s)",
+        );
     }
 
     // Initialize services broadcaster
     crate::webserver::initialize_services_broadcaster();
     if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "INFO", "✅ Services broadcast system initialized");
+        log(
+            LogTag::Webserver,
+            "INFO",
+            "✅ Services broadcast system initialized",
+        );
     }
 
     // Start services broadcaster task (every 3 seconds)
     let _services_handle = crate::webserver::start_services_broadcaster(3);
     if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "INFO", "✅ Services broadcast task started (interval: 3s)");
+        log(
+            LogTag::Webserver,
+            "INFO",
+            "✅ Services broadcast task started (interval: 3s)",
+        );
     }
 
     // Set global app state for WebSocket connection tracking
@@ -95,16 +124,20 @@ pub async fn start_server(config: WebserverConfig) -> Result<(), String> {
         .map_err(|e| format!("Invalid bind address: {}", e))?;
 
     // Create TCP listener
-    let listener = TcpListener::bind(&addr).await.map_err(|e|
-        format!("Failed to bind to {}: {}", addr, e)
-    )?;
+    let listener = TcpListener::bind(&addr)
+        .await
+        .map_err(|e| format!("Failed to bind to {}: {}", addr, e))?;
 
     if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "INFO", &format!("✅ Webserver listening on http://{}", addr));
         log(
             LogTag::Webserver,
             "INFO",
-            &format!("📊 API endpoints available at http://{}/api", addr)
+            &format!("✅ Webserver listening on http://{}", addr),
+        );
+        log(
+            LogTag::Webserver,
+            "INFO",
+            &format!("📊 API endpoints available at http://{}/api", addr),
         );
     }
 
@@ -112,13 +145,17 @@ pub async fn start_server(config: WebserverConfig) -> Result<(), String> {
     let shutdown_signal = async {
         SHUTDOWN_NOTIFY.notified().await;
         if is_debug_webserver_enabled() {
-            log(LogTag::Webserver, "INFO", "Received shutdown signal, stopping webserver...");
+            log(
+                LogTag::Webserver,
+                "INFO",
+                "Received shutdown signal, stopping webserver...",
+            );
         }
     };
 
-    axum
-        ::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal).await
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal)
+        .await
         .map_err(|e| format!("Server error: {}", e))?;
 
     if is_debug_webserver_enabled() {
@@ -131,7 +168,11 @@ pub async fn start_server(config: WebserverConfig) -> Result<(), String> {
 /// Trigger webserver shutdown
 pub fn shutdown() {
     if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "INFO", "Triggering webserver shutdown...");
+        log(
+            LogTag::Webserver,
+            "INFO",
+            "Triggering webserver shutdown...",
+        );
     }
     SHUTDOWN_NOTIFY.notify_one();
 }

@@ -19,7 +19,9 @@ use futures::{ SinkExt, StreamExt };
 use serde::{ Deserialize, Serialize };
 
 use crate::{
+    arguments::is_debug_webserver_enabled,
     events::{ self, Event, EventCategory, Severity },
+    logger::{ log, LogTag },
     pools,
     positions,
     webserver::{ routes::services::ServicesOverviewResponse, state::AppState, status_broadcast },
@@ -78,6 +80,13 @@ enum ServerMessage {
     Pong,
 }
 
+async fn log_ws_connection_change(state: &Arc<AppState>, context: &str) {
+    if is_debug_webserver_enabled() {
+        let active = state.ws_connection_count().await;
+        log(LogTag::Webserver, "DEBUG", &format!("{} (active_ws={})", context, active));
+    }
+}
+
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new().route("/ws", get(ws_hub_handler)).route("/ws/events", get(ws_events_handler)) // Keep for backward compatibility
 }
@@ -85,6 +94,7 @@ pub fn routes() -> Router<Arc<AppState>> {
 /// Centralized WebSocket hub handler
 pub async fn ws_hub_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> Response {
     state.increment_ws_connections().await;
+    log_ws_connection_change(&state, "Hub WebSocket connection opened").await;
     ws.on_upgrade(move |socket| handle_hub_socket(socket, state))
 }
 
@@ -95,6 +105,21 @@ pub async fn ws_events_handler(
     State(state): State<Arc<AppState>>
 ) -> Response {
     state.increment_ws_connections().await;
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "DEBUG",
+            &format!(
+                "Legacy events WebSocket connection opened with filters: category={:?} severity={:?} mint={:?} ref={:?} last_id={:?}",
+                params.category,
+                params.severity,
+                params.mint,
+                params.reference,
+                params.last_id
+            )
+        );
+    }
+    log_ws_connection_change(&state, "Events WebSocket connection opened").await;
     ws.on_upgrade(move |socket| handle_events_socket(socket, params, state))
 }
 
@@ -117,10 +142,31 @@ async fn handle_hub_socket(socket: WebSocket, state: Arc<AppState>) {
     let has_status = status_rx.is_some();
     let has_services = services_rx.is_some();
 
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "DEBUG",
+            &format!(
+                "Hub socket started (events_ready={} positions_ready={} prices_ready={} status_ready={} services_ready={})",
+                has_events,
+                has_positions,
+                has_prices,
+                has_status,
+                has_services
+            )
+        );
+    }
+
     if !has_events {
+        if is_debug_webserver_enabled() {
+            log(LogTag::Webserver, "DEBUG", "Events broadcaster unavailable for hub connection");
+        }
         let _ = send_error(&mut sender, "Events broadcaster not ready", "EVENTS_NOT_READY").await;
     }
     if !has_positions {
+        if is_debug_webserver_enabled() {
+            log(LogTag::Webserver, "DEBUG", "Positions broadcaster unavailable for hub connection");
+        }
         let _ = send_error(
             &mut sender,
             "Positions broadcaster not ready",
@@ -128,12 +174,21 @@ async fn handle_hub_socket(socket: WebSocket, state: Arc<AppState>) {
         ).await;
     }
     if !has_prices {
+        if is_debug_webserver_enabled() {
+            log(LogTag::Webserver, "DEBUG", "Prices broadcaster unavailable for hub connection");
+        }
         let _ = send_error(&mut sender, "Prices broadcaster not ready", "PRICES_NOT_READY").await;
     }
     if !has_status {
+        if is_debug_webserver_enabled() {
+            log(LogTag::Webserver, "DEBUG", "Status broadcaster unavailable for hub connection");
+        }
         let _ = send_error(&mut sender, "Status broadcaster not ready", "STATUS_NOT_READY").await;
     }
     if !has_services {
+        if is_debug_webserver_enabled() {
+            log(LogTag::Webserver, "DEBUG", "Services broadcaster unavailable for hub connection");
+        }
         let _ = send_error(
             &mut sender,
             "Services broadcaster not ready",
@@ -144,6 +199,9 @@ async fn handle_hub_socket(socket: WebSocket, state: Arc<AppState>) {
     // Auto-subscribe to status (always-on channel)
     subscriptions.insert("status".to_string());
     let _ = send_subscribed(&mut sender, "status", "Auto-subscribed to status updates").await;
+    if is_debug_webserver_enabled() {
+        log(LogTag::Webserver, "DEBUG", "Client auto-subscribed to status channel");
+    }
 
     // Main multiplexer loop
     loop {
@@ -154,8 +212,13 @@ async fn handle_hub_socket(socket: WebSocket, state: Arc<AppState>) {
             msg = receiver.next() => {
                 match msg {
                     Some(Ok(Message::Text(text))) => {
+                        if is_debug_webserver_enabled() {
+                            log(LogTag::Webserver, "DEBUG", &format!("Hub socket received message: {}", text));
+                        }
                         if let Ok(client_msg) = serde_json::from_str::<ClientMessage>(&text) {
                             handle_client_message(client_msg, &mut subscriptions, &mut sender).await;
+                        } else if is_debug_webserver_enabled() {
+                            log(LogTag::Webserver, "DEBUG", "Failed to parse client WebSocket message");
                         }
                     }
                     Some(Ok(Message::Close(_))) | None => break,
@@ -266,6 +329,7 @@ async fn handle_hub_socket(socket: WebSocket, state: Arc<AppState>) {
     }
 
     state.decrement_ws_connections().await;
+    log_ws_connection_change(&state, "Hub WebSocket connection closed").await;
 }
 
 /// Handle client messages (subscribe/unsubscribe/ping)
@@ -278,6 +342,13 @@ async fn handle_client_message(
         ClientMessage::Subscribe { channel, filters: _ } => {
             // Validate channel
             if !is_valid_channel(&channel) {
+                if is_debug_webserver_enabled() {
+                    log(
+                        LogTag::Webserver,
+                        "DEBUG",
+                        &format!("Client attempted to subscribe to invalid channel '{}'", channel)
+                    );
+                }
                 let _ = send_error(
                     sender,
                     &format!("Unknown channel: {}", channel),
@@ -288,6 +359,17 @@ async fn handle_client_message(
 
             // Add to subscriptions
             subscriptions.insert(channel.clone());
+            if is_debug_webserver_enabled() {
+                log(
+                    LogTag::Webserver,
+                    "DEBUG",
+                    &format!(
+                        "Client subscribed to '{}' (total_subscriptions={})",
+                        channel,
+                        subscriptions.len()
+                    )
+                );
+            }
             let _ = send_subscribed(
                 sender,
                 &channel,
@@ -296,6 +378,17 @@ async fn handle_client_message(
         }
         ClientMessage::Unsubscribe { channel } => {
             subscriptions.remove(&channel);
+            if is_debug_webserver_enabled() {
+                log(
+                    LogTag::Webserver,
+                    "DEBUG",
+                    &format!(
+                        "Client unsubscribed from '{}' (remaining_subscriptions={})",
+                        channel,
+                        subscriptions.len()
+                    )
+                );
+            }
             let _ = send_unsubscribed(
                 sender,
                 &channel,
@@ -303,6 +396,9 @@ async fn handle_client_message(
             ).await;
         }
         ClientMessage::Ping => {
+            if is_debug_webserver_enabled() {
+                log(LogTag::Webserver, "DEBUG", "Received client ping (responding with pong)");
+            }
             let _ = send_pong(sender).await;
         }
     }
@@ -492,6 +588,21 @@ async fn send_pong(
 }
 
 async fn handle_events_socket(mut socket: WebSocket, params: WsEventsQuery, state: Arc<AppState>) {
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "DEBUG",
+            &format!(
+                "Events WebSocket handler started with filters: category={:?} severity={:?} mint={:?} ref={:?} last_id={:?}",
+                params.category,
+                params.severity,
+                params.mint,
+                params.reference,
+                params.last_id
+            )
+        );
+    }
+
     // Backfill missed events if last_id provided
     if let Some(after_id) = params.last_id {
         if let Some(db) = events::EVENTS_DB.get() {
@@ -509,10 +620,21 @@ async fn handle_events_socket(mut socket: WebSocket, params: WsEventsQuery, stat
                     reference
                 ).await
             {
+                if is_debug_webserver_enabled() {
+                    log(
+                        LogTag::Webserver,
+                        "DEBUG",
+                        &format!("Sending {} backfill events", backfill.len())
+                    );
+                }
                 for e in backfill {
                     if let Ok(text) = serde_json::to_string(&map_event(&e)) {
                         if socket.send(Message::Text(text)).await.is_err() {
                             state.decrement_ws_connections().await;
+                            log_ws_connection_change(
+                                &state,
+                                "Events WebSocket closed during backfill send"
+                            ).await;
                             return;
                         }
                     }
@@ -530,6 +652,10 @@ async fn handle_events_socket(mut socket: WebSocket, params: WsEventsQuery, stat
             ).await;
             let _ = socket.close().await;
             state.decrement_ws_connections().await;
+            log_ws_connection_change(
+                &state,
+                "Events WebSocket closed - broadcaster unavailable"
+            ).await;
             return;
         }
     };
@@ -549,7 +675,12 @@ async fn handle_events_socket(mut socket: WebSocket, params: WsEventsQuery, stat
                         if !matches_filters(&event, &params) { continue; }
                         match serde_json::to_string(&map_event(&event)) {
                             Ok(text) => {
-                                if socket.send(Message::Text(text)).await.is_err() { break; }
+                                if socket.send(Message::Text(text)).await.is_err() {
+                                    if is_debug_webserver_enabled() {
+                                        log(LogTag::Webserver, "DEBUG", "Events WebSocket send failed; terminating connection");
+                                    }
+                                    break;
+                                }
                             }
                             Err(_) => {}
                         }
@@ -565,6 +696,7 @@ async fn handle_events_socket(mut socket: WebSocket, params: WsEventsQuery, stat
     }
 
     state.decrement_ws_connections().await;
+    log_ws_connection_change(&state, "Events WebSocket connection closed").await;
 }
 
 fn matches_filters(e: &Event, q: &WsEventsQuery) -> bool {

@@ -1,9 +1,11 @@
-use chrono::{DateTime, Utc};
+use chrono::{ DateTime, Utc };
 use once_cell::sync::OnceCell;
 use serde::Serialize;
 use std::collections::HashMap;
 use tokio::sync::broadcast;
-use tokio::time::{interval, Duration};
+use tokio::time::{ interval, Duration };
+
+use crate::{ arguments::is_debug_webserver_enabled, logger::{ log, LogTag } };
 
 // Broadcast channel capacity
 const STATUS_BROADCAST_CAPACITY: usize = 100;
@@ -66,19 +68,25 @@ pub fn initialize_status_broadcaster() -> broadcast::Receiver<StatusSnapshot> {
 
     match STATUS_BROADCAST_TX.set(tx) {
         Ok(_) => {
-            log::info!(
-                "✅ Status broadcast system initialized (capacity: {})",
-                STATUS_BROADCAST_CAPACITY
-            );
+            if is_debug_webserver_enabled() {
+                log(
+                    LogTag::Webserver,
+                    "DEBUG",
+                    &format!("Status broadcaster initialized (capacity: {})", STATUS_BROADCAST_CAPACITY)
+                );
+            }
             rx
         }
         Err(_) => {
-            log::warn!("⚠️ Status broadcaster already initialized");
+            if is_debug_webserver_enabled() {
+                log(
+                    LogTag::Webserver,
+                    "DEBUG",
+                    "Status broadcaster already initialized, returning new subscription"
+                );
+            }
             // Return a new subscription if already initialized
-            STATUS_BROADCAST_TX
-                .get()
-                .expect("Broadcaster exists")
-                .subscribe()
+            STATUS_BROADCAST_TX.get().expect("Broadcaster exists").subscribe()
         }
     }
 }
@@ -97,29 +105,65 @@ pub fn start_status_broadcaster(interval_secs: u64) -> tokio::task::JoinHandle<(
         initialize_status_broadcaster();
     }
 
-    let tx = STATUS_BROADCAST_TX
-        .get()
-        .expect("Status broadcaster initialized")
-        .clone();
+    let tx = STATUS_BROADCAST_TX.get().expect("Status broadcaster initialized").clone();
+
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "DEBUG",
+            &format!("Starting status broadcaster task (interval: {}s)", interval_secs)
+        );
+    }
 
     tokio::spawn(async move {
         let mut ticker = interval(Duration::from_secs(interval_secs));
+        let mut tick_count: u64 = 0;
 
         loop {
             ticker.tick().await;
+            tick_count += 1;
+
+            if is_debug_webserver_enabled() {
+                log(
+                    LogTag::Webserver,
+                    "DEBUG",
+                    &format!("Status broadcaster tick #{}", tick_count)
+                );
+            }
 
             // Gather status data from various sources
             let snapshot = gather_status_snapshot().await;
 
             // Broadcast to all subscribers
-            let _ = tx.send(snapshot);
+            if is_debug_webserver_enabled() {
+                log(
+                    LogTag::Webserver,
+                    "DEBUG",
+                    &format!(
+                        "Broadcasting status snapshot (services={}, ws_connections={}, rpc_total={})",
+                        snapshot.services.len(),
+                        snapshot.ws_connections,
+                        snapshot.rpc_requests_total
+                    )
+                );
+            }
+
+            if let Err(error) = tx.send(snapshot) {
+                if is_debug_webserver_enabled() {
+                    log(
+                        LogTag::Webserver,
+                        "DEBUG",
+                        &format!("No active listeners for status snapshot broadcast: {}", error)
+                    );
+                }
+            }
         }
     })
 }
 
 /// Gather current system status from all sources
 async fn gather_status_snapshot() -> StatusSnapshot {
-    use crate::positions::{get_closed_positions, get_open_positions};
+    use crate::positions::{ get_closed_positions, get_open_positions };
     use crate::services::get_service_manager;
 
     // Trading state (placeholder - will be updated when these functions are available)
@@ -131,20 +175,15 @@ async fn gather_status_snapshot() -> StatusSnapshot {
 
     let closed_positions_today = {
         let today = Utc::now().date_naive();
-        get_closed_positions()
-            .await
+        get_closed_positions().await
             .iter()
-            .filter(|p| {
-                p.exit_time
-                    .map(|t| t.date_naive() == today)
-                    .unwrap_or(false)
-            })
+            .filter(|p| { p.exit_time.map(|t| t.date_naive() == today).unwrap_or(false) })
             .count()
     };
 
     // Balances - get from wallet module
-    let sol_balance = crate::wallet::get_current_wallet_status()
-        .await
+    let sol_balance = crate::wallet
+        ::get_current_wallet_status().await
         .ok()
         .flatten()
         .map(|s| s.sol_balance)
@@ -186,9 +225,7 @@ async fn gather_status_snapshot() -> StatusSnapshot {
 
     // RPC stats - comprehensive metrics from global RPC client
     let rpc_stats = crate::rpc::get_global_rpc_stats().map(|stats| {
-        let uptime_seconds = Utc::now()
-            .signed_duration_since(stats.startup_time)
-            .num_seconds();
+        let uptime_seconds = Utc::now().signed_duration_since(stats.startup_time).num_seconds();
 
         RpcStatsSnapshot {
             total_calls: stats.total_calls(),
@@ -204,7 +241,7 @@ async fn gather_status_snapshot() -> StatusSnapshot {
         }
     });
 
-    StatusSnapshot {
+    let snapshot = StatusSnapshot {
         trading_enabled,
         trader_mode,
         open_positions,
@@ -214,18 +251,42 @@ async fn gather_status_snapshot() -> StatusSnapshot {
         services,
         cpu_percent,
         memory_mb,
-        rpc_requests_total: rpc_stats.as_ref().map(|s| s.total_calls).unwrap_or(0),
-        rpc_errors_total: rpc_stats.as_ref().map(|s| s.total_errors).unwrap_or(0),
+        rpc_requests_total: rpc_stats
+            .as_ref()
+            .map(|s| s.total_calls)
+            .unwrap_or(0),
+        rpc_errors_total: rpc_stats
+            .as_ref()
+            .map(|s| s.total_errors)
+            .unwrap_or(0),
         ws_connections,
         ohlcv_stats,
         rpc_stats,
         timestamp: Utc::now(),
+    };
+
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "DEBUG",
+            &format!(
+                "Status snapshot collected: open_positions={} closed_today={} ws_connections={} rpc_total={} cpu={:.2}% mem={}MB",
+                snapshot.open_positions,
+                snapshot.closed_positions_today,
+                snapshot.ws_connections,
+                snapshot.rpc_requests_total,
+                snapshot.cpu_percent,
+                snapshot.memory_mb
+            )
+        );
     }
+
+    snapshot
 }
 
 /// Get current system metrics (CPU, memory)
 fn get_system_metrics() -> (f32, u64) {
-    use sysinfo::{Pid, System};
+    use sysinfo::{ Pid, System };
 
     let mut sys = System::new_all();
     sys.refresh_all();
@@ -243,8 +304,7 @@ fn get_system_metrics() -> (f32, u64) {
 
 /// Get broadcast statistics (subscriber count)
 pub fn get_subscriber_count() -> usize {
-    STATUS_BROADCAST_TX
-        .get()
+    STATUS_BROADCAST_TX.get()
         .map(|tx| tx.receiver_count())
         .unwrap_or(0)
 }

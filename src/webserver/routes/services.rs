@@ -81,6 +81,14 @@ pub struct ServicesSummary {
 pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
     use crate::services::get_service_manager;
 
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "DEBUG",
+            "Collecting services overview snapshot from ServiceManager"
+        );
+    }
+
     let mut services = Vec::new();
     let mut dependency_graph = Vec::new();
     let mut summary = ServicesSummary {
@@ -98,6 +106,17 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
             let service_names = manager.get_all_service_names();
             let health_map = manager.get_health().await;
             let metrics_map = manager.get_metrics().await;
+
+            if is_debug_webserver_enabled() {
+                log(
+                    LogTag::Webserver,
+                    "DEBUG",
+                    &format!(
+                        "Discovered {} registered services while compiling snapshot",
+                        service_names.len()
+                    )
+                );
+            }
 
             for name in service_names {
                 if let Some(service) = manager.get_service(name) {
@@ -173,6 +192,22 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
         summary.degraded_services == 0 &&
         summary.starting_services == 0;
 
+    if is_debug_webserver_enabled() {
+        let unhealthy = summary.unhealthy_services + summary.degraded_services;
+        log(
+            LogTag::Webserver,
+            "DEBUG",
+            &format!(
+                "Services snapshot prepared: total={} enabled={} healthy={} unhealthy={} starting={}",
+                summary.total_services,
+                summary.enabled_services,
+                summary.healthy_services,
+                unhealthy,
+                summary.starting_services
+            )
+        );
+    }
+
     ServicesOverviewResponse {
         services,
         dependency_graph,
@@ -211,18 +246,43 @@ async fn list_services(State(_state): State<Arc<AppState>>) -> Response {
         timestamp: overview.timestamp,
     };
 
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "DEBUG",
+            &format!(
+                "Returning services list: total={} healthy={} unhealthy={} starting={}",
+                response.total_count,
+                response.healthy_count,
+                response.unhealthy_count,
+                response.starting_count
+            )
+        );
+    }
+
     success_response(response)
 }
 
 /// GET /api/services/:name
 /// Get detailed information about a specific service
 async fn get_service(Path(name): Path<String>, State(_state): State<Arc<AppState>>) -> Response {
-    log(LogTag::Webserver, "DEBUG", &format!("Fetching service details for: {}", name));
+    if is_debug_webserver_enabled() {
+        log(LogTag::Webserver, "DEBUG", &format!("Fetching service details for: {}", name));
+    }
 
     let overview = gather_services_overview_snapshot().await;
 
     match overview.services.into_iter().find(|svc| svc.name == name) {
-        Some(service) => success_response(service),
+        Some(service) => {
+            if is_debug_webserver_enabled() {
+                log(
+                    LogTag::Webserver,
+                    "DEBUG",
+                    &format!("Service '{}' found with priority {}", service.name, service.priority)
+                );
+            }
+            success_response(service)
+        }
         None => (StatusCode::NOT_FOUND, format!("Service '{}' not found", name)).into_response(),
     }
 }
@@ -230,6 +290,23 @@ async fn get_service(Path(name): Path<String>, State(_state): State<Arc<AppState
 /// GET /api/services/overview
 /// Complete services overview with dependency graph and summary
 async fn services_overview(State(_state): State<Arc<AppState>>) -> Response {
-    log(LogTag::Webserver, "DEBUG", "Fetching complete services overview");
-    success_response(gather_services_overview_snapshot().await)
+    if is_debug_webserver_enabled() {
+        log(LogTag::Webserver, "DEBUG", "Fetching complete services overview");
+    }
+
+    let overview = gather_services_overview_snapshot().await;
+
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "DEBUG",
+            &format!(
+                "Overview payload ready: services={}, dependencies={}",
+                overview.services.len(),
+                overview.dependency_graph.len()
+            )
+        );
+    }
+
+    success_response(overview)
 }

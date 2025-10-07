@@ -1,10 +1,10 @@
 use futures::StreamExt;
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{ Duration, Instant };
-use sysinfo::{ Pid, System };
-use tokio::sync::{ Mutex, Notify };
+use std::time::{Duration, Instant};
+use sysinfo::{Pid, System};
+use tokio::sync::{Mutex, Notify};
 use tokio_metrics::TaskMonitor;
 
 /// Service resource metrics with accurate per-service tracking
@@ -149,7 +149,7 @@ impl MetricsCollector {
         &self,
         service_name: &'static str,
         monitor: TaskMonitor,
-        shutdown: Arc<Notify>
+        shutdown: Arc<Notify>,
     ) {
         // Initialize storage
         let mut start_times = self.service_start_times.lock().await;
@@ -198,7 +198,8 @@ impl MetricsCollector {
             let _ = tokio::task::spawn_blocking(move || {
                 let mut sys = sys_arc.blocking_lock();
                 sys.refresh_all();
-            }).await;
+            })
+            .await;
         }
 
         // Get current process (shared across all services) - async-safe
@@ -270,13 +271,14 @@ impl MetricsCollector {
             operations_per_second: 0.0,
             errors_total: 0,
             custom_metrics: HashMap::new(),
-        }).sanitized()
+        })
+        .sanitized()
     }
 
     /// Collect metrics for all services efficiently (single refresh, no &mut needed)
     pub async fn collect_all(
         &self,
-        service_names: &[&'static str]
+        service_names: &[&'static str],
     ) -> HashMap<&'static str, ServiceMetrics> {
         // Refresh system info ONCE for all services in blocking pool
         {
@@ -284,7 +286,8 @@ impl MetricsCollector {
             let _ = tokio::task::spawn_blocking(move || {
                 let mut sys = sys_arc.blocking_lock();
                 sys.refresh_all();
-            }).await;
+            })
+            .await;
         }
 
         // Get process info once
@@ -364,7 +367,8 @@ impl MetricsCollector {
                     operations_per_second: 0.0,
                     errors_total: 0,
                     custom_metrics: HashMap::new(),
-                }).sanitized()
+                })
+                .sanitized(),
             );
         }
 

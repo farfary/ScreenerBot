@@ -2024,7 +2024,7 @@ fn nav_tabs(active: &str) -> String {
         ("positions", "💰 Positions"),
         ("tokens", "🪙 Tokens"),
         ("events", "📡 Events"),
-        ("config", "⚙️ Config")
+        ("config", "⚙️ Config"),
     ];
 
     tabs.iter()
@@ -2033,9 +2033,7 @@ fn nav_tabs(active: &str) -> String {
             // Use data-page attribute for client-side routing (SPA)
             format!(
                 "<a href=\"#\" data-page=\"{}\" class=\"tab{}\">{}</a>",
-                name,
-                active_class,
-                label
+                name, active_class, label
             )
         })
         .collect::<Vec<_>>()

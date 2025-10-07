@@ -15,17 +15,12 @@ pub mod templates;
 pub mod utils;
 
 // Public API for starting/stopping the webserver
-pub use server::{ shutdown, start_server };
+pub use server::{shutdown, start_server};
 pub use status_broadcast::{
-    get_subscriber_count as get_status_subscriber_count,
-    initialize_status_broadcaster,
-    start_status_broadcaster,
-    subscribe as subscribe_status,
-    StatusSnapshot,
+    get_subscriber_count as get_status_subscriber_count, initialize_status_broadcaster,
+    start_status_broadcaster, subscribe as subscribe_status, StatusSnapshot,
 };
 
 pub use services_broadcast::{
-    initialize_services_broadcaster,
-    start_services_broadcaster,
-    subscribe as subscribe_services,
+    initialize_services_broadcaster, start_services_broadcaster, subscribe as subscribe_services,
 };
