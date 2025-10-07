@@ -43,6 +43,16 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         {nav_tabs}
     </nav>
     
+    <!-- Sub-tabs container (populated dynamically per page) -->
+    <div id="subTabsContainer" class="sub-tabs-container" style="display: none;">
+        <!-- Sub-tabs will be injected here by page-specific JavaScript -->
+    </div>
+    
+    <!-- Toolbar container (for action buttons below sub-tabs) -->
+    <div id="toolbarContainer" class="toolbar-container" style="display: none;">
+        <!-- Toolbar buttons will be injected here by page-specific JavaScript -->
+    </div>
+    
     <main class="content">
         {content}
     </main>
@@ -714,6 +724,57 @@ fn common_styles() -> &'static str {
             color: var(--link-color);
             border-bottom-color: var(--link-color);
             background: var(--bg-card-hover);
+        }
+        
+        /* Sub-tabs navigation (second row below main tabs) */
+        .sub-tabs-container {
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0 10px;
+            display: flex;
+            gap: 4px;
+            overflow-x: auto;
+        }
+        
+        .sub-tab {
+            padding: 8px 16px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-weight: 500;
+            font-size: 0.9em;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            position: relative;
+        }
+        
+        .sub-tab:hover {
+            color: var(--link-color);
+            background: var(--bg-card-hover);
+        }
+        
+        .sub-tab.active {
+            color: var(--link-color);
+            border-bottom-color: var(--link-color);
+            font-weight: 600;
+        }
+        
+        /* Toolbar container (third row for action buttons) */
+        .toolbar-container {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 8px 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .toolbar-container .spacer {
+            flex: 1;
+            min-width: 10px;
         }
         
         .content {
@@ -1960,16 +2021,13 @@ fn nav_tabs(active: &str) -> String {
         ("positions", "💰 Positions"),
         ("tokens", "🪙 Tokens"),
         ("events", "📡 Events"),
-        ("config", "⚙️ Config"),
+        ("config", "⚙️ Config")
     ];
 
     tabs.iter()
         .map(|(name, label)| {
             let active_class = if *name == active { " active" } else { "" };
-            format!(
-                r#"<a href="/{}" class="tab{}">{}</a>"#,
-                name, active_class, label
-            )
+            format!(r#"<a href="/{}" class="tab{}">{}</a>"#, name, active_class, label)
         })
         .collect::<Vec<_>>()
         .join("\n        ")
@@ -2022,7 +2080,32 @@ fn common_scripts() -> &'static str {
             const currentPath = window.location.pathname;
             const tab = currentPath === '/' ? 'home' : currentPath.substring(1);
             AppState.save('lastTab', tab);
+            
+            // Clean up sub-tabs and toolbar for pages that don't use them
+            cleanupTabContainers();
         });
+        
+        // Helper function to hide sub-tabs/toolbar containers
+        function cleanupTabContainers() {
+            const subTabsContainer = document.getElementById('subTabsContainer');
+            const toolbarContainer = document.getElementById('toolbarContainer');
+            
+            // Only hide if not on a page that explicitly shows them
+            // Pages can call initPageSubTabs() to show and populate them
+            const currentPath = window.location.pathname;
+            const pagesWithSubTabs = ['/tokens']; // Add more as needed
+            
+            if (!pagesWithSubTabs.includes(currentPath)) {
+                if (subTabsContainer) {
+                    subTabsContainer.style.display = 'none';
+                    subTabsContainer.innerHTML = '';
+                }
+                if (toolbarContainer) {
+                    toolbarContainer.style.display = 'none';
+                    toolbarContainer.innerHTML = '';
+                }
+            }
+        }
         
         // Update status badge
         async function updateStatusBadge() {
@@ -3484,20 +3567,67 @@ pub fn positions_content() -> String {
 /// Tokens page content
 pub fn tokens_content() -> String {
     r#"
+    <script>
+        // Initialize Tokens tab sub-tabs and toolbar on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            initTokensSubTabs();
+            initTokensToolbar();
+        });
+        
+        function initTokensSubTabs() {
+            const subTabsContainer = document.getElementById('subTabsContainer');
+            if (!subTabsContainer) return;
+            
+            subTabsContainer.innerHTML = `
+                <button class="sub-tab active" data-view="pool" onclick="switchTokensSubTab('pool')">
+                    💧 Pool Service
+                </button>
+                <button class="sub-tab" data-view="all" onclick="switchTokensSubTab('all')">
+                    📋 All Tokens
+                </button>
+                <button class="sub-tab" data-view="blacklisted" onclick="switchTokensSubTab('blacklisted')">
+                    🚫 Blacklisted
+                </button>
+            `;
+            subTabsContainer.style.display = 'flex';
+        }
+        
+        function initTokensToolbar() {
+            const toolbarContainer = document.getElementById('toolbarContainer');
+            if (!toolbarContainer) return;
+            
+            toolbarContainer.innerHTML = `
+                <input type="text" id="searchInput" placeholder="Search by symbol or mint..." 
+                       style="flex: 1; max-width: 300px; padding: 6px 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9em; background: var(--bg-primary); color: var(--text-primary);">
+                <div class="spacer"></div>
+                <span id="tokenCount" style="color: var(--text-secondary); font-size: 0.9em; font-weight: 500;">Loading...</span>
+                <button onclick="loadTokens()" class="btn btn-primary" style="padding: 6px 12px;">
+                    🔄 Refresh
+                </button>
+                <button onclick="exportTokens()" class="btn btn-secondary" style="padding: 6px 12px;">
+                    📥 Export
+                </button>
+            `;
+            toolbarContainer.style.display = 'flex';
+        }
+        
+        function switchTokensSubTab(view) {
+            // Update sub-tab active state
+            document.querySelectorAll('.sub-tab').forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.view === view);
+            });
+            
+            // Call the existing view switching logic
+            switchTokensView(view);
+        }
+        
+        function exportTokens() {
+            // Placeholder for export functionality
+            alert('Export functionality - to be implemented');
+        }
+    </script>
+    
     <div class="page-section">
-        <div class="toolbar">
-            <span style="font-weight:600;">🪙 Tokens</span>
-            <input type="text" id="searchInput" placeholder="Search by symbol or mint" 
-                   style="flex: 1; min-width: 200px; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9em; background: var(--bg-primary); color: var(--text-primary);">
-            <div class="spacer"></div>
-            <div class="subtabs" style="display:flex; gap:6px; margin-right: 12px;">
-                <button class="btn btn-secondary" id="tabPool" onclick="switchTokensView('pool')">Pool Service</button>
-                <button class="btn btn-secondary" id="tabAll" onclick="switchTokensView('all')">All Tokens</button>
-                <button class="btn btn-secondary" id="tabBlacklisted" onclick="switchTokensView('blacklisted')">Blacklisted</button>
-            </div>
-            <span id="tokenCount" style="color: var(--text-secondary); font-size: 0.9em;">Loading...</span>
-            <button onclick="loadTokens()" class="btn btn-primary">🔄 Refresh</button>
-        </div>
         <div class="table-scroll no-x-scroll">
             <table class="table" id="tokensTable">
                 <thead>
