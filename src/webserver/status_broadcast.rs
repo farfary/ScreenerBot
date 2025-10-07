@@ -11,6 +11,34 @@ const STATUS_BROADCAST_CAPACITY: usize = 100;
 // Global broadcaster
 static STATUS_BROADCAST_TX: OnceCell<broadcast::Sender<StatusSnapshot>> = OnceCell::new();
 
+/// OHLCV statistics snapshot
+#[derive(Clone, Debug, Serialize)]
+pub struct OhlcvStatsSnapshot {
+    pub total_tokens: usize,
+    pub critical_tokens: usize,
+    pub high_tokens: usize,
+    pub medium_tokens: usize,
+    pub low_tokens: usize,
+    pub cache_hit_rate: f64,
+    pub api_calls_per_minute: f64,
+    pub queue_size: usize,
+}
+
+/// RPC statistics snapshot with detailed metrics
+#[derive(Clone, Debug, Serialize)]
+pub struct RpcStatsSnapshot {
+    pub total_calls: u64,
+    pub total_errors: u64,
+    pub success_rate: f32,
+    pub calls_per_second: f64,
+    pub average_response_time_ms: f64,
+    pub calls_per_url: HashMap<String, u64>,
+    pub errors_per_url: HashMap<String, u64>,
+    pub calls_per_method: HashMap<String, u64>,
+    pub errors_per_method: HashMap<String, u64>,
+    pub uptime_seconds: i64,
+}
+
 /// Status snapshot for WebSocket broadcasting
 #[derive(Clone, Debug, Serialize)]
 pub struct StatusSnapshot {
@@ -26,6 +54,8 @@ pub struct StatusSnapshot {
     pub rpc_requests_total: u64,
     pub rpc_errors_total: u64,
     pub ws_connections: usize,
+    pub ohlcv_stats: Option<OhlcvStatsSnapshot>,
+    pub rpc_stats: Option<RpcStatsSnapshot>,
     pub timestamp: DateTime<Utc>,
 }
 
@@ -132,6 +162,39 @@ async fn gather_status_snapshot() -> StatusSnapshot {
     // WebSocket connections
     let ws_connections = crate::webserver::state::get_ws_connection_count().await;
 
+    // OHLCV stats - using OhlcvMetrics which has the basic stats
+    // Note: Priority breakdown (critical/high/medium/low) requires MonitorStats
+    // which is not directly accessible. We use tokens_monitored as total.
+    let metrics = crate::ohlcvs::get_metrics().await;
+    let ohlcv_stats = Some(OhlcvStatsSnapshot {
+        total_tokens: metrics.tokens_monitored,
+        critical_tokens: 0, // TODO: Access monitor stats for priority breakdown
+        high_tokens: 0,
+        medium_tokens: 0,
+        low_tokens: metrics.tokens_monitored, // All tokens shown as low priority for now
+        cache_hit_rate: metrics.cache_hit_rate,
+        api_calls_per_minute: metrics.api_calls_per_minute,
+        queue_size: 0, // Not available in OhlcvMetrics
+    });
+
+    // RPC stats - comprehensive metrics from global RPC client
+    let rpc_stats = crate::rpc::get_global_rpc_stats().map(|stats| {
+        let uptime_seconds = Utc::now().signed_duration_since(stats.startup_time).num_seconds();
+
+        RpcStatsSnapshot {
+            total_calls: stats.total_calls(),
+            total_errors: stats.total_errors(),
+            success_rate: stats.success_rate(),
+            calls_per_second: stats.calls_per_second(),
+            average_response_time_ms: stats.average_response_time_ms_global(),
+            calls_per_url: stats.calls_per_url.clone(),
+            errors_per_url: stats.errors_per_url.clone(),
+            calls_per_method: stats.calls_per_method.clone(),
+            errors_per_method: stats.errors_per_method.clone(),
+            uptime_seconds,
+        }
+    });
+
     StatusSnapshot {
         trading_enabled,
         trader_mode,
@@ -142,9 +205,17 @@ async fn gather_status_snapshot() -> StatusSnapshot {
         services,
         cpu_percent,
         memory_mb,
-        rpc_requests_total: rpc_requests,
-        rpc_errors_total: rpc_errors,
+        rpc_requests_total: rpc_stats
+            .as_ref()
+            .map(|s| s.total_calls)
+            .unwrap_or(0),
+        rpc_errors_total: rpc_stats
+            .as_ref()
+            .map(|s| s.total_errors)
+            .unwrap_or(0),
         ws_connections,
+        ohlcv_stats,
+        rpc_stats,
         timestamp: Utc::now(),
     }
 }
