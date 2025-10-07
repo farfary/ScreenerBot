@@ -7630,440 +7630,459 @@ pub fn services_content() -> String {
     <script>
         // Prevent multiple script instances from interfering
         (function() {
-            // Check if already initialized
-            if (window.__servicesPageVersion === 2) {
-                console.log('[Services] Page script already loaded, skipping');
-                return;
-            }
-            window.__servicesPageVersion = 2;
-
-            var servicesData = null;
-            var sortKey = 'priority';
-            var sortDir = 'asc';
-            var servicesWsBound = false;
-            var servicesFallbackInterval = null;
-            var activeFetchController = null;
-            var activeFetchTimeout = null;
-            var cleanupRegistered = false;
-            var wsHandlers = { onSnapshot: null, onDisconnect: null, onReconnect: null };
-            function clearActiveFetch(reason, shouldAbort = true) {
-                if (activeFetchTimeout) {
-                    clearTimeout(activeFetchTimeout);
-                    activeFetchTimeout = null;
-                }
-                if (activeFetchController) {
-                    if (shouldAbort) {
-                        try {
-                            activeFetchController.abort();
-                        } catch (_) {}
-                    }
-                    activeFetchController = null;
-                }
-                if (reason) {
-                    console.debug('[Services] Cleared active fetch:', reason, 'abort:', shouldAbort);
-                }
-            }
-
-            async function loadServices(options = {}) {
-                const { showLoader = false } = options;
-
-                // Cancel any existing fetch before starting
-                clearActiveFetch('new-request');
-
-                const controller = new AbortController();
-                activeFetchController = controller;
+            // Create a new controller instance on every page visit
+            const servicePageController = {
+                servicesData: null,
+                sortKey: 'priority',
+                sortDir: 'asc',
+                servicesWsBound: false,
+                servicesFallbackInterval: null,
+                activeFetchController: null,
+                activeFetchTimeout: null,
+                cleanupRegistered: false,
+                wsHandlers: { onSnapshot: null, onDisconnect: null, onReconnect: null },
                 
-                activeFetchTimeout = setTimeout(() => {
-                    console.warn('[Services] ⏰ Fetch timeout after 5s');
-                    controller.abort();
-                }, 5000);
+                clearActiveFetch: function(reason, shouldAbort = true) {
+                    if (this.activeFetchTimeout) {
+                        clearTimeout(this.activeFetchTimeout);
+                        this.activeFetchTimeout = null;
+                    }
+                    if (this.activeFetchController) {
+                        if (shouldAbort) {
+                            try { 
+                                this.activeFetchController.abort();
+                            } catch (_) {}
+                        }
+                        this.activeFetchController = null;
+                    }
+                    if (reason) {
+                        console.debug('[Services] Cleared active fetch:', reason, 'abort:', shouldAbort);
+                    }
+                },
 
-                try {
-                    console.log('[Services] 🔄 Starting services fetch', {
-                        showLoader,
-                        timestamp: new Date().toISOString()
-                    });
+                loadServices: async function(options = {}) {
+                    const { showLoader = false } = options;
+
+                    // Cancel any existing fetch before starting
+                    this.clearActiveFetch('new-request');
+
+                    const controller = new AbortController();
+                    this.activeFetchController = controller;
                     
-                    if (showLoader) {
-                        setServicesLoading();
+                    this.activeFetchTimeout = setTimeout(() => {
+                        console.warn('[Services] ⏰ Fetch timeout after 5s');
+                        controller.abort();
+                    }, 5000);
+
+                    try {
+                        console.log('[Services] 🔄 Starting services fetch', {
+                            showLoader,
+                            timestamp: new Date().toISOString()
+                        });
+                        
+                        if (showLoader) {
+                            this.setServicesLoading();
+                        }
+
+                        const response = await fetch('/api/services/overview', {
+                            headers: { 'X-Requested-With': 'fetch' },
+                            signal: controller.signal,
+                            cache: 'no-cache'
+                        });
+                        
+                        if (this.activeFetchTimeout) {
+                            clearTimeout(this.activeFetchTimeout);
+                            this.activeFetchTimeout = null;
+                        }
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+
+                        const data = await response.json();
+                        this.clearActiveFetch('success', false);
+                        
+                        console.log('[Services] ✅ Data loaded', {
+                            serviceCount: data?.services?.length || 0
+                        });
+                        
+                        this.handleServicesSnapshot(data);
+                        
+                    } catch (error) {
+                        this.clearActiveFetch('error', false);
+                        
+                        if (error?.name === 'AbortError') {
+                            console.debug('[Services] Fetch aborted');
+                            return;
+                        }
+                        
+                        console.error('[Services] ❌ Failed to load services:', error);
+                        this.showServicesError('Failed to load services: ' + (error?.message || 'Network error'));
+                    }
+                },
+
+                setServicesLoading: function() {
+                    const tbody = document.getElementById('servicesTableBody');
+                    if (!tbody) return;
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="12" style="text-align:center; padding: 20px; color: var(--text-muted);">
+                                Loading services...
+                            </td>
+                        </tr>
+                    `;
+                },
+
+                showServicesError: function(message) {
+                    const tbody = document.getElementById('servicesTableBody');
+                    if (!tbody) return;
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="12" style="text-align:center; padding: 20px; color: #ef4444;">
+                                ${message}
+                            </td>
+                        </tr>
+                    `;
+                },
+
+                handleServicesSnapshot: function(snapshot) {
+                    if (!snapshot || !Array.isArray(snapshot.services)) {
+                        this.showServicesError('No services available');
+                        return;
                     }
 
-                    const response = await fetch('/api/services/overview', {
-                        headers: { 'X-Requested-With': 'fetch' },
-                        signal: controller.signal,
-                        cache: 'no-cache'
+                    this.servicesData = snapshot;
+                    console.log('[Services] ✅ Snapshot applied', {
+                        serviceCount: snapshot.services.length
                     });
                     
-                    clearTimeout(activeFetchTimeout);
-                    activeFetchTimeout = null;
+                    this.bindToolbarEventsOnce();
+                    this.bindSortHandlersOnce();
+                    this.renderServicesTable();
+                },
+
+                startServicesFallback: function(intervalMs = 30000) {
+                    this.stopServicesFallback();
+                    const self = this;
+                    this.servicesFallbackInterval = setInterval(() => {
+                        console.log('[Services] 🔁 Polling services via fallback HTTP');
+                        self.loadServices({ showLoader: false });
+                    }, intervalMs);
+                    console.debug('[Services] Fallback polling enabled');
+                },
+
+                stopServicesFallback: function() {
+                    if (this.servicesFallbackInterval) {
+                        clearInterval(this.servicesFallbackInterval);
+                        this.servicesFallbackInterval = null;
+                        console.debug('[Services] Fallback polling stopped');
+                    }
+                },
+
+                initServicesWebSocket: function() {
+                    console.log('[Services] 🔌 Initializing WebSocket integration');
                     
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    // Always register cleanup when Router is available
+                    const self = this;
+                    if (window.Router && typeof Router.registerCleanup === 'function' && !this.cleanupRegistered) {
+                        Router.registerCleanup(() => {
+                            self.servicesWsBound = false;
+                            self.cleanupRegistered = false;
+                            console.debug('[Services] Cleanup triggered');
+                            
+                            // Clean up WebSocket subscriptions
+                            if (typeof WsHub !== 'undefined') {
+                                const { onSnapshot, onDisconnect, onReconnect } = self.wsHandlers;
+                                if (onSnapshot) { try { WsHub.unsubscribe('services', onSnapshot); } catch (_) {} }
+                                if (onDisconnect) { try { WsHub.unsubscribe('_disconnected', onDisconnect); } catch (_) {} }
+                                if (onReconnect) { try { WsHub.unsubscribe('_connected', onReconnect); } catch (_) {} }
+                            }
+                            
+                            // Reset handlers
+                            self.wsHandlers = { onSnapshot: null, onDisconnect: null, onReconnect: null };
+                            self.stopServicesFallback();
+                            self.clearActiveFetch('cleanup');
+                        });
+                        this.cleanupRegistered = true;
                     }
 
-                    const data = await response.json();
-                    clearActiveFetch('success', false);
-                    
-                    console.log('[Services] ✅ Data loaded', {
-                        serviceCount: data?.services?.length || 0
-                    });
-                    
-                    handleServicesSnapshot(data);
-                    
-                } catch (error) {
-                    clearActiveFetch('error', false);
-                    
-                    if (error?.name === 'AbortError') {
-                        console.debug('[Services] Fetch aborted');
-                        // Don't show error for intentional aborts
+                    if (typeof WsHub === 'undefined') {
+                        console.warn('[Services] ⚠️ WsHub unavailable, using HTTP polling');
+                        this.startServicesFallback(30000);
+                        return;
+                    }
+
+                    if (this.servicesWsBound) {
+                        console.debug('[Services] WebSocket already bound');
                         return;
                     }
                     
-                    console.error('[Services] ❌ Failed to load services:', error);
-                    showServicesError('Failed to load services: ' + (error?.message || 'Network error'));
-                }
-            }
+                    this.servicesWsBound = true;
 
-            function setServicesLoading() {
-                const tbody = document.getElementById('servicesTableBody');
-                if (!tbody) return;
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="12" style="text-align:center; padding: 20px; color: var(--text-muted);">
-                            Loading services...
-                        </td>
-                    </tr>
-                `;
-            }
+                    const onSnapshot = (snapshot) => {
+                        console.log('[Services] 📬 WebSocket snapshot received');
+                        self.stopServicesFallback();
+                        self.handleServicesSnapshot(snapshot);
+                    };
 
-            function showServicesError(message) {
-                const tbody = document.getElementById('servicesTableBody');
-                if (!tbody) return;
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="12" style="text-align:center; padding: 20px; color: #ef4444;">
-                            ${message}
-                        </td>
-                    </tr>
-                `;
-            }
+                    const onDisconnect = () => {
+                        console.warn('[Services] WebSocket disconnected, enabling fallback');
+                        self.startServicesFallback(30000);
+                    };
 
-            function handleServicesSnapshot(snapshot) {
-                if (!snapshot || !Array.isArray(snapshot.services)) {
-                    showServicesError('No services available');
-                    return;
-                }
-
-                servicesData = snapshot;
-                console.log('[Services] ✅ Snapshot applied', {
-                    serviceCount: snapshot.services.length
-                });
-                
-                bindToolbarEventsOnce();
-                bindSortHandlersOnce();
-                renderServicesTable();
-            }
-
-            function startServicesFallback(intervalMs = 30000) {
-                stopServicesFallback();
-                servicesFallbackInterval = setInterval(() => {
-                    console.log('[Services] 🔁 Polling services via fallback HTTP');
-                    loadServices({ showLoader: false });
-                }, intervalMs);
-                console.debug('[Services] Fallback polling enabled');
-            }
-
-            function stopServicesFallback() {
-                if (servicesFallbackInterval) {
-                    clearInterval(servicesFallbackInterval);
-                    servicesFallbackInterval = null;
-                    console.debug('[Services] Fallback polling stopped');
-                }
-            }
-
-            function initServicesWebSocket() {
-                console.log('[Services] 🔌 Initializing WebSocket integration');
-                if (window.Router && typeof Router.registerCleanup === 'function' && !cleanupRegistered) {
-                    Router.registerCleanup(() => {
-                        servicesWsBound = false;
-                        cleanupRegistered = false;
-                        console.debug('[Services] Cleanup triggered');
-                        if (typeof WsHub !== 'undefined') {
-                            const { onSnapshot, onDisconnect, onReconnect } = wsHandlers;
-                            if (onSnapshot) { try { WsHub.unsubscribe('services', onSnapshot); } catch (_) {} }
-                            if (onDisconnect) { try { WsHub.unsubscribe('_disconnected', onDisconnect); } catch (_) {} }
-                            if (onReconnect) { try { WsHub.unsubscribe('_connected', onReconnect); } catch (_) {} }
+                    const onReconnect = () => {
+                        console.info('[Services] WebSocket reconnected');
+                        self.stopServicesFallback();
+                        if (WsHub.isConnected()) {
+                            WsHub.send({ type: 'subscribe', channel: 'services' });
                         }
-                        wsHandlers = { onSnapshot: null, onDisconnect: null, onReconnect: null };
-                        stopServicesFallback();
-                        clearActiveFetch('cleanup');
-                    });
-                    cleanupRegistered = true;
-                }
+                    };
 
-                if (typeof WsHub === 'undefined') {
-                    console.warn('[Services] ⚠️ WsHub unavailable, using HTTP polling');
-                    startServicesFallback(30000);
-                    return;
-                }
+                    this.wsHandlers = { onSnapshot, onDisconnect, onReconnect };
 
-                if (servicesWsBound) {
-                    console.debug('[Services] WebSocket already bound');
-                    return;
-                }
-                
-                servicesWsBound = true;
+                    WsHub.subscribe('services', onSnapshot);
+                    WsHub.subscribe('_disconnected', onDisconnect);
+                    WsHub.subscribe('_connected', onReconnect);
 
-                const onSnapshot = (snapshot) => {
-                    console.log('[Services] 📬 WebSocket snapshot received');
-                    stopServicesFallback();
-                    handleServicesSnapshot(snapshot);
-                };
-
-                const onDisconnect = () => {
-                    console.warn('[Services] WebSocket disconnected, enabling fallback');
-                    startServicesFallback(30000);
-                };
-
-                const onReconnect = () => {
-                    console.info('[Services] WebSocket reconnected');
-                    stopServicesFallback();
+                    // Send subscribe request
                     if (WsHub.isConnected()) {
+                        console.log('[Services] 📤 Subscribing to services channel');
                         WsHub.send({ type: 'subscribe', channel: 'services' });
                     }
-                };
+                },
 
-                wsHandlers = { onSnapshot, onDisconnect, onReconnect };
+                currentFilters: function() {
+                    const q = (document.getElementById('serviceSearch')?.value || '').toLowerCase();
+                    const status = document.getElementById('statusFilter')?.value || 'all';
+                    const enabledOnly = document.getElementById('enabledOnly')?.checked || false;
+                    return { q, status, enabledOnly };
+                },
 
-                WsHub.subscribe('services', onSnapshot);
-                WsHub.subscribe('_disconnected', onDisconnect);
-                WsHub.subscribe('_connected', onReconnect);
+                filteredAndSortedServices: function() {
+                    if (!this.servicesData) return [];
+                    const { q, status, enabledOnly } = this.currentFilters();
+                    let arr = this.servicesData.services.slice();
 
-                // Send subscribe request
-                if (WsHub.isConnected()) {
-                    console.log('[Services] 📤 Subscribing to services channel');
-                    WsHub.send({ type: 'subscribe', channel: 'services' });
-                }
-
-                // Register cleanup
-                // Cleanup already registered above when available
-            }
-
-            function currentFilters() {
-                const q = (document.getElementById('serviceSearch')?.value || '').toLowerCase();
-                const status = document.getElementById('statusFilter')?.value || 'all';
-                const enabledOnly = document.getElementById('enabledOnly')?.checked || false;
-                return { q, status, enabledOnly };
-            }
-
-            function filteredAndSortedServices() {
-                if (!servicesData) return [];
-                const { q, status, enabledOnly } = currentFilters();
-                let arr = servicesData.services.slice();
-
-                // Filter
-                arr = arr.filter(s => {
-                    const matchesText = !q || s.name.toLowerCase().includes(q);
-                    const matchesStatus = status === 'all' || (s.health?.status === status);
-                    const matchesEnabled = !enabledOnly || s.enabled;
-                    return matchesText && matchesStatus && matchesEnabled;
-                });
-
-                // Sort
-                const getKey = (s) => {
-                    const m = s.metrics || {};
-                    switch (sortKey) {
-                        case 'name': return s.name || '';
-                        case 'health': return healthRank(s.health?.status);
-                        case 'priority': return s.priority || 0;
-                        case 'enabled': return s.enabled ? 1 : 0;
-                        case 'uptime': return s.uptime_seconds || 0;
-                        case 'activity': {
-                            const total = (m.total_poll_duration_ns||0)+(m.total_idle_duration_ns||0);
-                            return total>0 ? (m.total_poll_duration_ns||0)/total : 0;
-                        }
-                        case 'poll': return m.mean_poll_duration_ns || 0;
-                        case 'pps': return (s.uptime_seconds>0) ? (m.total_polls||0)/s.uptime_seconds : 0;
-                        case 'tasks': return m.task_count || 0;
-                        case 'ops': return m.operations_per_second || 0;
-                        case 'errors': return m.errors_total || 0;
-                        default: return s.priority || 0;
-                    }
-                };
-
-                arr.sort((a,b) => {
-                    const ka = getKey(a);
-                    const kb = getKey(b);
-                    if (ka < kb) return sortDir === 'asc' ? -1 : 1;
-                    if (ka > kb) return sortDir === 'asc' ? 1 : -1;
-                    return 0;
-                });
-
-                return arr;
-            }
-
-            function renderServicesTable() {
-                if (!servicesData) return;
-
-                // Update summary chips
-                document.getElementById('totalServices').textContent = servicesData.summary.total_services;
-                document.getElementById('healthyServices').textContent = servicesData.summary.healthy_services;
-                document.getElementById('startingServices').textContent = servicesData.summary.starting_services;
-                const unhealthyTotal = (servicesData.summary.unhealthy_services || 0) + (servicesData.summary.degraded_services || 0);
-                document.getElementById('unhealthyServices').textContent = unhealthyTotal;
-
-                // Process-wide metrics
-                if (servicesData.services && servicesData.services.length > 0) {
-                    const m0 = servicesData.services[0].metrics || {};
-                    const cpu = Number.isFinite(m0.process_cpu_percent) ? m0.process_cpu_percent : 0;
-                    document.getElementById('processCpu').textContent = `${cpu.toFixed(1)}%`;
-                    document.getElementById('processMemory').textContent = formatBytes(m0.process_memory_bytes||0);
-                }
-
-                const tbody = document.getElementById('servicesTableBody');
-                if (!tbody) return;
-
-                const filtered = filteredAndSortedServices();
-                const rows = filtered.map(service => {
-                    const m = service.metrics || {};
-                    const deps = service.dependencies && service.dependencies.length
-                        ? service.dependencies.map(dep => `<span class="dependency-badge">${dep}</span>`).join(' ')
-                        : '<span class="detail-value">None</span>';
-
-                    const total = (m.total_poll_duration_ns||0)+(m.total_idle_duration_ns||0);
-                    const activity = total>0 ? ((m.total_poll_duration_ns||0)/total*100) : 0;
-                    const activityColor = activity>80 ? '#10b981' : activity>50 ? '#3b82f6' : activity>20 ? '#f59e0b' : activity>5 ? '#6b7280' : '#9ca3af';
-                    const avgPoll = formatDuration(m.mean_poll_duration_ns||0);
-                    const pps = service.uptime_seconds>0 ? ((m.total_polls||0)/service.uptime_seconds).toFixed(2) : '0.00';
-
-                    const taskInfo = m.task_count>0 ? `${m.task_count} tasks\nPoll: ${formatDuration(m.mean_poll_duration_ns)}\nIdle: ${formatDuration(m.mean_idle_duration_ns)}\nTotal Polls: ${m.total_polls||0}` : 'No instrumented tasks';
-
-                    return `
-                        <tr>
-                            <td style="font-weight:600;">${service.name}</td>
-                            <td><span class="badge ${getHealthBadgeClass(service.health)}">${getHealthStatus(service.health)}</span></td>
-                            <td>${service.priority}</td>
-                            <td>${service.enabled ? '✅' : '❌'}</td>
-                            <td>${formatUptime(service.uptime_seconds)}</td>
-                            <td class="activity-cell" title="${activity.toFixed(1)}% busy">
-                                <div class="activity-track"><div class="activity-fill" style="width:${activity.toFixed(1)}%; background:${activityColor}"></div></div>
-                                <div class="activity-meta"><span>${activity.toFixed(1)}%</span><span>${m.total_polls||0} polls</span></div>
-                            </td>
-                            <td title="Average duration per poll">${avgPoll}</td>
-                            <td title="Polls per second">${pps}</td>
-                            <td title="${taskInfo}">${m.task_count||0}</td>
-                            <td title="Operations per second">${(m.operations_per_second||0).toFixed(2)}</td>
-                            <td title="Total errors">${m.errors_total||0}</td>
-                            <td>${deps}</td>
-                        </tr>`;
-                }).join('');
-                
-                tbody.innerHTML = rows || `
-                    <tr>
-                        <td colspan="12" style="text-align:center; padding: 20px; color: var(--text-muted);">No services</td>
-                    </tr>`;
-            }
-
-            function bindToolbarEventsOnce() {
-                if (bindToolbarEventsOnce._bound) return; 
-                bindToolbarEventsOnce._bound = true;
-                
-                document.getElementById('serviceSearch')?.addEventListener('input', renderServicesTable);
-                document.getElementById('statusFilter')?.addEventListener('change', renderServicesTable);
-                document.getElementById('enabledOnly')?.addEventListener('change', renderServicesTable);
-            }
-
-            function bindSortHandlersOnce() {
-                if (bindSortHandlersOnce._bound) return;
-                bindSortHandlersOnce._bound = true;
-                
-                document.querySelectorAll('#servicesTable thead th[data-sort]').forEach(th => {
-                    th.addEventListener('click', () => {
-                        const key = th.getAttribute('data-sort');
-                        if (!key) return;
-                        if (sortKey === key) {
-                            sortDir = (sortDir === 'asc') ? 'desc' : 'asc';
-                        } else {
-                            sortKey = key;
-                            sortDir = 'asc';
-                        }
-                        document.querySelectorAll('#servicesTable thead th[data-sort]').forEach(h => {
-                            h.classList.remove('asc','desc');
-                        });
-                        th.classList.add(sortDir);
-                        renderServicesTable();
+                    // Filter
+                    arr = arr.filter(s => {
+                        const matchesText = !q || s.name.toLowerCase().includes(q);
+                        const matchesStatus = status === 'all' || (s.health?.status === status);
+                        const matchesEnabled = !enabledOnly || s.enabled;
+                        return matchesText && matchesStatus && matchesEnabled;
                     });
-                });
-            }
 
-            function healthRank(status) {
-                switch (status) {
-                    case 'healthy': return 3;
-                    case 'degraded': return 2;
-                    case 'starting': return 1;
-                    case 'unhealthy': return 0;
-                    default: return -1;
+                    // Sort
+                    const getKey = (s) => {
+                        const m = s.metrics || {};
+                        switch (this.sortKey) {
+                            case 'name': return s.name || '';
+                            case 'health': return this.healthRank(s.health?.status);
+                            case 'priority': return s.priority || 0;
+                            case 'enabled': return s.enabled ? 1 : 0;
+                            case 'uptime': return s.uptime_seconds || 0;
+                            case 'activity': {
+                                const total = (m.total_poll_duration_ns||0)+(m.total_idle_duration_ns||0);
+                                return total>0 ? (m.total_poll_duration_ns||0)/total : 0;
+                            }
+                            case 'poll': return m.mean_poll_duration_ns || 0;
+                            case 'pps': return (s.uptime_seconds>0) ? (m.total_polls||0)/s.uptime_seconds : 0;
+                            case 'tasks': return m.task_count || 0;
+                            case 'ops': return m.operations_per_second || 0;
+                            case 'errors': return m.errors_total || 0;
+                            default: return s.priority || 0;
+                        }
+                    };
+
+                    const sortDir = this.sortDir;
+                    arr.sort((a,b) => {
+                        const ka = getKey(a);
+                        const kb = getKey(b);
+                        if (ka < kb) return sortDir === 'asc' ? -1 : 1;
+                        if (ka > kb) return sortDir === 'asc' ? 1 : -1;
+                        return 0;
+                    });
+
+                    return arr;
+                },
+
+                renderServicesTable: function() {
+                    if (!this.servicesData) return;
+                    
+                    // Verify the DOM still exists before rendering
+                    if (!document.getElementById('servicesTableBody')) {
+                        console.debug('[Services] DOM not ready for rendering');
+                        return;
+                    }
+
+                    // Update summary chips
+                    document.getElementById('totalServices').textContent = this.servicesData.summary.total_services;
+                    document.getElementById('healthyServices').textContent = this.servicesData.summary.healthy_services;
+                    document.getElementById('startingServices').textContent = this.servicesData.summary.starting_services;
+                    const unhealthyTotal = (this.servicesData.summary.unhealthy_services || 0) + (this.servicesData.summary.degraded_services || 0);
+                    document.getElementById('unhealthyServices').textContent = unhealthyTotal;
+
+                    // Process-wide metrics
+                    if (this.servicesData.services && this.servicesData.services.length > 0) {
+                        const m0 = this.servicesData.services[0].metrics || {};
+                        const cpu = Number.isFinite(m0.process_cpu_percent) ? m0.process_cpu_percent : 0;
+                        document.getElementById('processCpu').textContent = `${cpu.toFixed(1)}%`;
+                        document.getElementById('processMemory').textContent = this.formatBytes(m0.process_memory_bytes||0);
+                    }
+
+                    const tbody = document.getElementById('servicesTableBody');
+                    if (!tbody) return;
+
+                    const filtered = this.filteredAndSortedServices();
+                    const rows = filtered.map(service => {
+                        const m = service.metrics || {};
+                        const deps = service.dependencies && service.dependencies.length
+                            ? service.dependencies.map(dep => `<span class="dependency-badge">${dep}</span>`).join(' ')
+                            : '<span class="detail-value">None</span>';
+
+                        const total = (m.total_poll_duration_ns||0)+(m.total_idle_duration_ns||0);
+                        const activity = total>0 ? ((m.total_poll_duration_ns||0)/total*100) : 0;
+                        const activityColor = activity>80 ? '#10b981' : activity>50 ? '#3b82f6' : activity>20 ? '#f59e0b' : activity>5 ? '#6b7280' : '#9ca3af';
+                        const avgPoll = this.formatDuration(m.mean_poll_duration_ns||0);
+                        const pps = service.uptime_seconds>0 ? ((m.total_polls||0)/service.uptime_seconds).toFixed(2) : '0.00';
+
+                        const taskInfo = m.task_count>0 ? `${m.task_count} tasks\nPoll: ${this.formatDuration(m.mean_poll_duration_ns)}\nIdle: ${this.formatDuration(m.mean_idle_duration_ns)}\nTotal Polls: ${m.total_polls||0}` : 'No instrumented tasks';
+
+                        return `
+                            <tr>
+                                <td style="font-weight:600;">${service.name}</td>
+                                <td><span class="badge ${this.getHealthBadgeClass(service.health)}">${this.getHealthStatus(service.health)}</span></td>
+                                <td>${service.priority}</td>
+                                <td>${service.enabled ? '✅' : '❌'}</td>
+                                <td>${this.formatUptime(service.uptime_seconds)}</td>
+                                <td class="activity-cell" title="${activity.toFixed(1)}% busy">
+                                    <div class="activity-track"><div class="activity-fill" style="width:${activity.toFixed(1)}%; background:${activityColor}"></div></div>
+                                    <div class="activity-meta"><span>${activity.toFixed(1)}%</span><span>${m.total_polls||0} polls</span></div>
+                                </td>
+                                <td title="Average duration per poll">${avgPoll}</td>
+                                <td title="Polls per second">${pps}</td>
+                                <td title="${taskInfo}">${m.task_count||0}</td>
+                                <td title="Operations per second">${(m.operations_per_second||0).toFixed(2)}</td>
+                                <td title="Total errors">${m.errors_total||0}</td>
+                                <td>${deps}</td>
+                            </tr>`;
+                    }).join('');
+                    
+                    tbody.innerHTML = rows || `
+                        <tr>
+                            <td colspan="12" style="text-align:center; padding: 20px; color: var(--text-muted);">No services</td>
+                        </tr>`;
+                },
+
+                bindToolbarEventsOnce: function() {
+                    if (this.bindToolbarEventsOnce._bound) return; 
+                    this.bindToolbarEventsOnce._bound = true;
+                    
+                    const self = this;
+                    document.getElementById('serviceSearch')?.addEventListener('input', () => self.renderServicesTable());
+                    document.getElementById('statusFilter')?.addEventListener('change', () => self.renderServicesTable());
+                    document.getElementById('enabledOnly')?.addEventListener('change', () => self.renderServicesTable());
+                },
+
+                bindSortHandlersOnce: function() {
+                    if (this.bindSortHandlersOnce._bound) return;
+                    this.bindSortHandlersOnce._bound = true;
+                    
+                    const self = this;
+                    document.querySelectorAll('#servicesTable thead th[data-sort]').forEach(th => {
+                        th.addEventListener('click', () => {
+                            const key = th.getAttribute('data-sort');
+                            if (!key) return;
+                            if (self.sortKey === key) {
+                                self.sortDir = (self.sortDir === 'asc') ? 'desc' : 'asc';
+                            } else {
+                                self.sortKey = key;
+                                self.sortDir = 'asc';
+                            }
+                            document.querySelectorAll('#servicesTable thead th[data-sort]').forEach(h => {
+                                h.classList.remove('asc','desc');
+                            });
+                            th.classList.add(self.sortDir);
+                            self.renderServicesTable();
+                        });
+                    });
+                },
+
+                healthRank: function(status) {
+                    switch (status) {
+                        case 'healthy': return 3;
+                        case 'degraded': return 2;
+                        case 'starting': return 1;
+                        case 'unhealthy': return 0;
+                        default: return -1;
+                    }
+                },
+
+                getHealthStatus: function(health) {
+                    if (health?.status === 'healthy') return '✅ Healthy';
+                    if (health?.status === 'starting') return '⏳ Starting';
+                    if (health?.status === 'degraded') return '⚠️ Degraded';
+                    if (health?.status === 'unhealthy') return '❌ Unhealthy';
+                    return '⏸️ ' + (health?.status || 'unknown');
+                },
+
+                getHealthBadgeClass: function(health) {
+                    if (health?.status === 'healthy') return 'success';
+                    if (health?.status === 'starting') return 'warning';
+                    if (health?.status === 'degraded') return 'warning';
+                    if (health?.status === 'unhealthy') return 'error';
+                    return 'secondary';
+                },
+
+                formatUptime: function(seconds) {
+                    if (!seconds || seconds < 60) return `${seconds||0}s`;
+                    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+                    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+                    return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`;
+                },
+
+                formatBytes: function(bytes) {
+                    if (!bytes || bytes < 1024) return `${bytes||0} B`;
+                    if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+                    if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(1)} MB`;
+                    return `${(bytes / 1073741824).toFixed(2)} GB`;
+                },
+
+                formatDuration: function(nanos) {
+                    if (!nanos || nanos < 1000) return `${nanos||0}ns`;
+                    if (nanos < 1000000) return `${(nanos / 1000).toFixed(1)}µs`;
+                    if (nanos < 1000000000) return `${(nanos / 1000000).toFixed(1)}ms`;
+                    return `${(nanos / 1000000000).toFixed(2)}s`;
+                },
+                
+                initialize: function() {
+                    console.log('[Services] 🚀 Initializing page controller');
+                    
+                    // Clean up any previous state
+                    this.clearActiveFetch('init');
+                    this.stopServicesFallback();
+                    
+                    // Start fresh
+                    this.loadServices({ showLoader: true });
+                    this.initServicesWebSocket();
                 }
-            }
-
-            function getHealthStatus(health) {
-                if (health?.status === 'healthy') return '✅ Healthy';
-                if (health?.status === 'starting') return '⏳ Starting';
-                if (health?.status === 'degraded') return '⚠️ Degraded';
-                if (health?.status === 'unhealthy') return '❌ Unhealthy';
-                return '⏸️ ' + (health?.status || 'unknown');
-            }
-
-            function getHealthBadgeClass(health) {
-                if (health?.status === 'healthy') return 'success';
-                if (health?.status === 'starting') return 'warning';
-                if (health?.status === 'degraded') return 'warning';
-                if (health?.status === 'unhealthy') return 'error';
-                return 'secondary';
-            }
-
-            function formatUptime(seconds) {
-                if (!seconds || seconds < 60) return `${seconds||0}s`;
-                if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-                if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
-                return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`;
-            }
-
-            function formatBytes(bytes) {
-                if (!bytes || bytes < 1024) return `${bytes||0} B`;
-                if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
-                if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(1)} MB`;
-                return `${(bytes / 1073741824).toFixed(2)} GB`;
-            }
-
-            function formatDuration(nanos) {
-                if (!nanos || nanos < 1000) return `${nanos||0}ns`;
-                if (nanos < 1000000) return `${(nanos / 1000).toFixed(1)}µs`;
-                if (nanos < 1000000000) return `${(nanos / 1000000).toFixed(1)}ms`;
-                return `${(nanos / 1000000000).toFixed(2)}s`;
-            }
-
+            };
+            
+            // Set the global refresh handler
             window.refreshServices = function() {
                 console.info('[Services] Manual refresh requested');
-                loadServices({ showLoader: true });
+                servicePageController.loadServices({ showLoader: true });
             };
-
+            
             // Global init function for Router
             window.initServicesPage = function() {
+                // Always create a new controller on page init
                 console.log('[Services] 🚀 Initializing page');
-                
-                // Clean up any previous state
-                clearActiveFetch('init');
-                stopServicesFallback();
-                
-                // Start fresh
-                loadServices({ showLoader: true });
-                initServicesWebSocket();
+                servicePageController.initialize();
             };
 
             // Initialize immediately if not in SPA mode
             if (!window.Router) {
-                initServicesPage();
+                servicePageController.initialize();
             }
         })();
     </script>
