@@ -3,15 +3,15 @@
 /// High-performance SQLite database for persistent event storage.
 /// Fresh schema (no migrations), split read/write pools, batched writes,
 /// and keyset-optimized queries.
-use crate::events::types::{Event, EventCategory, Severity};
-use crate::logger::{log, LogTag};
-use chrono::{DateTime, Utc};
-use r2d2::{Pool, PooledConnection};
+use crate::events::types::{ Event, EventCategory, Severity };
+use crate::logger::{ log, LogTag };
+use chrono::{ DateTime, Utc };
+use r2d2::{ Pool, PooledConnection };
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
+use rusqlite::{ params, Connection, OptionalExtension, Result as SqliteResult };
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{ AtomicBool, Ordering };
 
 // =============================================================================
 // CONSTANTS
@@ -48,7 +48,8 @@ impl EventsDatabase {
 
         // Ensure data directory exists
         if !data_dir.exists() {
-            std::fs::create_dir_all(&data_dir)
+            std::fs
+                ::create_dir_all(&data_dir)
                 .map_err(|e| format!("Failed to create data directory: {}", e))?;
         }
 
@@ -87,7 +88,7 @@ impl EventsDatabase {
         log(
             LogTag::System,
             "READY",
-            &format!("Events database initialized at {}", database_path_str),
+            &format!("Events database initialized at {}", database_path_str)
         );
 
         Ok(db)
@@ -99,20 +100,26 @@ impl EventsDatabase {
         let conn = self.get_write_connection()?;
 
         // Configure connection for optimal performance
-        conn.pragma_update(None, "journal_mode", "WAL")
+        conn
+            .pragma_update(None, "journal_mode", "WAL")
             .map_err(|e| format!("Failed to set journal mode: {}", e))?;
-        conn.pragma_update(None, "synchronous", "NORMAL")
+        conn
+            .pragma_update(None, "synchronous", "NORMAL")
             .map_err(|e| format!("Failed to set synchronous mode: {}", e))?;
-        conn.pragma_update(None, "cache_size", 10000)
+        conn
+            .pragma_update(None, "cache_size", 10000)
             .map_err(|e| format!("Failed to set cache size: {}", e))?;
-        conn.pragma_update(None, "temp_store", "memory")
+        conn
+            .pragma_update(None, "temp_store", "memory")
             .map_err(|e| format!("Failed to set temp store: {}", e))?;
-        conn.busy_timeout(std::time::Duration::from_millis(30_000))
+        conn
+            .busy_timeout(std::time::Duration::from_millis(30_000))
             .map_err(|e| format!("Failed to set busy timeout: {}", e))?;
 
         // Create main events table (fresh schema)
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS events (
+        conn
+            .execute(
+                "CREATE TABLE IF NOT EXISTS events (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
                 event_time      TEXT    NOT NULL,
                 category        TEXT    NOT NULL,
@@ -124,105 +131,116 @@ impl EventsDatabase {
                 json_payload    TEXT    NOT NULL,
                 created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
             )",
-            [],
-        )
-        .map_err(|e| format!("Failed to create events table: {}", e))?;
+                []
+            )
+            .map_err(|e| format!("Failed to create events table: {}", e))?;
 
         // Create optimized indexes
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_events_category_time 
+        conn
+            .execute(
+                "CREATE INDEX IF NOT EXISTS idx_events_category_time 
              ON events(category, event_time DESC)",
-            [],
-        )
-        .map_err(|e| format!("Failed to create category-time index: {}", e))?;
+                []
+            )
+            .map_err(|e| format!("Failed to create category-time index: {}", e))?;
 
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_events_reference_id 
+        conn
+            .execute(
+                "CREATE INDEX IF NOT EXISTS idx_events_reference_id 
              ON events(reference_id)",
-            [],
-        )
-        .map_err(|e| format!("Failed to create reference_id index: {}", e))?;
+                []
+            )
+            .map_err(|e| format!("Failed to create reference_id index: {}", e))?;
 
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_events_mint 
-             ON events(mint)",
-            [],
-        )
-        .map_err(|e| format!("Failed to create mint index: {}", e))?;
+        conn
+            .execute("CREATE INDEX IF NOT EXISTS idx_events_mint 
+             ON events(mint)", [])
+            .map_err(|e| format!("Failed to create mint index: {}", e))?;
 
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_events_severity_time 
+        conn
+            .execute(
+                "CREATE INDEX IF NOT EXISTS idx_events_severity_time 
              ON events(severity, event_time DESC)",
-            [],
-        )
-        .map_err(|e| format!("Failed to create severity-time index: {}", e))?;
+                []
+            )
+            .map_err(|e| format!("Failed to create severity-time index: {}", e))?;
 
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_events_created_at 
+        conn
+            .execute(
+                "CREATE INDEX IF NOT EXISTS idx_events_created_at 
              ON events(created_at)",
-            [],
-        )
-        .map_err(|e| format!("Failed to create created_at index: {}", e))?;
+                []
+            )
+            .map_err(|e| format!("Failed to create created_at index: {}", e))?;
 
         // Keyset and composite indexes for pagination and filters
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_events_id_desc 
+        conn
+            .execute(
+                "CREATE INDEX IF NOT EXISTS idx_events_id_desc 
              ON events(id DESC)",
-            [],
-        )
-        .map_err(|e| format!("Failed to create id desc index: {}", e))?;
+                []
+            )
+            .map_err(|e| format!("Failed to create id desc index: {}", e))?;
 
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_events_category_severity_id 
+        conn
+            .execute(
+                "CREATE INDEX IF NOT EXISTS idx_events_category_severity_id 
              ON events(category, severity, id DESC)",
-            [],
-        )
-        .map_err(|e| format!("Failed to create category-severity-id index: {}", e))?;
+                []
+            )
+            .map_err(|e| format!("Failed to create category-severity-id index: {}", e))?;
 
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_events_mint_id 
+        conn
+            .execute(
+                "CREATE INDEX IF NOT EXISTS idx_events_mint_id 
              ON events(mint, id DESC)",
-            [],
-        )
-        .map_err(|e| format!("Failed to create mint-id index: {}", e))?;
+                []
+            )
+            .map_err(|e| format!("Failed to create mint-id index: {}", e))?;
 
         Ok(())
     }
 
     /// Get write connection from pool
     fn get_write_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
-        let conn = self
-            .write_pool
+        let conn = self.write_pool
             .get()
             .map_err(|e| format!("Failed to get events write connection: {}", e))?;
         // Write-optimized PRAGMAs (database-level WAL already set during init)
-        conn.pragma_update(None, "journal_mode", "WAL")
+        conn
+            .pragma_update(None, "journal_mode", "WAL")
             .map_err(|e| format!("Failed to set journal mode: {}", e))?;
-        conn.pragma_update(None, "synchronous", "NORMAL")
+        conn
+            .pragma_update(None, "synchronous", "NORMAL")
             .map_err(|e| format!("Failed to set synchronous mode: {}", e))?;
-        conn.pragma_update(None, "cache_size", 10000)
+        conn
+            .pragma_update(None, "cache_size", 10000)
             .map_err(|e| format!("Failed to set cache size: {}", e))?;
-        conn.pragma_update(None, "temp_store", "memory")
+        conn
+            .pragma_update(None, "temp_store", "memory")
             .map_err(|e| format!("Failed to set temp store: {}", e))?;
-        conn.busy_timeout(std::time::Duration::from_millis(CONNECTION_TIMEOUT_MS))
+        conn
+            .busy_timeout(std::time::Duration::from_millis(CONNECTION_TIMEOUT_MS))
             .map_err(|e| format!("Failed to set busy timeout: {}", e))?;
         Ok(conn)
     }
 
     /// Get read connection from pool
     fn get_read_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
-        let conn = self
-            .read_pool
+        let conn = self.read_pool
             .get()
             .map_err(|e| format!("Failed to get events read connection: {}", e))?;
         // Read-optimized PRAGMAs
-        conn.pragma_update(None, "query_only", "1")
+        conn
+            .pragma_update(None, "query_only", "1")
             .map_err(|e| format!("Failed to set query_only: {}", e))?;
-        conn.pragma_update(None, "cache_size", 20000)
+        conn
+            .pragma_update(None, "cache_size", 20000)
             .map_err(|e| format!("Failed to set cache size: {}", e))?;
         // 256MB mmap if supported
         let _ = conn.pragma_update(None, "mmap_size", 268435456i64);
-        conn.busy_timeout(std::time::Duration::from_millis(CONNECTION_TIMEOUT_MS))
+        conn
+            .busy_timeout(std::time::Duration::from_millis(CONNECTION_TIMEOUT_MS))
             .map_err(|e| format!("Failed to set busy timeout: {}", e))?;
         Ok(conn)
     }
@@ -234,10 +252,10 @@ impl EventsDatabase {
         let event_time_str = event.event_time.to_rfc3339();
         let category_str = event.category.to_string();
         let severity_str = event.severity.to_string();
-        let payload_str = serde_json::to_string(&event.payload)
+        let payload_str = serde_json
+            ::to_string(&event.payload)
             .map_err(|e| format!("Failed to serialize event payload: {}", e))?;
-        let message_short: Option<String> = event
-            .payload
+        let message_short: Option<String> = event.payload
             .get("message")
             .and_then(|v| v.as_str())
             .map(|s| {
@@ -263,7 +281,7 @@ impl EventsDatabase {
                     event.reference_id,
                     message_short,
                     payload_str
-                ],
+                ]
             )
             .map_err(|e| format!("Failed to insert event: {}", e))?;
 
@@ -271,7 +289,7 @@ impl EventsDatabase {
     }
 
     /// Insert multiple events in a batch (more efficient)
-    pub async fn insert_events(&self, events: &[Event]) -> Result<(), String> {
+    pub async fn insert_events(&self, events: &mut [Event]) -> Result<(), String> {
         if events.is_empty() {
             return Ok(());
         }
@@ -288,18 +306,18 @@ impl EventsDatabase {
                     "INSERT INTO events (
                         event_time, category, subtype, severity, 
                         mint, reference_id, message_short, json_payload
-                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"
                 )
                 .map_err(|e| format!("Failed to prepare insert statement: {}", e))?;
 
-            for event in events {
+            for event in events.iter_mut() {
                 let event_time_str = event.event_time.to_rfc3339();
                 let category_str = event.category.to_string();
                 let severity_str = event.severity.to_string();
-                let payload_str = serde_json::to_string(&event.payload)
+                let payload_str = serde_json
+                    ::to_string(&event.payload)
                     .map_err(|e| format!("Failed to serialize event payload: {}", e))?;
-                let message_short: Option<String> = event
-                    .payload
+                let message_short: Option<String> = event.payload
                     .get("message")
                     .and_then(|v| v.as_str())
                     .map(|s| {
@@ -310,22 +328,30 @@ impl EventsDatabase {
                         m
                     });
 
-                stmt.execute(params![
-                    event_time_str,
-                    category_str,
-                    event.subtype,
-                    severity_str,
-                    event.mint,
-                    event.reference_id,
-                    message_short,
-                    payload_str
-                ])
-                .map_err(|e| format!("Failed to execute insert: {}", e))?;
+                stmt
+                    .execute(
+                        params![
+                            event_time_str,
+                            category_str,
+                            event.subtype.clone(),
+                            severity_str,
+                            event.mint.clone(),
+                            event.reference_id.clone(),
+                            message_short,
+                            payload_str
+                        ]
+                    )
+                    .map_err(|e| format!("Failed to execute insert: {}", e))?;
+
+                let inserted_id = tx.last_insert_rowid();
+                event.id = Some(inserted_id);
+                if event.created_at.is_none() {
+                    event.created_at = Some(Utc::now());
+                }
             }
         }
 
-        tx.commit()
-            .map_err(|e| format!("Failed to commit transaction: {}", e))?;
+        tx.commit().map_err(|e| format!("Failed to commit transaction: {}", e))?;
 
         Ok(())
     }
@@ -334,7 +360,7 @@ impl EventsDatabase {
     pub async fn get_recent_events(
         &self,
         category: Option<EventCategory>,
-        limit: usize,
+        limit: usize
     ) -> Result<Vec<Event>, String> {
         let conn = self.get_read_connection()?;
 
@@ -372,7 +398,7 @@ impl EventsDatabase {
                                 rusqlite::Error::InvalidColumnType(
                                     1,
                                     "event_time".to_string(),
-                                    rusqlite::types::Type::Text,
+                                    rusqlite::types::Type::Text
                                 )
                             })?
                             .with_timezone(&Utc),
@@ -381,19 +407,21 @@ impl EventsDatabase {
                         severity: Severity::from_string(&row.get::<_, String>(4)?),
                         mint: row.get(5)?,
                         reference_id: row.get(6)?,
-                        payload: serde_json::from_str(&row.get::<_, String>(7)?).map_err(|_| {
-                            rusqlite::Error::InvalidColumnType(
-                                7,
-                                "json_payload".to_string(),
-                                rusqlite::types::Type::Text,
-                            )
-                        })?,
+                        payload: serde_json
+                            ::from_str(&row.get::<_, String>(7)?)
+                            .map_err(|_| {
+                                rusqlite::Error::InvalidColumnType(
+                                    7,
+                                    "json_payload".to_string(),
+                                    rusqlite::types::Type::Text
+                                )
+                            })?,
                         created_at: row
                             .get::<_, Option<String>>(8)?
                             .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
                             .map(|dt| dt.with_timezone(&Utc)),
                     })
-                },
+                }
             )
             .map_err(|e| format!("Failed to execute query: {}", e))?;
 
@@ -409,7 +437,7 @@ impl EventsDatabase {
     pub async fn get_events_by_reference(
         &self,
         reference_id: &str,
-        limit: usize,
+        limit: usize
     ) -> Result<Vec<Event>, String> {
         let conn = self.get_read_connection()?;
 
@@ -429,7 +457,7 @@ impl EventsDatabase {
                             rusqlite::Error::InvalidColumnType(
                                 1,
                                 "event_time".to_string(),
-                                rusqlite::types::Type::Text,
+                                rusqlite::types::Type::Text
                             )
                         })?
                         .with_timezone(&Utc),
@@ -438,13 +466,15 @@ impl EventsDatabase {
                     severity: Severity::from_string(&row.get::<_, String>(4)?),
                     mint: row.get(5)?,
                     reference_id: row.get(6)?,
-                    payload: serde_json::from_str(&row.get::<_, String>(7)?).map_err(|_| {
-                        rusqlite::Error::InvalidColumnType(
-                            7,
-                            "json_payload".to_string(),
-                            rusqlite::types::Type::Text,
-                        )
-                    })?,
+                    payload: serde_json
+                        ::from_str(&row.get::<_, String>(7)?)
+                        .map_err(|_| {
+                            rusqlite::Error::InvalidColumnType(
+                                7,
+                                "json_payload".to_string(),
+                                rusqlite::types::Type::Text
+                            )
+                        })?,
                     created_at: row
                         .get::<_, Option<String>>(8)?
                         .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
@@ -481,7 +511,7 @@ impl EventsDatabase {
                             rusqlite::Error::InvalidColumnType(
                                 1,
                                 "event_time".to_string(),
-                                rusqlite::types::Type::Text,
+                                rusqlite::types::Type::Text
                             )
                         })?
                         .with_timezone(&Utc),
@@ -490,13 +520,15 @@ impl EventsDatabase {
                     severity: Severity::from_string(&row.get::<_, String>(4)?),
                     mint: row.get(5)?,
                     reference_id: row.get(6)?,
-                    payload: serde_json::from_str(&row.get::<_, String>(7)?).map_err(|_| {
-                        rusqlite::Error::InvalidColumnType(
-                            7,
-                            "json_payload".to_string(),
-                            rusqlite::types::Type::Text,
-                        )
-                    })?,
+                    payload: serde_json
+                        ::from_str(&row.get::<_, String>(7)?)
+                        .map_err(|_| {
+                            rusqlite::Error::InvalidColumnType(
+                                7,
+                                "json_payload".to_string(),
+                                rusqlite::types::Type::Text
+                            )
+                        })?,
                     created_at: row
                         .get::<_, Option<String>>(8)?
                         .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
@@ -516,7 +548,7 @@ impl EventsDatabase {
     /// Get event counts by category for the last N hours
     pub async fn get_event_counts_by_category(
         &self,
-        since_hours: u64,
+        since_hours: u64
     ) -> Result<HashMap<String, u64>, String> {
         let conn = self.get_read_connection()?;
 
@@ -528,7 +560,7 @@ impl EventsDatabase {
                 "SELECT category, COUNT(*) as count 
                  FROM events 
                  WHERE event_time >= ?1 
-                 GROUP BY category",
+                 GROUP BY category"
             )
             .map_err(|e| format!("Failed to prepare count query: {}", e))?;
 
@@ -540,8 +572,9 @@ impl EventsDatabase {
 
         let mut counts = HashMap::new();
         for count_result in count_iter {
-            let (category, count) =
-                count_result.map_err(|e| format!("Failed to parse count row: {}", e))?;
+            let (category, count) = count_result.map_err(|e|
+                format!("Failed to parse count row: {}", e)
+            )?;
             counts.insert(category, count);
         }
 
@@ -556,18 +589,11 @@ impl EventsDatabase {
         let cutoff_str = cutoff_time.to_rfc3339();
 
         let deleted_count = conn
-            .execute(
-                "DELETE FROM events WHERE event_time < ?1",
-                params![cutoff_str],
-            )
+            .execute("DELETE FROM events WHERE event_time < ?1", params![cutoff_str])
             .map_err(|e| format!("Failed to delete old events: {}", e))?;
 
         if deleted_count > 0 {
-            log(
-                LogTag::System,
-                "CLEANUP",
-                &format!("Cleaned up {} old events", deleted_count),
-            );
+            log(LogTag::System, "CLEANUP", &format!("Cleaned up {} old events", deleted_count));
         }
 
         Ok(deleted_count)
@@ -597,7 +623,7 @@ impl EventsDatabase {
             .query_row(
                 "SELECT COUNT(*) FROM events WHERE event_time >= ?1",
                 params![cutoff_24h_str],
-                |row| row.get(0),
+                |row| row.get(0)
             )
             .map_err(|e| format!("Failed to get 24h event count: {}", e))?;
         stats.insert("events_24h".to_string(), events_24h);
@@ -615,7 +641,7 @@ impl EventsDatabase {
         category: Option<EventCategory>,
         severity: Option<Severity>,
         mint: Option<&str>,
-        reference_id: Option<&str>,
+        reference_id: Option<&str>
     ) -> Result<Vec<Event>, String> {
         let conn = self.get_read_connection()?;
         let mut query = String::from(
@@ -651,7 +677,8 @@ impl EventsDatabase {
             .map_err(|e| format!("Failed to prepare since query: {}", e))?;
         let rows = stmt
             .query_map(
-                bind.iter()
+                bind
+                    .iter()
                     .map(|b| b.as_ref())
                     .collect::<Vec<_>>()
                     .as_slice(),
@@ -663,7 +690,7 @@ impl EventsDatabase {
                                 rusqlite::Error::InvalidColumnType(
                                     1,
                                     "event_time".to_string(),
-                                    rusqlite::types::Type::Text,
+                                    rusqlite::types::Type::Text
                                 )
                             })?
                             .with_timezone(&Utc),
@@ -672,19 +699,21 @@ impl EventsDatabase {
                         severity: Severity::from_string(&row.get::<_, String>(4)?),
                         mint: row.get(5)?,
                         reference_id: row.get(6)?,
-                        payload: serde_json::from_str(&row.get::<_, String>(7)?).map_err(|_| {
-                            rusqlite::Error::InvalidColumnType(
-                                7,
-                                "json_payload".to_string(),
-                                rusqlite::types::Type::Text,
-                            )
-                        })?,
+                        payload: serde_json
+                            ::from_str(&row.get::<_, String>(7)?)
+                            .map_err(|_| {
+                                rusqlite::Error::InvalidColumnType(
+                                    7,
+                                    "json_payload".to_string(),
+                                    rusqlite::types::Type::Text
+                                )
+                            })?,
                         created_at: row
                             .get::<_, Option<String>>(8)?
                             .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
                             .map(|dt| dt.with_timezone(&Utc)),
                     })
-                },
+                }
             )
             .map_err(|e| format!("Failed to execute since query: {}", e))?;
 
@@ -703,7 +732,7 @@ impl EventsDatabase {
         category: Option<EventCategory>,
         severity: Option<Severity>,
         mint: Option<&str>,
-        reference_id: Option<&str>,
+        reference_id: Option<&str>
     ) -> Result<Vec<Event>, String> {
         let conn = self.get_read_connection()?;
         let mut query = String::from(
@@ -739,7 +768,8 @@ impl EventsDatabase {
             .map_err(|e| format!("Failed to prepare before query: {}", e))?;
         let rows = stmt
             .query_map(
-                bind.iter()
+                bind
+                    .iter()
                     .map(|b| b.as_ref())
                     .collect::<Vec<_>>()
                     .as_slice(),
@@ -751,7 +781,7 @@ impl EventsDatabase {
                                 rusqlite::Error::InvalidColumnType(
                                     1,
                                     "event_time".to_string(),
-                                    rusqlite::types::Type::Text,
+                                    rusqlite::types::Type::Text
                                 )
                             })?
                             .with_timezone(&Utc),
@@ -760,19 +790,21 @@ impl EventsDatabase {
                         severity: Severity::from_string(&row.get::<_, String>(4)?),
                         mint: row.get(5)?,
                         reference_id: row.get(6)?,
-                        payload: serde_json::from_str(&row.get::<_, String>(7)?).map_err(|_| {
-                            rusqlite::Error::InvalidColumnType(
-                                7,
-                                "json_payload".to_string(),
-                                rusqlite::types::Type::Text,
-                            )
-                        })?,
+                        payload: serde_json
+                            ::from_str(&row.get::<_, String>(7)?)
+                            .map_err(|_| {
+                                rusqlite::Error::InvalidColumnType(
+                                    7,
+                                    "json_payload".to_string(),
+                                    rusqlite::types::Type::Text
+                                )
+                            })?,
                         created_at: row
                             .get::<_, Option<String>>(8)?
                             .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
                             .map(|dt| dt.with_timezone(&Utc)),
                     })
-                },
+                }
             )
             .map_err(|e| format!("Failed to execute before query: {}", e))?;
 
@@ -790,7 +822,7 @@ impl EventsDatabase {
         category: Option<EventCategory>,
         severity: Option<Severity>,
         mint: Option<&str>,
-        reference_id: Option<&str>,
+        reference_id: Option<&str>
     ) -> Result<(Vec<Event>, i64), String> {
         let conn = self.get_read_connection()?;
         let mut query = String::from(
@@ -800,58 +832,66 @@ impl EventsDatabase {
         let mut bind: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
         let mut idx = 1;
         if let Some(cat) = category {
-            query.push_str(&format!(
-                "{} category = ?{}",
-                if where_added {
-                    " AND"
-                } else {
-                    where_added = true;
-                    " WHERE"
-                },
-                idx
-            ));
+            query.push_str(
+                &format!(
+                    "{} category = ?{}",
+                    if where_added {
+                        " AND"
+                    } else {
+                        where_added = true;
+                        " WHERE"
+                    },
+                    idx
+                )
+            );
             bind.push(Box::new(cat.to_string()));
             idx += 1;
         }
         if let Some(sev) = severity {
-            query.push_str(&format!(
-                "{} severity = ?{}",
-                if where_added {
-                    " AND"
-                } else {
-                    where_added = true;
-                    " WHERE"
-                },
-                idx
-            ));
+            query.push_str(
+                &format!(
+                    "{} severity = ?{}",
+                    if where_added {
+                        " AND"
+                    } else {
+                        where_added = true;
+                        " WHERE"
+                    },
+                    idx
+                )
+            );
             bind.push(Box::new(sev.to_string()));
             idx += 1;
         }
         if let Some(m) = mint {
-            query.push_str(&format!(
-                "{} mint = ?{}",
-                if where_added {
-                    " AND"
-                } else {
-                    where_added = true;
-                    " WHERE"
-                },
-                idx
-            ));
+            query.push_str(
+                &format!(
+                    "{} mint = ?{}",
+                    if where_added {
+                        " AND"
+                    } else {
+                        where_added = true;
+                        " WHERE"
+                    },
+                    idx
+                )
+            );
             bind.push(Box::new(m.to_string()));
             idx += 1;
         }
         if let Some(r) = reference_id {
-            query.push_str(&format!(
-                "{} reference_id = ?{}",
-                if where_added {
-                    " AND"
-                } else {
-                    where_added = true;
-                    " WHERE"
-                },
-                idx
-            ));
+            query.push_str(
+                &format!(
+                    "{} reference_id = ?{}",
+                    if where_added {
+                        " AND"
+                    } else {
+                        where_added = true;
+                        " WHERE"
+                    },
+                    idx
+                )
+            );
             bind.push(Box::new(r.to_string()));
             idx += 1;
         }
@@ -863,7 +903,8 @@ impl EventsDatabase {
             .map_err(|e| format!("Failed to prepare head query: {}", e))?;
         let rows = stmt
             .query_map(
-                bind.iter()
+                bind
+                    .iter()
                     .map(|b| b.as_ref())
                     .collect::<Vec<_>>()
                     .as_slice(),
@@ -875,7 +916,7 @@ impl EventsDatabase {
                                 rusqlite::Error::InvalidColumnType(
                                     1,
                                     "event_time".to_string(),
-                                    rusqlite::types::Type::Text,
+                                    rusqlite::types::Type::Text
                                 )
                             })?
                             .with_timezone(&Utc),
@@ -884,19 +925,21 @@ impl EventsDatabase {
                         severity: Severity::from_string(&row.get::<_, String>(4)?),
                         mint: row.get(5)?,
                         reference_id: row.get(6)?,
-                        payload: serde_json::from_str(&row.get::<_, String>(7)?).map_err(|_| {
-                            rusqlite::Error::InvalidColumnType(
-                                7,
-                                "json_payload".to_string(),
-                                rusqlite::types::Type::Text,
-                            )
-                        })?,
+                        payload: serde_json
+                            ::from_str(&row.get::<_, String>(7)?)
+                            .map_err(|_| {
+                                rusqlite::Error::InvalidColumnType(
+                                    7,
+                                    "json_payload".to_string(),
+                                    rusqlite::types::Type::Text
+                                )
+                            })?,
                         created_at: row
                             .get::<_, Option<String>>(8)?
                             .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
                             .map(|dt| dt.with_timezone(&Utc)),
                     })
-                },
+                }
             )
             .map_err(|e| format!("Failed to execute head query: {}", e))?;
 

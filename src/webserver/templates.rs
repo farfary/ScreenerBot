@@ -2153,13 +2153,16 @@ fn common_scripts() -> &'static str {
                 
                 console.log(`[WsHub] Reconnect attempt ${this.attempts}, delay: ${delay}ms`);
                 
-                if (this.attempts > this.maxAttempts) {
-                    console.warn('[WsHub] Reconnect failed after max attempts, disabling');
-                    this.enabled = false;
-                    this.emit('_failed', {});
-                    return;
+                if (this.maxAttempts > 0 && this.attempts > this.maxAttempts) {
+                    console.warn('[WsHub] Reconnect still failing, continuing retries with max backoff');
+                    this.attempts = this.maxAttempts;
+                    this.emit('_warning', {
+                        channel: 'ws',
+                        message: 'Realtime connection degraded, retrying',
+                        recommendation: 'http_catchup'
+                    });
                 }
-                
+
                 setTimeout(() => this.connect(), delay);
             },
             

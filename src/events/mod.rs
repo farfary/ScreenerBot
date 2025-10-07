@@ -45,18 +45,26 @@ pub mod db;
 pub mod maintenance;
 pub mod types;
 
-use crate::logger::{log, LogTag};
+use crate::logger::{ log, LogTag };
 use db::EventsDatabase;
 pub use maintenance::{
-    get_events_summary, record_entry_event, record_pool_event, record_position_event,
-    record_security_event, record_swap_event, record_system_event, record_token_event,
-    record_transaction_event, search_events, start_maintenance_task,
+    get_events_summary,
+    record_entry_event,
+    record_pool_event,
+    record_position_event,
+    record_security_event,
+    record_swap_event,
+    record_system_event,
+    record_token_event,
+    record_transaction_event,
+    search_events,
+    start_maintenance_task,
 };
-use once_cell::sync::{Lazy, OnceCell};
+use once_cell::sync::{ Lazy, OnceCell };
 use std::collections::VecDeque;
 use std::sync::Arc;
-use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
-pub use types::{Event, EventCategory, Severity};
+use tokio::sync::{ broadcast, mpsc, Mutex, RwLock };
+pub use types::{ Event, EventCategory, Severity };
 
 // =============================================================================
 // GLOBAL EVENT SYSTEM
@@ -72,8 +80,9 @@ struct EventWriter {
 }
 
 /// Global event writer instance
-static EVENT_WRITER: Lazy<Arc<Mutex<Option<EventWriter>>>> =
-    Lazy::new(|| Arc::new(Mutex::new(None)));
+static EVENT_WRITER: Lazy<Arc<Mutex<Option<EventWriter>>>> = Lazy::new(||
+    Arc::new(Mutex::new(None))
+);
 
 /// Global database handle
 pub static EVENTS_DB: OnceCell<Arc<EventsDatabase>> = OnceCell::new();
@@ -83,8 +92,9 @@ static EVENTS_BROADCAST_TX: OnceCell<broadcast::Sender<Event>> = OnceCell::new()
 
 /// Ring buffer cache of recent events
 const EVENTS_CACHE_CAPACITY: usize = 5000;
-static EVENTS_CACHE: Lazy<Arc<RwLock<VecDeque<Event>>>> =
-    Lazy::new(|| Arc::new(RwLock::new(VecDeque::with_capacity(EVENTS_CACHE_CAPACITY))));
+static EVENTS_CACHE: Lazy<Arc<RwLock<VecDeque<Event>>>> = Lazy::new(||
+    Arc::new(RwLock::new(VecDeque::with_capacity(EVENTS_CACHE_CAPACITY)))
+);
 
 // =============================================================================
 // PUBLIC API
@@ -101,9 +111,9 @@ pub async fn init() -> Result<(), String> {
 
     // Initialize database (fresh schema)
     let db = Arc::new(
-        EventsDatabase::new()
-            .await
-            .map_err(|e| format!("Failed to initialize events database: {}", e))?,
+        EventsDatabase::new().await.map_err(|e|
+            format!("Failed to initialize events database: {}", e)
+        )?
     );
     let _ = EVENTS_DB.set(db.clone());
 
@@ -125,11 +135,7 @@ pub async fn init() -> Result<(), String> {
         _handle: handle,
     });
 
-    log(
-        LogTag::System,
-        "READY",
-        "Events system initialized successfully",
-    );
+    log(LogTag::System, "READY", "Events system initialized successfully");
     Ok(())
 }
 
@@ -139,11 +145,7 @@ pub async fn record(event: Event) -> Result<(), String> {
     let writer_guard = EVENT_WRITER.lock().await;
 
     if let Some(ref writer) = *writer_guard {
-        writer
-            .sender
-            .send(event)
-            .await
-            .map_err(|_| "Event channel closed".to_string())?;
+        writer.sender.send(event).await.map_err(|_| "Event channel closed".to_string())?;
         Ok(())
     } else {
         Err("Events system not initialized".to_string())
@@ -154,61 +156,45 @@ pub async fn record(event: Event) -> Result<(), String> {
 /// Logs errors instead of propagating them to avoid disrupting main operations
 pub async fn record_safe(event: Event) {
     if let Err(e) = record(event).await {
-        log(
-            LogTag::System,
-            "WARN",
-            &format!("Failed to record event: {}", e),
-        );
+        log(LogTag::System, "WARN", &format!("Failed to record event: {}", e));
     }
 }
 
 /// Get recent events by category
 pub async fn recent(category: EventCategory, limit: usize) -> Result<Vec<Event>, String> {
-    let db = EVENTS_DB
-        .get()
-        .ok_or_else(|| "Events system not initialized".to_string())?;
+    let db = EVENTS_DB.get().ok_or_else(|| "Events system not initialized".to_string())?;
     db.get_recent_events(Some(category), limit).await
 }
 
 /// Get recent events across all categories
 pub async fn recent_all(limit: usize) -> Result<Vec<Event>, String> {
-    let db = EVENTS_DB
-        .get()
-        .ok_or_else(|| "Events system not initialized".to_string())?;
+    let db = EVENTS_DB.get().ok_or_else(|| "Events system not initialized".to_string())?;
     db.get_recent_events(None, limit).await
 }
 
 /// Get event counts by category for the last N hours
 pub async fn count_by_category(
-    since_hours: u64,
+    since_hours: u64
 ) -> Result<std::collections::HashMap<String, u64>, String> {
-    let db = EVENTS_DB
-        .get()
-        .ok_or_else(|| "Events system not initialized".to_string())?;
+    let db = EVENTS_DB.get().ok_or_else(|| "Events system not initialized".to_string())?;
     db.get_event_counts_by_category(since_hours).await
 }
 
 /// Get events for a specific reference ID (e.g., transaction signature, pool address)
 pub async fn by_reference(reference_id: &str, limit: usize) -> Result<Vec<Event>, String> {
-    let db = EVENTS_DB
-        .get()
-        .ok_or_else(|| "Events system not initialized".to_string())?;
+    let db = EVENTS_DB.get().ok_or_else(|| "Events system not initialized".to_string())?;
     db.get_events_by_reference(reference_id, limit).await
 }
 
 /// Get events for a specific token mint
 pub async fn by_mint(mint: &str, limit: usize) -> Result<Vec<Event>, String> {
-    let db = EVENTS_DB
-        .get()
-        .ok_or_else(|| "Events system not initialized".to_string())?;
+    let db = EVENTS_DB.get().ok_or_else(|| "Events system not initialized".to_string())?;
     db.get_events_by_mint(mint, limit).await
 }
 
 /// Force cleanup of old events (normally handled automatically)
 pub async fn cleanup_old_events() -> Result<usize, String> {
-    let db = EVENTS_DB
-        .get()
-        .ok_or_else(|| "Events system not initialized".to_string())?;
+    let db = EVENTS_DB.get().ok_or_else(|| "Events system not initialized".to_string())?;
     db.cleanup_old_events().await
 }
 
@@ -316,12 +302,8 @@ async fn write_batch(db: &EventsDatabase, batch: &mut Vec<Event>) {
         return;
     }
 
-    if let Err(e) = db.insert_events(batch).await {
-        log(
-            LogTag::System,
-            "ERROR",
-            &format!("Failed to write event batch: {}", e),
-        );
+    if let Err(e) = db.insert_events(batch.as_mut_slice()).await {
+        log(LogTag::System, "ERROR", &format!("Failed to write event batch: {}", e));
     }
 
     // On success (or even if some failed), push to cache and broadcast
