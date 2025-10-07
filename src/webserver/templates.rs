@@ -7617,36 +7617,61 @@ pub fn services_content() -> String {
             const { showLoader = false } = options;
 
             try {
-                console.debug('[Services] loadServices invoked', {
+                console.log('[Services] 🔄 Starting services fetch', {
                     showLoader,
                     timestamp: new Date().toISOString(),
-                    fallbackEnabled: Boolean(servicesFallbackInterval)
+                    fallbackEnabled: Boolean(servicesFallbackInterval),
+                    url: '/api/services/overview'
                 });
+                
                 if (showLoader) {
                     setServicesLoading();
                 }
 
+                const fetchStart = performance.now();
                 const response = await fetch('/api/services/overview', {
                     headers: { 'X-Requested-With': 'fetch' }
                 });
+                const fetchDuration = performance.now() - fetchStart;
+
+                console.log('[Services] ✅ Fetch completed', {
+                    status: response.status,
+                    ok: response.ok,
+                    statusText: response.statusText,
+                    durationMs: fetchDuration.toFixed(2),
+                    headers: {
+                        contentType: response.headers.get('content-type'),
+                        contentLength: response.headers.get('content-length')
+                    }
+                });
 
                 if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
 
+                const parseStart = performance.now();
                 const data = await response.json();
-                console.debug('[Services] HTTP snapshot received', {
+                const parseDuration = performance.now() - parseStart;
+                
+                console.log('[Services] 📦 Response parsed', {
                     serviceCount: Array.isArray(data?.services) ? data.services.length : 0,
-                    summary: data?.summary || null
+                    hasServices: Boolean(data?.services),
+                    hasSummary: Boolean(data?.summary),
+                    hasDependencyGraph: Boolean(data?.dependency_graph),
+                    summary: data?.summary || null,
+                    parseDurationMs: parseDuration.toFixed(2),
+                    dataKeys: data ? Object.keys(data) : []
                 });
+                
                 handleServicesSnapshot(data);
             } catch (error) {
-                console.error('[Services] Failed to load services', {
+                console.error('[Services] ❌ Failed to load services', {
                     message: error?.message || String(error),
                     stack: error?.stack,
-                    timestamp: new Date().toISOString()
+                    timestamp: new Date().toISOString(),
+                    errorType: error?.constructor?.name
                 });
-                showServicesError('Failed to load services data');
+                showServicesError('Failed to load services data: ' + (error?.message || 'Unknown error'));
             }
         }
 
@@ -7680,21 +7705,33 @@ pub fn services_content() -> String {
         }
 
         function handleServicesSnapshot(snapshot) {
+            console.log('[Services] 🔍 Processing snapshot', {
+                hasSnapshot: Boolean(snapshot),
+                hasServicesArray: Array.isArray(snapshot?.services),
+                serviceCount: Array.isArray(snapshot?.services) ? snapshot.services.length : 0,
+                keys: snapshot ? Object.keys(snapshot) : [],
+                timestamp: new Date().toISOString()
+            });
+
             if (!snapshot || !Array.isArray(snapshot.services)) {
-                console.warn('[Services] Received malformed snapshot', {
+                console.warn('[Services] ⚠️ Received malformed snapshot', {
                     hasServicesArray: Array.isArray(snapshot?.services),
-                    keys: snapshot ? Object.keys(snapshot) : []
+                    keys: snapshot ? Object.keys(snapshot) : [],
+                    snapshotType: typeof snapshot
                 });
                 showServicesError('No services available');
                 return;
             }
 
             servicesData = snapshot;
-            console.debug('[Services] Snapshot applied', {
+            console.log('[Services] ✅ Snapshot applied to servicesData', {
                 serviceCount: snapshot.services.length,
                 summary: snapshot.summary,
+                firstServiceName: snapshot.services[0]?.name,
+                lastServiceName: snapshot.services[snapshot.services.length - 1]?.name,
                 receivedAt: new Date().toISOString()
             });
+            
             bindToolbarEventsOnce();
             bindSortHandlersOnce();
             renderServicesTable();
@@ -7729,22 +7766,35 @@ pub fn services_content() -> String {
         }
 
         function initServicesWebSocket() {
+            console.log('[Services] 🔌 Initializing WebSocket integration', {
+                hasWsHub: typeof WsHub !== 'undefined',
+                servicesWsBound,
+                timestamp: new Date().toISOString()
+            });
+
             if (typeof WsHub === 'undefined') {
-                console.warn('[Services] WsHub unavailable, switching to HTTP polling');
+                console.warn('[Services] ⚠️ WsHub unavailable, switching to HTTP polling');
                 startServicesFallback(10000);
                 return;
             }
 
-            if (servicesWsBound) return;
+            if (servicesWsBound) {
+                console.log('[Services] ℹ️ WebSocket handlers already bound, skipping');
+                return;
+            }
+            
             servicesWsBound = true;
-            console.debug('[Services] Binding websocket handlers', {
-                isConnected: typeof WsHub.isConnected === 'function' ? WsHub.isConnected() : null
+            console.log('[Services] ✅ Binding websocket handlers', {
+                isConnected: typeof WsHub.isConnected === 'function' ? WsHub.isConnected() : null,
+                hasSubscribe: typeof WsHub.subscribe === 'function'
             });
 
             const onSnapshot = (snapshot) => {
-                console.debug('[Services] WebSocket snapshot received', {
+                console.log('[Services] 📬 WebSocket snapshot received', {
                     serviceCount: Array.isArray(snapshot?.services) ? snapshot.services.length : 0,
-                    summary: snapshot?.summary || null
+                    summary: snapshot?.summary || null,
+                    hasData: Boolean(snapshot),
+                    timestamp: new Date().toISOString()
                 });
                 stopServicesFallback();
                 handleServicesSnapshot(snapshot);
@@ -7861,7 +7911,18 @@ pub fn services_content() -> String {
         }
 
         function renderServicesTable() {
-            if (!servicesData) return;
+            console.log('[Services] 🎨 Starting table render', {
+                hasServicesData: Boolean(servicesData),
+                serviceCount: servicesData?.services?.length || 0,
+                sortKey,
+                sortDir,
+                timestamp: new Date().toISOString()
+            });
+
+            if (!servicesData) {
+                console.warn('[Services] ⚠️ Render aborted: servicesData is null');
+                return;
+            }
 
             // Update compact summary chips
             document.getElementById('totalServices').textContent = servicesData.summary.total_services;
@@ -7870,18 +7931,37 @@ pub fn services_content() -> String {
             const unhealthyTotal = (servicesData.summary.unhealthy_services || 0) + (servicesData.summary.degraded_services || 0);
             document.getElementById('unhealthyServices').textContent = unhealthyTotal;
 
+            console.log('[Services] 📊 Summary chips updated', {
+                total: servicesData.summary.total_services,
+                healthy: servicesData.summary.healthy_services,
+                starting: servicesData.summary.starting_services,
+                unhealthy: unhealthyTotal
+            });
+
             // Process-wide metrics
             if (servicesData.services && servicesData.services.length > 0) {
                 const m0 = servicesData.services[0].metrics || {};
                 const cpu = Number.isFinite(m0.process_cpu_percent) ? m0.process_cpu_percent : 0;
                 document.getElementById('processCpu').textContent = `${cpu.toFixed(1)}%`;
                 document.getElementById('processMemory').textContent = formatBytes(m0.process_memory_bytes||0);
+                
+                console.log('[Services] 💻 Process metrics updated', {
+                    cpu: cpu.toFixed(1),
+                    memory: formatBytes(m0.process_memory_bytes||0)
+                });
             }
 
             const tbody = document.getElementById('servicesTableBody');
-            if (!tbody) return;
+            if (!tbody) {
+                console.error('[Services] ❌ Table body element not found');
+                return;
+            }
 
             const filtered = filteredAndSortedServices();
+            console.log('[Services] 🔍 Filtered services', {
+                originalCount: servicesData.services.length,
+                filteredCount: filtered.length
+            });
             const rows = filtered.map(service => {
                 const m = service.metrics || {};
                 const deps = service.dependencies && service.dependencies.length
@@ -7918,13 +7998,17 @@ pub fn services_content() -> String {
 
             const filters = currentFilters();
             const renderedCount = rows ? filtered.length : 0;
-            console.debug('[Services] Table rendered', {
+            
+            console.log('[Services] ✅ Table rendered', {
                 renderedCount,
                 totalServices: servicesData.services.length,
                 sortKey,
                 sortDir,
-                filters
+                filters,
+                rowsGenerated: Boolean(rows),
+                timestamp: new Date().toISOString()
             });
+            
             tbody.innerHTML = rows || `
                 <tr>
                     <td colspan="12" style="text-align:center; padding: 20px; color: var(--text-muted);">No services</td>
@@ -8031,15 +8115,19 @@ pub fn services_content() -> String {
 
         // Global init function for Router to call during SPA navigation
         window.initServicesPage = function() {
-            console.log('[Services] Initializing page', {
+            console.log('[Services] 🚀 Initializing page', {
                 timestamp: new Date().toISOString(),
-                fromSpaNavigation: Boolean(window.Router?.getCurrentRoute)
+                fromSpaNavigation: Boolean(window.Router?.getCurrentRoute),
+                currentRoute: window.Router?.getCurrentRoute?.(),
+                hasServicesData: Boolean(servicesData),
+                wsBound: servicesWsBound
             });
             loadServices({ showLoader: true });
             initServicesWebSocket();
         };
 
         // Execute initialization immediately (works for both initial load and SPA navigation)
+        console.log('[Services] 🎬 Executing immediate initialization');
         initServicesPage();
     </script>
     "#.to_string()

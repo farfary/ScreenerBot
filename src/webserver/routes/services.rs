@@ -102,6 +102,14 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
     };
 
     if let Some(manager_ref) = get_service_manager().await {
+        if is_debug_webserver_enabled() {
+            log(
+                LogTag::Webserver,
+                "DEBUG",
+                "ServiceManager reference obtained, acquiring read lock"
+            );
+        }
+
         if let Some(manager) = manager_ref.read().await.as_ref() {
             let service_names = manager.get_all_service_names();
             let health_map = manager.get_health().await;
@@ -112,8 +120,10 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
                     LogTag::Webserver,
                     "DEBUG",
                     &format!(
-                        "Discovered {} registered services while compiling snapshot",
-                        service_names.len()
+                        "Discovered {} registered services while compiling snapshot (health_map_size={}, metrics_map_size={})",
+                        service_names.len(),
+                        health_map.len(),
+                        metrics_map.len()
                     )
                 );
             }
@@ -139,6 +149,21 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
                         .unwrap_or_else(ServiceMetrics::default)
                         .sanitized();
                     let uptime_seconds = metrics.uptime_seconds;
+
+                    if is_debug_webserver_enabled() {
+                        log(
+                            LogTag::Webserver,
+                            "DEBUG",
+                            &format!(
+                                "Service '{}': priority={}, enabled={}, health={:?}, metrics.task_count={}",
+                                name,
+                                priority,
+                                enabled,
+                                health,
+                                metrics.task_count
+                            )
+                        );
+                    }
 
                     if enabled {
                         summary.enabled_services += 1;
@@ -180,6 +205,22 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
                     });
                 }
             }
+        } else {
+            if is_debug_webserver_enabled() {
+                log(
+                    LogTag::Webserver,
+                    "DEBUG",
+                    "ServiceManager read lock acquired but manager is None"
+                );
+            }
+        }
+    } else {
+        if is_debug_webserver_enabled() {
+            log(
+                LogTag::Webserver,
+                "DEBUG",
+                "ServiceManager reference not available (get_service_manager returned None)"
+            );
         }
     }
 
@@ -198,12 +239,13 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
             LogTag::Webserver,
             "DEBUG",
             &format!(
-                "Services snapshot prepared: total={} enabled={} healthy={} unhealthy={} starting={}",
+                "Services snapshot prepared: total={} enabled={} healthy={} unhealthy={} starting={} degraded={}",
                 summary.total_services,
                 summary.enabled_services,
                 summary.healthy_services,
-                unhealthy,
-                summary.starting_services
+                summary.unhealthy_services,
+                summary.starting_services,
+                summary.degraded_services
             )
         );
     }
