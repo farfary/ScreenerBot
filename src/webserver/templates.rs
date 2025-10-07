@@ -2075,6 +2075,193 @@ fn common_scripts() -> &'static str {
             }
         };
         
+        // WebSocket Hub - Centralized real-time updates
+        const WsHub = {
+            conn: null,
+            enabled: true,
+            attempts: 0,
+            maxAttempts: 5,
+            subscriptions: new Set(),
+            listeners: {}, // channel -> [callback, callback, ...]
+            
+            // Initialize connection
+            connect() {
+                if (this.conn && this.conn.readyState === WebSocket.OPEN) return;
+                
+                const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+                const url = `${proto}://${location.host}/api/ws`;
+                
+                console.log('[WsHub] Connecting:', url);
+                
+                try {
+                    this.conn = new WebSocket(url);
+                    
+                    this.conn.onopen = () => {
+                        console.log('[WsHub] Connected');
+                        this.attempts = 0;
+                        
+                        // Resubscribe to all channels
+                        for (const channel of this.subscriptions) {
+                            this.send({ type: 'subscribe', channel });
+                        }
+                        
+                        // Notify listeners
+                        this.emit('_connected', {});
+                    };
+                    
+                    this.conn.onmessage = (event) => {
+                        try {
+                            const msg = JSON.parse(event.data);
+                            this.handleMessage(msg);
+                        } catch (err) {
+                            console.error('[WsHub] Message parse error:', err);
+                        }
+                    };
+                    
+                    this.conn.onclose = () => {
+                        console.log('[WsHub] Closed');
+                        this.conn = null;
+                        this.emit('_disconnected', {});
+                        this.reconnect();
+                    };
+                    
+                    this.conn.onerror = (err) => {
+                        console.error('[WsHub] Error:', err);
+                        try { this.conn && this.conn.close(); } catch {};
+                        this.conn = null;
+                        this.reconnect();
+                    };
+                } catch (err) {
+                    console.error('[WsHub] Creation failed:', err);
+                    this.reconnect();
+                }
+            },
+            
+            // Reconnect with exponential backoff
+            reconnect() {
+                this.attempts++;
+                const delay = Math.min(1000 * Math.pow(2, this.attempts), 15000);
+                
+                console.log(`[WsHub] Reconnect attempt ${this.attempts}, delay: ${delay}ms`);
+                
+                if (this.attempts > this.maxAttempts) {
+                    console.warn('[WsHub] Reconnect failed after max attempts, disabling');
+                    this.enabled = false;
+                    this.emit('_failed', {});
+                    return;
+                }
+                
+                setTimeout(() => this.connect(), delay);
+            },
+            
+            // Handle incoming messages
+            handleMessage(msg) {
+                switch (msg.type) {
+                    case 'data':
+                        this.emit(msg.channel, msg.data, msg.timestamp);
+                        break;
+                    case 'subscribed':
+                        console.log('[WsHub] Subscribed to', msg.channel);
+                        break;
+                    case 'unsubscribed':
+                        console.log('[WsHub] Unsubscribed from', msg.channel);
+                        break;
+                    case 'error':
+                        console.error('[WsHub] Error:', msg.message, msg.code);
+                        this.emit('_error', msg);
+                        break;
+                    case 'warning':
+                        console.warn('[WsHub] Warning:', msg.channel, msg.message);
+                        this.emit('_warning', msg);
+                        break;
+                    case 'pong':
+                        // Keep-alive response
+                        break;
+                    default:
+                        console.warn('[WsHub] Unknown message type:', msg.type);
+                }
+            },
+            
+            // Subscribe to channel
+            subscribe(channel, callback) {
+                if (!this.listeners[channel]) {
+                    this.listeners[channel] = [];
+                }
+                this.listeners[channel].push(callback);
+                this.subscriptions.add(channel);
+                
+                // Send subscribe message if connected
+                if (this.conn && this.conn.readyState === WebSocket.OPEN) {
+                    this.send({ type: 'subscribe', channel });
+                }
+            },
+            
+            // Unsubscribe from channel
+            unsubscribe(channel, callback) {
+                if (this.listeners[channel]) {
+                    this.listeners[channel] = this.listeners[channel].filter(cb => cb !== callback);
+                    if (this.listeners[channel].length === 0) {
+                        delete this.listeners[channel];
+                        this.subscriptions.delete(channel);
+                        
+                        // Send unsubscribe message if connected
+                        if (this.conn && this.conn.readyState === WebSocket.OPEN) {
+                            this.send({ type: 'unsubscribe', channel });
+                        }
+                    }
+                }
+            },
+            
+            // Emit event to listeners
+            emit(channel, data, timestamp) {
+                if (this.listeners[channel]) {
+                    for (const callback of this.listeners[channel]) {
+                        try {
+                            callback(data, timestamp);
+                        } catch (err) {
+                            console.error('[WsHub] Listener error:', err);
+                        }
+                    }
+                }
+            },
+            
+            // Send message to server
+            send(msg) {
+                if (this.conn && this.conn.readyState === WebSocket.OPEN) {
+                    this.conn.send(JSON.stringify(msg));
+                } else {
+                    console.warn('[WsHub] Not connected, cannot send:', msg);
+                }
+            },
+            
+            // Start heartbeat (ping every 30s)
+            startHeartbeat() {
+                setInterval(() => {
+                    if (this.conn && this.conn.readyState === WebSocket.OPEN) {
+                        this.send({ type: 'ping' });
+                    }
+                }, 30000);
+            },
+            
+            // Get connection status
+            getStatus() {
+                if (!this.conn) return 'disconnected';
+                switch (this.conn.readyState) {
+                    case WebSocket.CONNECTING: return 'connecting';
+                    case WebSocket.OPEN: return 'connected';
+                    case WebSocket.CLOSING: return 'closing';
+                    case WebSocket.CLOSED: return 'disconnected';
+                    default: return 'unknown';
+                }
+            }
+        };
+        
+        // Initialize WebSocket Hub on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            WsHub.connect();
+            WsHub.startHeartbeat();
+        });
+        
         // Save active tab on navigation
         document.addEventListener('DOMContentLoaded', () => {
             const currentPath = window.location.pathname;

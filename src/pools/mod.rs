@@ -12,6 +12,7 @@ use std::sync::Arc;
 use tokio::sync::Notify;
 
 mod api;
+pub mod broadcast; // Broadcast system for WebSocket price updates
 mod cache;
 mod db; // Database module for price history persistence
 mod service;
@@ -20,13 +21,29 @@ pub mod utils; // Utility functions for SOL detection and vault pairing
 
 // Re-export only the public API
 pub use api::{
-    check_price_history_quality, get_available_tokens, get_cache_stats, get_extended_price_history,
-    get_pool_price, get_price_history, get_price_history_stats, load_token_history_into_cache,
+    check_price_history_quality,
+    get_available_tokens,
+    get_cache_stats,
+    get_extended_price_history,
+    get_pool_price,
+    get_price_history,
+    get_price_history_stats,
+    load_token_history_into_cache,
     PriceHistoryStats,
 };
+pub use broadcast::{
+    emit_price_update,
+    get_subscriber_count as get_prices_subscriber_count,
+    initialize_prices_broadcaster,
+    subscribe as subscribe_prices,
+    PriceUpdate,
+};
 pub use discovery::{
-    get_canonical_pool_address, PoolDiscovery, ENABLE_DEXSCREENER_DISCOVERY,
-    ENABLE_GECKOTERMINAL_DISCOVERY, ENABLE_RAYDIUM_DISCOVERY,
+    get_canonical_pool_address,
+    PoolDiscovery,
+    ENABLE_DEXSCREENER_DISCOVERY,
+    ENABLE_GECKOTERMINAL_DISCOVERY,
+    ENABLE_RAYDIUM_DISCOVERY,
 };
 pub use service::{
     get_account_fetcher,
@@ -41,7 +58,7 @@ pub use service::{
     start_helper_tasks,
     stop_pool_service,
 };
-pub use types::{PoolError, PriceResult}; // Expose for configuration access
+pub use types::{ PoolError, PriceResult }; // Expose for configuration access
 
 // Internal modules (not exposed)
 mod analyzer;
@@ -63,7 +80,7 @@ pub use fetcher::AccountData;
 /// This function initializes pool components only (no background tasks).
 /// Background tasks are now managed by separate services via ServiceManager.
 pub async fn init_pool_service(
-    shutdown: Arc<Notify>,
+    shutdown: Arc<Notify>
 ) -> Result<tokio::task::JoinHandle<()>, PoolError> {
     initialize_pool_components().await?;
 

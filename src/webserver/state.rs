@@ -50,9 +50,7 @@ impl AppState {
 
     /// Get server uptime in seconds
     pub fn uptime_seconds(&self) -> u64 {
-        (chrono::Utc::now() - self.startup_time)
-            .num_seconds()
-            .max(0) as u64
+        (chrono::Utc::now() - self.startup_time).num_seconds().max(0) as u64
     }
 
     /// Get all service names from ServiceManager
@@ -79,7 +77,7 @@ impl AppState {
 
     /// Get all services health
     pub async fn get_all_services_health(
-        &self,
+        &self
     ) -> std::collections::HashMap<&'static str, crate::services::ServiceHealth> {
         if let Some(manager_ref) = crate::services::get_service_manager().await {
             if let Some(manager) = manager_ref.read().await.as_ref() {
@@ -91,7 +89,7 @@ impl AppState {
 
     /// Get service metrics (optimized - uses read lock, not write lock)
     pub async fn get_service_metrics(
-        &self,
+        &self
     ) -> std::collections::HashMap<&'static str, crate::services::ServiceMetrics> {
         if let Some(manager_ref) = crate::services::get_service_manager().await {
             if let Some(manager) = manager_ref.read().await.as_ref() {
@@ -130,4 +128,17 @@ pub struct ServiceDetails {
     pub priority: i32,
     pub dependencies: Vec<String>,
     pub enabled: bool,
+}
+
+// Global state accessor (for status_broadcast)
+static GLOBAL_APP_STATE: once_cell::sync::OnceCell<Arc<AppState>> = once_cell::sync::OnceCell::new();
+
+/// Set global app state (called during webserver initialization)
+pub fn set_global_app_state(state: Arc<AppState>) {
+    GLOBAL_APP_STATE.set(state).ok();
+}
+
+/// Get WebSocket connection count (global accessor)
+pub async fn get_ws_connection_count() -> usize {
+    if let Some(state) = GLOBAL_APP_STATE.get() { state.ws_connection_count().await } else { 0 }
 }
