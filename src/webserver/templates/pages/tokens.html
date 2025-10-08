@@ -1,425 +1,526 @@
+<script>
+  var TOKENS_VIEWS = [
+    "pool",
+    "all",
+    "passed",
+    "rejected",
+    "blacklisted",
+    "positions",
+    "secure",
+    "recent",
+  ];
+  var VIEW_LABELS = {
+    pool: "with available prices",
+    all: "in database",
+    passed: "that passed filtering",
+    rejected: "rejected by filtering",
+    blacklisted: "blacklisted",
+    positions: "with open positions",
+    secure: "secure",
+    recent: "recently updated",
+  };
 
-    <script>
-        var TOKENS_VIEWS = ['pool', 'all', 'passed', 'rejected', 'blacklisted', 'positions', 'secure', 'recent'];
-        var VIEW_LABELS = {
-            pool: 'with available prices',
-            all: 'in database',
-            passed: 'that passed filtering',
-            rejected: 'rejected by filtering',
-            blacklisted: 'blacklisted',
-            positions: 'with open positions',
-            secure: 'secure',
-            recent: 'recently updated',
-        };
+  var tokensState = window.tokensState || {
+    view: "pool",
+    sortBy: "symbol",
+    sortDir: "asc",
+    searchTerm: "",
+  };
 
-        var tokensState = window.tokensState || {
-            view: 'pool',
-            sortBy: 'symbol',
-            sortDir: 'asc',
-            searchTerm: '',
-        };
+  var allTokensData = [];
+  var currentModalMint = null;
+  var tokenModalData = null;
+  var tokensRefreshInterval = null;
+  var tokensRequestController = null;
+  var tokensLoading = false;
+  var searchDebounceHandle = null;
 
-        var allTokensData = [];
-        var currentModalMint = null;
-        var tokenModalData = null;
-        var tokensRefreshInterval = null;
-        var tokensRequestController = null;
-        var tokensLoading = false;
-        var searchDebounceHandle = null;
+  // Global init function for Router to call during SPA navigation
+  window.initTokensPage = function () {
+    console.log("[Tokens] Initializing page");
+    hydrateTokensState();
+    initTokensSubTabs();
+    initTokensToolbar();
+    setupSortableHeaders();
+    attachGlobalListeners();
+    loadTokens({ reason: "initial", force: true });
+    startTokensRefresh();
+  };
 
-        // Global init function for Router to call during SPA navigation
-        window.initTokensPage = function() {
-            console.log('[Tokens] Initializing page');
-            hydrateTokensState();
-            initTokensSubTabs();
-            initTokensToolbar();
-            setupSortableHeaders();
-            attachGlobalListeners();
-            loadTokens({ reason: 'initial', force: true });
-            startTokensRefresh();
-        };
+  function hydrateTokensState() {
+    const savedView = window.sessionStorage.getItem("tokens.view");
+    if (savedView && TOKENS_VIEWS.includes(savedView)) {
+      tokensState.view = savedView;
+    }
+    window.PageRealtime = window.PageRealtime || {};
+    window.PageRealtime.tokens = {
+      channels: {
+        prices: handlePriceUpdate,
+      },
+      onUnavailable() {
+        console.warn(
+          "[Tokens] WebSocket unavailable – price updates will not refresh in real time."
+        );
+      },
+    };
 
-        function hydrateTokensState() {
-            const savedView = window.sessionStorage.getItem('tokens.view');
-            if (savedView && TOKENS_VIEWS.includes(savedView)) {
-                tokensState.view = savedView;
-            }
+    const savedSearch = window.sessionStorage.getItem("tokens.search");
+    if (typeof savedSearch === "string") {
+      tokensState.searchTerm = savedSearch;
+    }
+  }
 
-            const savedSearch = window.sessionStorage.getItem('tokens.search');
-            if (typeof savedSearch === 'string') {
-                tokensState.searchTerm = savedSearch;
-            }
-        }
+  function getTokenByMint(mint) {
+    if (!mint) return null;
+    return allTokensData.find((token) => token?.mint === mint) || null;
+  }
 
-        function getTokenByMint(mint) {
-            if (!mint) return null;
-            return allTokensData.find(token => token?.mint === mint) || null;
-        }
+  async function fetchTokenDetail(mint) {
+    try {
+      const res = await fetch(`/api/tokens/${mint}`);
+      if (!res.ok) throw new Error(`Token request failed (${res.status})`);
+      const data = await res.json();
+      return data;
+    } catch (error) {
+      console.error("Failed to fetch token detail:", error);
+      showToast("❌ Failed to load token details", "error");
+      return null;
+    }
+  }
 
-        async function fetchTokenDetail(mint) {
-            try {
-                const res = await fetch(`/api/tokens/${mint}`);
-                if (!res.ok) throw new Error(`Token request failed (${res.status})`);
-                const data = await res.json();
-                return data;
-            } catch (error) {
-                console.error('Failed to fetch token detail:', error);
-                showToast('❌ Failed to load token details', 'error');
-                return null;
-            }
-        }
+  function formatCompactNumber(value, digits = 2) {
+    if (!Number.isFinite(value)) return "—";
+    return Intl.NumberFormat("en-US", {
+      notation: "compact",
+      maximumFractionDigits: digits,
+    }).format(value);
+  }
 
-        function formatCompactNumber(value, digits = 2) {
-            if (!Number.isFinite(value)) return '—';
-            return Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: digits }).format(value);
-        }
+  function formatBooleanFlag(value, unknownLabel = "Unknown") {
+    if (value === true) return "Yes";
+    if (value === false) return "No";
+    return unknownLabel;
+  }
 
-        function formatBooleanFlag(value, unknownLabel = 'Unknown') {
-            if (value === true) return 'Yes';
-            if (value === false) return 'No';
-            return unknownLabel;
-        }
+  function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  }
 
-        function setText(id, value) {
-            const el = document.getElementById(id);
-            if (el) el.textContent = value;
-        }
+  function setHtml(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = value;
+  }
 
-        function setHtml(id, value) {
-            const el = document.getElementById(id);
-            if (el) el.innerHTML = value;
-        }
+  function renderSidebarBadges(token) {
+    const badges = [];
+    if (token?.has_pool_price)
+      badges.push(
+        '<span class="badge" style="background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;">POOL</span>'
+      );
+    if (token?.has_ohlcv)
+      badges.push(
+        '<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;">OHLCV</span>'
+      );
+    if (token?.has_open_position)
+      badges.push(
+        '<span class="badge" style="background:#fde68a;color:#92400e;border:1px solid #fcd34d;">POS</span>'
+      );
+    if (token?.blacklisted)
+      badges.push(
+        '<span class="badge" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;">BL</span>'
+      );
+    return badges.join(" ");
+  }
 
-        function renderSidebarBadges(token) {
-            const badges = [];
-            if (token?.has_pool_price) badges.push('<span class="badge" style="background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;">POOL</span>');
-            if (token?.has_ohlcv) badges.push('<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;">OHLCV</span>');
-            if (token?.has_open_position) badges.push('<span class="badge" style="background:#fde68a;color:#92400e;border:1px solid #fcd34d;">POS</span>');
-            if (token?.blacklisted) badges.push('<span class="badge" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;">BL</span>');
-            return badges.join(' ');
-        }
+  function renderRiskFactors(risks) {
+    if (!Array.isArray(risks) || risks.length === 0) {
+      return '<div style="color:#94a3b8;">No risk factors reported.</div>';
+    }
 
-        function renderRiskFactors(risks) {
-            if (!Array.isArray(risks) || risks.length === 0) {
-                return '<div style="color:#94a3b8;">No risk factors reported.</div>';
-            }
-
-            return risks
-                .map(risk => {
-                    const level = (risk.level || '').toUpperCase();
-                    const prefix = level ? `[${level}] ` : '';
-                    const title = risk.name || risk.title || 'Risk factor';
-                    const description = risk.description || '—';
-                    return `
+    return risks
+      .map((risk) => {
+        const level = (risk.level || "").toUpperCase();
+        const prefix = level ? `[${level}] ` : "";
+        const title = risk.name || risk.title || "Risk factor";
+        const description = risk.description || "—";
+        return `
                         <div class="risk-item">
                             <div class="risk-item-title">${prefix}${title}</div>
                             <div class="risk-item-desc">${description}</div>
                         </div>
                     `;
-                })
-                .join('');
+      })
+      .join("");
+  }
+
+  function populateTokenModal(token, detail) {
+    if (!token) return;
+
+    const detailData = detail || {};
+    const price = Number.isFinite(detailData.price_sol)
+      ? Number(detailData.price_sol)
+      : Number(token.price_sol);
+    const change24h = Number.isFinite(detailData.price_change_h24)
+      ? Number(detailData.price_change_h24)
+      : Number(token.price_change_h24);
+    const changeCls =
+      change24h > 0 ? "positive" : change24h < 0 ? "negative" : "";
+
+    const logoEl = document.getElementById("modalTokenLogo");
+    if (logoEl) {
+      if (token.logo_url) {
+        logoEl.src = token.logo_url;
+        logoEl.style.display = "block";
+      } else {
+        logoEl.src = "";
+        logoEl.style.display = "none";
+      }
+    }
+
+    setText("modalTokenSymbol", token.symbol || detailData.symbol || "—");
+    setText("modalTokenName", token.name || detailData.name || "—");
+    setText(
+      "modalTokenPrice",
+      Number.isFinite(price) ? formatPriceSol(price) : "—"
+    );
+
+    const changeEl = document.getElementById("modalTokenChange");
+    if (changeEl) {
+      changeEl.textContent = Number.isFinite(change24h)
+        ? formatPercentValue(change24h)
+        : "—";
+      changeEl.classList.remove("positive", "negative");
+      if (changeCls) changeEl.classList.add(changeCls);
+    }
+
+    setText("detail-mint", detailData.mint || token.mint || "—");
+    setText("detail-decimals", detailData.decimals ?? "—");
+    setText("detail-verified", formatBooleanFlag(detailData.verified, "—"));
+    setText(
+      "detail-blacklisted",
+      formatBooleanFlag(detailData.blacklisted ?? token.blacklisted, "—")
+    );
+    setText("detail-launch-date", detailData.launch_date || "—");
+
+    const liquidityValue = detailData.liquidity_usd ?? token.liquidity_usd;
+    const volume24hValue = detailData.volume_24h ?? token.volume_24h;
+    const volume6hValue = detailData.volume_6h ?? detailData.volume_h6;
+    const volume1hValue = detailData.volume_1h ?? detailData.volume_h1;
+    const fdvValue = detailData.fdv ?? token.fdv;
+    const marketCapValue = detailData.market_cap ?? token.market_cap;
+
+    setText("detail-liquidity", formatCurrencyUSD(liquidityValue));
+    setText("detail-volume24h", formatCurrencyUSD(volume24hValue));
+    setText("detail-volume6h", formatCurrencyUSD(volume6hValue));
+    setText("detail-volume1h", formatCurrencyUSD(volume1hValue));
+    setText("detail-fdv", formatCurrencyUSD(fdvValue));
+    setText("detail-marketcap", formatCurrencyUSD(marketCapValue));
+
+    const dexLabel = detailData.pool_dex || detailData.pool?.dex;
+    const poolAddress = detailData.pool_address || detailData.pool?.address;
+    const solReserves =
+      detailData.pool_reserves_sol ?? detailData.pool?.sol_reserves;
+    const tokenReserves =
+      detailData.pool_reserves_token ?? detailData.pool?.token_reserves;
+    const confidence =
+      detailData.price_confidence ?? detailData.pool?.confidence;
+    const poolAge = detailData.pool_age || detailData.pool?.age;
+
+    setText("detail-dex", dexLabel || "—");
+    setText("detail-pool", poolAddress || "—");
+    setText("detail-sol-reserves", formatCompactNumber(solReserves));
+    setText("detail-token-reserves", formatCompactNumber(tokenReserves));
+    setText(
+      "detail-confidence",
+      Number.isFinite(confidence) ? Number(confidence).toFixed(2) : "—"
+    );
+    setText("detail-pool-age", poolAge || "—");
+
+    const change5m =
+      detailData.price_change_m5 ?? detailData.price_changes?.change_5m;
+    const change1h =
+      detailData.price_change_h1 ??
+      token.price_change_h1 ??
+      detailData.price_changes?.change_1h;
+    const change6h =
+      detailData.price_change_h6 ?? detailData.price_changes?.change_6h;
+    const change24hValue =
+      detailData.price_change_h24 ??
+      token.price_change_h24 ??
+      detailData.price_changes?.change_24h;
+
+    setText(
+      "detail-change5m",
+      change5m !== undefined ? formatPercentValue(change5m) : "—"
+    );
+    setText(
+      "detail-change1h",
+      change1h !== undefined ? formatPercentValue(change1h) : "—"
+    );
+    setText(
+      "detail-change6h",
+      change6h !== undefined ? formatPercentValue(change6h) : "—"
+    );
+    setText(
+      "detail-change24h",
+      change24hValue !== undefined ? formatPercentValue(change24hValue) : "—"
+    );
+
+    const buys24hRaw = detailData.txns?.h24?.buys ?? detailData.buys_24h;
+    const sells24hRaw = detailData.txns?.h24?.sells ?? detailData.sells_24h;
+    const buys24h = Number(buys24hRaw);
+    const sells24h = Number(sells24hRaw);
+    const hasBuys = Number.isFinite(buys24h);
+    const hasSells = Number.isFinite(sells24h);
+    const netFlow =
+      hasBuys && hasSells ? buys24h - sells24h : Number(detailData.net_flow);
+    const ratio =
+      hasBuys && hasSells && sells24h !== 0
+        ? buys24h / sells24h
+        : Number(detailData.buy_sell_ratio);
+
+    setText("detail-buys24h", hasBuys ? Math.round(buys24h) : "—");
+    setText("detail-sells24h", hasSells ? Math.round(sells24h) : "—");
+    setText("detail-ratio", Number.isFinite(ratio) ? ratio.toFixed(2) : "—");
+    if (Number.isFinite(netFlow)) {
+      const sign = netFlow > 0 ? "+" : netFlow < 0 ? "-" : "";
+      setText("detail-netflow", `${sign}${Math.abs(Math.round(netFlow))}`);
+    } else {
+      setText("detail-netflow", "—");
+    }
+
+    const securityScore = Number(detailData.security_score);
+    const rugged = detailData.rugged;
+    const badge = document.getElementById("security-badge");
+    if (badge) {
+      const statusClass =
+        rugged === true
+          ? "critical"
+          : securityScore >= 700
+          ? "excellent"
+          : securityScore >= 500
+          ? "good"
+          : securityScore >= 300
+          ? "warning"
+          : "critical";
+      badge.className = `security-badge ${statusClass}`.trim();
+    }
+
+    const progress = document.getElementById("security-progress");
+    if (progress) {
+      let pct = Number(detailData.security_score_normalized);
+      if (!Number.isFinite(pct)) {
+        pct = Number(detailData.security_score);
+        if (Number.isFinite(pct)) {
+          pct = Math.max(0, Math.min(100, pct / 10.0));
         }
+      }
+      if (!Number.isFinite(pct)) pct = 0;
+      pct = Math.max(0, Math.min(100, pct));
+      progress.style.width = `${pct}%`;
+    }
 
-        function populateTokenModal(token, detail) {
-            if (!token) return;
+    setHtml(
+      "security-score-value",
+      Number.isFinite(securityScore) ? `${securityScore}` : "—"
+    );
+    const securitySummary =
+      detailData.security_summary ||
+      (rugged
+        ? "⚠️ Token flagged as rugged."
+        : "No security summary available.");
+    setHtml("security-status", securitySummary);
+    setText("detail-mint-auth", detailData.mint_authority ?? "Unknown");
+    setText("detail-freeze-auth", detailData.freeze_authority ?? "Unknown");
+    setText("detail-holders", detailData.total_holders ?? "—");
+    const top10Raw = detailData.top_10_concentration;
+    if (top10Raw === null || top10Raw === undefined) {
+      setText("detail-top10", "—");
+    } else {
+      const top10Num = Number(top10Raw);
+      if (Number.isFinite(top10Num)) {
+        const display = top10Num <= 1 ? top10Num * 100 : top10Num;
+        setText("detail-top10", `${display.toFixed(2)}%`);
+      } else {
+        setText("detail-top10", `${top10Raw}`);
+      }
+    }
+    setHtml("risk-factors-list", renderRiskFactors(detailData.security_risks));
 
-            const detailData = detail || {};
-            const price = Number.isFinite(detailData.price_sol) ? Number(detailData.price_sol) : Number(token.price_sol);
-            const change24h = Number.isFinite(detailData.price_change_h24) ? Number(detailData.price_change_h24) : Number(token.price_change_h24);
-            const changeCls = change24h > 0 ? 'positive' : change24h < 0 ? 'negative' : '';
+    setText(
+      "sidebar-price",
+      Number.isFinite(price) ? formatPriceSol(price) : "—"
+    );
+    setText("sidebar-volume", formatCurrencyUSD(volume24hValue));
+    setText("sidebar-liq", formatCurrencyUSD(liquidityValue));
+    setText("sidebar-mcap", formatCurrencyUSD(marketCapValue));
 
-            const logoEl = document.getElementById('modalTokenLogo');
-            if (logoEl) {
-                if (token.logo_url) {
-                    logoEl.src = token.logo_url;
-                    logoEl.style.display = 'block';
-                } else {
-                    logoEl.src = '';
-                    logoEl.style.display = 'none';
-                }
-            }
+    const statusFlags = {
+      has_pool_price: detailData.has_pool_price ?? token.has_pool_price,
+      has_ohlcv: detailData.has_ohlcv ?? token.has_ohlcv,
+      has_open_position:
+        detailData.has_open_position ?? token.has_open_position,
+      blacklisted: detailData.blacklisted ?? token.blacklisted,
+    };
+    setHtml("sidebar-badges", renderSidebarBadges(statusFlags));
 
-            setText('modalTokenSymbol', token.symbol || detailData.symbol || '—');
-            setText('modalTokenName', token.name || detailData.name || '—');
-            setText('modalTokenPrice', Number.isFinite(price) ? formatPriceSol(price) : '—');
+    const modal = document.getElementById("tokenModal");
+    if (modal) {
+      modal.classList.add("active");
+      console.log("Modal opened successfully");
+    } else {
+      console.error("Modal element not found!");
+    }
+  }
 
-            const changeEl = document.getElementById('modalTokenChange');
-            if (changeEl) {
-                changeEl.textContent = Number.isFinite(change24h) ? formatPercentValue(change24h) : '—';
-                changeEl.classList.remove('positive', 'negative');
-                if (changeCls) changeEl.classList.add(changeCls);
-            }
+  function resetTokenModal() {
+    const modal = document.getElementById("tokenModal");
+    if (modal) {
+      modal.classList.remove("active");
+    }
+    currentModalMint = null;
+    tokenModalData = null;
+  }
 
-            setText('detail-mint', detailData.mint || token.mint || '—');
-            setText('detail-decimals', detailData.decimals ?? '—');
-            setText('detail-verified', formatBooleanFlag(detailData.verified, '—'));
-            setText('detail-blacklisted', formatBooleanFlag(detailData.blacklisted ?? token.blacklisted, '—'));
-            setText('detail-launch-date', detailData.launch_date || '—');
+  async function openTokenModal(mint) {
+    if (!mint) {
+      console.warn("openTokenModal: no mint provided");
+      return;
+    }
 
-            const liquidityValue = detailData.liquidity_usd ?? token.liquidity_usd;
-            const volume24hValue = detailData.volume_24h ?? token.volume_24h;
-            const volume6hValue = detailData.volume_6h ?? detailData.volume_h6;
-            const volume1hValue = detailData.volume_1h ?? detailData.volume_h1;
-            const fdvValue = detailData.fdv ?? token.fdv;
-            const marketCapValue = detailData.market_cap ?? token.market_cap;
+    console.log("openTokenModal: opening modal for", mint);
 
-            setText('detail-liquidity', formatCurrencyUSD(liquidityValue));
-            setText('detail-volume24h', formatCurrencyUSD(volume24hValue));
-            setText('detail-volume6h', formatCurrencyUSD(volume6hValue));
-            setText('detail-volume1h', formatCurrencyUSD(volume1hValue));
-            setText('detail-fdv', formatCurrencyUSD(fdvValue));
-            setText('detail-marketcap', formatCurrencyUSD(marketCapValue));
+    const cached = getTokenByMint(mint);
+    if (!cached) {
+      console.warn("openTokenModal: token not found in cache", mint);
+      showToast("❌ Token not found in cache", "error");
+      return;
+    }
 
-            const dexLabel = detailData.pool_dex || detailData.pool?.dex;
-            const poolAddress = detailData.pool_address || detailData.pool?.address;
-            const solReserves = detailData.pool_reserves_sol ?? detailData.pool?.sol_reserves;
-            const tokenReserves = detailData.pool_reserves_token ?? detailData.pool?.token_reserves;
-            const confidence = detailData.price_confidence ?? detailData.pool?.confidence;
-            const poolAge = detailData.pool_age || detailData.pool?.age;
+    const detail = await fetchTokenDetail(mint);
+    if (!detail) {
+      console.warn("openTokenModal: failed to fetch token detail", mint);
+      return; // fetchTokenDetail already shows error toast
+    }
 
-            setText('detail-dex', dexLabel || '—');
-            setText('detail-pool', poolAddress || '—');
-            setText('detail-sol-reserves', formatCompactNumber(solReserves));
-            setText('detail-token-reserves', formatCompactNumber(tokenReserves));
-            setText(
-                'detail-confidence',
-                Number.isFinite(confidence) ? Number(confidence).toFixed(2) : '—'
-            );
-            setText('detail-pool-age', poolAge || '—');
+    console.log("openTokenModal: populating modal with data", {
+      cached,
+      detail,
+    });
+    currentModalMint = mint;
+    tokenModalData = { token: cached, detail };
+    populateTokenModal(cached, detail);
+  }
 
-            const change5m = detailData.price_change_m5 ?? detailData.price_changes?.change_5m;
-            const change1h = detailData.price_change_h1 ?? token.price_change_h1 ?? detailData.price_changes?.change_1h;
-            const change6h = detailData.price_change_h6 ?? detailData.price_changes?.change_6h;
-            const change24hValue = detailData.price_change_h24 ?? token.price_change_h24 ?? detailData.price_changes?.change_24h;
+  function closeTokenModal(event) {
+    if (event && event.target && event.target !== event.currentTarget) {
+      return;
+    }
+    resetTokenModal();
+  }
 
-            setText('detail-change5m', change5m !== undefined ? formatPercentValue(change5m) : '—');
-            setText('detail-change1h', change1h !== undefined ? formatPercentValue(change1h) : '—');
-            setText('detail-change6h', change6h !== undefined ? formatPercentValue(change6h) : '—');
-            setText('detail-change24h', change24hValue !== undefined ? formatPercentValue(change24hValue) : '—');
+  function switchModalTab(tabId) {
+    const content = document.querySelectorAll(".tab-pane");
+    const tabs = document.querySelectorAll(".modal-tab");
+    content.forEach((pane) => {
+      pane.classList.toggle("active", pane.id === `tab-${tabId}`);
+    });
+    tabs.forEach((tab) => {
+      tab.classList.toggle(
+        "active",
+        tab.textContent.includes(tabId.charAt(0).toUpperCase())
+      );
+    });
+  }
 
-            const buys24hRaw = detailData.txns?.h24?.buys ?? detailData.buys_24h;
-            const sells24hRaw = detailData.txns?.h24?.sells ?? detailData.sells_24h;
-            const buys24h = Number(buys24hRaw);
-            const sells24h = Number(sells24hRaw);
-            const hasBuys = Number.isFinite(buys24h);
-            const hasSells = Number.isFinite(sells24h);
-            const netFlow = hasBuys && hasSells ? buys24h - sells24h : Number(detailData.net_flow);
-            const ratio = hasBuys && hasSells && sells24h !== 0
-                ? buys24h / sells24h
-                : Number(detailData.buy_sell_ratio);
+  function copyMintFromModal() {
+    if (!currentModalMint) return;
+    navigator.clipboard
+      .writeText(currentModalMint)
+      .then(() => showToast("✅ Mint copied"))
+      .catch(() => showToast("❌ Failed to copy mint", "error"));
+  }
 
-            setText('detail-buys24h', hasBuys ? Math.round(buys24h) : '—');
-            setText('detail-sells24h', hasSells ? Math.round(sells24h) : '—');
-            setText('detail-ratio', Number.isFinite(ratio) ? ratio.toFixed(2) : '—');
-            if (Number.isFinite(netFlow)) {
-                const sign = netFlow > 0 ? '+' : netFlow < 0 ? '-' : '';
-                setText('detail-netflow', `${sign}${Math.abs(Math.round(netFlow))}`);
-            } else {
-                setText('detail-netflow', '—');
-            }
+  function openDexScreenerFromModal() {
+    if (!currentModalMint) return;
+    openDexScreener(currentModalMint);
+  }
 
-            const securityScore = Number(detailData.security_score);
-            const rugged = detailData.rugged;
-            const badge = document.getElementById('security-badge');
-            if (badge) {
-                const statusClass = rugged === true ? 'critical' : securityScore >= 700 ? 'excellent' : securityScore >= 500 ? 'good' : securityScore >= 300 ? 'warning' : 'critical';
-                badge.className = `security-badge ${statusClass}`.trim();
-            }
+  function openGMGNFromModal() {
+    if (!currentModalMint) return;
+    openGMGN(currentModalMint);
+  }
 
-            const progress = document.getElementById('security-progress');
-            if (progress) {
-                let pct = Number(detailData.security_score_normalized);
-                if (!Number.isFinite(pct)) {
-                    pct = Number(detailData.security_score);
-                    if (Number.isFinite(pct)) {
-                        pct = Math.max(0, Math.min(100, pct / 10.0));
-                    }
-                }
-                if (!Number.isFinite(pct)) pct = 0;
-                pct = Math.max(0, Math.min(100, pct));
-                progress.style.width = `${pct}%`;
-            }
+  function openSolscanFromModal() {
+    if (!currentModalMint) return;
+    openSolscan(currentModalMint);
+  }
 
-            setHtml('security-score-value', Number.isFinite(securityScore) ? `${securityScore}` : '—');
-            const securitySummary = detailData.security_summary || (rugged ? '⚠️ Token flagged as rugged.' : 'No security summary available.');
-            setHtml('security-status', securitySummary);
-            setText('detail-mint-auth', detailData.mint_authority ?? 'Unknown');
-            setText('detail-freeze-auth', detailData.freeze_authority ?? 'Unknown');
-            setText('detail-holders', detailData.total_holders ?? '—');
-            const top10Raw = detailData.top_10_concentration;
-            if (top10Raw === null || top10Raw === undefined) {
-                setText('detail-top10', '—');
-            } else {
-                const top10Num = Number(top10Raw);
-                if (Number.isFinite(top10Num)) {
-                    const display = top10Num <= 1 ? top10Num * 100 : top10Num;
-                    setText('detail-top10', `${display.toFixed(2)}%`);
-                } else {
-                    setText('detail-top10', `${top10Raw}`);
-                }
-            }
-            setHtml('risk-factors-list', renderRiskFactors(detailData.security_risks));
+  function attachGlobalListeners() {
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+  }
 
-            setText('sidebar-price', Number.isFinite(price) ? formatPriceSol(price) : '—');
-            setText('sidebar-volume', formatCurrencyUSD(volume24hValue));
-            setText('sidebar-liq', formatCurrencyUSD(liquidityValue));
-            setText('sidebar-mcap', formatCurrencyUSD(marketCapValue));
+  function handleVisibilityChange() {
+    if (document.visibilityState === "hidden") {
+      stopTokensRefresh();
+    } else {
+      startTokensRefresh();
+      loadTokens({ reason: "visibility", force: true });
+    }
+  }
 
-            const statusFlags = {
-                has_pool_price: detailData.has_pool_price ?? token.has_pool_price,
-                has_ohlcv: detailData.has_ohlcv ?? token.has_ohlcv,
-                has_open_position: detailData.has_open_position ?? token.has_open_position,
-                blacklisted: detailData.blacklisted ?? token.blacklisted,
-            };
-            setHtml('sidebar-badges', renderSidebarBadges(statusFlags));
+  function initTokensSubTabs() {
+    const subTabsContainer = document.getElementById("subTabsContainer");
+    if (!subTabsContainer) return;
 
-            const modal = document.getElementById('tokenModal');
-            if (modal) {
-                modal.classList.add('active');
-                console.log('Modal opened successfully');
-            } else {
-                console.error('Modal element not found!');
-            }
-        }
+    const views = [
+      { id: "pool", label: "💧 Pool Service" },
+      { id: "all", label: "📋 All Tokens" },
+      { id: "passed", label: "✅ Passed" },
+      { id: "rejected", label: "⛔ Rejected" },
+      { id: "blacklisted", label: "🚫 Blacklisted" },
+    ];
 
-        function resetTokenModal() {
-            const modal = document.getElementById('tokenModal');
-            if (modal) {
-                modal.classList.remove('active');
-            }
-            currentModalMint = null;
-            tokenModalData = null;
-        }
-
-        async function openTokenModal(mint) {
-            if (!mint) {
-                console.warn('openTokenModal: no mint provided');
-                return;
-            }
-            
-            console.log('openTokenModal: opening modal for', mint);
-            
-            const cached = getTokenByMint(mint);
-            if (!cached) {
-                console.warn('openTokenModal: token not found in cache', mint);
-                showToast('❌ Token not found in cache', 'error');
-                return;
-            }
-            
-            const detail = await fetchTokenDetail(mint);
-            if (!detail) {
-                console.warn('openTokenModal: failed to fetch token detail', mint);
-                return; // fetchTokenDetail already shows error toast
-            }
-            
-            console.log('openTokenModal: populating modal with data', { cached, detail });
-            currentModalMint = mint;
-            tokenModalData = { token: cached, detail };
-            populateTokenModal(cached, detail);
-        }
-
-        function closeTokenModal(event) {
-            if (event && event.target && event.target !== event.currentTarget) {
-                return;
-            }
-            resetTokenModal();
-        }
-
-        function switchModalTab(tabId) {
-            const content = document.querySelectorAll('.tab-pane');
-            const tabs = document.querySelectorAll('.modal-tab');
-            content.forEach(pane => {
-                pane.classList.toggle('active', pane.id === `tab-${tabId}`);
-            });
-            tabs.forEach(tab => {
-                tab.classList.toggle('active', tab.textContent.includes(tabId.charAt(0).toUpperCase()));
-            });
-        }
-
-        function copyMintFromModal() {
-            if (!currentModalMint) return;
-            navigator.clipboard.writeText(currentModalMint)
-                .then(() => showToast('✅ Mint copied'))
-                .catch(() => showToast('❌ Failed to copy mint', 'error'));
-        }
-
-        function openDexScreenerFromModal() {
-            if (!currentModalMint) return;
-            openDexScreener(currentModalMint);
-        }
-
-        function openGMGNFromModal() {
-            if (!currentModalMint) return;
-            openGMGN(currentModalMint);
-        }
-
-        function openSolscanFromModal() {
-            if (!currentModalMint) return;
-            openSolscan(currentModalMint);
-        }
-
-        function attachGlobalListeners() {
-            document.addEventListener('visibilitychange', handleVisibilityChange);
-        }
-
-        function handleVisibilityChange() {
-            if (document.visibilityState === 'hidden') {
-                stopTokensRefresh();
-            } else {
-                startTokensRefresh();
-                loadTokens({ reason: 'visibility', force: true });
-            }
-        }
-
-        function initTokensSubTabs() {
-            const subTabsContainer = document.getElementById('subTabsContainer');
-            if (!subTabsContainer) return;
-
-            const views = [
-                { id: 'pool', label: '💧 Pool Service' },
-                { id: 'all', label: '📋 All Tokens' },
-                { id: 'passed', label: '✅ Passed' },
-                { id: 'rejected', label: '⛔ Rejected' },
-                { id: 'blacklisted', label: '🚫 Blacklisted' },
-            ];
-
-            subTabsContainer.innerHTML = views
-                .map(view => `
-                    <button class="sub-tab ${view.id === tokensState.view ? 'active' : ''}" data-view="${view.id}">
+    subTabsContainer.innerHTML = views
+      .map(
+        (view) => `
+                    <button class="sub-tab ${
+                      view.id === tokensState.view ? "active" : ""
+                    }" data-view="${view.id}">
                         ${view.label}
                     </button>
-                `)
-                .join('');
+                `
+      )
+      .join("");
 
-            subTabsContainer
-                .querySelectorAll('.sub-tab')
-                .forEach(button => {
-                    button.addEventListener('click', () => switchTokensSubTab(button.dataset.view));
-                });
+    subTabsContainer.querySelectorAll(".sub-tab").forEach((button) => {
+      button.addEventListener("click", () =>
+        switchTokensSubTab(button.dataset.view)
+      );
+    });
 
-            subTabsContainer.style.display = 'flex';
-        }
+    subTabsContainer.style.display = "flex";
+  }
 
-        function switchTokensSubTab(view) {
-            if (!view || tokensState.view === view) return;
+  function switchTokensSubTab(view) {
+    if (!view || tokensState.view === view) return;
 
-            tokensState.view = view;
-            window.sessionStorage.setItem('tokens.view', view);
+    tokensState.view = view;
+    window.sessionStorage.setItem("tokens.view", view);
 
-            document
-                .querySelectorAll('#subTabsContainer .sub-tab')
-                .forEach(tab => {
-                    tab.classList.toggle('active', tab.dataset.view === view);
-                });
+    document.querySelectorAll("#subTabsContainer .sub-tab").forEach((tab) => {
+      tab.classList.toggle("active", tab.dataset.view === view);
+    });
 
-            loadTokens({ reason: 'view-change', force: true });
-        }
+    loadTokens({ reason: "view-change", force: true });
+  }
 
-        function initTokensToolbar() {
-            const toolbarContainer = document.getElementById('toolbarContainer');
-            if (!toolbarContainer) return;
+  function initTokensToolbar() {
+    const toolbarContainer = document.getElementById("toolbarContainer");
+    if (!toolbarContainer) return;
 
-            toolbarContainer.innerHTML = `
+    toolbarContainer.innerHTML = `
                 <input
                     type="text"
                     id="searchInput"
@@ -435,222 +536,238 @@
                     📥 Export
                 </button>
             `;
-            toolbarContainer.style.display = 'flex';
+    toolbarContainer.style.display = "flex";
 
-            const searchInput = toolbarContainer.querySelector('#searchInput');
-            if (searchInput) {
-                searchInput.value = tokensState.searchTerm;
-                searchInput.addEventListener('input', handleSearchInput);
-            }
+    const searchInput = toolbarContainer.querySelector("#searchInput");
+    if (searchInput) {
+      searchInput.value = tokensState.searchTerm;
+      searchInput.addEventListener("input", handleSearchInput);
+    }
 
-            const refreshBtn = toolbarContainer.querySelector('#tokensRefreshBtn');
-            if (refreshBtn) {
-                refreshBtn.addEventListener('click', () => loadTokens({ reason: 'manual-refresh', force: true }));
-            }
+    const refreshBtn = toolbarContainer.querySelector("#tokensRefreshBtn");
+    if (refreshBtn) {
+      refreshBtn.addEventListener("click", () =>
+        loadTokens({ reason: "manual-refresh", force: true })
+      );
+    }
 
-            const exportBtn = toolbarContainer.querySelector('#tokensExportBtn');
-            if (exportBtn) {
-                exportBtn.addEventListener('click', exportTokens);
-            }
-        }
+    const exportBtn = toolbarContainer.querySelector("#tokensExportBtn");
+    if (exportBtn) {
+      exportBtn.addEventListener("click", exportTokens);
+    }
+  }
 
-        function handleSearchInput(event) {
-            tokensState.searchTerm = event.target.value.trim();
-            window.sessionStorage.setItem('tokens.search', tokensState.searchTerm);
+  function handleSearchInput(event) {
+    tokensState.searchTerm = event.target.value.trim();
+    window.sessionStorage.setItem("tokens.search", tokensState.searchTerm);
 
-            applySearchFilter();
+    applySearchFilter();
 
-            if (searchDebounceHandle) {
-                clearTimeout(searchDebounceHandle);
-            }
-            searchDebounceHandle = setTimeout(() => {
-                loadTokens({ reason: 'search', force: true });
-            }, 350);
-        }
+    if (searchDebounceHandle) {
+      clearTimeout(searchDebounceHandle);
+    }
+    searchDebounceHandle = setTimeout(() => {
+      loadTokens({ reason: "search", force: true });
+    }, 350);
+  }
 
-        function exportTokens() {
-            alert('Export functionality - to be implemented');
-        }
+  function exportTokens() {
+    alert("Export functionality - to be implemented");
+  }
 
-        function normalizeTokenFromApi(rawToken) {
-            if (!rawToken || typeof rawToken !== 'object') return rawToken;
-            const token = { ...rawToken };
+  function normalizeTokenFromApi(rawToken) {
+    if (!rawToken || typeof rawToken !== "object") return rawToken;
+    const token = { ...rawToken };
 
-            if (token.price_updated_at) {
-                const numericTimestamp = Number(token.price_updated_at);
-                if (Number.isFinite(numericTimestamp)) {
-                    token.price_updated_at = numericTimestamp;
-                } else {
-                    const parsed = Date.parse(token.price_updated_at);
-                    token.price_updated_at = Number.isFinite(parsed) ? Math.floor(parsed / 1000) : null;
-                }
-            } else {
-                token.price_updated_at = null;
-            }
+    if (token.price_updated_at) {
+      const numericTimestamp = Number(token.price_updated_at);
+      if (Number.isFinite(numericTimestamp)) {
+        token.price_updated_at = numericTimestamp;
+      } else {
+        const parsed = Date.parse(token.price_updated_at);
+        token.price_updated_at = Number.isFinite(parsed)
+          ? Math.floor(parsed / 1000)
+          : null;
+      }
+    } else {
+      token.price_updated_at = null;
+    }
 
-            return token;
-        }
+    return token;
+  }
 
-        function dedupeTokensByMint(tokens) {
-            if (!Array.isArray(tokens) || tokens.length === 0) {
-                return [];
-            }
+  function dedupeTokensByMint(tokens) {
+    if (!Array.isArray(tokens) || tokens.length === 0) {
+      return [];
+    }
 
-            const seen = new Set();
-            const deduped = [];
+    const seen = new Set();
+    const deduped = [];
 
-            for (const token of tokens) {
-                if (!token || typeof token !== 'object') continue;
-                const mint = token.mint;
-                if (!mint || seen.has(mint)) continue;
-                seen.add(mint);
-                deduped.push(token);
-            }
+    for (const token of tokens) {
+      if (!token || typeof token !== "object") continue;
+      const mint = token.mint;
+      if (!mint || seen.has(mint)) continue;
+      seen.add(mint);
+      deduped.push(token);
+    }
 
-            return deduped;
-        }
+    return deduped;
+  }
 
-        async function loadTokens(options = {}) {
-            const { reason = 'manual', force = false } = options;
-            const isAutoRefresh = reason === 'interval';
-            const searchInput = document.getElementById('searchInput');
+  async function loadTokens(options = {}) {
+    const { reason = "manual", force = false } = options;
+    const isAutoRefresh = reason === "interval";
+    const searchInput = document.getElementById("searchInput");
 
-            if (isAutoRefresh && !force) {
-                if (document.visibilityState === 'hidden') return;
-                if (document.querySelector('.dropdown-menu.show')) return;
-                if (searchInput && document.activeElement === searchInput) return;
-            }
+    if (isAutoRefresh && !force) {
+      if (document.visibilityState === "hidden") return;
+      if (document.querySelector(".dropdown-menu.show")) return;
+      if (searchInput && document.activeElement === searchInput) return;
+    }
 
-            if (tokensLoading && !force) {
-                return;
-            }
+    if (tokensLoading && !force) {
+      return;
+    }
 
-            if (tokensRequestController) {
-                tokensRequestController.abort();
-            }
+    if (tokensRequestController) {
+      tokensRequestController.abort();
+    }
 
-            tokensRequestController = new AbortController();
-            tokensLoading = true;
+    tokensRequestController = new AbortController();
+    tokensLoading = true;
 
-            const params = new URLSearchParams({
-                view: tokensState.view,
-                search: tokensState.searchTerm,
-                sort_by: tokensState.sortBy,
-                sort_dir: tokensState.sortDir,
-                page: '1',
-                page_size: '1000',
-            });
+    const params = new URLSearchParams({
+      view: tokensState.view,
+      search: tokensState.searchTerm,
+      sort_by: tokensState.sortBy,
+      sort_dir: tokensState.sortDir,
+      page: "1",
+      page_size: "1000",
+    });
 
-            try {
-                const res = await fetch(`/api/tokens/list?${params.toString()}`, {
-                    signal: tokensRequestController.signal,
-                });
-                if (!res.ok) {
-                    throw new Error(`HTTP ${res.status}`);
-                }
+    try {
+      const res = await fetch(`/api/tokens/list?${params.toString()}`, {
+        signal: tokensRequestController.signal,
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
 
-                const data = await res.json();
-                const items = Array.isArray(data.items) ? data.items : [];
-                const normalized = items.map(normalizeTokenFromApi);
-                allTokensData = dedupeTokensByMint(normalized);
-                updateTokenCount(data.total ?? allTokensData.length);
-                applySearchFilter();
-            } catch (error) {
-                if (error.name === 'AbortError') {
-                    return;
-                }
-                console.error('Failed to load tokens:', error);
-                showTokensError('Failed to load tokens');
-            } finally {
-                tokensLoading = false;
-            }
-        }
+      const data = await res.json();
+      const items = Array.isArray(data.items) ? data.items : [];
+      const normalized = items.map(normalizeTokenFromApi);
+      allTokensData = dedupeTokensByMint(normalized);
+      updateTokenCount(data.total ?? allTokensData.length);
+      applySearchFilter();
+    } catch (error) {
+      if (error.name === "AbortError") {
+        return;
+      }
+      console.error("Failed to load tokens:", error);
+      showTokensError("Failed to load tokens");
+    } finally {
+      tokensLoading = false;
+    }
+  }
 
-        function showTokensError(message) {
-            const tbody = document.getElementById('tokensTableBody');
-            if (!tbody) return;
-            tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 20px; color: #ef4444;">${message}</td></tr>`;
-        }
+  function showTokensError(message) {
+    const tbody = document.getElementById("tokensTableBody");
+    if (!tbody) return;
+    tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 20px; color: #ef4444;">${message}</td></tr>`;
+  }
 
-        function updateTokenCount(total) {
-            const label = document.getElementById('tokenCount');
-            if (!label) return;
+  function updateTokenCount(total) {
+    const label = document.getElementById("tokenCount");
+    if (!label) return;
 
-            const parsedTotal = Number(total);
-            const totalValue = Number.isFinite(parsedTotal) ? parsedTotal : allTokensData.length;
-            const viewLabel = VIEW_LABELS[tokensState.view] || '';
-            label.textContent = viewLabel ? `${totalValue} tokens ${viewLabel}` : `${totalValue} tokens`;
-        }
+    const parsedTotal = Number(total);
+    const totalValue = Number.isFinite(parsedTotal)
+      ? parsedTotal
+      : allTokensData.length;
+    const viewLabel = VIEW_LABELS[tokensState.view] || "";
+    label.textContent = viewLabel
+      ? `${totalValue} tokens ${viewLabel}`
+      : `${totalValue} tokens`;
+  }
 
-        function applySearchFilter() {
-            const search = tokensState.searchTerm.toLowerCase();
-            if (!search) {
-                renderTokens(allTokensData);
-                return;
-            }
+  function applySearchFilter() {
+    const search = tokensState.searchTerm.toLowerCase();
+    if (!search) {
+      renderTokens(allTokensData);
+      return;
+    }
 
-            const filtered = allTokensData.filter(token => {
-                const symbol = (token.symbol || '').toString().toLowerCase();
-                const mint = (token.mint || '').toString().toLowerCase();
-                const name = (token.name || '').toString().toLowerCase();
-                return symbol.includes(search) || mint.includes(search) || name.includes(search);
-            });
+    const filtered = allTokensData.filter((token) => {
+      const symbol = (token.symbol || "").toString().toLowerCase();
+      const mint = (token.mint || "").toString().toLowerCase();
+      const name = (token.name || "").toString().toLowerCase();
+      return (
+        symbol.includes(search) ||
+        mint.includes(search) ||
+        name.includes(search)
+      );
+    });
 
-            renderTokens(filtered);
-        }
+    renderTokens(filtered);
+  }
 
-        function renderTokens(tokens) {
-            const tbody = document.getElementById('tokensTableBody');
-            if (!tbody) return;
+  function renderTokens(tokens) {
+    const tbody = document.getElementById("tokensTableBody");
+    if (!tbody) return;
 
-            const openState = captureOpenDropdownState();
+    const openState = captureOpenDropdownState();
 
-            if (!tokens || tokens.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 20px; color: #94a3b8;">No tokens found for view: ${tokensState.view}</td></tr>`;
-                return;
-            }
+    if (!tokens || tokens.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 20px; color: #94a3b8;">No tokens found for view: ${tokensState.view}</td></tr>`;
+      return;
+    }
 
-            tbody.innerHTML = tokens.map(createTokenRowHtml).join('');
-            restoreDropdownState(openState);
-        }
+    tbody.innerHTML = tokens.map(createTokenRowHtml).join("");
+    restoreDropdownState(openState);
+  }
 
-        function captureOpenDropdownState() {
-            const menu = document.querySelector('.dropdown-menu.show');
-            if (!menu) return null;
-            const row = menu.closest('tr[data-mint]');
-            if (!row) return null;
-            return { mint: row.dataset.mint };
-        }
+  function captureOpenDropdownState() {
+    const menu = document.querySelector(".dropdown-menu.show");
+    if (!menu) return null;
+    const row = menu.closest("tr[data-mint]");
+    if (!row) return null;
+    return { mint: row.dataset.mint };
+  }
 
-        function restoreDropdownState(state) {
-            if (!state || !state.mint) return;
-            const container = document.querySelector(`.dropdown-container[data-mint="${state.mint}"]`);
-            if (!container) return;
+  function restoreDropdownState(state) {
+    if (!state || !state.mint) return;
+    const container = document.querySelector(
+      `.dropdown-container[data-mint="${state.mint}"]`
+    );
+    if (!container) return;
 
-            const btn = container.querySelector('.dropdown-btn');
-            const menu = container.querySelector('.dropdown-menu');
-            if (!btn || !menu) return;
+    const btn = container.querySelector(".dropdown-btn");
+    const menu = container.querySelector(".dropdown-menu");
+    if (!btn || !menu) return;
 
-            openDropdownMenu(btn, menu);
-        }
+    openDropdownMenu(btn, menu);
+  }
 
-        function createTokenRowHtml(token) {
-            const mint = token.mint;
-            const symbol = escapeHtml(token.symbol || '');
-            const name = token.name ? escapeHtml(token.name) : '';
-            const timeAgo = token.price_updated_at ? formatTimeAgo(token.price_updated_at) : 'N/A';
-            const priceDisplay = formatPriceSol(token.price_sol);
-            const liquidity = formatCurrencyUSD(token.liquidity_usd);
-            const vol24h = formatCurrencyUSD(token.volume_24h);
-            const fdv = formatCurrencyUSD(token.fdv);
-            const marketCap = formatCurrencyUSD(token.market_cap);
-            const ch1h = formatPercent(token.price_change_h1);
-            const ch24h = formatPercent(token.price_change_h24);
-            const security = renderSecurity(token.security_score, token.rugged);
-            const status = renderStatusBadges(token);
-            const logo = safeLogoHtml(token.logo_url, token.symbol);
+  function createTokenRowHtml(token) {
+    const mint = token.mint;
+    const symbol = escapeHtml(token.symbol || "");
+    const name = token.name ? escapeHtml(token.name) : "";
+    const timeAgo = token.price_updated_at
+      ? formatTimeAgo(token.price_updated_at)
+      : "N/A";
+    const priceDisplay = formatPriceSol(token.price_sol);
+    const liquidity = formatCurrencyUSD(token.liquidity_usd);
+    const vol24h = formatCurrencyUSD(token.volume_24h);
+    const fdv = formatCurrencyUSD(token.fdv);
+    const marketCap = formatCurrencyUSD(token.market_cap);
+    const ch1h = formatPercent(token.price_change_h1);
+    const ch24h = formatPercent(token.price_change_h24);
+    const security = renderSecurity(token.security_score, token.rugged);
+    const status = renderStatusBadges(token);
+    const logo = safeLogoHtml(token.logo_url, token.symbol);
 
-            return `
+    return `
                 <tr data-mint="${mint}" onclick="openTokenDetail('${mint}')" style="cursor:pointer;" title="Click to view details">
                     <td>
                         <div style="display:flex; align-items:center; gap:12px; min-width:0;">
@@ -661,14 +778,28 @@
                             </div>
                         </div>
                     </td>
-                    <td class="num" style="font-weight:600;" title="${token.price_sol ?? ''}">${priceDisplay}</td>
-                    <td class="num" title="${token.liquidity_usd ?? ''}">${liquidity}</td>
-                    <td class="num" title="${token.volume_24h ?? ''}">${vol24h}</td>
-                    <td class="num" title="${token.fdv ?? ''}">${fdv}</td>
-                    <td class="num" title="${token.market_cap ?? ''}">${marketCap}</td>
-                    <td class="num" title="${token.price_change_h1 ?? ''}">${ch1h}</td>
-                    <td class="num" title="${token.price_change_h24 ?? ''}">${ch24h}</td>
-                    <td class="num" title="${token.security_score ?? ''}">${security}</td>
+                    <td class="num" style="font-weight:600;" title="${
+                      token.price_sol ?? ""
+                    }">${priceDisplay}</td>
+                    <td class="num" title="${
+                      token.liquidity_usd ?? ""
+                    }">${liquidity}</td>
+                    <td class="num" title="${
+                      token.volume_24h ?? ""
+                    }">${vol24h}</td>
+                    <td class="num" title="${token.fdv ?? ""}">${fdv}</td>
+                    <td class="num" title="${
+                      token.market_cap ?? ""
+                    }">${marketCap}</td>
+                    <td class="num" title="${
+                      token.price_change_h1 ?? ""
+                    }">${ch1h}</td>
+                    <td class="num" title="${
+                      token.price_change_h24 ?? ""
+                    }">${ch24h}</td>
+                    <td class="num" title="${
+                      token.security_score ?? ""
+                    }">${security}</td>
                     <td>${status}</td>
                     <td style="font-size: 0.85em; color: #64748b;">${timeAgo}</td>
                     <td onclick="event.stopPropagation();">
@@ -685,659 +816,869 @@
                     </td>
                 </tr>
             `;
+  }
+
+  function openDropdownMenu(btn, menu) {
+    const rect = btn.getBoundingClientRect();
+    const menuWidth = Math.max(200, menu.offsetWidth || 200);
+    const viewportWidth = window.innerWidth;
+    const rightSpace = viewportWidth - rect.right;
+
+    menu.classList.add("show");
+    menu.style.position = "fixed";
+    menu.style.top = `${Math.round(rect.bottom + 4)}px`;
+    if (rightSpace < menuWidth) {
+      menu.style.left = `${Math.max(8, Math.round(rect.right - menuWidth))}px`;
+      menu.style.right = "";
+    } else {
+      menu.style.left = `${Math.round(rect.left)}px`;
+      menu.style.right = "";
+    }
+    menu.style.width = `${menuWidth}px`;
+  }
+
+  function startTokensRefresh() {
+    if (tokensRefreshInterval) clearInterval(tokensRefreshInterval);
+    tokensRefreshInterval = setInterval(() => {
+      loadTokens({ reason: "interval", force: false });
+    }, 2000);
+
+    if (window.Router && typeof Router.registerCleanup === "function") {
+      Router.registerCleanup(() => {
+        if (tokensRefreshInterval) {
+          clearInterval(tokensRefreshInterval);
+          tokensRefreshInterval = null;
         }
+      });
+    }
+  }
 
-        function openDropdownMenu(btn, menu) {
-            const rect = btn.getBoundingClientRect();
-            const menuWidth = Math.max(200, menu.offsetWidth || 200);
-            const viewportWidth = window.innerWidth;
-            const rightSpace = viewportWidth - rect.right;
+  function stopTokensRefresh() {
+    if (tokensRefreshInterval) {
+      clearInterval(tokensRefreshInterval);
+      tokensRefreshInterval = null;
+    }
+  }
 
-            menu.classList.add('show');
-            menu.style.position = 'fixed';
-            menu.style.top = `${Math.round(rect.bottom + 4)}px`;
-            if (rightSpace < menuWidth) {
-                menu.style.left = `${Math.max(8, Math.round(rect.right - menuWidth))}px`;
-                menu.style.right = '';
-            } else {
-                menu.style.left = `${Math.round(rect.left)}px`;
-                menu.style.right = '';
-            }
-            menu.style.width = `${menuWidth}px`;
+  function setupSortableHeaders() {
+    const thead = document.querySelector("#tokensTable thead");
+    if (!thead) return;
+    thead.addEventListener("click", (e) => {
+      const th = e.target.closest("th.sortable");
+      if (!th) return;
+      const key = th.getAttribute("data-sort-key");
+      if (!key) return;
+      if (tokensState.sortBy === key) {
+        tokensState.sortDir = tokensState.sortDir === "asc" ? "desc" : "asc";
+      } else {
+        tokensState.sortBy = key;
+        tokensState.sortDir = key === "symbol" ? "asc" : "desc";
+      }
+      updateSortIndicators();
+      loadTokens({ reason: "sort", force: true });
+    });
+    updateSortIndicators();
+  }
+
+  function updateSortIndicators() {
+    const indicators = document.querySelectorAll(
+      "#tokensTable .sort-indicator"
+    );
+    indicators.forEach((el) => {
+      el.textContent = "";
+    });
+    const id = `sort-indicator-${tokensState.sortBy}`;
+    const el = document.getElementById(id);
+    if (el) el.textContent = tokensState.sortDir === "asc" ? "▲" : "▼";
+  }
+
+  function safeLogoHtml(url, symbol) {
+    let fallback = "?";
+    if (symbol && typeof symbol === "string") {
+      for (const ch of symbol) {
+        const u = ch.toUpperCase();
+        if (/^[A-Z0-9]$/.test(u)) {
+          fallback = u;
+          break;
         }
+      }
+    }
+    if (!url) {
+      return `<div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg, #1565c0 0%, #0f4c81 100%);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85em;flex-shrink:0;">${fallback}</div>`;
+    }
+    const esc = (s) =>
+      (s || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    return `<img src="${esc(url)}" alt="${esc(
+      symbol || ""
+    )}" width="32" height="32" style="border-radius:8px;object-fit:cover;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,0.1);" onerror="fallbackLogo(this, '${fallback}')">`;
+  }
 
-        function startTokensRefresh() {
-            if (tokensRefreshInterval) clearInterval(tokensRefreshInterval);
-            tokensRefreshInterval = setInterval(() => {
-                loadTokens({ reason: 'interval', force: false });
-            }, 2000);
+  function fallbackLogo(img, letter) {
+    try {
+      img.onerror = null;
+      const div = document.createElement("div");
+      div.style.width = "32px";
+      div.style.height = "32px";
+      div.style.borderRadius = "8px";
+      div.style.background =
+        "linear-gradient(135deg, #1565c0 0%, #0f4c81 100%)";
+      div.style.color = "white";
+      div.style.display = "flex";
+      div.style.alignItems = "center";
+      div.style.justifyContent = "center";
+      div.style.fontWeight = "700";
+      div.style.fontSize = "0.85em";
+      div.style.flexShrink = "0";
+      div.textContent = letter && /^[A-Z0-9]$/.test(letter) ? letter : "?";
+      img.replaceWith(div);
+    } catch (_) {
+      /* no-op */
+    }
+  }
 
-            if (window.Router && typeof Router.registerCleanup === 'function') {
-                Router.registerCleanup(() => {
-                    if (tokensRefreshInterval) {
-                        clearInterval(tokensRefreshInterval);
-                        tokensRefreshInterval = null;
-                    }
-                });
-            }
-        }
+  function formatPriceSol(price) {
+    if (price === null || price === undefined) return "N/A";
+    if (!Number.isFinite(price)) return "N/A";
+    if (price === 0) return "0";
+    return price < 0.000001 ? price.toExponential(4) : price.toFixed(8);
+  }
 
-        function stopTokensRefresh() {
-            if (tokensRefreshInterval) {
-                clearInterval(tokensRefreshInterval);
-                tokensRefreshInterval = null;
-            }
-        }
+  function formatCurrencyUSD(value) {
+    if (value === null || value === undefined || !Number.isFinite(value))
+      return "—";
+    const abs = Math.abs(value);
+    let v = value;
+    let suffix = "";
+    if (abs >= 1_000_000_000) {
+      v = value / 1_000_000_000;
+      suffix = "B";
+    } else if (abs >= 1_000_000) {
+      v = value / 1_000_000;
+      suffix = "M";
+    } else if (abs >= 1_000) {
+      v = value / 1_000;
+      suffix = "K";
+    }
+    return `$${v.toFixed(2)}${suffix}`;
+  }
 
-        function setupSortableHeaders() {
-            const thead = document.querySelector('#tokensTable thead');
-            if (!thead) return;
-            thead.addEventListener('click', (e) => {
-                const th = e.target.closest('th.sortable');
-                if (!th) return;
-                const key = th.getAttribute('data-sort-key');
-                if (!key) return;
-                if (tokensState.sortBy === key) {
-                    tokensState.sortDir = (tokensState.sortDir === 'asc') ? 'desc' : 'asc';
-                } else {
-                    tokensState.sortBy = key;
-                    tokensState.sortDir = (key === 'symbol') ? 'asc' : 'desc';
-                }
-                updateSortIndicators();
-                loadTokens({ reason: 'sort', force: true });
-            });
-            updateSortIndicators();
-        }
+  function formatPercentValue(value) {
+    if (value === null || value === undefined) return "—";
+    const num = Number(value);
+    if (!Number.isFinite(num)) return "—";
+    const sign = num > 0 ? "+" : num < 0 ? "-" : "";
+    const magnitude = Math.abs(num).toFixed(2);
+    return `${sign}${magnitude}%`;
+  }
 
-        function updateSortIndicators() {
-            const indicators = document.querySelectorAll('#tokensTable .sort-indicator');
-            indicators.forEach(el => { el.textContent = ''; });
-            const id = `sort-indicator-${tokensState.sortBy}`;
-            const el = document.getElementById(id);
-            if (el) el.textContent = tokensState.sortDir === 'asc' ? '▲' : '▼';
-        }
+  function formatPercent(value) {
+    if (value === null || value === undefined || !Number.isFinite(value))
+      return "<span>—</span>";
+    const cls =
+      value > 0
+        ? "color: #16a34a;"
+        : value < 0
+        ? "color:#ef4444;"
+        : "color:inherit;";
+    const sign = value > 0 ? "+" : "";
+    return `<span style="${cls}">${sign}${value.toFixed(2)}%</span>`;
+  }
 
-        function safeLogoHtml(url, symbol) {
-            let fallback = '?';
-            if (symbol && typeof symbol === 'string') {
-                for (const ch of symbol) {
-                    const u = ch.toUpperCase();
-                    if (/^[A-Z0-9]$/.test(u)) { fallback = u; break; }
-                }
-            }
-            if (!url) {
-                return `<div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg, #1565c0 0%, #0f4c81 100%);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85em;flex-shrink:0;">${fallback}</div>`;
-            }
-            const esc = (s) => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-            return `<img src="${esc(url)}" alt="${esc(symbol || '')}" width="32" height="32" style="border-radius:8px;object-fit:cover;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,0.1);" onerror="fallbackLogo(this, '${fallback}')">`;
-        }
+  function renderSecurity(score, rugged) {
+    if (rugged === true) {
+      return `<span class="badge" style="background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;">RUG</span>`;
+    }
+    if (score === null || score === undefined) return "—";
+    let color = "#64748b";
+    if (score >= 700) color = "#16a34a";
+    else if (score >= 500) color = "#22c55e";
+    else if (score >= 300) color = "#f59e0b";
+    else color = "#ef4444";
+    return `<span style="font-weight:600;color:${color}">${score}</span>`;
+  }
 
-        function fallbackLogo(img, letter) {
-            try {
-                img.onerror = null;
-                const div = document.createElement('div');
-                div.style.width = '32px';
-                div.style.height = '32px';
-                div.style.borderRadius = '8px';
-                div.style.background = 'linear-gradient(135deg, #1565c0 0%, #0f4c81 100%)';
-                div.style.color = 'white';
-                div.style.display = 'flex';
-                div.style.alignItems = 'center';
-                div.style.justifyContent = 'center';
-                div.style.fontWeight = '700';
-                div.style.fontSize = '0.85em';
-                div.style.flexShrink = '0';
-                div.textContent = (letter && /^[A-Z0-9]$/.test(letter)) ? letter : '?';
-                img.replaceWith(div);
-            } catch (_) { /* no-op */ }
-        }
+  function renderStatusBadges(token) {
+    const badges = [];
+    if (token.has_pool_price)
+      badges.push(
+        '<span class="badge" style="background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;">POOL</span>'
+      );
+    if (token.has_ohlcv)
+      badges.push(
+        '<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;">OHLCV</span>'
+      );
+    if (token.has_open_position)
+      badges.push(
+        '<span class="badge" style="background:#fde68a;color:#92400e;border:1px solid #fcd34d;">POS</span>'
+      );
+    if (token.blacklisted)
+      badges.push(
+        '<span class="badge" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;">BL</span>'
+      );
+    return badges.join(" ");
+  }
 
-        function formatPriceSol(price) {
-            if (price === null || price === undefined) return 'N/A';
-            if (!Number.isFinite(price)) return 'N/A';
-            if (price === 0) return '0';
-            return price < 0.000001 ? price.toExponential(4) : price.toFixed(8);
-        }
+  function formatTimeAgo(timestamp) {
+    if (!timestamp || !Number.isFinite(timestamp)) return "-";
+    const seconds = Math.max(0, Math.floor(Date.now() / 1000) - timestamp);
 
-        function formatCurrencyUSD(value) {
-            if (value === null || value === undefined || !Number.isFinite(value)) return '—';
-            const abs = Math.abs(value);
-            let v = value;
-            let suffix = '';
-            if (abs >= 1_000_000_000) { v = value / 1_000_000_000; suffix = 'B'; }
-            else if (abs >= 1_000_000) { v = value / 1_000_000; suffix = 'M'; }
-            else if (abs >= 1_000) { v = value / 1_000; suffix = 'K'; }
-            return `$${v.toFixed(2)}${suffix}`;
-        }
+    if (seconds < 60) return `${seconds}s ago`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+    return `${Math.floor(seconds / 86400)}d ago`;
+  }
 
-        function formatPercentValue(value) {
-            if (value === null || value === undefined) return '—';
-            const num = Number(value);
-            if (!Number.isFinite(num)) return '—';
-            const sign = num > 0 ? '+' : (num < 0 ? '-' : '');
-            const magnitude = Math.abs(num).toFixed(2);
-            return `${sign}${magnitude}%`;
-        }
+  function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+  }
 
-        function formatPercent(value) {
-            if (value === null || value === undefined || !Number.isFinite(value)) return '<span>—</span>';
-            const cls = value > 0 ? 'color: #16a34a;' : (value < 0 ? 'color:#ef4444;' : 'color:inherit;');
-            const sign = value > 0 ? '+' : '';
-            return `<span style="${cls}">${sign}${value.toFixed(2)}%</span>`;
-        }
+  function openTokenDetail(mint) {
+    if (!mint) return;
+    openTokenModal(mint).catch((err) => {
+      console.error("Failed to open token modal:", err);
+      showToast("❌ Failed to open token details", "error");
+    });
+  }
+</script>
 
-        function renderSecurity(score, rugged) {
-            if (rugged === true) {
-                return `<span class="badge" style="background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;">RUG</span>`;
-            }
-            if (score === null || score === undefined) return '—';
-            let color = '#64748b';
-            if (score >= 700) color = '#16a34a';
-            else if (score >= 500) color = '#22c55e';
-            else if (score >= 300) color = '#f59e0b';
-            else color = '#ef4444';
-            return `<span style="font-weight:600;color:${color}">${score}</span>`;
-        }
+<div class="page-section">
+  <div class="table-scroll no-x-scroll">
+    <table class="table" id="tokensTable">
+      <thead>
+        <tr>
+          <th class="sortable" data-sort-key="symbol">
+            <span class="sort-label"
+              >Token
+              <span class="sort-indicator" id="sort-indicator-symbol"></span
+            ></span>
+          </th>
+          <th class="sortable" data-sort-key="price_sol">
+            <span class="sort-label"
+              >Price (SOL)
+              <span class="sort-indicator" id="sort-indicator-price_sol"></span
+            ></span>
+          </th>
+          <th class="sortable" data-sort-key="liquidity_usd">
+            <span class="sort-label"
+              >Liquidity
+              <span
+                class="sort-indicator"
+                id="sort-indicator-liquidity_usd"
+              ></span
+            ></span>
+          </th>
+          <th class="sortable" data-sort-key="volume_24h">
+            <span class="sort-label"
+              >24h Vol
+              <span class="sort-indicator" id="sort-indicator-volume_24h"></span
+            ></span>
+          </th>
+          <th class="sortable" data-sort-key="fdv">
+            <span class="sort-label"
+              >FDV <span class="sort-indicator" id="sort-indicator-fdv"></span
+            ></span>
+          </th>
+          <th class="sortable" data-sort-key="market_cap">
+            <span class="sort-label"
+              >Mkt Cap
+              <span class="sort-indicator" id="sort-indicator-market_cap"></span
+            ></span>
+          </th>
+          <th class="sortable" data-sort-key="price_change_h1">
+            <span class="sort-label"
+              >1h
+              <span
+                class="sort-indicator"
+                id="sort-indicator-price_change_h1"
+              ></span
+            ></span>
+          </th>
+          <th class="sortable" data-sort-key="price_change_h24">
+            <span class="sort-label"
+              >24h
+              <span
+                class="sort-indicator"
+                id="sort-indicator-price_change_h24"
+              ></span
+            ></span>
+          </th>
+          <th class="sortable" data-sort-key="security_score">
+            <span class="sort-label"
+              >Security
+              <span
+                class="sort-indicator"
+                id="sort-indicator-security_score"
+              ></span
+            ></span>
+          </th>
+          <th>Status</th>
+          <th class="sortable" data-sort-key="updated_at">
+            <span class="sort-label"
+              >Updated
+              <span class="sort-indicator" id="sort-indicator-updated_at"></span
+            ></span>
+          </th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="tokensTableBody">
+        <tr>
+          <td
+            colspan="4"
+            style="text-align: center; padding: 20px; color: #94a3b8"
+          >
+            <div class="loading-text">Loading tokens...</div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
 
-        function renderStatusBadges(token) {
-            const badges = [];
-            if (token.has_pool_price) badges.push('<span class="badge" style="background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;">POOL</span>');
-            if (token.has_ohlcv) badges.push('<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;">OHLCV</span>');
-            if (token.has_open_position) badges.push('<span class="badge" style="background:#fde68a;color:#92400e;border:1px solid #fcd34d;">POS</span>');
-            if (token.blacklisted) badges.push('<span class="badge" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;">BL</span>');
-            return badges.join(' ');
-        }
-
-        function formatTimeAgo(timestamp) {
-            if (!timestamp || !Number.isFinite(timestamp)) return '-';
-            const seconds = Math.max(0, Math.floor(Date.now() / 1000) - timestamp);
-            
-            if (seconds < 60) return `${seconds}s ago`;
-            if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-            if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-            return `${Math.floor(seconds / 86400)}d ago`;
-        }
-
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        function openTokenDetail(mint) {
-            if (!mint) return;
-            openTokenModal(mint).catch(err => {
-                console.error('Failed to open token modal:', err);
-                showToast('❌ Failed to open token details', 'error');
-            });
-        }
-    </script>
-    
-    <div class="page-section">
-        <div class="table-scroll no-x-scroll">
-            <table class="table" id="tokensTable">
-                <thead>
-                    <tr>
-                        <th class="sortable" data-sort-key="symbol"><span class="sort-label">Token <span class="sort-indicator" id="sort-indicator-symbol"></span></span></th>
-                        <th class="sortable" data-sort-key="price_sol"><span class="sort-label">Price (SOL) <span class="sort-indicator" id="sort-indicator-price_sol"></span></span></th>
-                        <th class="sortable" data-sort-key="liquidity_usd"><span class="sort-label">Liquidity <span class="sort-indicator" id="sort-indicator-liquidity_usd"></span></span></th>
-                        <th class="sortable" data-sort-key="volume_24h"><span class="sort-label">24h Vol <span class="sort-indicator" id="sort-indicator-volume_24h"></span></span></th>
-                        <th class="sortable" data-sort-key="fdv"><span class="sort-label">FDV <span class="sort-indicator" id="sort-indicator-fdv"></span></span></th>
-                        <th class="sortable" data-sort-key="market_cap"><span class="sort-label">Mkt Cap <span class="sort-indicator" id="sort-indicator-market_cap"></span></span></th>
-                        <th class="sortable" data-sort-key="price_change_h1"><span class="sort-label">1h <span class="sort-indicator" id="sort-indicator-price_change_h1"></span></span></th>
-                        <th class="sortable" data-sort-key="price_change_h24"><span class="sort-label">24h <span class="sort-indicator" id="sort-indicator-price_change_h24"></span></span></th>
-                        <th class="sortable" data-sort-key="security_score"><span class="sort-label">Security <span class="sort-indicator" id="sort-indicator-security_score"></span></span></th>
-                        <th>Status</th>
-                        <th class="sortable" data-sort-key="updated_at"><span class="sort-label">Updated <span class="sort-indicator" id="sort-indicator-updated_at"></span></span></th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="tokensTableBody">
-                    <tr>
-                        <td colspan="4" style="text-align: center; padding: 20px; color: #94a3b8;">
-                            <div class="loading-text">Loading tokens...</div>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+<!-- Token Details Modal -->
+<div
+  class="token-modal-overlay"
+  id="tokenModal"
+  onclick="closeTokenModal(event)"
+>
+  <div class="token-modal" onclick="event.stopPropagation()">
+    <!-- Modal Header -->
+    <div class="modal-header">
+      <div class="modal-header-left">
+        <img id="modalTokenLogo" class="modal-token-logo" src="" alt="" />
+        <div class="modal-token-info">
+          <div class="modal-token-symbol" id="modalTokenSymbol">SONIC</div>
+          <div class="modal-token-name" id="modalTokenName">Sonic SVM</div>
         </div>
+      </div>
+      <div class="modal-price-info">
+        <div class="modal-price" id="modalTokenPrice">0.00077622</div>
+        <div class="modal-price-change positive" id="modalTokenChange">
+          +2.12%
+        </div>
+      </div>
+      <button
+        class="modal-close-btn"
+        onclick="closeTokenModal()"
+        title="Close (ESC)"
+      >
+        ×
+      </button>
     </div>
 
-    <!-- Token Details Modal -->
-    <div class="token-modal-overlay" id="tokenModal" onclick="closeTokenModal(event)">
-        <div class="token-modal" onclick="event.stopPropagation()">
-            <!-- Modal Header -->
-            <div class="modal-header">
-                <div class="modal-header-left">
-                    <img id="modalTokenLogo" class="modal-token-logo" src="" alt="">
-                    <div class="modal-token-info">
-                        <div class="modal-token-symbol" id="modalTokenSymbol">SONIC</div>
-                        <div class="modal-token-name" id="modalTokenName">Sonic SVM</div>
-                    </div>
-                </div>
-                <div class="modal-price-info">
-                    <div class="modal-price" id="modalTokenPrice">0.00077622</div>
-                    <div class="modal-price-change positive" id="modalTokenChange">+2.12%</div>
-                </div>
-                <button class="modal-close-btn" onclick="closeTokenModal()" title="Close (ESC)">×</button>
-            </div>
-
-            <!-- Modal Body -->
-            <div class="modal-body token-detail-body">
-                <!-- Main Content Area -->
-                <div class="modal-main">
-                    <!-- Tabs Navigation -->
-                    <div class="modal-tabs">
-                        <button class="modal-tab active" onclick="switchModalTab('overview')">📊 Overview</button>
-                        <button class="modal-tab" onclick="switchModalTab('security')">🛡️ Security</button>
-                        <button class="modal-tab" onclick="switchModalTab('chart')">📈 Chart</button>
-                        <button class="modal-tab" onclick="switchModalTab('transactions')">💱 Transactions</button>
-                    </div>
-
-                    <!-- Tab Content -->
-                    <div class="modal-content">
-                        <!-- Overview Tab -->
-                        <div class="tab-pane active" id="tab-overview">
-                            <div class="metrics-grid">
-                                <div class="metric-card">
-                                    <div class="metric-card-header">🧾 Token Profile</div>
-                                    <div class="metric-row" title="Full mint address">
-                                        <span class="metric-label">Mint</span>
-                                        <span class="metric-value" id="detail-mint" style="font-size:0.75em; letter-spacing:0.3px; overflow:hidden; text-overflow:ellipsis; max-width:160px;">—</span>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">Decimals</span>
-                                        <span class="metric-value" id="detail-decimals">—</span>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">Verified</span>
-                                        <span class="metric-value" id="detail-verified">—</span>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">Blacklisted</span>
-                                        <span class="metric-value" id="detail-blacklisted">—</span>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">Launch</span>
-                                        <span class="metric-value" id="detail-launch-date">—</span>
-                                    </div>
-                                </div>
-                                <div class="metric-card">
-                                    <div class="metric-card-header">💰 Market Data</div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">Liquidity</span>
-                                        <span class="metric-value" id="detail-liquidity">$628.66K</span>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">Volume 24h</span>
-                                        <span class="metric-value" id="detail-volume24h">$124.32K</span>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">Volume 6h</span>
-                                        <span class="metric-value" id="detail-volume6h">$45.67K</span>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">Volume 1h</span>
-                                        <span class="metric-value" id="detail-volume1h">$12.45K</span>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">FDV</span>
-                                        <span class="metric-value" id="detail-fdv">$432.41M</span>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">Market Cap</span>
-                                        <span class="metric-value" id="detail-marketcap">$64.86M</span>
-                                    </div>
-                                </div>
-
-                                <div class="metric-card">
-                                    <div class="metric-card-header">🏊 Pool Metrics</div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">DEX</span>
-                                        <span class="metric-value" id="detail-dex">Raydium CPMM</span>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">Pool Address</span>
-                                        <span class="metric-value" id="detail-pool" style="font-size:0.75em;">—</span>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">SOL Reserves</span>
-                                        <span class="metric-value" id="detail-sol-reserves">3,241.5</span>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">Token Reserves</span>
-                                        <span class="metric-value" id="detail-token-reserves">84.2M</span>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">Confidence</span>
-                                        <span class="metric-value" id="detail-confidence">0.95</span>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">Pool Age</span>
-                                        <span class="metric-value" id="detail-pool-age">2h 15m</span>
-                                    </div>
-                                </div>
-
-                                <div class="metric-card">
-                                    <div class="metric-card-header">📊 Price Changes</div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">5 minutes</span>
-                                        <span class="metric-value" id="detail-change5m">+2.5%</span>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">1 hour</span>
-                                        <span class="metric-value" id="detail-change1h">-1.2%</span>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">6 hours</span>
-                                        <span class="metric-value" id="detail-change6h">+5.8%</span>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">24 hours</span>
-                                        <span class="metric-value" id="detail-change24h">+15.3%</span>
-                                    </div>
-                                </div>
-
-                                <div class="metric-card">
-                                    <div class="metric-card-header">💱 Transaction Flow</div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">Buys 24h</span>
-                                        <span class="metric-value" id="detail-buys24h">432</span>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">Sells 24h</span>
-                                        <span class="metric-value" id="detail-sells24h">389</span>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">Buy/Sell Ratio</span>
-                                        <span class="metric-value" id="detail-ratio">1.11</span>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">Net Flow</span>
-                                        <span class="metric-value" id="detail-netflow">+43 Buys</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Security Tab -->
-                        <div class="tab-pane" id="tab-security">
-                            <div class="security-badge excellent" id="security-badge">
-                                <span>🛡️</span>
-                                <span>Security Score: <span id="security-score-value">35593</span> / 40000</span>
-                            </div>
-
-                            <div class="metric-card" style="margin-bottom: 20px;">
-                                <div class="metric-card-header">Overall Security Analysis</div>
-                                <div class="progress-bar">
-                                    <div class="progress-fill" id="security-progress" style="width: 89%"></div>
-                                </div>
-                                <div style="margin-top: 12px; color: #94a3b8; font-size: 0.9em;" id="security-status">
-                                    ✅ This token passes major security checks
-                                </div>
-                            </div>
-
-                            <div class="metric-card" style="margin-bottom: 20px;">
-                                <div class="metric-card-header">🔑 Token Authorities</div>
-                                <div class="metric-row">
-                                    <span class="metric-label">Mint Authority</span>
-                                    <span class="metric-value" id="detail-mint-auth" style="font-size:0.75em;">None ✅</span>
-                                </div>
-                                <div class="metric-row">
-                                    <span class="metric-label">Freeze Authority</span>
-                                    <span class="metric-value" id="detail-freeze-auth" style="font-size:0.75em;">None ✅</span>
-                                </div>
-                            </div>
-
-                            <div class="metric-card" style="margin-bottom: 20px;">
-                                <div class="metric-card-header">👥 Holder Distribution</div>
-                                <div class="metric-row">
-                                    <span class="metric-label">Total Holders</span>
-                                    <span class="metric-value" id="detail-holders">1,234</span>
-                                </div>
-                                <div class="metric-row">
-                                    <span class="metric-label">Top 10 Concentration</span>
-                                    <span class="metric-value" id="detail-top10">45.2%</span>
-                                </div>
-                            </div>
-
-                            <div class="metric-card-header" style="margin-bottom: 12px;">⚠️ Risk Factors</div>
-                            <div class="risk-list" id="risk-factors-list">
-                                <!-- Risk items will be populated here -->
-                            </div>
-                        </div>
-
-                        <!-- Chart Tab -->
-                        <div class="tab-pane" id="tab-chart">
-                            <div id="token-chart-container" style="height: 500px; width: 100%; position: relative; background: #1a1a1a; border-radius: 8px; overflow: hidden;">
-                                <div id="token-chart" style="width: 100%; height: 100%;"></div>
-                                <div id="chart-loading" class="chart-loading">
-                                    <div class="spinner"></div>
-                                    <p>Loading chart data...</p>
-                                </div>
-                                <div id="chart-error" class="chart-error" style="display: none;">
-                                    <p>Failed to load chart data</p>
-                                    <button onclick="retryChartLoad()">Retry</button>
-                                </div>
-                            </div>
-                            
-                            <!-- Chart Controls -->
-                            <div class="chart-controls">
-                                <div class="timeframe-selector">
-                                    <button class="tf-btn active" data-tf="1m">1m</button>
-                                    <button class="tf-btn" data-tf="5m">5m</button>
-                                    <button class="tf-btn" data-tf="15m">15m</button>
-                                    <button class="tf-btn" data-tf="1h">1h</button>
-                                    <button class="tf-btn" data-tf="4h">4h</button>
-                                    <button class="tf-btn" data-tf="1d">1D</button>
-                                </div>
-                                
-                                <div class="indicator-toggles">
-                                    <label><input type="checkbox" id="show-volume" checked> Volume</label>
-                                    <label><input type="checkbox" id="show-ma20"> MA(20)</label>
-                                    <label><input type="checkbox" id="show-ma50"> MA(50)</label>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Transactions Tab -->
-                        <div class="tab-pane" id="tab-transactions">
-                            <div class="metric-card">
-                                <div class="metric-card-header">📜 Recent Transactions</div>
-                                <div id="transactions-list" style="color: #94a3b8; text-align: center; padding: 40px;">
-                                    Loading recent transactions...
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Sidebar -->
-                <div class="modal-sidebar">
-                    <div class="sidebar-section">
-                        <div class="sidebar-section-title">⚡ Live Metrics</div>
-                        <div class="sidebar-metric">
-                            <span class="sidebar-metric-label">Price (SOL)</span>
-                            <span class="sidebar-metric-value" id="sidebar-price">0.00077622</span>
-                        </div>
-                        <div class="sidebar-metric">
-                            <span class="sidebar-metric-label">24h Volume</span>
-                            <span class="sidebar-metric-value" id="sidebar-volume">$124.3K</span>
-                        </div>
-                        <div class="sidebar-metric">
-                            <span class="sidebar-metric-label">Liquidity</span>
-                            <span class="sidebar-metric-value" id="sidebar-liq">$628.7K</span>
-                        </div>
-                        <div class="sidebar-metric">
-                            <span class="sidebar-metric-label">Market Cap</span>
-                            <span class="sidebar-metric-value" id="sidebar-mcap">$64.86M</span>
-                        </div>
-                    </div>
-
-                    <div class="sidebar-section">
-                        <div class="sidebar-section-title">🔗 Quick Actions</div>
-                        <div class="quick-actions">
-                            <button class="quick-action-btn" id="action-copy-mint" onclick="copyMintFromModal()">
-                                📋 Copy Mint Address
-                            </button>
-                            <button class="quick-action-btn" id="action-dexscreener" onclick="openDexScreenerFromModal()">
-                                📊 Open DexScreener →
-                            </button>
-                            <button class="quick-action-btn" id="action-gmgn" onclick="openGMGNFromModal()">
-                                🔗 Open GMGN →
-                            </button>
-                            <button class="quick-action-btn" id="action-solscan" onclick="openSolscanFromModal()">
-                                🔍 Open Solscan →
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="sidebar-section">
-                        <div class="sidebar-section-title">🏷️ Status Flags</div>
-                        <div id="sidebar-badges" style="display: flex; flex-wrap: wrap; gap: 6px;">
-                            <!-- Badges will be populated here -->
-                        </div>
-                    </div>
-                </div>
-            </div>
+    <!-- Modal Body -->
+    <div class="modal-body token-detail-body">
+      <!-- Main Content Area -->
+      <div class="modal-main">
+        <!-- Tabs Navigation -->
+        <div class="modal-tabs">
+          <button class="modal-tab active" onclick="switchModalTab('overview')">
+            📊 Overview
+          </button>
+          <button class="modal-tab" onclick="switchModalTab('security')">
+            🛡️ Security
+          </button>
+          <button class="modal-tab" onclick="switchModalTab('chart')">
+            📈 Chart
+          </button>
+          <button class="modal-tab" onclick="switchModalTab('transactions')">
+            💱 Transactions
+          </button>
         </div>
+
+        <!-- Tab Content -->
+        <div class="modal-content">
+          <!-- Overview Tab -->
+          <div class="tab-pane active" id="tab-overview">
+            <div class="metrics-grid">
+              <div class="metric-card">
+                <div class="metric-card-header">🧾 Token Profile</div>
+                <div class="metric-row" title="Full mint address">
+                  <span class="metric-label">Mint</span>
+                  <span
+                    class="metric-value"
+                    id="detail-mint"
+                    style="
+                      font-size: 0.75em;
+                      letter-spacing: 0.3px;
+                      overflow: hidden;
+                      text-overflow: ellipsis;
+                      max-width: 160px;
+                    "
+                    >—</span
+                  >
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">Decimals</span>
+                  <span class="metric-value" id="detail-decimals">—</span>
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">Verified</span>
+                  <span class="metric-value" id="detail-verified">—</span>
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">Blacklisted</span>
+                  <span class="metric-value" id="detail-blacklisted">—</span>
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">Launch</span>
+                  <span class="metric-value" id="detail-launch-date">—</span>
+                </div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-card-header">💰 Market Data</div>
+                <div class="metric-row">
+                  <span class="metric-label">Liquidity</span>
+                  <span class="metric-value" id="detail-liquidity"
+                    >$628.66K</span
+                  >
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">Volume 24h</span>
+                  <span class="metric-value" id="detail-volume24h"
+                    >$124.32K</span
+                  >
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">Volume 6h</span>
+                  <span class="metric-value" id="detail-volume6h">$45.67K</span>
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">Volume 1h</span>
+                  <span class="metric-value" id="detail-volume1h">$12.45K</span>
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">FDV</span>
+                  <span class="metric-value" id="detail-fdv">$432.41M</span>
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">Market Cap</span>
+                  <span class="metric-value" id="detail-marketcap"
+                    >$64.86M</span
+                  >
+                </div>
+              </div>
+
+              <div class="metric-card">
+                <div class="metric-card-header">🏊 Pool Metrics</div>
+                <div class="metric-row">
+                  <span class="metric-label">DEX</span>
+                  <span class="metric-value" id="detail-dex">Raydium CPMM</span>
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">Pool Address</span>
+                  <span
+                    class="metric-value"
+                    id="detail-pool"
+                    style="font-size: 0.75em"
+                    >—</span
+                  >
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">SOL Reserves</span>
+                  <span class="metric-value" id="detail-sol-reserves"
+                    >3,241.5</span
+                  >
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">Token Reserves</span>
+                  <span class="metric-value" id="detail-token-reserves"
+                    >84.2M</span
+                  >
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">Confidence</span>
+                  <span class="metric-value" id="detail-confidence">0.95</span>
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">Pool Age</span>
+                  <span class="metric-value" id="detail-pool-age">2h 15m</span>
+                </div>
+              </div>
+
+              <div class="metric-card">
+                <div class="metric-card-header">📊 Price Changes</div>
+                <div class="metric-row">
+                  <span class="metric-label">5 minutes</span>
+                  <span class="metric-value" id="detail-change5m">+2.5%</span>
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">1 hour</span>
+                  <span class="metric-value" id="detail-change1h">-1.2%</span>
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">6 hours</span>
+                  <span class="metric-value" id="detail-change6h">+5.8%</span>
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">24 hours</span>
+                  <span class="metric-value" id="detail-change24h">+15.3%</span>
+                </div>
+              </div>
+
+              <div class="metric-card">
+                <div class="metric-card-header">💱 Transaction Flow</div>
+                <div class="metric-row">
+                  <span class="metric-label">Buys 24h</span>
+                  <span class="metric-value" id="detail-buys24h">432</span>
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">Sells 24h</span>
+                  <span class="metric-value" id="detail-sells24h">389</span>
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">Buy/Sell Ratio</span>
+                  <span class="metric-value" id="detail-ratio">1.11</span>
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">Net Flow</span>
+                  <span class="metric-value" id="detail-netflow">+43 Buys</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Security Tab -->
+          <div class="tab-pane" id="tab-security">
+            <div class="security-badge excellent" id="security-badge">
+              <span>🛡️</span>
+              <span
+                >Security Score: <span id="security-score-value">35593</span> /
+                40000</span
+              >
+            </div>
+
+            <div class="metric-card" style="margin-bottom: 20px">
+              <div class="metric-card-header">Overall Security Analysis</div>
+              <div class="progress-bar">
+                <div
+                  class="progress-fill"
+                  id="security-progress"
+                  style="width: 89%"
+                ></div>
+              </div>
+              <div
+                style="margin-top: 12px; color: #94a3b8; font-size: 0.9em"
+                id="security-status"
+              >
+                ✅ This token passes major security checks
+              </div>
+            </div>
+
+            <div class="metric-card" style="margin-bottom: 20px">
+              <div class="metric-card-header">🔑 Token Authorities</div>
+              <div class="metric-row">
+                <span class="metric-label">Mint Authority</span>
+                <span
+                  class="metric-value"
+                  id="detail-mint-auth"
+                  style="font-size: 0.75em"
+                  >None ✅</span
+                >
+              </div>
+              <div class="metric-row">
+                <span class="metric-label">Freeze Authority</span>
+                <span
+                  class="metric-value"
+                  id="detail-freeze-auth"
+                  style="font-size: 0.75em"
+                  >None ✅</span
+                >
+              </div>
+            </div>
+
+            <div class="metric-card" style="margin-bottom: 20px">
+              <div class="metric-card-header">👥 Holder Distribution</div>
+              <div class="metric-row">
+                <span class="metric-label">Total Holders</span>
+                <span class="metric-value" id="detail-holders">1,234</span>
+              </div>
+              <div class="metric-row">
+                <span class="metric-label">Top 10 Concentration</span>
+                <span class="metric-value" id="detail-top10">45.2%</span>
+              </div>
+            </div>
+
+            <div class="metric-card-header" style="margin-bottom: 12px">
+              ⚠️ Risk Factors
+            </div>
+            <div class="risk-list" id="risk-factors-list">
+              <!-- Risk items will be populated here -->
+            </div>
+          </div>
+
+          <!-- Chart Tab -->
+          <div class="tab-pane" id="tab-chart">
+            <div
+              id="token-chart-container"
+              style="
+                height: 500px;
+                width: 100%;
+                position: relative;
+                background: #1a1a1a;
+                border-radius: 8px;
+                overflow: hidden;
+              "
+            >
+              <div id="token-chart" style="width: 100%; height: 100%"></div>
+              <div id="chart-loading" class="chart-loading">
+                <div class="spinner"></div>
+                <p>Loading chart data...</p>
+              </div>
+              <div id="chart-error" class="chart-error" style="display: none">
+                <p>Failed to load chart data</p>
+                <button onclick="retryChartLoad()">Retry</button>
+              </div>
+            </div>
+
+            <!-- Chart Controls -->
+            <div class="chart-controls">
+              <div class="timeframe-selector">
+                <button class="tf-btn active" data-tf="1m">1m</button>
+                <button class="tf-btn" data-tf="5m">5m</button>
+                <button class="tf-btn" data-tf="15m">15m</button>
+                <button class="tf-btn" data-tf="1h">1h</button>
+                <button class="tf-btn" data-tf="4h">4h</button>
+                <button class="tf-btn" data-tf="1d">1D</button>
+              </div>
+
+              <div class="indicator-toggles">
+                <label
+                  ><input type="checkbox" id="show-volume" checked />
+                  Volume</label
+                >
+                <label><input type="checkbox" id="show-ma20" /> MA(20)</label>
+                <label><input type="checkbox" id="show-ma50" /> MA(50)</label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Transactions Tab -->
+          <div class="tab-pane" id="tab-transactions">
+            <div class="metric-card">
+              <div class="metric-card-header">📜 Recent Transactions</div>
+              <div
+                id="transactions-list"
+                style="color: #94a3b8; text-align: center; padding: 40px"
+              >
+                Loading recent transactions...
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sidebar -->
+      <div class="modal-sidebar">
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">⚡ Live Metrics</div>
+          <div class="sidebar-metric">
+            <span class="sidebar-metric-label">Price (SOL)</span>
+            <span class="sidebar-metric-value" id="sidebar-price"
+              >0.00077622</span
+            >
+          </div>
+          <div class="sidebar-metric">
+            <span class="sidebar-metric-label">24h Volume</span>
+            <span class="sidebar-metric-value" id="sidebar-volume"
+              >$124.3K</span
+            >
+          </div>
+          <div class="sidebar-metric">
+            <span class="sidebar-metric-label">Liquidity</span>
+            <span class="sidebar-metric-value" id="sidebar-liq">$628.7K</span>
+          </div>
+          <div class="sidebar-metric">
+            <span class="sidebar-metric-label">Market Cap</span>
+            <span class="sidebar-metric-value" id="sidebar-mcap">$64.86M</span>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">🔗 Quick Actions</div>
+          <div class="quick-actions">
+            <button
+              class="quick-action-btn"
+              id="action-copy-mint"
+              onclick="copyMintFromModal()"
+            >
+              📋 Copy Mint Address
+            </button>
+            <button
+              class="quick-action-btn"
+              id="action-dexscreener"
+              onclick="openDexScreenerFromModal()"
+            >
+              📊 Open DexScreener →
+            </button>
+            <button
+              class="quick-action-btn"
+              id="action-gmgn"
+              onclick="openGMGNFromModal()"
+            >
+              🔗 Open GMGN →
+            </button>
+            <button
+              class="quick-action-btn"
+              id="action-solscan"
+              onclick="openSolscanFromModal()"
+            >
+              🔍 Open Solscan →
+            </button>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">🏷️ Status Flags</div>
+          <div
+            id="sidebar-badges"
+            style="display: flex; flex-wrap: wrap; gap: 6px"
+          >
+            <!-- Badges will be populated here -->
+          </div>
+        </div>
+      </div>
     </div>
-    
-    <script>
-        // ====================================================================
-        // WebSocket real-time price updates
-        // ====================================================================
-        
-        function handlePriceUpdate(message) {
-            if (!message || typeof message !== 'object') return;
-            const { mint, price_result: priceResult, timestamp } = message;
-            if (!mint || !priceResult || typeof priceResult !== 'object') return;
+  </div>
+</div>
 
-            const tokenInList = allTokensData.find(t => t.mint === mint);
-            const updatedPriceSol = Number(priceResult.price_sol);
-            const updatedPriceUsd = Number(priceResult.price_usd);
-            const updatedTimestamp = (() => {
-                if (Number.isFinite(priceResult.timestamp)) return Number(priceResult.timestamp);
-                if (typeof timestamp === 'string') {
-                    const parsed = Date.parse(timestamp);
-                    if (Number.isFinite(parsed)) return Math.floor(parsed / 1000);
-                }
-                return null;
-            })();
+<script>
+  // ====================================================================
+  // WebSocket real-time price updates
+  // ====================================================================
 
-            if (tokenInList) {
-                if (Number.isFinite(updatedPriceSol)) {
-                    tokenInList.price_sol = updatedPriceSol;
-                }
-                if (Number.isFinite(updatedPriceUsd)) {
-                    tokenInList.price_usd = updatedPriceUsd;
-                }
-                if (updatedTimestamp !== null) {
-                    tokenInList.price_updated_at = updatedTimestamp;
-                }
+  function handlePriceUpdate(message) {
+    if (!message || typeof message !== "object") return;
+    const { mint, price_result: priceResult, timestamp } = message;
+    if (!mint || !priceResult || typeof priceResult !== "object") return;
 
-                const row = document.querySelector(`tr[data-mint="${mint}"]`);
-                if (row) {
-                    const priceCell = row.cells?.[1];
-                    const liquidityCell = row.cells?.[2];
-                    const timeCell = row.cells?.[10];
+    const tokenInList = allTokensData.find((t) => t.mint === mint);
+    const updatedPriceSol = Number(priceResult.price_sol);
+    const updatedPriceUsd = Number(priceResult.price_usd);
+    const updatedTimestamp = (() => {
+      if (Number.isFinite(priceResult.timestamp))
+        return Number(priceResult.timestamp);
+      if (typeof timestamp === "string") {
+        const parsed = Date.parse(timestamp);
+        if (Number.isFinite(parsed)) return Math.floor(parsed / 1000);
+      }
+      return null;
+    })();
 
-                    if (priceCell && Number.isFinite(updatedPriceSol)) {
-                        priceCell.innerHTML = formatPriceSol(updatedPriceSol);
-                        priceCell.style.animation = 'highlight 0.6s ease-out';
-                        setTimeout(() => { priceCell.style.animation = ''; }, 600);
-                    }
+    if (tokenInList) {
+      if (Number.isFinite(updatedPriceSol)) {
+        tokenInList.price_sol = updatedPriceSol;
+      }
+      if (Number.isFinite(updatedPriceUsd)) {
+        tokenInList.price_usd = updatedPriceUsd;
+      }
+      if (updatedTimestamp !== null) {
+        tokenInList.price_updated_at = updatedTimestamp;
+      }
 
-                    if (liquidityCell && Number.isFinite(tokenInList.liquidity_usd)) {
-                        liquidityCell.innerHTML = formatCurrencyUSD(tokenInList.liquidity_usd);
-                    }
+      const row = document.querySelector(`tr[data-mint="${mint}"]`);
+      if (row) {
+        const priceCell = row.cells?.[1];
+        const liquidityCell = row.cells?.[2];
+        const timeCell = row.cells?.[10];
 
-                    if (timeCell && updatedTimestamp !== null) {
-                        timeCell.textContent = formatTimeAgo(updatedTimestamp);
-                    }
-                }
-            }
-
-            if (currentModalMint === mint) {
-                const modalPriceEl = document.getElementById('modalTokenPrice');
-                const sidebarPriceEl = document.getElementById('sidebar-price');
-                const liquidityEl = document.getElementById('detail-liquidity');
-                const sidebarLiqEl = document.getElementById('sidebar-liq');
-                const confidenceEl = document.getElementById('detail-confidence');
-                const solReservesEl = document.getElementById('detail-sol-reserves');
-                const tokenReservesEl = document.getElementById('detail-token-reserves');
-                const poolAddressEl = document.getElementById('detail-pool');
-
-                if (tokenModalData && tokenModalData.token && Number.isFinite(updatedPriceSol)) {
-                    tokenModalData.token.price_sol = updatedPriceSol;
-                }
-                if (tokenModalData && tokenModalData.detail) {
-                    if (Number.isFinite(updatedPriceSol)) {
-                        tokenModalData.detail.price_sol = updatedPriceSol;
-                    }
-                    if (Number.isFinite(priceResult.confidence)) {
-                        tokenModalData.detail.price_confidence = priceResult.confidence;
-                    }
-                    if (Number.isFinite(priceResult.sol_reserves)) {
-                        tokenModalData.detail.pool_reserves_sol = priceResult.sol_reserves;
-                    }
-                    if (Number.isFinite(priceResult.token_reserves)) {
-                        tokenModalData.detail.pool_reserves_token = priceResult.token_reserves;
-                    }
-                    if (priceResult.pool_address) {
-                        tokenModalData.detail.pool_address = priceResult.pool_address;
-                    }
-                    if (updatedTimestamp !== null) {
-                        tokenModalData.detail.price_updated_at = updatedTimestamp;
-                    }
-                }
-
-                if (modalPriceEl && Number.isFinite(updatedPriceSol)) {
-                    modalPriceEl.textContent = formatPriceSol(updatedPriceSol);
-                }
-                if (sidebarPriceEl && Number.isFinite(updatedPriceSol)) {
-                    sidebarPriceEl.textContent = formatPriceSol(updatedPriceSol);
-                }
-
-                if (confidenceEl && Number.isFinite(priceResult.confidence)) {
-                    confidenceEl.textContent = priceResult.confidence.toFixed(2);
-                }
-                if (solReservesEl && Number.isFinite(priceResult.sol_reserves)) {
-                    solReservesEl.textContent = formatCompactNumber(priceResult.sol_reserves);
-                }
-                if (tokenReservesEl && Number.isFinite(priceResult.token_reserves)) {
-                    tokenReservesEl.textContent = formatCompactNumber(priceResult.token_reserves);
-                }
-                if (poolAddressEl && priceResult.pool_address) {
-                    poolAddressEl.textContent = priceResult.pool_address;
-                }
-
-                if (Number.isFinite(tokenInList?.liquidity_usd)) {
-                    const formatted = formatCurrencyUSD(tokenInList.liquidity_usd);
-                    if (liquidityEl) liquidityEl.textContent = formatted;
-                    if (sidebarLiqEl) sidebarLiqEl.textContent = formatted;
-                }
-            }
-        }
-        
-        // Subscribe to WebSocket price updates
-        if (typeof WsHub !== 'undefined') {
-            WsHub.subscribe('prices', handlePriceUpdate);
-            console.log('[Tokens] Subscribed to WebSocket price updates');
-            
-            if (window.Router && typeof Router.registerCleanup === 'function') {
-                Router.registerCleanup(() => {
-                    WsHub.unsubscribe('prices', handlePriceUpdate);
-                });
-            }
-
-            // Cleanup on page unload
-            window.addEventListener('beforeunload', () => {
-                WsHub.unsubscribe('prices', handlePriceUpdate);
-            });
+        if (priceCell && Number.isFinite(updatedPriceSol)) {
+          priceCell.innerHTML = formatPriceSol(updatedPriceSol);
+          priceCell.style.animation = "highlight 0.6s ease-out";
+          setTimeout(() => {
+            priceCell.style.animation = "";
+          }, 600);
         }
 
-        // Execute initialization immediately (works for both initial load and SPA navigation)
-        initTokensPage();
-    </script>
-    
+        if (liquidityCell && Number.isFinite(tokenInList.liquidity_usd)) {
+          liquidityCell.innerHTML = formatCurrencyUSD(
+            tokenInList.liquidity_usd
+          );
+        }
+
+        if (timeCell && updatedTimestamp !== null) {
+          timeCell.textContent = formatTimeAgo(updatedTimestamp);
+        }
+      }
+    }
+
+    if (currentModalMint === mint) {
+      const modalPriceEl = document.getElementById("modalTokenPrice");
+      const sidebarPriceEl = document.getElementById("sidebar-price");
+      const liquidityEl = document.getElementById("detail-liquidity");
+      const sidebarLiqEl = document.getElementById("sidebar-liq");
+      const confidenceEl = document.getElementById("detail-confidence");
+      const solReservesEl = document.getElementById("detail-sol-reserves");
+      const tokenReservesEl = document.getElementById("detail-token-reserves");
+      const poolAddressEl = document.getElementById("detail-pool");
+
+      if (
+        tokenModalData &&
+        tokenModalData.token &&
+        Number.isFinite(updatedPriceSol)
+      ) {
+        tokenModalData.token.price_sol = updatedPriceSol;
+      }
+      if (tokenModalData && tokenModalData.detail) {
+        if (Number.isFinite(updatedPriceSol)) {
+          tokenModalData.detail.price_sol = updatedPriceSol;
+        }
+        if (Number.isFinite(priceResult.confidence)) {
+          tokenModalData.detail.price_confidence = priceResult.confidence;
+        }
+        if (Number.isFinite(priceResult.sol_reserves)) {
+          tokenModalData.detail.pool_reserves_sol = priceResult.sol_reserves;
+        }
+        if (Number.isFinite(priceResult.token_reserves)) {
+          tokenModalData.detail.pool_reserves_token =
+            priceResult.token_reserves;
+        }
+        if (priceResult.pool_address) {
+          tokenModalData.detail.pool_address = priceResult.pool_address;
+        }
+        if (updatedTimestamp !== null) {
+          tokenModalData.detail.price_updated_at = updatedTimestamp;
+        }
+      }
+
+      if (modalPriceEl && Number.isFinite(updatedPriceSol)) {
+        modalPriceEl.textContent = formatPriceSol(updatedPriceSol);
+      }
+      if (sidebarPriceEl && Number.isFinite(updatedPriceSol)) {
+        sidebarPriceEl.textContent = formatPriceSol(updatedPriceSol);
+      }
+
+      if (confidenceEl && Number.isFinite(priceResult.confidence)) {
+        confidenceEl.textContent = priceResult.confidence.toFixed(2);
+      }
+      if (solReservesEl && Number.isFinite(priceResult.sol_reserves)) {
+        solReservesEl.textContent = formatCompactNumber(
+          priceResult.sol_reserves
+        );
+      }
+      if (tokenReservesEl && Number.isFinite(priceResult.token_reserves)) {
+        tokenReservesEl.textContent = formatCompactNumber(
+          priceResult.token_reserves
+        );
+      }
+      if (poolAddressEl && priceResult.pool_address) {
+        poolAddressEl.textContent = priceResult.pool_address;
+      }
+
+      if (Number.isFinite(tokenInList?.liquidity_usd)) {
+        const formatted = formatCurrencyUSD(tokenInList.liquidity_usd);
+        if (liquidityEl) liquidityEl.textContent = formatted;
+        if (sidebarLiqEl) sidebarLiqEl.textContent = formatted;
+      }
+    }
+  }
+  // Execute initialization immediately (works for both initial load and SPA navigation)
+  initTokensPage();
+</script>

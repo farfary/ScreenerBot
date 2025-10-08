@@ -1,357 +1,359 @@
+<style>
+  .status-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
 
-    <style>
-        .status-metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
-        }
+  .status-metric-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
 
-        .status-metric-card {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
+  .status-metric-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
 
-        .status-metric-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        }
+  .status-metric-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-secondary);
+    font-size: 0.85em;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
 
-        .status-metric-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: var(--text-secondary);
-            font-size: 0.85em;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
+  .status-metric-icon {
+    font-size: 1.2em;
+  }
 
-        .status-metric-icon {
-            font-size: 1.2em;
-        }
+  .status-metric-value {
+    font-size: 1.8em;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
 
-        .status-metric-value {
-            font-size: 1.8em;
-            font-weight: 700;
-            color: var(--text-primary);
-            font-variant-numeric: tabular-nums;
-        }
+  .status-metric-unit {
+    font-size: 0.6em;
+    font-weight: 400;
+    color: var(--text-secondary);
+    margin-left: 4px;
+  }
 
-        .status-metric-unit {
-            font-size: 0.6em;
-            font-weight: 400;
-            color: var(--text-secondary);
-            margin-left: 4px;
-        }
+  .status-services-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin-top: 16px;
+  }
 
-        .status-services-table {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-            margin-top: 16px;
-        }
+  .status-services-table th {
+    background: var(--card-bg);
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid var(--border-color);
+  }
 
-        .status-services-table th {
-            background: var(--card-bg);
-            padding: 12px 16px;
-            text-align: left;
-            font-weight: 600;
-            color: var(--text-secondary);
-            font-size: 0.85em;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            border-bottom: 2px solid var(--border-color);
-        }
+  .status-services-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+  }
 
-        .status-services-table td {
-            padding: 12px 16px;
-            border-bottom: 1px solid var(--border-color);
-        }
+  .status-services-table tr:last-child td {
+    border-bottom: none;
+  }
 
-        .status-services-table tr:last-child td {
-            border-bottom: none;
-        }
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.85em;
+    font-weight: 600;
+  }
 
-        .status-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 0.85em;
-            font-weight: 600;
-        }
+  .status-badge.ready {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+  }
 
-        .status-badge.ready {
-            background: rgba(16, 185, 129, 0.1);
-            color: #10b981;
-        }
+  .status-badge.not-ready {
+    background: rgba(251, 191, 36, 0.1);
+    color: #fbbf24;
+  }
 
-        .status-badge.not-ready {
-            background: rgba(251, 191, 36, 0.1);
-            color: #fbbf24;
-        }
+  .status-section-title {
+    font-size: 1.1em;
+    font-weight: 600;
+    margin: 24px 0 12px 0;
+    color: var(--text-primary);
+  }
 
-        .status-section-title {
-            font-size: 1.1em;
-            font-weight: 600;
-            margin: 24px 0 12px 0;
-            color: var(--text-primary);
-        }
+  .status-wallet-tokens {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-top: 16px;
+  }
 
-        .status-wallet-tokens {
-            max-height: 300px;
-            overflow-y: auto;
-            margin-top: 16px;
-        }
+  .status-trader-info {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 16px;
+  }
 
-        .status-trader-info {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            margin-top: 16px;
-        }
+  .status-trader-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+  }
 
-        .status-trader-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px;
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-        }
+  .status-trader-label {
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
 
-        .status-trader-label {
-            font-weight: 500;
-            color: var(--text-secondary);
-        }
+  .status-trader-value {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
 
-        .status-trader-value {
-            font-weight: 600;
-            color: var(--text-primary);
-        }
+  .status-placeholder {
+    padding: 40px;
+    text-align: center;
+    color: var(--text-secondary);
+  }
 
-        .status-placeholder {
-            padding: 40px;
-            text-align: center;
-            color: var(--text-secondary);
-        }
+  .status-placeholder-icon {
+    font-size: 3em;
+    margin-bottom: 16px;
+    opacity: 0.5;
+  }
 
-        .status-placeholder-icon {
-            font-size: 3em;
-            margin-bottom: 16px;
-            opacity: 0.5;
-        }
+  .status-placeholder-title {
+    font-size: 1.1em;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
 
-        .status-placeholder-title {
-            font-size: 1.1em;
-            font-weight: 600;
-            margin-bottom: 8px;
-        }
+  .status-placeholder-text {
+    font-size: 0.9em;
+  }
+</style>
 
-        .status-placeholder-text {
-            font-size: 0.9em;
-        }
-    </style>
+<script>
+  var STATUS_VIEWS = [
+    "system",
+    "rpc",
+    "transactions",
+    "positions",
+    "pools",
+    "discovery",
+    "ohlcvs",
+    "events",
+    "wallet",
+    "trader",
+    "sol_price",
+    "webserver",
+    "rl_learner",
+  ];
 
-    <script>
-        var STATUS_VIEWS = ['system', 'rpc', 'transactions', 'positions', 'pools', 'discovery', 'ohlcvs', 'events', 'wallet', 'trader', 'sol_price', 'webserver', 'rl_learner'];
-        
-        var statusState = window.statusState || {
-            view: 'system',
-            currentData: null,
-        };
+  var statusState = window.statusState || {
+    view: "system",
+    currentData: null,
+  };
 
-        // Global init function for Router to call during SPA navigation
-        window.initStatusPage = function() {
-            console.log('[Status] Initializing page');
-            hydrateStatusState();
-            initStatusSubTabs();
-            initStatusWebSocket();
-            loadInitialStatusData();
-        };
+  // Global init function for Router to call during SPA navigation
+  window.initStatusPage = function () {
+    console.log("[Status] Initializing page");
+    hydrateStatusState();
+    initStatusSubTabs();
+    loadInitialStatusData();
+  };
 
-        function hydrateStatusState() {
-            const savedView = window.sessionStorage.getItem('status.view');
-            if (savedView && STATUS_VIEWS.includes(savedView)) {
-                statusState.view = savedView;
-            }
-        }
+  function hydrateStatusState() {
+    const savedView = window.sessionStorage.getItem("status.view");
+    if (savedView && STATUS_VIEWS.includes(savedView)) {
+      statusState.view = savedView;
+    }
+  }
 
-        function initStatusSubTabs() {
-            const subTabsContainer = document.getElementById('subTabsContainer');
-            if (!subTabsContainer) return;
+  function initStatusSubTabs() {
+    const subTabsContainer = document.getElementById("subTabsContainer");
+    if (!subTabsContainer) return;
 
-            const views = [
-                { id: 'system', label: '💻 System' },
-                { id: 'rpc', label: '📡 RPC' },
-                { id: 'transactions', label: '💱 Transactions' },
-                { id: 'positions', label: '💰 Positions' },
-                { id: 'pools', label: '🏊 Pools' },
-                { id: 'discovery', label: '🔍 Discovery' },
-                { id: 'ohlcvs', label: '📊 OHLCVS' },
-                { id: 'events', label: '📡 Events' },
-                { id: 'wallet', label: '👛 Wallet' },
-                { id: 'trader', label: '🤖 Trader' },
-                { id: 'sol_price', label: '💵 SOL Price' },
-                { id: 'webserver', label: '🌐 Webserver' },
-                { id: 'rl_learner', label: '🧠 RL Learner' },
-            ];
+    const views = [
+      { id: "system", label: "💻 System" },
+      { id: "rpc", label: "📡 RPC" },
+      { id: "transactions", label: "💱 Transactions" },
+      { id: "positions", label: "💰 Positions" },
+      { id: "pools", label: "🏊 Pools" },
+      { id: "discovery", label: "🔍 Discovery" },
+      { id: "ohlcvs", label: "📊 OHLCVS" },
+      { id: "events", label: "📡 Events" },
+      { id: "wallet", label: "👛 Wallet" },
+      { id: "trader", label: "🤖 Trader" },
+      { id: "sol_price", label: "💵 SOL Price" },
+      { id: "webserver", label: "🌐 Webserver" },
+      { id: "rl_learner", label: "🧠 RL Learner" },
+    ];
 
-            subTabsContainer.innerHTML = views
-                .map(view => `
-                    <button class="sub-tab ${view.id === statusState.view ? 'active' : ''}" data-view="${view.id}">
+    subTabsContainer.innerHTML = views
+      .map(
+        (view) => `
+                    <button class="sub-tab ${
+                      view.id === statusState.view ? "active" : ""
+                    }" data-view="${view.id}">
                         ${view.label}
                     </button>
-                `)
-                .join('');
+                `
+      )
+      .join("");
 
-            subTabsContainer
-                .querySelectorAll('.sub-tab')
-                .forEach(button => {
-                    button.addEventListener('click', () => switchStatusSubTab(button.dataset.view));
-                });
+    subTabsContainer.querySelectorAll(".sub-tab").forEach((button) => {
+      button.addEventListener("click", () =>
+        switchStatusSubTab(button.dataset.view)
+      );
+    });
 
-            subTabsContainer.style.display = 'flex';
-        }
+    subTabsContainer.style.display = "flex";
+  }
 
-        // Ensure sub-tabs are present and visible (defensive; handles race or prior page scripts)
-        function ensureStatusSubTabsVisible() {
-            const subTabsContainer = document.getElementById('subTabsContainer');
-            if (!subTabsContainer) return;
+  // Ensure sub-tabs are present and visible (defensive; handles race or prior page scripts)
+  function ensureStatusSubTabsVisible() {
+    const subTabsContainer = document.getElementById("subTabsContainer");
+    if (!subTabsContainer) return;
 
-            // If container is empty or still hidden, (re)initialize
-            const needsInit = subTabsContainer.children.length === 0;
-            const hidden = getComputedStyle(subTabsContainer).display === 'none' || subTabsContainer.style.display === 'none';
+    // If container is empty or still hidden, (re)initialize
+    const needsInit = subTabsContainer.children.length === 0;
+    const hidden =
+      getComputedStyle(subTabsContainer).display === "none" ||
+      subTabsContainer.style.display === "none";
 
-            if (needsInit) {
-                initStatusSubTabs();
-            }
+    if (needsInit) {
+      initStatusSubTabs();
+    }
 
-            if (hidden) {
-                subTabsContainer.style.display = 'flex';
-            }
+    if (hidden) {
+      subTabsContainer.style.display = "flex";
+    }
 
-            // Align active tab styling to current state if already mounted
-            if (!needsInit) {
-                document
-                    .querySelectorAll('#subTabsContainer .sub-tab')
-                    .forEach(tab => {
-                        tab.classList.toggle('active', tab.dataset.view === statusState.view);
-                    });
-            }
-        }
+    // Align active tab styling to current state if already mounted
+    if (!needsInit) {
+      document.querySelectorAll("#subTabsContainer .sub-tab").forEach((tab) => {
+        tab.classList.toggle("active", tab.dataset.view === statusState.view);
+      });
+    }
+  }
 
-        function switchStatusSubTab(view) {
-            if (!view || statusState.view === view) return;
+  function switchStatusSubTab(view) {
+    if (!view || statusState.view === view) return;
 
-            statusState.view = view;
-            window.sessionStorage.setItem('status.view', view);
+    statusState.view = view;
+    window.sessionStorage.setItem("status.view", view);
 
-            document
-                .querySelectorAll('#subTabsContainer .sub-tab')
-                .forEach(tab => {
-                    tab.classList.toggle('active', tab.dataset.view === view);
-                });
+    document.querySelectorAll("#subTabsContainer .sub-tab").forEach((tab) => {
+      tab.classList.toggle("active", tab.dataset.view === view);
+    });
 
-            renderStatusContent();
-        }
+    renderStatusContent();
+  }
 
-        // WebSocket integration
-        function initStatusWebSocket() {
-            if (typeof WsHub === 'undefined') {
-                console.warn('[Status] WsHub not available, falling back to HTTP polling');
-                return;
-            }
+  function handleStatusUpdate(data) {
+    console.log("[Status] Received update:", data);
+    statusState.currentData = data;
+    // Make sure sub-tabs are shown even if initial mount was skipped
+    ensureStatusSubTabsVisible();
+    renderStatusContent();
+  }
 
-            // Subscribe to status channel
-            WsHub.subscribe('status', handleStatusUpdate);
-            console.log('[Status] Subscribed to status channel');
-        }
+  // Load initial data via HTTP
+  async function loadInitialStatusData() {
+    try {
+      const [status, services, metrics] = await Promise.all([
+        fetch("/api/status").then((r) => r.json()),
+        fetch("/api/status/services").then((r) => r.json()),
+        fetch("/api/status/metrics").then((r) => r.json()),
+      ]);
 
-        function handleStatusUpdate(data) {
-            console.log('[Status] Received update:', data);
-            statusState.currentData = data;
-            // Make sure sub-tabs are shown even if initial mount was skipped
-            ensureStatusSubTabsVisible();
-            renderStatusContent();
-        }
+      statusState.currentData = {
+        ...status,
+        services,
+        metrics,
+      };
+      ensureStatusSubTabsVisible();
+      renderStatusContent();
+    } catch (error) {
+      console.error("[Status] Failed to load initial data:", error);
+      showStatusError("Failed to load status data");
+    }
+  }
 
-        // Load initial data via HTTP
-        async function loadInitialStatusData() {
-            try {
-                const [status, services, metrics] = await Promise.all([
-                    fetch('/api/status').then(r => r.json()),
-                    fetch('/api/status/services').then(r => r.json()),
-                    fetch('/api/status/metrics').then(r => r.json())
-                ]);
+  function renderStatusContent() {
+    const contentContainer = document.getElementById("statusContent");
+    if (!contentContainer) return;
 
-                statusState.currentData = {
-                    ...status,
-                    services,
-                    metrics
-                };
-                ensureStatusSubTabsVisible();
-                renderStatusContent();
-            } catch (error) {
-                console.error('[Status] Failed to load initial data:', error);
-                showStatusError('Failed to load status data');
-            }
-        }
-
-        function renderStatusContent() {
-            const contentContainer = document.getElementById('statusContent');
-            if (!contentContainer) return;
-
-            const data = statusState.currentData;
-            if (!data) {
-                contentContainer.innerHTML = `
+    const data = statusState.currentData;
+    if (!data) {
+      contentContainer.innerHTML = `
                     <div class="page-section">
                         <div style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
                             <div class="loading-text">Loading status...</div>
                         </div>
                     </div>
                 `;
-                return;
-            }
+      return;
+    }
 
-            switch (statusState.view) {
-                case 'system':
-                    renderSystemTab(data);
-                    break;
-                case 'rpc':
-                    renderRPCTab(data);
-                    break;
-                case 'wallet':
-                    renderWalletTab(data);
-                    break;
-                case 'trader':
-                    renderTraderTab(data);
-                    break;
-                case 'ohlcvs':
-                    renderOHLCVSTab(data);
-                    break;
-                default:
-                    renderPlaceholderTab(statusState.view);
-            }
-        }
+    switch (statusState.view) {
+      case "system":
+        renderSystemTab(data);
+        break;
+      case "rpc":
+        renderRPCTab(data);
+        break;
+      case "wallet":
+        renderWalletTab(data);
+        break;
+      case "trader":
+        renderTraderTab(data);
+        break;
+      case "ohlcvs":
+        renderOHLCVSTab(data);
+        break;
+      default:
+        renderPlaceholderTab(statusState.view);
+    }
+  }
 
-        function renderSystemTab(data) {
-            const contentContainer = document.getElementById('statusContent');
-            
-            const metrics = data.metrics || {};
-            const services = data.services || {};
-            
-            contentContainer.innerHTML = `
+  function renderSystemTab(data) {
+    const contentContainer = document.getElementById("statusContent");
+
+    const metrics = data.metrics || {};
+    const services = data.services || {};
+
+    contentContainer.innerHTML = `
                 <div class="page-section">
                     <div class="card">
                         <div class="card-header">
@@ -366,7 +368,7 @@
                                         <span>Uptime</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${data.uptime_formatted || 'N/A'}
+                                        ${data.uptime_formatted || "N/A"}
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -375,7 +377,12 @@
                                         <span>CPU (System)</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(metrics.cpu_system_percent || metrics.cpu_usage_percent || 0, 1)}<span class="status-metric-unit">%</span>
+                                        ${formatNumber(
+                                          metrics.cpu_system_percent ||
+                                            metrics.cpu_usage_percent ||
+                                            0,
+                                          1
+                                        )}<span class="status-metric-unit">%</span>
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -384,7 +391,10 @@
                                         <span>CPU (Process)</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(metrics.cpu_process_percent || 0, 1)}<span class="status-metric-unit">%</span>
+                                        ${formatNumber(
+                                          metrics.cpu_process_percent || 0,
+                                          1
+                                        )}<span class="status-metric-unit">%</span>
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -393,7 +403,12 @@
                                         <span>Memory (System)</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(metrics.system_memory_used_mb || metrics.memory_usage_mb || 0, 0)}<span class="status-metric-unit">MB</span>
+                                        ${formatNumber(
+                                          metrics.system_memory_used_mb ||
+                                            metrics.memory_usage_mb ||
+                                            0,
+                                          0
+                                        )}<span class="status-metric-unit">MB</span>
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -402,7 +417,10 @@
                                         <span>Memory (Process)</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(metrics.process_memory_mb || 0, 0)}<span class="status-metric-unit">MB</span>
+                                        ${formatNumber(
+                                          metrics.process_memory_mb || 0,
+                                          0
+                                        )}<span class="status-metric-unit">MB</span>
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -429,7 +447,10 @@
                                         <span>RPC Calls</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(metrics.rpc_calls_total || 0, 0)}
+                                        ${formatNumber(
+                                          metrics.rpc_calls_total || 0,
+                                          0
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -451,43 +472,47 @@
                     </div>
                 </div>
             `;
-        }
+  }
 
-        function renderServicesRows(services) {
-            const servicesList = [
-                { key: 'tokens_system', label: 'Tokens System' },
-                { key: 'positions_system', label: 'Positions System' },
-                { key: 'pool_service', label: 'Pool Service' },
-                { key: 'security_analyzer', label: 'Security Analyzer' },
-                { key: 'transactions_system', label: 'Transactions System' }
-            ];
+  function renderServicesRows(services) {
+    const servicesList = [
+      { key: "tokens_system", label: "Tokens System" },
+      { key: "positions_system", label: "Positions System" },
+      { key: "pool_service", label: "Pool Service" },
+      { key: "security_analyzer", label: "Security Analyzer" },
+      { key: "transactions_system", label: "Transactions System" },
+    ];
 
-            return servicesList.map(({key, label}) => {
-                const service = services[key] || {};
-                const ready = service.ready || false;
-                const lastCheck = service.last_check || 'N/A';
-                
-                return `
+    return servicesList
+      .map(({ key, label }) => {
+        const service = services[key] || {};
+        const ready = service.ready || false;
+        const lastCheck = service.last_check || "N/A";
+
+        return `
                     <tr>
                         <td><strong>${label}</strong></td>
                         <td>
-                            <span class="status-badge ${ready ? 'ready' : 'not-ready'}">
-                                ${ready ? '✅ Ready' : '⏳ Loading'}
+                            <span class="status-badge ${
+                              ready ? "ready" : "not-ready"
+                            }">
+                                ${ready ? "✅ Ready" : "⏳ Loading"}
                             </span>
                         </td>
                         <td>${formatTimestamp(lastCheck)}</td>
                     </tr>
                 `;
-            }).join('');
-        }
+      })
+      .join("");
+  }
 
-        function renderRPCTab(data) {
-            const contentContainer = document.getElementById('statusContent');
-            
-            const rpcStats = data.rpc_stats;
-            
-            if (!rpcStats) {
-                contentContainer.innerHTML = `
+  function renderRPCTab(data) {
+    const contentContainer = document.getElementById("statusContent");
+
+    const rpcStats = data.rpc_stats;
+
+    if (!rpcStats) {
+      contentContainer.innerHTML = `
                     <div class="page-section">
                         <div class="card">
                             <div class="card-header">
@@ -502,37 +527,52 @@
                         </div>
                     </div>
                 `;
-                return;
-            }
+      return;
+    }
 
-            // Calculate uptime formatted
-            const uptimeHours = Math.floor(rpcStats.uptime_seconds / 3600);
-            const uptimeMinutes = Math.floor((rpcStats.uptime_seconds % 3600) / 60);
-            const uptimeFormatted = uptimeHours > 0 
-                ? `${uptimeHours}h ${uptimeMinutes}m` 
-                : `${uptimeMinutes}m`;
+    // Calculate uptime formatted
+    const uptimeHours = Math.floor(rpcStats.uptime_seconds / 3600);
+    const uptimeMinutes = Math.floor((rpcStats.uptime_seconds % 3600) / 60);
+    const uptimeFormatted =
+      uptimeHours > 0
+        ? `${uptimeHours}h ${uptimeMinutes}m`
+        : `${uptimeMinutes}m`;
 
-            // Sort URLs by call count
-            const urlsArray = Object.entries(rpcStats.calls_per_url || {})
-                .map(([url, calls]) => ({
-                    url,
-                    calls,
-                    errors: (rpcStats.errors_per_url || {})[url] || 0,
-                    successRate: calls > 0 ? (((calls - ((rpcStats.errors_per_url || {})[url] || 0)) / calls) * 100).toFixed(2) : '100.00'
-                }))
-                .sort((a, b) => b.calls - a.calls);
+    // Sort URLs by call count
+    const urlsArray = Object.entries(rpcStats.calls_per_url || {})
+      .map(([url, calls]) => ({
+        url,
+        calls,
+        errors: (rpcStats.errors_per_url || {})[url] || 0,
+        successRate:
+          calls > 0
+            ? (
+                ((calls - ((rpcStats.errors_per_url || {})[url] || 0)) /
+                  calls) *
+                100
+              ).toFixed(2)
+            : "100.00",
+      }))
+      .sort((a, b) => b.calls - a.calls);
 
-            // Sort methods by call count
-            const methodsArray = Object.entries(rpcStats.calls_per_method || {})
-                .map(([method, calls]) => ({
-                    method,
-                    calls,
-                    errors: (rpcStats.errors_per_method || {})[method] || 0,
-                    successRate: calls > 0 ? (((calls - ((rpcStats.errors_per_method || {})[method] || 0)) / calls) * 100).toFixed(2) : '100.00'
-                }))
-                .sort((a, b) => b.calls - a.calls);
+    // Sort methods by call count
+    const methodsArray = Object.entries(rpcStats.calls_per_method || {})
+      .map(([method, calls]) => ({
+        method,
+        calls,
+        errors: (rpcStats.errors_per_method || {})[method] || 0,
+        successRate:
+          calls > 0
+            ? (
+                ((calls - ((rpcStats.errors_per_method || {})[method] || 0)) /
+                  calls) *
+                100
+              ).toFixed(2)
+            : "100.00",
+      }))
+      .sort((a, b) => b.calls - a.calls);
 
-            contentContainer.innerHTML = `
+    contentContainer.innerHTML = `
                 <div class="page-section">
                     <div class="card">
                         <div class="card-header">
@@ -556,7 +596,10 @@
                                         <span>Total Errors</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(rpcStats.total_errors, 0)}
+                                        ${formatNumber(
+                                          rpcStats.total_errors,
+                                          0
+                                        )}
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -565,7 +608,10 @@
                                         <span>Success Rate</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(rpcStats.success_rate, 2)}<span class="status-metric-unit">%</span>
+                                        ${formatNumber(
+                                          rpcStats.success_rate,
+                                          2
+                                        )}<span class="status-metric-unit">%</span>
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -574,7 +620,10 @@
                                         <span>Calls Per Second</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(rpcStats.calls_per_second, 2)}
+                                        ${formatNumber(
+                                          rpcStats.calls_per_second,
+                                          2
+                                        )}
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -583,7 +632,10 @@
                                         <span>Avg Response Time</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(rpcStats.average_response_time_ms, 1)}<span class="status-metric-unit">ms</span>
+                                        ${formatNumber(
+                                          rpcStats.average_response_time_ms,
+                                          1
+                                        )}<span class="status-metric-unit">ms</span>
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -608,24 +660,46 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    ${urlsArray.map(item => `
+                                    ${urlsArray
+                                      .map(
+                                        (item) => `
                                         <tr>
                                             <td>
                                                 <code style="font-size: 0.85em; word-break: break-all;">
-                                                    ${item.url.length > 60 ? item.url.slice(0, 57) + '...' : item.url}
+                                                    ${
+                                                      item.url.length > 60
+                                                        ? item.url.slice(
+                                                            0,
+                                                            57
+                                                          ) + "..."
+                                                        : item.url
+                                                    }
                                                 </code>
                                             </td>
-                                            <td style="text-align: right;"><strong>${formatNumber(item.calls, 0)}</strong></td>
-                                            <td style="text-align: right; color: ${item.errors > 0 ? '#ef4444' : 'inherit'};">
+                                            <td style="text-align: right;"><strong>${formatNumber(
+                                              item.calls,
+                                              0
+                                            )}</strong></td>
+                                            <td style="text-align: right; color: ${
+                                              item.errors > 0
+                                                ? "#ef4444"
+                                                : "inherit"
+                                            };">
                                                 ${formatNumber(item.errors, 0)}
                                             </td>
                                             <td style="text-align: right;">
-                                                <span class="status-badge ${item.successRate >= 99 ? 'ready' : 'not-ready'}">
+                                                <span class="status-badge ${
+                                                  item.successRate >= 99
+                                                    ? "ready"
+                                                    : "not-ready"
+                                                }">
                                                     ${item.successRate}%
                                                 </span>
                                             </td>
                                         </tr>
-                                    `).join('')}
+                                    `
+                                      )
+                                      .join("")}
                                 </tbody>
                             </table>
 
@@ -640,54 +714,76 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    ${methodsArray.slice(0, 15).map(item => `
+                                    ${methodsArray
+                                      .slice(0, 15)
+                                      .map(
+                                        (item) => `
                                         <tr>
-                                            <td><code style="font-size: 0.85em;">${item.method}</code></td>
-                                            <td style="text-align: right;"><strong>${formatNumber(item.calls, 0)}</strong></td>
-                                            <td style="text-align: right; color: ${item.errors > 0 ? '#ef4444' : 'inherit'};">
+                                            <td><code style="font-size: 0.85em;">${
+                                              item.method
+                                            }</code></td>
+                                            <td style="text-align: right;"><strong>${formatNumber(
+                                              item.calls,
+                                              0
+                                            )}</strong></td>
+                                            <td style="text-align: right; color: ${
+                                              item.errors > 0
+                                                ? "#ef4444"
+                                                : "inherit"
+                                            };">
                                                 ${formatNumber(item.errors, 0)}
                                             </td>
                                             <td style="text-align: right;">
-                                                <span class="status-badge ${item.successRate >= 99 ? 'ready' : 'not-ready'}">
+                                                <span class="status-badge ${
+                                                  item.successRate >= 99
+                                                    ? "ready"
+                                                    : "not-ready"
+                                                }">
                                                     ${item.successRate}%
                                                 </span>
                                             </td>
                                         </tr>
-                                    `).join('')}
-                                    ${methodsArray.length > 15 ? `
+                                    `
+                                      )
+                                      .join("")}
+                                    ${
+                                      methodsArray.length > 15
+                                        ? `
                                         <tr>
                                             <td colspan="4" style="text-align: center; color: var(--text-secondary); font-size: 0.9em; padding: 16px;">
                                                 Showing top 15 of ${methodsArray.length} methods
                                             </td>
                                         </tr>
-                                    ` : ''}
+                                    `
+                                        : ""
+                                    }
                                 </tbody>
                             </table>
                         </div>
                     </div>
                 </div>
             `;
-        }
+  }
 
-        async function renderWalletTab(data) {
-            const contentContainer = document.getElementById('statusContent');
-            
-            // Get SOL balance from status data
-            const solBalance = data.sol_balance || 0;
-            
-            // Fetch detailed wallet info
-            let walletData = null;
-            try {
-                const response = await fetch('/api/wallet/current');
-                walletData = await response.json();
-            } catch (error) {
-                console.error('[Status] Failed to fetch wallet data:', error);
-            }
+  async function renderWalletTab(data) {
+    const contentContainer = document.getElementById("statusContent");
 
-            const tokenCount = walletData ? walletData.total_tokens_count : 0;
-            const tokenBalances = walletData ? walletData.token_balances : [];
+    // Get SOL balance from status data
+    const solBalance = data.sol_balance || 0;
 
-            contentContainer.innerHTML = `
+    // Fetch detailed wallet info
+    let walletData = null;
+    try {
+      const response = await fetch("/api/wallet/current");
+      walletData = await response.json();
+    } catch (error) {
+      console.error("[Status] Failed to fetch wallet data:", error);
+    }
+
+    const tokenCount = walletData ? walletData.total_tokens_count : 0;
+    const tokenBalances = walletData ? walletData.token_balances : [];
+
+    contentContainer.innerHTML = `
                 <div class="page-section">
                     <div class="card">
                         <div class="card-header">
@@ -702,7 +798,10 @@
                                         <span>SOL Balance</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(solBalance, 4)}<span class="status-metric-unit">SOL</span>
+                                        ${formatNumber(
+                                          solBalance,
+                                          4
+                                        )}<span class="status-metric-unit">SOL</span>
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -716,7 +815,9 @@
                                 </div>
                             </div>
 
-                            ${tokenBalances.length > 0 ? `
+                            ${
+                              tokenBalances.length > 0
+                                ? `
                                 <h3 class="status-section-title">Token Balances</h3>
                                 <div class="status-wallet-tokens">
                                     <table class="status-services-table">
@@ -728,43 +829,61 @@
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            ${tokenBalances.map(token => `
+                                            ${tokenBalances
+                                              .map(
+                                                (token) => `
                                                 <tr>
-                                                    <td><code style="font-size: 0.85em;">${token.mint.slice(0, 8)}...${token.mint.slice(-6)}</code></td>
-                                                    <td><strong>${formatNumber(token.balance_ui, 6)}</strong></td>
-                                                    <td>${token.is_token_2022 ? 'Token-2022' : 'SPL Token'}</td>
+                                                    <td><code style="font-size: 0.85em;">${token.mint.slice(
+                                                      0,
+                                                      8
+                                                    )}...${token.mint.slice(
+                                                  -6
+                                                )}</code></td>
+                                                    <td><strong>${formatNumber(
+                                                      token.balance_ui,
+                                                      6
+                                                    )}</strong></td>
+                                                    <td>${
+                                                      token.is_token_2022
+                                                        ? "Token-2022"
+                                                        : "SPL Token"
+                                                    }</td>
                                                 </tr>
-                                            `).join('')}
+                                            `
+                                              )
+                                              .join("")}
                                         </tbody>
                                     </table>
                                 </div>
-                            ` : '<p style="text-align: center; color: var(--text-secondary); margin-top: 24px;">No token balances found</p>'}
+                            `
+                                : '<p style="text-align: center; color: var(--text-secondary); margin-top: 24px;">No token balances found</p>'
+                            }
                         </div>
                     </div>
                 </div>
             `;
-        }
+  }
 
-        async function renderTraderTab(data) {
-            const contentContainer = document.getElementById('statusContent');
-            
-            const tradingEnabled = data.trading_enabled || false;
-            const traderMode = data.trader_mode || 'unknown';
-            const openPositions = data.open_positions || 0;
-            
-            // Fetch detailed trader status
-            let traderStatus = null;
-            try {
-                const response = await fetch('/api/trader/status');
-                const result = await response.json();
-                traderStatus = result.data || result;
-            } catch (error) {
-                console.error('[Status] Failed to fetch trader status:', error);
-            }
+  async function renderTraderTab(data) {
+    const contentContainer = document.getElementById("statusContent");
 
-            const isRunning = traderStatus ? traderStatus.running : false;
+    const tradingEnabled = data.trading_enabled || false;
+    const traderMode = data.trader_mode || "unknown";
+    const openPositions = data.open_positions || 0;
 
-            contentContainer.innerHTML = `
+    // Fetch detailed trader status
+    let traderStatus = null;
+    try {
+      const response = await fetch("/api/trader/status");
+      const result = await response.json();
+      traderStatus = result.data || result;
+    } catch (error) {
+      console.error("[Status] Failed to fetch trader status:", error);
+    }
+
+    const isRunning = traderStatus ? traderStatus.running : false;
+
+    contentContainer.innerHTML = `
                 <div class="page-section">
                     <div class="card">
                         <div class="card-header">
@@ -779,8 +898,14 @@
                                         <span>Trading Status</span>
                                     </div>
                                     <div class="status-metric-value" style="font-size: 1.4em;">
-                                        <span class="status-badge ${tradingEnabled ? 'ready' : 'not-ready'}">
-                                            ${tradingEnabled ? '✅ Enabled' : '❌ Disabled'}
+                                        <span class="status-badge ${
+                                          tradingEnabled ? "ready" : "not-ready"
+                                        }">
+                                            ${
+                                              tradingEnabled
+                                                ? "✅ Enabled"
+                                                : "❌ Disabled"
+                                            }
                                         </span>
                                     </div>
                                 </div>
@@ -790,8 +915,10 @@
                                         <span>Running</span>
                                     </div>
                                     <div class="status-metric-value" style="font-size: 1.4em;">
-                                        <span class="status-badge ${isRunning ? 'ready' : 'not-ready'}">
-                                            ${isRunning ? '✅ Yes' : '❌ No'}
+                                        <span class="status-badge ${
+                                          isRunning ? "ready" : "not-ready"
+                                        }">
+                                            ${isRunning ? "✅ Yes" : "❌ No"}
                                         </span>
                                     </div>
                                 </div>
@@ -819,30 +946,36 @@
                             <div class="status-trader-info">
                                 <div class="status-trader-row">
                                     <span class="status-trader-label">Configuration Status</span>
-                                    <span class="status-trader-value">${tradingEnabled ? 'Enabled' : 'Disabled'}</span>
+                                    <span class="status-trader-value">${
+                                      tradingEnabled ? "Enabled" : "Disabled"
+                                    }</span>
                                 </div>
                                 <div class="status-trader-row">
                                     <span class="status-trader-label">Runtime Status</span>
-                                    <span class="status-trader-value">${isRunning ? 'Running' : 'Stopped'}</span>
+                                    <span class="status-trader-value">${
+                                      isRunning ? "Running" : "Stopped"
+                                    }</span>
                                 </div>
                                 <div class="status-trader-row">
                                     <span class="status-trader-label">Active Monitoring</span>
-                                    <span class="status-trader-value">${isRunning ? 'Active' : 'Inactive'}</span>
+                                    <span class="status-trader-value">${
+                                      isRunning ? "Active" : "Inactive"
+                                    }</span>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
             `;
-        }
+  }
 
-        function renderOHLCVSTab(data) {
-            const contentContainer = document.getElementById('statusContent');
-            
-            const ohlcvStats = data.ohlcv_stats;
-            
-            if (!ohlcvStats) {
-                contentContainer.innerHTML = `
+  function renderOHLCVSTab(data) {
+    const contentContainer = document.getElementById("statusContent");
+
+    const ohlcvStats = data.ohlcv_stats;
+
+    if (!ohlcvStats) {
+      contentContainer.innerHTML = `
                     <div class="page-section">
                         <div class="card">
                             <div class="card-header">
@@ -857,16 +990,16 @@
                         </div>
                     </div>
                 `;
-                return;
-            }
+      return;
+    }
 
-            const totalTokens = ohlcvStats.total_tokens || 0;
-            const critical = ohlcvStats.critical_tokens || 0;
-            const high = ohlcvStats.high_tokens || 0;
-            const medium = ohlcvStats.medium_tokens || 0;
-            const low = ohlcvStats.low_tokens || 0;
+    const totalTokens = ohlcvStats.total_tokens || 0;
+    const critical = ohlcvStats.critical_tokens || 0;
+    const high = ohlcvStats.high_tokens || 0;
+    const medium = ohlcvStats.medium_tokens || 0;
+    const low = ohlcvStats.low_tokens || 0;
 
-            contentContainer.innerHTML = `
+    contentContainer.innerHTML = `
                 <div class="page-section">
                     <div class="card">
                         <div class="card-header">
@@ -890,7 +1023,10 @@
                                         <span>Cache Hit Rate</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(ohlcvStats.cache_hit_rate || 0, 1)}<span class="status-metric-unit">%</span>
+                                        ${formatNumber(
+                                          ohlcvStats.cache_hit_rate || 0,
+                                          1
+                                        )}<span class="status-metric-unit">%</span>
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -899,7 +1035,10 @@
                                         <span>API Calls/Min</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(ohlcvStats.api_calls_per_minute || 0, 1)}
+                                        ${formatNumber(
+                                          ohlcvStats.api_calls_per_minute || 0,
+                                          1
+                                        )}
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -919,28 +1058,44 @@
                                     <div style="display: flex; align-items: center; gap: 12px;">
                                         <div style="min-width: 100px; font-weight: 500; color: var(--text-secondary);">Critical</div>
                                         <div style="flex: 1; height: 32px; background: var(--card-bg); border-radius: 8px; overflow: hidden; position: relative;">
-                                            <div style="height: 100%; background: linear-gradient(90deg, #ef4444, #dc2626); width: ${totalTokens > 0 ? (critical / totalTokens * 100) : 0}%; transition: width 0.3s;"></div>
+                                            <div style="height: 100%; background: linear-gradient(90deg, #ef4444, #dc2626); width: ${
+                                              totalTokens > 0
+                                                ? (critical / totalTokens) * 100
+                                                : 0
+                                            }%; transition: width 0.3s;"></div>
                                             <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-weight: 600; color: var(--text-primary);">${critical}</span>
                                         </div>
                                     </div>
                                     <div style="display: flex; align-items: center; gap: 12px;">
                                         <div style="min-width: 100px; font-weight: 500; color: var(--text-secondary);">High</div>
                                         <div style="flex: 1; height: 32px; background: var(--card-bg); border-radius: 8px; overflow: hidden; position: relative;">
-                                            <div style="height: 100%; background: linear-gradient(90deg, #f59e0b, #d97706); width: ${totalTokens > 0 ? (high / totalTokens * 100) : 0}%; transition: width 0.3s;"></div>
+                                            <div style="height: 100%; background: linear-gradient(90deg, #f59e0b, #d97706); width: ${
+                                              totalTokens > 0
+                                                ? (high / totalTokens) * 100
+                                                : 0
+                                            }%; transition: width 0.3s;"></div>
                                             <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-weight: 600; color: var(--text-primary);">${high}</span>
                                         </div>
                                     </div>
                                     <div style="display: flex; align-items: center; gap: 12px;">
                                         <div style="min-width: 100px; font-weight: 500; color: var(--text-secondary);">Medium</div>
                                         <div style="flex: 1; height: 32px; background: var(--card-bg); border-radius: 8px; overflow: hidden; position: relative;">
-                                            <div style="height: 100%; background: linear-gradient(90deg, #3b82f6, #2563eb); width: ${totalTokens > 0 ? (medium / totalTokens * 100) : 0}%; transition: width 0.3s;"></div>
+                                            <div style="height: 100%; background: linear-gradient(90deg, #3b82f6, #2563eb); width: ${
+                                              totalTokens > 0
+                                                ? (medium / totalTokens) * 100
+                                                : 0
+                                            }%; transition: width 0.3s;"></div>
                                             <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-weight: 600; color: var(--text-primary);">${medium}</span>
                                         </div>
                                     </div>
                                     <div style="display: flex; align-items: center; gap: 12px;">
                                         <div style="min-width: 100px; font-weight: 500; color: var(--text-secondary);">Low</div>
                                         <div style="flex: 1; height: 32px; background: var(--card-bg); border-radius: 8px; overflow: hidden; position: relative;">
-                                            <div style="height: 100%; background: linear-gradient(90deg, #6b7280, #4b5563); width: ${totalTokens > 0 ? (low / totalTokens * 100) : 0}%; transition: width 0.3s;"></div>
+                                            <div style="height: 100%; background: linear-gradient(90deg, #6b7280, #4b5563); width: ${
+                                              totalTokens > 0
+                                                ? (low / totalTokens) * 100
+                                                : 0
+                                            }%; transition: width 0.3s;"></div>
                                             <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-weight: 600; color: var(--text-primary);">${low}</span>
                                         </div>
                                     </div>
@@ -950,39 +1105,39 @@
                     </div>
                 </div>
             `;
-        }
+  }
 
-        function renderPlaceholderTab(view) {
-            const contentContainer = document.getElementById('statusContent');
-            
-            const viewTitles = {
-                rpc: 'RPC Statistics',
-                transactions: 'Transaction Processing',
-                positions: 'Position Management',
-                pools: 'Pool Service',
-                discovery: 'Token Discovery',
-                events: 'Event System',
-                sol_price: 'SOL Price Tracking',
-                webserver: 'Webserver Metrics',
-                rl_learner: 'Reinforcement Learning'
-            };
+  function renderPlaceholderTab(view) {
+    const contentContainer = document.getElementById("statusContent");
 
-            const viewIcons = {
-                rpc: '📡',
-                transactions: '💱',
-                positions: '💰',
-                pools: '🏊',
-                discovery: '🔍',
-                events: '📡',
-                sol_price: '💵',
-                webserver: '🌐',
-                rl_learner: '🧠'
-            };
+    const viewTitles = {
+      rpc: "RPC Statistics",
+      transactions: "Transaction Processing",
+      positions: "Position Management",
+      pools: "Pool Service",
+      discovery: "Token Discovery",
+      events: "Event System",
+      sol_price: "SOL Price Tracking",
+      webserver: "Webserver Metrics",
+      rl_learner: "Reinforcement Learning",
+    };
 
-            const icon = viewIcons[view] || '📊';
-            const title = viewTitles[view] || 'Status';
+    const viewIcons = {
+      rpc: "📡",
+      transactions: "💱",
+      positions: "💰",
+      pools: "🏊",
+      discovery: "🔍",
+      events: "📡",
+      sol_price: "💵",
+      webserver: "🌐",
+      rl_learner: "🧠",
+    };
 
-            contentContainer.innerHTML = `
+    const icon = viewIcons[view] || "📊";
+    const title = viewTitles[view] || "Status";
+
+    contentContainer.innerHTML = `
                 <div class="page-section">
                     <div class="card">
                         <div class="card-header">
@@ -997,13 +1152,13 @@
                     </div>
                 </div>
             `;
-        }
+  }
 
-        function showStatusError(message) {
-            const contentContainer = document.getElementById('statusContent');
-            if (!contentContainer) return;
+  function showStatusError(message) {
+    const contentContainer = document.getElementById("statusContent");
+    if (!contentContainer) return;
 
-            contentContainer.innerHTML = `
+    contentContainer.innerHTML = `
                 <div class="page-section">
                     <div class="card">
                         <div class="card-body" style="text-align: center; padding: 60px 20px;">
@@ -1014,44 +1169,73 @@
                     </div>
                 </div>
             `;
-        }
+  }
 
-        // Utility functions
-        function formatNumber(value, decimals = 2) {
-            if (value === null || value === undefined) return 'N/A';
-            const num = parseFloat(value);
-            if (isNaN(num)) return 'N/A';
-            return num.toLocaleString('en-US', {
-                minimumFractionDigits: decimals,
-                maximumFractionDigits: decimals
-            });
-        }
+  // Utility functions
+  function formatNumber(value, decimals = 2) {
+    if (value === null || value === undefined) return "N/A";
+    const num = parseFloat(value);
+    if (isNaN(num)) return "N/A";
+    return num.toLocaleString("en-US", {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    });
+  }
 
-        function formatTimestamp(timestamp) {
-            if (!timestamp || timestamp === 'N/A') return 'N/A';
-            try {
-                const date = new Date(timestamp);
-                return date.toLocaleString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit'
-                });
-            } catch (error) {
-                return 'N/A';
-            }
-        }
+  function formatTimestamp(timestamp) {
+    if (!timestamp || timestamp === "N/A") return "N/A";
+    try {
+      const date = new Date(timestamp);
+      return date.toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+    } catch (error) {
+      return "N/A";
+    }
+  }
 
-        // Execute initialization immediately (works for both initial load and SPA navigation)
-        initStatusPage();
-    </script>
+  window.PageRealtime = window.PageRealtime || {};
+  window.PageRealtime.status = {
+    channels: {
+      status: handleStatusUpdate,
+      _connected: () => {
+        console.log("[Status] WebSocket connected – refreshing snapshot");
+        loadInitialStatusData();
+      },
+      _disconnected: () => {
+        console.warn(
+          "[Status] WebSocket disconnected – continuing HTTP polling"
+        );
+      },
+      _failed: () => {
+        console.warn("[Status] WebSocket error – continuing HTTP polling");
+      },
+    },
+    onUnavailable() {
+      console.warn(
+        "[Status] WebSocket unavailable – falling back to HTTP polling"
+      );
+    },
+  };
 
-    <div id="statusContent">
-        <div class="page-section">
-            <div style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
-                <div class="loading-text">Loading status...</div>
-            </div>
-        </div>
+  // Execute initialization immediately (works for both initial load and SPA navigation)
+  initStatusPage();
+</script>
+
+<div id="statusContent">
+  <div class="page-section">
+    <div
+      style="
+        text-align: center;
+        padding: 60px 20px;
+        color: var(--text-secondary);
+      "
+    >
+      <div class="loading-text">Loading status...</div>
     </div>
-    
+  </div>
+</div>
