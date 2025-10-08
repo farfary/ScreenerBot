@@ -463,7 +463,7 @@
             1
           )}%`;
           document.getElementById("processMemory").textContent =
-            this.formatBytes(m0.process_memory_bytes || 0);
+            Utils.formatBytes(m0.process_memory_bytes || 0);
         }
 
         const tbody = document.getElementById("servicesTableBody");
@@ -496,7 +496,7 @@
                 : activity > 5
                 ? "#6b7280"
                 : "#9ca3af";
-            const avgPoll = this.formatDuration(m.mean_poll_duration_ns || 0);
+            const avgPoll = Utils.formatDuration(m.mean_poll_duration_ns || 0);
             const pps =
               service.uptime_seconds > 0
                 ? ((m.total_polls || 0) / service.uptime_seconds).toFixed(2)
@@ -504,9 +504,9 @@
 
             const taskInfo =
               m.task_count > 0
-                ? `${m.task_count} tasks\nPoll: ${this.formatDuration(
+                ? `${m.task_count} tasks\nPoll: ${Utils.formatDuration(
                     m.mean_poll_duration_ns
-                  )}\nIdle: ${this.formatDuration(
+                  )}\nIdle: ${Utils.formatDuration(
                     m.mean_idle_duration_ns
                   )}\nTotal Polls: ${m.total_polls || 0}`
                 : "No instrumented tasks";
@@ -523,8 +523,9 @@
             )}</span></td>
                                 <td>${service.priority}</td>
                                 <td>${service.enabled ? "✅" : "❌"}</td>
-                                <td>${this.formatUptime(
-                                  service.uptime_seconds
+                                <td>${Utils.formatUptime(
+                                  service.uptime_seconds,
+                                  { style: "compact" }
                                 )}</td>
                                 <td class="activity-cell" title="${activity.toFixed(
                                   1
@@ -635,18 +636,6 @@
         if (health?.status === "degraded") return "warning";
         if (health?.status === "unhealthy") return "error";
         return "secondary";
-      },
-
-      formatUptime: function (seconds) {
-        return Utils.formatUptime(seconds, { style: "compact" });
-      },
-
-      formatBytes: function (bytes) {
-        return Utils.formatBytes(bytes);
-      },
-
-      formatDuration: function (nanos) {
-        return Utils.formatDuration(nanos);
       },
 
       initialize: function () {

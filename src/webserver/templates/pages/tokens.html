@@ -740,18 +740,24 @@
 
   function createTokenRowHtml(token) {
     const mint = token.mint;
-    const symbol = escapeHtml(token.symbol || "");
-    const name = token.name ? escapeHtml(token.name) : "";
+    const symbol = Utils.escapeHtml(token.symbol || "");
+    const name = token.name ? Utils.escapeHtml(token.name) : "";
     const timeAgo = token.price_updated_at
-      ? formatTimeAgo(token.price_updated_at)
+      ? Utils.formatTimeAgo(token.price_updated_at, { fallback: "-" })
       : "N/A";
     const priceDisplay = formatPriceSol(token.price_sol);
     const liquidity = formatCurrencyUSD(token.liquidity_usd);
     const vol24h = formatCurrencyUSD(token.volume_24h);
     const fdv = formatCurrencyUSD(token.fdv);
     const marketCap = formatCurrencyUSD(token.market_cap);
-    const ch1h = formatPercent(token.price_change_h1);
-    const ch24h = formatPercent(token.price_change_h24);
+    const ch1h = Utils.formatPercent(token.price_change_h1, {
+      style: "token",
+      fallback: "—",
+    });
+    const ch24h = Utils.formatPercent(token.price_change_h24, {
+      style: "token",
+      fallback: "—",
+    });
     const security = renderSecurity(token.security_score, token.rugged);
     const status = renderStatusBadges(token);
     const logo = safeLogoHtml(token.logo_url, token.symbol);
@@ -942,10 +948,6 @@
     return Utils.formatPercentValue(value, { fallback: "—" });
   }
 
-  function formatPercent(value) {
-    return Utils.formatPercent(value, { style: "token", fallback: "—" });
-  }
-
   function renderSecurity(score, rugged) {
     if (rugged === true) {
       return `<span class="badge" style="background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;">RUG</span>`;
@@ -978,14 +980,6 @@
         '<span class="badge" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;">BL</span>'
       );
     return badges.join(" ");
-  }
-
-  function formatTimeAgo(timestamp) {
-    return Utils.formatTimeAgo(timestamp, { fallback: "-" });
-  }
-
-  function escapeHtml(text) {
-    return Utils.escapeHtml(text);
   }
 
   function openTokenDetail(mint) {
@@ -1553,7 +1547,9 @@
         }
 
         if (timeCell && updatedTimestamp !== null) {
-          timeCell.textContent = formatTimeAgo(updatedTimestamp);
+          timeCell.textContent = Utils.formatTimeAgo(updatedTimestamp, {
+            fallback: "-",
+          });
         }
       }
     }

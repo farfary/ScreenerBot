@@ -114,40 +114,6 @@
   var positionsFallbackInterval = null;
   var positionsRequestController = null;
 
-  // Format number with decimals
-  function formatNumber(num, decimals = 2) {
-    return Utils.formatNumber(num, decimals, {
-      fallback: "-",
-      useGrouping: false,
-    });
-  }
-
-  // Format SOL amount
-  function formatSOL(amount) {
-    return Utils.formatSol(amount, { decimals: 4, fallback: "-" });
-  }
-
-  // Format percentage
-  function formatPercent(percent) {
-    return Utils.formatPercent(percent, {
-      style: "pnl",
-      decimals: 2,
-      fallback: "-",
-    });
-  }
-
-  // Format P&L with color
-  function formatPnL(pnl) {
-    return Utils.formatPnL(pnl, { decimals: 4, fallback: "-" });
-  }
-
-  // Format timestamp
-  function formatTime(timestamp) {
-    return Utils.formatTimeFromSeconds(timestamp, {
-      fallback: "-",
-    });
-  }
-
   // Truncate address
   function truncateAddress(address) {
     if (!address) return "-";
@@ -251,10 +217,16 @@
 
     const currentOrExitPrice = isOpen
       ? pos.current_price
-        ? formatNumber(pos.current_price, 8)
+        ? Utils.formatNumber(pos.current_price, 8, {
+            fallback: "-",
+            useGrouping: false,
+          })
         : "-"
       : pos.effective_exit_price || pos.exit_price
-      ? formatNumber(pos.effective_exit_price || pos.exit_price, 8)
+      ? Utils.formatNumber(pos.effective_exit_price || pos.exit_price, 8, {
+          fallback: "-",
+          useGrouping: false,
+        })
       : "-";
 
     const pnl = isOpen ? pos.unrealized_pnl : pos.pnl;
@@ -265,16 +237,28 @@
                     <td>${statusBadge}</td>
                     <td><strong>${pos.symbol}</strong></td>
                     <td style="font-size: 0.85em;">${pos.name}</td>
-                    <td>${formatNumber(
+                    <td>${Utils.formatNumber(
                       pos.effective_entry_price || pos.entry_price,
-                      8
+                      8,
+                      { fallback: "-", useGrouping: false }
                     )}</td>
                     <td>${currentOrExitPrice}</td>
-                    <td>${formatSOL(pos.entry_size_sol)}</td>
-                    <td>${formatPnL(pnl)}</td>
-                    <td>${formatPercent(pnlPercent)}</td>
-                    <td style="font-size: 0.85em;">${formatTime(
-                      pos.entry_time
+                    <td>${Utils.formatSol(pos.entry_size_sol, {
+                      decimals: 4,
+                      fallback: "-",
+                    })}</td>
+                    <td>${Utils.formatPnL(pnl, {
+                      decimals: 4,
+                      fallback: "-",
+                    })}</td>
+                    <td>${Utils.formatPercent(pnlPercent, {
+                      style: "pnl",
+                      decimals: 2,
+                      fallback: "-",
+                    })}</td>
+                    <td style="font-size: 0.85em;">${Utils.formatTimeFromSeconds(
+                      pos.entry_time,
+                      { fallback: "-" }
                     )}</td>
                     <td>
                         <div class="dropdown-container">

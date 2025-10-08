@@ -377,11 +377,12 @@
                                         <span>CPU (System)</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(
+                                        ${Utils.formatNumber(
                                           metrics.cpu_system_percent ||
                                             metrics.cpu_usage_percent ||
                                             0,
-                                          1
+                                          1,
+                                          { fallback: "N/A" }
                                         )}<span class="status-metric-unit">%</span>
                                     </div>
                                 </div>
@@ -391,9 +392,10 @@
                                         <span>CPU (Process)</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(
+                                        ${Utils.formatNumber(
                                           metrics.cpu_process_percent || 0,
-                                          1
+                                          1,
+                                          { fallback: "N/A" }
                                         )}<span class="status-metric-unit">%</span>
                                     </div>
                                 </div>
@@ -403,11 +405,12 @@
                                         <span>Memory (System)</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(
+                                        ${Utils.formatNumber(
                                           metrics.system_memory_used_mb ||
                                             metrics.memory_usage_mb ||
                                             0,
-                                          0
+                                          0,
+                                          { fallback: "N/A" }
                                         )}<span class="status-metric-unit">MB</span>
                                     </div>
                                 </div>
@@ -417,9 +420,10 @@
                                         <span>Memory (Process)</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(
+                                        ${Utils.formatNumber(
                                           metrics.process_memory_mb || 0,
-                                          0
+                                          0,
+                                          { fallback: "N/A" }
                                         )}<span class="status-metric-unit">MB</span>
                                     </div>
                                 </div>
@@ -447,9 +451,10 @@
                                         <span>RPC Calls</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(
+                                        ${Utils.formatNumber(
                                           metrics.rpc_calls_total || 0,
-                                          0
+                                          0,
+                                          { fallback: "N/A" }
                                         )}
                                     </div>
                                 </div>
@@ -499,7 +504,9 @@
                                 ${ready ? "✅ Ready" : "⏳ Loading"}
                             </span>
                         </td>
-                        <td>${formatTimestamp(lastCheck)}</td>
+                        <td>${Utils.formatTimestamp(lastCheck, {
+                          fallback: "N/A",
+                        })}</td>
                     </tr>
                 `;
       })
@@ -587,7 +594,11 @@
                                         <span>Total Calls</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(rpcStats.total_calls, 0)}
+                                        ${Utils.formatNumber(
+                                          rpcStats.total_calls,
+                                          0,
+                                          { fallback: "N/A" }
+                                        )}
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -596,9 +607,10 @@
                                         <span>Total Errors</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(
+                                        ${Utils.formatNumber(
                                           rpcStats.total_errors,
-                                          0
+                                          0,
+                                          { fallback: "N/A" }
                                         )}
                                     </div>
                                 </div>
@@ -608,9 +620,10 @@
                                         <span>Success Rate</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(
+                                        ${Utils.formatNumber(
                                           rpcStats.success_rate,
-                                          2
+                                          2,
+                                          { fallback: "N/A" }
                                         )}<span class="status-metric-unit">%</span>
                                     </div>
                                 </div>
@@ -620,9 +633,10 @@
                                         <span>Calls Per Second</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(
+                                        ${Utils.formatNumber(
                                           rpcStats.calls_per_second,
-                                          2
+                                          2,
+                                          { fallback: "N/A" }
                                         )}
                                     </div>
                                 </div>
@@ -632,9 +646,10 @@
                                         <span>Avg Response Time</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(
+                                        ${Utils.formatNumber(
                                           rpcStats.average_response_time_ms,
-                                          1
+                                          1,
+                                          { fallback: "N/A" }
                                         )}<span class="status-metric-unit">ms</span>
                                     </div>
                                 </div>
@@ -676,16 +691,21 @@
                                                     }
                                                 </code>
                                             </td>
-                                            <td style="text-align: right;"><strong>${formatNumber(
+                                            <td style="text-align: right;"><strong>${Utils.formatNumber(
                                               item.calls,
-                                              0
+                                              0,
+                                              { fallback: "N/A" }
                                             )}</strong></td>
                                             <td style="text-align: right; color: ${
                                               item.errors > 0
                                                 ? "#ef4444"
                                                 : "inherit"
                                             };">
-                                                ${formatNumber(item.errors, 0)}
+                                                ${Utils.formatNumber(
+                                                  item.errors,
+                                                  0,
+                                                  { fallback: "N/A" }
+                                                )}
                                             </td>
                                             <td style="text-align: right;">
                                                 <span class="status-badge ${
@@ -722,16 +742,21 @@
                                             <td><code style="font-size: 0.85em;">${
                                               item.method
                                             }</code></td>
-                                            <td style="text-align: right;"><strong>${formatNumber(
+                                            <td style="text-align: right;"><strong>${Utils.formatNumber(
                                               item.calls,
-                                              0
+                                              0,
+                                              { fallback: "N/A" }
                                             )}</strong></td>
                                             <td style="text-align: right; color: ${
                                               item.errors > 0
                                                 ? "#ef4444"
                                                 : "inherit"
                                             };">
-                                                ${formatNumber(item.errors, 0)}
+                                                ${Utils.formatNumber(
+                                                  item.errors,
+                                                  0,
+                                                  { fallback: "N/A" }
+                                                )}
                                             </td>
                                             <td style="text-align: right;">
                                                 <span class="status-badge ${
@@ -798,10 +823,9 @@
                                         <span>SOL Balance</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(
-                                          solBalance,
-                                          4
-                                        )}<span class="status-metric-unit">SOL</span>
+                                        ${Utils.formatNumber(solBalance, 4, {
+                                          fallback: "N/A",
+                                        })}<span class="status-metric-unit">SOL</span>
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -839,9 +863,10 @@
                                                     )}...${token.mint.slice(
                                                   -6
                                                 )}</code></td>
-                                                    <td><strong>${formatNumber(
+                                                    <td><strong>${Utils.formatNumber(
                                                       token.balance_ui,
-                                                      6
+                                                      6,
+                                                      { fallback: "N/A" }
                                                     )}</strong></td>
                                                     <td>${
                                                       token.is_token_2022
@@ -1023,9 +1048,10 @@
                                         <span>Cache Hit Rate</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(
+                                        ${Utils.formatNumber(
                                           ohlcvStats.cache_hit_rate || 0,
-                                          1
+                                          1,
+                                          { fallback: "N/A" }
                                         )}<span class="status-metric-unit">%</span>
                                     </div>
                                 </div>
@@ -1035,9 +1061,10 @@
                                         <span>API Calls/Min</span>
                                     </div>
                                     <div class="status-metric-value">
-                                        ${formatNumber(
+                                        ${Utils.formatNumber(
                                           ohlcvStats.api_calls_per_minute || 0,
-                                          1
+                                          1,
+                                          { fallback: "N/A" }
                                         )}
                                     </div>
                                 </div>
@@ -1169,15 +1196,6 @@
                     </div>
                 </div>
             `;
-  }
-
-  // Utility functions
-  function formatNumber(value, decimals = 2) {
-    return Utils.formatNumber(value, decimals, { fallback: "N/A" });
-  }
-
-  function formatTimestamp(timestamp) {
-    return Utils.formatTimestamp(timestamp, { fallback: "N/A" });
   }
 
   window.PageRealtime = window.PageRealtime || {};

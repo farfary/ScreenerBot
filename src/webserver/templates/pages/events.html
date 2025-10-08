@@ -25,7 +25,9 @@
         color: var(--text-primary);
       "
     >
-      <option value="">All Categories</option>
+      <option value="  }
+
+  // Silent refresh every secondies</option>
       <option value="swap">Swap</option>
       <option value="transaction">Transaction</option>
       <option value="pool">Pool</option>
@@ -514,21 +516,21 @@ Loading...</pre
 
     tbody.innerHTML = filtered
       .map((event) => {
-        const time = formatTimeAgo(new Date(event.event_time));
+        const time = Utils.formatTimeAgo(new Date(event.event_time), { fallback: "-" });
         const severityColor = getSeverityColor(event.severity);
         let referenceCell = "-";
         if (event.reference_id) {
-          const snippet = escapeHtml(
+          const snippet = Utils.escapeHtml(
             formatReferenceSnippet(event.reference_id)
           );
-          const full = escapeHtml(event.reference_id);
+          const full = Utils.escapeHtml(event.reference_id);
           const encoded = encodeURIComponent(event.reference_id);
           referenceCell = `
                         <span class="event-ref" title="${full}">${snippet}</span>
                         <button class="event-ref-copy" type="button" data-ref="${encoded}" title="Copy reference">📋</button>
                     `;
         }
-        const messageText = escapeHtml(event.message);
+        const messageText = Utils.escapeHtml(event.message);
         const detailButton = `<button class="event-detail-btn" type="button" data-event-id="${event.id}" title="View full event">Details</button>`;
 
         return `
