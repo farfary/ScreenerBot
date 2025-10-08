@@ -1,5 +1,4 @@
 /// Tokens topic messages - Placeholder
-
 use crate::webserver::ws::message::{Topic, WsEnvelope};
 
 /// Convert token update to envelope (stub)

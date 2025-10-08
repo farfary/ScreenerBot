@@ -1,5 +1,4 @@
 /// Prices topic messages
-
 use crate::pools::PriceUpdate;
 use crate::webserver::ws::message::{Topic, WsEnvelope};
 

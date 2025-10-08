@@ -1,5 +1,4 @@
 /// OHLCV topic messages - Placeholder
-
 use crate::webserver::ws::message::{Topic, WsEnvelope};
 
 /// Convert OHLCV update to envelope (stub)

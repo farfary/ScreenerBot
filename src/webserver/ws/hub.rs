@@ -7,7 +7,6 @@
 /// - Broadcast routing to all active connections
 /// - Filter application (future enhancement)
 /// - Hub-level metrics
-
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -39,16 +38,16 @@ pub type ConnectionSender = mpsc::Sender<WsEnvelope>;
 pub struct WsHub {
     /// Per-topic sequence counters
     sequences: RwLock<HashMap<String, AtomicU64>>,
-    
+
     /// Active connections (connection_id → sender)
     connections: RwLock<HashMap<ConnectionId, ConnectionSender>>,
-    
+
     /// Next connection ID
     next_conn_id: AtomicU64,
-    
+
     /// Hub metrics
     metrics: Arc<HubMetrics>,
-    
+
     /// Per-client buffer size (from config)
     buffer_size: usize,
 }
@@ -64,7 +63,7 @@ impl WsHub {
             buffer_size,
         })
     }
-    
+
     /// Get next sequence number for a topic
     pub fn next_seq(&self, topic: &str) -> u64 {
         // This is a simplified sync access for now
@@ -79,15 +78,15 @@ impl WsHub {
             0
         }
     }
-    
+
     /// Register a new connection
     pub async fn register_connection(&self) -> (ConnectionId, mpsc::Receiver<WsEnvelope>) {
         let conn_id = self.next_conn_id.fetch_add(1, Ordering::SeqCst);
         let (tx, rx) = mpsc::channel(self.buffer_size);
-        
+
         self.connections.write().await.insert(conn_id, tx);
         self.metrics.connection_opened();
-        
+
         if is_debug_webserver_enabled() {
             log(
                 LogTag::Webserver,
@@ -99,15 +98,15 @@ impl WsHub {
                 ),
             );
         }
-        
+
         (conn_id, rx)
     }
-    
+
     /// Unregister a connection
     pub async fn unregister_connection(&self, conn_id: ConnectionId) {
         self.connections.write().await.remove(&conn_id);
         self.metrics.connection_closed();
-        
+
         if is_debug_webserver_enabled() {
             log(
                 LogTag::Webserver,
@@ -120,19 +119,19 @@ impl WsHub {
             );
         }
     }
-    
+
     /// Broadcast message to all connections
     pub async fn broadcast(&self, envelope: WsEnvelope) {
         let connections = self.connections.read().await;
         let conn_count = connections.len();
-        
+
         if conn_count == 0 {
             return;
         }
-        
+
         let mut sent = 0;
         let mut dropped = 0;
-        
+
         for (conn_id, sender) in connections.iter() {
             match sender.try_send(envelope.clone()) {
                 Ok(_) => {
@@ -159,7 +158,7 @@ impl WsHub {
                 }
             }
         }
-        
+
         if is_debug_webserver_enabled() && (sent > 0 || dropped > 0) {
             log(
                 LogTag::Webserver,
@@ -171,12 +170,12 @@ impl WsHub {
             );
         }
     }
-    
+
     /// Get hub metrics
     pub fn metrics(&self) -> Arc<HubMetrics> {
         self.metrics.clone()
     }
-    
+
     /// Get active connection count
     pub async fn active_connections(&self) -> usize {
         self.connections.read().await.len()
@@ -191,13 +190,13 @@ mod tests {
     #[tokio::test]
     async fn test_hub_registration() {
         let hub = WsHub::new(10);
-        
+
         let (conn_id1, _rx1) = hub.register_connection().await;
         let (conn_id2, _rx2) = hub.register_connection().await;
-        
+
         assert_eq!(hub.active_connections().await, 2);
         assert_ne!(conn_id1, conn_id2);
-        
+
         hub.unregister_connection(conn_id1).await;
         assert_eq!(hub.active_connections().await, 1);
     }
@@ -205,17 +204,13 @@ mod tests {
     #[tokio::test]
     async fn test_hub_broadcast() {
         let hub = WsHub::new(10);
-        
+
         let (_conn_id, mut rx) = hub.register_connection().await;
-        
-        let envelope = WsEnvelope::new(
-            Topic::EventsNew,
-            1,
-            serde_json::json!({"test": "data"}),
-        );
-        
+
+        let envelope = WsEnvelope::new(Topic::EventsNew, 1, serde_json::json!({"test": "data"}));
+
         hub.broadcast(envelope.clone()).await;
-        
+
         let received = rx.recv().await.unwrap();
         assert_eq!(received.t, "events.new");
         assert_eq!(received.seq, 1);
@@ -224,11 +219,11 @@ mod tests {
     #[test]
     fn test_sequence_counter() {
         let hub = WsHub::new(10);
-        
+
         let seq1 = hub.next_seq("test.topic");
         let seq2 = hub.next_seq("test.topic");
         let seq3 = hub.next_seq("other.topic");
-        
+
         assert_eq!(seq1, 0);
         assert_eq!(seq2, 1);
         assert_eq!(seq3, 0); // Different topic, separate counter

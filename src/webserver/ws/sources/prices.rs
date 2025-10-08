@@ -15,7 +15,11 @@ pub fn start(hub: Arc<WsHub>) {
             log(LogTag::Webserver, "INFO", "ws.sources.prices started");
         }
     } else if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "WARN", "ws.sources.prices: subscribe_prices() returned None");
+        log(
+            LogTag::Webserver,
+            "WARN",
+            "ws.sources.prices: subscribe_prices() returned None",
+        );
     }
 }
 
@@ -23,7 +27,8 @@ async fn run(hub: Arc<WsHub>, mut rx: broadcast::Receiver<pools::PriceUpdate>) {
     loop {
         match rx.recv().await {
             Ok(update) => {
-                let envelope = topics::prices::price_to_envelope(&update, hub.next_seq("prices.update"));
+                let envelope =
+                    topics::prices::price_to_envelope(&update, hub.next_seq("prices.update"));
                 hub.broadcast(envelope).await;
             }
             Err(broadcast::error::RecvError::Lagged(skipped)) => {
@@ -34,7 +39,11 @@ async fn run(hub: Arc<WsHub>, mut rx: broadcast::Receiver<pools::PriceUpdate>) {
                 );
             }
             Err(broadcast::error::RecvError::Closed) => {
-                log(LogTag::Webserver, "WARN", "ws.sources.prices closed, exiting");
+                log(
+                    LogTag::Webserver,
+                    "WARN",
+                    "ws.sources.prices closed, exiting",
+                );
                 break;
             }
         }

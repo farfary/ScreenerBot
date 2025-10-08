@@ -1,5 +1,4 @@
 /// Security alerts topic messages - Placeholder
-
 use crate::webserver::ws::message::{Topic, WsEnvelope};
 
 /// Convert security alert to envelope (stub)

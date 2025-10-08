@@ -38,16 +38,12 @@ pub async fn start_server(config: WebserverConfig) -> Result<(), String> {
 
     // Initialize WebSocket hub
     if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "INFO",
-            "Initializing WebSocket hub...",
-        );
+        log(LogTag::Webserver, "INFO", "Initializing WebSocket hub...");
     }
 
     let buffer_size = config.websocket.per_client_buffer;
     let ws_hub = crate::webserver::ws::WsHub::new(buffer_size);
-    
+
     if is_debug_webserver_enabled() {
         log(
             LogTag::Webserver,
@@ -59,7 +55,7 @@ pub async fn start_server(config: WebserverConfig) -> Result<(), String> {
     // Initialize broadcast systems that still use broadcasts
     crate::positions::initialize_positions_broadcaster();
     crate::pools::initialize_prices_broadcaster();
-    
+
     if is_debug_webserver_enabled() {
         log(
             LogTag::Webserver,

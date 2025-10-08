@@ -15,7 +15,11 @@ pub fn start(hub: Arc<WsHub>) {
             log(LogTag::Webserver, "INFO", "ws.sources.positions started");
         }
     } else if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "WARN", "ws.sources.positions: subscribe_positions() returned None");
+        log(
+            LogTag::Webserver,
+            "WARN",
+            "ws.sources.positions: subscribe_positions() returned None",
+        );
     }
 }
 
@@ -23,7 +27,10 @@ async fn run(hub: Arc<WsHub>, mut rx: broadcast::Receiver<positions::PositionUpd
     loop {
         match rx.recv().await {
             Ok(update) => {
-                let envelope = topics::positions::position_to_envelope(&update, hub.next_seq("positions.update"));
+                let envelope = topics::positions::position_to_envelope(
+                    &update,
+                    hub.next_seq("positions.update"),
+                );
                 hub.broadcast(envelope).await;
             }
             Err(broadcast::error::RecvError::Lagged(skipped)) => {
@@ -34,7 +41,11 @@ async fn run(hub: Arc<WsHub>, mut rx: broadcast::Receiver<positions::PositionUpd
                 );
             }
             Err(broadcast::error::RecvError::Closed) => {
-                log(LogTag::Webserver, "WARN", "ws.sources.positions closed, exiting");
+                log(
+                    LogTag::Webserver,
+                    "WARN",
+                    "ws.sources.positions closed, exiting",
+                );
                 break;
             }
         }

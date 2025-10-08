@@ -1,10 +1,9 @@
+use serde::Serialize;
 /// WebSocket metrics collection
 ///
 /// Per-connection statistics for monitoring and debugging.
-
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
-use serde::Serialize;
 
 // ============================================================================
 // CONNECTION METRICS
@@ -15,19 +14,19 @@ use serde::Serialize;
 pub struct ConnectionMetrics {
     /// Total messages sent
     messages_sent: AtomicU64,
-    
+
     /// Total messages dropped (backpressure)
     messages_dropped: AtomicU64,
-    
+
     /// Total lag events (receiver lagged)
     lag_events: AtomicU64,
-    
+
     /// Current queue size
     queue_size: AtomicUsize,
-    
+
     /// Peak queue size
     peak_queue_size: AtomicUsize,
-    
+
     /// Total backpressure warnings sent
     backpressure_warnings: AtomicU64,
 }
@@ -44,38 +43,38 @@ impl ConnectionMetrics {
             backpressure_warnings: AtomicU64::new(0),
         })
     }
-    
+
     /// Increment messages sent
     pub fn inc_sent(&self) {
         self.messages_sent.fetch_add(1, Ordering::Relaxed);
     }
-    
+
     /// Increment messages dropped
     pub fn inc_dropped(&self, count: u64) {
         self.messages_dropped.fetch_add(count, Ordering::Relaxed);
     }
-    
+
     /// Increment lag events
     pub fn inc_lag(&self) {
         self.lag_events.fetch_add(1, Ordering::Relaxed);
     }
-    
+
     /// Update queue size
     pub fn set_queue_size(&self, size: usize) {
         self.queue_size.store(size, Ordering::Relaxed);
-        
+
         // Update peak if needed
         let current_peak = self.peak_queue_size.load(Ordering::Relaxed);
         if size > current_peak {
             self.peak_queue_size.store(size, Ordering::Relaxed);
         }
     }
-    
+
     /// Increment backpressure warnings
     pub fn inc_backpressure_warnings(&self) {
         self.backpressure_warnings.fetch_add(1, Ordering::Relaxed);
     }
-    
+
     /// Get snapshot for API
     pub fn snapshot(&self) -> ConnectionMetricsSnapshot {
         ConnectionMetricsSnapshot {
@@ -122,13 +121,13 @@ pub struct ConnectionMetricsSnapshot {
 pub struct HubMetrics {
     /// Total connections (lifetime)
     total_connections: AtomicU64,
-    
+
     /// Current active connections
     active_connections: AtomicUsize,
-    
+
     /// Total messages sent (all connections)
     total_messages_sent: AtomicU64,
-    
+
     /// Total messages dropped (all connections)
     total_messages_dropped: AtomicU64,
 }
@@ -143,28 +142,29 @@ impl HubMetrics {
             total_messages_dropped: AtomicU64::new(0),
         })
     }
-    
+
     /// Record new connection
     pub fn connection_opened(&self) {
         self.total_connections.fetch_add(1, Ordering::Relaxed);
         self.active_connections.fetch_add(1, Ordering::Relaxed);
     }
-    
+
     /// Record connection closed
     pub fn connection_closed(&self) {
         self.active_connections.fetch_sub(1, Ordering::Relaxed);
     }
-    
+
     /// Record message sent
     pub fn message_sent(&self) {
         self.total_messages_sent.fetch_add(1, Ordering::Relaxed);
     }
-    
+
     /// Record message dropped
     pub fn message_dropped(&self, count: u64) {
-        self.total_messages_dropped.fetch_add(count, Ordering::Relaxed);
+        self.total_messages_dropped
+            .fetch_add(count, Ordering::Relaxed);
     }
-    
+
     /// Get snapshot
     pub fn snapshot(&self) -> HubMetricsSnapshot {
         HubMetricsSnapshot {
@@ -203,14 +203,14 @@ mod tests {
     #[test]
     fn test_connection_metrics() {
         let metrics = ConnectionMetrics::new();
-        
+
         metrics.inc_sent();
         metrics.inc_sent();
         metrics.inc_dropped(5);
         metrics.set_queue_size(10);
         metrics.set_queue_size(20);
         metrics.set_queue_size(15);
-        
+
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.messages_sent, 2);
         assert_eq!(snapshot.messages_dropped, 5);
@@ -221,14 +221,14 @@ mod tests {
     #[test]
     fn test_hub_metrics() {
         let metrics = HubMetrics::new();
-        
+
         metrics.connection_opened();
         metrics.connection_opened();
         metrics.message_sent();
         metrics.message_sent();
         metrics.message_dropped(3);
         metrics.connection_closed();
-        
+
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.total_connections, 2);
         assert_eq!(snapshot.active_connections, 1);

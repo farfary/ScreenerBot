@@ -14,7 +14,7 @@ pub struct AppState {
 
     /// Server startup time
     pub startup_time: chrono::DateTime<chrono::Utc>,
-    
+
     /// Central WebSocket hub
     pub ws_hub: Arc<crate::webserver::ws::WsHub>,
 }
@@ -28,7 +28,7 @@ impl AppState {
             ws_hub,
         }
     }
-    
+
     /// Get WsHub reference
     pub fn ws_hub(&self) -> &Arc<crate::webserver::ws::WsHub> {
         &self.ws_hub

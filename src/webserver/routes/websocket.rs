@@ -1,7 +1,6 @@
 /// WebSocket route - Upgrade handler for centralized WebSocket hub
 ///
 /// Single endpoint `/ws` that handles all real-time data streaming.
-
 use axum::{
     extract::{ws::WebSocketUpgrade, State},
     http::StatusCode,
@@ -22,17 +21,14 @@ pub fn routes() -> Router<Arc<AppState>> {
 }
 
 /// WebSocket upgrade handler
-async fn websocket_handler(
-    ws: WebSocketUpgrade,
-    State(state): State<Arc<AppState>>,
-) -> Response {
-        // Get hub from state (ws_hub() returns &Arc<WsHub>, not Option)
+async fn websocket_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> Response {
+    // Get hub from state (ws_hub() returns &Arc<WsHub>, not Option)
     let hub = state.ws_hub().clone();
 
     // Check connection limit
     let current = hub.active_connections().await;
     let max_allowed = state.config.websocket.max_connections;
-    
+
     if current >= max_allowed {
         if is_debug_webserver_enabled() {
             log(

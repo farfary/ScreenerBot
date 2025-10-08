@@ -25,9 +25,7 @@
         color: var(--text-primary);
       "
     >
-      <option value="    }
-
-  // Silent refresh every secondt refresh every secondies</option>
+      <option value="">All Categories</option>
       <option value="swap">Swap</option>
       <option value="transaction">Transaction</option>
       <option value="pool">Pool</option>
@@ -242,14 +240,16 @@ Loading...</pre
 
 <script>
   var allEventsData = [];
-  var eventsRefreshInterval = null;
   var maxEventId = 0;
   var connectionStatus = "connecting"; // 'connecting', 'connected', 'disconnected', 'error'
   var eventsStore = window.eventsStore || new Map();
   var EVENT_MAX_RECORDS = 1000;
-  var eventsLoadInFlight = false;
-  var pendingEventsLoad = false;
   var searchDebounceHandle = null;
+  var snapshotState = {
+    inProgress: false,
+    expected: 0,
+    received: 0,
+  };
 
   // Update connection status indicator
   function updateConnectionStatus(status, message) {
@@ -285,6 +285,24 @@ Loading...</pre
   function clearEventsCache() {
     eventsStore.clear();
     allEventsData = [];
+  }
+
+  function requestEventsSnapshot(message) {
+    if (message) {
+      updateConnectionStatus("connecting", message);
+    }
+
+    snapshotState.inProgress = true;
+    snapshotState.expected = 0;
+    snapshotState.received = 0;
+
+    if (window.Realtime && typeof Realtime.updateFilters === "function") {
+      Realtime.updateFilters({ snapshotTopics: ["events"] });
+    } else {
+      console.warn(
+        "[Events] Realtime controller unavailable; cannot request snapshot"
+      );
+    }
   }
 
   function normalizeEvent(raw) {
@@ -356,108 +374,6 @@ Loading...</pre
     return true;
   }
 
-  function stopEventsRefresh() {
-    if (eventsRefreshInterval) {
-      clearInterval(eventsRefreshInterval);
-      eventsRefreshInterval = null;
-    }
-  }
-
-  // Load events from API
-  async function loadEvents(options = {}) {
-    const { force = false } = options;
-    if (eventsLoadInFlight) {
-      if (force) {
-        pendingEventsLoad = true;
-      }
-      return;
-    }
-
-    const category = document.getElementById("categoryFilter").value;
-    const severity = document.getElementById("severityFilter").value;
-    const params = new URLSearchParams();
-    params.set("limit", "200");
-    if (category) params.set("category", category);
-    if (severity) params.set("severity", severity);
-
-    let url = "";
-    const isInitialLoad = force || maxEventId === 0;
-    try {
-      eventsLoadInFlight = true;
-      if (isInitialLoad) {
-        url = `/api/events/head?${params.toString()}`;
-        updateConnectionStatus("connecting", "Loading events...");
-      } else {
-        params.set("after_id", String(maxEventId));
-        url = `/api/events/since?${params.toString()}`;
-      }
-
-      const res = await fetch(url, { cache: "no-cache" });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      }
-
-      const data = await res.json();
-      const payload = Array.isArray(data.events) ? data.events : [];
-
-      if (isInitialLoad) {
-        clearEventsCache();
-      }
-
-      const added = mergeEvents(payload);
-      if (added) {
-        const highestFromPayload = payload.reduce(
-          (max, evt) =>
-            evt && typeof evt.id === "number" ? Math.max(max, evt.id) : max,
-          0
-        );
-        maxEventId = Math.max(maxEventId, data.max_id || 0, highestFromPayload);
-      } else if (isInitialLoad) {
-        renderEvents();
-        maxEventId = Math.max(maxEventId, data.max_id || 0);
-      }
-
-      const totalEvents = allEventsData.length;
-      const countLabel = formatEventCountLabel(totalEvents);
-      if (eventsRefreshInterval) {
-        updateConnectionStatus("disconnected", `Polling • ${countLabel}`);
-      } else {
-        updateConnectionStatus("connected", `Realtime • ${countLabel}`);
-      }
-
-      AppState.save("events_category", category);
-      AppState.save("events_severity", severity);
-    } catch (error) {
-      console.error("Failed to load events:", error);
-
-      let errorMsg = "Failed to connect to server";
-      if (error.message.includes("Failed to fetch")) {
-        errorMsg = "Server not responding - check if bot is running";
-      } else if (error.message.includes("HTTP")) {
-        errorMsg = `Server error: ${error.message}`;
-      }
-
-      document.getElementById("eventsTableBody").innerHTML = `
-                    <tr>
-                        <td colspan="6" style="text-align: center; padding: 40px;">
-                            <div style="color: var(--badge-error); margin-bottom: 10px;">❌ ${errorMsg}</div>
-                            <div style="color: var(--text-muted); font-size: 0.9em;">
-                                Retrying automatically... or click Refresh to try again
-                            </div>
-                        </td>
-                    </tr>
-                `;
-      updateConnectionStatus("error", errorMsg);
-      startEventsRefresh(3000);
-    } finally {
-      eventsLoadInFlight = false;
-      if (pendingEventsLoad) {
-        pendingEventsLoad = false;
-        loadEvents();
-      }
-    }
-  }
-
   // Render events in table
   function getSearchTerm() {
     return (document.getElementById("eventSearch")?.value || "").toLowerCase();
@@ -497,12 +413,15 @@ Loading...</pre
     const filtered = events.filter((event) => matchesSearch(event, searchTerm));
 
     if (!filtered || filtered.length === 0) {
-      const message =
-        connectionStatus === "error"
-          ? "⚠️ Error loading events. Please check server status."
-          : connectionStatus === "connecting"
-          ? "🔄 Connecting to server..."
-          : "📋 No events found. Events will appear here as they occur.";
+      const message = snapshotState.inProgress
+        ? "📦 Receiving snapshot..."
+        : connectionStatus === "error"
+        ? "⚠️ Error loading events. Please check server status."
+        : connectionStatus === "connecting"
+        ? "🔄 Connecting to server..."
+        : connectionStatus === "disconnected"
+        ? "📴 Realtime connection lost. Waiting to resync..."
+        : "📋 No events found. Events will appear here as they occur.";
 
       tbody.innerHTML = `
                     <tr>
@@ -516,7 +435,9 @@ Loading...</pre
 
     tbody.innerHTML = filtered
       .map((event) => {
-        const time = Utils.formatTimeAgo(new Date(event.event_time), { fallback: "-" });
+        const time = Utils.formatTimeAgo(new Date(event.event_time), {
+          fallback: "-",
+        });
         const severityColor = getSeverityColor(event.severity);
         let referenceCell = "-";
         if (event.reference_id) {
@@ -590,24 +511,32 @@ Loading...</pre
 
   // Filter by category
   document.getElementById("categoryFilter").addEventListener("change", () => {
-    maxEventId = 0; // Reset to get fresh data with new filter
-    allEventsData = [];
+    maxEventId = 0;
     clearEventsCache();
-    loadEvents();
+    requestEventsSnapshot("Applying category filter...");
+    AppState.save(
+      "events_category",
+      document.getElementById("categoryFilter").value
+    );
   });
 
   // Filter by severity
   document.getElementById("severityFilter").addEventListener("change", () => {
-    maxEventId = 0; // Reset to get fresh data with new filter
-    allEventsData = [];
+    maxEventId = 0;
     clearEventsCache();
-    loadEvents();
+    requestEventsSnapshot("Applying severity filter...");
+    AppState.save(
+      "events_severity",
+      document.getElementById("severityFilter").value
+    );
   });
 
   // Refresh button
   document
     .getElementById("refreshEvents")
-    .addEventListener("click", loadEvents);
+    .addEventListener("click", () =>
+      requestEventsSnapshot("Refreshing events...")
+    );
 
   // Reference copy handler
   document
@@ -708,44 +637,30 @@ Loading...</pre
     }
   });
 
-  // Silent refresh every second
-  function startEventsRefresh(intervalMs = 2000) {
-    if (eventsRefreshInterval) return;
-    eventsRefreshInterval = setInterval(() => {
-      loadEvents();
-    }, intervalMs);
-
-    if (window.Router && typeof Router.registerCleanup === "function") {
-      Router.registerCleanup(() => {
-        if (eventsRefreshInterval) {
-          clearInterval(eventsRefreshInterval);
-          eventsRefreshInterval = null;
-        }
-      });
-    }
-  }
-
   // Handle incoming event from WebSocket
-  function handleEventsWebSocket(event) {
-    // Handle lag warning
-    if (event.warning === "lagged") {
-      console.warn("[Events] WebSocket lagged, catching up via HTTP");
-      updateConnectionStatus(
-        "disconnected",
-        "Connection lagged, catching up..."
-      );
-      startEventsRefresh(1500);
-      loadEvents();
+  function handleEventsWebSocket(data, envelope) {
+    if (!data || typeof data !== "object") {
       return;
     }
 
-    // Add new event to list
-    if (event && typeof event.id === "number") {
-      if (!matchesActiveFilters(normalizeEvent(event))) {
-        return;
-      }
-      maxEventId = Math.max(maxEventId, event.id);
-      mergeEvents([event]);
+    const normalized = normalizeEvent(data);
+    if (!normalized || typeof normalized.id !== "number") {
+      return;
+    }
+
+    if (!matchesActiveFilters(normalized)) {
+      return;
+    }
+
+    maxEventId = Math.max(maxEventId, normalized.id);
+    mergeEvents([normalized]);
+
+    if (envelope?.meta && envelope.meta.snapshot) {
+      snapshotState.received += 1;
+      return;
+    }
+
+    if (!snapshotState.inProgress) {
       updateConnectionStatus(
         "connected",
         `Realtime • ${formatEventCountLabel(allEventsData.length)}`
@@ -753,44 +668,41 @@ Loading...</pre
     }
   }
 
-  // Handle WebSocket warnings (lag detection)
-  function handleWebSocketWarning(data) {
-    if (data.channel === "events") {
-      console.warn("[Events] Channel warning:", data);
-      updateConnectionStatus(
-        "disconnected",
-        `Polling • ${formatEventCountLabel(allEventsData.length)}`
-      );
-      startEventsRefresh(2000);
-      loadEvents();
-    }
+  function handleEventsSnapshotBegin(info) {
+    snapshotState.inProgress = true;
+    snapshotState.expected = Number.isFinite(info?.total)
+      ? Number(info.total)
+      : 0;
+    snapshotState.received = 0;
+    clearEventsCache();
+    updateConnectionStatus("connecting", "Receiving snapshot...");
   }
 
-  function handleEventsDisconnect() {
-    console.warn("[Events] WebSocket disconnected, switching to polling");
-    updateConnectionStatus(
-      "disconnected",
-      `Polling • ${formatEventCountLabel(allEventsData.length)}`
-    );
-    startEventsRefresh(3000);
-  }
-
-  function handleEventsReconnect() {
-    console.log("[Events] WebSocket reconnected");
-    stopEventsRefresh();
+  function handleEventsSnapshotEnd() {
+    snapshotState.inProgress = false;
     updateConnectionStatus(
       "connected",
       `Realtime • ${formatEventCountLabel(allEventsData.length)}`
     );
-    if (!allEventsData.length) {
-      loadEvents({ force: true });
-    }
+    renderEvents();
   }
-  // Global init function for Router to call during SPA navigation
-  window.initEventsPage = function () {
-    console.log("[Events] Initializing page");
 
-    // Restore saved filters (wait for DOM to be ready)
+  function handleWebSocketWarning(message) {
+    if (!message || message.alias !== "events") return;
+    console.warn("[Events] Channel warning:", message);
+    updateConnectionStatus("connecting", "Warning received, resyncing...");
+    requestEventsSnapshot("Resyncing after warning...");
+  }
+
+  function handleEventsDisconnect() {
+    updateConnectionStatus("disconnected", "Disconnected from realtime");
+  }
+
+  function handleEventsReconnect() {
+    updateConnectionStatus("connecting", "Reconnected, syncing events...");
+    requestEventsSnapshot("Syncing after reconnect...");
+  }
+  function restoreSavedFilters() {
     const categoryFilter = document.getElementById("categoryFilter");
     const severityFilter = document.getElementById("severityFilter");
     const searchInput = document.getElementById("eventSearch");
@@ -809,19 +721,39 @@ Loading...</pre
       const savedSearch = AppState.load("events_search", "");
       if (savedSearch) searchInput.value = savedSearch;
     }
+  }
 
-    // Initial load
-    loadEvents({ force: true });
+  // Global init function for Router to call during SPA navigation
+  window.initEventsPage = function () {
+    console.log("[Events] Initializing page");
+    restoreSavedFilters();
+    requestEventsSnapshot("Loading events...");
   };
 
   window.PageRealtime = window.PageRealtime || {};
   window.PageRealtime.events = {
+    topics: ["events"],
     channels: {
       events: handleEventsWebSocket,
+      "snapshot_begin:events.new": handleEventsSnapshotBegin,
+      "snapshot_end:events.new": handleEventsSnapshotEnd,
       _warning: handleWebSocketWarning,
       _disconnected: handleEventsDisconnect,
       _failed: handleEventsDisconnect,
       _connected: handleEventsReconnect,
+    },
+    getFilters() {
+      const filters = {};
+      const category = document.getElementById("categoryFilter")?.value;
+      const severity = document.getElementById("severityFilter")?.value;
+      const searchTerm = getSearchTerm();
+      const topic = "events.new";
+
+      filters[topic] = {};
+      if (category) filters[topic].category = category;
+      if (severity) filters[topic].severity = severity;
+      if (searchTerm) filters[topic].search = searchTerm;
+      return filters;
     },
     onInitial(status) {
       if (status === "connected") {
@@ -829,29 +761,23 @@ Loading...</pre
           "connected",
           `Realtime • ${formatEventCountLabel(allEventsData.length)}`
         );
-        stopEventsRefresh();
       } else if (status === "connecting") {
-        updateConnectionStatus("connecting", "Connecting to WebSocket...");
+        updateConnectionStatus("connecting", "Connecting to realtime...");
       } else {
-        updateConnectionStatus(
-          "disconnected",
-          `Polling • ${formatEventCountLabel(allEventsData.length)}`
-        );
-        startEventsRefresh(3000);
+        updateConnectionStatus("disconnected", "Realtime unavailable");
       }
     },
     onUnavailable() {
-      console.warn(
-        "[Events] WebSocket unavailable, falling back to HTTP polling"
-      );
-      updateConnectionStatus("disconnected", "WebSocket unavailable (polling)");
-      startEventsRefresh(3000);
+      updateConnectionStatus("disconnected", "Realtime unavailable");
+    },
+    onEnter() {
+      requestEventsSnapshot("Loading events...");
     },
     onExit() {
-      stopEventsRefresh();
+      snapshotState.inProgress = false;
     },
   };
 
   // Execute initialization immediately (works for both initial load and SPA navigation)
-  initEventsPage();
+  window.initEventsPage();
 </script>

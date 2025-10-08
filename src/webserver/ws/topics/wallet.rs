@@ -1,5 +1,4 @@
 /// Wallet balances topic messages - Placeholder
-
 use crate::webserver::ws::message::{Topic, WsEnvelope};
 
 /// Convert wallet balance to envelope (stub)

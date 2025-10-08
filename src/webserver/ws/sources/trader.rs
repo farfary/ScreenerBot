@@ -9,6 +9,10 @@ use crate::{
 pub fn start(_hub: Arc<WsHub>) {
     // Placeholder: trader state stream not implemented yet
     if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "INFO", "ws.sources.trader skipped (not implemented)");
+        log(
+            LogTag::Webserver,
+            "INFO",
+            "ws.sources.trader skipped (not implemented)",
+        );
     }
 }

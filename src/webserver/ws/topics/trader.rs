@@ -1,5 +1,4 @@
 /// Trader state topic messages - Placeholder
-
 use crate::webserver::ws::message::{Topic, WsEnvelope};
 
 /// Convert trader state to envelope (stub)

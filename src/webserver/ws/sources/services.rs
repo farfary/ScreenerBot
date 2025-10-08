@@ -20,8 +20,10 @@ async fn run(hub: Arc<WsHub>) {
     let mut ticker = interval(Duration::from_secs(interval_secs));
     loop {
         ticker.tick().await;
-        let snapshot = crate::webserver::routes::services::gather_services_overview_snapshot().await;
-        let envelope = topics::services::services_to_envelope(&snapshot, hub.next_seq("services.metrics"));
+        let snapshot =
+            crate::webserver::routes::services::gather_services_overview_snapshot().await;
+        let envelope =
+            topics::services::services_to_envelope(&snapshot, hub.next_seq("services.metrics"));
         hub.broadcast(envelope).await;
         if is_debug_webserver_enabled() {
             log(
@@ -29,7 +31,8 @@ async fn run(hub: Arc<WsHub>) {
                 "DEBUG",
                 &format!(
                     "ws.sources.services snapshot: services={}, unhealthy={}",
-                    snapshot.services.len(), snapshot.summary.unhealthy_services
+                    snapshot.services.len(),
+                    snapshot.summary.unhealthy_services
                 ),
             );
         }

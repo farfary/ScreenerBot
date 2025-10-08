@@ -7,7 +7,6 @@
 /// - Optional routing key (mint/pool/service ID)
 /// - Typed data payload
 /// - Optional metadata (snapshot markers, backpressure warnings)
-
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -28,12 +27,12 @@ pub enum Topic {
     // System topics
     SystemStatus,
     ServicesMetrics,
-    
+
     // Trading topics
     PositionsUpdate,
     PricesUpdate,
     TokensUpdate,
-    
+
     // Activity topics
     EventsNew,
     OhlcvsUpdate,
@@ -91,29 +90,29 @@ impl fmt::Display for Topic {
 // ============================================================================
 
 /// Standard WebSocket message envelope
-/// 
+///
 /// All messages from server to client use this format.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WsEnvelope {
     /// Protocol version
     pub v: u8,
-    
+
     /// Topic code (e.g., "positions.update")
     pub t: String,
-    
+
     /// Server timestamp (unix milliseconds)
     pub ts: i64,
-    
+
     /// Sequence number (monotonic per topic)
     pub seq: u64,
-    
+
     /// Routing key (mint/pool/service ID, null for broadcast)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
-    
+
     /// Message payload (topic-specific)
     pub data: serde_json::Value,
-    
+
     /// Optional metadata
     #[serde(skip_serializing_if = "Option::is_none")]
     pub meta: Option<MessageMetadata>,
@@ -125,11 +124,11 @@ pub struct MessageMetadata {
     /// True if this is a snapshot (initial state)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub snapshot: Option<bool>,
-    
+
     /// Number of messages dropped due to backpressure
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dropped: Option<u64>,
-    
+
     /// Additional context (free-form)
     #[serde(flatten)]
     pub extra: Option<serde_json::Map<String, serde_json::Value>>,
@@ -152,31 +151,31 @@ pub enum ClientMessage {
         #[serde(default)]
         pages_supported: Vec<String>,
     },
-    
+
     /// Set filters for topics
     SetFilters {
         /// Per-topic filters (topic code → filter object)
         topics: serde_json::Map<String, serde_json::Value>,
     },
-    
+
     /// Pause streaming for specific topics (or all if empty)
     Pause {
         #[serde(default)]
         topics: Vec<String>,
     },
-    
+
     /// Resume streaming for specific topics (or all if empty)
     Resume {
         #[serde(default)]
         topics: Vec<String>,
     },
-    
+
     /// Request resync with last known sequence numbers
     Resync {
         /// Topic code → last known sequence number
         topics: serde_json::Map<String, serde_json::Value>,
     },
-    
+
     /// Client ping (keepalive)
     Ping {
         #[serde(default)]
@@ -194,14 +193,14 @@ pub enum ClientMessage {
 pub enum ServerMessage {
     /// Data message (uses WsEnvelope)
     Data(WsEnvelope),
-    
+
     /// Acknowledge control message
     Ack {
         message: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         context: Option<serde_json::Value>,
     },
-    
+
     /// Error response
     Error {
         message: String,
@@ -209,13 +208,13 @@ pub enum ServerMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         context: Option<serde_json::Value>,
     },
-    
+
     /// Pong response to ping
     Pong {
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<String>,
     },
-    
+
     /// Backpressure warning
     Backpressure {
         topic: String,
@@ -223,18 +222,12 @@ pub enum ServerMessage {
         queue_size: usize,
         recommendation: String,
     },
-    
+
     /// Snapshot begin marker
-    SnapshotBegin {
-        topic: String,
-        total: usize,
-    },
-    
+    SnapshotBegin { topic: String, total: usize },
+
     /// Snapshot end marker
-    SnapshotEnd {
-        topic: String,
-        sent: usize,
-    },
+    SnapshotEnd { topic: String, sent: usize },
 }
 
 // ============================================================================
@@ -254,19 +247,19 @@ impl WsEnvelope {
             meta: None,
         }
     }
-    
+
     /// Set routing key
     pub fn with_key(mut self, key: impl Into<String>) -> Self {
         self.key = Some(key.into());
         self
     }
-    
+
     /// Set metadata
     pub fn with_meta(mut self, meta: MessageMetadata) -> Self {
         self.meta = Some(meta);
         self
     }
-    
+
     /// Mark as snapshot
     pub fn as_snapshot(mut self) -> Self {
         let mut meta = self.meta.take().unwrap_or_default();
@@ -318,7 +311,7 @@ mod tests {
         let envelope = WsEnvelope::new(Topic::EventsNew, 42, data.clone())
             .with_key("test_mint")
             .as_snapshot();
-        
+
         assert_eq!(envelope.v, PROTOCOL_VERSION);
         assert_eq!(envelope.t, "events.new");
         assert_eq!(envelope.seq, 42);
@@ -333,7 +326,7 @@ mod tests {
             message: "Filters updated".to_string(),
             context: Some(serde_json::json!({"topics": ["events", "positions"]})),
         };
-        
+
         let json = msg.to_json().unwrap();
         assert!(json.contains("\"type\":\"ack\""));
         assert!(json.contains("Filters updated"));

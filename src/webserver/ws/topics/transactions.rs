@@ -1,5 +1,4 @@
 /// Transactions activity topic messages - Placeholder
-
 use crate::webserver::ws::message::{Topic, WsEnvelope};
 
 /// Convert transaction to envelope (stub)

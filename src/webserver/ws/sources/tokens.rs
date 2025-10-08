@@ -9,6 +9,10 @@ use crate::{
 pub fn start(_hub: Arc<WsHub>) {
     // Placeholder: tokens updates are not wired yet
     if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "INFO", "ws.sources.tokens skipped (not implemented)");
+        log(
+            LogTag::Webserver,
+            "INFO",
+            "ws.sources.tokens skipped (not implemented)",
+        );
     }
 }

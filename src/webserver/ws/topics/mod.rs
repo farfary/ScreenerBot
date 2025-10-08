@@ -2,7 +2,6 @@
 ///
 /// Each module provides typed helpers for constructing WsEnvelope messages
 /// for a specific topic domain.
-
 pub mod events;
 pub mod ohlcvs;
 pub mod positions;
