@@ -1,4 +1,4 @@
-use crate::services::{ Service, ServiceHealth, ServiceMetrics };
+use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
@@ -28,10 +28,10 @@ impl Service for PositionsService {
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor
+        monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
-        let handle = crate::positions
-            ::start_positions_manager_service(shutdown.clone(), monitor).await
+        let handle = crate::positions::start_positions_manager_service(shutdown.clone(), monitor)
+            .await
             .map_err(|e| format!("Failed to start positions service: {}", e))?;
 
         // Return verification_worker handle so ServiceManager can wait for graceful shutdown

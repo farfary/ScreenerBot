@@ -4,8 +4,9 @@ use super::discovery::{PoolDiscovery, ENABLE_DEXSCREENER_DISCOVERY};
 use super::fetcher::AccountFetcher;
 use super::types::{ProgramKind, MAX_WATCHED_TOKENS, POOL_REFRESH_INTERVAL_SECONDS};
 use super::{cache, db, PoolError};
+use crate::arguments::is_debug_pool_cache_enabled;
 use crate::events::{record_safe, Event, EventCategory, Severity};
-use crate::global::is_debug_pool_service_enabled;
+use crate::global::{is_debug_pool_cleanup_enabled, is_debug_pool_service_enabled};
 /// Pool service supervisor - manages the lifecycle of all pool-related tasks
 ///
 /// This module provides the main entry points for starting and stopping the pool service.
@@ -106,7 +107,9 @@ pub async fn initialize_pool_components() -> Result<(), PoolError> {
         ));
     }
 
-    log(LogTag::PoolService, "INFO", "Starting pool service...");
+    if is_debug_pool_service_enabled() {
+        log(LogTag::PoolService, "INFO", "Starting pool service...");
+    }
 
     // Initialize database first
     if let Err(e) = db::initialize_database().await {
@@ -150,11 +153,13 @@ pub async fn initialize_pool_components() -> Result<(), PoolError> {
     // Initialize service components
     match initialize_service_components().await {
         Ok(_) => {
-            log(
-                LogTag::PoolService,
-                "INFO",
-                "Service components initialized successfully",
-            );
+            if is_debug_pool_service_enabled() {
+                log(
+                    LogTag::PoolService,
+                    "INFO",
+                    "Service components initialized successfully",
+                );
+            }
         }
         Err(e) => {
             SERVICE_RUNNING.store(false, Ordering::Relaxed);
@@ -184,24 +189,30 @@ pub async fn initialize_pool_components() -> Result<(), PoolError> {
 
     // Log pool monitoring mode configuration
     if ENABLE_SINGLE_POOL_MODE {
-        log(
-            LogTag::PoolService,
-            "INFO",
-            "Pool monitoring mode: SINGLE POOL (highest liquidity only)",
-        );
+        if is_debug_pool_service_enabled() {
+            log(
+                LogTag::PoolService,
+                "INFO",
+                "Pool monitoring mode: SINGLE POOL (highest liquidity only)",
+            );
+        }
     } else {
-        log(
-            LogTag::PoolService,
-            "INFO",
-            "Pool monitoring mode: ALL POOLS (comprehensive coverage)",
-        );
+        if is_debug_pool_service_enabled() {
+            log(
+                LogTag::PoolService,
+                "INFO",
+                "Pool monitoring mode: ALL POOLS (comprehensive coverage)",
+            );
+        }
     }
 
-    log(
-        LogTag::PoolService,
-        "SUCCESS",
-        "Pool components initialized successfully",
-    );
+    if is_debug_pool_service_enabled() {
+        log(
+            LogTag::PoolService,
+            "SUCCESS",
+            "Pool components initialized successfully",
+        );
+    }
 
     record_safe(Event::info(
         EventCategory::System,
@@ -254,11 +265,13 @@ pub async fn stop_pool_service(timeout_seconds: u64) -> Result<(), PoolError> {
         return Ok(());
     }
 
-    log(
-        LogTag::PoolService,
-        "INFO",
-        &format!("Stopping pool service (timeout: {}s)...", timeout_seconds),
-    );
+    if is_debug_pool_service_enabled() {
+        log(
+            LogTag::PoolService,
+            "INFO",
+            &format!("Stopping pool service (timeout: {}s)...", timeout_seconds),
+        );
+    }
 
     // Get shutdown handle and notify
     unsafe {
@@ -288,11 +301,13 @@ pub async fn stop_pool_service(timeout_seconds: u64) -> Result<(), PoolError> {
                 PRICE_CALCULATOR = None;
             }
 
-            log(
-                LogTag::PoolService,
-                "SUCCESS",
-                "✅ Pool service stopped successfully",
-            );
+            if is_debug_pool_service_enabled() {
+                log(
+                    LogTag::PoolService,
+                    "SUCCESS",
+                    "✅ Pool service stopped successfully",
+                );
+            }
 
             record_safe(Event::info(
                 EventCategory::System,
@@ -395,11 +410,13 @@ pub async fn start_helper_tasks(
 
     // Set readiness flag
     crate::global::POOL_SERVICE_READY.store(true, std::sync::atomic::Ordering::SeqCst);
-    log(
-        LogTag::PoolService,
-        "SUCCESS",
-        "Pool helper tasks started (3 handles returned)",
-    );
+    if is_debug_pool_service_enabled() {
+        log(
+            LogTag::PoolService,
+            "SUCCESS",
+            "Pool helper tasks started (3 handles returned)",
+        );
+    }
 
     handles
 }
@@ -596,7 +613,7 @@ async fn emit_service_health_stats() {
 
 /// Database cleanup task - runs periodically to clean old entries
 async fn run_database_cleanup_task(shutdown: Arc<Notify>) {
-    if is_debug_pool_service_enabled() {
+    if is_debug_pool_cleanup_enabled() {
         log(
             LogTag::PoolService,
             "INFO",
@@ -610,7 +627,7 @@ async fn run_database_cleanup_task(shutdown: Arc<Notify>) {
     loop {
         tokio::select! {
             _ = shutdown.notified() => {
-                if is_debug_pool_service_enabled() {
+                if is_debug_pool_cleanup_enabled() {
                     log(LogTag::PoolService, "INFO", "Database cleanup task shutting down");
                 }
                 break;
@@ -618,7 +635,7 @@ async fn run_database_cleanup_task(shutdown: Arc<Notify>) {
             _ = interval.tick() => {
                 if let Err(e) = db::cleanup_old_entries().await {
                     log(LogTag::PoolService, "ERROR", &format!("Database cleanup failed: {}", e));
-                } else if is_debug_pool_service_enabled() {
+                } else if is_debug_pool_cleanup_enabled() {
                     log(LogTag::PoolService, "INFO", "Database cleanup completed successfully");
                 }
             }
@@ -628,7 +645,7 @@ async fn run_database_cleanup_task(shutdown: Arc<Notify>) {
 
 /// Gap cleanup task - runs periodically to remove gapped price data
 async fn run_gap_cleanup_task(shutdown: Arc<Notify>) {
-    if is_debug_pool_service_enabled() {
+    if is_debug_pool_cleanup_enabled() {
         log(LogTag::PoolService, "INFO", "Starting gap cleanup task");
     }
 
@@ -638,7 +655,7 @@ async fn run_gap_cleanup_task(shutdown: Arc<Notify>) {
     loop {
         tokio::select! {
             _ = shutdown.notified() => {
-                if is_debug_pool_service_enabled() {
+                if is_debug_pool_cleanup_enabled() {
                     log(LogTag::PoolService, "INFO", "Gap cleanup task shutting down");
                 }
                 break;
@@ -651,12 +668,14 @@ async fn run_gap_cleanup_task(shutdown: Arc<Notify>) {
                 match db::cleanup_all_gapped_data().await {
                     Ok(deleted) => {
                         if deleted > 0 {
-                            log(
-                                LogTag::PoolService,
-                                "GAP_CLEANUP",
-                                &format!("Gap cleanup completed: removed {} gapped entries", deleted)
-                            );
-                        } else if is_debug_pool_service_enabled() {
+                            if is_debug_pool_cleanup_enabled() {
+                                log(
+                                    LogTag::PoolService,
+                                    "GAP_CLEANUP",
+                                    &format!("Gap cleanup completed: removed {} gapped entries", deleted)
+                                );
+                            }
+                        } else if is_debug_pool_cleanup_enabled() {
                             log(LogTag::PoolService, "INFO", "Gap cleanup completed: no gapped data found");
                         }
                     }
@@ -673,7 +692,7 @@ async fn run_gap_cleanup_task(shutdown: Arc<Notify>) {
 async fn cleanup_memory_gaps() {
     let (total_removed, tokens_cleaned) = cache::cleanup_all_memory_gaps().await;
 
-    if total_removed > 0 {
+    if total_removed > 0 && is_debug_pool_cache_enabled() {
         log(
             LogTag::PoolCache,
             "GAP_CLEANUP",

@@ -1,3 +1,4 @@
+use crate::arguments::is_debug_pool_analyzer_enabled;
 use crate::logger::{log, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
@@ -22,11 +23,13 @@ impl Service for PoolAnalyzerService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
-        log(
-            LogTag::PoolService,
-            "INFO",
-            "Initializing pool analyzer service...",
-        );
+        if is_debug_pool_analyzer_enabled() {
+            log(
+                LogTag::PoolService,
+                "INFO",
+                "Initializing pool analyzer service...",
+            );
+        }
         Ok(())
     }
 
@@ -35,11 +38,13 @@ impl Service for PoolAnalyzerService {
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
-        log(
-            LogTag::PoolService,
-            "INFO",
-            "Starting pool analyzer service...",
-        );
+        if is_debug_pool_analyzer_enabled() {
+            log(
+                LogTag::PoolService,
+                "INFO",
+                "Starting pool analyzer service...",
+            );
+        }
 
         // Get the PoolAnalyzer component from global state
         let analyzer = crate::pools::get_pool_analyzer()
@@ -50,21 +55,25 @@ impl Service for PoolAnalyzerService {
             analyzer.start_analyzer_task(shutdown).await;
         }));
 
-        log(
-            LogTag::PoolService,
-            "SUCCESS",
-            "✅ Pool analyzer service started (instrumented)",
-        );
+        if is_debug_pool_analyzer_enabled() {
+            log(
+                LogTag::PoolService,
+                "SUCCESS",
+                "✅ Pool analyzer service started (instrumented)",
+            );
+        }
 
         Ok(vec![handle])
     }
 
     async fn stop(&mut self) -> Result<(), String> {
-        log(
-            LogTag::PoolService,
-            "INFO",
-            "Pool analyzer service stopping (via shutdown signal)",
-        );
+        if is_debug_pool_analyzer_enabled() {
+            log(
+                LogTag::PoolService,
+                "INFO",
+                "Pool analyzer service stopping (via shutdown signal)",
+            );
+        }
         Ok(())
     }
 

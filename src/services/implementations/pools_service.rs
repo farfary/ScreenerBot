@@ -1,3 +1,4 @@
+use crate::arguments::is_debug_pool_service_enabled;
 use crate::logger::{log, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
@@ -23,22 +24,26 @@ impl Service for PoolsService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
-        log(
-            LogTag::PoolService,
-            "INFO",
-            "Initializing pool components...",
-        );
+        if is_debug_pool_service_enabled() {
+            log(
+                LogTag::PoolService,
+                "INFO",
+                "Initializing pool components...",
+            );
+        }
 
         // Initialize all pool components (database, cache, RPC, components)
         crate::pools::initialize_pool_components()
             .await
             .map_err(|e| format!("Failed to initialize pool components: {:?}", e))?;
 
-        log(
-            LogTag::PoolService,
-            "SUCCESS",
-            "✅ Pool components initialized",
-        );
+        if is_debug_pool_service_enabled() {
+            log(
+                LogTag::PoolService,
+                "SUCCESS",
+                "✅ Pool components initialized",
+            );
+        }
         Ok(())
     }
 
@@ -47,27 +52,33 @@ impl Service for PoolsService {
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
-        log(LogTag::PoolService, "INFO", "Starting pool helper tasks...");
+        if is_debug_pool_service_enabled() {
+            log(LogTag::PoolService, "INFO", "Starting pool helper tasks...");
+        }
 
         // Start helper background tasks (health monitor, database cleanup, gap cleanup)
         // Note: Main pool tasks (discovery, fetcher, calculator, analyzer) are started by separate services
         let handles = crate::pools::start_helper_tasks(shutdown, monitor).await;
 
-        log(
-            LogTag::PoolService,
-            "SUCCESS",
-            &format!(
-                "✅ Pool helper tasks started ({} instrumented handles)",
-                handles.len()
-            ),
-        );
+        if is_debug_pool_service_enabled() {
+            log(
+                LogTag::PoolService,
+                "SUCCESS",
+                &format!(
+                    "✅ Pool helper tasks started ({} instrumented handles)",
+                    handles.len()
+                ),
+            );
+        }
 
         // Return handles so ServiceManager can wait for graceful shutdown
         Ok(handles)
     }
 
     async fn stop(&mut self) -> Result<(), String> {
-        log(LogTag::PoolService, "INFO", "Stopping pool service...");
+        if is_debug_pool_service_enabled() {
+            log(LogTag::PoolService, "INFO", "Stopping pool service...");
+        }
 
         // Stop pool service gracefully
         crate::pools::stop_pool_service(5)

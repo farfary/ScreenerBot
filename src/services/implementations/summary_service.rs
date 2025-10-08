@@ -1,5 +1,5 @@
 use crate::arguments::is_summary_enabled;
-use crate::services::{ log_service_notice, Service, ServiceHealth, ServiceMetrics };
+use crate::services::{log_service_notice, Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
@@ -36,23 +36,19 @@ impl Service for SummaryService {
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor
+        monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
         if !is_summary_enabled() {
             // Return empty handle if not enabled
-            let handle = tokio::spawn(
-                monitor.instrument(async move {
-                    shutdown.notified().await;
-                })
-            );
+            let handle = tokio::spawn(monitor.instrument(async move {
+                shutdown.notified().await;
+            }));
             return Ok(vec![handle]);
         }
 
-        let handle = tokio::spawn(
-            monitor.instrument(async move {
-                crate::summary::summary_loop(shutdown).await;
-            })
-        );
+        let handle = tokio::spawn(monitor.instrument(async move {
+            crate::summary::summary_loop(shutdown).await;
+        }));
 
         log_service_notice(self.name(), "loop_started", None, true);
 

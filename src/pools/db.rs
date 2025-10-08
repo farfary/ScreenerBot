@@ -1,5 +1,5 @@
 use super::types::{PriceResult, PRICE_HISTORY_MAX_ENTRIES};
-use crate::arguments::is_debug_pool_cache_enabled;
+use crate::arguments::{is_debug_pool_cache_enabled, is_debug_pool_cleanup_enabled};
 /// Database module for persistent price history storage
 ///
 /// This module provides SQLite-based storage for price history data,
@@ -510,7 +510,7 @@ impl PoolsDatabase {
             }
         }
 
-        if total_deleted > 0 {
+        if total_deleted > 0 && is_debug_pool_cleanup_enabled() {
             log(
                 LogTag::PoolService,
                 "GAP_CLEANUP",

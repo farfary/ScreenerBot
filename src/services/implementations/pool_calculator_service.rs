@@ -1,3 +1,4 @@
+use crate::arguments::is_debug_pool_calculator_enabled;
 use crate::logger::{log, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
@@ -22,11 +23,13 @@ impl Service for PoolCalculatorService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
-        log(
-            LogTag::PoolService,
-            "INFO",
-            "Initializing pool calculator service...",
-        );
+        if is_debug_pool_calculator_enabled() {
+            log(
+                LogTag::PoolService,
+                "INFO",
+                "Initializing pool calculator service...",
+            );
+        }
         Ok(())
     }
 
@@ -35,11 +38,13 @@ impl Service for PoolCalculatorService {
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
-        log(
-            LogTag::PoolService,
-            "INFO",
-            "Starting pool calculator service...",
-        );
+        if is_debug_pool_calculator_enabled() {
+            log(
+                LogTag::PoolService,
+                "INFO",
+                "Starting pool calculator service...",
+            );
+        }
 
         // Get the PriceCalculator component from global state
         let calculator = crate::pools::get_price_calculator()
@@ -50,21 +55,25 @@ impl Service for PoolCalculatorService {
             calculator.start_calculator_task(shutdown).await;
         }));
 
-        log(
-            LogTag::PoolService,
-            "SUCCESS",
-            "✅ Pool calculator service started (instrumented)",
-        );
+        if is_debug_pool_calculator_enabled() {
+            log(
+                LogTag::PoolService,
+                "SUCCESS",
+                "✅ Pool calculator service started (instrumented)",
+            );
+        }
 
         Ok(vec![handle])
     }
 
     async fn stop(&mut self) -> Result<(), String> {
-        log(
-            LogTag::PoolService,
-            "INFO",
-            "Pool calculator service stopping (via shutdown signal)",
-        );
+        if is_debug_pool_calculator_enabled() {
+            log(
+                LogTag::PoolService,
+                "INFO",
+                "Pool calculator service stopping (via shutdown signal)",
+            );
+        }
         Ok(())
     }
 

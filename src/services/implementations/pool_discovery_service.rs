@@ -1,3 +1,4 @@
+use crate::arguments::is_debug_pool_discovery_enabled;
 use crate::logger::{log, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
@@ -22,11 +23,13 @@ impl Service for PoolDiscoveryService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
-        log(
-            LogTag::PoolService,
-            "INFO",
-            "Initializing pool discovery service...",
-        );
+        if is_debug_pool_discovery_enabled() {
+            log(
+                LogTag::PoolService,
+                "INFO",
+                "Initializing pool discovery service...",
+            );
+        }
         Ok(())
     }
 
@@ -35,11 +38,13 @@ impl Service for PoolDiscoveryService {
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
-        log(
-            LogTag::PoolService,
-            "INFO",
-            "Starting pool discovery service...",
-        );
+        if is_debug_pool_discovery_enabled() {
+            log(
+                LogTag::PoolService,
+                "INFO",
+                "Starting pool discovery service...",
+            );
+        }
 
         // Get the PoolDiscovery component from global state
         let discovery = crate::pools::get_pool_discovery()
@@ -50,21 +55,25 @@ impl Service for PoolDiscoveryService {
             discovery.start_discovery_task(shutdown).await;
         }));
 
-        log(
-            LogTag::PoolService,
-            "SUCCESS",
-            "✅ Pool discovery service started (instrumented)",
-        );
+        if is_debug_pool_discovery_enabled() {
+            log(
+                LogTag::PoolService,
+                "SUCCESS",
+                "✅ Pool discovery service started (instrumented)",
+            );
+        }
 
         Ok(vec![handle])
     }
 
     async fn stop(&mut self) -> Result<(), String> {
-        log(
-            LogTag::PoolService,
-            "INFO",
-            "Pool discovery service stopping (via shutdown signal)",
-        );
+        if is_debug_pool_discovery_enabled() {
+            log(
+                LogTag::PoolService,
+                "INFO",
+                "Pool discovery service stopping (via shutdown signal)",
+            );
+        }
         Ok(())
     }
 

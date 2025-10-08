@@ -3,22 +3,21 @@ pub mod implementations;
 mod metrics;
 
 pub use health::ServiceHealth;
-pub use metrics::{ MetricsCollector, ServiceMetrics };
+pub use metrics::{MetricsCollector, ServiceMetrics};
 
 use crate::arguments::is_debug_system_enabled;
-use crate::logger::{ log, LogTag };
+use crate::logger::{log, LogTag};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::LazyLock;
 use std::time::Instant;
-use tokio::sync::{ Notify, RwLock };
+use tokio::sync::{Notify, RwLock};
 use tokio::task::JoinHandle;
 
 /// Global ServiceManager instance for webserver and other components access
-static GLOBAL_SERVICE_MANAGER: LazyLock<Arc<RwLock<Option<ServiceManager>>>> = LazyLock::new(||
-    Arc::new(RwLock::new(None))
-);
+static GLOBAL_SERVICE_MANAGER: LazyLock<Arc<RwLock<Option<ServiceManager>>>> =
+    LazyLock::new(|| Arc::new(RwLock::new(None)));
 
 /// Core service trait that all services must implement
 #[async_trait]
@@ -51,7 +50,7 @@ pub trait Service: Send + Sync {
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor
+        monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String>;
 
     /// Stop the service
@@ -119,7 +118,7 @@ pub fn log_service_event(
     service_name: &str,
     event: ServiceLogEvent,
     details: Option<&str>,
-    always: bool
+    always: bool,
 ) {
     if !should_log_service_details(always) {
         return;
@@ -187,13 +186,18 @@ impl ServiceManager {
         let total_registered = self.services.len();
 
         // Filter enabled services
-        let enabled_services: Vec<&'static str> = self.services
+        let enabled_services: Vec<&'static str> = self
+            .services
             .iter()
             .filter(|(_, service)| service.is_enabled())
             .map(|(name, _)| *name)
             .collect();
 
-        let debug_flag = if is_debug_system_enabled() { "on" } else { "off" };
+        let debug_flag = if is_debug_system_enabled() {
+            "on"
+        } else {
+            "off"
+        };
         let disabled = total_registered.saturating_sub(enabled_services.len());
         let begin_details = format!(
             "registered={} enabled={} disabled={} debug_system={}",
@@ -213,7 +217,10 @@ impl ServiceManager {
                 log(
                     LogTag::System,
                     "DEBUG",
-                    &format!("service_startup phase=enabled_list services=[{}]", enabled_list)
+                    &format!(
+                        "service_startup phase=enabled_list services=[{}]",
+                        enabled_list
+                    ),
                 );
             }
 
@@ -222,7 +229,10 @@ impl ServiceManager {
                 log(
                     LogTag::System,
                     "DEBUG",
-                    &format!("service_startup phase=start_order services=[{}]", ordered_list)
+                    &format!(
+                        "service_startup phase=start_order services=[{}]",
+                        ordered_list
+                    ),
                 );
             }
         }
@@ -238,9 +248,16 @@ impl ServiceManager {
                 log_service_event(service_name, ServiceLogEvent::InitializeStart, None, false);
                 service.initialize().await?;
 
-                log_service_event(service_name, ServiceLogEvent::InitializeSuccess, None, false);
+                log_service_event(
+                    service_name,
+                    ServiceLogEvent::InitializeSuccess,
+                    None,
+                    false,
+                );
                 log_service_event(service_name, ServiceLogEvent::StartStart, None, false);
-                let handles = service.start(self.shutdown.clone(), monitor.clone()).await?;
+                let handles = service
+                    .start(self.shutdown.clone(), monitor.clone())
+                    .await?;
                 let handle_count = handles.len();
                 let handle_detail = if is_debug_system_enabled() {
                     Some(format!("handles={}", handle_count))
@@ -251,36 +268,40 @@ impl ServiceManager {
                     service_name,
                     ServiceLogEvent::StartSuccess,
                     handle_detail.as_deref(),
-                    false
+                    false,
                 );
                 self.handles.insert(service_name, handles);
             }
 
             // Register monitor with metrics collector and start intervals() background task
-            self.metrics_collector.start_monitoring(
-                service_name,
-                monitor,
-                self.shutdown.clone()
-            ).await;
+            self.metrics_collector
+                .start_monitoring(service_name, monitor, self.shutdown.clone())
+                .await;
         }
 
         let elapsed = startup_timer.elapsed().as_millis();
         let completion = format!("started={} duration_ms={}", ordered.len(), elapsed);
         log_service_startup_phase("complete", Some(&completion));
-        log(LogTag::System, "SUCCESS", &format!("service_startup status=ready {}", completion));
+        log(
+            LogTag::System,
+            "SUCCESS",
+            &format!("service_startup status=ready {}", completion),
+        );
         Ok(())
     }
 
     /// Stop all services in reverse priority order
     pub async fn stop_all(&mut self) -> Result<(), String> {
         let running_services: Vec<&'static str> = self.handles.keys().copied().collect();
-        let shutdown_begin = format!("running={} debug_system={}", running_services.len(), if
-            is_debug_system_enabled()
-        {
-            "on"
-        } else {
-            "off"
-        });
+        let shutdown_begin = format!(
+            "running={} debug_system={}",
+            running_services.len(),
+            if is_debug_system_enabled() {
+                "on"
+            } else {
+                "off"
+            }
+        );
         log_service_startup_phase("shutdown_begin", Some(&shutdown_begin));
 
         // Signal shutdown
@@ -299,7 +320,7 @@ impl ServiceManager {
                     log(
                         LogTag::System,
                         "WARN",
-                        &format!("Service stop error for {}: {}", service_name, e)
+                        &format!("Service stop error for {}: {}", service_name, e),
                     );
                 }
 
@@ -320,7 +341,7 @@ impl ServiceManager {
                                             service_name,
                                             idx + 1,
                                             handle_count
-                                        )
+                                        ),
                                     );
                                 }
                             }
@@ -334,7 +355,7 @@ impl ServiceManager {
                                         idx + 1,
                                         handle_count,
                                         e
-                                    )
+                                    ),
                                 );
                             }
                             Err(_) => {
@@ -347,7 +368,7 @@ impl ServiceManager {
                                         idx + 1,
                                         handle_count,
                                         timeout_duration.as_secs()
-                                    )
+                                    ),
                                 );
                             }
                         }
@@ -361,7 +382,10 @@ impl ServiceManager {
         log(
             LogTag::System,
             "SUCCESS",
-            &format!("service_shutdown status=complete services_stopped={}", running_services.len())
+            &format!(
+                "service_shutdown status=complete services_stopped={}",
+                running_services.len()
+            ),
         );
         Ok(())
     }
@@ -369,7 +393,7 @@ impl ServiceManager {
     /// Resolve service startup order
     fn resolve_startup_order(
         &self,
-        services: &[&'static str]
+        services: &[&'static str],
     ) -> Result<Vec<&'static str>, String> {
         use std::collections::HashSet;
 
@@ -382,14 +406,17 @@ impl ServiceManager {
             services: &'a HashMap<&'static str, Box<dyn Service>>,
             ordered: &mut Vec<&'static str>,
             visited: &mut HashSet<&'static str>,
-            visiting: &mut HashSet<&'static str>
+            visiting: &mut HashSet<&'static str>,
         ) -> Result<(), String> {
             if visited.contains(name) {
                 return Ok(());
             }
 
             if visiting.contains(name) {
-                return Err(format!("Circular dependency detected for service: {}", name));
+                return Err(format!(
+                    "Circular dependency detected for service: {}",
+                    name
+                ));
             }
 
             visiting.insert(name);
@@ -408,16 +435,17 @@ impl ServiceManager {
         }
 
         for &service_name in services {
-            visit(service_name, &self.services, &mut ordered, &mut visited, &mut visiting)?;
+            visit(
+                service_name,
+                &self.services,
+                &mut ordered,
+                &mut visited,
+                &mut visiting,
+            )?;
         }
 
         // Sort by priority
-        ordered.sort_by_key(|name|
-            self.services
-                .get(name)
-                .map(|s| s.priority())
-                .unwrap_or(100)
-        );
+        ordered.sort_by_key(|name| self.services.get(name).map(|s| s.priority()).unwrap_or(100));
 
         Ok(ordered)
     }
@@ -488,7 +516,11 @@ impl ServiceManager {
 pub async fn init_global_service_manager(manager: ServiceManager) {
     let mut global = GLOBAL_SERVICE_MANAGER.write().await;
     *global = Some(manager);
-    log(LogTag::System, "INFO", "✅ Global ServiceManager initialized");
+    log(
+        LogTag::System,
+        "INFO",
+        "✅ Global ServiceManager initialized",
+    );
 }
 
 /// Get reference to global ServiceManager

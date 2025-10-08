@@ -1,4 +1,4 @@
-use crate::services::{ Service, ServiceHealth, ServiceMetrics };
+use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
@@ -27,11 +27,11 @@ impl Service for TokenMonitoringService {
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor
+        monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
         // Start token monitoring task
-        let handle = crate::tokens::monitor
-            ::start_token_monitoring(shutdown, monitor).await
+        let handle = crate::tokens::monitor::start_token_monitoring(shutdown, monitor)
+            .await
             .map_err(|e| format!("Failed to start token monitoring: {}", e))?;
 
         Ok(vec![handle])

@@ -1,12 +1,12 @@
 use crate::arguments::is_debug_ohlcv_enabled;
-use crate::logger::{ log, LogTag };
-use crate::ohlcvs::{ ActivityType, Priority };
-use crate::services::{ Service, ServiceHealth };
+use crate::logger::{log, LogTag};
+use crate::ohlcvs::{ActivityType, Priority};
+use crate::services::{Service, ServiceHealth};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
-use tokio::time::{ sleep, Duration };
+use tokio::time::{sleep, Duration};
 
 /// OHLCV (Open, High, Low, Close, Volume) data collection service
 ///
@@ -29,8 +29,8 @@ impl Service for OhlcvService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
-        crate::ohlcvs::OhlcvService
-            ::initialize().await
+        crate::ohlcvs::OhlcvService::initialize()
+            .await
             .map_err(|e| format!("Failed to initialize OHLCV service: {}", e))?;
         Ok(())
     }
@@ -38,10 +38,10 @@ impl Service for OhlcvService {
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor
+        monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
-        let mut handles = crate::ohlcvs::OhlcvService
-            ::start(shutdown.clone(), monitor.clone()).await
+        let mut handles = crate::ohlcvs::OhlcvService::start(shutdown.clone(), monitor.clone())
+            .await
             .map_err(|e| format!("Failed to start OHLCV runtime: {}", e))?;
 
         let autop_monitor = monitor.clone();

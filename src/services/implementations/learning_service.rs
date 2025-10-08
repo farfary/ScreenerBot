@@ -1,4 +1,4 @@
-use crate::services::{ Service, ServiceHealth, ServiceMetrics };
+use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
@@ -22,8 +22,8 @@ impl Service for LearningService {
 
     async fn initialize(&mut self) -> Result<(), String> {
         // Initialize learning system
-        crate::learner
-            ::initialize_learning_system().await
+        crate::learner::initialize_learning_system()
+            .await
             .map_err(|e| format!("Failed to initialize learning system: {}", e))?;
         Ok(())
     }
@@ -31,14 +31,12 @@ impl Service for LearningService {
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor
+        monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
         // Learning system doesn't spawn background tasks currently
-        let handle = tokio::spawn(
-            monitor.instrument(async move {
-                shutdown.notified().await;
-            })
-        );
+        let handle = tokio::spawn(monitor.instrument(async move {
+            shutdown.notified().await;
+        }));
 
         Ok(vec![handle])
     }

@@ -1,4 +1,4 @@
-use crate::services::{ Service, ServiceHealth, ServiceMetrics };
+use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
@@ -22,8 +22,7 @@ impl Service for SecurityService {
 
     async fn initialize(&mut self) -> Result<(), String> {
         // Initialize security analyzer (not async)
-        crate::tokens::security
-            ::initialize_security_analyzer()
+        crate::tokens::security::initialize_security_analyzer()
             .map_err(|e| format!("Failed to initialize security analyzer: {}", e))?;
         Ok(())
     }
@@ -31,13 +30,11 @@ impl Service for SecurityService {
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor
+        monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
-        let handle = tokio::spawn(
-            monitor.instrument(async move {
-                crate::tokens::security::start_security_monitoring(shutdown).await;
-            })
-        );
+        let handle = tokio::spawn(monitor.instrument(async move {
+            crate::tokens::security::start_security_monitoring(shutdown).await;
+        }));
 
         Ok(vec![handle])
     }

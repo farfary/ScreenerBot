@@ -10,6 +10,19 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
+macro_rules! log_blacklist_debug {
+    ($level:expr, $msg:expr) => {{
+        if is_debug_blacklist_enabled() {
+            log(LogTag::Blacklist, $level, $msg);
+        }
+    }};
+    ($level:expr, $fmt:expr, $($arg:tt)*) => {{
+        if is_debug_blacklist_enabled() {
+            log(LogTag::Blacklist, $level, &format!($fmt, $($arg)*));
+        }
+    }};
+}
+
 // =============================================================================
 // CONFIGURATION CONSTANTS
 // =============================================================================
@@ -260,10 +273,12 @@ pub fn add_to_blacklist_db(mint: &str, symbol: &str, reason: BlacklistReason) ->
 
     match result {
         Ok(_) => {
-            log(
-                LogTag::Blacklist,
+            log_blacklist_debug!(
                 "ADDED",
-                &format!("Blacklisted {} ({}) - {}", symbol, mint, reason_str),
+                "Blacklisted {} ({}) - {}",
+                symbol,
+                mint,
+                reason_str
             );
             // Refresh cache after adding to blacklist
             refresh_blacklist_cache();
@@ -364,13 +379,13 @@ pub fn track_liquidity_db(
             }
         };
 
-        log(
-            LogTag::Blacklist,
+        log_blacklist_debug!(
             "TRACK",
-            &format!(
-                "Low liquidity for {} ({}): ${:.2} USD (count: {})",
-                symbol, mint, liquidity_usd, low_count
-            ),
+            "Low liquidity for {} ({}): ${:.2} USD (count: {})",
+            symbol,
+            mint,
+            liquidity_usd,
+            low_count
         );
 
         if low_count >= (MAX_LOW_LIQUIDITY_COUNT as i64) {
@@ -448,23 +463,22 @@ pub fn track_route_failure_db(mint: &str, symbol: &str, error_type: &str) -> boo
         }
     };
 
-    log(
-        LogTag::Blacklist,
+    log_blacklist_debug!(
         "TRACK",
-        &format!(
-            "Route failure for {} ({}): {} (count: {})",
-            symbol, mint, error_type, failure_count
-        ),
+        "Route failure for {} ({}): {} (count: {})",
+        symbol,
+        mint,
+        error_type,
+        failure_count
     );
 
     if failure_count >= (MAX_NO_ROUTE_FAILURES as i64) {
-        log(
-            LogTag::Blacklist,
+        log_blacklist_debug!(
             "BLACKLIST",
-            &format!(
-                "Blacklisting {} ({}) after {} route failures",
-                symbol, mint, failure_count
-            ),
+            "Blacklisting {} ({}) after {} route failures",
+            symbol,
+            mint,
+            failure_count
         );
         add_to_blacklist_db(mint, symbol, BlacklistReason::NoRoute);
         return false; // Don't allow processing
@@ -597,10 +611,10 @@ pub fn cleanup_old_blacklist_data() -> bool {
     ) {
         Ok(deleted) => {
             if deleted > 0 {
-                log(
-                    LogTag::Blacklist,
+                log_blacklist_debug!(
                     "CLEANUP",
-                    &format!("Cleaned {} old liquidity tracking records", deleted),
+                    "Cleaned {} old liquidity tracking records",
+                    deleted
                 );
             }
         }
@@ -620,10 +634,10 @@ pub fn cleanup_old_blacklist_data() -> bool {
     ) {
         Ok(deleted) => {
             if deleted > 0 {
-                log(
-                    LogTag::Blacklist,
+                log_blacklist_debug!(
                     "CLEANUP",
-                    &format!("Cleaned {} old route failure tracking records", deleted),
+                    "Cleaned {} old route failure tracking records",
+                    deleted
                 );
             }
             true
@@ -769,10 +783,10 @@ fn refresh_blacklist_cache() -> bool {
     };
     *last_refresh = Some(Utc::now());
 
-    log(
-        LogTag::Blacklist,
+    log_blacklist_debug!(
         "CACHE",
-        &format!("Refreshed blacklist cache with {} tokens", cache.len()),
+        "Refreshed blacklist cache with {} tokens",
+        cache.len()
     );
     true
 }
@@ -845,13 +859,12 @@ pub fn is_token_excluded_from_trading(mint: &str) -> bool {
 
 /// Add decimal fetch failure to blacklist
 pub fn add_decimal_failure_to_blacklist(mint: &str, symbol: &str, attempts: u32) -> bool {
-    log(
-        LogTag::Blacklist,
+    log_blacklist_debug!(
         "DECIMAL_FAIL",
-        &format!(
-            "Adding {} ({}) to blacklist after {} decimal fetch attempts",
-            symbol, mint, attempts
-        ),
+        "Adding {} ({}) to blacklist after {} decimal fetch attempts",
+        symbol,
+        mint,
+        attempts
     );
     let result = add_to_blacklist_db(mint, symbol, BlacklistReason::ApiError);
     if result {
@@ -928,13 +941,10 @@ pub fn initialize_system_stable_blacklist() {
         }
     }
 
-    log(
-        LogTag::Blacklist,
+    log_blacklist_debug!(
         "INIT",
-        &format!(
-            "System and stable tokens initialized in blacklist database ({} added)",
-            tokens_added
-        ),
+        "System and stable tokens initialized in blacklist database ({} added)",
+        tokens_added
     );
 }
 
