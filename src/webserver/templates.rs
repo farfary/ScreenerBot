@@ -5,6 +5,10 @@
 /// while HTML, CSS, and JavaScript live in dedicated files.
 
 const BASE_TEMPLATE: &str = include_str!("templates/base.html");
+const FOUNDATION_STYLES: &str = include_str!("templates/styles/foundation.css");
+const LAYOUT_STYLES: &str = include_str!("templates/styles/layout.css");
+const COMPONENT_STYLES: &str = include_str!("templates/styles/components.css");
+const TOKEN_MODAL_STYLES: &str = include_str!("templates/styles/token-modal.css");
 const COMMON_STYLES: &str = include_str!("templates/styles/common.css");
 const COMMON_SCRIPTS: &str = include_str!("templates/scripts/common.js");
 const THEME_SCRIPTS: &str = include_str!("templates/scripts/theme.js");
@@ -22,7 +26,15 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     let mut html = BASE_TEMPLATE.replace("{{TITLE}}", title);
     html = html.replace("{{NAV_TABS}}", &nav_tabs(active_tab));
     html = html.replace("{{CONTENT}}", content);
-    html = html.replace("/*__COMMON_STYLES__*/", COMMON_STYLES);
+    let combined_styles = [
+        FOUNDATION_STYLES,
+        LAYOUT_STYLES,
+        COMPONENT_STYLES,
+        TOKEN_MODAL_STYLES,
+        COMMON_STYLES,
+    ]
+    .join("\n");
+    html = html.replace("/*__INJECTED_STYLES__*/", &combined_styles);
     html = html.replace("/*__COMMON_SCRIPTS__*/", COMMON_SCRIPTS);
     html = html.replace("/*__THEME_SCRIPTS__*/", THEME_SCRIPTS);
     html
