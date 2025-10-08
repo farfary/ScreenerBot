@@ -28,6 +28,7 @@ pub mod metrics;
 pub mod producers;
 pub mod snapshots;
 pub mod topics;
+pub mod sources;
 
 pub use hub::WsHub;
 pub use message::{ServerMessage, Topic, WsEnvelope};
