@@ -23,6 +23,11 @@ pub struct ServiceMetrics {
     pub total_idle_duration_ns: u64,
     pub mean_idle_duration_ns: u64,
 
+    /// Derived cycle metrics (poll + idle per loop iteration)
+    pub last_cycle_duration_ns: u64,
+    pub avg_cycle_duration_ns: u64,
+    pub cycles_per_second: f32,
+
     /// Service uptime
     pub uptime_seconds: u64,
 
@@ -42,6 +47,10 @@ impl ServiceMetrics {
 
         if !self.operations_per_second.is_finite() {
             self.operations_per_second = 0.0;
+        }
+
+        if !self.cycles_per_second.is_finite() {
+            self.cycles_per_second = 0.0;
         }
 
         self.custom_metrics.retain(|_, value| value.is_finite());
@@ -92,6 +101,16 @@ impl ServiceMetrics {
         Self::format_nanos(self.mean_idle_duration_ns)
     }
 
+    /// Format last recorded cycle duration
+    pub fn format_last_cycle_duration(&self) -> String {
+        Self::format_nanos(self.last_cycle_duration_ns)
+    }
+
+    /// Format average cycle duration across uptime
+    pub fn format_avg_cycle_duration(&self) -> String {
+        Self::format_nanos(self.avg_cycle_duration_ns)
+    }
+
     /// Helper to format nanoseconds into human-readable duration
     fn format_nanos(nanos: u64) -> String {
         if nanos < 1_000 {
@@ -113,6 +132,12 @@ struct AccumulatedTaskMetrics {
     total_polls: u64,
     total_poll_duration_ns: u64,
     total_idle_duration_ns: u64,
+    avg_cycle_duration_ns: u64,
+    last_cycle_duration_ns: u64,
+    cycles_per_second: f32,
+    prev_total_polls: u64,
+    prev_total_poll_duration_ns: u64,
+    prev_total_idle_duration_ns: u64,
     last_update: Instant,
 }
 
@@ -123,6 +148,12 @@ impl Default for AccumulatedTaskMetrics {
             total_polls: 0,
             total_poll_duration_ns: 0,
             total_idle_duration_ns: 0,
+            avg_cycle_duration_ns: 0,
+            last_cycle_duration_ns: 0,
+            cycles_per_second: 0.0,
+            prev_total_polls: 0,
+            prev_total_poll_duration_ns: 0,
+            prev_total_idle_duration_ns: 0,
             last_update: Instant::now(),
         }
     }
@@ -174,15 +205,59 @@ impl MetricsCollector {
                     _ = interval_timer.tick() => {
                         // Sample cumulative metrics
                         let metrics_snapshot = monitor.cumulative();
+                        let now = Instant::now();
+
+                        let total_polls = metrics_snapshot.total_poll_count;
+                        let total_poll_duration_ns =
+                            metrics_snapshot.total_poll_duration.as_nanos() as u64;
+                        let total_idle_duration_ns =
+                            metrics_snapshot.total_idle_duration.as_nanos() as u64;
 
                         // Update storage with current cumulative values
                         let mut storage = accumulated_metrics.lock().await;
                         if let Some(metrics) = storage.get_mut(&service_name) {
+                            let delta_polls = total_polls.saturating_sub(metrics.prev_total_polls);
+                            let delta_poll_duration = total_poll_duration_ns
+                                .saturating_sub(metrics.prev_total_poll_duration_ns);
+                            let delta_idle_duration = total_idle_duration_ns
+                                .saturating_sub(metrics.prev_total_idle_duration_ns);
+
+                            let cycle_duration_total = total_poll_duration_ns
+                                .saturating_add(total_idle_duration_ns);
+                            let avg_cycle_duration_ns = if total_polls > 0 {
+                                cycle_duration_total / total_polls
+                            } else {
+                                0
+                            };
+
+                            let last_cycle_duration_ns = if delta_polls > 0 {
+                                let delta_total = delta_poll_duration
+                                    .saturating_add(delta_idle_duration);
+                                delta_total / delta_polls
+                            } else {
+                                metrics.last_cycle_duration_ns
+                            };
+
+                            let elapsed = now
+                                .checked_duration_since(metrics.last_update)
+                                .unwrap_or_default();
+                            let cycles_per_second = if elapsed.as_secs_f32() > 0.0 {
+                                (delta_polls as f32) / elapsed.as_secs_f32()
+                            } else {
+                                metrics.cycles_per_second
+                            };
+
                             metrics.instrumented_count = metrics_snapshot.instrumented_count as usize;
-                            metrics.total_polls = metrics_snapshot.total_poll_count;
-                            metrics.total_poll_duration_ns = metrics_snapshot.total_poll_duration.as_nanos() as u64;
-                            metrics.total_idle_duration_ns = metrics_snapshot.total_idle_duration.as_nanos() as u64;
-                            metrics.last_update = Instant::now();
+                            metrics.total_polls = total_polls;
+                            metrics.total_poll_duration_ns = total_poll_duration_ns;
+                            metrics.total_idle_duration_ns = total_idle_duration_ns;
+                            metrics.avg_cycle_duration_ns = avg_cycle_duration_ns;
+                            metrics.last_cycle_duration_ns = last_cycle_duration_ns;
+                            metrics.cycles_per_second = cycles_per_second;
+                            metrics.prev_total_polls = total_polls;
+                            metrics.prev_total_poll_duration_ns = total_poll_duration_ns;
+                            metrics.prev_total_idle_duration_ns = total_idle_duration_ns;
+                            metrics.last_update = now;
                         }
                     }
                 }
@@ -224,6 +299,9 @@ impl MetricsCollector {
             mean_poll_duration,
             total_idle_duration,
             mean_idle_duration,
+            avg_cycle_duration,
+            last_cycle_duration,
+            cycles_per_second,
         ) = if let Some(accumulated) = storage.get(name) {
             let mean_poll = if accumulated.total_polls > 0 {
                 accumulated.total_poll_duration_ns / accumulated.total_polls
@@ -243,9 +321,12 @@ impl MetricsCollector {
                 mean_poll,
                 accumulated.total_idle_duration_ns,
                 mean_idle,
+                accumulated.avg_cycle_duration_ns,
+                accumulated.last_cycle_duration_ns,
+                accumulated.cycles_per_second,
             )
         } else {
-            (0, 0, 0, 0, 0, 0)
+            (0, 0, 0, 0, 0, 0, 0, 0, 0.0)
         };
         drop(storage);
 
@@ -266,6 +347,9 @@ impl MetricsCollector {
             mean_poll_duration_ns: mean_poll_duration,
             total_idle_duration_ns: total_idle_duration,
             mean_idle_duration_ns: mean_idle_duration,
+            last_cycle_duration_ns: last_cycle_duration,
+            avg_cycle_duration_ns: avg_cycle_duration,
+            cycles_per_second,
             uptime_seconds: uptime,
             operations_total: 0,
             operations_per_second: 0.0,
@@ -321,6 +405,9 @@ impl MetricsCollector {
                 mean_poll_duration,
                 total_idle_duration,
                 mean_idle_duration,
+                avg_cycle_duration,
+                last_cycle_duration,
+                cycles_per_second,
             ) = if let Some(accumulated) = storage_snapshot.get(name) {
                 let mean_poll = if accumulated.total_polls > 0 {
                     accumulated.total_poll_duration_ns / accumulated.total_polls
@@ -340,9 +427,12 @@ impl MetricsCollector {
                     mean_poll,
                     accumulated.total_idle_duration_ns,
                     mean_idle,
+                    accumulated.avg_cycle_duration_ns,
+                    accumulated.last_cycle_duration_ns,
+                    accumulated.cycles_per_second,
                 )
             } else {
-                (0, 0, 0, 0, 0, 0)
+                (0, 0, 0, 0, 0, 0, 0, 0, 0.0)
             };
 
             // Calculate uptime
@@ -362,6 +452,9 @@ impl MetricsCollector {
                     mean_poll_duration_ns: mean_poll_duration,
                     total_idle_duration_ns: total_idle_duration,
                     mean_idle_duration_ns: mean_idle_duration,
+                    last_cycle_duration_ns: last_cycle_duration,
+                    avg_cycle_duration_ns: avg_cycle_duration,
+                    cycles_per_second,
                     uptime_seconds: uptime,
                     operations_total: 0,
                     operations_per_second: 0.0,
@@ -392,6 +485,9 @@ mod tests {
             mean_poll_duration_ns: 0,
             total_idle_duration_ns: 0,
             mean_idle_duration_ns: 0,
+            last_cycle_duration_ns: 0,
+            avg_cycle_duration_ns: 0,
+            cycles_per_second: f32::NAN,
             uptime_seconds: 0,
             operations_total: 0,
             operations_per_second: f32::INFINITY,

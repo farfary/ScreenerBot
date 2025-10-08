@@ -53,8 +53,10 @@
           <th data-sort="activity" title="Poll time ratio (busyness)">
             Activity
           </th>
-          <th data-sort="poll">Avg Poll</th>
-          <th data-sort="pps">Polls/s</th>
+          <th data-sort="lastCycle">Last Cycle</th>
+          <th data-sort="avgCycle">Avg Cycle</th>
+          <th data-sort="avgPoll">Avg Poll</th>
+          <th data-sort="cycleRate">Cycles/s</th>
           <th data-sort="tasks">Tasks</th>
           <th data-sort="ops">Ops/s</th>
           <th data-sort="errors">Errors</th>
@@ -64,7 +66,7 @@
       <tbody id="servicesTableBody">
         <tr>
           <td
-            colspan="12"
+            colspan="14"
             style="text-align: center; padding: 20px; color: var(--text-muted)"
           >
             Loading services...
@@ -328,7 +330,7 @@
         if (!tbody) return;
         tbody.innerHTML = `
                         <tr>
-                            <td colspan="12" style="text-align:center; padding: 20px; color: var(--text-muted);">
+              <td colspan="14" style="text-align:center; padding: 20px; color: var(--text-muted);">
                                 Loading services...
                             </td>
                         </tr>
@@ -340,7 +342,7 @@
         if (!tbody) return;
         tbody.innerHTML = `
                         <tr>
-                            <td colspan="12" style="text-align:center; padding: 20px; color: #ef4444;">
+              <td colspan="14" style="text-align:center; padding: 20px; color: #ef4444;">
                                 ${message}
                             </td>
                         </tr>
@@ -428,12 +430,14 @@
                 (m.total_idle_duration_ns || 0);
               return total > 0 ? (m.total_poll_duration_ns || 0) / total : 0;
             }
-            case "poll":
+            case "lastCycle":
+              return m.last_cycle_duration_ns || 0;
+            case "avgCycle":
+              return m.avg_cycle_duration_ns || 0;
+            case "avgPoll":
               return m.mean_poll_duration_ns || 0;
-            case "pps":
-              return s.uptime_seconds > 0
-                ? (m.total_polls || 0) / s.uptime_seconds
-                : 0;
+            case "cycleRate":
+              return m.cycles_per_second || 0;
             case "tasks":
               return m.task_count || 0;
             case "ops":
@@ -525,15 +529,20 @@
                 : activity > 5
                 ? "#6b7280"
                 : "#9ca3af";
+            const lastCycle = Utils.formatDuration(
+              m.last_cycle_duration_ns || 0
+            );
+            const avgCycle = Utils.formatDuration(m.avg_cycle_duration_ns || 0);
             const avgPoll = Utils.formatDuration(m.mean_poll_duration_ns || 0);
-            const pps =
-              service.uptime_seconds > 0
-                ? ((m.total_polls || 0) / service.uptime_seconds).toFixed(2)
-                : "0.00";
+            const cycleRate = Number.isFinite(m.cycles_per_second)
+              ? m.cycles_per_second.toFixed(2)
+              : "0.00";
 
             const taskInfo =
               m.task_count > 0
-                ? `${m.task_count} tasks\nPoll: ${Utils.formatDuration(
+                ? `${
+                    m.task_count
+                  } tasks\nLast cycle: ${lastCycle}\nAvg cycle: ${avgCycle}\nPoll: ${Utils.formatDuration(
                     m.mean_poll_duration_ns
                   )}\nIdle: ${Utils.formatDuration(
                     m.mean_idle_duration_ns
@@ -568,8 +577,10 @@
               m.total_polls || 0
             } polls</span></div>
                                 </td>
+                                <td title="Last full loop duration">${lastCycle}</td>
+                                <td title="Average full loop duration">${avgCycle}</td>
                                 <td title="Average duration per poll">${avgPoll}</td>
-                                <td title="Polls per second">${pps}</td>
+                                <td title="Cycles per second">${cycleRate}</td>
                                 <td title="${taskInfo}">${
               m.task_count || 0
             }</td>
@@ -588,7 +599,7 @@
           rows ||
           `
                         <tr>
-                            <td colspan="12" style="text-align:center; padding: 20px; color: var(--text-muted);">No services</td>
+                            <td colspan="14" style="text-align:center; padding: 20px; color: var(--text-muted);">No services</td>
                         </tr>`;
       },
 
