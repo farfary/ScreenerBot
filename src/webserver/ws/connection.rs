@@ -27,8 +27,8 @@ use super::{
     topics,
 };
 
-const EVENTS_SNAPSHOT_LIMIT: usize = 500;
-const EVENTS_SNAPSHOT_FETCH_LIMIT: usize = EVENTS_SNAPSHOT_LIMIT * 4;
+const EVENTS_SNAPSHOT_LIMIT: usize = 1000;
+const EVENTS_SNAPSHOT_FETCH_LIMIT: usize = EVENTS_SNAPSHOT_LIMIT;
 
 #[derive(Default)]
 struct ConnectionState {
@@ -731,12 +731,12 @@ async fn send_events_snapshot(
     filter: EventsRealtimeFilter,
 ) -> Result<Option<i64>, String> {
     let mut snapshot_events = Vec::with_capacity(EVENTS_SNAPSHOT_LIMIT);
-    let mut fetch = events::recent_all(EVENTS_SNAPSHOT_FETCH_LIMIT).await?;
+    let mut cached = events::cached_events_head(EVENTS_SNAPSHOT_FETCH_LIMIT).await;
 
-    // events::recent_all returns newest first; reverse iterate to maintain chronological order after filtering
-    fetch.reverse();
+    // cached_events_head returns newest first; reverse iterate to send oldest-to-newest snapshot
+    cached.reverse();
 
-    for event in fetch.into_iter() {
+    for event in cached.into_iter() {
         if filter.matches_event(&event) {
             snapshot_events.push(event);
         }
