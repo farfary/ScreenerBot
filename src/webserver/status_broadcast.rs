@@ -11,7 +11,7 @@ use crate::{
 };
 
 // Broadcast channel capacity
-const STATUS_BROADCAST_CAPACITY: usize = 100;
+const STATUS_BROADCAST_CAPACITY: usize = 256;
 
 // Global broadcaster
 static STATUS_BROADCAST_TX: OnceCell<broadcast::Sender<StatusSnapshot>> = OnceCell::new();

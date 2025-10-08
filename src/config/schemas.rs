@@ -320,11 +320,28 @@ config_struct! {
 }
 
 config_struct! {
+    /// WebSocket Hub snapshot limits
+    pub struct WsSnapshotLimitsConfig {
+        positions: usize = 100,
+        tokens: usize = 200,
+        events: usize = 50,
+        services: usize = 50,
+    }
+}
+
+config_struct! {
     /// WebSocket configuration
     pub struct WebSocketConfig {
         enabled: bool = true,
         max_connections: usize = 100,
         heartbeat_interval_secs: u64 = 30,
+
+        // Central hub configuration
+        central_hub_enabled: bool = false,
+        per_client_buffer: usize = 256,
+        heartbeat_secs: u64 = 30,
+        client_idle_timeout_secs: u64 = 90,
+        snapshot_limits: WsSnapshotLimitsConfig = WsSnapshotLimitsConfig::default(),
     }
 }
 

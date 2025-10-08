@@ -40,8 +40,10 @@
         // Client-Side Router - SPA Architecture
         window.Router = {
             currentPage: null,
-            _timeoutMs: 10000,
             cleanupHandlers: [],
+            _timeoutMs: 10000,
+            pageCache: {},           // Cache page containers
+            initializedPages: {},    // Track which pages have been initialized
             
             registerCleanup(handler) {
                 if (typeof handler === 'function') {
@@ -81,7 +83,7 @@
                 // Update current page
                 this.currentPage = pageName;
 
-                // Run cleanup handlers for previous page before loading new content
+                // Run cleanup handlers for previous page (page-specific only, not global WebSocket)
                 this.runCleanupHandlers();
                 
                 // Update active tab styling
@@ -95,30 +97,85 @@
                 });
                 
                 const mainContent = document.querySelector('main');
-                if (mainContent) {
-                    mainContent.setAttribute('data-loading', 'true');
-                    mainContent.innerHTML = `
-                        <div class="page-loading" style="padding: 2rem; text-align: center;">
-                            <div style="font-size: 1.1rem; color: var(--text-secondary);">
-                                Loading ${pageName}...
-                            </div>
-                        </div>
-                    `;
+                if (!mainContent) {
+                    console.error('[Router] Main content container not found');
+                    return;
                 }
+
+                // Check if page is already cached
+                let pageEl = this.pageCache[pageName];
+                
+                if (pageEl) {
+                    // Page is cached - just swap visibility
+                    console.log('[Router] Using cached page:', pageName);
+                    
+                    // Hide all pages
+                    Object.values(this.pageCache).forEach(el => {
+                        el.style.display = 'none';
+                    });
+                    
+                    // Show target page
+                    pageEl.style.display = 'block';
+                    
+                    // Clean up sub-tabs and toolbar for pages that don't use them
+                    cleanupTabContainers();
+                    
+                    // Update browser history only if path actually changed
+                    const targetUrl = pageName === 'home' ? '/' : `/${pageName}`;
+                    if (window.location.pathname !== targetUrl) {
+                        window.history.pushState({ page: pageName }, '', targetUrl);
+                    }
+                    
+                    // Save last visited tab
+                    AppState.save('lastTab', pageName);
+                    
+                    console.log('[Router] Cached page displayed:', pageName);
+                    return;
+                }
+
+                // Page not cached - fetch and create
+                mainContent.setAttribute('data-loading', 'true');
+                
+                // Show loading indicator in a temporary container
+                const loadingEl = document.createElement('div');
+                loadingEl.className = 'page-loading';
+                loadingEl.style.cssText = 'padding: 2rem; text-align: center;';
+                loadingEl.innerHTML = `
+                    <div style="font-size: 1.1rem; color: var(--text-secondary);">
+                        Loading ${pageName}...
+                    </div>
+                `;
+                
+                // Hide all existing pages and show loading
+                Object.values(this.pageCache).forEach(el => {
+                    el.style.display = 'none';
+                });
+                mainContent.appendChild(loadingEl);
 
                 // Fetch page content from API with timeout protection
                 try {
                     const html = await this.fetchPageContent(pageName, this._timeoutMs);
 
-                    if (!mainContent) {
-                        console.error('[Router] Main content container not found');
-                        return;
-                    }
+                    // Create new page container
+                    pageEl = document.createElement('div');
+                    pageEl.className = 'page-container';
+                    pageEl.id = `page-${pageName}`;
+                    pageEl.setAttribute('data-page', pageName);
+                    pageEl.innerHTML = html;
+                    
+                    // Cache the page
+                    this.pageCache[pageName] = pageEl;
+                    
+                    // Remove loading indicator
+                    loadingEl.remove();
+                    
+                    // Add to DOM
+                    mainContent.appendChild(pageEl);
+                    
+                    // Execute embedded scripts
+                    this.executeEmbeddedScripts(pageEl);
 
-                    mainContent.innerHTML = html;
-                    this.executeEmbeddedScripts(mainContent);
-
-                    // Re-initialize page-specific scripts
+                    // Initialize page-specific scripts (only once)
                     this.initPageScripts(pageName);
 
                     // Clean up sub-tabs and toolbar for pages that don't use them
@@ -133,31 +190,26 @@
                     // Save last visited tab
                     AppState.save('lastTab', pageName);
 
-                    console.log('[Router] Page loaded successfully:', pageName);
+                    console.log('[Router] New page loaded and cached:', pageName);
                 } catch (error) {
                     console.error('[Router] Failed to load page:', pageName, error);
                     
-                    // Show error in main content
-                    if (mainContent) {
-                        mainContent.removeAttribute('data-loading');
-                        mainContent.innerHTML = `
-                            <div style="padding: 2rem; text-align: center;">
-                                <h2 style="color: #ef4444;">⚠️ Failed to Load Page</h2>
-                                <p style="color: #9ca3af; margin-top: 1rem;">
-                                    ${error.message}
-                                </p>
-                                <button onclick="Router.loadPage('${pageName}')" 
-                                    style="margin-top: 1rem; padding: 0.5rem 1rem; 
-                                           background: #3b82f6; color: white; border: none; 
-                                           border-radius: 0.5rem; cursor: pointer;">
-                                    Retry
-                                </button>
-                            </div>
-                        `;
-                    }
-                }
-                
-                if (mainContent) {
+                    // Show error in loading container
+                    loadingEl.innerHTML = `
+                        <div style="padding: 2rem; text-align: center;">
+                            <h2 style="color: #ef4444;">⚠️ Failed to Load Page</h2>
+                            <p style="color: #9ca3af; margin-top: 1rem;">
+                                ${error.message}
+                            </p>
+                            <button onclick="Router.loadPage('${pageName}')" 
+                                style="margin-top: 1rem; padding: 0.5rem 1rem; 
+                                       background: #3b82f6; color: white; border: none; 
+                                       border-radius: 0.5rem; cursor: pointer;">
+                                Retry
+                            </button>
+                        </div>
+                    `;
+                } finally {
                     mainContent.removeAttribute('data-loading');
                 }
             },
@@ -202,6 +254,19 @@
             },
             
             initPageScripts(pageName) {
+                // Only initialize each page once (on first load)
+                if (this.initializedPages[pageName]) {
+                    console.log('[Router] Page already initialized, skipping init:', pageName);
+                    
+                    // Still activate WebSocket subscriptions for this page
+                    if (window.Realtime && typeof Realtime.activate === 'function') {
+                        Realtime.activate(pageName);
+                    }
+                    return;
+                }
+                
+                console.log('[Router] Initializing page for first time:', pageName);
+                
                 // Re-initialize page-specific functionality after dynamic load
                 switch (pageName) {
                     case 'status':
@@ -224,6 +289,9 @@
                         if (typeof initServicesPage === 'function') initServicesPage();
                         break;
                 }
+
+                // Mark as initialized
+                this.initializedPages[pageName] = true;
 
                 if (window.Realtime && typeof Realtime.activate === 'function') {
                     Realtime.activate(pageName);

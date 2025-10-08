@@ -13,6 +13,7 @@ pub mod state;
 pub mod status_broadcast;
 pub mod templates;
 pub mod utils;
+pub mod ws;
 
 // Public API for starting/stopping the webserver
 pub use server::{shutdown, start_server};

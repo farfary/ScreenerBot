@@ -8,7 +8,7 @@ use crate::{
     webserver::routes::services::{gather_services_overview_snapshot, ServicesOverviewResponse},
 };
 
-const SERVICES_BROADCAST_CAPACITY: usize = 64;
+const SERVICES_BROADCAST_CAPACITY: usize = 256;
 
 static SERVICES_BROADCAST_TX: OnceCell<broadcast::Sender<ServicesOverviewResponse>> =
     OnceCell::new();

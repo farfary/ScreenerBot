@@ -218,6 +218,58 @@
 
     const globalSubscriptions = [];
 
+    // Persistent subscriptions with client-side filtering (never unsubscribe on tab switch)
+    const persistentSubscriptions = {
+        status: (data) => {
+            // Always handle status (global header)
+            if (typeof global.renderStatusBadgesFromSnapshot === 'function') {
+                global.renderStatusBadgesFromSnapshot(data);
+            }
+        },
+        services: (data) => {
+            // Only process if services page is active
+            if (realtime.activePage === 'services' && 
+                global.PageRealtime?.services?.channels?.services) {
+                global.PageRealtime.services.channels.services(data);
+            }
+        },
+        events: (data) => {
+            // Only process if events page is active
+            if (realtime.activePage === 'events' && 
+                global.PageRealtime?.events?.channels?.events) {
+                global.PageRealtime.events.channels.events(data);
+            }
+        },
+        positions: (data) => {
+            // Only process if positions page is active
+            if (realtime.activePage === 'positions' && 
+                global.PageRealtime?.positions?.channels?.positions) {
+                global.PageRealtime.positions.channels.positions(data);
+            }
+        },
+        prices: (data) => {
+            // Only process if prices page is active (tokens page)
+            if (realtime.activePage === 'tokens' && 
+                global.PageRealtime?.tokens?.channels?.prices) {
+                global.PageRealtime.tokens.channels.prices(data);
+            }
+        },
+    };
+
+    // Initialize persistent subscriptions once
+    function initializePersistentSubscriptions() {
+        if (!hasWsHub() || global.__persistentSubsInitialized) {
+            return;
+        }
+        
+        for (const [channel, handler] of Object.entries(persistentSubscriptions)) {
+            global.WsHub.subscribe(channel, handler);
+        }
+        
+        global.__persistentSubsInitialized = true;
+        console.log('[Realtime] Persistent subscriptions initialized');
+    }
+
     const realtime = {
         activePage: null,
         activeConfig: null,
@@ -233,6 +285,7 @@
                 global.__wsHubInitialized = true;
                 global.WsHub.connect();
                 global.WsHub.startHeartbeat();
+                initializePersistentSubscriptions();
             } else if (!global.WsHub.isConnected()) {
                 global.WsHub.connect();
             }
@@ -316,13 +369,24 @@
                 return;
             }
 
-            this.deactivateCurrent();
+            // Call onExit for previous page if exists
+            const prevPage = this.activePage;
+            if (prevPage && this.activeConfig && typeof this.activeConfig.onExit === 'function') {
+                try {
+                    this.activeConfig.onExit();
+                } catch (err) {
+                    console.error('[Realtime] onExit handler failed:', err);
+                }
+            }
+
+            // Update active page state (no unsubscribe/resubscribe!)
             this.activePage = pageName;
 
             const config = global.PageRealtime ? global.PageRealtime[pageName] : undefined;
             this.activeConfig = config || null;
 
             if (!config) {
+                console.log(`[Realtime] Activated page: ${pageName} (no config, was: ${prevPage || 'none'})`);
                 return;
             }
 
@@ -347,15 +411,6 @@
                 }
             }
 
-            if (config.channels && typeof config.channels === 'object') {
-                for (const [channel, handler] of Object.entries(config.channels)) {
-                    if (typeof handler === 'function') {
-                        global.WsHub.subscribe(channel, handler);
-                        this.activeSubscriptions.push({ channel, handler });
-                    }
-                }
-            }
-
             if (typeof config.onEnter === 'function') {
                 try {
                     config.onEnter(status);
@@ -363,19 +418,12 @@
                     console.error('[Realtime] onEnter handler failed:', err);
                 }
             }
+
+            console.log(`[Realtime] Activated page: ${pageName} (was: ${prevPage || 'none'}) - using persistent subscriptions`);
         },
 
         deactivateCurrent() {
-            if (this.activeSubscriptions.length && hasWsHub()) {
-                for (const sub of this.activeSubscriptions) {
-                    try {
-                        global.WsHub.unsubscribe(sub.channel, sub.handler);
-                    } catch (err) {
-                        console.warn('[Realtime] Failed to unsubscribe channel', sub.channel, err);
-                    }
-                }
-            }
-
+            // Only call onExit, do NOT unsubscribe (keep persistent subscriptions)
             if (this.activeConfig && typeof this.activeConfig.onExit === 'function') {
                 try {
                     this.activeConfig.onExit();
@@ -384,7 +432,7 @@
                 }
             }
 
-            this.activeSubscriptions = [];
+            // Only clear local state, keep subscriptions active
             this.activeConfig = null;
             this.activePage = null;
         },

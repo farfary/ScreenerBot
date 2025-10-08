@@ -17,6 +17,9 @@ pub struct AppState {
 
     /// Server startup time
     pub startup_time: chrono::DateTime<chrono::Utc>,
+    
+    /// Central WebSocket hub (optional, feature-flagged)
+    pub ws_hub: Option<Arc<crate::webserver::ws::WsHub>>,
 }
 
 impl AppState {
@@ -26,7 +29,23 @@ impl AppState {
             config: Arc::new(config),
             ws_connections: Arc::new(RwLock::new(0)),
             startup_time: chrono::Utc::now(),
+            ws_hub: None,
         }
+    }
+    
+    /// Create new application state with WsHub
+    pub fn with_ws_hub(config: WebserverConfig, ws_hub: Arc<crate::webserver::ws::WsHub>) -> Self {
+        Self {
+            config: Arc::new(config),
+            ws_connections: Arc::new(RwLock::new(0)),
+            startup_time: chrono::Utc::now(),
+            ws_hub: Some(ws_hub),
+        }
+    }
+    
+    /// Get WsHub reference (if enabled)
+    pub fn ws_hub(&self) -> Option<&Arc<crate::webserver::ws::WsHub>> {
+        self.ws_hub.as_ref()
     }
 
     /// Get current WebSocket connection count
