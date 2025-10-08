@@ -1,5 +1,5 @@
 use once_cell::sync::OnceCell;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, RwLock};
 use tokio::time::{interval, Duration};
 
 use crate::{
@@ -12,6 +12,23 @@ const SERVICES_BROADCAST_CAPACITY: usize = 64;
 
 static SERVICES_BROADCAST_TX: OnceCell<broadcast::Sender<ServicesOverviewResponse>> =
     OnceCell::new();
+
+// Cached last services snapshot for immediate WebSocket subscribe catch-up
+static LAST_SERVICES_SNAPSHOT: OnceCell<RwLock<Option<ServicesOverviewResponse>>> = OnceCell::new();
+
+fn snapshot_store() -> &'static RwLock<Option<ServicesOverviewResponse>> {
+    LAST_SERVICES_SNAPSHOT.get_or_init(|| RwLock::new(None))
+}
+
+/// Retrieve last broadcasted services snapshot, if available
+pub async fn get_last_services_snapshot() -> Option<ServicesOverviewResponse> {
+    snapshot_store().read().await.clone()
+}
+
+/// Update the cached last services snapshot
+pub async fn set_last_services_snapshot(snapshot: ServicesOverviewResponse) {
+    *snapshot_store().write().await = Some(snapshot);
+}
 
 /// Initialize services broadcaster and return the first receiver
 pub fn initialize_services_broadcaster() -> broadcast::Receiver<ServicesOverviewResponse> {
@@ -105,6 +122,9 @@ pub fn start_services_broadcaster(interval_secs: u64) -> tokio::task::JoinHandle
                     ),
                 );
             }
+
+            // Update cached snapshot for immediate WS subscribe delivery
+            set_last_services_snapshot(snapshot.clone()).await;
 
             if let Err(error) = tx.send(snapshot) {
                 if is_debug_webserver_enabled() {

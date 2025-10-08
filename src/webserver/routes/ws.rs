@@ -22,6 +22,7 @@ use axum::{
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 
+use crate::webserver::services_broadcast::get_last_services_snapshot;
 use crate::{
     arguments::is_debug_webserver_enabled,
     events::{self, Event, EventCategory, Severity},
@@ -479,8 +480,13 @@ async fn handle_client_message(
                         "Preparing immediate services snapshot push on subscribe",
                     );
                 }
-                // Gather and forward the latest services overview snapshot right away
-                let snapshot = gather_services_overview_snapshot().await;
+                // Forward cached snapshot if available to avoid recompute & lock contention
+                let snapshot = if let Some(s) = get_last_services_snapshot().await {
+                    s
+                } else {
+                    // Startup fallback if cache not yet seeded
+                    gather_services_overview_snapshot().await
+                };
                 if let Err(_e) = forward_services(sender, &snapshot).await {
                     if is_debug_webserver_enabled() {
                         log(

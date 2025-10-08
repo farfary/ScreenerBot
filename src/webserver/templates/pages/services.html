@@ -212,6 +212,9 @@
       servicesFallbackInterval: null,
       activeFetchController: null,
       activeFetchTimeout: null,
+      // WS grace timer to avoid HTTP/WS race on page (re)enter
+      wsGraceTimer: null,
+      hasInitialSnapshot: false,
 
       clearActiveFetch: function (reason, shouldAbort = true) {
         if (this.activeFetchTimeout) {
@@ -234,6 +237,28 @@
             shouldAbort
           );
         }
+      },
+
+      clearWsGraceTimer: function () {
+        if (this.wsGraceTimer) {
+          clearTimeout(this.wsGraceTimer);
+          this.wsGraceTimer = null;
+          console.debug("[Services] WS grace timer cleared");
+        }
+      },
+
+      scheduleWsGraceFallback: function (ms = 800) {
+        this.clearWsGraceTimer();
+        this.wsGraceTimer = setTimeout(() => {
+          // If no WS snapshot arrived within grace, do one HTTP catch-up
+          if (!this.hasInitialSnapshot) {
+            console.warn(
+              "[Services] WS grace elapsed – fetching snapshot via HTTP"
+            );
+            this.loadServices({ showLoader: false });
+          }
+        }, Math.max(200, ms | 0));
+        console.debug("[Services] WS grace timer started", { ms });
       },
 
       loadServices: async function (options = {}) {
@@ -327,6 +352,10 @@
           this.showServicesError("No services available");
           return;
         }
+
+        // Mark that we received a WS snapshot and cancel any grace fallback
+        this.hasInitialSnapshot = true;
+        this.clearWsGraceTimer();
 
         this.servicesData = snapshot;
         console.log("[Services] ✅ Snapshot applied", {
@@ -644,9 +673,14 @@
         // Clean up any previous state
         this.clearActiveFetch("init");
         this.stopServicesFallback();
+        this.clearWsGraceTimer();
+        this.hasInitialSnapshot = false;
 
-        // Start fresh
-        this.loadServices({ showLoader: true });
+        // Always set loader to indicate activity and rely on WS snapshot only.
+        this.setServicesLoading();
+
+        // Defer grace/HTTP decisions to Realtime.onInitial/onUnavailable,
+        // which run after Router activates the page subscriptions.
       },
     };
 
@@ -655,41 +689,49 @@
       channels: {
         services: (snapshot) => {
           servicePageController.stopServicesFallback();
+          servicePageController.clearWsGraceTimer();
           servicePageController.handleServicesSnapshot(snapshot);
         },
         _disconnected: () => {
           console.warn(
             "[Services] WebSocket disconnected, enabling fallback polling"
           );
-          servicePageController.startServicesFallback(30000);
+          servicePageController.clearWsGraceTimer();
+          // WS-first: do not auto-start HTTP fallback; show reconnecting state instead
         },
         _failed: () => {
           console.error(
             "[Services] WebSocket error, keeping fallback polling active"
           );
-          servicePageController.startServicesFallback(30000);
+          servicePageController.clearWsGraceTimer();
+          // WS-first: do not auto-start HTTP fallback on errors
         },
         _connected: () => {
           console.info(
             "[Services] WebSocket connected, stopping fallback polling"
           );
           servicePageController.stopServicesFallback();
+          servicePageController.clearWsGraceTimer();
         },
       },
       onInitial(status) {
-        if (status === "connected") {
+        // After Router activates realtime, decide fallback/grace now
+        if (status === "connected" || status === "connecting") {
           servicePageController.stopServicesFallback();
+          // Start a longer grace since WS subscribe just occurred
+          servicePageController.scheduleWsGraceFallback(4000);
         } else {
-          servicePageController.startServicesFallback(30000);
+          // WS unavailable at init: stay WS-first; don't auto-HTTP. Keep loader visible.
         }
       },
       onUnavailable() {
         console.warn("[Services] WebSocket unavailable, using HTTP polling");
-        servicePageController.startServicesFallback(30000);
+        // WS-first: avoid auto HTTP polling; users can click Refresh if needed
       },
       onExit() {
         servicePageController.stopServicesFallback();
         servicePageController.clearActiveFetch("page-exit");
+        servicePageController.clearWsGraceTimer();
       },
     };
 
