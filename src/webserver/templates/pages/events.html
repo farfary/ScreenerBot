@@ -1,11 +1,7 @@
 <div class="page-section">
   <div class="toolbar">
     <span style="font-weight: 600">📡 Events</span>
-    <input
-      type="text"
-      id="eventSearch"
-      placeholder="🔍 Search events..."
-      style="
+    <input type="text" id="eventSearch" placeholder="🔍 Search events..." style="
         flex: 1;
         min-width: 200px;
         padding: 6px 8px;
@@ -13,18 +9,14 @@
         border-radius: 6px;
         background: var(--bg-primary);
         color: var(--text-primary);
-      "
-    />
-    <select
-      id="categoryFilter"
-      style="
+      " />
+    <select id="categoryFilter" style="
         padding: 6px 8px;
         border: 1px solid var(--border-color);
         border-radius: 6px;
         background: var(--bg-primary);
         color: var(--text-primary);
-      "
-    >
+      ">
       <option value="">All Categories</option>
       <option value="swap">Swap</option>
       <option value="transaction">Transaction</option>
@@ -35,16 +27,13 @@
       <option value="entry">Entry</option>
       <option value="system">System</option>
     </select>
-    <select
-      id="severityFilter"
-      style="
+    <select id="severityFilter" style="
         padding: 6px 8px;
         border: 1px solid var(--border-color);
         border-radius: 6px;
         background: var(--bg-primary);
         color: var(--text-primary);
-      "
-    >
+      ">
       <option value="">All Severity</option>
       <option value="info">Info</option>
       <option value="warn">Warning</option>
@@ -52,11 +41,7 @@
       <option value="debug">Debug</option>
     </select>
     <div class="spacer"></div>
-    <span
-      id="eventsCountText"
-      style="color: var(--text-secondary); font-size: 0.9em"
-      >Loading...</span
-    >
+    <span id="eventsCountText" style="color: var(--text-secondary); font-size: 0.9em">Loading...</span>
     <button id="toggleEventsPause" class="btn">⏸️ Pause</button>
     <button id="refreshEvents" class="btn btn-primary">🔄 Refresh</button>
   </div>
@@ -183,10 +168,7 @@
       </thead>
       <tbody id="eventsTableBody">
         <tr>
-          <td
-            colspan="6"
-            style="text-align: center; padding: 20px; color: var(--text-muted)"
-          >
+          <td colspan="6" style="text-align: center; padding: 20px; color: var(--text-muted)">
             Loading events...
           </td>
         </tr>
@@ -197,12 +179,7 @@
     <div class="modal-content event-detail-modal">
       <div class="modal-header">
         <span class="modal-title" id="eventDetailTitle">Event Details</span>
-        <button
-          id="eventDetailClose"
-          class="modal-close"
-          type="button"
-          aria-label="Close"
-        >
+        <button id="eventDetailClose" class="modal-close" type="button" aria-label="Close">
           ×
         </button>
       </div>
@@ -231,8 +208,7 @@
         </div>
         <div class="event-detail-json-wrapper">
           <pre id="eventDetailPayload" class="event-detail-json">
-Loading...</pre
-          >
+Loading...</pre>
         </div>
       </div>
     </div>
@@ -427,15 +403,15 @@ Loading...</pre
     const categoryLabel = categoryRaw
       ? categoryRaw.charAt(0).toUpperCase() + categoryRaw.slice(1)
       : category
-      ? category.charAt(0).toUpperCase() + category.slice(1)
-      : "Unknown";
+        ? category.charAt(0).toUpperCase() + category.slice(1)
+        : "Unknown";
     const payloadMessage =
       typeof payload.message === "string" && payload.message.trim() !== ""
         ? payload.message
         : typeof payload.message_short === "string" &&
           payload.message_short.trim() !== ""
-        ? payload.message_short
-        : null;
+          ? payload.message_short
+          : null;
     const rawMessage =
       typeof raw.message === "string" && raw.message.trim() !== ""
         ? raw.message
@@ -550,14 +526,14 @@ Loading...</pre
       const message = snapshotState.inProgress
         ? "📦 Receiving snapshot..."
         : connectionStatus === "error"
-        ? "⚠️ Error loading events. Please check server status."
-        : connectionStatus === "connecting"
-        ? "🔄 Connecting to server..."
-        : connectionStatus === "paused"
-        ? "⏸️ Events paused. Resume to receive new activity."
-        : connectionStatus === "disconnected"
-        ? "📴 Realtime connection lost. Waiting to resync..."
-        : "📋 No events found. Events will appear here as they occur.";
+          ? "⚠️ Error loading events. Please check server status."
+          : connectionStatus === "connecting"
+            ? "🔄 Connecting to server..."
+            : connectionStatus === "paused"
+              ? "⏸️ Events paused. Resume to receive new activity."
+              : connectionStatus === "disconnected"
+                ? "📴 Realtime connection lost. Waiting to resync..."
+                : "📋 No events found. Events will appear here as they occur.";
 
       tbody.innerHTML = `
                     <tr>
@@ -596,13 +572,12 @@ Loading...</pre
             <td style="padding: 10px;">
               <span style="background: var(--badge-loading); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85em;">
                 ${Utils.escapeHtml(
-                  event.categoryLabel || event.category || "-"
-                )}
+          event.categoryLabel || event.category || "-"
+        )}
                             </span>
                         </td>
-                        <td style="padding: 10px; font-size: 0.9em;">${
-                          event.subtype || "-"
-                        }</td>
+                        <td style="padding: 10px; font-size: 0.9em;">${event.subtype || "-"
+          }</td>
                         <td style="padding: 10px;">
                             <span style="background: ${severityColor}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85em;">
                                 ${event.severity.toUpperCase()}
@@ -897,7 +872,7 @@ Loading...</pre
     updatePauseButtonUI();
     const realtime = window.Realtime;
     const realtimePaused = !!(realtime &&
-    typeof realtime.isEventsPaused === "function"
+      typeof realtime.isEventsPaused === "function"
       ? realtime.isEventsPaused("events")
       : false);
     const savedPaused = AppState.load("events_paused", "") === "1";

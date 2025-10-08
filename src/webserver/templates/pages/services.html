@@ -1,12 +1,7 @@
 <div class="services-container">
   <div class="services-toolbar">
     <div class="toolbar-left">
-      <input
-        id="serviceSearch"
-        class="input"
-        type="text"
-        placeholder="Search services..."
-      />
+      <input id="serviceSearch" class="input" type="text" placeholder="Search services..." />
       <select id="statusFilter" class="input">
         <option value="all">All statuses</option>
         <option value="healthy">Healthy</option>
@@ -14,9 +9,7 @@
         <option value="starting">Starting</option>
         <option value="unhealthy">Unhealthy</option>
       </select>
-      <label class="toggle"
-        ><input type="checkbox" id="enabledOnly" /> Enabled only</label
-      >
+      <label class="toggle"><input type="checkbox" id="enabledOnly" /> Enabled only</label>
     </div>
     <div class="toolbar-right">
       <div class="chip">Total <span id="totalServices">-</span></div>
@@ -65,10 +58,7 @@
       </thead>
       <tbody id="servicesTableBody">
         <tr>
-          <td
-            colspan="14"
-            style="text-align: center; padding: 20px; color: var(--text-muted)"
-          >
+          <td colspan="14" style="text-align: center; padding: 20px; color: var(--text-muted)">
             Loading services...
           </td>
         </tr>
@@ -83,6 +73,7 @@
     max-width: 1400px;
     margin: 0 auto;
   }
+
   .services-toolbar {
     display: flex;
     gap: 1rem;
@@ -90,6 +81,7 @@
     align-items: center;
     margin-bottom: 1rem;
   }
+
   .toolbar-left,
   .toolbar-right {
     display: flex;
@@ -97,6 +89,7 @@
     gap: 0.5rem;
     flex-wrap: wrap;
   }
+
   .input {
     background: var(--bg-card);
     color: var(--text-primary);
@@ -104,6 +97,7 @@
     border-radius: 6px;
     padding: 0.4rem 0.6rem;
   }
+
   .toggle {
     color: var(--text-muted);
     font-size: 0.9rem;
@@ -111,6 +105,7 @@
     align-items: center;
     gap: 0.4rem;
   }
+
   .chip {
     background: var(--bg-secondary);
     color: var(--text-primary);
@@ -119,16 +114,19 @@
     padding: 0.25rem 0.6rem;
     font-size: 0.85rem;
   }
+
   .chip-success {
     background: #064e3b;
     color: #34d399;
     border-color: #065f46;
   }
+
   .chip-warn {
     background: #4a3000;
     color: #fbbf24;
     border-color: #92400e;
   }
+
   .chip-error {
     background: #4c0519;
     color: #fb7185;
@@ -139,6 +137,7 @@
   .activity-cell {
     min-width: 140px;
   }
+
   .activity-track {
     background: #1f2937;
     border-radius: 6px;
@@ -146,12 +145,14 @@
     width: 100%;
     overflow: hidden;
   }
+
   .activity-fill {
     height: 100%;
     border-radius: 6px;
     background: #10b981;
     transition: width 0.25s ease;
   }
+
   .activity-meta {
     display: flex;
     justify-content: space-between;
@@ -165,10 +166,12 @@
     cursor: pointer;
     user-select: none;
   }
+
   .services-table th[data-sort].asc::after {
     content: " \25B2";
     color: var(--text-muted);
   }
+
   .services-table th[data-sort].desc::after {
     content: " \25BC";
     color: var(--text-muted);
@@ -189,14 +192,17 @@
     background: var(--badge-online);
     color: #fff;
   }
+
   .badge.warning {
     background: var(--badge-loading);
     color: #fff;
   }
+
   .badge.error {
     background: var(--badge-error);
     color: #fff;
   }
+
   .badge.secondary {
     background: var(--bg-secondary);
     color: var(--text-primary);
@@ -227,7 +233,7 @@
           if (shouldAbort) {
             try {
               this.activeFetchController.abort();
-            } catch (_) {}
+            } catch (_) { }
           }
           this.activeFetchController = null;
         }
@@ -509,10 +515,10 @@
             const deps =
               service.dependencies && service.dependencies.length
                 ? service.dependencies
-                    .map(
-                      (dep) => `<span class="dependency-badge">${dep}</span>`
-                    )
-                    .join(" ")
+                  .map(
+                    (dep) => `<span class="dependency-badge">${dep}</span>`
+                  )
+                  .join(" ")
                 : '<span class="detail-value">None</span>';
 
             const total =
@@ -523,12 +529,12 @@
               activity > 80
                 ? "#10b981"
                 : activity > 50
-                ? "#3b82f6"
-                : activity > 20
-                ? "#f59e0b"
-                : activity > 5
-                ? "#6b7280"
-                : "#9ca3af";
+                  ? "#3b82f6"
+                  : activity > 20
+                    ? "#f59e0b"
+                    : activity > 5
+                      ? "#6b7280"
+                      : "#9ca3af";
             const lastCycle = Utils.formatDuration(
               m.last_cycle_duration_ns || 0
             );
@@ -540,56 +546,51 @@
 
             const taskInfo =
               m.task_count > 0
-                ? `${
-                    m.task_count
-                  } tasks\nLast cycle: ${lastCycle}\nAvg cycle: ${avgCycle}\nPoll: ${Utils.formatDuration(
-                    m.mean_poll_duration_ns
-                  )}\nIdle: ${Utils.formatDuration(
-                    m.mean_idle_duration_ns
-                  )}\nTotal Polls: ${m.total_polls || 0}`
+                ? `${m.task_count
+                } tasks\nLast cycle: ${lastCycle}\nAvg cycle: ${avgCycle}\nPoll: ${Utils.formatDuration(
+                  m.mean_poll_duration_ns
+                )}\nIdle: ${Utils.formatDuration(
+                  m.mean_idle_duration_ns
+                )}\nTotal Polls: ${m.total_polls || 0}`
                 : "No instrumented tasks";
 
             return `
                             <tr>
-                                <td style="font-weight:600;">${
-                                  service.name
-                                }</td>
+                                <td style="font-weight:600;">${service.name
+              }</td>
                                 <td><span class="badge ${this.getHealthBadgeClass(
-                                  service.health
-                                )}">${this.getHealthStatus(
-              service.health
-            )}</span></td>
+                service.health
+              )}">${this.getHealthStatus(
+                service.health
+              )}</span></td>
                                 <td>${service.priority}</td>
                                 <td>${service.enabled ? "✅" : "❌"}</td>
                                 <td>${Utils.formatUptime(
-                                  service.uptime_seconds,
-                                  { style: "compact" }
-                                )}</td>
+                service.uptime_seconds,
+                { style: "compact" }
+              )}</td>
                                 <td class="activity-cell" title="${activity.toFixed(
-                                  1
-                                )}% busy">
+                1
+              )}% busy">
                                     <div class="activity-track"><div class="activity-fill" style="width:${activity.toFixed(
-                                      1
-                                    )}%; background:${activityColor}"></div></div>
+                1
+              )}%; background:${activityColor}"></div></div>
                                     <div class="activity-meta"><span>${activity.toFixed(
-                                      1
-                                    )}%</span><span>${
-              m.total_polls || 0
-            } polls</span></div>
+                1
+              )}%</span><span>${m.total_polls || 0
+              } polls</span></div>
                                 </td>
                                 <td title="Last full loop duration">${lastCycle}</td>
                                 <td title="Average full loop duration">${avgCycle}</td>
                                 <td title="Average duration per poll">${avgPoll}</td>
                                 <td title="Cycles per second">${cycleRate}</td>
-                                <td title="${taskInfo}">${
-              m.task_count || 0
-            }</td>
+                                <td title="${taskInfo}">${m.task_count || 0
+              }</td>
                                 <td title="Operations per second">${(
-                                  m.operations_per_second || 0
-                                ).toFixed(2)}</td>
-                                <td title="Total errors">${
-                                  m.errors_total || 0
-                                }</td>
+                m.operations_per_second || 0
+              ).toFixed(2)}</td>
+                                <td title="Total errors">${m.errors_total || 0
+              }</td>
                                 <td>${deps}</td>
                             </tr>`;
           })

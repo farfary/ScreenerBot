@@ -317,12 +317,12 @@
         rugged === true
           ? "critical"
           : securityScore >= 700
-          ? "excellent"
-          : securityScore >= 500
-          ? "good"
-          : securityScore >= 300
-          ? "warning"
-          : "critical";
+            ? "excellent"
+            : securityScore >= 500
+              ? "good"
+              : securityScore >= 300
+                ? "warning"
+                : "critical";
       badge.className = `security-badge ${statusClass}`.trim();
     }
 
@@ -518,9 +518,8 @@
     subTabsContainer.innerHTML = views
       .map(
         (view) => `
-                    <button class="sub-tab ${
-                      view.id === tokensState.view ? "active" : ""
-                    }" data-view="${view.id}">
+                    <button class="sub-tab ${view.id === tokensState.view ? "active" : ""
+          }" data-view="${view.id}">
                         ${view.label}
                     </button>
                 `
@@ -823,28 +822,21 @@
                             </div>
                         </div>
                     </td>
-                    <td class="num" style="font-weight:600;" title="${
-                      token.price_sol ?? ""
-                    }">${priceDisplay}</td>
-                    <td class="num" title="${
-                      token.liquidity_usd ?? ""
-                    }">${liquidity}</td>
-                    <td class="num" title="${
-                      token.volume_24h ?? ""
-                    }">${vol24h}</td>
+                    <td class="num" style="font-weight:600;" title="${token.price_sol ?? ""
+      }">${priceDisplay}</td>
+                    <td class="num" title="${token.liquidity_usd ?? ""
+      }">${liquidity}</td>
+                    <td class="num" title="${token.volume_24h ?? ""
+      }">${vol24h}</td>
                     <td class="num" title="${token.fdv ?? ""}">${fdv}</td>
-                    <td class="num" title="${
-                      token.market_cap ?? ""
-                    }">${marketCap}</td>
-                    <td class="num" title="${
-                      token.price_change_h1 ?? ""
-                    }">${ch1h}</td>
-                    <td class="num" title="${
-                      token.price_change_h24 ?? ""
-                    }">${ch24h}</td>
-                    <td class="num" title="${
-                      token.security_score ?? ""
-                    }">${security}</td>
+                    <td class="num" title="${token.market_cap ?? ""
+      }">${marketCap}</td>
+                    <td class="num" title="${token.price_change_h1 ?? ""
+      }">${ch1h}</td>
+                    <td class="num" title="${token.price_change_h24 ?? ""
+      }">${ch24h}</td>
+                    <td class="num" title="${token.security_score ?? ""
+      }">${security}</td>
                     <td>${status}</td>
                     <td style="font-size: 0.85em; color: #64748b;">${timeAgo}</td>
                     <td onclick="event.stopPropagation();">
@@ -1035,86 +1027,51 @@
       <thead>
         <tr>
           <th class="sortable" data-sort-key="symbol">
-            <span class="sort-label"
-              >Token
-              <span class="sort-indicator" id="sort-indicator-symbol"></span
-            ></span>
+            <span class="sort-label">Token
+              <span class="sort-indicator" id="sort-indicator-symbol"></span></span>
           </th>
           <th class="sortable" data-sort-key="price_sol">
-            <span class="sort-label"
-              >Price (SOL)
-              <span class="sort-indicator" id="sort-indicator-price_sol"></span
-            ></span>
+            <span class="sort-label">Price (SOL)
+              <span class="sort-indicator" id="sort-indicator-price_sol"></span></span>
           </th>
           <th class="sortable" data-sort-key="liquidity_usd">
-            <span class="sort-label"
-              >Liquidity
-              <span
-                class="sort-indicator"
-                id="sort-indicator-liquidity_usd"
-              ></span
-            ></span>
+            <span class="sort-label">Liquidity
+              <span class="sort-indicator" id="sort-indicator-liquidity_usd"></span></span>
           </th>
           <th class="sortable" data-sort-key="volume_24h">
-            <span class="sort-label"
-              >24h Vol
-              <span class="sort-indicator" id="sort-indicator-volume_24h"></span
-            ></span>
+            <span class="sort-label">24h Vol
+              <span class="sort-indicator" id="sort-indicator-volume_24h"></span></span>
           </th>
           <th class="sortable" data-sort-key="fdv">
-            <span class="sort-label"
-              >FDV <span class="sort-indicator" id="sort-indicator-fdv"></span
-            ></span>
+            <span class="sort-label">FDV <span class="sort-indicator" id="sort-indicator-fdv"></span></span>
           </th>
           <th class="sortable" data-sort-key="market_cap">
-            <span class="sort-label"
-              >Mkt Cap
-              <span class="sort-indicator" id="sort-indicator-market_cap"></span
-            ></span>
+            <span class="sort-label">Mkt Cap
+              <span class="sort-indicator" id="sort-indicator-market_cap"></span></span>
           </th>
           <th class="sortable" data-sort-key="price_change_h1">
-            <span class="sort-label"
-              >1h
-              <span
-                class="sort-indicator"
-                id="sort-indicator-price_change_h1"
-              ></span
-            ></span>
+            <span class="sort-label">1h
+              <span class="sort-indicator" id="sort-indicator-price_change_h1"></span></span>
           </th>
           <th class="sortable" data-sort-key="price_change_h24">
-            <span class="sort-label"
-              >24h
-              <span
-                class="sort-indicator"
-                id="sort-indicator-price_change_h24"
-              ></span
-            ></span>
+            <span class="sort-label">24h
+              <span class="sort-indicator" id="sort-indicator-price_change_h24"></span></span>
           </th>
           <th class="sortable" data-sort-key="security_score">
-            <span class="sort-label"
-              >Security
-              <span
-                class="sort-indicator"
-                id="sort-indicator-security_score"
-              ></span
-            ></span>
+            <span class="sort-label">Security
+              <span class="sort-indicator" id="sort-indicator-security_score"></span></span>
           </th>
           <th>Status</th>
           <th class="sortable" data-sort-key="updated_at">
-            <span class="sort-label"
-              >Updated
-              <span class="sort-indicator" id="sort-indicator-updated_at"></span
-            ></span>
+            <span class="sort-label">Updated
+              <span class="sort-indicator" id="sort-indicator-updated_at"></span></span>
           </th>
           <th>Actions</th>
         </tr>
       </thead>
       <tbody id="tokensTableBody">
         <tr>
-          <td
-            colspan="4"
-            style="text-align: center; padding: 20px; color: #94a3b8"
-          >
+          <td colspan="4" style="text-align: center; padding: 20px; color: #94a3b8">
             <div class="loading-text">Loading tokens...</div>
           </td>
         </tr>
@@ -1124,11 +1081,7 @@
 </div>
 
 <!-- Token Details Modal -->
-<div
-  class="token-modal-overlay"
-  id="tokenModal"
-  onclick="closeTokenModal(event)"
->
+<div class="token-modal-overlay" id="tokenModal" onclick="closeTokenModal(event)">
   <div class="token-modal" onclick="event.stopPropagation()">
     <!-- Modal Header -->
     <div class="modal-header">
@@ -1145,11 +1098,7 @@
           +2.12%
         </div>
       </div>
-      <button
-        class="modal-close-btn"
-        onclick="closeTokenModal()"
-        title="Close (ESC)"
-      >
+      <button class="modal-close-btn" onclick="closeTokenModal()" title="Close (ESC)">
         ×
       </button>
     </div>
@@ -1183,18 +1132,13 @@
                 <div class="metric-card-header">🧾 Token Profile</div>
                 <div class="metric-row" title="Full mint address">
                   <span class="metric-label">Mint</span>
-                  <span
-                    class="metric-value"
-                    id="detail-mint"
-                    style="
+                  <span class="metric-value" id="detail-mint" style="
                       font-size: 0.75em;
                       letter-spacing: 0.3px;
                       overflow: hidden;
                       text-overflow: ellipsis;
                       max-width: 160px;
-                    "
-                    >—</span
-                  >
+                    ">—</span>
                 </div>
                 <div class="metric-row">
                   <span class="metric-label">Decimals</span>
@@ -1217,15 +1161,11 @@
                 <div class="metric-card-header">💰 Market Data</div>
                 <div class="metric-row">
                   <span class="metric-label">Liquidity</span>
-                  <span class="metric-value" id="detail-liquidity"
-                    >$628.66K</span
-                  >
+                  <span class="metric-value" id="detail-liquidity">$628.66K</span>
                 </div>
                 <div class="metric-row">
                   <span class="metric-label">Volume 24h</span>
-                  <span class="metric-value" id="detail-volume24h"
-                    >$124.32K</span
-                  >
+                  <span class="metric-value" id="detail-volume24h">$124.32K</span>
                 </div>
                 <div class="metric-row">
                   <span class="metric-label">Volume 6h</span>
@@ -1241,9 +1181,7 @@
                 </div>
                 <div class="metric-row">
                   <span class="metric-label">Market Cap</span>
-                  <span class="metric-value" id="detail-marketcap"
-                    >$64.86M</span
-                  >
+                  <span class="metric-value" id="detail-marketcap">$64.86M</span>
                 </div>
               </div>
 
@@ -1255,24 +1193,15 @@
                 </div>
                 <div class="metric-row">
                   <span class="metric-label">Pool Address</span>
-                  <span
-                    class="metric-value"
-                    id="detail-pool"
-                    style="font-size: 0.75em"
-                    >—</span
-                  >
+                  <span class="metric-value" id="detail-pool" style="font-size: 0.75em">—</span>
                 </div>
                 <div class="metric-row">
                   <span class="metric-label">SOL Reserves</span>
-                  <span class="metric-value" id="detail-sol-reserves"
-                    >3,241.5</span
-                  >
+                  <span class="metric-value" id="detail-sol-reserves">3,241.5</span>
                 </div>
                 <div class="metric-row">
                   <span class="metric-label">Token Reserves</span>
-                  <span class="metric-value" id="detail-token-reserves"
-                    >84.2M</span
-                  >
+                  <span class="metric-value" id="detail-token-reserves">84.2M</span>
                 </div>
                 <div class="metric-row">
                   <span class="metric-label">Confidence</span>
@@ -1330,25 +1259,16 @@
           <div class="tab-pane" id="tab-security">
             <div class="security-badge excellent" id="security-badge">
               <span>🛡️</span>
-              <span
-                >Security Score: <span id="security-score-value">35593</span> /
-                40000</span
-              >
+              <span>Security Score: <span id="security-score-value">35593</span> /
+                40000</span>
             </div>
 
             <div class="metric-card" style="margin-bottom: 20px">
               <div class="metric-card-header">Overall Security Analysis</div>
               <div class="progress-bar">
-                <div
-                  class="progress-fill"
-                  id="security-progress"
-                  style="width: 89%"
-                ></div>
+                <div class="progress-fill" id="security-progress" style="width: 89%"></div>
               </div>
-              <div
-                style="margin-top: 12px; color: #94a3b8; font-size: 0.9em"
-                id="security-status"
-              >
+              <div style="margin-top: 12px; color: #94a3b8; font-size: 0.9em" id="security-status">
                 ✅ This token passes major security checks
               </div>
             </div>
@@ -1357,21 +1277,11 @@
               <div class="metric-card-header">🔑 Token Authorities</div>
               <div class="metric-row">
                 <span class="metric-label">Mint Authority</span>
-                <span
-                  class="metric-value"
-                  id="detail-mint-auth"
-                  style="font-size: 0.75em"
-                  >None ✅</span
-                >
+                <span class="metric-value" id="detail-mint-auth" style="font-size: 0.75em">None ✅</span>
               </div>
               <div class="metric-row">
                 <span class="metric-label">Freeze Authority</span>
-                <span
-                  class="metric-value"
-                  id="detail-freeze-auth"
-                  style="font-size: 0.75em"
-                  >None ✅</span
-                >
+                <span class="metric-value" id="detail-freeze-auth" style="font-size: 0.75em">None ✅</span>
               </div>
             </div>
 
@@ -1397,17 +1307,14 @@
 
           <!-- Chart Tab -->
           <div class="tab-pane" id="tab-chart">
-            <div
-              id="token-chart-container"
-              style="
+            <div id="token-chart-container" style="
                 height: 500px;
                 width: 100%;
                 position: relative;
                 background: #1a1a1a;
                 border-radius: 8px;
                 overflow: hidden;
-              "
-            >
+              ">
               <div id="token-chart" style="width: 100%; height: 100%"></div>
               <div id="chart-loading" class="chart-loading">
                 <div class="spinner"></div>
@@ -1431,10 +1338,8 @@
               </div>
 
               <div class="indicator-toggles">
-                <label
-                  ><input type="checkbox" id="show-volume" checked />
-                  Volume</label
-                >
+                <label><input type="checkbox" id="show-volume" checked />
+                  Volume</label>
                 <label><input type="checkbox" id="show-ma20" /> MA(20)</label>
                 <label><input type="checkbox" id="show-ma50" /> MA(50)</label>
               </div>
@@ -1445,10 +1350,7 @@
           <div class="tab-pane" id="tab-transactions">
             <div class="metric-card">
               <div class="metric-card-header">📜 Recent Transactions</div>
-              <div
-                id="transactions-list"
-                style="color: #94a3b8; text-align: center; padding: 40px"
-              >
+              <div id="transactions-list" style="color: #94a3b8; text-align: center; padding: 40px">
                 Loading recent transactions...
               </div>
             </div>
@@ -1462,15 +1364,11 @@
           <div class="sidebar-section-title">⚡ Live Metrics</div>
           <div class="sidebar-metric">
             <span class="sidebar-metric-label">Price (SOL)</span>
-            <span class="sidebar-metric-value" id="sidebar-price"
-              >0.00077622</span
-            >
+            <span class="sidebar-metric-value" id="sidebar-price">0.00077622</span>
           </div>
           <div class="sidebar-metric">
             <span class="sidebar-metric-label">24h Volume</span>
-            <span class="sidebar-metric-value" id="sidebar-volume"
-              >$124.3K</span
-            >
+            <span class="sidebar-metric-value" id="sidebar-volume">$124.3K</span>
           </div>
           <div class="sidebar-metric">
             <span class="sidebar-metric-label">Liquidity</span>
@@ -1485,32 +1383,16 @@
         <div class="sidebar-section">
           <div class="sidebar-section-title">🔗 Quick Actions</div>
           <div class="quick-actions">
-            <button
-              class="quick-action-btn"
-              id="action-copy-mint"
-              onclick="copyMintFromModal()"
-            >
+            <button class="quick-action-btn" id="action-copy-mint" onclick="copyMintFromModal()">
               📋 Copy Mint Address
             </button>
-            <button
-              class="quick-action-btn"
-              id="action-dexscreener"
-              onclick="openDexScreenerFromModal()"
-            >
+            <button class="quick-action-btn" id="action-dexscreener" onclick="openDexScreenerFromModal()">
               📊 Open DexScreener →
             </button>
-            <button
-              class="quick-action-btn"
-              id="action-gmgn"
-              onclick="openGMGNFromModal()"
-            >
+            <button class="quick-action-btn" id="action-gmgn" onclick="openGMGNFromModal()">
               🔗 Open GMGN →
             </button>
-            <button
-              class="quick-action-btn"
-              id="action-solscan"
-              onclick="openSolscanFromModal()"
-            >
+            <button class="quick-action-btn" id="action-solscan" onclick="openSolscanFromModal()">
               🔍 Open Solscan →
             </button>
           </div>
@@ -1518,10 +1400,7 @@
 
         <div class="sidebar-section">
           <div class="sidebar-section-title">🏷️ Status Flags</div>
-          <div
-            id="sidebar-badges"
-            style="display: flex; flex-wrap: wrap; gap: 6px"
-          >
+          <div id="sidebar-badges" style="display: flex; flex-wrap: wrap; gap: 6px">
             <!-- Badges will be populated here -->
           </div>
         </div>

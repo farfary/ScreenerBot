@@ -1,143 +1,159 @@
-        /* Chart Styles */
-        #token-chart {
-            width: 100%;
-            height: 400px;
-            background: var(--bg-card);
-            border-radius: 8px;
-        }
+/* Chart Styles */
+#token-chart {
+  width: 100%;
+  height: 400px;
+  background: var(--bg-card);
+  border-radius: 8px;
+}
 
-        #chart-loading {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 400px;
-            color: var(--text-secondary);
-            font-size: 1.1em;
-        }
+#chart-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 400px;
+  color: var(--text-secondary);
+  font-size: 1.1em;
+}
 
-        #chart-loading::after {
-            content: '...';
-            animation: dots 1.5s steps(4, end) infinite;
-        }
+#chart-loading::after {
+  content: "...";
+  animation: dots 1.5s steps(4, end) infinite;
+}
 
-        @keyframes dots {
-            0%, 20% { content: '.'; }
-            40% { content: '..'; }
-            60%, 100% { content: '...'; }
-        }
+@keyframes dots {
+  0%,
+  20% {
+    content: ".";
+  }
 
-        #chart-error {
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 400px;
-            gap: 16px;
-        }
+  40% {
+    content: "..";
+  }
 
-        #chart-error-message {
-            color: var(--badge-error);
-            font-size: 1em;
-        }
+  60%,
+  100% {
+    content: "...";
+  }
+}
 
-        #chart-error button {
-            padding: 8px 16px;
-            background: var(--link-color);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.9em;
-            transition: background 0.2s ease;
-        }
+#chart-error {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 400px;
+  gap: 16px;
+}
 
-        #chart-error button:hover {
-            background: var(--link-hover);
-        }
+#chart-error-message {
+  color: var(--badge-error);
+  font-size: 1em;
+}
 
-        .chart-controls {
-            display: flex;
-            gap: 16px;
-            margin-bottom: 12px;
-            padding: 12px;
-            background: var(--table-header-bg);
-            border-radius: 6px;
-        }
+#chart-error button {
+  padding: 8px 16px;
+  background: var(--link-color);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9em;
+  transition: background 0.2s ease;
+}
 
-        .timeframe-selector {
-            display: flex;
-            gap: 4px;
-        }
+#chart-error button:hover {
+  background: var(--link-hover);
+}
 
-        .timeframe-btn {
-            padding: 6px 12px;
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            color: var(--text-secondary);
-            cursor: pointer;
-            font-size: 0.85em;
-            transition: all 0.2s ease;
-        }
+.chart-controls {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding: 12px;
+  background: var(--table-header-bg);
+  border-radius: 6px;
+}
 
-        .timeframe-btn:hover {
-            background: var(--bg-card-hover);
-            color: var(--text-primary);
-        }
+.timeframe-selector {
+  display: flex;
+  gap: 4px;
+}
 
-        .timeframe-btn.active {
-            background: var(--link-color);
-            color: white;
-            border-color: var(--link-color);
-        }
+.timeframe-btn {
+  padding: 6px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.85em;
+  transition: all 0.2s ease;
+}
 
-        .indicator-toggles {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-        }
+.timeframe-btn:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
 
-        .indicator-toggles label {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            color: var(--text-secondary);
-            font-size: 0.85em;
-            cursor: pointer;
-        }
+.timeframe-btn.active {
+  background: var(--link-color);
+  color: white;
+  border-color: var(--link-color);
+}
 
-        .indicator-toggles input[type="checkbox"] {
-            cursor: pointer;
-        }
+.indicator-toggles {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
 
-        /* Full-height page utilities */
-        .page-section {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            min-height: 0; /* allow child scrolling */
-        }
-        .toolbar {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-            flex-wrap: wrap;
-            padding: 6px 8px;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            background: var(--bg-secondary);
-            margin-bottom: 8px;
-        }
-        .toolbar .spacer { flex: 1; }
-        .table-scroll {
-            flex: 1;
-            overflow: auto;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            background: var(--bg-card);
-        }
-        .table-scroll.no-x-scroll {
-            overflow-x: hidden;
-            overflow-y: auto;
-        }
-    
+.indicator-toggles label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 0.85em;
+  cursor: pointer;
+}
+
+.indicator-toggles input[type="checkbox"] {
+  cursor: pointer;
+}
+
+/* Full-height page utilities */
+.page-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  /* allow child scrolling */
+}
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  margin-bottom: 8px;
+}
+
+.toolbar .spacer {
+  flex: 1;
+}
+
+.table-scroll {
+  flex: 1;
+  overflow: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-card);
+}
+
+.table-scroll.no-x-scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
