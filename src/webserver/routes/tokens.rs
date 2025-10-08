@@ -226,7 +226,9 @@ pub fn routes() -> Router<Arc<AppState>> {
 
 /// List tokens with simple query params and view selection
 /// GET /api/tokens/list?view=pool|all|blacklisted|positions|secure|recent&search=...&sort_by=...&sort_dir=...&page=1&page_size=50
-async fn get_tokens_list(Query(query): Query<TokenListQuery>) -> Json<TokenListResponse> {
+pub(crate) async fn get_tokens_list(
+    Query(query): Query<TokenListQuery>,
+) -> Json<TokenListResponse> {
     use crate::config::with_config;
 
     // Config-driven limits

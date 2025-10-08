@@ -7,8 +7,9 @@
 /// - Health monitoring and heartbeat
 /// - Graceful shutdown
 use axum::extract::ws::{Message, WebSocket};
+use axum::extract::Query;
 use futures::{SinkExt, StreamExt};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -17,18 +18,20 @@ use crate::{
     config,
     events::{self, Event},
     logger::{log, LogTag},
+    webserver::routes::tokens::{self, TokenListQuery},
 };
 
 use super::{
     health::{ConnectionHealth, HealthConfig},
     hub::{ConnectionId, WsHub},
-    message::{ClientMessage, ServerMessage, Topic, WsEnvelope},
+    message::{ClientMessage, MessageMetadata, ServerMessage, Topic, WsEnvelope},
     metrics::ConnectionMetrics,
     topics,
 };
 
 const EVENTS_SNAPSHOT_LIMIT: usize = 100;
 const EVENTS_SNAPSHOT_FETCH_LIMIT: usize = EVENTS_SNAPSHOT_LIMIT * 3;
+const TOKENS_SNAPSHOT_DEFAULT_LIMIT: usize = 200;
 
 #[derive(Default)]
 struct ConnectionState {
@@ -39,11 +42,13 @@ struct ConnectionState {
 
 struct FilterUpdateResult {
     snapshot_requested: bool,
+    topic: String,
 }
 
 #[derive(Clone, Debug)]
 enum TopicFilter {
     Events(EventsRealtimeFilter),
+    Tokens(TokensRealtimeFilter),
     Passthrough,
 }
 
@@ -55,6 +60,85 @@ struct EventsRealtimeFilter {
     mint: Option<String>,
     reference: Option<String>,
     since_id: Option<i64>,
+}
+
+#[derive(Clone, Debug)]
+struct TokensRealtimeFilter {
+    view: String,
+    search: Option<String>,
+    sort_by: String,
+    sort_dir: String,
+    limit: usize,
+}
+
+impl Default for TokensRealtimeFilter {
+    fn default() -> Self {
+        let max_limit = config::with_config(|cfg| cfg.webserver.tokens_tab.max_page_size);
+        Self {
+            view: "pool".to_string(),
+            search: None,
+            sort_by: "liquidity_usd".to_string(),
+            sort_dir: "desc".to_string(),
+            limit: max_limit.min(TOKENS_SNAPSHOT_DEFAULT_LIMIT).max(1),
+        }
+    }
+}
+
+impl TokensRealtimeFilter {
+    fn from_value(raw: &Value) -> Self {
+        let mut filter = TokensRealtimeFilter::default();
+
+        if let Some(map) = raw.as_object() {
+            if let Some(view) = map.get("view").and_then(|v| v.as_str()) {
+                filter.view = view.to_string();
+            }
+            if let Some(search) = map.get("search").and_then(|v| v.as_str()) {
+                let trimmed = search.trim();
+                if trimmed.is_empty() {
+                    filter.search = None;
+                } else {
+                    filter.search = Some(trimmed.to_string());
+                }
+            }
+            if let Some(sort_by) = map.get("sort_by").and_then(|v| v.as_str()) {
+                filter.sort_by = sort_by.to_string();
+            }
+            if let Some(sort_dir) = map.get("sort_dir").and_then(|v| v.as_str()) {
+                let normalized = match sort_dir.to_lowercase().as_str() {
+                    "asc" => "asc",
+                    _ => "desc",
+                };
+                filter.sort_dir = normalized.to_string();
+            }
+            if let Some(limit) = map
+                .get("limit")
+                .or_else(|| map.get("page_size"))
+                .and_then(|v| v.as_u64())
+            {
+                filter.limit = limit as usize;
+            }
+        }
+
+        let max_limit = config::with_config(|cfg| cfg.webserver.tokens_tab.max_page_size);
+        filter.limit = filter.limit.min(max_limit).max(1);
+        filter
+    }
+
+    fn normalized_limit(&self) -> usize {
+        let max_limit = config::with_config(|cfg| cfg.webserver.tokens_tab.max_page_size);
+        self.limit.min(max_limit).max(1)
+    }
+
+    fn to_query(&self) -> TokenListQuery {
+        TokenListQuery {
+            view: self.view.clone(),
+            search: self.search.clone().unwrap_or_default(),
+            sort_by: self.sort_by.clone(),
+            sort_dir: self.sort_dir.clone(),
+            page: 1,
+            page_size: self.normalized_limit(),
+        }
+    }
 }
 
 impl ConnectionState {
@@ -77,13 +161,21 @@ impl ConnectionState {
                 self.filters
                     .insert(normalized_topic.clone(), TopicFilter::Events(filter));
             }
+            Some(Topic::TokensUpdate) => {
+                let filter = TokensRealtimeFilter::from_value(raw);
+                self.filters
+                    .insert(normalized_topic.clone(), TopicFilter::Tokens(filter));
+            }
             _ => {
                 self.filters
                     .insert(normalized_topic.clone(), TopicFilter::Passthrough);
             }
         }
 
-        FilterUpdateResult { snapshot_requested }
+        FilterUpdateResult {
+            snapshot_requested,
+            topic: normalized_topic,
+        }
     }
 
     fn events_filter(&self) -> Option<&EventsRealtimeFilter> {
@@ -98,6 +190,29 @@ impl ConnectionState {
             Topic::EventsNew.code().to_string(),
             TopicFilter::Events(filter),
         );
+    }
+
+    fn tokens_filter(&self) -> Option<&TokensRealtimeFilter> {
+        match self.filters.get(Topic::TokensUpdate.code()) {
+            Some(TopicFilter::Tokens(filter)) => Some(filter),
+            _ => None,
+        }
+    }
+
+    fn set_tokens_filter(&mut self, filter: TokensRealtimeFilter) {
+        self.filters.insert(
+            Topic::TokensUpdate.code().to_string(),
+            TopicFilter::Tokens(filter),
+        );
+    }
+
+    fn prune_filters(&mut self, allowed: &HashSet<String>) {
+        self.filters.retain(|topic, _| allowed.contains(topic));
+        self.paused_topics.retain(|topic| allowed.contains(topic));
+    }
+
+    fn active_topics(&self) -> HashSet<String> {
+        self.filters.keys().cloned().collect()
     }
 
     fn update_events_since(&mut self, since_id: i64) {
@@ -158,6 +273,7 @@ impl TopicFilter {
     fn allows(&self, envelope: &WsEnvelope) -> bool {
         match self {
             TopicFilter::Events(filter) => filter.matches_value(&envelope.data),
+            TopicFilter::Tokens(_) => true,
             TopicFilter::Passthrough => true,
         }
     }
@@ -602,12 +718,18 @@ async fn handle_client_message(
             }
 
             let mut snapshot_topics = Vec::new();
+            let mut desired_topics = HashSet::new();
             for (topic, value) in topics.iter() {
                 let result = state.update_filter(topic, value);
+                desired_topics.insert(result.topic.clone());
                 if result.snapshot_requested {
-                    snapshot_topics.push(topic.to_string());
+                    snapshot_topics.push(result.topic.clone());
                 }
             }
+
+            state.prune_filters(&desired_topics);
+            hub.update_connection_topics(conn_id, state.active_topics())
+                .await;
 
             let response = ServerMessage::Ack {
                 message: format!("Filters updated for {} topics", topics.len()),
@@ -619,12 +741,20 @@ async fn handle_client_message(
             send_control_message(ws_tx, response).await?;
 
             for topic in snapshot_topics {
-                if topic == Topic::EventsNew.code() {
-                    let filter = state.events_filter().cloned().unwrap_or_default();
-                    if let Some(last_id) = send_events_snapshot(ws_tx, hub, metrics, filter).await?
-                    {
-                        state.update_events_since(last_id);
+                match Topic::from_code(&topic) {
+                    Some(Topic::EventsNew) => {
+                        let filter = state.events_filter().cloned().unwrap_or_default();
+                        if let Some(last_id) =
+                            send_events_snapshot(ws_tx, hub, metrics, filter).await?
+                        {
+                            state.update_events_since(last_id);
+                        }
                     }
+                    Some(Topic::TokensUpdate) => {
+                        let filter = state.tokens_filter().cloned().unwrap_or_default();
+                        send_tokens_snapshot(ws_tx, hub, metrics, filter).await?;
+                    }
+                    _ => {}
                 }
             }
         }
@@ -684,18 +814,27 @@ async fn handle_client_message(
             send_control_message(ws_tx, response).await?;
 
             for (topic, value) in topics.iter() {
-                if topic == Topic::EventsNew.code() {
-                    let mut filter = state.events_filter().cloned().unwrap_or_default();
-                    let since_override = value
-                        .as_object()
-                        .and_then(|map| map.get("since_id"))
-                        .and_then(|v| v.as_i64());
-                    filter.set_since_id(since_override);
-                    state.set_events_filter(filter.clone());
-                    if let Some(last_id) = send_events_snapshot(ws_tx, hub, metrics, filter).await?
-                    {
-                        state.update_events_since(last_id);
+                match Topic::from_code(topic) {
+                    Some(Topic::EventsNew) => {
+                        let mut filter = state.events_filter().cloned().unwrap_or_default();
+                        let since_override = value
+                            .as_object()
+                            .and_then(|map| map.get("since_id"))
+                            .and_then(|v| v.as_i64());
+                        filter.set_since_id(since_override);
+                        state.set_events_filter(filter.clone());
+                        if let Some(last_id) =
+                            send_events_snapshot(ws_tx, hub, metrics, filter).await?
+                        {
+                            state.update_events_since(last_id);
+                        }
                     }
+                    Some(Topic::TokensUpdate) => {
+                        let filter = TokensRealtimeFilter::from_value(value);
+                        state.set_tokens_filter(filter.clone());
+                        send_tokens_snapshot(ws_tx, hub, metrics, filter).await?;
+                    }
+                    _ => {}
                 }
             }
         }
@@ -785,4 +924,88 @@ async fn send_events_snapshot(
     .await?;
 
     Ok(last_id)
+}
+
+async fn send_tokens_snapshot(
+    ws_tx: &mut futures::stream::SplitSink<WebSocket, Message>,
+    hub: &Arc<WsHub>,
+    metrics: &Arc<ConnectionMetrics>,
+    filter: TokensRealtimeFilter,
+) -> Result<(), String> {
+    let query = filter.to_query();
+    let axum::Json(response) = tokens::get_tokens_list(Query(query)).await;
+
+    let total_sent = response.items.len();
+    let total_available = response.total;
+
+    send_control_message(
+        ws_tx,
+        ServerMessage::SnapshotBegin {
+            topic: Topic::TokensUpdate.code().to_string(),
+            total: total_sent,
+        },
+    )
+    .await?;
+
+    for (idx, summary) in response.items.into_iter().enumerate() {
+        let seq = hub.next_seq(Topic::TokensUpdate.code()).await;
+        let data = serde_json::to_value(&summary).unwrap_or_else(|err| {
+            log(
+                LogTag::Webserver,
+                "ERROR",
+                &format!(
+                    "Failed to serialize token summary for {}: {}",
+                    summary.mint, err
+                ),
+            );
+            serde_json::json!({ "mint": summary.mint })
+        });
+
+        let mut envelope = topics::tokens::token_to_envelope(&summary.mint, data, seq);
+
+        if idx == 0 {
+            let mut extra = Map::new();
+            extra.insert("total".to_string(), serde_json::json!(total_available));
+            extra.insert("view".to_string(), serde_json::json!(filter.view.clone()));
+            extra.insert(
+                "sort_by".to_string(),
+                serde_json::json!(filter.sort_by.clone()),
+            );
+            extra.insert(
+                "sort_dir".to_string(),
+                serde_json::json!(filter.sort_dir.clone()),
+            );
+            if let Some(search) = filter.search.clone() {
+                extra.insert("search".to_string(), serde_json::json!(search));
+            }
+            let meta = MessageMetadata {
+                snapshot: None,
+                dropped: None,
+                extra: Some(extra),
+            };
+            envelope = envelope.with_meta(meta);
+        }
+
+        envelope = envelope.as_snapshot();
+        let msg = ServerMessage::Data(envelope);
+        let json = msg
+            .to_json()
+            .map_err(|e| format!("Serialization error: {}", e))?;
+        ws_tx
+            .send(Message::Text(json))
+            .await
+            .map_err(|e| format!("Send error: {}", e))?;
+        metrics.inc_sent();
+    }
+
+    send_control_message(
+        ws_tx,
+        ServerMessage::SnapshotEnd {
+            topic: Topic::TokensUpdate.code().to_string(),
+            sent: total_sent,
+        },
+    )
+    .await?;
+
+    Ok(())
 }

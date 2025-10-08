@@ -30,10 +30,19 @@
   var allTokensData = [];
   var currentModalMint = null;
   var tokenModalData = null;
-  var tokensRefreshInterval = null;
   var tokensRequestController = null;
   var tokensLoading = false;
   var searchDebounceHandle = null;
+  var tokensSnapshotState = {
+    inProgress: false,
+    pending: [],
+    expected: 0,
+    totalAvailable: 0,
+    message: "",
+    timeoutHandle: null,
+  };
+  var TOKENS_SNAPSHOT_LIMIT = 200;
+  var TOKENS_SNAPSHOT_TIMEOUT_MS = 8000;
 
   // Global init function for Router to call during SPA navigation
   window.initTokensPage = function () {
@@ -43,8 +52,7 @@
     initTokensToolbar();
     setupSortableHeaders();
     attachGlobalListeners();
-    loadTokens({ reason: "initial", force: true });
-    startTokensRefresh();
+    setTokenCountStatus("⏳ Waiting for realtime snapshot...");
   };
 
   function hydrateTokensState() {
@@ -54,13 +62,61 @@
     }
     window.PageRealtime = window.PageRealtime || {};
     window.PageRealtime.tokens = {
+      topics: ["tokens"],
       channels: {
-        prices: handlePriceUpdate,
+        tokens: handleTokensRealtime,
+        "snapshot_begin:tokens.update": handleTokensSnapshotBegin,
+        "snapshot_end:tokens.update": handleTokensSnapshotEnd,
+        _warning: handleTokensWarning,
+        _disconnected: handleTokensDisconnect,
+        _failed: handleTokensDisconnect,
+        _connected: handleTokensReconnect,
+      },
+      getFilters() {
+        const topic = "tokens.update";
+        const limit = TOKENS_SNAPSHOT_LIMIT;
+        const filter = {
+          view: tokensState.view,
+          sort_by: tokensState.sortBy,
+          sort_dir: tokensState.sortDir,
+          page: 1,
+          page_size: limit,
+          limit,
+        };
+        if (tokensState.searchTerm) {
+          filter.search = tokensState.searchTerm;
+        }
+        return { [topic]: filter };
+      },
+      onInitial(status) {
+        if (status === "connected") {
+          setTokenCountStatus("🔌 Realtime connected • Loading tokens...");
+        } else if (status === "connecting") {
+          setTokenCountStatus("🔄 Connecting to realtime...");
+        } else {
+          setTokenCountStatus("⚠️ Realtime unavailable – using fallback cache");
+        }
       },
       onUnavailable() {
-        console.warn(
-          "[Tokens] WebSocket unavailable – price updates will not refresh in real time."
-        );
+        console.warn("[Tokens] Realtime unavailable – switching to fallback fetch");
+        setTokenCountStatus("⚠️ Realtime unavailable – using fallback cache");
+        fetchTokensFallback({ reason: "realtime-unavailable", force: true });
+      },
+      onEnter(status) {
+        if (status === "connected") {
+          requestTokensSnapshot("Loading tokens...");
+        } else if (status === "connecting") {
+          setTokenCountStatus("🔄 Connecting to realtime...");
+          requestTokensSnapshot("Connecting to realtime...");
+        } else {
+          setTokenCountStatus("⚠️ Waiting for realtime...");
+          fetchTokensFallback({ reason: "enter-fallback", force: true });
+        }
+      },
+      onExit() {
+        clearTokensSnapshotTimer();
+        tokensSnapshotState.inProgress = false;
+        tokensSnapshotState.pending = [];
       },
     };
 
@@ -495,11 +551,8 @@
   }
 
   function handleVisibilityChange() {
-    if (document.visibilityState === "hidden") {
-      stopTokensRefresh();
-    } else {
-      startTokensRefresh();
-      loadTokens({ reason: "visibility", force: true });
+    if (document.visibilityState === "visible") {
+      requestTokensSnapshot("Refreshing after returning...");
     }
   }
 
@@ -545,7 +598,7 @@
       tab.classList.toggle("active", tab.dataset.view === view);
     });
 
-    loadTokens({ reason: "view-change", force: true });
+    requestTokensSnapshot(`Switching to ${view} view...`);
   }
 
   function initTokensToolbar() {
@@ -579,7 +632,7 @@
     const refreshBtn = toolbarContainer.querySelector("#tokensRefreshBtn");
     if (refreshBtn) {
       refreshBtn.addEventListener("click", () =>
-        loadTokens({ reason: "manual-refresh", force: true })
+        requestTokensSnapshot("Refreshing tokens...")
       );
     }
 
@@ -599,7 +652,7 @@
       clearTimeout(searchDebounceHandle);
     }
     searchDebounceHandle = setTimeout(() => {
-      loadTokens({ reason: "search", force: true });
+      requestTokensSnapshot("Applying search filter...");
     }, 350);
   }
 
@@ -647,16 +700,8 @@
     return deduped;
   }
 
-  async function loadTokens(options = {}) {
-    const { reason = "manual", force = false } = options;
-    const isAutoRefresh = reason === "interval";
-    const searchInput = document.getElementById("searchInput");
-
-    if (isAutoRefresh && !force) {
-      if (document.visibilityState === "hidden") return;
-      if (document.querySelector(".dropdown-menu.show")) return;
-      if (searchInput && document.activeElement === searchInput) return;
-    }
+  async function fetchTokensFallback(options = {}) {
+    const { force = false } = options;
 
     if (tokensLoading && !force) {
       return;
@@ -668,6 +713,10 @@
 
     tokensRequestController = new AbortController();
     tokensLoading = true;
+    clearTokensSnapshotTimer();
+
+    setTokenCountStatus("📥 Loading fallback data...");
+    showTokensLoading("Loading tokens from cache...");
 
     const params = new URLSearchParams({
       view: tokensState.view,
@@ -675,7 +724,7 @@
       sort_by: tokensState.sortBy,
       sort_dir: tokensState.sortDir,
       page: "1",
-      page_size: "1000",
+      page_size: String(TOKENS_SNAPSHOT_LIMIT),
     });
 
     try {
@@ -690,14 +739,24 @@
       const items = Array.isArray(data.items) ? data.items : [];
       const normalized = items.map(normalizeTokenFromApi);
       allTokensData = dedupeTokensByMint(normalized);
-      updateTokenCount(data.total ?? allTokensData.length);
+      tokensSnapshotState.inProgress = false;
+      tokensSnapshotState.totalAvailable = data.total ?? allTokensData.length;
+      tokensSnapshotState.message = "";
+      updateTokenCount(tokensSnapshotState.totalAvailable);
       applySearchFilter();
+
+      const viewLabel = VIEW_LABELS[tokensState.view] || "";
+      const status = viewLabel
+        ? `Fallback • ${tokensSnapshotState.totalAvailable} tokens ${viewLabel}`
+        : `Fallback • ${tokensSnapshotState.totalAvailable} tokens`;
+      setTokenCountStatus(status);
     } catch (error) {
       if (error.name === "AbortError") {
         return;
       }
       console.error("Failed to load tokens:", error);
       showTokensError("Failed to load tokens");
+      setTokenCountStatus("❌ Failed to load tokens");
     } finally {
       tokensLoading = false;
     }
@@ -707,6 +766,7 @@
     const tbody = document.getElementById("tokensTableBody");
     if (!tbody) return;
     tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 20px; color: #ef4444;">${message}</td></tr>`;
+    setTokenCountStatus(message);
   }
 
   function updateTokenCount(total) {
@@ -779,6 +839,185 @@
     if (!btn || !menu) return;
 
     openDropdownMenu(btn, menu);
+  }
+
+  function setTokenCountStatus(text) {
+    const label = document.getElementById("tokenCount");
+    if (!label) return;
+    label.textContent = text;
+  }
+
+  function showTokensLoading(message) {
+    const tbody = document.getElementById("tokensTableBody");
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 20px; color: #94a3b8;">${message}</td></tr>`;
+    }
+    setTokenCountStatus(message);
+  }
+
+  function clearTokensSnapshotTimer() {
+    if (tokensSnapshotState.timeoutHandle) {
+      clearTimeout(tokensSnapshotState.timeoutHandle);
+      tokensSnapshotState.timeoutHandle = null;
+    }
+  }
+
+  function scheduleTokensSnapshotTimer(reason) {
+    clearTokensSnapshotTimer();
+
+    if (
+      !Number.isFinite(TOKENS_SNAPSHOT_TIMEOUT_MS) ||
+      TOKENS_SNAPSHOT_TIMEOUT_MS <= 0
+    ) {
+      return;
+    }
+
+    tokensSnapshotState.timeoutHandle = setTimeout(() => {
+      tokensSnapshotState.timeoutHandle = null;
+      if (!tokensSnapshotState.inProgress) {
+        return;
+      }
+
+      console.warn(
+        `[Tokens] Snapshot timeout (${reason || "unknown"}) — triggering fallback`
+      );
+
+      if (tokensSnapshotState.pending.length > 0) {
+        finalizeTokensSnapshot();
+        return;
+      }
+
+      tokensSnapshotState.inProgress = false;
+      tokensSnapshotState.message = "";
+      setTokenCountStatus("⚠️ Snapshot delayed – using fallback cache");
+      fetchTokensFallback({ reason: "snapshot-timeout", force: true });
+    }, TOKENS_SNAPSHOT_TIMEOUT_MS);
+  }
+
+  function requestTokensSnapshot(message) {
+    tokensSnapshotState.inProgress = true;
+    tokensSnapshotState.pending = [];
+    tokensSnapshotState.expected = 0;
+    tokensSnapshotState.totalAvailable = 0;
+    tokensSnapshotState.message = message || "Loading tokens...";
+    showTokensLoading(tokensSnapshotState.message);
+    scheduleTokensSnapshotTimer("request");
+
+    if (window.Realtime && typeof Realtime.updateFilters === "function") {
+      Realtime.updateFilters({ snapshotTopics: ["tokens"] });
+    } else {
+      console.warn(
+        "[Tokens] Realtime controller unavailable; falling back to HTTP fetch"
+      );
+      fetchTokensFallback({ reason: "realtime-missing", force: true });
+    }
+  }
+
+  function handleTokensSnapshotBegin(payload) {
+    tokensSnapshotState.inProgress = true;
+    tokensSnapshotState.pending = [];
+    tokensSnapshotState.expected = Number(payload?.total) || 0;
+    tokensSnapshotState.totalAvailable = tokensSnapshotState.expected;
+    const message =
+      tokensSnapshotState.message ||
+      `Receiving snapshot (${tokensSnapshotState.expected} tokens)...`;
+    showTokensLoading(message);
+    scheduleTokensSnapshotTimer("begin");
+  }
+
+  function finalizeTokensSnapshot() {
+    clearTokensSnapshotTimer();
+    tokensSnapshotState.inProgress = false;
+    const deduped = dedupeTokensByMint(tokensSnapshotState.pending);
+    tokensSnapshotState.pending = [];
+    tokensSnapshotState.expected = 0;
+    allTokensData = deduped;
+
+    const total =
+      tokensSnapshotState.totalAvailable || allTokensData.length || deduped.length;
+    tokensSnapshotState.totalAvailable = total;
+    tokensSnapshotState.message = "";
+    updateTokenCount(total);
+
+    const viewLabel = VIEW_LABELS[tokensState.view] || "";
+    const status = viewLabel
+      ? `Realtime • ${total} tokens ${viewLabel}`
+      : `Realtime • ${total} tokens`;
+    setTokenCountStatus(status);
+
+    applySearchFilter();
+  }
+
+  function handleTokensSnapshotEnd(payload) {
+    tokensSnapshotState.inProgress = false;
+    const sent = Number(payload?.sent);
+    if (Number.isFinite(sent)) {
+      tokensSnapshotState.totalAvailable = Math.max(
+        tokensSnapshotState.totalAvailable,
+        sent
+      );
+    }
+    clearTokensSnapshotTimer();
+    finalizeTokensSnapshot();
+  }
+
+  function handleTokensRealtime(data, envelope) {
+    if (!data || typeof data !== "object") return;
+    const meta = envelope?.meta || {};
+    const isSnapshot = meta.snapshot === true;
+
+    if (typeof meta.total === "number") {
+      tokensSnapshotState.totalAvailable = Math.max(
+        tokensSnapshotState.totalAvailable,
+        Number(meta.total)
+      );
+    }
+
+    if (isSnapshot) {
+      const normalized = normalizeTokenFromApi({ ...data });
+      tokensSnapshotState.pending.push(normalized);
+      scheduleTokensSnapshotTimer("chunk");
+      return;
+    }
+
+    if (tokensSnapshotState.inProgress && tokensSnapshotState.pending.length > 0) {
+      console.debug(
+        "[Tokens] Completing snapshot from realtime delta (missing snapshot_end)"
+      );
+      finalizeTokensSnapshot();
+    }
+
+    if (data.price_result) {
+      handlePriceUpdate(data);
+    }
+  }
+
+  function handleTokensWarning(payload) {
+    if (!payload) return;
+    clearTokensSnapshotTimer();
+    const topic = payload.topic || payload.alias;
+    if (topic !== "tokens.update" && topic !== "tokens") return;
+
+    const recommendation = payload.recommendation || payload.action;
+    setTokenCountStatus("⚠️ Realtime warning – resyncing...");
+
+    if (recommendation === "http_catchup") {
+      fetchTokensFallback({ reason: "warning", force: true });
+    } else {
+      requestTokensSnapshot("Resyncing after warning...");
+    }
+  }
+
+  function handleTokensDisconnect() {
+    clearTokensSnapshotTimer();
+    setTokenCountStatus("⚠️ Realtime disconnected – using fallback cache");
+    fetchTokensFallback({ reason: "disconnect", force: true });
+  }
+
+  function handleTokensReconnect() {
+    clearTokensSnapshotTimer();
+    setTokenCountStatus("🔌 Reconnected – refreshing tokens...");
+    requestTokensSnapshot("Resyncing after reconnect...");
   }
 
   function createTokenRowHtml(token) {
@@ -874,29 +1113,6 @@
     menu.style.width = `${menuWidth}px`;
   }
 
-  function startTokensRefresh() {
-    if (tokensRefreshInterval) clearInterval(tokensRefreshInterval);
-    tokensRefreshInterval = setInterval(() => {
-      loadTokens({ reason: "interval", force: false });
-    }, 2000);
-
-    if (window.Router && typeof Router.registerCleanup === "function") {
-      Router.registerCleanup(() => {
-        if (tokensRefreshInterval) {
-          clearInterval(tokensRefreshInterval);
-          tokensRefreshInterval = null;
-        }
-      });
-    }
-  }
-
-  function stopTokensRefresh() {
-    if (tokensRefreshInterval) {
-      clearInterval(tokensRefreshInterval);
-      tokensRefreshInterval = null;
-    }
-  }
-
   function setupSortableHeaders() {
     const thead = document.querySelector("#tokensTable thead");
     if (!thead) return;
@@ -912,7 +1128,7 @@
         tokensState.sortDir = key === "symbol" ? "asc" : "desc";
       }
       updateSortIndicators();
-      loadTokens({ reason: "sort", force: true });
+      requestTokensSnapshot("Sorting tokens...");
     });
     updateSortIndicators();
   }

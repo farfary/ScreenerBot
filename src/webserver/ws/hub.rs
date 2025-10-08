@@ -7,7 +7,7 @@
 /// - Broadcast routing to all active connections
 /// - Filter application (future enhancement)
 /// - Hub-level metrics
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
@@ -42,6 +42,9 @@ pub struct WsHub {
     /// Active connections (connection_id → sender)
     connections: RwLock<HashMap<ConnectionId, ConnectionSender>>,
 
+    /// Topic subscriptions per connection (topic codes)
+    connection_topics: RwLock<HashMap<ConnectionId, HashSet<String>>>,
+
     /// Next connection ID
     next_conn_id: AtomicU64,
 
@@ -58,6 +61,7 @@ impl WsHub {
         Arc::new(Self {
             sequences: RwLock::new(HashMap::new()),
             connections: RwLock::new(HashMap::new()),
+            connection_topics: RwLock::new(HashMap::new()),
             next_conn_id: AtomicU64::new(1),
             metrics: HubMetrics::new(),
             buffer_size,
@@ -87,6 +91,10 @@ impl WsHub {
         let (tx, rx) = mpsc::channel(self.buffer_size);
 
         self.connections.write().await.insert(conn_id, tx);
+        self.connection_topics
+            .write()
+            .await
+            .insert(conn_id, HashSet::new());
         self.metrics.connection_opened();
 
         if is_debug_webserver_enabled() {
@@ -107,6 +115,7 @@ impl WsHub {
     /// Unregister a connection
     pub async fn unregister_connection(&self, conn_id: ConnectionId) {
         self.connections.write().await.remove(&conn_id);
+        self.connection_topics.write().await.remove(&conn_id);
         self.metrics.connection_closed();
 
         if is_debug_webserver_enabled() {
@@ -131,10 +140,18 @@ impl WsHub {
             return;
         }
 
+        let topics_map = self.connection_topics.read().await;
+        let topic_code = envelope.t.clone();
+
         let mut sent = 0;
         let mut dropped = 0;
 
         for (conn_id, sender) in connections.iter() {
+            match topics_map.get(conn_id) {
+                Some(topics) if topics.contains(&topic_code) => {}
+                _ => continue,
+            }
+
             match sender.try_send(envelope.clone()) {
                 Ok(_) => {
                     sent += 1;
@@ -170,6 +187,16 @@ impl WsHub {
                     envelope.t, sent, dropped
                 ),
             );
+        }
+    }
+
+    /// Update the topic subscription set for a connection
+    pub async fn update_connection_topics(&self, conn_id: ConnectionId, topics: HashSet<String>) {
+        let mut map = self.connection_topics.write().await;
+        if topics.is_empty() {
+            map.remove(&conn_id);
+        } else {
+            map.insert(conn_id, topics);
         }
     }
 
