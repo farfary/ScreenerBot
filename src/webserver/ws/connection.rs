@@ -762,7 +762,7 @@ async fn send_events_snapshot(
         if let Some(id) = event.id {
             last_id = Some(id);
         }
-        let seq = hub.next_seq(Topic::EventsNew.code());
+        let seq = hub.next_seq(Topic::EventsNew.code()).await;
         let envelope = topics::events::event_to_envelope(&event, seq).as_snapshot();
         let msg = ServerMessage::Data(envelope);
         let json = msg

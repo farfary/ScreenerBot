@@ -27,8 +27,8 @@ async fn run(hub: Arc<WsHub>, mut rx: broadcast::Receiver<events::Event>) {
     loop {
         match rx.recv().await {
             Ok(event) => {
-                let envelope =
-                    topics::events::event_to_envelope(&event, hub.next_seq("events.new"));
+                let seq = hub.next_seq("events.new").await;
+                let envelope = topics::events::event_to_envelope(&event, seq);
                 hub.broadcast(envelope).await;
             }
             Err(broadcast::error::RecvError::Lagged(skipped)) => {

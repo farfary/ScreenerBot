@@ -27,8 +27,8 @@ async fn run(hub: Arc<WsHub>, mut rx: broadcast::Receiver<pools::PriceUpdate>) {
     loop {
         match rx.recv().await {
             Ok(update) => {
-                let envelope =
-                    topics::prices::price_to_envelope(&update, hub.next_seq("prices.update"));
+                let seq = hub.next_seq("prices.update").await;
+                let envelope = topics::prices::price_to_envelope(&update, seq);
                 hub.broadcast(envelope).await;
             }
             Err(broadcast::error::RecvError::Lagged(skipped)) => {

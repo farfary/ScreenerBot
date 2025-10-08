@@ -22,8 +22,8 @@ async fn run(hub: Arc<WsHub>) {
         ticker.tick().await;
         let snapshot =
             crate::webserver::routes::services::gather_services_overview_snapshot().await;
-        let envelope =
-            topics::services::services_to_envelope(&snapshot, hub.next_seq("services.metrics"));
+        let seq = hub.next_seq("services.metrics").await;
+        let envelope = topics::services::services_to_envelope(&snapshot, seq);
         hub.broadcast(envelope).await;
         if is_debug_webserver_enabled() {
             log(

@@ -37,7 +37,7 @@ pub type ConnectionSender = mpsc::Sender<WsEnvelope>;
 /// Central WebSocket hub
 pub struct WsHub {
     /// Per-topic sequence counters
-    sequences: RwLock<HashMap<String, AtomicU64>>,
+    sequences: RwLock<HashMap<String, Arc<AtomicU64>>>,
 
     /// Active connections (connection_id → sender)
     connections: RwLock<HashMap<ConnectionId, ConnectionSender>>,
@@ -65,18 +65,20 @@ impl WsHub {
     }
 
     /// Get next sequence number for a topic
-    pub fn next_seq(&self, topic: &str) -> u64 {
-        // This is a simplified sync access for now
-        // In production, you'd want to ensure proper ordering
-        let sequences = self.sequences.blocking_read();
-        if let Some(counter) = sequences.get(topic) {
-            counter.fetch_add(1, Ordering::SeqCst)
-        } else {
-            drop(sequences);
-            let mut sequences = self.sequences.blocking_write();
-            sequences.insert(topic.to_string(), AtomicU64::new(1));
-            0
+    pub async fn next_seq(&self, topic: &str) -> u64 {
+        if let Some(counter) = {
+            let sequences = self.sequences.read().await;
+            sequences.get(topic).cloned()
+        } {
+            return counter.fetch_add(1, Ordering::SeqCst);
         }
+
+        let mut sequences = self.sequences.write().await;
+        let counter = sequences
+            .entry(topic.to_string())
+            .or_insert_with(|| Arc::new(AtomicU64::new(0)))
+            .clone();
+        counter.fetch_add(1, Ordering::SeqCst)
     }
 
     /// Register a new connection
@@ -216,13 +218,13 @@ mod tests {
         assert_eq!(received.seq, 1);
     }
 
-    #[test]
-    fn test_sequence_counter() {
+    #[tokio::test]
+    async fn test_sequence_counter() {
         let hub = WsHub::new(10);
 
-        let seq1 = hub.next_seq("test.topic");
-        let seq2 = hub.next_seq("test.topic");
-        let seq3 = hub.next_seq("other.topic");
+        let seq1 = hub.next_seq("test.topic").await;
+        let seq2 = hub.next_seq("test.topic").await;
+        let seq3 = hub.next_seq("other.topic").await;
 
         assert_eq!(seq1, 0);
         assert_eq!(seq2, 1);

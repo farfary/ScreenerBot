@@ -27,10 +27,8 @@ async fn run(hub: Arc<WsHub>, mut rx: broadcast::Receiver<positions::PositionUpd
     loop {
         match rx.recv().await {
             Ok(update) => {
-                let envelope = topics::positions::position_to_envelope(
-                    &update,
-                    hub.next_seq("positions.update"),
-                );
+                let seq = hub.next_seq("positions.update").await;
+                let envelope = topics::positions::position_to_envelope(&update, seq);
                 hub.broadcast(envelope).await;
             }
             Err(broadcast::error::RecvError::Lagged(skipped)) => {

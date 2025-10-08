@@ -178,7 +178,8 @@ async fn run(hub: Arc<WsHub>) {
     loop {
         ticker.tick().await;
         let snapshot = gather_status_snapshot().await;
-        let envelope = topics::status::status_to_envelope(&snapshot, hub.next_seq("system.status"));
+        let seq = hub.next_seq("system.status").await;
+        let envelope = topics::status::status_to_envelope(&snapshot, seq);
         hub.broadcast(envelope).await;
         if is_debug_webserver_enabled() {
             log(
