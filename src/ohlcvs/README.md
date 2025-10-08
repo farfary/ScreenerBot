@@ -261,17 +261,23 @@ The monitor runs several background loops:
    - Processes priority-based fetching
    - Updates activity tracking
 
-2. **Gap Fill Loop** (5m interval)
+2. **Pool Service Sync Loop** (30s interval)
+   - Syncs token list with Pool Service (~500 tokens)
+   - Pool Service updates prices every 5-10s (very fast)
+   - Auto-upgrades priority for tokens with open positions
+   - Removes inactive tokens that are no longer in Pool Service
+
+3. **Gap Fill Loop** (5m interval)
    - Detects gaps in recent data
    - Fills gaps for active tokens
    - Prioritizes critical tokens
 
-3. **Cleanup Loop** (1h interval)
+4. **Cleanup Loop** (1h interval)
    - Removes data older than retention period
    - Compacts database
    - Maintains storage limits
 
-4. **Cache Maintenance Loop** (10m interval)
+5. **Cache Maintenance Loop** (10m interval)
    - Evicts expired cache entries
    - Rebalances LRU cache
    - Updates hit rate metrics

@@ -462,7 +462,7 @@ impl OhlcvMonitor {
     }
 
     async fn sync_pool_service_tokens(self: Arc<Self>) {
-        let mut tick = interval(Duration::from_secs(300)); // Every 5 minutes
+        let mut tick = interval(Duration::from_secs(30)); // Every 30 seconds (Pool Service updates every 5-10s)
 
         loop {
             tick.tick().await;
