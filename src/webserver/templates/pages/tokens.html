@@ -88,14 +88,6 @@
     }
   }
 
-  function setText(id, value) {
-    Utils.setText(id, value);
-  }
-
-  function setHtml(id, value) {
-    Utils.setHtml(id, value);
-  }
-
   function renderSidebarBadges(token) {
     const badges = [];
     if (token?.has_pool_price)
@@ -162,11 +154,13 @@
       }
     }
 
-    setText("modalTokenSymbol", token.symbol || detailData.symbol || "—");
-    setText("modalTokenName", token.name || detailData.name || "—");
-    setText(
+    Utils.setText("modalTokenSymbol", token.symbol || detailData.symbol || "—");
+    Utils.setText("modalTokenName", token.name || detailData.name || "—");
+    Utils.setText(
       "modalTokenPrice",
-      Number.isFinite(price) ? Utils.formatPriceSol(price, { fallback: "N/A" }) : "—"
+      Number.isFinite(price)
+        ? Utils.formatPriceSol(price, { fallback: "N/A" })
+        : "—"
     );
 
     const changeEl = document.getElementById("modalTokenChange");
@@ -178,14 +172,17 @@
       if (changeCls) changeEl.classList.add(changeCls);
     }
 
-    setText("detail-mint", detailData.mint || token.mint || "—");
-    setText("detail-decimals", detailData.decimals ?? "—");
-    setText("detail-verified", Utils.formatBooleanFlag(detailData.verified, "—"));
-    setText(
+    Utils.setText("detail-mint", detailData.mint || token.mint || "—");
+    Utils.setText("detail-decimals", detailData.decimals ?? "—");
+    Utils.setText(
+      "detail-verified",
+      Utils.formatBooleanFlag(detailData.verified, "—")
+    );
+    Utils.setText(
       "detail-blacklisted",
       Utils.formatBooleanFlag(detailData.blacklisted ?? token.blacklisted, "—")
     );
-    setText("detail-launch-date", detailData.launch_date || "—");
+    Utils.setText("detail-launch-date", detailData.launch_date || "—");
 
     const liquidityValue = detailData.liquidity_usd ?? token.liquidity_usd;
     const volume24hValue = detailData.volume_24h ?? token.volume_24h;
@@ -194,12 +191,30 @@
     const fdvValue = detailData.fdv ?? token.fdv;
     const marketCapValue = detailData.market_cap ?? token.market_cap;
 
-    setText("detail-liquidity", Utils.formatCurrencyUSD(liquidityValue, { fallback: "—" }));
-    setText("detail-volume24h", Utils.formatCurrencyUSD(volume24hValue, { fallback: "—" }));
-    setText("detail-volume6h", Utils.formatCurrencyUSD(volume6hValue, { fallback: "—" }));
-    setText("detail-volume1h", Utils.formatCurrencyUSD(volume1hValue, { fallback: "—" }));
-    setText("detail-fdv", Utils.formatCurrencyUSD(fdvValue, { fallback: "—" }));
-    setText("detail-marketcap", Utils.formatCurrencyUSD(marketCapValue, { fallback: "—" }));
+    Utils.setText(
+      "detail-liquidity",
+      Utils.formatCurrencyUSD(liquidityValue, { fallback: "—" })
+    );
+    Utils.setText(
+      "detail-volume24h",
+      Utils.formatCurrencyUSD(volume24hValue, { fallback: "—" })
+    );
+    Utils.setText(
+      "detail-volume6h",
+      Utils.formatCurrencyUSD(volume6hValue, { fallback: "—" })
+    );
+    Utils.setText(
+      "detail-volume1h",
+      Utils.formatCurrencyUSD(volume1hValue, { fallback: "—" })
+    );
+    Utils.setText(
+      "detail-fdv",
+      Utils.formatCurrencyUSD(fdvValue, { fallback: "—" })
+    );
+    Utils.setText(
+      "detail-marketcap",
+      Utils.formatCurrencyUSD(marketCapValue, { fallback: "—" })
+    );
 
     const dexLabel = detailData.pool_dex || detailData.pool?.dex;
     const poolAddress = detailData.pool_address || detailData.pool?.address;
@@ -211,15 +226,21 @@
       detailData.price_confidence ?? detailData.pool?.confidence;
     const poolAge = detailData.pool_age || detailData.pool?.age;
 
-    setText("detail-dex", dexLabel || "—");
-    setText("detail-pool", poolAddress || "—");
-    setText("detail-sol-reserves", Utils.formatCompactNumber(solReserves, 2, "—"));
-    setText("detail-token-reserves", Utils.formatCompactNumber(tokenReserves, 2, "—"));
-    setText(
+    Utils.setText("detail-dex", dexLabel || "—");
+    Utils.setText("detail-pool", poolAddress || "—");
+    Utils.setText(
+      "detail-sol-reserves",
+      Utils.formatCompactNumber(solReserves, 2, "—")
+    );
+    Utils.setText(
+      "detail-token-reserves",
+      Utils.formatCompactNumber(tokenReserves, 2, "—")
+    );
+    Utils.setText(
       "detail-confidence",
       Number.isFinite(confidence) ? Number(confidence).toFixed(2) : "—"
     );
-    setText("detail-pool-age", poolAge || "—");
+    Utils.setText("detail-pool-age", poolAge || "—");
 
     const change5m =
       detailData.price_change_m5 ?? detailData.price_changes?.change_5m;
@@ -234,21 +255,29 @@
       token.price_change_h24 ??
       detailData.price_changes?.change_24h;
 
-    setText(
+    Utils.setText(
       "detail-change5m",
-      change5m !== undefined ? Utils.formatPercentValue(change5m, { fallback: "—" }) : "—"
+      change5m !== undefined
+        ? Utils.formatPercentValue(change5m, { fallback: "—" })
+        : "—"
     );
-    setText(
+    Utils.setText(
       "detail-change1h",
-      change1h !== undefined ? Utils.formatPercentValue(change1h, { fallback: "—" }) : "—"
+      change1h !== undefined
+        ? Utils.formatPercentValue(change1h, { fallback: "—" })
+        : "—"
     );
-    setText(
+    Utils.setText(
       "detail-change6h",
-      change6h !== undefined ? Utils.formatPercentValue(change6h, { fallback: "—" }) : "—"
+      change6h !== undefined
+        ? Utils.formatPercentValue(change6h, { fallback: "—" })
+        : "—"
     );
-    setText(
+    Utils.setText(
       "detail-change24h",
-      change24hValue !== undefined ? Utils.formatPercentValue(change24hValue, { fallback: "—" }) : "—"
+      change24hValue !== undefined
+        ? Utils.formatPercentValue(change24hValue, { fallback: "—" })
+        : "—"
     );
 
     const buys24hRaw = detailData.txns?.h24?.buys ?? detailData.buys_24h;
@@ -264,14 +293,20 @@
         ? buys24h / sells24h
         : Number(detailData.buy_sell_ratio);
 
-    setText("detail-buys24h", hasBuys ? Math.round(buys24h) : "—");
-    setText("detail-sells24h", hasSells ? Math.round(sells24h) : "—");
-    setText("detail-ratio", Number.isFinite(ratio) ? ratio.toFixed(2) : "—");
+    Utils.setText("detail-buys24h", hasBuys ? Math.round(buys24h) : "—");
+    Utils.setText("detail-sells24h", hasSells ? Math.round(sells24h) : "—");
+    Utils.setText(
+      "detail-ratio",
+      Number.isFinite(ratio) ? ratio.toFixed(2) : "—"
+    );
     if (Number.isFinite(netFlow)) {
       const sign = netFlow > 0 ? "+" : netFlow < 0 ? "-" : "";
-      setText("detail-netflow", `${sign}${Math.abs(Math.round(netFlow))}`);
+      Utils.setText(
+        "detail-netflow",
+        `${sign}${Math.abs(Math.round(netFlow))}`
+      );
     } else {
-      setText("detail-netflow", "—");
+      Utils.setText("detail-netflow", "—");
     }
 
     const securityScore = Number(detailData.security_score);
@@ -305,7 +340,7 @@
       progress.style.width = `${pct}%`;
     }
 
-    setHtml(
+    Utils.setHtml(
       "security-score-value",
       Number.isFinite(securityScore) ? `${securityScore}` : "—"
     );
@@ -314,31 +349,48 @@
       (rugged
         ? "⚠️ Token flagged as rugged."
         : "No security summary available.");
-    setHtml("security-status", securitySummary);
-    setText("detail-mint-auth", detailData.mint_authority ?? "Unknown");
-    setText("detail-freeze-auth", detailData.freeze_authority ?? "Unknown");
-    setText("detail-holders", detailData.total_holders ?? "—");
+    Utils.setHtml("security-status", securitySummary);
+    Utils.setText("detail-mint-auth", detailData.mint_authority ?? "Unknown");
+    Utils.setText(
+      "detail-freeze-auth",
+      detailData.freeze_authority ?? "Unknown"
+    );
+    Utils.setText("detail-holders", detailData.total_holders ?? "—");
     const top10Raw = detailData.top_10_concentration;
     if (top10Raw === null || top10Raw === undefined) {
-      setText("detail-top10", "—");
+      Utils.setText("detail-top10", "—");
     } else {
       const top10Num = Number(top10Raw);
       if (Number.isFinite(top10Num)) {
         const display = top10Num <= 1 ? top10Num * 100 : top10Num;
-        setText("detail-top10", `${display.toFixed(2)}%`);
+        Utils.setText("detail-top10", `${display.toFixed(2)}%`);
       } else {
-        setText("detail-top10", `${top10Raw}`);
+        Utils.setText("detail-top10", `${top10Raw}`);
       }
     }
-    setHtml("risk-factors-list", renderRiskFactors(detailData.security_risks));
-
-    setText(
-      "sidebar-price",
-      Number.isFinite(price) ? Utils.formatPriceSol(price, { fallback: "N/A" }) : "—"
+    Utils.setHtml(
+      "risk-factors-list",
+      renderRiskFactors(detailData.security_risks)
     );
-    setText("sidebar-volume", Utils.formatCurrencyUSD(volume24hValue, { fallback: "—" }));
-    setText("sidebar-liq", Utils.formatCurrencyUSD(liquidityValue, { fallback: "—" }));
-    setText("sidebar-mcap", Utils.formatCurrencyUSD(marketCapValue, { fallback: "—" }));
+
+    Utils.setText(
+      "sidebar-price",
+      Number.isFinite(price)
+        ? Utils.formatPriceSol(price, { fallback: "N/A" })
+        : "—"
+    );
+    Utils.setText(
+      "sidebar-volume",
+      Utils.formatCurrencyUSD(volume24hValue, { fallback: "—" })
+    );
+    Utils.setText(
+      "sidebar-liq",
+      Utils.formatCurrencyUSD(liquidityValue, { fallback: "—" })
+    );
+    Utils.setText(
+      "sidebar-mcap",
+      Utils.formatCurrencyUSD(marketCapValue, { fallback: "—" })
+    );
 
     const statusFlags = {
       has_pool_price: detailData.has_pool_price ?? token.has_pool_price,
@@ -347,7 +399,7 @@
         detailData.has_open_position ?? token.has_open_position,
       blacklisted: detailData.blacklisted ?? token.blacklisted,
     };
-    setHtml("sidebar-badges", renderSidebarBadges(statusFlags));
+    Utils.setHtml("sidebar-badges", renderSidebarBadges(statusFlags));
 
     const modal = document.getElementById("tokenModal");
     if (modal) {
@@ -737,11 +789,17 @@
     const timeAgo = token.price_updated_at
       ? Utils.formatTimeAgo(token.price_updated_at, { fallback: "-" })
       : "N/A";
-    const priceDisplay = Utils.formatPriceSol(token.price_sol, { fallback: "N/A" });
-    const liquidity = Utils.formatCurrencyUSD(token.liquidity_usd, { fallback: "—" });
+    const priceDisplay = Utils.formatPriceSol(token.price_sol, {
+      fallback: "N/A",
+    });
+    const liquidity = Utils.formatCurrencyUSD(token.liquidity_usd, {
+      fallback: "—",
+    });
     const vol24h = Utils.formatCurrencyUSD(token.volume_24h, { fallback: "—" });
     const fdv = Utils.formatCurrencyUSD(token.fdv, { fallback: "—" });
-    const marketCap = Utils.formatCurrencyUSD(token.market_cap, { fallback: "—" });
+    const marketCap = Utils.formatCurrencyUSD(token.market_cap, {
+      fallback: "—",
+    });
     const ch1h = Utils.formatPercent(token.price_change_h1, {
       style: "token",
       fallback: "—",
@@ -926,12 +984,6 @@
     } catch (_) {
       /* no-op */
     }
-  }
-
-  , { fallback: "—" });
-  }
-
-  , { fallback: "—" });
   }
 
   function renderSecurity(score, rugged) {
