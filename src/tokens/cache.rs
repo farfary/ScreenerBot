@@ -1,20 +1,20 @@
 // Token database persistence module.
-use crate::global::{is_debug_monitor_enabled, TOKENS_DATABASE};
-use crate::logger::{log, LogTag};
+use crate::global::{ is_debug_monitor_enabled, TOKENS_DATABASE };
+use crate::logger::{ log, LogTag };
 use crate::tokens::types::*;
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use chrono::{ DateTime, Utc };
+use serde::{ Deserialize, Serialize };
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::{ Arc, Mutex };
 
 // =============================================================================
 // TOKEN DATABASE (SQLite)
 // =============================================================================
 
 use crate::tokens::types::ApiToken;
-use rusqlite::{params, Connection, Result as SqliteResult};
+use rusqlite::{ params, Connection, Result as SqliteResult };
 
 /// SQLite database for token storage and caching
 #[derive(Clone)]
@@ -95,29 +95,26 @@ impl TokenDatabase {
                 last_updated TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             )",
-            [],
+            []
         )?;
 
         // Create indexes for better performance
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS idx_tokens_symbol ON tokens(symbol)",
-            [],
-        )?;
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_tokens_symbol ON tokens(symbol)", [])?;
 
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_tokens_liquidity ON tokens(liquidity_usd DESC)",
-            [],
+            []
         )?;
 
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_tokens_last_updated ON tokens(last_updated)",
-            [],
+            []
         )?;
 
         // Helpful index for boost selection: pair_created_at recency
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_tokens_pair_created_at ON tokens(pair_created_at)",
-            [],
+            []
         )?;
 
         // Only log on first initialization - reduce log spam
@@ -132,11 +129,7 @@ impl TokenDatabase {
 
         // Run database schema migrations on startup
         if let Err(e) = database.migrate_database_schemas() {
-            log(
-                LogTag::Cache,
-                "MIGRATION_ERROR",
-                &format!("Database migration failed: {}", e),
-            );
+            log(LogTag::Cache, "MIGRATION_ERROR", &format!("Database migration failed: {}", e));
         }
 
         Ok(database)
@@ -149,11 +142,7 @@ impl TokenDatabase {
         }
 
         if is_debug_monitor_enabled() {
-            log(
-                LogTag::Cache,
-                "DATABASE",
-                &format!("Added/updated {} tokens", tokens.len()),
-            );
+            log(LogTag::Cache, "DATABASE", &format!("Added/updated {} tokens", tokens.len()));
         }
 
         Ok(())
@@ -162,17 +151,14 @@ impl TokenDatabase {
     /// Update existing tokens in database
     pub async fn update_tokens(&self, tokens: &[ApiToken]) -> Result<(), String> {
         for token in tokens {
-            self.insert_or_update_token(token)
+            self
+                .insert_or_update_token(token)
                 .map_err(|e| format!("Failed to update token: {}", e))?;
         }
 
         // Only log on errors or significant updates (> 50 tokens)
         if tokens.len() > 50 {
-            log(
-                LogTag::Cache,
-                "DATABASE",
-                &format!("Updated {} tokens", tokens.len()),
-            );
+            log(LogTag::Cache, "DATABASE", &format!("Updated {} tokens", tokens.len()));
         }
         Ok(())
     }
@@ -198,19 +184,17 @@ impl TokenDatabase {
             log(
                 LogTag::Monitor,
                 "SAFETY_CHECK",
-                &format!(
-                    "✅ Verified {} tokens safe to delete (no open positions)",
-                    mints.len()
-                ),
+                &format!("✅ Verified {} tokens safe to delete (no open positions)", mints.len())
             );
         }
 
-        let placeholders = mints.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let placeholders = mints
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(",");
 
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|e| format!("Database lock error: {}", e))?;
+        let connection = self.connection.lock().map_err(|e| format!("Database lock error: {}", e))?;
 
         let mut params: Vec<&dyn rusqlite::ToSql> = Vec::new();
         for mint in mints {
@@ -224,10 +208,8 @@ impl TokenDatabase {
 
         // First delete from tables that have foreign key references to tokens
         // Delete from liquidity_tracking
-        let liquidity_query = format!(
-            "DELETE FROM liquidity_tracking WHERE mint IN ({})",
-            placeholders
-        );
+        let liquidity_query =
+            format!("DELETE FROM liquidity_tracking WHERE mint IN ({})", placeholders);
         let liquidity_deleted = connection
             .prepare(&liquidity_query)
             .map_err(|e| format!("Failed to prepare liquidity_tracking delete: {}", e))?
@@ -235,10 +217,8 @@ impl TokenDatabase {
             .map_err(|e| format!("Failed to delete from liquidity_tracking: {}", e))?;
 
         // Delete from route_failure_tracking
-        let route_query = format!(
-            "DELETE FROM route_failure_tracking WHERE mint IN ({})",
-            placeholders
-        );
+        let route_query =
+            format!("DELETE FROM route_failure_tracking WHERE mint IN ({})", placeholders);
         let route_deleted = connection
             .prepare(&route_query)
             .map_err(|e| format!("Failed to prepare route_failure_tracking delete: {}", e))?
@@ -271,11 +251,11 @@ impl TokenDatabase {
             );
         }
 
-        if deleted_count > 0 {
+        if deleted_count > 0 && is_debug_monitor_enabled() {
             log(
                 LogTag::Cache,
                 "DATABASE",
-                &format!("Deleted {} stale tokens from database", deleted_count),
+                &format!("Deleted {} stale tokens from database", deleted_count)
             );
         }
 
@@ -289,16 +269,13 @@ impl TokenDatabase {
         &self,
         max_age_minutes: i64,
         min_stale_minutes: i64,
-        limit: usize,
+        limit: usize
     ) -> Result<Vec<String>, String> {
         if limit == 0 {
             return Ok(Vec::new());
         }
 
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|e| format!("Database lock error: {}", e))?;
+        let connection = self.connection.lock().map_err(|e| format!("Database lock error: {}", e))?;
 
         let now = chrono::Utc::now();
         let min_created_at = now - chrono::Duration::minutes(max_age_minutes);
@@ -315,14 +292,13 @@ impl TokenDatabase {
                    AND pair_created_at >= ?1
                    AND last_updated <= ?2
                  ORDER BY pair_created_at DESC
-                 LIMIT ?3",
+                 LIMIT ?3"
             )
             .map_err(|e| format!("Failed to prepare boost query: {}", e))?;
 
         let rows = stmt
-            .query_map(
-                rusqlite::params![min_created_ms, max_last_updated_str, limit as i64],
-                |row| Ok(row.get::<_, String>("mint")?),
+            .query_map(rusqlite::params![min_created_ms, max_last_updated_str, limit as i64], |row|
+                Ok(row.get::<_, String>("mint")?)
             )
             .map_err(|e| format!("Failed to execute boost query: {}", e))?;
 
@@ -335,10 +311,7 @@ impl TokenDatabase {
 
     /// Get all tokens from database
     pub async fn get_all_tokens(&self) -> Result<Vec<ApiToken>, String> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|e| format!("Database lock error: {}", e))?;
+        let connection = self.connection.lock().map_err(|e| format!("Database lock error: {}", e))?;
 
         let mut stmt = connection
             .prepare("SELECT * FROM tokens ORDER BY liquidity_usd DESC")
@@ -359,7 +332,7 @@ impl TokenDatabase {
     /// Get tokens by mints
     pub async fn get_tokens_by_mints(
         &self,
-        mints: &[String],
+        mints: &[String]
     ) -> Result<Vec<ApiToken>, Box<dyn std::error::Error>> {
         let mut tokens = Vec::new();
 
@@ -375,14 +348,18 @@ impl TokenDatabase {
     /// Get single token by mint
     pub fn get_token_by_mint(
         &self,
-        mint: &str,
+        mint: &str
     ) -> Result<Option<ApiToken>, Box<dyn std::error::Error>> {
-        let connection = self.connection.lock().map_err(|e| {
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Database lock error: {}", e),
-            )) as Box<dyn std::error::Error>
-        })?;
+        let connection = self.connection
+            .lock()
+            .map_err(|e| {
+                Box::new(
+                    std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Database lock error: {}", e)
+                    )
+                ) as Box<dyn std::error::Error>
+            })?;
         let mut stmt = connection.prepare("SELECT * FROM tokens WHERE mint = ?1")?;
 
         let mut rows = stmt.query_map(params![mint], |row| Ok(self.row_to_token(row)?))?;
@@ -397,19 +374,23 @@ impl TokenDatabase {
     /// Get tokens by liquidity threshold for new entry detection
     pub async fn get_tokens_by_liquidity_threshold(
         &self,
-        threshold: f64,
+        threshold: f64
     ) -> Result<Vec<ApiToken>, Box<dyn std::error::Error>> {
-        let connection = self.connection.lock().map_err(|e| {
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Database lock error: {}", e),
-            )) as Box<dyn std::error::Error>
-        })?;
+        let connection = self.connection
+            .lock()
+            .map_err(|e| {
+                Box::new(
+                    std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Database lock error: {}", e)
+                    )
+                ) as Box<dyn std::error::Error>
+            })?;
 
         let mut stmt = connection.prepare(
             "SELECT * FROM tokens 
              WHERE liquidity_usd >= ?1 
-             ORDER BY liquidity_usd DESC",
+             ORDER BY liquidity_usd DESC"
         )?;
 
         let rows = stmt.query_map(params![threshold], |row| Ok(self.row_to_token(row)?))?;
@@ -424,18 +405,21 @@ impl TokenDatabase {
 
     /// Insert or update token in database
     fn insert_or_update_token(&self, token: &ApiToken) -> Result<(), Box<dyn std::error::Error>> {
-        let labels_json = token
-            .labels
+        let labels_json = token.labels
             .as_ref()
             .map(|labels| serde_json::to_string(labels).unwrap_or_default())
             .unwrap_or_default();
 
-        let connection = self.connection.lock().map_err(|e| {
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Database lock error: {}", e),
-            )) as Box<dyn std::error::Error>
-        })?;
+        let connection = self.connection
+            .lock()
+            .map_err(|e| {
+                Box::new(
+                    std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Database lock error: {}", e)
+                    )
+                ) as Box<dyn std::error::Error>
+            })?;
         connection.execute(
             "INSERT OR REPLACE INTO tokens (
                 mint, symbol, name, chain_id, dex_id, pair_address, pair_url,
@@ -504,12 +488,13 @@ impl TokenDatabase {
         };
 
         let last_updated_str: String = row.get("last_updated")?;
-        let last_updated = chrono::DateTime::parse_from_rfc3339(&last_updated_str)
+        let last_updated = chrono::DateTime
+            ::parse_from_rfc3339(&last_updated_str)
             .map_err(|_e| {
                 rusqlite::Error::InvalidColumnType(
                     0,
                     "last_updated".to_string(),
-                    rusqlite::types::Type::Text,
+                    rusqlite::types::Type::Text
                 )
             })?
             .with_timezone(&chrono::Utc);
@@ -573,7 +558,7 @@ impl TokenDatabase {
                 symbol: row.get::<_, String>("symbol")?,
                 image_url: row.get("info_image_url")?,
                 websites: None, // Not stored in simplified schema
-                socials: None,  // Not stored in simplified schema
+                socials: None, // Not stored in simplified schema
             }),
             labels,
             last_updated,
@@ -582,17 +567,20 @@ impl TokenDatabase {
 
     /// Get database statistics
     pub fn get_stats(&self) -> Result<DatabaseStats, Box<dyn std::error::Error>> {
-        let connection = self.connection.lock().map_err(|e| {
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Database lock error: {}", e),
-            )) as Box<dyn std::error::Error>
-        })?;
+        let connection = self.connection
+            .lock()
+            .map_err(|e| {
+                Box::new(
+                    std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Database lock error: {}", e)
+                    )
+                ) as Box<dyn std::error::Error>
+            })?;
         let mut stmt = connection.prepare("SELECT COUNT(*) FROM tokens")?;
         let total_tokens: i64 = stmt.query_row([], |row| row.get(0))?;
 
-        let mut stmt =
-            connection.prepare("SELECT COUNT(*) FROM tokens WHERE liquidity_usd > 100")?;
+        let mut stmt = connection.prepare("SELECT COUNT(*) FROM tokens WHERE liquidity_usd > 100")?;
         let tokens_with_liquidity: i64 = stmt.query_row([], |row| row.get(0))?;
 
         Ok(DatabaseStats {
@@ -607,30 +595,28 @@ impl TokenDatabase {
     /// Get all tokens with their last update times for monitoring
     /// Returns tokens ordered by liquidity (highest first) with update time information
     pub async fn get_all_tokens_with_update_time(
-        &self,
+        &self
     ) -> Result<Vec<(String, String, DateTime<Utc>, f64)>, String> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|e| format!("Database lock error: {}", e))?;
+        let connection = self.connection.lock().map_err(|e| format!("Database lock error: {}", e))?;
 
         let mut stmt = connection
             .prepare(
                 "SELECT mint, symbol, last_updated, COALESCE(liquidity_usd, 0.0) as liquidity
                  FROM tokens 
-                 ORDER BY liquidity_usd DESC NULLS LAST",
+                 ORDER BY liquidity_usd DESC NULLS LAST"
             )
             .map_err(|e| format!("Failed to prepare statement: {}", e))?;
 
         let token_iter = stmt
             .query_map([], |row| {
                 let last_updated_str: String = row.get("last_updated")?;
-                let last_updated = chrono::DateTime::parse_from_rfc3339(&last_updated_str)
+                let last_updated = chrono::DateTime
+                    ::parse_from_rfc3339(&last_updated_str)
                     .map_err(|e| {
                         rusqlite::Error::InvalidColumnType(
                             0,
                             "last_updated".to_string(),
-                            rusqlite::types::Type::Text,
+                            rusqlite::types::Type::Text
                         )
                     })?
                     .with_timezone(&chrono::Utc);
@@ -656,12 +642,9 @@ impl TokenDatabase {
     /// Returns tokens that haven't been updated within the specified hours
     pub async fn get_tokens_needing_update(
         &self,
-        min_hours_since_update: i64,
+        min_hours_since_update: i64
     ) -> Result<Vec<(String, String, DateTime<Utc>, f64)>, String> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|e| format!("Database lock error: {}", e))?;
+        let connection = self.connection.lock().map_err(|e| format!("Database lock error: {}", e))?;
 
         let cutoff_time = chrono::Utc::now() - chrono::Duration::hours(min_hours_since_update);
         let cutoff_str = cutoff_time.to_rfc3339();
@@ -671,19 +654,20 @@ impl TokenDatabase {
                 "SELECT mint, symbol, last_updated, COALESCE(liquidity_usd, 0.0) as liquidity
                  FROM tokens 
                  WHERE last_updated < ?1
-                 ORDER BY liquidity_usd DESC NULLS LAST",
+                 ORDER BY liquidity_usd DESC NULLS LAST"
             )
             .map_err(|e| format!("Failed to prepare statement: {}", e))?;
 
         let token_iter = stmt
             .query_map([&cutoff_str], |row| {
                 let last_updated_str: String = row.get("last_updated")?;
-                let last_updated = chrono::DateTime::parse_from_rfc3339(&last_updated_str)
+                let last_updated = chrono::DateTime
+                    ::parse_from_rfc3339(&last_updated_str)
                     .map_err(|e| {
                         rusqlite::Error::InvalidColumnType(
                             0,
                             "last_updated".to_string(),
-                            rusqlite::types::Type::Text,
+                            rusqlite::types::Type::Text
                         )
                     })?
                     .with_timezone(&chrono::Utc);
@@ -725,23 +709,20 @@ impl TokenDatabase {
             log(
                 LogTag::Cache,
                 "MIGRATION",
-                "Migrating failed_decimals table to add retry_count columns",
+                "Migrating failed_decimals table to add retry_count columns"
             );
 
             // Add missing columns to failed_decimals table
             migration_conn
                 .execute(
                     "ALTER TABLE failed_decimals ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0",
-                    [],
+                    []
                 )
                 .unwrap_or_else(|e| {
                     log(
                         LogTag::Cache,
                         "MIGRATION_WARN",
-                        &format!(
-                            "Could not add retry_count column (may already exist): {}",
-                            e
-                        ),
+                        &format!("Could not add retry_count column (may already exist): {}", e)
                     );
                     0
                 });
@@ -749,25 +730,18 @@ impl TokenDatabase {
             migration_conn
                 .execute(
                     "ALTER TABLE failed_decimals ADD COLUMN max_retries INTEGER NOT NULL DEFAULT 3",
-                    [],
+                    []
                 )
                 .unwrap_or_else(|e| {
                     log(
                         LogTag::Cache,
                         "MIGRATION_WARN",
-                        &format!(
-                            "Could not add max_retries column (may already exist): {}",
-                            e
-                        ),
+                        &format!("Could not add max_retries column (may already exist): {}", e)
                     );
                     0
                 });
 
-            log(
-                LogTag::Cache,
-                "MIGRATION",
-                "Failed_decimals table migration completed",
-            );
+            log(LogTag::Cache, "MIGRATION", "Failed_decimals table migration completed");
         }
 
         // Close migration connection explicitly

@@ -1,5 +1,5 @@
-use crate::webserver::{ state::AppState, templates };
-use axum::{ response::Html, Router };
+use crate::webserver::{state::AppState, templates};
+use axum::{response::Html, Router};
 use std::sync::Arc;
 
 pub mod blacklist;
@@ -12,8 +12,8 @@ pub mod services;
 pub mod status;
 pub mod system;
 pub mod tokens;
-pub mod trading;
 pub mod trader;
+pub mod trading;
 pub mod wallet;
 pub mod ws;
 
@@ -70,7 +70,11 @@ async fn services_page() -> Html<String> {
 /// Config page handler
 async fn config_page() -> Html<String> {
     let content = templates::config_content();
-    Html(templates::base_template("Configuration", "config", &content))
+    Html(templates::base_template(
+        "Configuration",
+        "config",
+        &content,
+    ))
 }
 
 fn api_routes() -> Router<Arc<AppState>> {

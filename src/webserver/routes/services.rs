@@ -1,19 +1,19 @@
 use axum::{
-    extract::{ Path, State },
+    extract::{Path, State},
     http::StatusCode,
-    response::{ IntoResponse, Response },
+    response::{IntoResponse, Response},
     routing::get,
     Router,
 };
-use chrono::{ DateTime, Utc };
-use serde::{ Deserialize, Serialize };
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::{
     arguments::is_debug_webserver_enabled,
-    logger::{ log, LogTag },
-    services::{ ServiceHealth, ServiceMetrics },
-    webserver::{ state::AppState, utils::success_response },
+    logger::{log, LogTag},
+    services::{ServiceHealth, ServiceMetrics},
+    webserver::{state::AppState, utils::success_response},
 };
 
 // ================================================================================================
@@ -85,7 +85,7 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
         log(
             LogTag::Webserver,
             "DEBUG",
-            "Collecting services overview snapshot from ServiceManager"
+            "Collecting services overview snapshot from ServiceManager",
         );
     }
 
@@ -106,7 +106,7 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
             log(
                 LogTag::Webserver,
                 "DEBUG",
-                "ServiceManager reference obtained, acquiring read lock"
+                "ServiceManager reference obtained, acquiring read lock",
             );
         }
 
@@ -140,9 +140,9 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
                     let health = health_map
                         .get(name)
                         .cloned()
-                        .unwrap_or(
-                            ServiceHealth::Unhealthy("Health status unavailable".to_string())
-                        );
+                        .unwrap_or(ServiceHealth::Unhealthy(
+                            "Health status unavailable".to_string(),
+                        ));
                     let metrics = metrics_map
                         .get(name)
                         .cloned()
@@ -210,7 +210,7 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
                 log(
                     LogTag::Webserver,
                     "DEBUG",
-                    "ServiceManager read lock acquired but manager is None"
+                    "ServiceManager read lock acquired but manager is None",
                 );
             }
         }
@@ -219,7 +219,7 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
             log(
                 LogTag::Webserver,
                 "DEBUG",
-                "ServiceManager reference not available (get_service_manager returned None)"
+                "ServiceManager reference not available (get_service_manager returned None)",
             );
         }
     }
@@ -228,10 +228,9 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
     dependency_graph.sort_by_key(|service| service.priority);
 
     summary.total_services = services.len();
-    summary.all_healthy =
-        summary.unhealthy_services == 0 &&
-        summary.degraded_services == 0 &&
-        summary.starting_services == 0;
+    summary.all_healthy = summary.unhealthy_services == 0
+        && summary.degraded_services == 0
+        && summary.starting_services == 0;
 
     if is_debug_webserver_enabled() {
         let unhealthy = summary.unhealthy_services + summary.degraded_services;
@@ -298,7 +297,7 @@ async fn list_services(State(_state): State<Arc<AppState>>) -> Response {
                 response.healthy_count,
                 response.unhealthy_count,
                 response.starting_count
-            )
+            ),
         );
     }
 
@@ -309,7 +308,11 @@ async fn list_services(State(_state): State<Arc<AppState>>) -> Response {
 /// Get detailed information about a specific service
 async fn get_service(Path(name): Path<String>, State(_state): State<Arc<AppState>>) -> Response {
     if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "DEBUG", &format!("Fetching service details for: {}", name));
+        log(
+            LogTag::Webserver,
+            "DEBUG",
+            &format!("Fetching service details for: {}", name),
+        );
     }
 
     let overview = gather_services_overview_snapshot().await;
@@ -320,12 +323,19 @@ async fn get_service(Path(name): Path<String>, State(_state): State<Arc<AppState
                 log(
                     LogTag::Webserver,
                     "DEBUG",
-                    &format!("Service '{}' found with priority {}", service.name, service.priority)
+                    &format!(
+                        "Service '{}' found with priority {}",
+                        service.name, service.priority
+                    ),
                 );
             }
             success_response(service)
         }
-        None => (StatusCode::NOT_FOUND, format!("Service '{}' not found", name)).into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            format!("Service '{}' not found", name),
+        )
+            .into_response(),
     }
 }
 
@@ -337,7 +347,11 @@ async fn services_overview(State(_state): State<Arc<AppState>>) -> Response {
     let start = Instant::now();
 
     if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "DEBUG", "Fetching complete services overview");
+        log(
+            LogTag::Webserver,
+            "DEBUG",
+            "Fetching complete services overview",
+        );
     }
 
     let overview = gather_services_overview_snapshot().await;
@@ -352,7 +366,7 @@ async fn services_overview(State(_state): State<Arc<AppState>>) -> Response {
                 overview.services.len(),
                 overview.dependency_graph.len(),
                 gather_duration.as_millis()
-            )
+            ),
         );
     }
 
@@ -368,7 +382,7 @@ async fn services_overview(State(_state): State<Arc<AppState>>) -> Response {
                 total_duration.as_millis(),
                 gather_duration.as_millis(),
                 (total_duration - gather_duration).as_millis()
-            )
+            ),
         );
     }
 

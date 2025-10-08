@@ -1,24 +1,15 @@
-use axum::{
-    extract::{Path, Query},
-    http::StatusCode,
-    routing::{get, post},
-    Json, Router,
-};
-use futures::stream::{self, StreamExt};
-use serde::{Deserialize, Serialize};
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use axum::{ extract::{ Path, Query }, http::StatusCode, routing::{ get, post }, Json, Router };
+use futures::stream::{ self, StreamExt };
+use serde::{ Deserialize, Serialize };
+use std::{ collections::{ HashMap, HashSet }, sync::Arc };
 
 use crate::{
-    logger::{log, LogTag},
-    pools, positions,
-    tokens::{blacklist, cache::TokenDatabase, security_db::SecurityDatabase},
-    webserver::{
-        state::AppState,
-        utils::{error_response, success_response},
-    },
+    global::is_debug_webserver_enabled,
+    logger::{ log, LogTag },
+    pools,
+    positions,
+    tokens::{ blacklist, cache::TokenDatabase, security_db::SecurityDatabase },
+    webserver::{ state::AppState, utils::{ error_response, success_response } },
 };
 
 // =============================================================================
@@ -236,13 +227,13 @@ async fn get_tokens_list(Query(query): Query<TokenListQuery>) -> Json<TokenListR
     // Optimized path for view=all when sorting on inexpensive fields
     let cheap_sort = matches!(
         query.sort_by.as_str(),
-        "symbol"
-            | "liquidity_usd"
-            | "volume_24h"
-            | "fdv"
-            | "market_cap"
-            | "price_change_h1"
-            | "price_change_h24"
+        "symbol" |
+            "liquidity_usd" |
+            "volume_24h" |
+            "fdv" |
+            "market_cap" |
+            "price_change_h1" |
+            "price_change_h24"
     );
 
     if query.view == "all" && cheap_sort {
@@ -266,9 +257,9 @@ async fn get_tokens_list(Query(query): Query<TokenListQuery>) -> Json<TokenListR
         if !query.search.is_empty() {
             let q = query.search.to_lowercase();
             raw.retain(|t| {
-                t.symbol.to_lowercase().contains(&q)
-                    || t.mint.to_lowercase().contains(&q)
-                    || t.name.to_lowercase().contains(&q)
+                t.symbol.to_lowercase().contains(&q) ||
+                    t.mint.to_lowercase().contains(&q) ||
+                    t.name.to_lowercase().contains(&q)
             });
         }
 
@@ -277,24 +268,27 @@ async fn get_tokens_list(Query(query): Query<TokenListQuery>) -> Json<TokenListR
         raw.sort_by(|a, b| {
             let cmp = match query.sort_by.as_str() {
                 "symbol" => a.symbol.cmp(&b.symbol),
-                "liquidity_usd" => optf(a.liquidity.as_ref().and_then(|l| l.usd))
-                    .partial_cmp(&optf(b.liquidity.as_ref().and_then(|l| l.usd)))
-                    .unwrap_or(std::cmp::Ordering::Equal),
-                "volume_24h" => optf(a.volume.as_ref().and_then(|v| v.h24))
-                    .partial_cmp(&optf(b.volume.as_ref().and_then(|v| v.h24)))
-                    .unwrap_or(std::cmp::Ordering::Equal),
-                "fdv" => optf(a.fdv)
-                    .partial_cmp(&optf(b.fdv))
-                    .unwrap_or(std::cmp::Ordering::Equal),
-                "market_cap" => optf(a.market_cap)
-                    .partial_cmp(&optf(b.market_cap))
-                    .unwrap_or(std::cmp::Ordering::Equal),
-                "price_change_h1" => optf(a.price_change.as_ref().and_then(|p| p.h1))
-                    .partial_cmp(&optf(b.price_change.as_ref().and_then(|p| p.h1)))
-                    .unwrap_or(std::cmp::Ordering::Equal),
-                "price_change_h24" => optf(a.price_change.as_ref().and_then(|p| p.h24))
-                    .partial_cmp(&optf(b.price_change.as_ref().and_then(|p| p.h24)))
-                    .unwrap_or(std::cmp::Ordering::Equal),
+                "liquidity_usd" =>
+                    optf(a.liquidity.as_ref().and_then(|l| l.usd))
+                        .partial_cmp(&optf(b.liquidity.as_ref().and_then(|l| l.usd)))
+                        .unwrap_or(std::cmp::Ordering::Equal),
+                "volume_24h" =>
+                    optf(a.volume.as_ref().and_then(|v| v.h24))
+                        .partial_cmp(&optf(b.volume.as_ref().and_then(|v| v.h24)))
+                        .unwrap_or(std::cmp::Ordering::Equal),
+                "fdv" => optf(a.fdv).partial_cmp(&optf(b.fdv)).unwrap_or(std::cmp::Ordering::Equal),
+                "market_cap" =>
+                    optf(a.market_cap)
+                        .partial_cmp(&optf(b.market_cap))
+                        .unwrap_or(std::cmp::Ordering::Equal),
+                "price_change_h1" =>
+                    optf(a.price_change.as_ref().and_then(|p| p.h1))
+                        .partial_cmp(&optf(b.price_change.as_ref().and_then(|p| p.h1)))
+                        .unwrap_or(std::cmp::Ordering::Equal),
+                "price_change_h24" =>
+                    optf(a.price_change.as_ref().and_then(|p| p.h24))
+                        .partial_cmp(&optf(b.price_change.as_ref().and_then(|p| p.h24)))
+                        .unwrap_or(std::cmp::Ordering::Equal),
                 _ => std::cmp::Ordering::Equal,
             };
             if ascending {
@@ -316,7 +310,10 @@ async fn get_tokens_list(Query(query): Query<TokenListQuery>) -> Json<TokenListR
         };
 
         // Build caches only for the current page
-        let mints: Vec<String> = page_slice.iter().map(|t| t.mint.clone()).collect();
+        let mints: Vec<String> = page_slice
+            .iter()
+            .map(|t| t.mint.clone())
+            .collect();
         let caches = TokenSummaryCaches::build(&mints).await;
 
         let items = page_slice
@@ -324,20 +321,22 @@ async fn get_tokens_list(Query(query): Query<TokenListQuery>) -> Json<TokenListR
             .map(|t| token_to_summary(t, &caches))
             .collect();
 
-        log(
-            LogTag::Api,
-            "TOKENS_LIST_OPTIMIZED",
-            &format!(
-                "view=all search='{}' sort_by={} sort_dir={} page={}/{} items={}/{}",
-                query.search,
-                query.sort_by,
-                query.sort_dir,
-                page,
-                total_pages,
-                page_size.min(total),
-                total
-            ),
-        );
+        if is_debug_webserver_enabled() {
+            log(
+                LogTag::Webserver,
+                "TOKENS_LIST_OPTIMIZED",
+                &format!(
+                    "view=all search='{}' sort_by={} sort_dir={} page={}/{} items={}/{}",
+                    query.search,
+                    query.sort_by,
+                    query.sort_dir,
+                    page,
+                    total_pages,
+                    page_size.min(total),
+                    total
+                )
+            );
+        }
 
         return Json(TokenListResponse {
             items,
@@ -360,9 +359,9 @@ async fn get_tokens_list(Query(query): Query<TokenListQuery>) -> Json<TokenListR
         tokens
             .into_iter()
             .filter(|t| {
-                t.symbol.to_lowercase().contains(&search_lower)
-                    || t.mint.to_lowercase().contains(&search_lower)
-                    || t.name
+                t.symbol.to_lowercase().contains(&search_lower) ||
+                    t.mint.to_lowercase().contains(&search_lower) ||
+                    t.name
                         .as_ref()
                         .map(|n| n.to_lowercase().contains(&search_lower))
                         .unwrap_or(false)
@@ -379,25 +378,23 @@ async fn get_tokens_list(Query(query): Query<TokenListQuery>) -> Json<TokenListR
     let total_pages = (total + page_size - 1) / page_size;
     let start_idx = (page - 1) * page_size;
     let end_idx = (start_idx + page_size).min(total);
-    let items = if start_idx < total {
-        sorted[start_idx..end_idx].to_vec()
-    } else {
-        vec![]
-    };
+    let items = if start_idx < total { sorted[start_idx..end_idx].to_vec() } else { vec![] };
 
-    log(
-        LogTag::Api,
-        "TOKENS_LIST",
-        &format!(
-            "view={} search='{}' page={}/{} items={}/{}",
-            query.view,
-            query.search,
-            page,
-            total_pages,
-            items.len(),
-            total
-        ),
-    );
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "TOKENS_LIST",
+            &format!(
+                "view={} search='{}' page={}/{} items={}/{}",
+                query.view,
+                query.search,
+                page,
+                total_pages,
+                items.len(),
+                total
+            )
+        );
+    }
 
     Json(TokenListResponse {
         items,
@@ -411,7 +408,9 @@ async fn get_tokens_list(Query(query): Query<TokenListQuery>) -> Json<TokenListR
 
 /// Get token detail
 async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse> {
-    log(LogTag::Api, "TOKEN_DETAIL", &format!("mint={}", mint));
+    if is_debug_webserver_enabled() {
+        log(LogTag::Webserver, "TOKEN_DETAIL", &format!("mint={}", mint));
+    }
 
     // Fetch token from database (ONE async call)
     let db = match TokenDatabase::new() {
@@ -544,7 +543,8 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         pool_reserves_token,
     ) = if let Some(price_result) = pools::get_pool_price(&mint) {
         let age_secs = price_result.timestamp.elapsed().as_secs();
-        let now_unix = std::time::SystemTime::now()
+        let now_unix = std::time::SystemTime
+            ::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs() as i64;
@@ -576,12 +576,17 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         .and_then(|db| db.get_security_info(&mint).ok().flatten())
         .map(|sec| {
             let top_10_conc = if sec.top_holders.len() >= 10 {
-                Some(sec.top_holders.iter().take(10).map(|h| h.pct).sum::<f64>())
+                Some(
+                    sec.top_holders
+                        .iter()
+                        .take(10)
+                        .map(|h| h.pct)
+                        .sum::<f64>()
+                )
             } else {
                 None
             };
-            let risks = sec
-                .risks
+            let risks = sec.risks
                 .iter()
                 .map(|r| SecurityRisk {
                     name: r.name.clone(),
@@ -608,9 +613,9 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         Ok(flag) => flag,
         Err(e) => {
             log(
-                LogTag::Api,
+                LogTag::Webserver,
                 "WARN",
-                &format!("Failed to determine OHLCV availability for {}: {}", mint, e),
+                &format!("Failed to determine OHLCV availability for {}: {}", mint, e)
             );
             false
         }
@@ -632,21 +637,20 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
 
     if let Err(e) = crate::ohlcvs::add_token_monitoring(&mint, priority).await {
         log(
-            LogTag::Api,
+            LogTag::Webserver,
             "WARN",
-            &format!("Failed to add {} to OHLCV monitoring: {}", mint, e),
+            &format!("Failed to add {} to OHLCV monitoring: {}", mint, e)
         );
     }
 
     // Record view activity
-    if let Err(e) =
-        crate::ohlcvs::record_activity(&mint, crate::ohlcvs::ActivityType::TokenViewed).await
+    if
+        let Err(e) = crate::ohlcvs::record_activity(
+            &mint,
+            crate::ohlcvs::ActivityType::TokenViewed
+        ).await
     {
-        log(
-            LogTag::Api,
-            "WARN",
-            &format!("Failed to record token view for {}: {}", mint, e),
-        );
+        log(LogTag::Webserver, "WARN", &format!("Failed to record token view for {}: {}", mint, e));
     }
 
     Json(TokenDetailResponse {
@@ -654,14 +658,12 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         symbol: token.symbol,
         name: Some(token.name),
         logo_url: token.info.as_ref().and_then(|i| i.image_url.clone()),
-        website: token
-            .info
+        website: token.info
             .as_ref()
             .and_then(|i| i.websites.as_ref())
             .and_then(|w| w.first())
             .map(|w| w.url.clone()),
-        verified: token
-            .labels
+        verified: token.labels
             .as_ref()
             .map(|l| l.iter().any(|label| label.to_lowercase() == "verified"))
             .unwrap_or(false),
@@ -698,13 +700,11 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
 /// Get token OHLCV data
 async fn get_token_ohlcv(
     Path(mint): Path<String>,
-    Query(query): Query<OhlcvQuery>,
+    Query(query): Query<OhlcvQuery>
 ) -> Result<Json<Vec<OhlcvPoint>>, StatusCode> {
-    log(
-        LogTag::Api,
-        "TOKEN_OHLCV",
-        &format!("mint={} limit={}", mint, query.limit),
-    );
+    if is_debug_webserver_enabled() {
+        log(LogTag::Webserver, "TOKEN_OHLCV", &format!("mint={} limit={}", mint, query.limit));
+    }
 
     // Add token to OHLCV monitoring with appropriate priority
     // This ensures data collection starts when a user views the chart
@@ -717,34 +717,33 @@ async fn get_token_ohlcv(
 
     if let Err(e) = crate::ohlcvs::add_token_monitoring(&mint, priority).await {
         log(
-            LogTag::Api,
+            LogTag::Webserver,
             "WARN",
-            &format!("Failed to add {} to OHLCV monitoring: {}", mint, e),
+            &format!("Failed to add {} to OHLCV monitoring: {}", mint, e)
         );
     }
 
     // Record chart view activity (stronger signal than just viewing token)
-    if let Err(e) =
-        crate::ohlcvs::record_activity(&mint, crate::ohlcvs::ActivityType::ChartViewed).await
+    if
+        let Err(e) = crate::ohlcvs::record_activity(
+            &mint,
+            crate::ohlcvs::ActivityType::ChartViewed
+        ).await
     {
-        log(
-            LogTag::Api,
-            "WARN",
-            &format!("Failed to record chart view for {}: {}", mint, e),
-        );
+        log(LogTag::Webserver, "WARN", &format!("Failed to record chart view for {}: {}", mint, e));
     }
 
     // Fetch OHLCV data using new API
-    let data = crate::ohlcvs::get_ohlcv_data(
-        &mint,
-        crate::ohlcvs::Timeframe::Minute1,
-        None,
-        query.limit as usize,
-        None,
-        None,
-    )
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let data = crate::ohlcvs
+        ::get_ohlcv_data(
+            &mint,
+            crate::ohlcvs::Timeframe::Minute1,
+            None,
+            query.limit as usize,
+            None,
+            None
+        ).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let points: Vec<OhlcvPoint> = data
         .iter()
@@ -763,13 +762,12 @@ async fn get_token_ohlcv(
 
 /// Get token statistics
 async fn get_tokens_stats() -> Result<Json<TokenStatsResponse>, StatusCode> {
-    log(LogTag::Api, "TOKENS_STATS", "Calculating statistics");
+    if is_debug_webserver_enabled() {
+        log(LogTag::Webserver, "TOKENS_STATS", "Calculating statistics");
+    }
 
     let db = TokenDatabase::new().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let all_tokens = db
-        .get_all_tokens()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let all_tokens = db.get_all_tokens().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let total_tokens = all_tokens.len();
     let with_pool_price = pools::get_available_tokens().len();
@@ -810,38 +808,45 @@ async fn get_tokens_stats() -> Result<Json<TokenStatsResponse>, StatusCode> {
     let ohlcv_metrics = crate::ohlcvs::get_metrics().await;
     let with_ohlcv = ohlcv_metrics.tokens_monitored;
 
-    Ok(Json(TokenStatsResponse {
-        total_tokens,
-        with_pool_price,
-        open_positions,
-        blacklisted,
-        secure_tokens,
-        with_ohlcv,
-        timestamp: chrono::Utc::now().to_rfc3339(),
-    }))
+    Ok(
+        Json(TokenStatsResponse {
+            total_tokens,
+            with_pool_price,
+            open_positions,
+            blacklisted,
+            secure_tokens,
+            with_ohlcv,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        })
+    )
 }
 
 /// Filter tokens with advanced criteria
-async fn filter_tokens(
-    Json(filter): Json<FilterRequest>,
-) -> Result<Json<TokenListResponse>, StatusCode> {
-    log(
-        LogTag::Api,
-        "TOKENS_FILTER",
-        &format!(
-            "Applying filters: search='{}' liquidity={:?}-{:?}",
-            filter.search, filter.min_liquidity, filter.max_liquidity
-        ),
-    );
+async fn filter_tokens(Json(filter): Json<FilterRequest>) -> Result<
+    Json<TokenListResponse>,
+    StatusCode
+> {
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "TOKENS_FILTER",
+            &format!(
+                "Applying filters: search='{}' liquidity={:?}-{:?}",
+                filter.search,
+                filter.min_liquidity,
+                filter.max_liquidity
+            )
+        );
+    }
 
     // Get all tokens
     let db = TokenDatabase::new().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let all_tokens = db
-        .get_all_tokens()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let all_tokens = db.get_all_tokens().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let mints: Vec<String> = all_tokens.iter().map(|token| token.mint.clone()).collect();
+    let mints: Vec<String> = all_tokens
+        .iter()
+        .map(|token| token.mint.clone())
+        .collect();
     let caches = TokenSummaryCaches::build(&mints).await;
 
     // Convert to TokenSummary and apply filters
@@ -852,10 +857,10 @@ async fn filter_tokens(
         // Apply filters
         if !filter.search.is_empty() {
             let search_lower = filter.search.to_lowercase();
-            if !summary.symbol.to_lowercase().contains(&search_lower)
-                && !summary.mint.to_lowercase().contains(&search_lower)
-                && !summary
-                    .name
+            if
+                !summary.symbol.to_lowercase().contains(&search_lower) &&
+                !summary.mint.to_lowercase().contains(&search_lower) &&
+                !summary.name
                     .as_ref()
                     .map(|n| n.to_lowercase().contains(&search_lower))
                     .unwrap_or(false)
@@ -929,20 +934,18 @@ async fn filter_tokens(
     let start_idx = (page - 1) * page_size;
     let end_idx = (start_idx + page_size).min(total);
 
-    let items = if start_idx < total {
-        tokens[start_idx..end_idx].to_vec()
-    } else {
-        vec![]
-    };
+    let items = if start_idx < total { tokens[start_idx..end_idx].to_vec() } else { vec![] };
 
-    Ok(Json(TokenListResponse {
-        items,
-        page,
-        page_size,
-        total,
-        total_pages,
-        timestamp: chrono::Utc::now().to_rfc3339(),
-    }))
+    Ok(
+        Json(TokenListResponse {
+            items,
+            page,
+            page_size,
+            total,
+            total_pages,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        })
+    )
 }
 
 // =============================================================================
@@ -967,15 +970,13 @@ impl TokenSummaryCaches {
     async fn build(mints: &[String]) -> Self {
         let unique_mints: HashSet<String> = mints.iter().cloned().collect();
 
-        let open_positions = positions::get_open_positions()
-            .await
+        let open_positions = positions
+            ::get_open_positions().await
             .into_iter()
             .map(|pos| pos.mint)
             .collect::<HashSet<_>>();
 
-        let blacklisted = blacklist::get_blacklisted_mints()
-            .into_iter()
-            .collect::<HashSet<_>>();
+        let blacklisted = blacklist::get_blacklisted_mints().into_iter().collect::<HashSet<_>>();
 
         let security = load_security_snapshots(&unique_mints);
         let ohlcv = load_ohlcv_flags(&unique_mints).await;
@@ -1015,13 +1016,10 @@ fn load_security_snapshots(mints: &HashSet<String>) -> HashMap<String, SecurityS
     if let Ok(db) = SecurityDatabase::new("data/security.db") {
         for mint in mints {
             if let Ok(Some(sec)) = db.get_security_info(mint) {
-                snapshots.insert(
-                    mint.clone(),
-                    SecuritySnapshot {
-                        score: sec.score,
-                        rugged: sec.rugged,
-                    },
-                );
+                snapshots.insert(mint.clone(), SecuritySnapshot {
+                    score: sec.score,
+                    rugged: sec.rugged,
+                });
             }
         }
     }
@@ -1034,21 +1032,17 @@ async fn load_ohlcv_flags(mints: &HashSet<String>) -> HashSet<String> {
         return HashSet::new();
     }
 
-    stream::iter(mints.iter().cloned())
+    stream
+        ::iter(mints.iter().cloned())
         .map(|mint| async move {
             let has_data = crate::ohlcvs::has_data(&mint).await.unwrap_or(false);
             (mint, has_data)
         })
         .buffer_unordered(8)
         .filter_map(|(mint, has_data)| async move {
-            if has_data {
-                Some(mint)
-            } else {
-                None
-            }
+            if has_data { Some(mint) } else { None }
         })
-        .collect::<HashSet<_>>()
-        .await
+        .collect::<HashSet<_>>().await
 }
 
 #[inline]
@@ -1083,26 +1077,36 @@ async fn get_pool_tokens() -> Result<Vec<TokenSummary>, String> {
         }
     }
 
-    let mints: Vec<String> = raw_tokens.iter().map(|token| token.mint.clone()).collect();
+    let mints: Vec<String> = raw_tokens
+        .iter()
+        .map(|token| token.mint.clone())
+        .collect();
     let caches = TokenSummaryCaches::build(&mints).await;
 
-    Ok(raw_tokens
-        .into_iter()
-        .map(|token| token_to_summary(token, &caches))
-        .collect())
+    Ok(
+        raw_tokens
+            .into_iter()
+            .map(|token| token_to_summary(token, &caches))
+            .collect()
+    )
 }
 
 /// Get all tokens from database
 async fn get_all_tokens_from_db() -> Result<Vec<TokenSummary>, String> {
     let db = TokenDatabase::new().map_err(|e| e.to_string())?;
     let tokens = db.get_all_tokens().await?;
-    let mints: Vec<String> = tokens.iter().map(|token| token.mint.clone()).collect();
+    let mints: Vec<String> = tokens
+        .iter()
+        .map(|token| token.mint.clone())
+        .collect();
     let caches = TokenSummaryCaches::build(&mints).await;
 
-    Ok(tokens
-        .into_iter()
-        .map(|token| token_to_summary(token, &caches))
-        .collect())
+    Ok(
+        tokens
+            .into_iter()
+            .map(|token| token_to_summary(token, &caches))
+            .collect()
+    )
 }
 
 /// Get blacklisted tokens
@@ -1114,18 +1118,17 @@ async fn get_blacklisted_tokens() -> Result<Vec<TokenSummary>, String> {
     }
 
     let db = TokenDatabase::new().map_err(|e| e.to_string())?;
-    let tokens = db
-        .get_tokens_by_mints(&blacklisted_mints)
-        .await
-        .map_err(|e| e.to_string())?;
+    let tokens = db.get_tokens_by_mints(&blacklisted_mints).await.map_err(|e| e.to_string())?;
 
     // Build caches scoped to this page's mints only
     let caches = TokenSummaryCaches::build(&blacklisted_mints).await;
 
-    Ok(tokens
-        .into_iter()
-        .map(|token| token_to_summary(token, &caches))
-        .collect())
+    Ok(
+        tokens
+            .into_iter()
+            .map(|token| token_to_summary(token, &caches))
+            .collect()
+    )
 }
 
 /// Get rejected tokens from filtering
@@ -1154,18 +1157,17 @@ async fn get_rejected_tokens() -> Result<Vec<TokenSummary>, String> {
     }
 
     let db = TokenDatabase::new().map_err(|e| e.to_string())?;
-    let tokens = db
-        .get_tokens_by_mints(&rejected_mints)
-        .await
-        .map_err(|e| e.to_string())?;
+    let tokens = db.get_tokens_by_mints(&rejected_mints).await.map_err(|e| e.to_string())?;
 
     // Build caches scoped to this page's mints only
     let caches = TokenSummaryCaches::build(&rejected_mints).await;
 
-    Ok(tokens
-        .into_iter()
-        .map(|token| token_to_summary(token, &caches))
-        .collect())
+    Ok(
+        tokens
+            .into_iter()
+            .map(|token| token_to_summary(token, &caches))
+            .collect()
+    )
 }
 
 /// Get passed tokens from filtering
@@ -1194,18 +1196,17 @@ async fn get_passed_tokens() -> Result<Vec<TokenSummary>, String> {
     }
 
     let db = TokenDatabase::new().map_err(|e| e.to_string())?;
-    let tokens = db
-        .get_tokens_by_mints(&passed_mints)
-        .await
-        .map_err(|e| e.to_string())?;
+    let tokens = db.get_tokens_by_mints(&passed_mints).await.map_err(|e| e.to_string())?;
 
     // Build caches scoped to this page's mints only
     let caches = TokenSummaryCaches::build(&passed_mints).await;
 
-    Ok(tokens
-        .into_iter()
-        .map(|token| token_to_summary(token, &caches))
-        .collect())
+    Ok(
+        tokens
+            .into_iter()
+            .map(|token| token_to_summary(token, &caches))
+            .collect()
+    )
 }
 
 /// Get tokens with open positions
@@ -1220,13 +1221,18 @@ async fn get_position_tokens() -> Result<Vec<TokenSummary>, String> {
         }
     }
 
-    let mints: Vec<String> = raw_tokens.iter().map(|token| token.mint.clone()).collect();
+    let mints: Vec<String> = raw_tokens
+        .iter()
+        .map(|token| token.mint.clone())
+        .collect();
     let caches = TokenSummaryCaches::build(&mints).await;
 
-    Ok(raw_tokens
-        .into_iter()
-        .map(|token| token_to_summary(token, &caches))
-        .collect())
+    Ok(
+        raw_tokens
+            .into_iter()
+            .map(|token| token_to_summary(token, &caches))
+            .collect()
+    )
 }
 
 /// Get secure tokens (high security score, not rugged)
@@ -1236,19 +1242,24 @@ async fn get_secure_tokens() -> Result<Vec<TokenSummary>, String> {
     let threshold = with_config(|cfg| cfg.webserver.tokens_tab.secure_token_score_threshold);
     let db = TokenDatabase::new().map_err(|e| e.to_string())?;
     let all_tokens = db.get_all_tokens().await?;
-    let mints: Vec<String> = all_tokens.iter().map(|token| token.mint.clone()).collect();
+    let mints: Vec<String> = all_tokens
+        .iter()
+        .map(|token| token.mint.clone())
+        .collect();
     let caches = TokenSummaryCaches::build(&mints).await;
 
-    Ok(all_tokens
-        .into_iter()
-        .filter(|token| {
-            caches
-                .security_snapshot(&token.mint)
-                .map(|snapshot| snapshot.score > threshold && !snapshot.rugged)
-                .unwrap_or(false)
-        })
-        .map(|token| token_to_summary(token, &caches))
-        .collect())
+    Ok(
+        all_tokens
+            .into_iter()
+            .filter(|token| {
+                caches
+                    .security_snapshot(&token.mint)
+                    .map(|snapshot| snapshot.score > threshold && !snapshot.rugged)
+                    .unwrap_or(false)
+            })
+            .map(|token| token_to_summary(token, &caches))
+            .collect()
+    )
 }
 
 /// Get recently created tokens (configurable lookback period)
@@ -1280,32 +1291,33 @@ async fn get_recent_tokens() -> Result<Vec<TokenSummary>, String> {
         .collect();
     let caches = TokenSummaryCaches::build(&mints).await;
 
-    Ok(recent_tokens
-        .into_iter()
-        .map(|token| token_to_summary(token, &caches))
-        .collect())
+    Ok(
+        recent_tokens
+            .into_iter()
+            .map(|token| token_to_summary(token, &caches))
+            .collect()
+    )
 }
 
 /// Convert ApiToken to TokenSummary with enriched data
 fn token_to_summary(
     token: crate::tokens::types::ApiToken,
-    caches: &TokenSummaryCaches,
+    caches: &TokenSummaryCaches
 ) -> TokenSummary {
     // Get price info
-    let (price_sol, price_updated_at) =
-        if let Some(price_result) = pools::get_pool_price(&token.mint) {
-            let age_secs = price_result.timestamp.elapsed().as_secs();
-            let now_unix = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs() as i64;
-            (
-                Some(price_result.price_sol),
-                Some(now_unix - (age_secs as i64)),
-            )
-        } else {
-            (None, None)
-        };
+    let (price_sol, price_updated_at) = if
+        let Some(price_result) = pools::get_pool_price(&token.mint)
+    {
+        let age_secs = price_result.timestamp.elapsed().as_secs();
+        let now_unix = std::time::SystemTime
+            ::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        (Some(price_result.price_sol), Some(now_unix - (age_secs as i64)))
+    } else {
+        (None, None)
+    };
 
     // Check status flags
     let has_pool_price = price_sol.is_some();
@@ -1347,49 +1359,30 @@ fn sort_tokens(tokens: &mut [TokenSummary], sort_by: &str, sort_dir: &str) {
     tokens.sort_by(|a, b| {
         let cmp = match sort_by {
             "symbol" => a.symbol.cmp(&b.symbol),
-            "liquidity_usd" => a
-                .liquidity_usd
-                .unwrap_or(0.0)
-                .partial_cmp(&b.liquidity_usd.unwrap_or(0.0))
-                .unwrap(),
-            "volume_24h" => a
-                .volume_24h
-                .unwrap_or(0.0)
-                .partial_cmp(&b.volume_24h.unwrap_or(0.0))
-                .unwrap(),
-            "price_sol" => a
-                .price_sol
-                .unwrap_or(0.0)
-                .partial_cmp(&b.price_sol.unwrap_or(0.0))
-                .unwrap(),
-            "market_cap" => a
-                .market_cap
-                .unwrap_or(0.0)
-                .partial_cmp(&b.market_cap.unwrap_or(0.0))
-                .unwrap(),
-            "fdv" => a
-                .fdv
-                .unwrap_or(0.0)
-                .partial_cmp(&b.fdv.unwrap_or(0.0))
-                .unwrap(),
-            "security_score" => a
-                .security_score
-                .unwrap_or(0)
-                .cmp(&b.security_score.unwrap_or(0)),
-            "price_change_h1" => a
-                .price_change_h1
-                .unwrap_or(0.0)
-                .partial_cmp(&b.price_change_h1.unwrap_or(0.0))
-                .unwrap(),
-            "price_change_h24" => a
-                .price_change_h24
-                .unwrap_or(0.0)
-                .partial_cmp(&b.price_change_h24.unwrap_or(0.0))
-                .unwrap(),
-            "updated_at" => a
-                .price_updated_at
-                .unwrap_or(0)
-                .cmp(&b.price_updated_at.unwrap_or(0)),
+            "liquidity_usd" =>
+                a.liquidity_usd
+                    .unwrap_or(0.0)
+                    .partial_cmp(&b.liquidity_usd.unwrap_or(0.0))
+                    .unwrap(),
+            "volume_24h" =>
+                a.volume_24h.unwrap_or(0.0).partial_cmp(&b.volume_24h.unwrap_or(0.0)).unwrap(),
+            "price_sol" =>
+                a.price_sol.unwrap_or(0.0).partial_cmp(&b.price_sol.unwrap_or(0.0)).unwrap(),
+            "market_cap" =>
+                a.market_cap.unwrap_or(0.0).partial_cmp(&b.market_cap.unwrap_or(0.0)).unwrap(),
+            "fdv" => a.fdv.unwrap_or(0.0).partial_cmp(&b.fdv.unwrap_or(0.0)).unwrap(),
+            "security_score" => a.security_score.unwrap_or(0).cmp(&b.security_score.unwrap_or(0)),
+            "price_change_h1" =>
+                a.price_change_h1
+                    .unwrap_or(0.0)
+                    .partial_cmp(&b.price_change_h1.unwrap_or(0.0))
+                    .unwrap(),
+            "price_change_h24" =>
+                a.price_change_h24
+                    .unwrap_or(0.0)
+                    .partial_cmp(&b.price_change_h24.unwrap_or(0.0))
+                    .unwrap(),
+            "updated_at" => a.price_updated_at.unwrap_or(0).cmp(&b.price_updated_at.unwrap_or(0)),
             _ => a.mint.cmp(&b.mint), // fallback to mint as tie-breaker
         };
 

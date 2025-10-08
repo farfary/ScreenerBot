@@ -1,10 +1,10 @@
-use axum::{ response::Response, routing::get, Router };
+use axum::{response::Response, routing::get, Router};
 use serde::Serialize;
 use std::sync::Arc;
 
 use crate::config::with_config;
 use crate::profit::STOP_LOSS_PERCENT;
-use crate::webserver::{ state::AppState, utils::success_response };
+use crate::webserver::{state::AppState, utils::success_response};
 
 #[derive(Debug, Serialize)]
 pub struct TradingConfigResponse {

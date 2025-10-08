@@ -1,30 +1,27 @@
 use axum::{
     extract::State,
     http::StatusCode,
-    response::{ IntoResponse, Response },
+    response::{IntoResponse, Response},
     routing::get,
-    Json,
-    Router,
+    Json, Router,
 };
-use chrono::{ DateTime, Utc };
-use serde::{ Deserialize, Serialize };
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use sysinfo::System;
 
 use crate::{
     arguments::is_debug_webserver_enabled,
     global::{
-        are_core_services_ready,
-        get_pending_services,
-        POOL_SERVICE_READY,
-        POSITIONS_SYSTEM_READY,
-        SECURITY_ANALYZER_READY,
-        TOKENS_SYSTEM_READY,
-        TRANSACTIONS_SYSTEM_READY,
+        are_core_services_ready, get_pending_services, POOL_SERVICE_READY, POSITIONS_SYSTEM_READY,
+        SECURITY_ANALYZER_READY, TOKENS_SYSTEM_READY, TRANSACTIONS_SYSTEM_READY,
     },
-    logger::{ log, LogTag },
+    logger::{log, LogTag},
     rpc::get_global_rpc_stats,
-    webserver::{ state::AppState, utils::{ format_duration, success_response } },
+    webserver::{
+        state::AppState,
+        utils::{format_duration, success_response},
+    },
 };
 
 // ================================================================================================
@@ -67,7 +64,7 @@ pub struct ServiceState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemMetricsResponse {
     // Backward-compat (kept for existing UI):
-    pub memory_usage_mb: u64, // maps to system used memory
+    pub memory_usage_mb: u64,   // maps to system used memory
     pub cpu_usage_percent: f32, // maps to system CPU usage
 
     // Detailed metrics (new):
@@ -126,7 +123,11 @@ async fn health_check() -> Response {
 /// Complete system status including services and metrics
 async fn system_status(State(state): State<Arc<AppState>>) -> Response {
     if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "DEBUG", "Fetching complete system status");
+        log(
+            LogTag::Webserver,
+            "DEBUG",
+            "Fetching complete system status",
+        );
     }
 
     let uptime = state.uptime_seconds();
@@ -136,7 +137,9 @@ async fn system_status(State(state): State<Arc<AppState>>) -> Response {
 
     // Get RPC stats if available
     let rpc_stats = get_global_rpc_stats().map(|stats| {
-        let uptime_seconds = Utc::now().signed_duration_since(stats.startup_time).num_seconds();
+        let uptime_seconds = Utc::now()
+            .signed_duration_since(stats.startup_time)
+            .num_seconds();
 
         crate::webserver::status_broadcast::RpcStatsSnapshot {
             total_calls: stats.total_calls(),
@@ -168,10 +171,8 @@ async fn system_status(State(state): State<Arc<AppState>>) -> Response {
             "DEBUG",
             &format!(
                 "System status response ready (uptime={}s, trading_enabled={}, ws_connections={})",
-                response.uptime_seconds,
-                response.trading_enabled,
-                response.metrics.ws_connections
-            )
+                response.uptime_seconds, response.trading_enabled, response.metrics.ws_connections
+            ),
         );
     }
 
@@ -189,10 +190,8 @@ async fn service_status() -> Response {
             "DEBUG",
             &format!(
                 "Service readiness requested (all_ready={}, tokens_ready={}, positions_ready={})",
-                response.all_ready,
-                response.tokens_system.ready,
-                response.positions_system.ready
-            )
+                response.all_ready, response.tokens_system.ready, response.positions_system.ready
+            ),
         );
     }
     success_response(response)
@@ -264,11 +263,7 @@ fn get_service_status_internal() -> ServiceStatusResponse {
         pool_service: ServiceState {
             ready: pool_ready,
             last_check: now,
-            error: if !pool_ready {
-                error_msg.clone()
-            } else {
-                None
-            },
+            error: if !pool_ready { error_msg.clone() } else { None },
         },
         security_analyzer: ServiceState {
             ready: security_ready,
@@ -282,11 +277,7 @@ fn get_service_status_internal() -> ServiceStatusResponse {
         transactions_system: ServiceState {
             ready: transactions_ready,
             last_check: now,
-            error: if !transactions_ready {
-                error_msg
-            } else {
-                None
-            },
+            error: if !transactions_ready { error_msg } else { None },
         },
         all_ready,
     }
@@ -326,8 +317,7 @@ async fn get_system_metrics_internal(state: &AppState) -> SystemMetricsResponse 
     };
 
     // Count active threads (approximate)
-    let thread_count = std::thread
-        ::available_parallelism()
+    let thread_count = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(1);
 

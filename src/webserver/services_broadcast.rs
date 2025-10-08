@@ -1,11 +1,11 @@
 use once_cell::sync::OnceCell;
 use tokio::sync::broadcast;
-use tokio::time::{ interval, Duration };
+use tokio::time::{interval, Duration};
 
 use crate::{
     arguments::is_debug_webserver_enabled,
-    logger::{ log, LogTag },
-    webserver::routes::services::{ gather_services_overview_snapshot, ServicesOverviewResponse },
+    logger::{log, LogTag},
+    webserver::routes::services::{gather_services_overview_snapshot, ServicesOverviewResponse},
 };
 
 const SERVICES_BROADCAST_CAPACITY: usize = 64;
@@ -23,12 +23,18 @@ pub fn initialize_services_broadcaster() -> broadcast::Receiver<ServicesOverview
                 log(
                     LogTag::Webserver,
                     "DEBUG",
-                    &format!("Services broadcaster initialized (capacity: {})", SERVICES_BROADCAST_CAPACITY)
+                    &format!(
+                        "Services broadcaster initialized (capacity: {})",
+                        SERVICES_BROADCAST_CAPACITY
+                    ),
                 );
             }
             rx
         }
-        Err(_) => SERVICES_BROADCAST_TX.get().expect("Services broadcaster exists").subscribe(),
+        Err(_) => SERVICES_BROADCAST_TX
+            .get()
+            .expect("Services broadcaster exists")
+            .subscribe(),
     }
 }
 
@@ -43,7 +49,7 @@ pub fn subscribe() -> Option<broadcast::Receiver<ServicesOverviewResponse>> {
                 "New services broadcast subscriber created (active_tx={}, has_rx={})",
                 SERVICES_BROADCAST_TX.get().is_some(),
                 rx.is_some()
-            )
+            ),
         );
     }
     rx
@@ -55,13 +61,19 @@ pub fn start_services_broadcaster(interval_secs: u64) -> tokio::task::JoinHandle
         initialize_services_broadcaster();
     }
 
-    let tx = SERVICES_BROADCAST_TX.get().expect("Services broadcaster initialized").clone();
+    let tx = SERVICES_BROADCAST_TX
+        .get()
+        .expect("Services broadcaster initialized")
+        .clone();
 
     if is_debug_webserver_enabled() {
         log(
             LogTag::Webserver,
             "DEBUG",
-            &format!("Starting services broadcaster task (interval: {}s)", interval_secs.max(1))
+            &format!(
+                "Starting services broadcaster task (interval: {}s)",
+                interval_secs.max(1)
+            ),
         );
     }
 
@@ -77,7 +89,7 @@ pub fn start_services_broadcaster(interval_secs: u64) -> tokio::task::JoinHandle
                 log(
                     LogTag::Webserver,
                     "DEBUG",
-                    &format!("Services broadcaster tick #{}", tick_count)
+                    &format!("Services broadcaster tick #{}", tick_count),
                 );
             }
 
@@ -90,7 +102,7 @@ pub fn start_services_broadcaster(interval_secs: u64) -> tokio::task::JoinHandle
                         "Broadcasting services snapshot (services={}, unhealthy={})",
                         snapshot.services.len(),
                         snapshot.summary.unhealthy_services + snapshot.summary.degraded_services
-                    )
+                    ),
                 );
             }
 
@@ -99,7 +111,10 @@ pub fn start_services_broadcaster(interval_secs: u64) -> tokio::task::JoinHandle
                     log(
                         LogTag::Webserver,
                         "DEBUG",
-                        &format!("No active listeners for services snapshot broadcast: {}", error)
+                        &format!(
+                            "No active listeners for services snapshot broadcast: {}",
+                            error
+                        ),
                     );
                 }
             }
