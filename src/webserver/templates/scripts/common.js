@@ -424,24 +424,6 @@
             statusPollInterval = null;
         }
         
-        // Format uptime
-        function formatUptime(seconds) {
-            const days = Math.floor(seconds / 86400);
-            const hours = Math.floor((seconds % 86400) / 3600);
-            const minutes = Math.floor((seconds % 3600) / 60);
-            const secs = Math.floor(seconds % 60);
-            
-            if (days > 0) return `${days}d ${hours}h ${minutes}m`;
-            if (hours > 0) return `${hours}h ${minutes}m ${secs}s`;
-            if (minutes > 0) return `${minutes}m ${secs}s`;
-            return `${secs}s`;
-        }
-        
-        // Format large numbers
-        function formatNumber(num) {
-            return num.toLocaleString();
-        }
-        
     // Initialize (refresh silently every 1s)
     fetchStatusSnapshot();
     startStatusPolling();
@@ -452,360 +434,6 @@
         });
     }
 
-        // Dropdown Menu Functions
-        function toggleDropdown(event) {
-            event.stopPropagation();
-            const btn = event.currentTarget;
-            const menu = btn.nextElementSibling;
-            
-            // Close all other dropdowns
-            document.querySelectorAll('.dropdown-menu.show').forEach(m => {
-                if (m !== menu) {
-                    m.classList.remove('show');
-                    m.style.position = '';
-                    m.style.top = '';
-                    m.style.left = '';
-                    m.style.right = '';
-                    m.style.width = '';
-                }
-            });
-            
-            // Toggle visibility
-            const willShow = !menu.classList.contains('show');
-            if (!willShow) {
-                menu.classList.remove('show');
-                return;
-            }
-            
-            // Compute viewport position for fixed menu to avoid clipping
-            const rect = btn.getBoundingClientRect();
-            const menuWidth = Math.max(200, menu.offsetWidth || 200);
-            const viewportWidth = window.innerWidth;
-            const rightSpace = viewportWidth - rect.right;
-            
-            menu.classList.add('show');
-            menu.style.position = 'fixed';
-            menu.style.top = `${Math.round(rect.bottom + 4)}px`;
-            if (rightSpace < menuWidth) {
-                // Align to right edge of button when near viewport edge
-                menu.style.left = `${Math.max(8, Math.round(rect.right - menuWidth))}px`;
-                menu.style.right = '';
-            } else {
-                // Default align to button's left
-                menu.style.left = `${Math.round(rect.left)}px`;
-                menu.style.right = '';
-            }
-            menu.style.width = `${menuWidth}px`;
-        }
-        
-        // Close dropdowns when clicking outside
-        document.addEventListener('click', () => {
-            document.querySelectorAll('.dropdown-menu.show').forEach(m => {
-                m.classList.remove('show');
-                m.style.position = '';
-                m.style.top = '';
-                m.style.left = '';
-                m.style.right = '';
-                m.style.width = '';
-            });
-        });
-        // Also close on scroll/resize to avoid desync
-        ['scroll','resize'].forEach(evt => {
-            window.addEventListener(evt, () => {
-                document.querySelectorAll('.dropdown-menu.show').forEach(m => {
-                    m.classList.remove('show');
-                    m.style.position = '';
-                    m.style.top = '';
-                    m.style.left = '';
-                    m.style.right = '';
-                    m.style.width = '';
-                });
-            }, { passive: true });
-        });
-        
-        // Copy Mint Address Function
-        function copyMint(mint) {
-            navigator.clipboard.writeText(mint).then(() => {
-                showToast('✅ Mint address copied to clipboard!');
-            }).catch(err => {
-                showToast('❌ Failed to copy: ' + err, 'error');
-            });
-        }
-        
-        // Copy any debug value to clipboard
-        function copyDebugValue(value, label) {
-            navigator.clipboard.writeText(value).then(() => {
-                showToast(`✅ ${label} copied to clipboard!`);
-            }).catch(err => {
-                showToast('❌ Failed to copy: ' + err, 'error');
-            });
-        }
-        
-        // Build and copy full debug info (single action)
-        async function copyDebugInfo(mint, type) {
-            try {
-                const endpoint = type === 'position' ? `/api/positions/${mint}/debug` : `/api/tokens/${mint}/debug`;
-                const res = await fetch(endpoint);
-                const data = await res.json();
-                const text = generateDebugText(data, type);
-                await navigator.clipboard.writeText(text);
-                showToast('✅ Debug info copied to clipboard!');
-            } catch (err) {
-                console.error('copyDebugInfo error:', err);
-                showToast('❌ Failed to copy debug info: ' + err, 'error');
-            }
-        }
-
-        function generateDebugText(data, type) {
-            const lines = [];
-            const tokenInfo = data.token_info || {};
-            const price = data.price_data || {};
-            const market = data.market_data || {};
-            const pools = Array.isArray(data.pools) ? data.pools : [];
-            const security = data.security || {};
-            const pos = data.position_data || {};
-
-            // Header
-            lines.push('ScreenerBot Debug Info');
-            lines.push(`Mint: ${data.mint || 'N/A'}`);
-            if (tokenInfo.symbol || tokenInfo.name) {
-                lines.push(`Token: ${tokenInfo.symbol || 'N/A'} ${tokenInfo.name ? '(' + tokenInfo.name + ')' : ''}`);
-            }
-            lines.push('');
-
-            // Token Info
-            lines.push('[Token]');
-            lines.push(`Symbol: ${tokenInfo.symbol ?? 'N/A'}`);
-            lines.push(`Name: ${tokenInfo.name ?? 'N/A'}`);
-            lines.push(`Decimals: ${tokenInfo.decimals ?? 'N/A'}`);
-            lines.push(`Website: ${tokenInfo.website ?? 'N/A'}`);
-            lines.push(`Verified: ${tokenInfo.is_verified ? 'Yes' : 'No'}`);
-            const tags = Array.isArray(tokenInfo.tags) ? tokenInfo.tags.join(', ') : 'None';
-            lines.push(`Tags: ${tags}`);
-            lines.push('');
-
-            // Price & Market
-            lines.push('[Price & Market]');
-            lines.push(`Price (SOL): ${price.pool_price_sol != null ? Number(price.pool_price_sol).toPrecision(10) : 'N/A'}`);
-            lines.push(`Confidence: ${price.confidence != null ? (Number(price.confidence) * 100).toFixed(1) + '%' : 'N/A'}`);
-            lines.push(`Last Updated: ${price.last_updated ? new Date(price.last_updated * 1000).toISOString() : 'N/A'}`);
-            lines.push(`Market Cap: ${market.market_cap != null ? '$' + Number(market.market_cap).toLocaleString() : 'N/A'}`);
-            lines.push(`FDV: ${market.fdv != null ? '$' + Number(market.fdv).toLocaleString() : 'N/A'}`);
-            lines.push(`Liquidity: ${market.liquidity_usd != null ? '$' + Number(market.liquidity_usd).toLocaleString() : 'N/A'}`);
-            lines.push(`24h Volume: ${market.volume_24h != null ? '$' + Number(market.volume_24h).toLocaleString() : 'N/A'}`);
-            lines.push('');
-
-            // Pools
-            lines.push('[Pools]');
-            if (pools.length === 0) {
-                lines.push('None');
-            } else {
-                pools.forEach((p, idx) => {
-                    lines.push(`Pool #${idx + 1}`);
-                    lines.push(`  Address: ${p.pool_address ?? 'N/A'}`);
-                    lines.push(`  DEX: ${p.dex_name ?? 'N/A'}`);
-                    lines.push(`  SOL Reserves: ${p.sol_reserves != null ? Number(p.sol_reserves).toFixed(2) : 'N/A'}`);
-                    lines.push(`  Token Reserves: ${p.token_reserves != null ? Number(p.token_reserves).toFixed(2) : 'N/A'}`);
-                    lines.push(`  Price (SOL): ${p.price_sol != null ? Number(p.price_sol).toPrecision(10) : 'N/A'}`);
-                });
-            }
-            lines.push('');
-
-            // Security
-            lines.push('[Security]');
-            lines.push(`Score: ${security.score ?? 'N/A'}`);
-            lines.push(`Rugged: ${security.rugged ? 'Yes' : 'No'}`);
-            lines.push(`Total Holders: ${security.total_holders ?? 'N/A'}`);
-            lines.push(`Top 10 Concentration: ${security.top_10_concentration != null ? Number(security.top_10_concentration).toFixed(2) + '%' : 'N/A'}`);
-            lines.push(`Mint Authority: ${security.mint_authority ?? 'None'}`);
-            lines.push(`Freeze Authority: ${security.freeze_authority ?? 'None'}`);
-            const risks = Array.isArray(security.risks) ? security.risks : [];
-            if (risks.length) {
-                lines.push('Risks:');
-                risks.forEach(r => lines.push(`  - ${r.name || 'Unknown'}: ${r.level || 'N/A'} (${r.description || ''})`));
-            } else {
-                lines.push('Risks: None');
-            }
-            lines.push('');
-
-            // Position
-            if (type === 'position') {
-                lines.push('[Position]');
-                if (pos && Object.keys(pos).length) {
-                    lines.push(`Open Positions: ${pos.open_position ? '1' : '0'}`);
-                    lines.push(`Closed Positions: ${pos.closed_positions_count ?? '0'}`);
-                    lines.push(`Total P&L: ${pos.total_pnl != null ? Number(pos.total_pnl).toFixed(4) + ' SOL' : 'N/A'}`);
-                    lines.push(`Win Rate: ${pos.win_rate != null ? Number(pos.win_rate).toFixed(1) + '%' : 'N/A'}`);
-                    if (pos.open_position) {
-                        const o = pos.open_position;
-                        lines.push('Open Position:');
-                        lines.push(`  Entry Price: ${o.entry_price != null ? Number(o.entry_price).toPrecision(10) : 'N/A'}`);
-                        lines.push(`  Entry Size: ${o.entry_size_sol != null ? Number(o.entry_size_sol).toFixed(4) + ' SOL' : 'N/A'}`);
-                        lines.push(`  Current Price: ${o.current_price != null ? Number(o.current_price).toPrecision(10) : 'N/A'}`);
-                        lines.push(`  Unrealized P&L: ${o.unrealized_pnl != null ? Number(o.unrealized_pnl).toFixed(4) + ' SOL' : 'N/A'}`);
-                        lines.push(`  Unrealized P&L %: ${o.unrealized_pnl_percent != null ? Number(o.unrealized_pnl_percent).toFixed(2) + '%' : 'N/A'}`);
-                    }
-                } else {
-                    lines.push('No position data available');
-                }
-                lines.push('');
-            }
-
-            // Pool Debug
-            if (data.pool_debug) {
-                const pd = data.pool_debug;
-                lines.push('[Pool Debug]');
-                
-                // Price history
-                if (pd.price_history && pd.price_history.length > 0) {
-                    lines.push(`Price History Points: ${pd.price_history.length}`);
-                    lines.push('Recent Prices (last 10):');
-                    pd.price_history.slice(0, 10).forEach((p, i) => {
-                        const date = new Date(p.timestamp * 1000).toISOString();
-                        lines.push(`  ${i + 1}. ${date} - ${Number(p.price_sol).toPrecision(10)} SOL (conf: ${(p.confidence * 100).toFixed(1)}%)`);
-                    });
-                }
-                
-                // Price stats
-                if (pd.price_stats) {
-                    const ps = pd.price_stats;
-                    lines.push(`Min Price: ${Number(ps.min_price).toPrecision(10)} SOL`);
-                    lines.push(`Max Price: ${Number(ps.max_price).toPrecision(10)} SOL`);
-                    lines.push(`Avg Price: ${Number(ps.avg_price).toPrecision(10)} SOL`);
-                    lines.push(`Volatility: ${Number(ps.price_volatility).toFixed(2)}%`);
-                    lines.push(`Data Points: ${ps.data_points}`);
-                    lines.push(`Time Span: ${ps.time_span_seconds}s (${(ps.time_span_seconds / 60).toFixed(0)} min)`);
-                }
-                
-                // All pools
-                if (pd.all_pools && pd.all_pools.length > 0) {
-                    lines.push(`All Pools (${pd.all_pools.length}):`);
-                    pd.all_pools.forEach((pool, i) => {
-                        lines.push(`  Pool #${i + 1}: ${pool.pool_address}`);
-                        lines.push(`    DEX: ${pool.dex_name}`);
-                    });
-                }
-                
-                // Cache stats
-                if (pd.cache_stats) {
-                    lines.push(`Cache - Total: ${pd.cache_stats.total_tokens_cached}, Fresh: ${pd.cache_stats.fresh_prices}, History: ${pd.cache_stats.history_entries}`);
-                }
-                
-                lines.push('');
-            }
-
-            // Token Debug
-            if (data.token_debug) {
-                const td = data.token_debug;
-                lines.push('[Token Debug]');
-                
-                if (td.blacklist_status) {
-                    lines.push(`Blacklisted: ${td.blacklist_status.is_blacklisted ? 'Yes' : 'No'}`);
-                    if (td.blacklist_status.is_blacklisted && td.blacklist_status.reason) {
-                        lines.push(`  Reason: ${td.blacklist_status.reason}`);
-                        lines.push(`  Occurrences: ${td.blacklist_status.occurrence_count}`);
-                        lines.push(`  First Occurrence: ${td.blacklist_status.first_occurrence || 'N/A'}`);
-                    }
-                }
-                
-                if (td.ohlcv_availability) {
-                    const oa = td.ohlcv_availability;
-                    lines.push(`OHLCV: 1m=${oa.has_1m_data}, 5m=${oa.has_5m_data}, 15m=${oa.has_15m_data}, 1h=${oa.has_1h_data}`);
-                    lines.push(`Total Candles: ${oa.total_candles}`);
-                    if (oa.oldest_timestamp) {
-                        lines.push(`  Oldest: ${new Date(oa.oldest_timestamp * 1000).toISOString()}`);
-                    }
-                    if (oa.newest_timestamp) {
-                        lines.push(`  Newest: ${new Date(oa.newest_timestamp * 1000).toISOString()}`);
-                    }
-                }
-                
-                if (td.decimals_info) {
-                    lines.push(`Decimals: ${td.decimals_info.decimals ?? 'N/A'} (${td.decimals_info.source}, cached: ${td.decimals_info.cached})`);
-                }
-                
-                lines.push('');
-            }
-
-            // Position Debug
-            if (data.position_debug) {
-                const pd = data.position_debug;
-                lines.push('[Position Debug]');
-                
-                if (pd.transaction_details) {
-                    lines.push('Transactions:');
-                    lines.push(`  Entry: ${pd.transaction_details.entry_signature || 'N/A'} (verified: ${pd.transaction_details.entry_verified})`);
-                    lines.push(`  Exit: ${pd.transaction_details.exit_signature || 'N/A'} (verified: ${pd.transaction_details.exit_verified})`);
-                    if (pd.transaction_details.synthetic_exit) {
-                        lines.push(`  Synthetic Exit: Yes`);
-                    }
-                    if (pd.transaction_details.closed_reason) {
-                        lines.push(`  Closed Reason: ${pd.transaction_details.closed_reason}`);
-                    }
-                }
-                
-                if (pd.fee_details) {
-                    lines.push(`Fees:`);
-                    lines.push(`  Entry: ${pd.fee_details.entry_fee_sol?.toFixed(6) || 'N/A'} SOL (${pd.fee_details.entry_fee_lamports || 0} lamports)`);
-                    lines.push(`  Exit: ${pd.fee_details.exit_fee_sol?.toFixed(6) || 'N/A'} SOL (${pd.fee_details.exit_fee_lamports || 0} lamports)`);
-                    lines.push(`  Total: ${pd.fee_details.total_fees_sol.toFixed(6)} SOL`);
-                }
-                
-                if (pd.profit_targets) {
-                    lines.push(`Profit Targets: Min ${pd.profit_targets.min_target_percent || 'N/A'}%, Max ${pd.profit_targets.max_target_percent || 'N/A'}%`);
-                    lines.push(`Liquidity Tier: ${pd.profit_targets.liquidity_tier || 'N/A'}`);
-                }
-                
-                if (pd.price_tracking) {
-                    lines.push(`Price Tracking:`);
-                    lines.push(`  High: ${pd.price_tracking.price_highest}`);
-                    lines.push(`  Low: ${pd.price_tracking.price_lowest}`);
-                    lines.push(`  Current: ${pd.price_tracking.current_price || 'N/A'}`);
-                    if (pd.price_tracking.drawdown_from_high) {
-                        lines.push(`  Drawdown from High: ${pd.price_tracking.drawdown_from_high.toFixed(2)}%`);
-                    }
-                    if (pd.price_tracking.gain_from_low) {
-                        lines.push(`  Gain from Low: ${pd.price_tracking.gain_from_low.toFixed(2)}%`);
-                    }
-                }
-                
-                if (pd.phantom_details) {
-                    lines.push(`Phantom:`);
-                    lines.push(`  Remove Flag: ${pd.phantom_details.phantom_remove}`);
-                    lines.push(`  Confirmations: ${pd.phantom_details.phantom_confirmations}`);
-                    if (pd.phantom_details.phantom_first_seen) {
-                        lines.push(`  First Seen: ${pd.phantom_details.phantom_first_seen}`);
-                    }
-                }
-                
-                if (pd.proceeds_metrics) {
-                    const pm = pd.proceeds_metrics;
-                    lines.push(`Proceeds Metrics:`);
-                    lines.push(`  Accepted: ${pm.accepted_quotes} (${pm.accepted_profit_quotes} profit, ${pm.accepted_loss_quotes} loss)`);
-                    lines.push(`  Rejected: ${pm.rejected_quotes}`);
-                    lines.push(`  Avg Shortfall: ${pm.average_shortfall_bps.toFixed(2)} bps`);
-                    lines.push(`  Worst Shortfall: ${pm.worst_shortfall_bps} bps`);
-                }
-                
-                lines.push('');
-            }
-
-            return lines.join('\n');
-        }
-        
-        // Open External Links
-        function openGMGN(mint) {
-            window.open(`https://gmgn.ai/sol/token/${mint}`, '_blank');
-        }
-        
-        function openDexScreener(mint) {
-            window.open(`https://dexscreener.com/solana/${mint}`, '_blank');
-        }
-        
-        function openSolscan(mint) {
-            window.open(`https://solscan.io/token/${mint}`, '_blank');
-        }
-        
         // Show Debug Modal
         async function showDebugModal(mint, type) {
             const modal = document.getElementById('debugModal');
@@ -820,7 +448,7 @@
                 const data = await response.json();
                 populateDebugModal(data, type);
             } catch (error) {
-                showToast('❌ Failed to load debug info: ' + error, 'error');
+                Utils.showToast('❌ Failed to load debug info: ' + error, 'error');
                 console.error('Debug modal error:', error);
             }
         }
@@ -942,29 +570,6 @@
             }
         }
         
-        // Toast Notification
-        function showToast(message, type = 'success') {
-            const container = document.getElementById('toastContainer') || createToastContainer();
-            const toast = document.createElement('div');
-            toast.className = 'toast' + (type === 'error' ? ' error' : '');
-            toast.innerHTML = `<div class="toast-message">${message}</div>`;
-            
-            container.appendChild(toast);
-            
-            setTimeout(() => {
-                toast.style.opacity = '0';
-                setTimeout(() => toast.remove(), 300);
-            }, 3000);
-        }
-        
-        function createToastContainer() {
-            const container = document.createElement('div');
-            container.id = 'toastContainer';
-            container.className = 'toast-container';
-            document.body.appendChild(container);
-            return container;
-        }
-        
         // =============================================================================
         // TRADER CONTROL SYSTEM
         // =============================================================================
@@ -1073,13 +678,13 @@
                 
                 const message = data.message || data.data?.message || 
                     (isRunning ? 'Trader stopped successfully' : 'Trader started successfully');
-                showToast(`✅ ${message}`);
+                Utils.showToast(`✅ ${message}`);
                 
                 // Immediate status refresh
                 setTimeout(updateTraderStatus, 500);
             } catch (error) {
                 console.error('Trader toggle error:', error);
-                showToast(`❌ Failed to ${isRunning ? 'stop' : 'start'} trader: ${error.message}`, 'error');
+                Utils.showToast(`❌ Failed to ${isRunning ? 'stop' : 'start'} trader: ${error.message}`, 'error');
                 
                 // Restore previous state
                 updateTraderUI(isRunning, isRunning);
@@ -1109,7 +714,7 @@
                     throw new Error(data.error || 'Reboot request failed');
                 }
                 
-                showToast('🔄 System reboot initiated. Reconnecting...', 'info');
+                Utils.showToast('🔄 System reboot initiated. Reconnecting...', 'info');
                 
                 // Start reconnection attempts
                 isReconnecting = true;
@@ -1121,7 +726,7 @@
                 attemptReconnect();
             } catch (error) {
                 console.error('Reboot error:', error);
-                showToast(`❌ Failed to initiate reboot: ${error.message}`, 'error');
+                Utils.showToast(`❌ Failed to initiate reboot: ${error.message}`, 'error');
                 
                 // Restore button
                 rebootBtn.disabled = false;
@@ -1144,7 +749,7 @@
                     });
                     
                     if (res.ok) {
-                        showToast('✅ System reconnected successfully!');
+                        Utils.showToast('✅ System reconnected successfully!');
                         
                         // Reload the page to refresh all state
                         setTimeout(() => {
@@ -1157,10 +762,10 @@
                 }
                 
                 if (attempt < maxAttempts) {
-                    showToast(`🔄 Reconnecting... (${attempt}/${maxAttempts})`, 'info');
+                    Utils.showToast(`🔄 Reconnecting... (${attempt}/${maxAttempts})`, 'info');
                     setTimeout(checkConnection, 2000);
                 } else {
-                    showToast('❌ Reconnection timeout. Please refresh the page manually.', 'error');
+                    Utils.showToast('❌ Reconnection timeout. Please refresh the page manually.', 'error');
                     isReconnecting = false;
                     
                     // Re-enable reboot button
@@ -1178,7 +783,7 @@
         
         // Show notification toast
         function showNotification(message, type = 'info') {
-            showToast(message, type);
+            Utils.showToast(message, type);
         }
         
         // Initialize trader controls when DOM is ready

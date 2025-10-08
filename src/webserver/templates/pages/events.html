@@ -617,11 +617,11 @@ Loading...</pre
         if (!encoded) return;
         const reference = decodeURIComponent(encoded);
         try {
-          await navigator.clipboard.writeText(reference);
-          showToast("✅ Reference copied to clipboard");
+          await Utils.copyToClipboard(reference);
+          Utils.showToast("✅ Reference copied to clipboard");
         } catch (err) {
           console.error("Failed to copy reference:", err);
-          showToast("❌ Failed to copy reference", "error");
+          Utils.showToast("❌ Failed to copy reference", "error");
         }
         return;
       }
@@ -643,7 +643,7 @@ Loading...</pre
     if (!eventDetailModal) return;
     const eventData = eventsStore.get(eventId);
     if (!eventData) {
-      showToast("❌ Event details unavailable", "error");
+      Utils.showToast("❌ Event details unavailable", "error");
       return;
     }
 
@@ -708,21 +708,12 @@ Loading...</pre
 
   // Time formatting
   function formatTimeAgo(date) {
-    const seconds = Math.floor((new Date() - date) / 1000);
-    if (seconds < 60) return `${seconds}s ago`;
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    return `${days}d ago`;
+    return Utils.formatTimeAgo(date, { fallback: "-" });
   }
 
   // HTML escape
   function escapeHtml(text) {
-    const div = document.createElement("div");
-    div.textContent = text;
-    return div.innerHTML;
+    return Utils.escapeHtml(text);
   }
 
   // Silent refresh every second

@@ -1173,29 +1173,11 @@
 
   // Utility functions
   function formatNumber(value, decimals = 2) {
-    if (value === null || value === undefined) return "N/A";
-    const num = parseFloat(value);
-    if (isNaN(num)) return "N/A";
-    return num.toLocaleString("en-US", {
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals,
-    });
+    return Utils.formatNumber(value, decimals, { fallback: "N/A" });
   }
 
   function formatTimestamp(timestamp) {
-    if (!timestamp || timestamp === "N/A") return "N/A";
-    try {
-      const date = new Date(timestamp);
-      return date.toLocaleString("en-US", {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      });
-    } catch (error) {
-      return "N/A";
-    }
+    return Utils.formatTimestamp(timestamp, { fallback: "N/A" });
   }
 
   window.PageRealtime = window.PageRealtime || {};

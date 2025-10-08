@@ -10,6 +10,7 @@ const LAYOUT_STYLES: &str = include_str!("templates/styles/layout.css");
 const COMPONENT_STYLES: &str = include_str!("templates/styles/components.css");
 const TOKEN_MODAL_STYLES: &str = include_str!("templates/styles/token-modal.css");
 const COMMON_STYLES: &str = include_str!("templates/styles/common.css");
+const UTIL_SCRIPTS: &str = include_str!("templates/scripts/utils.js");
 const COMMON_SCRIPTS: &str = include_str!("templates/scripts/common.js");
 const WEBSOCKET_SCRIPTS: &str = include_str!("templates/scripts/websocket.js");
 const THEME_SCRIPTS: &str = include_str!("templates/scripts/theme.js");
@@ -36,6 +37,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     ]
     .join("\n");
     html = html.replace("/*__INJECTED_STYLES__*/", &combined_styles);
+    html = html.replace("/*__UTIL_SCRIPTS__*/", UTIL_SCRIPTS);
     html = html.replace("/*__COMMON_SCRIPTS__*/", COMMON_SCRIPTS);
     html = html.replace("/*__WEBSOCKET_SCRIPTS__*/", WEBSOCKET_SCRIPTS);
     html = html.replace("/*__THEME_SCRIPTS__*/", THEME_SCRIPTS);

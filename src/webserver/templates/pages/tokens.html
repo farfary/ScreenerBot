@@ -83,33 +83,25 @@
       return data;
     } catch (error) {
       console.error("Failed to fetch token detail:", error);
-      showToast("❌ Failed to load token details", "error");
+      Utils.showToast("❌ Failed to load token details", "error");
       return null;
     }
   }
 
   function formatCompactNumber(value, digits = 2) {
-    if (!Number.isFinite(value)) return "—";
-    return Intl.NumberFormat("en-US", {
-      notation: "compact",
-      maximumFractionDigits: digits,
-    }).format(value);
+    return Utils.formatCompactNumber(value, digits, "—");
   }
 
   function formatBooleanFlag(value, unknownLabel = "Unknown") {
-    if (value === true) return "Yes";
-    if (value === false) return "No";
-    return unknownLabel;
+    return Utils.formatBooleanFlag(value, unknownLabel);
   }
 
   function setText(id, value) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = value;
+    Utils.setText(id, value);
   }
 
   function setHtml(id, value) {
-    const el = document.getElementById(id);
-    if (el) el.innerHTML = value;
+    Utils.setHtml(id, value);
   }
 
   function renderSidebarBadges(token) {
@@ -394,7 +386,7 @@
     const cached = getTokenByMint(mint);
     if (!cached) {
       console.warn("openTokenModal: token not found in cache", mint);
-      showToast("❌ Token not found in cache", "error");
+      Utils.showToast("❌ Token not found in cache", "error");
       return;
     }
 
@@ -436,25 +428,22 @@
 
   function copyMintFromModal() {
     if (!currentModalMint) return;
-    navigator.clipboard
-      .writeText(currentModalMint)
-      .then(() => showToast("✅ Mint copied"))
-      .catch(() => showToast("❌ Failed to copy mint", "error"));
+    Utils.copyMint(currentModalMint);
   }
 
   function openDexScreenerFromModal() {
     if (!currentModalMint) return;
-    openDexScreener(currentModalMint);
+    Utils.openDexScreener(currentModalMint);
   }
 
   function openGMGNFromModal() {
     if (!currentModalMint) return;
-    openGMGN(currentModalMint);
+    Utils.openGMGN(currentModalMint);
   }
 
   function openSolscanFromModal() {
     if (!currentModalMint) return;
-    openSolscan(currentModalMint);
+    Utils.openSolscan(currentModalMint);
   }
 
   function attachGlobalListeners() {
@@ -804,12 +793,12 @@
                     <td style="font-size: 0.85em; color: #64748b;">${timeAgo}</td>
                     <td onclick="event.stopPropagation();">
                         <div class="dropdown-container" data-mint="${mint}">
-                            <button class="dropdown-btn" type="button" onclick="toggleDropdown(event)" aria-label="Actions">⋮</button>
+                            <button class="dropdown-btn" type="button" onclick="Utils.toggleDropdown(event)" aria-label="Actions">⋮</button>
                             <div class="dropdown-menu">
-                                <button onclick="copyMint('${mint}')" class="dropdown-item">📋 Copy Mint</button>
-                                <button onclick="openGMGN('${mint}')" class="dropdown-item">🔗 Open GMGN</button>
-                                <button onclick="openDexScreener('${mint}')" class="dropdown-item">📊 Open DexScreener</button>
-                                <button onclick="openSolscan('${mint}')" class="dropdown-item">🔍 Open Solscan</button>
+                                <button onclick="Utils.copyMint('${mint}')" class="dropdown-item">📋 Copy Mint</button>
+                                <button onclick="Utils.openGMGN('${mint}')" class="dropdown-item">🔗 Open GMGN</button>
+                                <button onclick="Utils.openDexScreener('${mint}')" class="dropdown-item">📊 Open DexScreener</button>
+                                <button onclick="Utils.openSolscan('${mint}')" class="dropdown-item">🔍 Open Solscan</button>
                                 <button onclick="openTokenDetail('${mint}')" class="dropdown-item">🔎 View Details</button>
                             </div>
                         </div>
@@ -942,51 +931,19 @@
   }
 
   function formatPriceSol(price) {
-    if (price === null || price === undefined) return "N/A";
-    if (!Number.isFinite(price)) return "N/A";
-    if (price === 0) return "0";
-    return price < 0.000001 ? price.toExponential(4) : price.toFixed(8);
+    return Utils.formatPriceSol(price, { fallback: "N/A" });
   }
 
   function formatCurrencyUSD(value) {
-    if (value === null || value === undefined || !Number.isFinite(value))
-      return "—";
-    const abs = Math.abs(value);
-    let v = value;
-    let suffix = "";
-    if (abs >= 1_000_000_000) {
-      v = value / 1_000_000_000;
-      suffix = "B";
-    } else if (abs >= 1_000_000) {
-      v = value / 1_000_000;
-      suffix = "M";
-    } else if (abs >= 1_000) {
-      v = value / 1_000;
-      suffix = "K";
-    }
-    return `$${v.toFixed(2)}${suffix}`;
+    return Utils.formatCurrencyUSD(value, { fallback: "—" });
   }
 
   function formatPercentValue(value) {
-    if (value === null || value === undefined) return "—";
-    const num = Number(value);
-    if (!Number.isFinite(num)) return "—";
-    const sign = num > 0 ? "+" : num < 0 ? "-" : "";
-    const magnitude = Math.abs(num).toFixed(2);
-    return `${sign}${magnitude}%`;
+    return Utils.formatPercentValue(value, { fallback: "—" });
   }
 
   function formatPercent(value) {
-    if (value === null || value === undefined || !Number.isFinite(value))
-      return "<span>—</span>";
-    const cls =
-      value > 0
-        ? "color: #16a34a;"
-        : value < 0
-        ? "color:#ef4444;"
-        : "color:inherit;";
-    const sign = value > 0 ? "+" : "";
-    return `<span style="${cls}">${sign}${value.toFixed(2)}%</span>`;
+    return Utils.formatPercent(value, { style: "token", fallback: "—" });
   }
 
   function renderSecurity(score, rugged) {
@@ -1024,26 +981,18 @@
   }
 
   function formatTimeAgo(timestamp) {
-    if (!timestamp || !Number.isFinite(timestamp)) return "-";
-    const seconds = Math.max(0, Math.floor(Date.now() / 1000) - timestamp);
-
-    if (seconds < 60) return `${seconds}s ago`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-    return `${Math.floor(seconds / 86400)}d ago`;
+    return Utils.formatTimeAgo(timestamp, { fallback: "-" });
   }
 
   function escapeHtml(text) {
-    const div = document.createElement("div");
-    div.textContent = text;
-    return div.innerHTML;
+    return Utils.escapeHtml(text);
   }
 
   function openTokenDetail(mint) {
     if (!mint) return;
     openTokenModal(mint).catch((err) => {
       console.error("Failed to open token modal:", err);
-      showToast("❌ Failed to open token details", "error");
+      Utils.showToast("❌ Failed to open token details", "error");
     });
   }
 </script>

@@ -638,29 +638,15 @@
       },
 
       formatUptime: function (seconds) {
-        if (!seconds || seconds < 60) return `${seconds || 0}s`;
-        if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-        if (seconds < 86400)
-          return `${Math.floor(seconds / 3600)}h ${Math.floor(
-            (seconds % 3600) / 60
-          )}m`;
-        return `${Math.floor(seconds / 86400)}d ${Math.floor(
-          (seconds % 86400) / 3600
-        )}h`;
+        return Utils.formatUptime(seconds, { style: "compact" });
       },
 
       formatBytes: function (bytes) {
-        if (!bytes || bytes < 1024) return `${bytes || 0} B`;
-        if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
-        if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(1)} MB`;
-        return `${(bytes / 1073741824).toFixed(2)} GB`;
+        return Utils.formatBytes(bytes);
       },
 
       formatDuration: function (nanos) {
-        if (!nanos || nanos < 1000) return `${nanos || 0}ns`;
-        if (nanos < 1000000) return `${(nanos / 1000).toFixed(1)}µs`;
-        if (nanos < 1000000000) return `${(nanos / 1000000).toFixed(1)}ms`;
-        return `${(nanos / 1000000000).toFixed(2)}s`;
+        return Utils.formatDuration(nanos);
       },
 
       initialize: function () {
