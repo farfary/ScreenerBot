@@ -68,16 +68,8 @@ pub async fn start_server(config: WebserverConfig) -> Result<(), String> {
         );
     }
 
-    // Start WebSocket producers
-    crate::webserver::ws::producers::start_producers(ws_hub.clone());
-    
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "INFO",
-            "✅ WebSocket producers started",
-        );
-    }
+    // Start WebSocket data sources
+    crate::webserver::ws::sources::start_all(ws_hub.clone());
 
     // Create application state with WsHub
     let state = Arc::new(AppState::new(config.clone(), ws_hub));

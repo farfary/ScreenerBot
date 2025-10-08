@@ -1,7 +1,7 @@
 /// Status topic messages
 use crate::webserver::ws::{
     message::{Topic, WsEnvelope},
-    snapshots::StatusSnapshot,
+    sources::status::StatusSnapshot,
 };
 
 /// Convert status snapshot to envelope

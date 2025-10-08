@@ -25,11 +25,9 @@ pub mod health;
 pub mod hub;
 pub mod message;
 pub mod metrics;
-pub mod producers;
-pub mod snapshots;
-pub mod topics;
 pub mod sources;
+pub mod topics;
 
 pub use hub::WsHub;
 pub use message::{ServerMessage, Topic, WsEnvelope};
-pub use snapshots::{RpcStatsSnapshot, StatusSnapshot};
+pub use sources::status::{RpcStatsSnapshot, StatusSnapshot};

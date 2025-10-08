@@ -35,16 +35,29 @@ pub mod wallet;
 
 use std::sync::Arc;
 
-use crate::webserver::ws::hub::WsHub;
+use crate::{
+    arguments::is_debug_webserver_enabled,
+    logger::{log, LogTag},
+    webserver::ws::hub::WsHub,
+};
 
-/// Start all sources
+/// Start all WebSocket data sources (replaces old producers.rs)
 pub fn start_all(hub: Arc<WsHub>) {
-    // Start in deterministic order for logs
+    // Start active sources in deterministic order
     events::start(hub.clone());
     positions::start(hub.clone());
     prices::start(hub.clone());
     status::start(hub.clone());
     services::start(hub);
+
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "INFO",
+            "✅ ws.sources started (events, positions, prices, status, services)",
+        );
+    }
+
     // Additional sources (currently stubs) for uniform structure:
     // tokens::start(hub.clone());
     // trader::start(hub.clone());
