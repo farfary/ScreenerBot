@@ -88,14 +88,6 @@
     }
   }
 
-  function formatCompactNumber(value, digits = 2) {
-    return Utils.formatCompactNumber(value, digits, "—");
-  }
-
-  function formatBooleanFlag(value, unknownLabel = "Unknown") {
-    return Utils.formatBooleanFlag(value, unknownLabel);
-  }
-
   function setText(id, value) {
     Utils.setText(id, value);
   }
@@ -174,13 +166,13 @@
     setText("modalTokenName", token.name || detailData.name || "—");
     setText(
       "modalTokenPrice",
-      Number.isFinite(price) ? formatPriceSol(price) : "—"
+      Number.isFinite(price) ? Utils.formatPriceSol(price, { fallback: "N/A" }) : "—"
     );
 
     const changeEl = document.getElementById("modalTokenChange");
     if (changeEl) {
       changeEl.textContent = Number.isFinite(change24h)
-        ? formatPercentValue(change24h)
+        ? Utils.formatPercentValue(change24h, { fallback: "—" })
         : "—";
       changeEl.classList.remove("positive", "negative");
       if (changeCls) changeEl.classList.add(changeCls);
@@ -188,10 +180,10 @@
 
     setText("detail-mint", detailData.mint || token.mint || "—");
     setText("detail-decimals", detailData.decimals ?? "—");
-    setText("detail-verified", formatBooleanFlag(detailData.verified, "—"));
+    setText("detail-verified", Utils.formatBooleanFlag(detailData.verified, "—"));
     setText(
       "detail-blacklisted",
-      formatBooleanFlag(detailData.blacklisted ?? token.blacklisted, "—")
+      Utils.formatBooleanFlag(detailData.blacklisted ?? token.blacklisted, "—")
     );
     setText("detail-launch-date", detailData.launch_date || "—");
 
@@ -202,12 +194,12 @@
     const fdvValue = detailData.fdv ?? token.fdv;
     const marketCapValue = detailData.market_cap ?? token.market_cap;
 
-    setText("detail-liquidity", formatCurrencyUSD(liquidityValue));
-    setText("detail-volume24h", formatCurrencyUSD(volume24hValue));
-    setText("detail-volume6h", formatCurrencyUSD(volume6hValue));
-    setText("detail-volume1h", formatCurrencyUSD(volume1hValue));
-    setText("detail-fdv", formatCurrencyUSD(fdvValue));
-    setText("detail-marketcap", formatCurrencyUSD(marketCapValue));
+    setText("detail-liquidity", Utils.formatCurrencyUSD(liquidityValue, { fallback: "—" }));
+    setText("detail-volume24h", Utils.formatCurrencyUSD(volume24hValue, { fallback: "—" }));
+    setText("detail-volume6h", Utils.formatCurrencyUSD(volume6hValue, { fallback: "—" }));
+    setText("detail-volume1h", Utils.formatCurrencyUSD(volume1hValue, { fallback: "—" }));
+    setText("detail-fdv", Utils.formatCurrencyUSD(fdvValue, { fallback: "—" }));
+    setText("detail-marketcap", Utils.formatCurrencyUSD(marketCapValue, { fallback: "—" }));
 
     const dexLabel = detailData.pool_dex || detailData.pool?.dex;
     const poolAddress = detailData.pool_address || detailData.pool?.address;
@@ -221,8 +213,8 @@
 
     setText("detail-dex", dexLabel || "—");
     setText("detail-pool", poolAddress || "—");
-    setText("detail-sol-reserves", formatCompactNumber(solReserves));
-    setText("detail-token-reserves", formatCompactNumber(tokenReserves));
+    setText("detail-sol-reserves", Utils.formatCompactNumber(solReserves, 2, "—"));
+    setText("detail-token-reserves", Utils.formatCompactNumber(tokenReserves, 2, "—"));
     setText(
       "detail-confidence",
       Number.isFinite(confidence) ? Number(confidence).toFixed(2) : "—"
@@ -244,19 +236,19 @@
 
     setText(
       "detail-change5m",
-      change5m !== undefined ? formatPercentValue(change5m) : "—"
+      change5m !== undefined ? Utils.formatPercentValue(change5m, { fallback: "—" }) : "—"
     );
     setText(
       "detail-change1h",
-      change1h !== undefined ? formatPercentValue(change1h) : "—"
+      change1h !== undefined ? Utils.formatPercentValue(change1h, { fallback: "—" }) : "—"
     );
     setText(
       "detail-change6h",
-      change6h !== undefined ? formatPercentValue(change6h) : "—"
+      change6h !== undefined ? Utils.formatPercentValue(change6h, { fallback: "—" }) : "—"
     );
     setText(
       "detail-change24h",
-      change24hValue !== undefined ? formatPercentValue(change24hValue) : "—"
+      change24hValue !== undefined ? Utils.formatPercentValue(change24hValue, { fallback: "—" }) : "—"
     );
 
     const buys24hRaw = detailData.txns?.h24?.buys ?? detailData.buys_24h;
@@ -342,11 +334,11 @@
 
     setText(
       "sidebar-price",
-      Number.isFinite(price) ? formatPriceSol(price) : "—"
+      Number.isFinite(price) ? Utils.formatPriceSol(price, { fallback: "N/A" }) : "—"
     );
-    setText("sidebar-volume", formatCurrencyUSD(volume24hValue));
-    setText("sidebar-liq", formatCurrencyUSD(liquidityValue));
-    setText("sidebar-mcap", formatCurrencyUSD(marketCapValue));
+    setText("sidebar-volume", Utils.formatCurrencyUSD(volume24hValue, { fallback: "—" }));
+    setText("sidebar-liq", Utils.formatCurrencyUSD(liquidityValue, { fallback: "—" }));
+    setText("sidebar-mcap", Utils.formatCurrencyUSD(marketCapValue, { fallback: "—" }));
 
     const statusFlags = {
       has_pool_price: detailData.has_pool_price ?? token.has_pool_price,
@@ -745,11 +737,11 @@
     const timeAgo = token.price_updated_at
       ? Utils.formatTimeAgo(token.price_updated_at, { fallback: "-" })
       : "N/A";
-    const priceDisplay = formatPriceSol(token.price_sol);
-    const liquidity = formatCurrencyUSD(token.liquidity_usd);
-    const vol24h = formatCurrencyUSD(token.volume_24h);
-    const fdv = formatCurrencyUSD(token.fdv);
-    const marketCap = formatCurrencyUSD(token.market_cap);
+    const priceDisplay = Utils.formatPriceSol(token.price_sol, { fallback: "N/A" });
+    const liquidity = Utils.formatCurrencyUSD(token.liquidity_usd, { fallback: "—" });
+    const vol24h = Utils.formatCurrencyUSD(token.volume_24h, { fallback: "—" });
+    const fdv = Utils.formatCurrencyUSD(token.fdv, { fallback: "—" });
+    const marketCap = Utils.formatCurrencyUSD(token.market_cap, { fallback: "—" });
     const ch1h = Utils.formatPercent(token.price_change_h1, {
       style: "token",
       fallback: "—",
@@ -936,16 +928,10 @@
     }
   }
 
-  function formatPriceSol(price) {
-    return Utils.formatPriceSol(price, { fallback: "N/A" });
+  , { fallback: "—" });
   }
 
-  function formatCurrencyUSD(value) {
-    return Utils.formatCurrencyUSD(value, { fallback: "—" });
-  }
-
-  function formatPercentValue(value) {
-    return Utils.formatPercentValue(value, { fallback: "—" });
+  , { fallback: "—" });
   }
 
   function renderSecurity(score, rugged) {
@@ -1533,7 +1519,9 @@
         const timeCell = row.cells?.[10];
 
         if (priceCell && Number.isFinite(updatedPriceSol)) {
-          priceCell.innerHTML = formatPriceSol(updatedPriceSol);
+          priceCell.innerHTML = Utils.formatPriceSol(updatedPriceSol, {
+            fallback: "N/A",
+          });
           priceCell.style.animation = "highlight 0.6s ease-out";
           setTimeout(() => {
             priceCell.style.animation = "";
@@ -1541,8 +1529,9 @@
         }
 
         if (liquidityCell && Number.isFinite(tokenInList.liquidity_usd)) {
-          liquidityCell.innerHTML = formatCurrencyUSD(
-            tokenInList.liquidity_usd
+          liquidityCell.innerHTML = Utils.formatCurrencyUSD(
+            tokenInList.liquidity_usd,
+            { fallback: "—" }
           );
         }
 
@@ -1594,23 +1583,31 @@
       }
 
       if (modalPriceEl && Number.isFinite(updatedPriceSol)) {
-        modalPriceEl.textContent = formatPriceSol(updatedPriceSol);
+        modalPriceEl.textContent = Utils.formatPriceSol(updatedPriceSol, {
+          fallback: "N/A",
+        });
       }
       if (sidebarPriceEl && Number.isFinite(updatedPriceSol)) {
-        sidebarPriceEl.textContent = formatPriceSol(updatedPriceSol);
+        sidebarPriceEl.textContent = Utils.formatPriceSol(updatedPriceSol, {
+          fallback: "N/A",
+        });
       }
 
       if (confidenceEl && Number.isFinite(priceResult.confidence)) {
         confidenceEl.textContent = priceResult.confidence.toFixed(2);
       }
       if (solReservesEl && Number.isFinite(priceResult.sol_reserves)) {
-        solReservesEl.textContent = formatCompactNumber(
-          priceResult.sol_reserves
+        solReservesEl.textContent = Utils.formatCompactNumber(
+          priceResult.sol_reserves,
+          2,
+          "—"
         );
       }
       if (tokenReservesEl && Number.isFinite(priceResult.token_reserves)) {
-        tokenReservesEl.textContent = formatCompactNumber(
-          priceResult.token_reserves
+        tokenReservesEl.textContent = Utils.formatCompactNumber(
+          priceResult.token_reserves,
+          2,
+          "—"
         );
       }
       if (poolAddressEl && priceResult.pool_address) {
@@ -1618,7 +1615,9 @@
       }
 
       if (Number.isFinite(tokenInList?.liquidity_usd)) {
-        const formatted = formatCurrencyUSD(tokenInList.liquidity_usd);
+        const formatted = Utils.formatCurrencyUSD(tokenInList.liquidity_usd, {
+          fallback: "—",
+        });
         if (liquidityEl) liquidityEl.textContent = formatted;
         if (sidebarLiqEl) sidebarLiqEl.textContent = formatted;
       }

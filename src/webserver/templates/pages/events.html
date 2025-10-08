@@ -25,9 +25,9 @@
         color: var(--text-primary);
       "
     >
-      <option value="  }
+      <option value="    }
 
-  // Silent refresh every secondies</option>
+  // Silent refresh every secondt refresh every secondies</option>
       <option value="swap">Swap</option>
       <option value="transaction">Transaction</option>
       <option value="pool">Pool</option>
@@ -707,16 +707,6 @@ Loading...</pre
       closeEventDetailModal();
     }
   });
-
-  // Time formatting
-  function formatTimeAgo(date) {
-    return Utils.formatTimeAgo(date, { fallback: "-" });
-  }
-
-  // HTML escape
-  function escapeHtml(text) {
-    return Utils.escapeHtml(text);
-  }
 
   // Silent refresh every second
   function startEventsRefresh(intervalMs = 2000) {
