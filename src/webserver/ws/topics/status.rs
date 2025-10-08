@@ -1,7 +1,8 @@
 /// Status topic messages
-
-use crate::webserver::status_broadcast::StatusSnapshot;
-use crate::webserver::ws::message::{Topic, WsEnvelope};
+use crate::webserver::ws::{
+    message::{Topic, WsEnvelope},
+    snapshots::StatusSnapshot,
+};
 
 /// Convert status snapshot to envelope
 pub fn status_to_envelope(snapshot: &StatusSnapshot, seq: u64) -> WsEnvelope {

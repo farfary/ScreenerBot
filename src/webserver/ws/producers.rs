@@ -1,26 +1,27 @@
-/// WebSocket producers - Bridge internal broadcasts to WsHub
+/// WebSocket producers - Feed data to WsHub
 ///
-/// Subscribes to internal broadcast channels and feeds the WsHub with
-/// typed topic messages. Handles broadcast errors gracefully without
-/// breaking the WebSocket connection.
+/// Subscribes to internal broadcast channels and periodically gathers
+/// system state, then feeds the WsHub with typed topic messages.
 
 use std::sync::Arc;
 use tokio::sync::broadcast;
+use tokio::time::{interval, Duration};
 
 use crate::{
     arguments::is_debug_webserver_enabled,
+    config,
     events,
     logger::{log, LogTag},
     pools, positions,
     webserver::{
-        services_broadcast, status_broadcast,
-        ws::{hub::WsHub, topics},
+        routes::services::gather_services_overview_snapshot,
+        ws::{hub::WsHub, snapshots, topics},
     },
 };
 
 /// Start all producers (spawn background tasks)
 pub fn start_producers(hub: Arc<WsHub>) {
-    // Events producer
+    // Events producer (from broadcast)
     if let Some(rx) = events::subscribe() {
         tokio::spawn(events_producer(hub.clone(), rx));
         if is_debug_webserver_enabled() {
@@ -28,7 +29,7 @@ pub fn start_producers(hub: Arc<WsHub>) {
         }
     }
 
-    // Positions producer
+    // Positions producer (from broadcast)
     if let Some(rx) = positions::subscribe_positions() {
         tokio::spawn(positions_producer(hub.clone(), rx));
         if is_debug_webserver_enabled() {
@@ -36,7 +37,7 @@ pub fn start_producers(hub: Arc<WsHub>) {
         }
     }
 
-    // Prices producer
+    // Prices producer (from broadcast)
     if let Some(rx) = pools::subscribe_prices() {
         tokio::spawn(prices_producer(hub.clone(), rx));
         if is_debug_webserver_enabled() {
@@ -44,20 +45,16 @@ pub fn start_producers(hub: Arc<WsHub>) {
         }
     }
 
-    // Status producer
-    if let Some(rx) = status_broadcast::subscribe() {
-        tokio::spawn(status_producer(hub.clone(), rx));
-        if is_debug_webserver_enabled() {
-            log(LogTag::Webserver, "DEBUG", "Status producer started");
-        }
+    // Status producer (periodic gather)
+    tokio::spawn(status_producer(hub.clone()));
+    if is_debug_webserver_enabled() {
+        log(LogTag::Webserver, "DEBUG", "Status producer started");
     }
 
-    // Services producer
-    if let Some(rx) = services_broadcast::subscribe() {
-        tokio::spawn(services_producer(hub.clone(), rx));
-        if is_debug_webserver_enabled() {
-            log(LogTag::Webserver, "DEBUG", "Services producer started");
-        }
+    // Services producer (periodic gather)
+    tokio::spawn(services_producer(hub.clone()));
+    if is_debug_webserver_enabled() {
+        log(LogTag::Webserver, "DEBUG", "Services producer started");
     }
 }
 
@@ -151,62 +148,53 @@ async fn prices_producer(
     }
 }
 
-/// Status producer task
-async fn status_producer(
-    hub: Arc<WsHub>,
-    mut rx: broadcast::Receiver<status_broadcast::StatusSnapshot>,
-) {
+/// Status producer task (periodic gather)
+async fn status_producer(hub: Arc<WsHub>) {
+    let interval_secs = config::with_config(|cfg| cfg.webserver.websocket.heartbeat_secs.max(2));
+    let mut ticker = interval(Duration::from_secs(interval_secs));
+    
     loop {
-        match rx.recv().await {
-            Ok(snapshot) => {
-                let envelope = topics::status::status_to_envelope(&snapshot, hub.next_seq("system.status"));
-                hub.broadcast(envelope).await;
-            }
-            Err(broadcast::error::RecvError::Lagged(skipped)) => {
-                log(
-                    LogTag::Webserver,
-                    "WARN",
-                    &format!("Status producer lagged, skipped {} messages", skipped),
-                );
-            }
-            Err(broadcast::error::RecvError::Closed) => {
-                log(
-                    LogTag::Webserver,
-                    "WARN",
-                    "Status broadcaster closed, producer exiting",
-                );
-                break;
-            }
+        ticker.tick().await;
+        
+        let snapshot = snapshots::gather_status_snapshot().await;
+        let envelope = topics::status::status_to_envelope(&snapshot, hub.next_seq("system.status"));
+        hub.broadcast(envelope).await;
+        
+        if is_debug_webserver_enabled() {
+            log(
+                LogTag::Webserver,
+                "DEBUG",
+                &format!(
+                    "Status snapshot broadcast (positions={}, ws_connections={})",
+                    snapshot.open_positions, snapshot.ws_connections
+                ),
+            );
         }
     }
 }
 
-/// Services producer task
-async fn services_producer(
-    hub: Arc<WsHub>,
-    mut rx: broadcast::Receiver<crate::webserver::routes::services::ServicesOverviewResponse>,
-) {
+/// Services producer task (periodic gather)
+async fn services_producer(hub: Arc<WsHub>) {
+    let interval_secs = config::with_config(|cfg| cfg.webserver.websocket.heartbeat_secs.max(3));
+    let mut ticker = interval(Duration::from_secs(interval_secs));
+    
     loop {
-        match rx.recv().await {
-            Ok(snapshot) => {
-                let envelope = topics::services::services_to_envelope(&snapshot, hub.next_seq("services.metrics"));
-                hub.broadcast(envelope).await;
-            }
-            Err(broadcast::error::RecvError::Lagged(skipped)) => {
-                log(
-                    LogTag::Webserver,
-                    "WARN",
-                    &format!("Services producer lagged, skipped {} messages", skipped),
-                );
-            }
-            Err(broadcast::error::RecvError::Closed) => {
-                log(
-                    LogTag::Webserver,
-                    "WARN",
-                    "Services broadcaster closed, producer exiting",
-                );
-                break;
-            }
+        ticker.tick().await;
+        
+        let snapshot = gather_services_overview_snapshot().await;
+        let envelope = topics::services::services_to_envelope(&snapshot, hub.next_seq("services.metrics"));
+        hub.broadcast(envelope).await;
+        
+        if is_debug_webserver_enabled() {
+            log(
+                LogTag::Webserver,
+                "DEBUG",
+                &format!(
+                    "Services snapshot broadcast (services={}, unhealthy={})",
+                    snapshot.services.len(),
+                    snapshot.summary.unhealthy_services
+                ),
+            );
         }
     }
 }

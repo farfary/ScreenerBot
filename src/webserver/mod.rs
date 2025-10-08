@@ -5,23 +5,13 @@
 /// - WebSocket connections for real-time updates
 /// - Service monitoring and management interface
 ///
-/// See docs/webserver-dashboard-architecture.md for full design
+/// See docs/websocket-hub-architecture.md for WebSocket architecture
 pub mod routes;
 pub mod server;
-pub mod services_broadcast;
 pub mod state;
-pub mod status_broadcast;
 pub mod templates;
 pub mod utils;
 pub mod ws;
 
 // Public API for starting/stopping the webserver
 pub use server::{shutdown, start_server};
-pub use status_broadcast::{
-    get_subscriber_count as get_status_subscriber_count, initialize_status_broadcaster,
-    start_status_broadcaster, subscribe as subscribe_status, StatusSnapshot,
-};
-
-pub use services_broadcast::{
-    initialize_services_broadcaster, start_services_broadcaster, subscribe as subscribe_services,
-};

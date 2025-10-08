@@ -15,7 +15,7 @@ pub mod tokens;
 pub mod trader;
 pub mod trading;
 pub mod wallet;
-pub mod ws;
+pub mod websocket;
 
 pub fn create_router(state: Arc<AppState>) -> Router {
     Router::new()
@@ -87,7 +87,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .merge(wallet::routes())
         .merge(blacklist::routes())
         .merge(config::routes())
-        .merge(ws::routes())
+        .merge(websocket::routes())
         .merge(services::routes())
         .merge(ohlcv::ohlcv_routes())
         .nest("/trading", trading::routes())

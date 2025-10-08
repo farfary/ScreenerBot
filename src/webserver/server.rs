@@ -36,79 +36,53 @@ pub async fn start_server(config: WebserverConfig) -> Result<(), String> {
         );
     }
 
-    // Create application state
-    let state = Arc::new(AppState::new(config.clone()));
-
-    // Initialize WebSocket broadcast systems
+    // Initialize WebSocket hub
     if is_debug_webserver_enabled() {
         log(
             LogTag::Webserver,
             "INFO",
-            "Initializing WebSocket broadcast systems...",
+            "Initializing WebSocket hub...",
         );
     }
 
-    // Initialize positions broadcaster
+    let buffer_size = config.websocket.per_client_buffer;
+    let ws_hub = crate::webserver::ws::WsHub::new(buffer_size);
+    
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "INFO",
+            &format!("✅ WebSocket hub initialized (buffer_size={})", buffer_size),
+        );
+    }
+
+    // Initialize broadcast systems that still use broadcasts
     crate::positions::initialize_positions_broadcaster();
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "INFO",
-            "✅ Positions broadcast system initialized",
-        );
-    }
-
-    // Initialize prices broadcaster
     crate::pools::initialize_prices_broadcaster();
+    
     if is_debug_webserver_enabled() {
         log(
             LogTag::Webserver,
             "INFO",
-            "✅ Prices broadcast system initialized",
+            "✅ Internal broadcast systems initialized",
         );
     }
 
-    // Initialize status broadcaster
-    crate::webserver::initialize_status_broadcaster();
+    // Start WebSocket producers
+    crate::webserver::ws::producers::start_producers(ws_hub.clone());
+    
     if is_debug_webserver_enabled() {
         log(
             LogTag::Webserver,
             "INFO",
-            "✅ Status broadcast system initialized",
+            "✅ WebSocket producers started",
         );
     }
 
-    // Start status broadcaster task (every 2 seconds)
-    let _status_handle = crate::webserver::start_status_broadcaster(2);
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "INFO",
-            "✅ Status broadcast task started (interval: 2s)",
-        );
-    }
+    // Create application state with WsHub
+    let state = Arc::new(AppState::new(config.clone(), ws_hub));
 
-    // Initialize services broadcaster
-    crate::webserver::initialize_services_broadcaster();
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "INFO",
-            "✅ Services broadcast system initialized",
-        );
-    }
-
-    // Start services broadcaster task (every 3 seconds)
-    let _services_handle = crate::webserver::start_services_broadcaster(3);
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "INFO",
-            "✅ Services broadcast task started (interval: 3s)",
-        );
-    }
-
-    // Set global app state for WebSocket connection tracking
+    // Set global app state
     crate::webserver::state::set_global_app_state(Arc::clone(&state));
     if is_debug_webserver_enabled() {
         log(LogTag::Webserver, "INFO", "✅ Global app state configured");

@@ -12,59 +12,31 @@ pub struct AppState {
     /// Webserver configuration
     pub config: Arc<WebserverConfig>,
 
-    /// Active WebSocket connection count
-    pub ws_connections: Arc<RwLock<usize>>,
-
     /// Server startup time
     pub startup_time: chrono::DateTime<chrono::Utc>,
     
-    /// Central WebSocket hub (optional, feature-flagged)
-    pub ws_hub: Option<Arc<crate::webserver::ws::WsHub>>,
+    /// Central WebSocket hub
+    pub ws_hub: Arc<crate::webserver::ws::WsHub>,
 }
 
 impl AppState {
-    /// Create new application state
-    pub fn new(config: WebserverConfig) -> Self {
-        Self {
-            config: Arc::new(config),
-            ws_connections: Arc::new(RwLock::new(0)),
-            startup_time: chrono::Utc::now(),
-            ws_hub: None,
-        }
-    }
-    
     /// Create new application state with WsHub
-    pub fn with_ws_hub(config: WebserverConfig, ws_hub: Arc<crate::webserver::ws::WsHub>) -> Self {
+    pub fn new(config: WebserverConfig, ws_hub: Arc<crate::webserver::ws::WsHub>) -> Self {
         Self {
             config: Arc::new(config),
-            ws_connections: Arc::new(RwLock::new(0)),
             startup_time: chrono::Utc::now(),
-            ws_hub: Some(ws_hub),
+            ws_hub,
         }
     }
     
-    /// Get WsHub reference (if enabled)
-    pub fn ws_hub(&self) -> Option<&Arc<crate::webserver::ws::WsHub>> {
-        self.ws_hub.as_ref()
+    /// Get WsHub reference
+    pub fn ws_hub(&self) -> &Arc<crate::webserver::ws::WsHub> {
+        &self.ws_hub
     }
 
-    /// Get current WebSocket connection count
+    /// Get current WebSocket connection count (from hub)
     pub async fn ws_connection_count(&self) -> usize {
-        *self.ws_connections.read().await
-    }
-
-    /// Increment WebSocket connection count
-    pub async fn increment_ws_connections(&self) {
-        let mut count = self.ws_connections.write().await;
-        *count += 1;
-    }
-
-    /// Decrement WebSocket connection count
-    pub async fn decrement_ws_connections(&self) {
-        let mut count = self.ws_connections.write().await;
-        if *count > 0 {
-            *count -= 1;
-        }
+        self.ws_hub.active_connections().await
     }
 
     /// Get server uptime in seconds
@@ -151,7 +123,7 @@ pub struct ServiceDetails {
     pub enabled: bool,
 }
 
-// Global state accessor (for status_broadcast)
+// Global state accessor
 static GLOBAL_APP_STATE: once_cell::sync::OnceCell<Arc<AppState>> =
     once_cell::sync::OnceCell::new();
 
@@ -160,11 +132,7 @@ pub fn set_global_app_state(state: Arc<AppState>) {
     GLOBAL_APP_STATE.set(state).ok();
 }
 
-/// Get WebSocket connection count (global accessor)
-pub async fn get_ws_connection_count() -> usize {
-    if let Some(state) = GLOBAL_APP_STATE.get() {
-        state.ws_connection_count().await
-    } else {
-        0
-    }
+/// Get global app state
+pub async fn get_app_state() -> Option<Arc<AppState>> {
+    GLOBAL_APP_STATE.get().cloned()
 }

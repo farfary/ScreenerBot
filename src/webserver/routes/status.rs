@@ -38,7 +38,7 @@ pub struct SystemStatusResponse {
     pub metrics: SystemMetricsResponse,
     pub trading_enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub rpc_stats: Option<crate::webserver::status_broadcast::RpcStatsSnapshot>,
+    pub rpc_stats: Option<crate::webserver::ws::RpcStatsSnapshot>,
 }
 
 /// Service readiness status
@@ -141,7 +141,7 @@ async fn system_status(State(state): State<Arc<AppState>>) -> Response {
             .signed_duration_since(stats.startup_time)
             .num_seconds();
 
-        crate::webserver::status_broadcast::RpcStatsSnapshot {
+        crate::webserver::ws::RpcStatsSnapshot {
             total_calls: stats.total_calls(),
             total_errors: stats.total_errors(),
             success_rate: stats.success_rate(),
