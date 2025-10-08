@@ -288,6 +288,19 @@ window.Router = {
         pageName
       );
 
+      switch (pageName) {
+        case "status":
+          if (typeof ensureStatusSubTabsVisible === "function") {
+            ensureStatusSubTabsVisible();
+          }
+          break;
+        case "tokens":
+          if (typeof ensureTokensPageReady === "function") {
+            ensureTokensPageReady();
+          }
+          break;
+      }
+
       // Still activate WebSocket subscriptions for this page
       if (window.Realtime && typeof Realtime.activate === "function") {
         Realtime.activate(pageName);
@@ -397,14 +410,23 @@ function cleanupTabContainers() {
 
   // Only hide if not on a page that explicitly shows them
   // Pages can call initPageSubTabs() to show and populate them
-  const currentPath = window.location.pathname;
-  const pagesWithSubTabs = ["/tokens"]; // Add more as needed
+  const activePage =
+    (window.Router && Router.currentPage) ||
+    (window.location.pathname === "/"
+      ? "home"
+      : window.location.pathname.substring(1));
 
-  if (!pagesWithSubTabs.includes(currentPath)) {
+  const pagesWithSubTabs = ["tokens", "status"]; // Add more as needed
+  const pagesWithToolbar = ["tokens"];
+
+  if (!pagesWithSubTabs.includes(activePage)) {
     if (subTabsContainer) {
       subTabsContainer.style.display = "none";
       subTabsContainer.innerHTML = "";
     }
+  }
+
+  if (!pagesWithToolbar.includes(activePage)) {
     if (toolbarContainer) {
       toolbarContainer.style.display = "none";
       toolbarContainer.innerHTML = "";

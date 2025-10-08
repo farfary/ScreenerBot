@@ -48,8 +48,7 @@
   window.initTokensPage = function () {
     console.log("[Tokens] Initializing page");
     hydrateTokensState();
-    initTokensSubTabs();
-    initTokensToolbar();
+    ensureTokensPageReady({ updateStatus: false });
     setupSortableHeaders();
     attachGlobalListeners();
     setTokenCountStatus("⏳ Waiting for realtime snapshot...");
@@ -588,6 +587,35 @@
     subTabsContainer.style.display = "flex";
   }
 
+  function ensureTokensSubTabsVisible() {
+    const subTabsContainer = document.getElementById("subTabsContainer");
+    if (!subTabsContainer) return;
+
+    const needsInit = subTabsContainer.children.length === 0;
+    const computed =
+      typeof window.getComputedStyle === "function"
+        ? window.getComputedStyle(subTabsContainer)
+        : null;
+    const hidden =
+      (computed && computed.display === "none") ||
+      subTabsContainer.style.display === "none";
+
+    if (needsInit) {
+      initTokensSubTabs();
+    } else {
+      subTabsContainer.querySelectorAll(".sub-tab").forEach((button) => {
+        button.classList.toggle(
+          "active",
+          button.dataset.view === tokensState.view
+        );
+      });
+    }
+
+    if (hidden) {
+      subTabsContainer.style.display = "flex";
+    }
+  }
+
   function switchTokensSubTab(view) {
     if (!view || tokensState.view === view) return;
 
@@ -600,6 +628,63 @@
 
     requestTokensSnapshot(`Switching to ${view} view...`);
   }
+
+  function ensureTokensToolbarVisible(options = {}) {
+    const { updateStatus = true } = options;
+    const toolbarContainer = document.getElementById("toolbarContainer");
+    if (!toolbarContainer) return;
+
+    const needsInit = toolbarContainer.children.length === 0;
+    const computed =
+      typeof window.getComputedStyle === "function"
+        ? window.getComputedStyle(toolbarContainer)
+        : null;
+    const hidden =
+      (computed && computed.display === "none") ||
+      toolbarContainer.style.display === "none";
+
+    if (needsInit) {
+      initTokensToolbar();
+    } else {
+      const searchInput = toolbarContainer.querySelector("#searchInput");
+      if (searchInput) {
+        searchInput.value = tokensState.searchTerm;
+      }
+    }
+
+    if (hidden) {
+      toolbarContainer.style.display = "flex";
+    }
+
+    if (!updateStatus) {
+      return;
+    }
+
+    let statusMessage = null;
+    if (tokensSnapshotState.inProgress && tokensSnapshotState.message) {
+      statusMessage = tokensSnapshotState.message;
+    } else {
+      const totalAvailable = Number(tokensSnapshotState.totalAvailable) || 0;
+      const total = totalAvailable || allTokensData.length;
+      if (total > 0) {
+        const viewLabel = VIEW_LABELS[tokensState.view] || "";
+        statusMessage = viewLabel
+          ? `${total} tokens ${viewLabel}`
+          : `${total} tokens`;
+      }
+    }
+
+    if (statusMessage) {
+      setTokenCountStatus(statusMessage);
+    }
+  }
+
+  function ensureTokensPageReady(options = {}) {
+    ensureTokensSubTabsVisible();
+    ensureTokensToolbarVisible(options);
+  }
+
+  window.ensureTokensPageReady = ensureTokensPageReady;
 
   function initTokensToolbar() {
     const toolbarContainer = document.getElementById("toolbarContainer");
