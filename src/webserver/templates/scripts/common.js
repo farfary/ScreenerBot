@@ -76,6 +76,29 @@
                 }
                 return timeoutId;
             },
+
+            removeCachedPageElements(mainContent) {
+                if (!mainContent) {
+                    return;
+                }
+
+                Object.values(this.pageCache).forEach((el) => {
+                    if (el && el.parentElement === mainContent) {
+                        mainContent.removeChild(el);
+                        el.style.display = 'none';
+                    }
+                });
+            },
+
+            displayPageElement(mainContent, pageEl) {
+                if (!mainContent || !pageEl) {
+                    return;
+                }
+
+                this.removeCachedPageElements(mainContent);
+                pageEl.style.display = '';
+                mainContent.appendChild(pageEl);
+            },
             
             async loadPage(pageName) {
                 console.log('[Router] Loading page:', pageName);
@@ -109,17 +132,14 @@
                     // Page is cached - just swap visibility
                     console.log('[Router] Using cached page:', pageName);
                     
-                    // Hide all pages
-                    Object.values(this.pageCache).forEach(el => {
-                        el.style.display = 'none';
-                    });
-                    
-                    // Show target page
-                    pageEl.style.display = 'block';
-                    
+                    this.displayPageElement(mainContent, pageEl);
+
+                    // Initialize page-specific scripts (ensures realtime activation)
+                    this.initPageScripts(pageName);
+
                     // Clean up sub-tabs and toolbar for pages that don't use them
                     cleanupTabContainers();
-                    
+
                     // Update browser history only if path actually changed
                     const targetUrl = pageName === 'home' ? '/' : `/${pageName}`;
                     if (window.location.pathname !== targetUrl) {
@@ -135,6 +155,7 @@
 
                 // Page not cached - fetch and create
                 mainContent.setAttribute('data-loading', 'true');
+                this.removeCachedPageElements(mainContent);
                 
                 // Show loading indicator in a temporary container
                 const loadingEl = document.createElement('div');
@@ -169,8 +190,8 @@
                     // Remove loading indicator
                     loadingEl.remove();
                     
-                    // Add to DOM
-                    mainContent.appendChild(pageEl);
+                    // Add to DOM, removing other cached pages from the container
+                    this.displayPageElement(mainContent, pageEl);
                     
                     // Execute embedded scripts
                     this.executeEmbeddedScripts(pageEl);
@@ -305,6 +326,31 @@
             const currentPath = window.location.pathname;
             const initialPage = currentPath === '/' ? 'home' : currentPath.substring(1);
             Router.currentPage = initialPage;
+
+            const mainContent = document.querySelector('main');
+            if (mainContent) {
+                let initialContainer = mainContent.querySelector('.page-container');
+
+                if (!initialContainer) {
+                    initialContainer = document.createElement('div');
+                    initialContainer.className = 'page-container';
+                    initialContainer.id = `page-${initialPage}`;
+                    initialContainer.setAttribute('data-page', initialPage);
+
+                    while (mainContent.firstChild) {
+                        initialContainer.appendChild(mainContent.firstChild);
+                    }
+
+                    mainContent.appendChild(initialContainer);
+                }
+
+                Router.pageCache[initialPage] = initialContainer;
+                Router.initializedPages[initialPage] = true;
+
+                if (typeof Router.initPageScripts === 'function') {
+                    Router.initPageScripts(initialPage);
+                }
+            }
             
             // Intercept all navigation link clicks
             document.addEventListener('click', (e) => {

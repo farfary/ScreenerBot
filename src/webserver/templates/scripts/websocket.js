@@ -436,6 +436,7 @@
         pendingFilterUpdate: false,
         lastSentFilters: null,
         pendingTopics: null,
+        pausedAliases: new Set(),
 
         ensureHubInitialized() {
             if (!hasWsHub()) {
@@ -725,14 +726,22 @@
                 this.pendingFilterUpdate = false;
                 this.pendingTopics = null;
                 this.snapshotRequestAliases.clear();
-                return;
+            } else {
+                const aliases = Array.from(this.getActiveAliases());
+                if (aliases.length > 0) {
+                    this.requestSnapshotForAliases(aliases);
+                } else if (this.lastSentFilters) {
+                    global.WsHub.sendSetFilters(this.lastSentFilters);
+                }
             }
 
-            const aliases = Array.from(this.getActiveAliases());
-            if (aliases.length > 0) {
-                this.requestSnapshotForAliases(aliases);
-            } else if (this.lastSentFilters) {
-                global.WsHub.sendSetFilters(this.lastSentFilters);
+            if (this.pausedAliases.size > 0) {
+                const topics = Array.from(this.pausedAliases)
+                    .map((alias) => resolveTopicFromAlias(alias))
+                    .filter(Boolean);
+                if (topics.length > 0) {
+                    global.WsHub.send({ type: "pause", topics });
+                }
             }
         },
 
@@ -745,6 +754,60 @@
 
         onHubAck() {
             // Reserved for future protocol negotiation
+        },
+
+        isAliasPaused(alias) {
+            if (!alias) {
+                return false;
+            }
+            return this.pausedAliases.has(alias);
+        },
+
+        setAliasPaused(alias, paused) {
+            if (!alias) {
+                return false;
+            }
+
+            const topic = resolveTopicFromAlias(alias);
+            if (!topic) {
+                console.warn("[Realtime] Unknown topic alias for pause:", alias);
+                return false;
+            }
+
+            if (paused) {
+                this.pausedAliases.add(alias);
+            } else {
+                this.pausedAliases.delete(alias);
+            }
+
+            if (!hasWsHub()) {
+                return true;
+            }
+
+            const payload = {
+                type: paused ? "pause" : "resume",
+                topics: [topic],
+            };
+
+            if (global.WsHub.isConnected()) {
+                global.WsHub.send(payload);
+            }
+
+            return true;
+        },
+
+        isEventsPaused(alias) {
+            if (typeof alias !== "string") {
+                return this.isAliasPaused("events");
+            }
+            return this.isAliasPaused(alias);
+        },
+
+        setEventsPaused(aliasOrPaused, maybePaused) {
+            if (typeof maybePaused === "undefined") {
+                return this.setAliasPaused("events", Boolean(aliasOrPaused));
+            }
+            return this.setAliasPaused(aliasOrPaused, Boolean(maybePaused));
         },
     };
 

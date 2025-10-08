@@ -1,278 +1,304 @@
-
-    <div class="grid">
-        <!-- Trading Overview Card -->
-        <div class="card">
-            <div class="card-header">
-                <span class="card-icon">�</span>
-                <span class="card-title">Trading Overview</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Open Positions</span>
-                <span class="metric-value loading-text" id="openPositions">--</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Total Invested</span>
-                <span class="metric-value loading-text" id="totalInvested">--</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Total P&L</span>
-                <span class="metric-value loading-text" id="totalPnl">--</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Win Rate</span>
-                <span class="metric-value loading-text" id="winRate">--</span>
-            </div>
-        </div>
-        
-        <!-- Wallet Status Card -->
-        <div class="card">
-            <div class="card-header">
-                <span class="card-icon">�</span>
-                <span class="card-title">Wallet Status</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">SOL Balance</span>
-                <span class="metric-value loading-text" id="solBalance">--</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Token Holdings</span>
-                <span class="metric-value loading-text" id="tokenCount">--</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Last Updated</span>
-                <span class="metric-value loading-text" id="walletUpdated">--</span>
-            </div>
-        </div>
-        
-        <!-- System Health Card -->
-        <div class="card">
-            <div class="card-header">
-                <span class="card-icon">⚙️</span>
-                <span class="card-title">System Health</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Services</span>
-                <span class="metric-value loading-text" id="servicesStatus">--</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">RPC Calls/sec</span>
-                <span class="metric-value loading-text" id="rpcRate">--</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">CPU (System)</span>
-                <span class="metric-value loading-text" id="homeCpu">--</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Memory (Sys)</span>
-                <span class="metric-value loading-text" id="homeMem">--</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Uptime</span>
-                <span class="metric-value loading-text" id="systemUptime">--</span>
-            </div>
-        </div>
-        
-        <!-- Performance Summary Card -->
-        <div class="card">
-            <div class="card-header">
-                <span class="card-icon">📊</span>
-                <span class="card-title">All-Time Performance</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Total Positions</span>
-                <span class="metric-value loading-text" id="totalPositions">--</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Closed Positions</span>
-                <span class="metric-value loading-text" id="closedPositions">--</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">All-Time P&L</span>
-                <span class="metric-value loading-text" id="allTimePnl">--</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Overall Win Rate</span>
-                <span class="metric-value loading-text" id="overallWinRate">--</span>
-            </div>
-        </div>
-        
-        <!-- Monitoring Status Card -->
-        <div class="card">
-            <div class="card-header">
-                <span class="card-icon">�</span>
-                <span class="card-title">Monitoring</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Tokens Tracked</span>
-                <span class="metric-value loading-text" id="tokensTracked">--</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Blacklisted</span>
-                <span class="metric-value loading-text" id="blacklisted">--</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Entry Check</span>
-                <span class="metric-value loading-text" id="entryInterval">--</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Position Check</span>
-                <span class="metric-value loading-text" id="positionInterval">--</span>
-            </div>
-        </div>
-        
-        <!-- Trading Config Card -->
-        <div class="card">
-            <div class="card-header">
-                <span class="card-icon">⚡</span>
-                <span class="card-title">Trading Config</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Max Positions</span>
-                <span class="metric-value loading-text" id="maxPositions">--</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Trade Size</span>
-                <span class="metric-value loading-text" id="tradeSize">--</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Stop Loss</span>
-                <span class="metric-value loading-text" id="stopLoss">--</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Min Profit</span>
-                <span class="metric-value loading-text" id="minProfit">--</span>
-            </div>
-        </div>
+<div class="grid">
+  <!-- Trading Overview Card -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-icon">�</span>
+      <span class="card-title">Trading Overview</span>
     </div>
-    
-    <script>
-        async function loadHomeData() {
-            const sentinel = document.getElementById('openPositions');
-            if (!sentinel) {
-                return;
-            }
+    <div class="metric-row">
+      <span class="metric-label">Open Positions</span>
+      <span class="metric-value loading-text" id="openPositions">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Total Invested</span>
+      <span class="metric-value loading-text" id="totalInvested">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Total P&L</span>
+      <span class="metric-value loading-text" id="totalPnl">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Win Rate</span>
+      <span class="metric-value loading-text" id="winRate">--</span>
+    </div>
+  </div>
 
-            const getMetric = (id) => document.getElementById(id);
-            const setMetric = (id, value) => {
-                const el = getMetric(id);
-                if (!el) {
-                    return null;
-                }
-                el.textContent = value;
-                el.classList.remove('loading-text');
-                return el;
-            };
+  <!-- Wallet Status Card -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-icon">�</span>
+      <span class="card-title">Wallet Status</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">SOL Balance</span>
+      <span class="metric-value loading-text" id="solBalance">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Token Holdings</span>
+      <span class="metric-value loading-text" id="tokenCount">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Last Updated</span>
+      <span class="metric-value loading-text" id="walletUpdated">--</span>
+    </div>
+  </div>
 
-            try {
-                const res = await fetch('/api/dashboard/overview');
-                const data = await res.json();
+  <!-- System Health Card -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-icon">⚙️</span>
+      <span class="card-title">System Health</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Services</span>
+      <span class="metric-value loading-text" id="servicesStatus">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">RPC Calls/sec</span>
+      <span class="metric-value loading-text" id="rpcRate">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">CPU (System)</span>
+      <span class="metric-value loading-text" id="homeCpu">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Memory (Sys)</span>
+      <span class="metric-value loading-text" id="homeMem">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Uptime</span>
+      <span class="metric-value loading-text" id="systemUptime">--</span>
+    </div>
+  </div>
 
-                // Trading Overview
-                const openPos = data.positions.open_positions;
-                const interimMaxPos = 2; // Placeholder until config fetch completes
-                const openPositionsEl = setMetric('openPositions', `${openPos}/${interimMaxPos}`);
+  <!-- Performance Summary Card -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-icon">📊</span>
+      <span class="card-title">All-Time Performance</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Total Positions</span>
+      <span class="metric-value loading-text" id="totalPositions">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Closed Positions</span>
+      <span class="metric-value loading-text" id="closedPositions">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">All-Time P&L</span>
+      <span class="metric-value loading-text" id="allTimePnl">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Overall Win Rate</span>
+      <span class="metric-value loading-text" id="overallWinRate">--</span>
+    </div>
+  </div>
 
-                setMetric('totalInvested', `${data.positions.total_invested_sol.toFixed(4)} SOL`);
+  <!-- Monitoring Status Card -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-icon">�</span>
+      <span class="card-title">Monitoring</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Tokens Tracked</span>
+      <span class="metric-value loading-text" id="tokensTracked">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Blacklisted</span>
+      <span class="metric-value loading-text" id="blacklisted">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Entry Check</span>
+      <span class="metric-value loading-text" id="entryInterval">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Position Check</span>
+      <span class="metric-value loading-text" id="positionInterval">--</span>
+    </div>
+  </div>
 
-                const pnl = data.positions.total_pnl;
-                const pnlEl = setMetric('totalPnl', `${pnl >= 0 ? '+' : ''}${pnl.toFixed(4)} SOL`);
-                if (pnlEl) {
-                    pnlEl.style.color = pnl >= 0 ? '#00ff00' : '#ff4444';
-                }
+  <!-- Trading Config Card -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-icon">⚡</span>
+      <span class="card-title">Trading Config</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Max Positions</span>
+      <span class="metric-value loading-text" id="maxPositions">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Trade Size</span>
+      <span class="metric-value loading-text" id="tradeSize">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Stop Loss</span>
+      <span class="metric-value loading-text" id="stopLoss">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Min Profit</span>
+      <span class="metric-value loading-text" id="minProfit">--</span>
+    </div>
+  </div>
+</div>
 
-                setMetric('winRate', `${data.positions.win_rate.toFixed(1)}%`);
+<script>
+  async function loadHomeData() {
+    const sentinel = document.getElementById("openPositions");
+    if (!sentinel) {
+      return;
+    }
 
-                // Wallet Status
-                setMetric('solBalance', `${data.wallet.sol_balance.toFixed(4)} SOL`);
-                setMetric('tokenCount', `${data.wallet.total_tokens_count} tokens`);
+    const getMetric = (id) => document.getElementById(id);
+    const setMetric = (id, value) => {
+      const el = getMetric(id);
+      if (!el) {
+        return null;
+      }
+      el.textContent = value;
+      el.classList.remove("loading-text");
+      return el;
+    };
 
-                const walletTime = data.wallet.last_updated ? new Date(data.wallet.last_updated).toLocaleTimeString() : 'N/A';
-                setMetric('walletUpdated', walletTime);
+    try {
+      const res = await fetch("/api/dashboard/overview");
+      const data = await res.json();
 
-                // System Health
-                const allReady = data.system.all_services_ready;
-                const servicesEl = setMetric('servicesStatus', allReady ? '●●●●● All Ready' : '○ Starting...');
-                if (servicesEl) {
-                    servicesEl.style.color = allReady ? '#00ff00' : '#ffaa00';
-                }
+      // Trading Overview
+      const openPos = data.positions.open_positions;
+      const interimMaxPos = 2; // Placeholder until config fetch completes
+      const openPositionsEl = setMetric(
+        "openPositions",
+        `${openPos}/${interimMaxPos}`
+      );
 
-                setMetric('rpcRate', `${data.rpc.calls_per_second.toFixed(1)}/sec`);
+      setMetric(
+        "totalInvested",
+        `${data.positions.total_invested_sol.toFixed(4)} SOL`
+      );
 
-                const cpuEl = getMetric('homeCpu');
-                const memEl = getMetric('homeMem');
+      const pnl = data.positions.total_pnl;
+      const pnlEl = setMetric(
+        "totalPnl",
+        `${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} SOL`
+      );
+      if (pnlEl) {
+        pnlEl.style.color = pnl >= 0 ? "#00ff00" : "#ff4444";
+      }
 
-                // Fetch detailed system metrics for CPU/memory
-                try {
-                    const mres = await fetch('/api/status/metrics');
-                    const m = await mres.json();
-                    if (cpuEl) {
-                        cpuEl.textContent = `${m.cpu_system_percent.toFixed(1)}%`;
-                        cpuEl.classList.remove('loading-text');
-                    }
-                    if (memEl) {
-                        memEl.textContent = `${m.system_memory_used_mb} / ${m.system_memory_total_mb} MB`;
-                        memEl.classList.remove('loading-text');
-                    }
-                } catch (e) {
-                    // fallback: use simplified fields from overview
-                    if (cpuEl) {
-                        cpuEl.textContent = `${data.system.cpu_percent.toFixed(1)}%`;
-                        cpuEl.classList.remove('loading-text');
-                    }
-                    if (memEl) {
-                        memEl.textContent = `${data.system.memory_mb.toFixed(0)} MB`;
-                        memEl.classList.remove('loading-text');
-                    }
-                }
+      setMetric("winRate", `${data.positions.win_rate.toFixed(1)}%`);
 
-                setMetric('systemUptime', data.system.uptime_formatted);
+      // Wallet Status
+      setMetric("solBalance", `${data.wallet.sol_balance.toFixed(4)} SOL`);
+      setMetric("tokenCount", `${data.wallet.total_tokens_count} tokens`);
 
-                // Performance Summary
-                setMetric('totalPositions', data.positions.total_positions);
-                setMetric('closedPositions', data.positions.closed_positions);
+      const walletTime = data.wallet.last_updated
+        ? new Date(data.wallet.last_updated).toLocaleTimeString()
+        : "N/A";
+      setMetric("walletUpdated", walletTime);
 
-                const allTimePnl = data.positions.total_pnl;
-                const allTimePnlEl = setMetric('allTimePnl', `${allTimePnl >= 0 ? '+' : ''}${allTimePnl.toFixed(4)} SOL`);
-                if (allTimePnlEl) {
-                    allTimePnlEl.style.color = allTimePnl >= 0 ? '#00ff00' : '#ff4444';
-                }
+      // System Health
+      const allReady = data.system.all_services_ready;
+      const servicesEl = setMetric(
+        "servicesStatus",
+        allReady ? "●●●●● All Ready" : "○ Starting..."
+      );
+      if (servicesEl) {
+        servicesEl.style.color = allReady ? "#00ff00" : "#ffaa00";
+      }
 
-                setMetric('overallWinRate', `${data.positions.win_rate.toFixed(1)}%`);
+      setMetric("rpcRate", `${data.rpc.calls_per_second.toFixed(1)}/sec`);
 
-                // Monitoring
-                setMetric('tokensTracked', data.monitoring.tokens_tracked);
-                setMetric('blacklisted', data.blacklist.total_blacklisted);
-                setMetric('entryInterval', `Every ${data.monitoring.entry_check_interval_secs}s`);
-                setMetric('positionInterval', `Every ${data.monitoring.position_monitor_interval_secs}s`);
+      const cpuEl = getMetric("homeCpu");
+      const memEl = getMetric("homeMem");
 
-                // Load trading config
-                try {
-                    const configRes = await fetch('/api/trading/config');
-                    const config = await configRes.json();
-
-                    const maxPositionsEl = setMetric('maxPositions', config.trading_limits.max_open_positions);
-                    setMetric('tradeSize', `${config.trading_limits.trade_size_sol} SOL`);
-                    setMetric('stopLoss', `${config.risk_management.stop_loss_percent}%`);
-                    setMetric('minProfit', `${config.profit_targets.base_min_profit_percent}%`);
-
-                    if (maxPositionsEl && openPositionsEl) {
-                        openPositionsEl.textContent = `${openPos}/${config.trading_limits.max_open_positions}`;
-                    }
-                } catch (configError) {
-                    console.warn('Failed to load trading config:', configError);
-                }
-
-            } catch (error) {
-                console.error('Failed to load home data:', error);
-            }
+      // Fetch detailed system metrics for CPU/memory
+      try {
+        const mres = await fetch("/api/status/metrics");
+        const m = await mres.json();
+        if (cpuEl) {
+          cpuEl.textContent = `${m.cpu_system_percent.toFixed(1)}%`;
+          cpuEl.classList.remove("loading-text");
         }
-        
-        loadHomeData();
-        const homeDataInterval = setInterval(loadHomeData, 1000);
-        if (window.Router && typeof Router.registerCleanup === 'function') {
-            Router.registerCleanup(() => {
-                clearInterval(homeDataInterval);
-            });
+        if (memEl) {
+          memEl.textContent = `${m.system_memory_used_mb} / ${m.system_memory_total_mb} MB`;
+          memEl.classList.remove("loading-text");
         }
-    </script>
-    
+      } catch (e) {
+        // fallback: use simplified fields from overview
+        if (cpuEl) {
+          cpuEl.textContent = `${data.system.cpu_percent.toFixed(1)}%`;
+          cpuEl.classList.remove("loading-text");
+        }
+        if (memEl) {
+          memEl.textContent = `${data.system.memory_mb.toFixed(0)} MB`;
+          memEl.classList.remove("loading-text");
+        }
+      }
+
+      setMetric("systemUptime", data.system.uptime_formatted);
+
+      // Performance Summary
+      setMetric("totalPositions", data.positions.total_positions);
+      setMetric("closedPositions", data.positions.closed_positions);
+
+      const allTimePnl = data.positions.total_pnl;
+      const allTimePnlEl = setMetric(
+        "allTimePnl",
+        `${allTimePnl >= 0 ? "+" : ""}${allTimePnl.toFixed(4)} SOL`
+      );
+      if (allTimePnlEl) {
+        allTimePnlEl.style.color = allTimePnl >= 0 ? "#00ff00" : "#ff4444";
+      }
+
+      setMetric("overallWinRate", `${data.positions.win_rate.toFixed(1)}%`);
+
+      // Monitoring
+      setMetric("tokensTracked", data.monitoring.tokens_tracked);
+      setMetric("blacklisted", data.blacklist.total_blacklisted);
+      setMetric(
+        "entryInterval",
+        `Every ${data.monitoring.entry_check_interval_secs}s`
+      );
+      setMetric(
+        "positionInterval",
+        `Every ${data.monitoring.position_monitor_interval_secs}s`
+      );
+
+      // Load trading config
+      try {
+        const configRes = await fetch("/api/trading/config");
+        const config = await configRes.json();
+
+        const maxPositionsEl = setMetric(
+          "maxPositions",
+          config.trading_limits.max_open_positions
+        );
+        setMetric("tradeSize", `${config.trading_limits.trade_size_sol} SOL`);
+        setMetric("stopLoss", `${config.risk_management.stop_loss_percent}%`);
+        setMetric(
+          "minProfit",
+          `${config.profit_targets.base_min_profit_percent}%`
+        );
+
+        if (maxPositionsEl && openPositionsEl) {
+          openPositionsEl.textContent = `${openPos}/${config.trading_limits.max_open_positions}`;
+        }
+      } catch (configError) {
+        console.warn("Failed to load trading config:", configError);
+      }
+    } catch (error) {
+      console.error("Failed to load home data:", error);
+    }
+  }
+
+  loadHomeData();
+  const homeDataInterval = setInterval(loadHomeData, 1000);
+  if (window.Router && typeof Router.registerCleanup === "function") {
+    Router.registerCleanup(() => {
+      clearInterval(homeDataInterval);
+    });
+  }
+</script>

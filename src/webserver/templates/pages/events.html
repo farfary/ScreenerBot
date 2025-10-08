@@ -57,6 +57,7 @@
       style="color: var(--text-secondary); font-size: 0.9em"
       >Loading...</span
     >
+    <button id="toggleEventsPause" class="btn">⏸️ Pause</button>
     <button id="refreshEvents" class="btn btn-primary">🔄 Refresh</button>
   </div>
   <style>
@@ -243,13 +244,116 @@ Loading...</pre
   var maxEventId = 0;
   var connectionStatus = "connecting"; // 'connecting', 'connected', 'disconnected', 'error'
   var eventsStore = window.eventsStore || new Map();
-  var EVENT_MAX_RECORDS = 1000;
+  var EVENT_MAX_RECORDS = 100;
   var searchDebounceHandle = null;
   var snapshotState = {
     inProgress: false,
     expected: 0,
     received: 0,
   };
+  var eventsPauseState = {
+    paused: false,
+    pending: false,
+  };
+
+  function isEventsPaused() {
+    return eventsPauseState.paused;
+  }
+
+  function updatePauseButtonUI() {
+    const btn = document.getElementById("toggleEventsPause");
+    if (!btn) return;
+    const { paused, pending } = eventsPauseState;
+    btn.disabled = pending;
+    btn.classList.remove("btn-secondary");
+
+    if (pending) {
+      btn.textContent = paused ? "⏳ Resuming..." : "⏳ Pausing...";
+      return;
+    }
+
+    if (paused) {
+      btn.textContent = "▶️ Resume";
+      btn.classList.add("btn-secondary");
+    } else {
+      btn.textContent = "⏸️ Pause";
+    }
+  }
+
+  function applyEventsPauseState(targetPaused, options) {
+    const opts = Object.assign(
+      {
+        sendCommand: true,
+        refreshSnapshot: !targetPaused,
+        silent: false,
+        force: false,
+        message: null,
+      },
+      options || {}
+    );
+
+    if (eventsPauseState.pending) {
+      return false;
+    }
+
+    if (!opts.force && eventsPauseState.paused === targetPaused) {
+      if (opts.message) {
+        const statusKey = targetPaused ? "paused" : "connected";
+        updateConnectionStatus(statusKey, opts.message);
+      }
+      return true;
+    }
+
+    if (opts.sendCommand) {
+      const realtime = window.Realtime;
+      if (!realtime || typeof realtime.setEventsPaused !== "function") {
+        if (!opts.silent) {
+          Utils.showToast("⚠️ Realtime controller unavailable", "warn");
+        }
+        return false;
+      }
+
+      eventsPauseState.pending = true;
+      updatePauseButtonUI();
+
+      const success = realtime.setEventsPaused("events", targetPaused);
+      if (!success) {
+        eventsPauseState.pending = false;
+        updatePauseButtonUI();
+        if (!opts.silent) {
+          Utils.showToast("⚠️ Failed to update realtime pause state", "warn");
+        }
+        return false;
+      }
+
+      eventsPauseState.pending = false;
+    }
+
+    eventsPauseState.paused = targetPaused;
+    AppState.save("events_paused", targetPaused ? "1" : "");
+    updatePauseButtonUI();
+
+    const statusMessage =
+      opts.message ||
+      (targetPaused
+        ? `Paused • ${formatEventCountLabel(allEventsData.length)}`
+        : `Realtime • ${formatEventCountLabel(allEventsData.length)}`);
+
+    if (targetPaused) {
+      updateConnectionStatus("paused", statusMessage);
+      if (opts.refreshSnapshot) {
+        requestEventsSnapshot(
+          opts.message || "Refreshing events while paused..."
+        );
+      }
+    } else if (opts.refreshSnapshot !== false) {
+      requestEventsSnapshot(opts.message || "Resuming events...");
+    } else {
+      updateConnectionStatus("connected", statusMessage);
+    }
+
+    return true;
+  }
 
   // Update connection status indicator
   function updateConnectionStatus(status, message) {
@@ -261,18 +365,21 @@ Loading...</pre
       connected: "var(--badge-online)",
       disconnected: "var(--badge-loading)",
       error: "var(--badge-error)",
+      paused: "var(--badge-loading)",
     };
     const icons = {
       connecting: "⏳",
       connected: "✅",
       disconnected: "⚠️",
       error: "❌",
+      paused: "⏸️",
     };
     const defaults = {
       connecting: "Connecting…",
       connected: "Connected",
       disconnected: "Disconnected",
       error: "Error",
+      paused: "Paused",
     };
     const icon = icons[status] || "ℹ️";
     const text = message || defaults[status] || "Status unavailable";
@@ -288,9 +395,13 @@ Loading...</pre
   }
 
   function requestEventsSnapshot(message) {
-    if (message) {
-      updateConnectionStatus("connecting", message);
-    }
+    const statusKey = isEventsPaused() ? "paused" : "connecting";
+    const statusMessage =
+      message ||
+      (isEventsPaused()
+        ? "Paused snapshot requested..."
+        : "Requesting snapshot...");
+    updateConnectionStatus(statusKey, statusMessage);
 
     snapshotState.inProgress = true;
     snapshotState.expected = 0;
@@ -307,13 +418,36 @@ Loading...</pre
 
   function normalizeEvent(raw) {
     if (!raw || typeof raw !== "object") return null;
-    const severity = (raw.severity || "").toLowerCase();
-    const message = raw.message ?? "No message";
+    const payload =
+      raw.payload && typeof raw.payload === "object" ? raw.payload : {};
+    const severity =
+      typeof raw.severity === "string" ? raw.severity.toLowerCase() : "";
+    const categoryRaw = typeof raw.category === "string" ? raw.category : "";
+    const category = categoryRaw.toLowerCase();
+    const categoryLabel = categoryRaw
+      ? categoryRaw.charAt(0).toUpperCase() + categoryRaw.slice(1)
+      : category
+      ? category.charAt(0).toUpperCase() + category.slice(1)
+      : "Unknown";
+    const payloadMessage =
+      typeof payload.message === "string" && payload.message.trim() !== ""
+        ? payload.message
+        : typeof payload.message_short === "string" &&
+          payload.message_short.trim() !== ""
+        ? payload.message_short
+        : null;
+    const rawMessage =
+      typeof raw.message === "string" && raw.message.trim() !== ""
+        ? raw.message
+        : null;
+    const message = rawMessage || payloadMessage || "No message";
     return {
       ...raw,
+      category,
+      categoryLabel,
       severity,
       message,
-      payload: raw.payload ?? null,
+      payload,
     };
   }
 
@@ -419,6 +553,8 @@ Loading...</pre
         ? "⚠️ Error loading events. Please check server status."
         : connectionStatus === "connecting"
         ? "🔄 Connecting to server..."
+        : connectionStatus === "paused"
+        ? "⏸️ Events paused. Resume to receive new activity."
         : connectionStatus === "disconnected"
         ? "📴 Realtime connection lost. Waiting to resync..."
         : "📋 No events found. Events will appear here as they occur.";
@@ -457,9 +593,11 @@ Loading...</pre
         return `
                     <tr style="border-bottom: 1px solid var(--border-color);">
                         <td style="padding: 10px; white-space: nowrap;">${time}</td>
-                        <td style="padding: 10px;">
-                            <span style="background: var(--badge-loading); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85em;">
-                                ${event.category}
+            <td style="padding: 10px;">
+              <span style="background: var(--badge-loading); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85em;">
+                ${Utils.escapeHtml(
+                  event.categoryLabel || event.category || "-"
+                )}
                             </span>
                         </td>
                         <td style="padding: 10px; font-size: 0.9em;">${
@@ -538,6 +676,15 @@ Loading...</pre
       requestEventsSnapshot("Refreshing events...")
     );
 
+  document.getElementById("toggleEventsPause").addEventListener("click", () => {
+    const nextPaused = !isEventsPaused();
+    applyEventsPauseState(nextPaused, {
+      message: nextPaused
+        ? `Paused • ${formatEventCountLabel(allEventsData.length)}`
+        : "Resuming events...",
+    });
+  });
+
   // Reference copy handler
   document
     .getElementById("eventsTableBody")
@@ -578,12 +725,12 @@ Loading...</pre
       return;
     }
 
-    document.getElementById("eventDetailTitle").textContent = `${(
-      eventData.category || "event"
-    ).toUpperCase()} • #${eventData.id}`;
-    document.getElementById("eventDetailCategory").textContent = (
-      eventData.category || "-"
-    ).toUpperCase();
+    const categoryLabel =
+      eventData.categoryLabel || eventData.category || "event";
+    document.getElementById(
+      "eventDetailTitle"
+    ).textContent = `${categoryLabel.toUpperCase()} • #${eventData.id}`;
+    document.getElementById("eventDetailCategory").textContent = categoryLabel;
     document.getElementById("eventDetailSeverity").textContent = (
       eventData.severity || "-"
     ).toUpperCase();
@@ -643,12 +790,18 @@ Loading...</pre
       return;
     }
 
+    const paused = isEventsPaused();
+
     const normalized = normalizeEvent(data);
     if (!normalized || typeof normalized.id !== "number") {
       return;
     }
 
     if (!matchesActiveFilters(normalized)) {
+      return;
+    }
+
+    if (paused && !snapshotState.inProgress) {
       return;
     }
 
@@ -661,9 +814,11 @@ Loading...</pre
     }
 
     if (!snapshotState.inProgress) {
+      const statusKey = paused ? "paused" : "connected";
+      const prefix = paused ? "Paused" : "Realtime";
       updateConnectionStatus(
-        "connected",
-        `Realtime • ${formatEventCountLabel(allEventsData.length)}`
+        statusKey,
+        `${prefix} • ${formatEventCountLabel(allEventsData.length)}`
       );
     }
   }
@@ -675,14 +830,21 @@ Loading...</pre
       : 0;
     snapshotState.received = 0;
     clearEventsCache();
-    updateConnectionStatus("connecting", "Receiving snapshot...");
+    const statusKey = isEventsPaused() ? "paused" : "connecting";
+    const label = isEventsPaused()
+      ? "Paused • Receiving snapshot..."
+      : "Receiving snapshot...";
+    updateConnectionStatus(statusKey, label);
   }
 
   function handleEventsSnapshotEnd() {
     snapshotState.inProgress = false;
+    const paused = isEventsPaused();
+    const statusKey = paused ? "paused" : "connected";
+    const prefix = paused ? "Paused" : "Realtime";
     updateConnectionStatus(
-      "connected",
-      `Realtime • ${formatEventCountLabel(allEventsData.length)}`
+      statusKey,
+      `${prefix} • ${formatEventCountLabel(allEventsData.length)}`
     );
     renderEvents();
   }
@@ -699,8 +861,16 @@ Loading...</pre
   }
 
   function handleEventsReconnect() {
-    updateConnectionStatus("connecting", "Reconnected, syncing events...");
-    requestEventsSnapshot("Syncing after reconnect...");
+    if (isEventsPaused()) {
+      applyEventsPauseState(true, {
+        force: true,
+        refreshSnapshot: true,
+        message: "Paused • Syncing after reconnect...",
+      });
+    } else {
+      updateConnectionStatus("connecting", "Reconnected, syncing events...");
+      requestEventsSnapshot("Syncing after reconnect...");
+    }
   }
   function restoreSavedFilters() {
     const categoryFilter = document.getElementById("categoryFilter");
@@ -723,11 +893,41 @@ Loading...</pre
     }
   }
 
+  function initializePauseState() {
+    updatePauseButtonUI();
+    const realtime = window.Realtime;
+    const realtimePaused = !!(realtime &&
+    typeof realtime.isEventsPaused === "function"
+      ? realtime.isEventsPaused("events")
+      : false);
+    const savedPaused = AppState.load("events_paused", "") === "1";
+    const shouldPause = realtimePaused || savedPaused;
+    if (shouldPause) {
+      applyEventsPauseState(true, {
+        force: true,
+        refreshSnapshot: false,
+        message: `Paused • ${formatEventCountLabel(allEventsData.length)}`,
+        silent: true,
+      });
+    } else if (eventsPauseState.paused) {
+      applyEventsPauseState(false, {
+        force: true,
+        refreshSnapshot: false,
+        silent: true,
+        message: `Realtime • ${formatEventCountLabel(allEventsData.length)}`,
+      });
+    }
+  }
+
   // Global init function for Router to call during SPA navigation
   window.initEventsPage = function () {
     console.log("[Events] Initializing page");
     restoreSavedFilters();
-    requestEventsSnapshot("Loading events...");
+    initializePauseState();
+    const message = isEventsPaused()
+      ? "Paused • Loading events..."
+      : "Loading events...";
+    requestEventsSnapshot(message);
   };
 
   window.PageRealtime = window.PageRealtime || {};
@@ -771,7 +971,11 @@ Loading...</pre
       updateConnectionStatus("disconnected", "Realtime unavailable");
     },
     onEnter() {
-      requestEventsSnapshot("Loading events...");
+      initializePauseState();
+      const message = isEventsPaused()
+        ? "Paused • Loading events..."
+        : "Loading events...";
+      requestEventsSnapshot(message);
     },
     onExit() {
       snapshotState.inProgress = false;

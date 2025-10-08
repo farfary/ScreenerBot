@@ -27,8 +27,8 @@ use super::{
     topics,
 };
 
-const EVENTS_SNAPSHOT_LIMIT: usize = 1000;
-const EVENTS_SNAPSHOT_FETCH_LIMIT: usize = EVENTS_SNAPSHOT_LIMIT;
+const EVENTS_SNAPSHOT_LIMIT: usize = 100;
+const EVENTS_SNAPSHOT_FETCH_LIMIT: usize = EVENTS_SNAPSHOT_LIMIT * 3;
 
 #[derive(Default)]
 struct ConnectionState {
