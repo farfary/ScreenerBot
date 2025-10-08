@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{TITLE}} - ScreenerBot</title>
+    <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+      /*__COMMON_STYLES__*/
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>🤖 ScreenerBot Dashboard</h1>
+      <div class="header-controls">
+        <button
+          class="control-btn trader-btn"
+          id="traderToggle"
+          aria-label="Toggle trader"
+        >
+          <span id="traderIcon">⏸️</span>
+          <span id="traderText">Stop Trader</span>
+        </button>
+        <button
+          class="control-btn reboot-btn"
+          id="rebootBtn"
+          aria-label="Reboot system"
+        >
+          <span>🔄</span>
+          <span>Reboot</span>
+        </button>
+        <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+          <span id="themeIcon">🌙</span>
+          <span id="themeText">Dark</span>
+        </button>
+        <div class="status-indicator">
+          <div style="display: flex; gap: 8px; align-items: center">
+            <span
+              id="wsBadge"
+              class="badge loading"
+              title="WebSocket Connection"
+              >🔌 WS</span
+            >
+            <span id="botBadge" class="badge loading" title="Bot Status"
+              >🤖 BOT</span
+            >
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <nav class="tabs">{{NAV_TABS}}</nav>
+
+    <!-- Sub-tabs container (populated dynamically per page) -->
+    <div id="subTabsContainer" class="sub-tabs-container" style="display: none">
+      <!-- Sub-tabs will be injected here by page-specific JavaScript -->
+    </div>
+
+    <!-- Toolbar container (for action buttons below sub-tabs) -->
+    <div id="toolbarContainer" class="toolbar-container" style="display: none">
+      <!-- Toolbar buttons will be injected here by page-specific JavaScript -->
+    </div>
+
+    <main class="content">{{CONTENT}}</main>
+
+    <!-- Debug Modal -->
+    <div
+      id="debugModal"
+      class="modal-overlay"
+      onclick="if(event.target === this) closeDebugModal()"
+    >
+      <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <span class="modal-title">🐛 Debug Information</span>
+          <button
+            class="modal-close"
+            onclick="closeDebugModal()"
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-tabs">
+            <button class="modal-tab active" onclick="switchDebugTab('token')">
+              Token Info
+            </button>
+            <button class="modal-tab" onclick="switchDebugTab('price')">
+              Price & Market
+            </button>
+            <button class="modal-tab" onclick="switchDebugTab('pool')">
+              Pool Data
+            </button>
+            <button class="modal-tab" onclick="switchDebugTab('pool-debug')">
+              Pool Debug
+            </button>
+            <button class="modal-tab" onclick="switchDebugTab('token-debug')">
+              Token Debug
+            </button>
+            <button class="modal-tab" onclick="switchDebugTab('security')">
+              Security
+            </button>
+            <button class="modal-tab" onclick="switchDebugTab('position')">
+              Position History
+            </button>
+            <button
+              class="modal-tab"
+              onclick="switchDebugTab('position-debug')"
+            >
+              Position Debug
+            </button>
+          </div>
+
+          <!-- Token Info Tab -->
+          <div id="tab-token" class="modal-tab-content active">
+            <div class="debug-section">
+              <h3 class="debug-section-title">Token Information</h3>
+              <div class="debug-row">
+                <span class="debug-label">Mint Address:</span>
+                <span class="debug-value" id="debugMintAddress"
+                  >Loading...</span
+                >
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Symbol:</span>
+                <span class="debug-value" id="tokenSymbol">Loading...</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Name:</span>
+                <span class="debug-value" id="tokenName">Loading...</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Decimals:</span>
+                <span class="debug-value" id="tokenDecimals">Loading...</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Website:</span>
+                <span class="debug-value" id="tokenWebsite">Loading...</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Verified:</span>
+                <span class="debug-value" id="tokenVerified">Loading...</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Tags:</span>
+                <span class="debug-value" id="tokenTags">Loading...</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Price & Market Tab -->
+          <div id="tab-price" class="modal-tab-content">
+            <div class="debug-section">
+              <h3 class="debug-section-title">Current Price</h3>
+              <div class="debug-row">
+                <span class="debug-label">Price (SOL):</span>
+                <span class="debug-value" id="priceSol">Loading...</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Confidence:</span>
+                <span class="debug-value" id="priceConfidence">Loading...</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Last Updated:</span>
+                <span class="debug-value" id="priceUpdated">Loading...</span>
+              </div>
+            </div>
+            <div class="debug-section">
+              <h3 class="debug-section-title">Market Data</h3>
+              <div class="debug-row">
+                <span class="debug-label">Market Cap:</span>
+                <span class="debug-value" id="marketCap">Loading...</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">FDV:</span>
+                <span class="debug-value" id="fdv">Loading...</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Liquidity:</span>
+                <span class="debug-value" id="liquidity">Loading...</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">24h Volume:</span>
+                <span class="debug-value" id="volume24h">Loading...</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pool Data Tab -->
+          <div id="tab-pool" class="modal-tab-content">
+            <div id="poolsList">
+              <p>Loading pool data...</p>
+            </div>
+          </div>
+
+          <!-- Security Tab -->
+          <div id="tab-security" class="modal-tab-content">
+            <div class="debug-section">
+              <h3 class="debug-section-title">Security Overview</h3>
+              <div class="debug-row">
+                <span class="debug-label">Security Score:</span>
+                <span class="debug-value" id="securityScore">Loading...</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Rugged:</span>
+                <span class="debug-value" id="securityRugged">Loading...</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Total Holders:</span>
+                <span class="debug-value" id="securityHolders">Loading...</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Top 10 Concentration:</span>
+                <span class="debug-value" id="securityTop10">Loading...</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Mint Authority:</span>
+                <span class="debug-value" id="securityMintAuth"
+                  >Loading...</span
+                >
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Freeze Authority:</span>
+                <span class="debug-value" id="securityFreezeAuth"
+                  >Loading...</span
+                >
+              </div>
+            </div>
+            <div class="debug-section">
+              <h3 class="debug-section-title">Risk Factors</h3>
+              <div id="securityRisks">
+                <p>Loading risks...</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Position History Tab -->
+          <div id="tab-position" class="modal-tab-content">
+            <div class="debug-section">
+              <h3 class="debug-section-title">Position Summary</h3>
+              <div class="debug-row">
+                <span class="debug-label">Open Positions:</span>
+                <span class="debug-value" id="positionOpenPositions"
+                  >Loading...</span
+                >
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Closed Positions:</span>
+                <span class="debug-value" id="positionClosedCount"
+                  >Loading...</span
+                >
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Total P&L:</span>
+                <span class="debug-value" id="positionTotalPnL"
+                  >Loading...</span
+                >
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Win Rate:</span>
+                <span class="debug-value" id="positionWinRate">Loading...</span>
+              </div>
+            </div>
+            <div class="debug-section">
+              <h3 class="debug-section-title">Current Position</h3>
+              <div class="debug-row">
+                <span class="debug-label">Entry Price:</span>
+                <span class="debug-value" id="positionEntryPrice">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Entry Size:</span>
+                <span class="debug-value" id="positionEntrySize">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Current Price:</span>
+                <span class="debug-value" id="positionCurrentPrice">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Unrealized P&L:</span>
+                <span class="debug-value" id="positionUnrealizedPnL">N/A</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pool Debug Tab -->
+          <div id="tab-pool-debug" class="modal-tab-content">
+            <div class="debug-section">
+              <h3 class="debug-section-title">Price History (Last 100)</h3>
+              <div
+                id="priceHistoryChart"
+                style="height: 200px; overflow-y: auto"
+              >
+                <pre id="priceHistoryData">Loading...</pre>
+              </div>
+            </div>
+            <div class="debug-section">
+              <h3 class="debug-section-title">Price Statistics</h3>
+              <div class="debug-row">
+                <span class="debug-label">Min Price:</span>
+                <span class="debug-value" id="statsMinPrice">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Max Price:</span>
+                <span class="debug-value" id="statsMaxPrice">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Avg Price:</span>
+                <span class="debug-value" id="statsAvgPrice">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Volatility:</span>
+                <span class="debug-value" id="statsVolatility">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Data Points:</span>
+                <span class="debug-value" id="statsDataPoints">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Time Span:</span>
+                <span class="debug-value" id="statsTimeSpan">N/A</span>
+              </div>
+            </div>
+            <div class="debug-section">
+              <h3 class="debug-section-title">All Discovered Pools</h3>
+              <div id="allPoolsList">Loading...</div>
+            </div>
+            <div class="debug-section">
+              <h3 class="debug-section-title">Cache Statistics</h3>
+              <div class="debug-row">
+                <span class="debug-label">Total Cached:</span>
+                <span class="debug-value" id="cacheTotal">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Fresh Prices:</span>
+                <span class="debug-value" id="cacheFresh">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">History Entries:</span>
+                <span class="debug-value" id="cacheHistory">N/A</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Token Debug Tab -->
+          <div id="tab-token-debug" class="modal-tab-content">
+            <div class="debug-section">
+              <h3 class="debug-section-title">Blacklist Status</h3>
+              <div class="debug-row">
+                <span class="debug-label">Blacklisted:</span>
+                <span class="debug-value" id="blacklistStatus">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Reason:</span>
+                <span class="debug-value" id="blacklistReason">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Occurrences:</span>
+                <span class="debug-value" id="blacklistCount">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">First Occurrence:</span>
+                <span class="debug-value" id="blacklistFirstOccurrence"
+                  >N/A</span
+                >
+              </div>
+            </div>
+            <div class="debug-section">
+              <h3 class="debug-section-title">OHLCV Availability</h3>
+              <div class="debug-row">
+                <span class="debug-label">1m Data:</span>
+                <span class="debug-value" id="ohlcv1m">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">5m Data:</span>
+                <span class="debug-value" id="ohlcv5m">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">15m Data:</span>
+                <span class="debug-value" id="ohlcv15m">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">1h Data:</span>
+                <span class="debug-value" id="ohlcv1h">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Total Candles:</span>
+                <span class="debug-value" id="ohlcvTotal">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Oldest Timestamp:</span>
+                <span class="debug-value" id="ohlcvOldest">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Newest Timestamp:</span>
+                <span class="debug-value" id="ohlcvNewest">N/A</span>
+              </div>
+            </div>
+            <div class="debug-section">
+              <h3 class="debug-section-title">Decimals Cache</h3>
+              <div class="debug-row">
+                <span class="debug-label">Decimals:</span>
+                <span class="debug-value" id="decimalsValue">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Cached:</span>
+                <span class="debug-value" id="decimalsCached">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Source:</span>
+                <span class="debug-value" id="decimalsSource">N/A</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Position Debug Tab -->
+          <div id="tab-position-debug" class="modal-tab-content">
+            <div class="debug-section">
+              <h3 class="debug-section-title">Transaction Details</h3>
+              <div class="debug-row">
+                <span class="debug-label">Entry Signature:</span>
+                <span
+                  class="debug-value"
+                  id="entrySignature"
+                  style="word-break: break-all; font-size: 0.8em"
+                  >N/A</span
+                >
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Entry Verified:</span>
+                <span class="debug-value" id="entryVerified">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Exit Signature:</span>
+                <span
+                  class="debug-value"
+                  id="exitSignature"
+                  style="word-break: break-all; font-size: 0.8em"
+                  >N/A</span
+                >
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Exit Verified:</span>
+                <span class="debug-value" id="exitVerified">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Synthetic Exit:</span>
+                <span class="debug-value" id="syntheticExit">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Closed Reason:</span>
+                <span class="debug-value" id="closedReason">N/A</span>
+              </div>
+            </div>
+            <div class="debug-section">
+              <h3 class="debug-section-title">Fee Details</h3>
+              <div class="debug-row">
+                <span class="debug-label">Entry Fee:</span>
+                <span class="debug-value" id="entryFee">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Exit Fee:</span>
+                <span class="debug-value" id="exitFee">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Total Fees:</span>
+                <span class="debug-value" id="totalFees">N/A</span>
+              </div>
+            </div>
+            <div class="debug-section">
+              <h3 class="debug-section-title">Profit Targets</h3>
+              <div class="debug-row">
+                <span class="debug-label">Min Target:</span>
+                <span class="debug-value" id="minTarget">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Max Target:</span>
+                <span class="debug-value" id="maxTarget">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Liquidity Tier:</span>
+                <span class="debug-value" id="liquidityTier">N/A</span>
+              </div>
+            </div>
+            <div class="debug-section">
+              <h3 class="debug-section-title">Price Tracking</h3>
+              <div class="debug-row">
+                <span class="debug-label">Highest:</span>
+                <span class="debug-value" id="priceHighest">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Lowest:</span>
+                <span class="debug-value" id="priceLowest">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Drawdown from High:</span>
+                <span class="debug-value" id="drawdown">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Gain from Low:</span>
+                <span class="debug-value" id="gainFromLow">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Current Price Updated:</span>
+                <span class="debug-value" id="currentPriceUpdated">N/A</span>
+              </div>
+            </div>
+            <div class="debug-section">
+              <h3 class="debug-section-title">Phantom Details</h3>
+              <div class="debug-row">
+                <span class="debug-label">Phantom Remove:</span>
+                <span class="debug-value" id="phantomRemove">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Confirmations:</span>
+                <span class="debug-value" id="phantomConfirmations">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">First Seen:</span>
+                <span class="debug-value" id="phantomFirstSeen">N/A</span>
+              </div>
+            </div>
+            <div class="debug-section">
+              <h3 class="debug-section-title">Proceeds Metrics</h3>
+              <div class="debug-row">
+                <span class="debug-label">Accepted Quotes:</span>
+                <span class="debug-value" id="acceptedQuotes">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Rejected Quotes:</span>
+                <span class="debug-value" id="rejectedQuotes">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Profit Quotes:</span>
+                <span class="debug-value" id="profitQuotes">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Loss Quotes:</span>
+                <span class="debug-value" id="lossQuotes">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Avg Shortfall:</span>
+                <span class="debug-value" id="avgShortfall">N/A</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-label">Worst Shortfall:</span>
+                <span class="debug-value" id="worstShortfall">N/A</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      /*__COMMON_SCRIPTS__*/
+      /*__THEME_SCRIPTS__*/
+    </script>
+  </body>
+</html>
