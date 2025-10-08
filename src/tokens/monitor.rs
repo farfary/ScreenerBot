@@ -2,8 +2,10 @@ use crate::global::is_debug_monitor_enabled;
 /// Token monitoring system for periodic updates of database tokens
 /// Updates existing tokens based on liquidity priority and time constraints
 use crate::logger::{log, LogTag};
-use crate::tokens::cache::TokenDatabase;
-use crate::tokens::dexscreener::get_global_dexscreener_api;
+use crate::tokens::{
+    cache::TokenDatabase, dexscreener::get_global_dexscreener_api, emit_token_removed,
+    emit_token_summary, summarize_tokens,
+};
 use chrono::{DateTime, Utc};
 use futures::TryFutureExt;
 use rand::seq::SliceRandom;
@@ -310,6 +312,13 @@ impl TokenMonitor {
                                     &format!("Updated {} tokens in database", tokens.len()),
                                 );
                             }
+
+                            if !tokens.is_empty() {
+                                let summaries = summarize_tokens(&tokens).await;
+                                for summary in summaries {
+                                    emit_token_summary(summary);
+                                }
+                            }
                         }
                         Err(e) => {
                             log(
@@ -377,6 +386,10 @@ impl TokenMonitor {
                                             deleted_count
                                         ),
                                     );
+                                }
+
+                                for mint in &safe_to_delete {
+                                    emit_token_removed(mint.clone());
                                 }
                             }
                             Err(e) => {

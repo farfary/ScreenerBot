@@ -27,7 +27,7 @@ static PRICE_EMIT_THROTTLE: Lazy<Mutex<HashMap<String, Instant>>> =
 
 /// Emit price update via WebSocket with throttling
 fn emit_price_throttled(mint: &str, price_result: &PriceResult) {
-    const THROTTLE_DURATION: Duration = Duration::from_secs(5);
+    const THROTTLE_DURATION: Duration = Duration::from_secs(1);
 
     let mut throttle_map = match PRICE_EMIT_THROTTLE.lock() {
         Ok(map) => map,

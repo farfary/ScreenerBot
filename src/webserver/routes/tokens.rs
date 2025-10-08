@@ -4,18 +4,19 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use futures::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::{collections::HashSet, sync::Arc};
 
 use crate::{
     global::is_debug_webserver_enabled,
     logger::{log, LogTag},
     pools, positions,
-    tokens::{blacklist, cache::TokenDatabase, security_db::SecurityDatabase},
+    tokens::{
+        blacklist,
+        cache::TokenDatabase,
+        summary::{token_to_summary, TokenSummary, TokenSummaryContext},
+        SecurityDatabase,
+    },
     webserver::{
         state::AppState,
         utils::{error_response, success_response},
@@ -25,29 +26,6 @@ use crate::{
 // =============================================================================
 // RESPONSE TYPES
 // =============================================================================
-
-/// Token summary for list views
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TokenSummary {
-    pub mint: String,
-    pub symbol: String,
-    pub name: Option<String>,
-    pub logo_url: Option<String>,
-    pub price_sol: Option<f64>,
-    pub price_updated_at: Option<i64>,
-    pub liquidity_usd: Option<f64>,
-    pub volume_24h: Option<f64>,
-    pub fdv: Option<f64>,
-    pub market_cap: Option<f64>,
-    pub price_change_h1: Option<f64>,
-    pub price_change_h24: Option<f64>,
-    pub security_score: Option<i32>,
-    pub rugged: Option<bool>,
-    pub has_pool_price: bool,
-    pub has_ohlcv: bool,
-    pub has_open_position: bool,
-    pub blacklisted: bool,
-}
 
 /// Token list response
 #[derive(Debug, Serialize)]
@@ -249,7 +227,6 @@ pub(crate) async fn get_tokens_list(
     );
 
     if query.view == "all" && cheap_sort {
-        // Load raw tokens
         let db = match TokenDatabase::new() {
             Ok(db) => db,
             Err(_) => {
@@ -263,95 +240,66 @@ pub(crate) async fn get_tokens_list(
                 });
             }
         };
-        let mut raw = db.get_all_tokens().await.unwrap_or_default();
 
-        // Search on raw fields
-        if !query.search.is_empty() {
-            let q = query.search.to_lowercase();
-            raw.retain(|t| {
-                t.symbol.to_lowercase().contains(&q)
-                    || t.mint.to_lowercase().contains(&q)
-                    || t.name.to_lowercase().contains(&q)
-            });
-        }
+        match db
+            .get_all_tokens_page(
+                &query.sort_by,
+                &query.sort_dir,
+                page,
+                page_size,
+                &query.search,
+            )
+            .await
+        {
+            Ok((page_tokens, total)) => {
+                let total_pages = (total + page_size - 1) / page_size;
+                let mints: Vec<String> = page_tokens.iter().map(|t| t.mint.clone()).collect();
+                let caches = TokenSummaryContext::build(&mints).await;
+                let items: Vec<TokenSummary> = page_tokens
+                    .iter()
+                    .map(|t| token_to_summary(t, &caches))
+                    .collect();
 
-        // Sort raw by selected key
-        let ascending = query.sort_dir == "asc";
-        raw.sort_by(|a, b| {
-            let cmp = match query.sort_by.as_str() {
-                "symbol" => a.symbol.cmp(&b.symbol),
-                "liquidity_usd" => optf(a.liquidity.as_ref().and_then(|l| l.usd))
-                    .partial_cmp(&optf(b.liquidity.as_ref().and_then(|l| l.usd)))
-                    .unwrap_or(std::cmp::Ordering::Equal),
-                "volume_24h" => optf(a.volume.as_ref().and_then(|v| v.h24))
-                    .partial_cmp(&optf(b.volume.as_ref().and_then(|v| v.h24)))
-                    .unwrap_or(std::cmp::Ordering::Equal),
-                "fdv" => optf(a.fdv)
-                    .partial_cmp(&optf(b.fdv))
-                    .unwrap_or(std::cmp::Ordering::Equal),
-                "market_cap" => optf(a.market_cap)
-                    .partial_cmp(&optf(b.market_cap))
-                    .unwrap_or(std::cmp::Ordering::Equal),
-                "price_change_h1" => optf(a.price_change.as_ref().and_then(|p| p.h1))
-                    .partial_cmp(&optf(b.price_change.as_ref().and_then(|p| p.h1)))
-                    .unwrap_or(std::cmp::Ordering::Equal),
-                "price_change_h24" => optf(a.price_change.as_ref().and_then(|p| p.h24))
-                    .partial_cmp(&optf(b.price_change.as_ref().and_then(|p| p.h24)))
-                    .unwrap_or(std::cmp::Ordering::Equal),
-                _ => std::cmp::Ordering::Equal,
-            };
-            if ascending {
-                cmp
-            } else {
-                cmp.reverse()
-            }
-        });
+                if is_debug_webserver_enabled() {
+                    log(
+                        LogTag::Webserver,
+                        "TOKENS_LIST_OPTIMIZED",
+                        &format!(
+                            "view=all search='{}' sort_by={} sort_dir={} page={}/{} items={}/{}",
+                            query.search,
+                            query.sort_by,
+                            query.sort_dir,
+                            page,
+                            total_pages,
+                            items.len(),
+                            total
+                        ),
+                    );
+                }
 
-        // Paginate raw
-        let total = raw.len();
-        let total_pages = (total + page_size - 1) / page_size;
-        let start_idx = (page - 1) * page_size;
-        let end_idx = (start_idx + page_size).min(total);
-        let page_slice: Vec<crate::tokens::types::ApiToken> = if start_idx < total {
-            raw[start_idx..end_idx].to_vec()
-        } else {
-            vec![]
-        };
-
-        // Build caches only for the current page
-        let mints: Vec<String> = page_slice.iter().map(|t| t.mint.clone()).collect();
-        let caches = TokenSummaryCaches::build(&mints).await;
-
-        let items = page_slice
-            .into_iter()
-            .map(|t| token_to_summary(t, &caches))
-            .collect();
-
-        if is_debug_webserver_enabled() {
-            log(
-                LogTag::Webserver,
-                "TOKENS_LIST_OPTIMIZED",
-                &format!(
-                    "view=all search='{}' sort_by={} sort_dir={} page={}/{} items={}/{}",
-                    query.search,
-                    query.sort_by,
-                    query.sort_dir,
+                return Json(TokenListResponse {
+                    items,
                     page,
+                    page_size,
+                    total,
                     total_pages,
-                    page_size.min(total),
-                    total
-                ),
-            );
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                });
+            }
+            Err(err) => {
+                if is_debug_webserver_enabled() {
+                    log(
+                        LogTag::Webserver,
+                        "WARN",
+                        &format!(
+                            "Paginated tokens query failed (falling back to legacy path): {}",
+                            err
+                        ),
+                    );
+                }
+                // Fall through to legacy path below
+            }
         }
-
-        return Json(TokenListResponse {
-            items,
-            page,
-            page_size,
-            total,
-            total_pages,
-            timestamp: chrono::Utc::now().to_rfc3339(),
-        });
     }
 
     // Default generic path (handles pool/secure/positions/blacklisted/recent and expensive sorts)
@@ -857,11 +805,11 @@ async fn filter_tokens(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let mints: Vec<String> = all_tokens.iter().map(|token| token.mint.clone()).collect();
-    let caches = TokenSummaryCaches::build(&mints).await;
+    let caches = TokenSummaryContext::build(&mints).await;
 
     // Convert to TokenSummary and apply filters
     let mut tokens = Vec::new();
-    for token in all_tokens {
+    for token in &all_tokens {
         let mut summary = token_to_summary(token, &caches);
 
         // Apply filters
@@ -964,113 +912,6 @@ async fn filter_tokens(
 // HELPER FUNCTIONS
 // =============================================================================
 
-#[derive(Debug, Default)]
-struct TokenSummaryCaches {
-    security: HashMap<String, SecuritySnapshot>,
-    ohlcv: HashSet<String>,
-    open_positions: HashSet<String>,
-    blacklisted: HashSet<String>,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct SecuritySnapshot {
-    score: i32,
-    rugged: bool,
-}
-
-impl TokenSummaryCaches {
-    async fn build(mints: &[String]) -> Self {
-        let unique_mints: HashSet<String> = mints.iter().cloned().collect();
-
-        let open_positions = positions::get_open_positions()
-            .await
-            .into_iter()
-            .map(|pos| pos.mint)
-            .collect::<HashSet<_>>();
-
-        let blacklisted = blacklist::get_blacklisted_mints()
-            .into_iter()
-            .collect::<HashSet<_>>();
-
-        let security = load_security_snapshots(&unique_mints);
-        let ohlcv = load_ohlcv_flags(&unique_mints).await;
-
-        Self {
-            security,
-            ohlcv,
-            open_positions,
-            blacklisted,
-        }
-    }
-
-    fn security_snapshot(&self, mint: &str) -> Option<&SecuritySnapshot> {
-        self.security.get(mint)
-    }
-
-    fn has_ohlcv(&self, mint: &str) -> bool {
-        self.ohlcv.contains(mint)
-    }
-
-    fn has_open_position(&self, mint: &str) -> bool {
-        self.open_positions.contains(mint)
-    }
-
-    fn is_blacklisted(&self, mint: &str) -> bool {
-        self.blacklisted.contains(mint)
-    }
-}
-
-fn load_security_snapshots(mints: &HashSet<String>) -> HashMap<String, SecuritySnapshot> {
-    let mut snapshots = HashMap::new();
-
-    if mints.is_empty() {
-        return snapshots;
-    }
-
-    if let Ok(db) = SecurityDatabase::new("data/security.db") {
-        for mint in mints {
-            if let Ok(Some(sec)) = db.get_security_info(mint) {
-                snapshots.insert(
-                    mint.clone(),
-                    SecuritySnapshot {
-                        score: sec.score,
-                        rugged: sec.rugged,
-                    },
-                );
-            }
-        }
-    }
-
-    snapshots
-}
-
-async fn load_ohlcv_flags(mints: &HashSet<String>) -> HashSet<String> {
-    if mints.is_empty() {
-        return HashSet::new();
-    }
-
-    stream::iter(mints.iter().cloned())
-        .map(|mint| async move {
-            let has_data = crate::ohlcvs::has_data(&mint).await.unwrap_or(false);
-            (mint, has_data)
-        })
-        .buffer_unordered(8)
-        .filter_map(|(mint, has_data)| async move {
-            if has_data {
-                Some(mint)
-            } else {
-                None
-            }
-        })
-        .collect::<HashSet<_>>()
-        .await
-}
-
-#[inline]
-fn optf(v: Option<f64>) -> f64 {
-    v.unwrap_or(0.0)
-}
-
 /// Get tokens for a specific view
 async fn get_tokens_for_view(view: &str) -> Result<Vec<TokenSummary>, String> {
     match view {
@@ -1089,20 +930,21 @@ async fn get_tokens_for_view(view: &str) -> Result<Vec<TokenSummary>, String> {
 /// Get tokens with pool prices
 async fn get_pool_tokens() -> Result<Vec<TokenSummary>, String> {
     let available_mints = pools::get_available_tokens();
-    let db = TokenDatabase::new().map_err(|e| e.to_string())?;
-    let mut raw_tokens = Vec::new();
-
-    for mint in available_mints {
-        if let Ok(Some(token)) = db.get_token_by_mint(&mint) {
-            raw_tokens.push(token);
-        }
+    if available_mints.is_empty() {
+        return Ok(Vec::new());
     }
 
+    let db = TokenDatabase::new().map_err(|e| e.to_string())?;
+    let raw_tokens = db
+        .get_tokens_by_mints(&available_mints)
+        .await
+        .map_err(|e| e.to_string())?;
+
     let mints: Vec<String> = raw_tokens.iter().map(|token| token.mint.clone()).collect();
-    let caches = TokenSummaryCaches::build(&mints).await;
+    let caches = TokenSummaryContext::build(&mints).await;
 
     Ok(raw_tokens
-        .into_iter()
+        .iter()
         .map(|token| token_to_summary(token, &caches))
         .collect())
 }
@@ -1112,10 +954,10 @@ async fn get_all_tokens_from_db() -> Result<Vec<TokenSummary>, String> {
     let db = TokenDatabase::new().map_err(|e| e.to_string())?;
     let tokens = db.get_all_tokens().await?;
     let mints: Vec<String> = tokens.iter().map(|token| token.mint.clone()).collect();
-    let caches = TokenSummaryCaches::build(&mints).await;
+    let caches = TokenSummaryContext::build(&mints).await;
 
     Ok(tokens
-        .into_iter()
+        .iter()
         .map(|token| token_to_summary(token, &caches))
         .collect())
 }
@@ -1135,10 +977,10 @@ async fn get_blacklisted_tokens() -> Result<Vec<TokenSummary>, String> {
         .map_err(|e| e.to_string())?;
 
     // Build caches scoped to this page's mints only
-    let caches = TokenSummaryCaches::build(&blacklisted_mints).await;
+    let caches = TokenSummaryContext::build(&blacklisted_mints).await;
 
     Ok(tokens
-        .into_iter()
+        .iter()
         .map(|token| token_to_summary(token, &caches))
         .collect())
 }
@@ -1175,10 +1017,10 @@ async fn get_rejected_tokens() -> Result<Vec<TokenSummary>, String> {
         .map_err(|e| e.to_string())?;
 
     // Build caches scoped to this page's mints only
-    let caches = TokenSummaryCaches::build(&rejected_mints).await;
+    let caches = TokenSummaryContext::build(&rejected_mints).await;
 
     Ok(tokens
-        .into_iter()
+        .iter()
         .map(|token| token_to_summary(token, &caches))
         .collect())
 }
@@ -1215,10 +1057,10 @@ async fn get_passed_tokens() -> Result<Vec<TokenSummary>, String> {
         .map_err(|e| e.to_string())?;
 
     // Build caches scoped to this page's mints only
-    let caches = TokenSummaryCaches::build(&passed_mints).await;
+    let caches = TokenSummaryContext::build(&passed_mints).await;
 
     Ok(tokens
-        .into_iter()
+        .iter()
         .map(|token| token_to_summary(token, &caches))
         .collect())
 }
@@ -1227,19 +1069,20 @@ async fn get_passed_tokens() -> Result<Vec<TokenSummary>, String> {
 async fn get_position_tokens() -> Result<Vec<TokenSummary>, String> {
     let db = TokenDatabase::new().map_err(|e| e.to_string())?;
     let open_positions = positions::get_open_positions().await;
-    let mut raw_tokens = Vec::new();
-
-    for pos in open_positions {
-        if let Ok(Some(token)) = db.get_token_by_mint(&pos.mint) {
-            raw_tokens.push(token);
-        }
+    let mints: Vec<String> = open_positions.into_iter().map(|pos| pos.mint).collect();
+    if mints.is_empty() {
+        return Ok(Vec::new());
     }
 
-    let mints: Vec<String> = raw_tokens.iter().map(|token| token.mint.clone()).collect();
-    let caches = TokenSummaryCaches::build(&mints).await;
+    let raw_tokens = db
+        .get_tokens_by_mints(&mints)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let caches = TokenSummaryContext::build(&mints).await;
 
     Ok(raw_tokens
-        .into_iter()
+        .iter()
         .map(|token| token_to_summary(token, &caches))
         .collect())
 }
@@ -1252,10 +1095,10 @@ async fn get_secure_tokens() -> Result<Vec<TokenSummary>, String> {
     let db = TokenDatabase::new().map_err(|e| e.to_string())?;
     let all_tokens = db.get_all_tokens().await?;
     let mints: Vec<String> = all_tokens.iter().map(|token| token.mint.clone()).collect();
-    let caches = TokenSummaryCaches::build(&mints).await;
+    let caches = TokenSummaryContext::build(&mints).await;
 
     Ok(all_tokens
-        .into_iter()
+        .iter()
         .filter(|token| {
             caches
                 .security_snapshot(&token.mint)
@@ -1293,66 +1136,12 @@ async fn get_recent_tokens() -> Result<Vec<TokenSummary>, String> {
         .iter()
         .map(|token| token.mint.clone())
         .collect();
-    let caches = TokenSummaryCaches::build(&mints).await;
+    let caches = TokenSummaryContext::build(&mints).await;
 
     Ok(recent_tokens
-        .into_iter()
+        .iter()
         .map(|token| token_to_summary(token, &caches))
         .collect())
-}
-
-/// Convert ApiToken to TokenSummary with enriched data
-fn token_to_summary(
-    token: crate::tokens::types::ApiToken,
-    caches: &TokenSummaryCaches,
-) -> TokenSummary {
-    // Get price info
-    let (price_sol, price_updated_at) =
-        if let Some(price_result) = pools::get_pool_price(&token.mint) {
-            let age_secs = price_result.timestamp.elapsed().as_secs();
-            let now_unix = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs() as i64;
-            (
-                Some(price_result.price_sol),
-                Some(now_unix - (age_secs as i64)),
-            )
-        } else {
-            (None, None)
-        };
-
-    // Check status flags
-    let has_pool_price = price_sol.is_some();
-    let has_ohlcv = caches.has_ohlcv(&token.mint);
-    let has_open_position = caches.has_open_position(&token.mint);
-    let blacklisted = caches.is_blacklisted(&token.mint);
-
-    let (security_score, rugged) = caches
-        .security_snapshot(&token.mint)
-        .map(|snapshot| (Some(snapshot.score), Some(snapshot.rugged)))
-        .unwrap_or((None, None));
-
-    TokenSummary {
-        mint: token.mint,
-        symbol: token.symbol,
-        name: Some(token.name),
-        logo_url: token.info.as_ref().and_then(|i| i.image_url.clone()),
-        price_sol,
-        price_updated_at,
-        liquidity_usd: token.liquidity.as_ref().and_then(|l| l.usd),
-        volume_24h: token.volume.as_ref().and_then(|v| v.h24),
-        fdv: token.fdv,
-        market_cap: token.market_cap,
-        price_change_h1: token.price_change.as_ref().and_then(|p| p.h1),
-        price_change_h24: token.price_change.as_ref().and_then(|p| p.h24),
-        security_score,
-        rugged,
-        has_pool_price,
-        has_ohlcv,
-        has_open_position,
-        blacklisted,
-    }
 }
 
 /// Sort tokens by specified field and direction

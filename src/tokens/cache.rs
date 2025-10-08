@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 // =============================================================================
 
 use crate::tokens::types::ApiToken;
-use rusqlite::{params, Connection, Result as SqliteResult};
+use rusqlite::{params, params_from_iter, Connection, Result as SqliteResult};
 
 /// SQLite database for token storage and caching
 #[derive(Clone)]
@@ -356,20 +356,174 @@ impl TokenDatabase {
         Ok(tokens)
     }
 
+    /// Optimized paginated query for the All Tokens view
+    pub async fn get_all_tokens_page(
+        &self,
+        sort_by: &str,
+        sort_dir: &str,
+        page: usize,
+        page_size: usize,
+        search: &str,
+    ) -> Result<(Vec<ApiToken>, usize), String> {
+        let db = self.clone();
+        let sort_key = sort_by.to_lowercase();
+        let direction = if sort_dir.eq_ignore_ascii_case("asc") {
+            "ASC"
+        } else {
+            "DESC"
+        };
+        let safe_page = page.max(1);
+        let safe_page_size = page_size.max(1);
+        let offset = safe_page.saturating_sub(1).saturating_mul(safe_page_size);
+        let search_normalized = search.trim().to_lowercase();
+        let pattern = if search_normalized.is_empty() {
+            None
+        } else {
+            Some(format!("%{}%", search_normalized))
+        };
+
+        tokio::task::spawn_blocking(move || {
+            let connection = db
+                .connection
+                .lock()
+                .map_err(|e| format!("Database lock error: {}", e))?;
+
+            let order_expr = match sort_key.as_str() {
+                "symbol" => "LOWER(symbol)",
+                "volume_24h" => "COALESCE(volume_h24, 0)",
+                "fdv" => "COALESCE(fdv, 0)",
+                "market_cap" => "COALESCE(market_cap, 0)",
+                "price_change_h1" => "COALESCE(price_change_h1, 0)",
+                "price_change_h24" => "COALESCE(price_change_h24, 0)",
+                _ => "COALESCE(liquidity_usd, 0)",
+            };
+
+            let limit_i64 = safe_page_size as i64;
+            let offset_i64 = offset as i64;
+
+            // Count matching rows first
+            let total: i64 = if let Some(ref pattern) = pattern {
+                let mut stmt = connection
+                    .prepare(
+                        "SELECT COUNT(*) FROM tokens \
+                         WHERE LOWER(symbol) LIKE ?1 OR LOWER(mint) LIKE ?2 OR LOWER(name) LIKE ?3",
+                    )
+                    .map_err(|e| format!("Failed to prepare count statement: {}", e))?;
+
+                stmt.query_row(rusqlite::params![pattern, pattern, pattern], |row| {
+                    row.get::<_, i64>(0)
+                })
+                .map_err(|e| format!("Failed to execute count statement: {}", e))?
+            } else {
+                let mut stmt = connection
+                    .prepare("SELECT COUNT(*) FROM tokens")
+                    .map_err(|e| format!("Failed to prepare count statement: {}", e))?;
+
+                stmt.query_row([], |row| row.get::<_, i64>(0))
+                    .map_err(|e| format!("Failed to execute count statement: {}", e))?
+            };
+
+            // Build data query
+            let data_sql = if pattern.is_some() {
+                format!(
+                    "SELECT * FROM tokens \
+                     WHERE LOWER(symbol) LIKE ?1 OR LOWER(mint) LIKE ?2 OR LOWER(name) LIKE ?3 \
+                     ORDER BY {} {} \
+                     LIMIT ?4 OFFSET ?5",
+                    order_expr, direction
+                )
+            } else {
+                format!(
+                    "SELECT * FROM tokens \
+                     ORDER BY {} {} \
+                     LIMIT ?1 OFFSET ?2",
+                    order_expr, direction
+                )
+            };
+
+            let mut stmt = connection
+                .prepare(&data_sql)
+                .map_err(|e| format!("Failed to prepare query: {}", e))?;
+
+            let mut tokens = Vec::new();
+
+            if let Some(ref pattern) = pattern {
+                let mut rows = stmt
+                    .query(rusqlite::params![
+                        pattern, pattern, pattern, limit_i64, offset_i64
+                    ])
+                    .map_err(|e| format!("Failed to execute query: {}", e))?;
+
+                while let Some(row) = rows
+                    .next()
+                    .map_err(|e| format!("Failed to read row: {}", e))?
+                {
+                    tokens.push(
+                        db.row_to_token(&row)
+                            .map_err(|e| format!("Failed to parse token: {}", e))?,
+                    );
+                }
+            } else {
+                let mut rows = stmt
+                    .query(rusqlite::params![limit_i64, offset_i64])
+                    .map_err(|e| format!("Failed to execute query: {}", e))?;
+
+                while let Some(row) = rows
+                    .next()
+                    .map_err(|e| format!("Failed to read row: {}", e))?
+                {
+                    tokens.push(
+                        db.row_to_token(&row)
+                            .map_err(|e| format!("Failed to parse token: {}", e))?,
+                    );
+                }
+            }
+
+            Ok((tokens, total as usize))
+        })
+        .await
+        .map_err(|e| format!("Blocking task error: {}", e))?
+    }
+
     /// Get tokens by mints
     pub async fn get_tokens_by_mints(
         &self,
         mints: &[String],
     ) -> Result<Vec<ApiToken>, Box<dyn std::error::Error>> {
-        let mut tokens = Vec::new();
+        if mints.is_empty() {
+            return Ok(Vec::new());
+        }
 
+        let placeholders = mints.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let query = format!("SELECT * FROM tokens WHERE mint IN ({})", placeholders);
+
+        let connection = self.connection.lock().map_err(|e| {
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Database lock error: {}", e),
+            )) as Box<dyn std::error::Error>
+        })?;
+
+        let mut stmt = connection.prepare(&query)?;
+        let rows = stmt.query_map(
+            params_from_iter(mints.iter().map(|mint| mint.as_str())),
+            |row| Ok(self.row_to_token(row)?),
+        )?;
+
+        let mut fetched: HashMap<String, ApiToken> = HashMap::new();
+        for row in rows {
+            let token = row?;
+            fetched.insert(token.mint.clone(), token);
+        }
+
+        let mut ordered = Vec::with_capacity(mints.len());
         for mint in mints {
-            if let Some(token) = self.get_token_by_mint(mint)? {
-                tokens.push(token);
+            if let Some(token) = fetched.remove(mint) {
+                ordered.push(token);
             }
         }
 
-        Ok(tokens)
+        Ok(ordered)
     }
 
     /// Get single token by mint

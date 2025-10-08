@@ -42,7 +42,7 @@
     timeoutHandle: null,
   };
   var TOKENS_SNAPSHOT_LIMIT = 200;
-  var TOKENS_SNAPSHOT_TIMEOUT_MS = 8000;
+  var TOKENS_SNAPSHOT_TIMEOUT_MS = 12000;
 
   // Global init function for Router to call during SPA navigation
   window.initTokensPage = function () {
@@ -965,6 +965,7 @@
     if (!data || typeof data !== "object") return;
     const meta = envelope?.meta || {};
     const isSnapshot = meta.snapshot === true;
+    const updateType = meta?.update;
 
     if (typeof meta.total === "number") {
       tokensSnapshotState.totalAvailable = Math.max(
@@ -987,9 +988,70 @@
       finalizeTokensSnapshot();
     }
 
+    if (updateType === "removed" || data.removed === true) {
+      if (typeof data.mint === "string") {
+        handleTokenRemoval(data.mint);
+      }
+      return;
+    }
+
+    if (
+      updateType === "summary" ||
+      (typeof data.mint === "string" &&
+        (typeof data.symbol === "string" || typeof data.name === "string"))
+    ) {
+      const normalized = normalizeTokenFromApi({ ...data });
+      handleTokenSummaryDelta(normalized);
+      return;
+    }
+
     if (data.price_result) {
       handlePriceUpdate(data);
     }
+  }
+
+  function handleTokenSummaryDelta(summary) {
+    if (!summary || typeof summary !== "object" || !summary.mint) return;
+
+    const existingIndex = allTokensData.findIndex(
+      (token) => token.mint === summary.mint
+    );
+
+    if (existingIndex >= 0) {
+      allTokensData[existingIndex] = {
+        ...allTokensData[existingIndex],
+        ...summary,
+      };
+    } else {
+      allTokensData.unshift(summary);
+    }
+
+    const total = allTokensData.length;
+    tokensSnapshotState.totalAvailable = total;
+    updateTokenCount(total);
+    applySearchFilter();
+    const viewLabel = VIEW_LABELS[tokensState.view] || "";
+    const status = viewLabel
+      ? `Realtime • ${total} tokens ${viewLabel}`
+      : `Realtime • ${total} tokens`;
+    setTokenCountStatus(status);
+  }
+
+  function handleTokenRemoval(mint) {
+    if (!mint) return;
+    const index = allTokensData.findIndex((token) => token.mint === mint);
+    if (index === -1) return;
+
+    allTokensData.splice(index, 1);
+    const total = allTokensData.length;
+    tokensSnapshotState.totalAvailable = total;
+    updateTokenCount(total);
+    applySearchFilter();
+    const viewLabel = VIEW_LABELS[tokensState.view] || "";
+    const status = viewLabel
+      ? `Realtime • ${total} tokens ${viewLabel}`
+      : `Realtime • ${total} tokens`;
+    setTokenCountStatus(status);
   }
 
   function handleTokensWarning(payload) {
