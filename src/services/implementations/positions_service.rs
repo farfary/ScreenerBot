@@ -1,5 +1,4 @@
-use crate::logger::{log, LogTag};
-use crate::services::{Service, ServiceHealth, ServiceMetrics};
+use crate::services::{ Service, ServiceHealth, ServiceMetrics };
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
@@ -22,33 +21,18 @@ impl Service for PositionsService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
-        log(LogTag::System, "INFO", "Initializing positions system...");
-
         // Positions system initialization happens in start
-        log(LogTag::System, "SUCCESS", "Positions system initialized");
         Ok(())
     }
 
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor,
+        monitor: tokio_metrics::TaskMonitor
     ) -> Result<Vec<JoinHandle<()>>, String> {
-        log(
-            LogTag::System,
-            "INFO",
-            "Starting positions manager service...",
-        );
-
-        let handle = crate::positions::start_positions_manager_service(shutdown.clone(), monitor)
-            .await
+        let handle = crate::positions
+            ::start_positions_manager_service(shutdown.clone(), monitor).await
             .map_err(|e| format!("Failed to start positions service: {}", e))?;
-
-        log(
-            LogTag::System,
-            "SUCCESS",
-            "✅ Positions service started (1 instrumented handle)",
-        );
 
         // Return verification_worker handle so ServiceManager can wait for graceful shutdown
         Ok(vec![handle])

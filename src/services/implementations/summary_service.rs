@@ -1,6 +1,5 @@
 use crate::arguments::is_summary_enabled;
-use crate::logger::{log, LogTag};
-use crate::services::{Service, ServiceHealth, ServiceMetrics};
+use crate::services::{ log_service_notice, Service, ServiceHealth, ServiceMetrics };
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
@@ -29,12 +28,7 @@ impl Service for SummaryService {
 
     async fn initialize(&mut self) -> Result<(), String> {
         if is_summary_enabled() {
-            log(LogTag::System, "INFO", "Initializing summary service...");
-            log(
-                LogTag::System,
-                "INFO",
-                "Summary will display positions every 15 seconds",
-            );
+            log_service_notice(self.name(), "init", Some("interval_secs=15"), true);
         }
         Ok(())
     }
@@ -42,34 +36,32 @@ impl Service for SummaryService {
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor,
+        monitor: tokio_metrics::TaskMonitor
     ) -> Result<Vec<JoinHandle<()>>, String> {
         if !is_summary_enabled() {
             // Return empty handle if not enabled
-            let handle = tokio::spawn(monitor.instrument(async move {
-                shutdown.notified().await;
-            }));
+            let handle = tokio::spawn(
+                monitor.instrument(async move {
+                    shutdown.notified().await;
+                })
+            );
             return Ok(vec![handle]);
         }
 
-        log(LogTag::System, "INFO", "Starting summary display...");
-
-        let handle = tokio::spawn(monitor.instrument(async move {
-            crate::summary::summary_loop(shutdown).await;
-        }));
-
-        log(
-            LogTag::System,
-            "SUCCESS",
-            "✅ Summary service started (instrumented)",
+        let handle = tokio::spawn(
+            monitor.instrument(async move {
+                crate::summary::summary_loop(shutdown).await;
+            })
         );
+
+        log_service_notice(self.name(), "loop_started", None, true);
 
         Ok(vec![handle])
     }
 
     async fn stop(&mut self) -> Result<(), String> {
         if is_summary_enabled() {
-            log(LogTag::System, "INFO", "Summary service stopped");
+            log_service_notice(self.name(), "stopped", None, true);
         }
         Ok(())
     }

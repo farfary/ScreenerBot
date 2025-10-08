@@ -1,5 +1,4 @@
-use crate::logger::{log, LogTag};
-use crate::services::{Service, ServiceHealth, ServiceMetrics};
+use crate::services::{ Service, ServiceHealth, ServiceMetrics };
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
@@ -22,24 +21,15 @@ impl Service for WalletService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
-        log(LogTag::System, "INFO", "Initializing wallet monitoring...");
         Ok(())
     }
 
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor,
+        monitor: tokio_metrics::TaskMonitor
     ) -> Result<Vec<JoinHandle<()>>, String> {
-        log(LogTag::System, "INFO", "Starting wallet monitoring...");
-
         let handle = crate::wallet::start_wallet_monitoring_service(shutdown, monitor).await;
-
-        log(
-            LogTag::System,
-            "SUCCESS",
-            "✅ Wallet service started (instrumented)",
-        );
 
         Ok(vec![handle])
     }

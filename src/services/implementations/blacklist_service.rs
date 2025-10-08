@@ -1,5 +1,4 @@
-use crate::logger::{log, LogTag};
-use crate::services::{Service, ServiceHealth, ServiceMetrics};
+use crate::services::{ Service, ServiceHealth, ServiceMetrics };
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
@@ -22,8 +21,6 @@ impl Service for BlacklistService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
-        log(LogTag::System, "INFO", "Initializing blacklist system...");
-
         // Initialize blacklist system (database and cache)
         if let Err(e) = crate::tokens::blacklist::initialize_blacklist_system() {
             return Err(format!("Failed to initialize blacklist system: {}", e));
@@ -31,26 +28,20 @@ impl Service for BlacklistService {
 
         // Initialize system and stable tokens in blacklist
         crate::tokens::blacklist::initialize_system_stable_blacklist();
-
-        log(LogTag::System, "SUCCESS", "Blacklist system initialized");
         Ok(())
     }
 
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor,
+        monitor: tokio_metrics::TaskMonitor
     ) -> Result<Vec<JoinHandle<()>>, String> {
-        log(
-            LogTag::System,
-            "INFO",
-            "Blacklist service started (instrumented)",
-        );
-
         // Blacklist system doesn't spawn background tasks
-        let handle = tokio::spawn(monitor.instrument(async move {
-            shutdown.notified().await;
-        }));
+        let handle = tokio::spawn(
+            monitor.instrument(async move {
+                shutdown.notified().await;
+            })
+        );
 
         Ok(vec![handle])
     }

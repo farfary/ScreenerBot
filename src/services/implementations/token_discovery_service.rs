@@ -1,5 +1,4 @@
-use crate::logger::{log, LogTag};
-use crate::services::{Service, ServiceHealth, ServiceMetrics};
+use crate::services::{ Service, ServiceHealth, ServiceMetrics };
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
@@ -22,49 +21,28 @@ impl Service for TokenDiscoveryService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
-        log(LogTag::System, "INFO", "Initializing tokens system...");
-
         // Initialize tokens system (database, API clients, OHLCV, etc.)
         // This was previously in TokensService, but that service was empty/useless
-        crate::tokens::initialize_tokens_system()
-            .await
+        crate::tokens
+            ::initialize_tokens_system().await
             .map_err(|e| format!("Failed to initialize tokens system: {}", e))?;
-
-        log(LogTag::System, "SUCCESS", "✅ Tokens system initialized");
         Ok(())
     }
 
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor,
+        monitor: tokio_metrics::TaskMonitor
     ) -> Result<Vec<JoinHandle<()>>, String> {
-        log(
-            LogTag::System,
-            "INFO",
-            "Starting token discovery service...",
-        );
-
         // Start token discovery task
-        let handle = crate::tokens::discovery::start_token_discovery(shutdown, monitor)
-            .await
+        let handle = crate::tokens::discovery
+            ::start_token_discovery(shutdown, monitor).await
             .map_err(|e| format!("Failed to start token discovery: {}", e))?;
-
-        log(
-            LogTag::System,
-            "SUCCESS",
-            "✅ Token discovery service started (instrumented)",
-        );
 
         Ok(vec![handle])
     }
 
     async fn stop(&mut self) -> Result<(), String> {
-        log(
-            LogTag::System,
-            "INFO",
-            "Token discovery service stopping (via shutdown signal)",
-        );
         Ok(())
     }
 

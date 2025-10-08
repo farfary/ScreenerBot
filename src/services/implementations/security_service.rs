@@ -1,5 +1,4 @@
-use crate::logger::{log, LogTag};
-use crate::services::{Service, ServiceHealth, ServiceMetrics};
+use crate::services::{ Service, ServiceHealth, ServiceMetrics };
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
@@ -22,31 +21,22 @@ impl Service for SecurityService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
-        log(LogTag::System, "INFO", "Initializing security analyzer...");
-
         // Initialize security analyzer (not async)
-        crate::tokens::security::initialize_security_analyzer()
+        crate::tokens::security
+            ::initialize_security_analyzer()
             .map_err(|e| format!("Failed to initialize security analyzer: {}", e))?;
-
-        log(LogTag::System, "SUCCESS", "Security analyzer initialized");
         Ok(())
     }
 
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor,
+        monitor: tokio_metrics::TaskMonitor
     ) -> Result<Vec<JoinHandle<()>>, String> {
-        log(LogTag::System, "INFO", "Starting security monitoring...");
-
-        let handle = tokio::spawn(monitor.instrument(async move {
-            crate::tokens::security::start_security_monitoring(shutdown).await;
-        }));
-
-        log(
-            LogTag::System,
-            "SUCCESS",
-            "✅ Security service started (instrumented)",
+        let handle = tokio::spawn(
+            monitor.instrument(async move {
+                crate::tokens::security::start_security_monitoring(shutdown).await;
+            })
         );
 
         Ok(vec![handle])
