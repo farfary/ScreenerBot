@@ -277,7 +277,7 @@
         this.setLoading("Waiting for realtime data...");
         this.bindToolbarEventsOnce();
         this.bindSortHandlersOnce();
-        this.requestSnapshot("init");
+        // Note: Do NOT request snapshot here - it will be requested by onEnter after Realtime.activate()
       },
 
       reset() {
@@ -972,11 +972,14 @@
       onInitial(status) {
         if (status !== "connected") {
           controller.setLoading("Waiting for realtime connection...");
+        } else if (!controller.hasInitialSnapshot) {
+          controller.requestSnapshot("initial-load");
         }
       },
       onEnter() {
         if (!controller.hasInitialSnapshot) {
-          controller.setLoading("Waiting for snapshot...");
+          controller.setLoading("Requesting snapshot...");
+          controller.requestSnapshot("page-enter");
         }
       },
       onUnavailable() {

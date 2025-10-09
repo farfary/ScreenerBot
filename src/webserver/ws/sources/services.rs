@@ -30,7 +30,9 @@ async fn run(hub: Arc<WsHub>) {
             ),
         );
 
-        publish_snapshot(&hub).await;
+        // NOTE: Initial snapshot is now handled by connection.rs::send_services_snapshot()
+        // with proper SnapshotBegin/End messages and request correlation.
+        // This source only sends periodic delta updates (if needed in future).
 
         let mut ticker = interval(Duration::from_secs(10));
         ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -51,12 +53,14 @@ async fn run(hub: Arc<WsHub>) {
                 break;
             }
 
-            publish_snapshot(&hub).await;
+            // Periodic updates: send full snapshot as a delta update (no begin/end markers)
+            // Frontend will merge this with existing state
+            publish_delta(&hub).await;
         }
     }
 }
 
-async fn publish_snapshot(hub: &Arc<WsHub>) {
+async fn publish_delta(hub: &Arc<WsHub>) {
     let snapshot = crate::webserver::routes::services::gather_services_overview_snapshot().await;
     let seq = hub.next_seq("services.metrics").await;
     let envelope = topics::services::services_to_envelope(&snapshot, seq);
@@ -67,7 +71,7 @@ async fn publish_snapshot(hub: &Arc<WsHub>) {
             LogTag::Webserver,
             "DEBUG",
             &format!(
-                "ws.sources.services snapshot: services={}, unhealthy={}",
+                "ws.sources.services delta: services={}, unhealthy={}",
                 snapshot.services.len(),
                 snapshot.summary.unhealthy_services
             ),

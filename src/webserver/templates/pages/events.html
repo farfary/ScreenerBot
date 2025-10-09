@@ -1235,6 +1235,9 @@ Loading...</pre
     },
     onExit() {
       snapshotState.inProgress = false;
+      snapshotState.started = false;
+      snapshotState.requestId = null;
+      clearEventsSnapshotTimer();
     },
   };
 

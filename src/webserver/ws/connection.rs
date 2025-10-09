@@ -1916,6 +1916,14 @@ async fn send_services_snapshot(
     filter: ServicesRealtimeFilter,
     conn_id: ConnectionId,
 ) -> Result<(), String> {
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "DEBUG",
+            &format!("Connection {}: send_services_snapshot called", conn_id),
+        );
+    }
+
     let snapshot = crate::webserver::routes::services::gather_services_overview_snapshot().await;
     let total_services = snapshot.services.len();
     let unhealthy = snapshot.summary.unhealthy_services;

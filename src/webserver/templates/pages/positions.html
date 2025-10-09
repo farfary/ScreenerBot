@@ -114,7 +114,6 @@
   var positionsStore = window.positionsStore || new Map();
   var positionsInitialized = false;
   var positionsInSnapshot = false;
-  var positionsSnapshotHandlersRegistered = false;
   var lastPositionsSnapshotMeta = null;
   var POSITIONS_SNAPSHOT_TIMEOUT_MS = 15000;
   const POSITIONS_SNAPSHOT_LIMIT = 1000;
@@ -684,41 +683,6 @@
     renderPositionsTable();
   }
 
-  function setupPositionsRealtimeHooks() {
-    if (positionsSnapshotHandlersRegistered) {
-      return;
-    }
-    if (!window.WsHub || typeof WsHub.subscribe !== "function") {
-      return;
-    }
-
-    const beginChannel = "snapshot_begin:positions.update";
-    const endChannel = "snapshot_end:positions.update";
-
-    WsHub.subscribe(beginChannel, handlePositionsSnapshotBegin);
-    WsHub.subscribe(endChannel, handlePositionsSnapshotEnd);
-    positionsSnapshotHandlersRegistered = true;
-
-    const cleanup = () => {
-      if (window.WsHub && typeof WsHub.unsubscribe === "function") {
-        WsHub.unsubscribe(beginChannel, handlePositionsSnapshotBegin);
-        WsHub.unsubscribe(endChannel, handlePositionsSnapshotEnd);
-      }
-      positionsSnapshotHandlersRegistered = false;
-      positionsInSnapshot = false;
-      positionsSnapshotState.inProgress = false;
-      positionsSnapshotState.started = false;
-      positionsSnapshotState.requestId = null;
-      clearPositionsSnapshotTimer();
-    };
-
-    if (window.Router && typeof Router.registerCleanup === "function") {
-      Router.registerCleanup(cleanup);
-    } else {
-      window.addEventListener("beforeunload", cleanup, { once: true });
-    }
-  }
-
   function handlePositionBroadcast(update, envelope) {
     if (!update || typeof update !== "object") return;
 
@@ -978,13 +942,14 @@
     },
     channels: {
       positions: handlePositionBroadcast,
+      "snapshot_begin:positions.update": handlePositionsSnapshotBegin,
+      "snapshot_end:positions.update": handlePositionsSnapshotEnd,
       _warning: handlePositionsWarning,
       _disconnected: handlePositionsWarningOrDisconnect,
       _failed: handlePositionsWarningOrDisconnect,
       _connected: handlePositionsReconnect,
     },
     onInitial() {
-      setupPositionsRealtimeHooks();
       if (!positionsInitialized && positionsStore.size === 0) {
         renderEmptyState("Loading positions...");
         updatePositionCount(0);
