@@ -107,9 +107,15 @@ impl OhlcvMonitor {
 
     /// Remove a token from monitoring
     pub async fn remove_token(&self, mint: &str) -> OhlcvResult<()> {
-        let mut active = self.active_tokens.write().await;
-        if let Some(mut config) = active.remove(mint) {
-            config.is_active = false;
+        let removed_config = {
+            let mut active = self.active_tokens.write().await;
+            active.remove(mint).map(|mut config| {
+                config.is_active = false;
+                config
+            })
+        };
+
+        if let Some(config) = removed_config {
             self.db.upsert_monitor_config(&config)?;
         }
 
@@ -118,11 +124,17 @@ impl OhlcvMonitor {
 
     /// Update token priority
     pub async fn update_priority(&self, mint: &str, priority: Priority) -> OhlcvResult<()> {
-        let mut active = self.active_tokens.write().await;
-        if let Some(config) = active.get_mut(mint) {
-            config.priority = priority;
-            config.fetch_frequency = priority.base_interval();
-            self.db.upsert_monitor_config(config)?;
+        let updated_config = {
+            let mut active = self.active_tokens.write().await;
+            active.get_mut(mint).map(|config| {
+                config.priority = priority;
+                config.fetch_frequency = priority.base_interval();
+                config.clone()
+            })
+        };
+
+        if let Some(config) = updated_config {
+            self.db.upsert_monitor_config(&config)?;
         }
 
         Ok(())
@@ -134,23 +146,30 @@ impl OhlcvMonitor {
         mint: &str,
         activity_type: ActivityType,
     ) -> OhlcvResult<()> {
-        let mut active = self.active_tokens.write().await;
-        if let Some(config) = active.get_mut(mint) {
-            config.mark_activity();
+        let (updated_config, should_trigger_fetch) = {
+            let mut active = self.active_tokens.write().await;
+            active.get_mut(mint).map_or((None, false), |config| {
+                config.mark_activity();
 
-            // Update priority based on activity
-            let new_priority =
-                PriorityManager::update_priority_on_activity(config.priority, activity_type);
-            config.priority = new_priority;
-            config.fetch_frequency = new_priority.base_interval();
+                // Update priority based on activity
+                let new_priority =
+                    PriorityManager::update_priority_on_activity(config.priority, activity_type);
+                config.priority = new_priority;
+                config.fetch_frequency = new_priority.base_interval();
 
-            self.db.upsert_monitor_config(config)?;
+                let trigger = matches!(
+                    activity_type,
+                    ActivityType::PositionOpened | ActivityType::DataRequested
+                );
 
-            // Trigger immediate fetch for high-priority activities
-            if matches!(
-                activity_type,
-                ActivityType::PositionOpened | ActivityType::DataRequested
-            ) {
+                (Some(config.clone()), trigger)
+            })
+        };
+
+        if let Some(config) = updated_config {
+            self.db.upsert_monitor_config(&config)?;
+
+            if should_trigger_fetch {
                 self.fetch_token_data(mint).await?;
             }
         }
@@ -166,7 +185,6 @@ impl OhlcvMonitor {
     /// Get monitoring statistics
     pub async fn get_stats(&self) -> MonitorStats {
         let active = self.active_tokens.read().await;
-
         let total_tokens = active.len();
         let by_priority = count_by_priority(&active);
 
@@ -275,11 +293,17 @@ impl OhlcvMonitor {
             match self.pool_manager.discover_pools(mint).await {
                 Ok(discovered) if !discovered.is_empty() => {
                     // Success! Update config with discovered pools and reset failure counter
-                    let mut active = self.active_tokens.write().await;
-                    if let Some(config) = active.get_mut(mint) {
-                        config.pools = discovered;
-                        config.mark_pool_discovery_success();
-                        self.db.upsert_monitor_config(config)?;
+                    let updated_config = {
+                        let mut active = self.active_tokens.write().await;
+                        active.get_mut(mint).map(|config| {
+                            config.pools = discovered.clone();
+                            config.mark_pool_discovery_success();
+                            config.clone()
+                        })
+                    };
+
+                    if let Some(config) = updated_config {
+                        self.db.upsert_monitor_config(&config)?;
 
                         if is_debug_ohlcv_enabled() {
                             log(
@@ -295,28 +319,33 @@ impl OhlcvMonitor {
                 }
                 Ok(_) | Err(_) => {
                     // Failed - update failure counter and backoff timestamp
-                    let mut active = self.active_tokens.write().await;
-                    if let Some(config) = active.get_mut(mint) {
-                        let was_failure_count = config.consecutive_pool_failures;
-                        config.mark_pool_discovery_failure();
-                        self.db.upsert_monitor_config(config)?;
+                    let update_result = {
+                        let mut active = self.active_tokens.write().await;
+                        active.get_mut(mint).map(|config| {
+                            let was_failure_count = config.consecutive_pool_failures;
+                            config.mark_pool_discovery_failure();
+                            let updated = config.clone();
+                            (was_failure_count, updated)
+                        })
+                    };
+
+                    if let Some((was_failure_count, config)) = update_result {
+                        self.db.upsert_monitor_config(&config)?;
 
                         // Log with appropriate frequency (only first 3 attempts, then once at 5, 10, etc.)
                         let should_log = was_failure_count < 3 || was_failure_count % 5 == 0;
 
-                        if should_log {
-                            if is_debug_ohlcv_enabled() {
-                                log(
-                                    LogTag::Ohlcv,
-                                    "WARN",
-                                    &format!(
-                                        "⚠️  Pool discovery failed for {} (attempt {}). Next retry: {}",
-                                        mint,
-                                        config.consecutive_pool_failures,
-                                        config.get_next_retry_description()
-                                    )
-                                );
-                            }
+                        if should_log && is_debug_ohlcv_enabled() {
+                            log(
+                                LogTag::Ohlcv,
+                                "WARN",
+                                &format!(
+                                    "⚠️  Pool discovery failed for {} (attempt {}). Next retry: {}",
+                                    mint,
+                                    config.consecutive_pool_failures,
+                                    config.get_next_retry_description()
+                                ),
+                            );
                         }
                     }
 
@@ -362,10 +391,16 @@ impl OhlcvMonitor {
             Ok(data_points) => {
                 if data_points.is_empty() {
                     // Mark empty fetch
-                    let mut active = self.active_tokens.write().await;
-                    if let Some(config) = active.get_mut(mint) {
-                        config.mark_empty_fetch();
-                        self.db.upsert_monitor_config(config)?;
+                    let updated_config = {
+                        let mut active = self.active_tokens.write().await;
+                        active.get_mut(mint).map(|config| {
+                            config.mark_empty_fetch();
+                            config.clone()
+                        })
+                    };
+
+                    if let Some(config) = updated_config {
+                        self.db.upsert_monitor_config(&config)?;
                     }
                 } else {
                     // Ensure ascending timestamp order for consistency
@@ -408,11 +443,17 @@ impl OhlcvMonitor {
                     // Mark success
                     self.pool_manager.mark_success(mint, &pool_address).await?;
 
-                    let mut active = self.active_tokens.write().await;
-                    if let Some(config) = active.get_mut(mint) {
-                        config.consecutive_empty_fetches = 0;
-                        config.mark_activity();
-                        self.db.upsert_monitor_config(config)?;
+                    let updated_config = {
+                        let mut active = self.active_tokens.write().await;
+                        active.get_mut(mint).map(|config| {
+                            config.consecutive_empty_fetches = 0;
+                            config.mark_activity();
+                            config.clone()
+                        })
+                    };
+
+                    if let Some(config) = updated_config {
+                        self.db.upsert_monitor_config(&config)?;
                     }
                 }
             }

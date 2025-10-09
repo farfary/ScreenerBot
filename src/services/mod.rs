@@ -506,12 +506,37 @@ impl ServiceManager {
 
     /// Update cached health and metrics (called periodically by background task)
     pub async fn update_cache(&self) {
+        use crate::arguments::is_debug_webserver_enabled;
+
+        if is_debug_webserver_enabled() {
+            log(
+                LogTag::System,
+                "DEBUG",
+                "ServiceManager: Starting cache update",
+            );
+        }
+
         // Collect fresh health
         let health = self.get_health().await;
         *self.cached_health.write().await = health;
 
         // Collect fresh metrics
         let metrics = self.get_metrics().await;
+
+        if is_debug_webserver_enabled() {
+            let sample_service = metrics.iter().next();
+            if let Some((name, m)) = sample_service {
+                log(
+                    LogTag::System,
+                    "DEBUG",
+                    &format!(
+                        "ServiceManager: Cache updated - sample service '{}' uptime={}s",
+                        name, m.uptime_seconds
+                    ),
+                );
+            }
+        }
+
         *self.cached_metrics.write().await = metrics;
     }
 
@@ -559,7 +584,29 @@ pub async fn init_global_service_manager(manager: ServiceManager) {
 
             if let Some(manager_ref) = get_service_manager().await {
                 if let Some(manager) = manager_ref.read().await.as_ref() {
-                    manager.update_cache().await;
+                    // Add timeout to prevent hanging forever
+                    let update_future = manager.update_cache();
+                    match tokio::time::timeout(tokio::time::Duration::from_secs(3), update_future)
+                        .await
+                    {
+                        Ok(_) => {
+                            // Update completed successfully
+                            if is_debug_system_enabled() {
+                                log(
+                                    LogTag::System,
+                                    "DEBUG",
+                                    "ServiceManager: Cache update completed",
+                                );
+                            }
+                        }
+                        Err(_) => {
+                            log(
+                                LogTag::System,
+                                "WARN",
+                                "ServiceManager: Cache update timed out after 3s - continuing with stale cache"
+                            );
+                        }
+                    }
                 }
             }
         }
