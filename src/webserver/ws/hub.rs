@@ -178,16 +178,7 @@ impl WsHub {
             }
         }
 
-        if is_debug_webserver_enabled() && (sent > 0 || dropped > 0) {
-            log(
-                LogTag::Webserver,
-                "DEBUG",
-                &format!(
-                    "WsHub: broadcast {} (sent={}, dropped={})",
-                    envelope.t, sent, dropped
-                ),
-            );
-        }
+        // Removed verbose per-broadcast logging - metrics are tracked in HubMetrics instead
     }
 
     /// Update the topic subscription set for a connection

@@ -10,6 +10,7 @@ use axum::extract::ws::{Message, WebSocket};
 use axum::extract::Query;
 use futures::{SinkExt, StreamExt};
 use serde_json::{Map, Value};
+use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -17,8 +18,11 @@ use crate::{
     arguments::is_debug_webserver_enabled,
     config,
     events::{self, Event},
+    filtering,
     logger::{log, LogTag},
-    webserver::routes::tokens::{self, TokenListQuery},
+    pools,
+    tokens::{summary_cache, TokenSummary},
+    webserver::routes::tokens::{self as tokens_routes, TokenListQuery, TokenListResponse},
 };
 
 use super::{
@@ -926,6 +930,228 @@ async fn send_events_snapshot(
     Ok(last_id)
 }
 
+fn build_cached_tokens_snapshot(filter: &TokensRealtimeFilter) -> Option<TokenListResponse> {
+    match filter.view.as_str() {
+        "pool" => build_cached_pool_snapshot(filter),
+        "all" => build_cached_all_snapshot(filter),
+        "positions" => build_cached_positions_snapshot(filter),
+        "blacklisted" => build_cached_blacklisted_snapshot(filter),
+        "secure" => build_cached_secure_snapshot(filter),
+        "passed" => build_cached_passed_snapshot(filter),
+        "rejected" => build_cached_rejected_snapshot(filter),
+        "recent" => build_cached_recent_snapshot(filter),
+        _ => None,
+    }
+}
+
+fn build_cached_pool_snapshot(filter: &TokensRealtimeFilter) -> Option<TokenListResponse> {
+    let mints = pools::get_available_tokens();
+    if mints.is_empty() {
+        return Some(finalize_token_snapshot(Vec::new(), filter));
+    }
+
+    let (summaries, _missing) = summary_cache::get_for_mints(&mints);
+
+    // Cache is pre-warmed at startup, so use whatever we have
+    Some(finalize_token_snapshot(summaries, filter))
+}
+
+fn build_cached_all_snapshot(filter: &TokensRealtimeFilter) -> Option<TokenListResponse> {
+    let summaries = summary_cache::all();
+    if summaries.is_empty() {
+        return None;
+    }
+
+    Some(finalize_token_snapshot(summaries, filter))
+}
+
+fn build_cached_positions_snapshot(filter: &TokensRealtimeFilter) -> Option<TokenListResponse> {
+    let summaries: Vec<TokenSummary> = summary_cache::all()
+        .into_iter()
+        .filter(|summary| summary.has_open_position)
+        .collect();
+
+    Some(finalize_token_snapshot(summaries, filter))
+}
+
+fn build_cached_blacklisted_snapshot(filter: &TokensRealtimeFilter) -> Option<TokenListResponse> {
+    let summaries: Vec<TokenSummary> = summary_cache::all()
+        .into_iter()
+        .filter(|summary| summary.blacklisted)
+        .collect();
+
+    Some(finalize_token_snapshot(summaries, filter))
+}
+
+fn build_cached_secure_snapshot(filter: &TokensRealtimeFilter) -> Option<TokenListResponse> {
+    let threshold =
+        config::with_config(|cfg| cfg.webserver.tokens_tab.secure_token_score_threshold);
+
+    let summaries: Vec<TokenSummary> = summary_cache::all()
+        .into_iter()
+        .filter(|summary| {
+            summary
+                .security_score
+                .map(|score| score > threshold)
+                .unwrap_or(false)
+                && !summary.rugged.unwrap_or(false)
+        })
+        .collect();
+
+    Some(finalize_token_snapshot(summaries, filter))
+}
+
+fn build_cached_passed_snapshot(filter: &TokensRealtimeFilter) -> Option<TokenListResponse> {
+    let passed = filtering::get_passed_tokens();
+    if passed.is_empty() {
+        return Some(finalize_token_snapshot(Vec::new(), filter));
+    }
+
+    // Deduplicate by mint while preserving most recent pass result
+    let mut seen = HashSet::new();
+    let mut passed_mints: Vec<String> = Vec::new();
+    for entry in passed.iter().rev() {
+        let mint = &entry.mint;
+        if !seen.contains(mint) {
+            seen.insert(mint.clone());
+            passed_mints.push(mint.clone());
+        }
+    }
+
+    let (summaries, _missing) = summary_cache::get_for_mints(&passed_mints);
+
+    // Cache is pre-warmed at startup, so use whatever we have
+    Some(finalize_token_snapshot(summaries, filter))
+}
+
+fn build_cached_rejected_snapshot(filter: &TokensRealtimeFilter) -> Option<TokenListResponse> {
+    let rejected = filtering::get_rejected_tokens();
+    if rejected.is_empty() {
+        return Some(finalize_token_snapshot(Vec::new(), filter));
+    }
+
+    // Deduplicate by mint while preserving most recent rejection
+    let mut seen = HashSet::new();
+    let mut rejected_mints: Vec<String> = Vec::new();
+    for entry in rejected.iter().rev() {
+        let mint = &entry.mint;
+        if !seen.contains(mint) {
+            seen.insert(mint.clone());
+            rejected_mints.push(mint.clone());
+        }
+    }
+
+    let (summaries, _missing) = summary_cache::get_for_mints(&rejected_mints);
+
+    // Cache is pre-warmed at startup, so use whatever we have
+    Some(finalize_token_snapshot(summaries, filter))
+}
+
+fn build_cached_recent_snapshot(filter: &TokensRealtimeFilter) -> Option<TokenListResponse> {
+    let hours = config::with_config(|cfg| cfg.webserver.tokens_tab.recent_token_hours);
+    let cutoff = chrono::Utc::now() - chrono::Duration::hours(hours);
+
+    let summaries: Vec<TokenSummary> = summary_cache::all()
+        .into_iter()
+        .filter(|summary| {
+            // Filter by price_updated_at as a proxy for recent activity
+            // (we don't have pair_created_at in TokenSummary)
+            summary
+                .price_updated_at
+                .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0))
+                .map(|dt| dt > cutoff)
+                .unwrap_or(false)
+        })
+        .collect();
+
+    Some(finalize_token_snapshot(summaries, filter))
+}
+
+fn finalize_token_snapshot(
+    mut items: Vec<TokenSummary>,
+    filter: &TokensRealtimeFilter,
+) -> TokenListResponse {
+    if let Some(search) = filter.search.as_ref() {
+        let search_lower = search.trim().to_lowercase();
+        if !search_lower.is_empty() {
+            items = items
+                .into_iter()
+                .filter(|summary| token_matches_search(summary, &search_lower))
+                .collect();
+        }
+    }
+
+    sort_token_summaries(&mut items, &filter.sort_by, &filter.sort_dir);
+
+    let total = items.len();
+    let page_size = filter.normalized_limit();
+    if items.len() > page_size {
+        items.truncate(page_size);
+    }
+    let total_pages = if total == 0 {
+        0
+    } else {
+        (total + page_size - 1) / page_size
+    };
+
+    TokenListResponse {
+        items,
+        page: 1,
+        page_size,
+        total,
+        total_pages,
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    }
+}
+
+fn token_matches_search(summary: &TokenSummary, search_lower: &str) -> bool {
+    summary.symbol.to_lowercase().contains(search_lower)
+        || summary.mint.to_lowercase().contains(search_lower)
+        || summary
+            .name
+            .as_ref()
+            .map(|name| name.to_lowercase().contains(search_lower))
+            .unwrap_or(false)
+}
+
+fn sort_token_summaries(tokens: &mut [TokenSummary], sort_by: &str, sort_dir: &str) {
+    let ascending = sort_dir.eq_ignore_ascii_case("asc");
+
+    tokens.sort_by(|a, b| {
+        let cmp = match sort_by {
+            "symbol" => a.symbol.cmp(&b.symbol),
+            "liquidity_usd" => cmp_f64(a.liquidity_usd, b.liquidity_usd),
+            "volume_24h" => cmp_f64(a.volume_24h, b.volume_24h),
+            "price_sol" => cmp_f64(a.price_sol, b.price_sol),
+            "market_cap" => cmp_f64(a.market_cap, b.market_cap),
+            "fdv" => cmp_f64(a.fdv, b.fdv),
+            "security_score" => a
+                .security_score
+                .unwrap_or(0)
+                .cmp(&b.security_score.unwrap_or(0)),
+            "price_change_h1" => cmp_f64(a.price_change_h1, b.price_change_h1),
+            "price_change_h24" => cmp_f64(a.price_change_h24, b.price_change_h24),
+            "updated_at" => a
+                .price_updated_at
+                .unwrap_or(0)
+                .cmp(&b.price_updated_at.unwrap_or(0)),
+            _ => a.mint.cmp(&b.mint),
+        };
+
+        if ascending {
+            cmp
+        } else {
+            cmp.reverse()
+        }
+    });
+}
+
+fn cmp_f64(left: Option<f64>, right: Option<f64>) -> Ordering {
+    left.unwrap_or(0.0)
+        .partial_cmp(&right.unwrap_or(0.0))
+        .unwrap_or(Ordering::Equal)
+}
+
 async fn send_tokens_snapshot(
     ws_tx: &mut futures::stream::SplitSink<WebSocket, Message>,
     hub: &Arc<WsHub>,
@@ -933,7 +1159,14 @@ async fn send_tokens_snapshot(
     filter: TokensRealtimeFilter,
 ) -> Result<(), String> {
     let query = filter.to_query();
-    let axum::Json(response) = tokens::get_tokens_list(Query(query)).await;
+    let response = match build_cached_tokens_snapshot(&filter) {
+        Some(snapshot) => snapshot,
+        None => {
+            // Fallback only for unsupported views (shouldn't happen with current implementation)
+            let axum::Json(legacy) = tokens_routes::get_tokens_list(Query(query)).await;
+            legacy
+        }
+    };
 
     let total_sent = response.items.len();
     let total_available = response.total;

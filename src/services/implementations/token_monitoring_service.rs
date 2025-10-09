@@ -13,7 +13,7 @@ impl Service for TokenMonitoringService {
     }
 
     fn priority(&self) -> i32 {
-        42
+        25 // Start before webserver (30) to pre-warm cache
     }
 
     fn dependencies(&self) -> Vec<&'static str> {
@@ -21,6 +21,31 @@ impl Service for TokenMonitoringService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
+        use crate::logger::{log, LogTag};
+        use crate::tokens::prewarm_summary_cache;
+
+        let start = std::time::Instant::now();
+        match prewarm_summary_cache().await {
+            Ok(count) => {
+                log(
+                    LogTag::Monitor,
+                    "CACHE_PREWARM",
+                    &format!(
+                        "✅ Pre-warmed cache with {} tokens in {:?}",
+                        count,
+                        start.elapsed()
+                    ),
+                );
+            }
+            Err(e) => {
+                log(
+                    LogTag::Monitor,
+                    "WARN",
+                    &format!("Cache pre-warm failed (will rely on monitor): {}", e),
+                );
+            }
+        }
+
         Ok(())
     }
 
