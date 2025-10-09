@@ -939,16 +939,12 @@
 
     window.PageRealtime = window.PageRealtime || {};
     window.PageRealtime.services = {
-      // Subscribe to both alias and concrete topic name for robustness
-      topics: ["services", "services.metrics"],
+      // Subscribe only to the primary topic (no duplicate subscriptions)
+      topics: ["services.metrics"],
       getFilters() {
-        // Provide filters for both alias and concrete topic routing keys
-        return { services: {}, "services.metrics": {} };
+        return { "services.metrics": {} };
       },
       channels: {
-        services(snapshot) {
-          controller.handleServicesSnapshot(snapshot);
-        },
         "services.metrics": function (snapshot) {
           controller.handleServicesSnapshot(snapshot);
         },
@@ -956,12 +952,6 @@
           controller.handleSnapshotBegin(payload);
         },
         "snapshot_end:services.metrics": function (payload) {
-          controller.handleSnapshotCompletion(payload);
-        },
-        "snapshot_begin:services": function (payload) {
-          controller.handleSnapshotBegin(payload);
-        },
-        "snapshot_end:services": function (payload) {
           controller.handleSnapshotCompletion(payload);
         },
         _warning(message) {

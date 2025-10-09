@@ -551,10 +551,11 @@ pub async fn init_global_service_manager(manager: ServiceManager) {
         "✅ Global ServiceManager initialized",
     );
 
-    // Spawn background task to update cache every 2 seconds
+    // Spawn background task to update cache every 5 seconds
+    // (most services are idle, so less frequent updates reduce CPU overhead)
     tokio::spawn(async {
         loop {
-            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
 
             if let Some(manager_ref) = get_service_manager().await {
                 if let Some(manager) = manager_ref.read().await.as_ref() {
