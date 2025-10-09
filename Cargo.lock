@@ -3643,6 +3643,7 @@ dependencies = [
  "axum-macros",
  "base64 0.21.7",
  "bincode",
+ "blake3",
  "bs58 0.4.0",
  "chrono",
  "clap",

@@ -576,6 +576,10 @@
     pendingTopics: null,
     pausedAliases: new Set(),
     activeSubscriptions: [],
+    snapshotContextsByTopic: new Map(),
+    snapshotContextsByAlias: new Map(),
+    lastSnapshotRequestIds: {},
+    snapshotListenersBound: false,
 
     ensureHubInitialized() {
       if (!hasWsHub()) {
@@ -599,6 +603,7 @@
       }
       this.hasInitialized = true;
       this.setupGlobalStatusTelemetry();
+      this.bindSnapshotLifecycleListeners();
     },
 
     setupGlobalStatusTelemetry() {
@@ -669,12 +674,130 @@
       }
     },
 
+    bindSnapshotLifecycleListeners() {
+      if (this.snapshotListenersBound) {
+        return;
+      }
+
+      this.addGlobalSubscription("_snapshot_begin", (payload) => {
+        this.handleSnapshotBegin(payload);
+      });
+      this.addGlobalSubscription("_snapshot_end", (payload) => {
+        this.handleSnapshotCompletion(payload);
+      });
+
+      this.snapshotListenersBound = true;
+    },
+
     addGlobalSubscription(channel, handler) {
       if (!hasWsHub()) {
         return;
       }
       global.WsHub.subscribe(channel, handler);
       globalSubscriptions.push({ channel, handler });
+    },
+
+    handleSnapshotBegin(payload) {
+      if (!payload || !payload.topic) {
+        return;
+      }
+      const topic = payload.topic;
+      const requestId =
+        payload.context?.request_id || payload.context?.requestId || null;
+      const context = this.snapshotContextsByTopic.get(topic);
+      if (context) {
+        context.startedAt = Date.now();
+        if (requestId && context.requestId !== requestId) {
+          context.requestId = requestId;
+          if (context.aliases) {
+            context.aliases.forEach((alias) => {
+              this.snapshotContextsByAlias.set(alias, context);
+              this.lastSnapshotRequestIds[alias] = requestId;
+            });
+          }
+          this.lastSnapshotRequestIds[topic] = requestId;
+        }
+      } else if (requestId) {
+        const aliasSet = new Set([topic]);
+        const ctx = {
+          topic,
+          requestId,
+          aliases: aliasSet,
+          createdAt: Date.now(),
+          startedAt: Date.now(),
+        };
+        this.snapshotContextsByTopic.set(topic, ctx);
+        this.snapshotContextsByAlias.set(topic, ctx);
+        this.lastSnapshotRequestIds[topic] = requestId;
+      }
+    },
+
+    handleSnapshotCompletion(payload) {
+      if (!payload || !payload.topic) {
+        return;
+      }
+      const topic = payload.topic;
+      const requestId =
+        payload.context?.request_id || payload.context?.requestId || null;
+      const context = this.snapshotContextsByTopic.get(topic);
+      if (!context) {
+        return;
+      }
+      if (requestId && context.requestId && context.requestId !== requestId) {
+        return;
+      }
+      this.snapshotContextsByTopic.delete(topic);
+      if (context.aliases) {
+        context.aliases.forEach((alias) => {
+          this.snapshotContextsByAlias.delete(alias);
+        });
+      }
+    },
+
+    prepareSnapshotContexts(snapshotAliases, willSendNow) {
+      const contexts = new Map();
+      const aliasRequestIds = {};
+
+      if (!willSendNow || snapshotAliases.size === 0) {
+        return { contexts, aliasRequestIds };
+      }
+
+      const now = Date.now();
+      const timestampPart = now.toString(36);
+
+      for (const alias of snapshotAliases) {
+        if (!alias) continue;
+        const topic = resolveTopicFromAlias(alias);
+        let context = contexts.get(topic);
+        if (!context) {
+          const requestId = `snap-${topic
+            .replace(/[^a-z0-9]+/gi, "-")
+            .replace(/-+/g, "-")}-${timestampPart}-${Math.random()
+            .toString(36)
+            .slice(2, 8)}`;
+          context = {
+            topic,
+            requestId,
+            aliases: new Set(),
+            createdAt: now,
+          };
+          contexts.set(topic, context);
+        }
+        context.aliases.add(alias);
+        aliasRequestIds[alias] = context.requestId;
+        aliasRequestIds[topic] = context.requestId;
+      }
+
+      contexts.forEach((ctx) => {
+        this.snapshotContextsByTopic.set(ctx.topic, ctx);
+        ctx.aliases.forEach((alias) => {
+          this.snapshotContextsByAlias.set(alias, ctx);
+        });
+      });
+
+      this.lastSnapshotRequestIds = { ...aliasRequestIds };
+
+      return { contexts, aliasRequestIds };
     },
 
     getFiltersForAlias(alias) {
@@ -734,17 +857,24 @@
       return aliases;
     },
 
-    collectFilters(snapshotAliases) {
+    collectFilters(snapshotAliases, snapshotContexts) {
       const topics = {};
 
       const applyAlias = (alias) => {
         const topic = resolveTopicFromAlias(alias);
         const filters = this.getFiltersForAlias(alias);
         const existing = topics[topic] || {};
-        topics[topic] = { ...existing, ...filters };
+        const merged = { ...existing, ...filters };
+        const context =
+          snapshotContexts.get(topic) ||
+          this.snapshotContextsByTopic.get(topic);
         if (snapshotAliases.has(alias)) {
-          topics[topic] = { ...topics[topic], snapshot: true };
+          merged.snapshot = true;
+          if (context && context.requestId) {
+            merged.request_id = context.requestId;
+          }
         }
+        topics[topic] = merged;
       };
 
       for (const config of persistentRealtimeConfigs) {
@@ -769,6 +899,7 @@
     },
 
     updateFilters(options = {}) {
+      let aliasRequestIds = {};
       if (options.snapshotTopics) {
         for (const alias of options.snapshotTopics) {
           if (alias) {
@@ -778,7 +909,18 @@
       }
 
       const snapshotAliases = new Set(this.snapshotRequestAliases);
-      const topics = this.collectFilters(snapshotAliases);
+      const hubAvailable = hasWsHub();
+      const isConnected = hubAvailable && global.WsHub.isConnected();
+      const { contexts: snapshotContexts, aliasRequestIds: generatedIds } =
+        this.prepareSnapshotContexts(
+          snapshotAliases,
+          hubAvailable && isConnected
+        );
+      if (Object.keys(generatedIds).length > 0) {
+        aliasRequestIds = generatedIds;
+      }
+
+      const topics = this.collectFilters(snapshotAliases, snapshotContexts);
 
       if (Object.keys(topics).length === 0) {
         const hadPrev = !!this.lastSentFilters;
@@ -788,8 +930,8 @@
         this.snapshotRequestAliases.clear();
 
         // Proactively clear server-side filters to avoid stale subscriptions
-        if (hasWsHub()) {
-          if (global.WsHub.isConnected()) {
+        if (hubAvailable) {
+          if (isConnected) {
             if (hadPrev) {
               dbg("updateFilters:clearing_server_filters");
               global.WsHub.sendSetFilters({});
@@ -800,21 +942,21 @@
             this.pendingTopics = {};
           }
         }
-        return;
+        return aliasRequestIds;
       }
 
-      if (!hasWsHub()) {
+      if (!hubAvailable) {
         dbg("updateFilters:hub_unavailable", topics);
         this.pendingFilterUpdate = true;
         this.pendingTopics = topics;
-        return;
+        return aliasRequestIds;
       }
 
-      if (!global.WsHub.isConnected()) {
+      if (!isConnected) {
         dbg("updateFilters:ws_disconnected", topics);
         this.pendingFilterUpdate = true;
         this.pendingTopics = topics;
-        return;
+        return aliasRequestIds;
       }
 
       // Avoid redundant updates if nothing changed and no snapshot was requested
@@ -827,7 +969,7 @@
         this.pendingFilterUpdate = false;
         this.pendingTopics = null;
         this.snapshotRequestAliases.clear();
-        return;
+        return aliasRequestIds;
       }
 
       dbg("updateFilters:sending", {
@@ -839,6 +981,7 @@
       this.pendingFilterUpdate = false;
       this.pendingTopics = null;
       this.snapshotRequestAliases.clear();
+      return aliasRequestIds;
     },
 
     requestSnapshotForAliases(aliases) {
@@ -850,7 +993,7 @@
           this.snapshotRequestAliases.add(alias);
         }
       }
-      this.updateFilters();
+      return this.updateFilters();
     },
 
     isConnected() {

@@ -41,6 +41,78 @@ const TOKENS_SNAPSHOT_DEFAULT_LIMIT: usize = 200;
 const POSITIONS_SNAPSHOT_DEFAULT_LIMIT: usize = 1000;
 const POSITIONS_SNAPSHOT_MAX_LIMIT: usize = 2000;
 
+fn sanitize_filter_value(value: &Value) -> Value {
+    match value {
+        Value::Object(map) => {
+            let mut cleaned = Map::new();
+            for (key, val) in map {
+                if key == "snapshot" || key == "request_id" {
+                    continue;
+                }
+                cleaned.insert(key.clone(), sanitize_filter_value(val));
+            }
+            Value::Object(cleaned)
+        }
+        Value::Array(items) => Value::Array(items.iter().map(sanitize_filter_value).collect()),
+        _ => value.clone(),
+    }
+}
+
+fn canonicalize_value(value: Value) -> Value {
+    match value {
+        Value::Object(map) => {
+            let mut entries: Vec<_> = map.into_iter().collect();
+            entries.sort_by(|a, b| a.0.cmp(&b.0));
+            let mut ordered = Map::new();
+            for (key, val) in entries {
+                ordered.insert(key, canonicalize_value(val));
+            }
+            Value::Object(ordered)
+        }
+        Value::Array(items) => Value::Array(items.into_iter().map(canonicalize_value).collect()),
+        other => other,
+    }
+}
+
+fn compute_filter_hash(raw: &Value) -> Option<String> {
+    if !raw.is_object() {
+        return None;
+    }
+
+    let sanitized = sanitize_filter_value(raw);
+    match &sanitized {
+        Value::Object(map) if map.is_empty() => return None,
+        _ => {}
+    }
+
+    let canonical = canonicalize_value(sanitized);
+    let serialized = serde_json::to_string(&canonical).ok()?;
+    let hash = blake3::hash(serialized.as_bytes());
+    Some(hash.to_hex().to_string())
+}
+
+fn log_snapshot_event(
+    event: &str,
+    conn_id: ConnectionId,
+    topic: &str,
+    request_id: Option<&str>,
+    filter_hash: Option<&str>,
+    detail: &str,
+) {
+    let mut message = format!("conn={} topic={}", conn_id, topic);
+    if let Some(id) = request_id {
+        message.push_str(&format!(" request_id={}", id));
+    }
+    if let Some(hash) = filter_hash {
+        message.push_str(&format!(" filter_hash={}", hash));
+    }
+    if !detail.is_empty() {
+        message.push(' ');
+        message.push_str(detail);
+    }
+    log(LogTag::Webserver, event, &message);
+}
+
 #[derive(Default)]
 struct ConnectionState {
     filters: HashMap<String, TopicFilter>,
@@ -51,6 +123,8 @@ struct ConnectionState {
 struct FilterUpdateResult {
     snapshot_requested: bool,
     topic: String,
+    request_id: Option<String>,
+    filter_hash: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -58,6 +132,7 @@ enum TopicFilter {
     Events(EventsRealtimeFilter),
     Tokens(TokensRealtimeFilter),
     Positions(PositionsRealtimeFilter),
+    Services(ServicesRealtimeFilter),
     Passthrough,
 }
 
@@ -69,6 +144,8 @@ struct EventsRealtimeFilter {
     mint: Option<String>,
     reference: Option<String>,
     since_id: Option<i64>,
+    request_id: Option<String>,
+    filter_hash: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -78,6 +155,8 @@ struct TokensRealtimeFilter {
     sort_by: String,
     sort_dir: String,
     limit: usize,
+    request_id: Option<String>,
+    filter_hash: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -85,6 +164,8 @@ struct PositionsRealtimeFilter {
     status: Vec<String>,
     mints: Vec<String>,
     limit: usize,
+    request_id: Option<String>,
+    filter_hash: Option<String>,
 }
 
 impl Default for PositionsRealtimeFilter {
@@ -93,6 +174,8 @@ impl Default for PositionsRealtimeFilter {
             status: Vec::new(),
             mints: Vec::new(),
             limit: POSITIONS_SNAPSHOT_DEFAULT_LIMIT,
+            request_id: None,
+            filter_hash: None,
         }
     }
 }
@@ -106,6 +189,8 @@ impl Default for TokensRealtimeFilter {
             sort_by: "liquidity_usd".to_string(),
             sort_dir: "desc".to_string(),
             limit: max_limit.min(TOKENS_SNAPSHOT_DEFAULT_LIMIT).max(1),
+            request_id: None,
+            filter_hash: None,
         }
     }
 }
@@ -143,10 +228,15 @@ impl TokensRealtimeFilter {
             {
                 filter.limit = limit as usize;
             }
+            filter.request_id = map
+                .get("request_id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
         }
 
         let max_limit = config::with_config(|cfg| cfg.webserver.tokens_tab.max_page_size);
         filter.limit = filter.limit.min(max_limit).max(1);
+        filter.filter_hash = compute_filter_hash(raw);
         filter
     }
 
@@ -208,9 +298,14 @@ impl PositionsRealtimeFilter {
             {
                 filter.limit = limit as usize;
             }
+            filter.request_id = map
+                .get("request_id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
         }
 
         filter.normalize();
+        filter.filter_hash = compute_filter_hash(raw);
         filter
     }
 
@@ -251,6 +346,26 @@ impl PositionsRealtimeFilter {
     }
 }
 
+#[derive(Clone, Debug, Default)]
+struct ServicesRealtimeFilter {
+    request_id: Option<String>,
+    filter_hash: Option<String>,
+}
+
+impl ServicesRealtimeFilter {
+    fn from_value(raw: &Value) -> Self {
+        let mut filter = ServicesRealtimeFilter::default();
+        if let Some(map) = raw.as_object() {
+            filter.request_id = map
+                .get("request_id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+        }
+        filter.filter_hash = compute_filter_hash(raw);
+        filter
+    }
+}
+
 impl ConnectionState {
     fn new() -> Self {
         Self::default()
@@ -265,21 +380,37 @@ impl ConnectionState {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
+        let mut request_id = None;
+        let mut filter_hash = None;
+
         match Topic::from_code(&normalized_topic) {
             Some(Topic::EventsNew) => {
                 let filter = EventsRealtimeFilter::from_value(raw);
+                request_id = filter.request_id.clone();
+                filter_hash = filter.filter_hash.clone();
                 self.filters
                     .insert(normalized_topic.clone(), TopicFilter::Events(filter));
             }
             Some(Topic::TokensUpdate) => {
                 let filter = TokensRealtimeFilter::from_value(raw);
+                request_id = filter.request_id.clone();
+                filter_hash = filter.filter_hash.clone();
                 self.filters
                     .insert(normalized_topic.clone(), TopicFilter::Tokens(filter));
             }
             Some(Topic::PositionsUpdate) => {
                 let filter = PositionsRealtimeFilter::from_value(raw);
+                request_id = filter.request_id.clone();
+                filter_hash = filter.filter_hash.clone();
                 self.filters
                     .insert(normalized_topic.clone(), TopicFilter::Positions(filter));
+            }
+            Some(Topic::ServicesMetrics) => {
+                let filter = ServicesRealtimeFilter::from_value(raw);
+                request_id = filter.request_id.clone();
+                filter_hash = filter.filter_hash.clone();
+                self.filters
+                    .insert(normalized_topic.clone(), TopicFilter::Services(filter));
             }
             _ => {
                 self.filters
@@ -290,6 +421,8 @@ impl ConnectionState {
         FilterUpdateResult {
             snapshot_requested,
             topic: normalized_topic,
+            request_id,
+            filter_hash,
         }
     }
 
@@ -332,6 +465,20 @@ impl ConnectionState {
         self.filters.insert(
             Topic::PositionsUpdate.code().to_string(),
             TopicFilter::Positions(filter),
+        );
+    }
+
+    fn services_filter(&self) -> Option<&ServicesRealtimeFilter> {
+        match self.filters.get(Topic::ServicesMetrics.code()) {
+            Some(TopicFilter::Services(filter)) => Some(filter),
+            _ => None,
+        }
+    }
+
+    fn set_services_filter(&mut self, filter: ServicesRealtimeFilter) {
+        self.filters.insert(
+            Topic::ServicesMetrics.code().to_string(),
+            TopicFilter::Services(filter),
         );
     }
 
@@ -404,6 +551,7 @@ impl TopicFilter {
             TopicFilter::Events(filter) => filter.matches_value(&envelope.data),
             TopicFilter::Tokens(_) => true,
             TopicFilter::Positions(_) => true,
+            TopicFilter::Services(_) => true,
             TopicFilter::Passthrough => true,
         }
     }
@@ -444,12 +592,18 @@ impl EventsRealtimeFilter {
             if let Some(since_id) = map.get("since_id").and_then(|v| v.as_i64()) {
                 filter.since_id = Some(since_id);
             }
+            filter.request_id = map
+                .get("request_id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
         }
 
         if filter.categories.len() > 1 {
             filter.categories.sort();
             filter.categories.dedup();
         }
+
+        filter.filter_hash = compute_filter_hash(raw);
 
         filter
     }
@@ -903,7 +1057,7 @@ async fn handle_client_message(
                     Some(Topic::EventsNew) => {
                         let filter = state.events_filter().cloned().unwrap_or_default();
                         if let Some(last_id) =
-                            send_events_snapshot(ws_tx, hub, metrics, filter).await?
+                            send_events_snapshot(ws_tx, hub, metrics, filter, conn_id).await?
                         {
                             state.update_events_since(last_id);
                         }
@@ -925,11 +1079,15 @@ async fn handle_client_message(
                                 ),
                             );
                         }
-                        send_tokens_snapshot(ws_tx, hub, metrics, filter).await?;
+                        send_tokens_snapshot(ws_tx, hub, metrics, filter, conn_id).await?;
                     }
                     Some(Topic::PositionsUpdate) => {
                         let filter = state.positions_filter().cloned().unwrap_or_default();
-                        send_positions_snapshot(ws_tx, hub, metrics, filter).await?;
+                        send_positions_snapshot(ws_tx, hub, metrics, filter, conn_id).await?;
+                    }
+                    Some(Topic::ServicesMetrics) => {
+                        let filter = state.services_filter().cloned().unwrap_or_default();
+                        send_services_snapshot(ws_tx, hub, metrics, filter, conn_id).await?;
                     }
                     _ => {}
                 }
@@ -1001,7 +1159,7 @@ async fn handle_client_message(
                         filter.set_since_id(since_override);
                         state.set_events_filter(filter.clone());
                         if let Some(last_id) =
-                            send_events_snapshot(ws_tx, hub, metrics, filter).await?
+                            send_events_snapshot(ws_tx, hub, metrics, filter, conn_id).await?
                         {
                             state.update_events_since(last_id);
                         }
@@ -1009,12 +1167,17 @@ async fn handle_client_message(
                     Some(Topic::TokensUpdate) => {
                         let filter = TokensRealtimeFilter::from_value(value);
                         state.set_tokens_filter(filter.clone());
-                        send_tokens_snapshot(ws_tx, hub, metrics, filter).await?;
+                        send_tokens_snapshot(ws_tx, hub, metrics, filter, conn_id).await?;
                     }
                     Some(Topic::PositionsUpdate) => {
                         let filter = PositionsRealtimeFilter::from_value(value);
                         state.set_positions_filter(filter.clone());
-                        send_positions_snapshot(ws_tx, hub, metrics, filter).await?;
+                        send_positions_snapshot(ws_tx, hub, metrics, filter, conn_id).await?;
+                    }
+                    Some(Topic::ServicesMetrics) => {
+                        let filter = ServicesRealtimeFilter::from_value(value);
+                        state.set_services_filter(filter.clone());
+                        send_services_snapshot(ws_tx, hub, metrics, filter, conn_id).await?;
                     }
                     _ => {}
                 }
@@ -1050,6 +1213,7 @@ async fn send_events_snapshot(
     hub: &Arc<WsHub>,
     metrics: &Arc<ConnectionMetrics>,
     filter: EventsRealtimeFilter,
+    conn_id: ConnectionId,
 ) -> Result<Option<i64>, String> {
     let mut snapshot_events = Vec::with_capacity(EVENTS_SNAPSHOT_LIMIT);
     let mut cached = events::cached_events_head(EVENTS_SNAPSHOT_FETCH_LIMIT).await;
@@ -1067,24 +1231,114 @@ async fn send_events_snapshot(
     }
 
     let total = snapshot_events.len();
+    let request_id = filter.request_id.clone();
+    let filter_hash = filter.filter_hash.clone();
+
+    log_snapshot_event(
+        "SNAPSHOT_REQ",
+        conn_id,
+        Topic::EventsNew.code(),
+        request_id.as_deref(),
+        filter_hash.as_deref(),
+        &format!(
+            "categories={:?} severity={:?} mint={:?} reference={:?} since_id={:?}",
+            filter.categories, filter.severity, filter.mint, filter.reference, filter.since_id
+        ),
+    );
+
+    let mut context = Map::new();
+    if let Some(id) = request_id.as_deref() {
+        context.insert("request_id".to_string(), serde_json::json!(id));
+    }
+    if let Some(hash) = filter_hash.as_deref() {
+        context.insert("filter_hash".to_string(), serde_json::json!(hash));
+    }
+    if !filter.categories.is_empty() {
+        context.insert(
+            "categories".to_string(),
+            serde_json::json!(filter.categories.clone()),
+        );
+    }
+    if let Some(severity) = &filter.severity {
+        context.insert("severity".to_string(), serde_json::json!(severity));
+    }
+    if let Some(search) = &filter.search {
+        context.insert("search".to_string(), serde_json::json!(search));
+    }
+    if let Some(mint) = &filter.mint {
+        context.insert("mint".to_string(), serde_json::json!(mint));
+    }
+    if let Some(reference) = &filter.reference {
+        context.insert("reference".to_string(), serde_json::json!(reference));
+    }
+    if let Some(since) = filter.since_id {
+        context.insert("since_id".to_string(), serde_json::json!(since));
+    }
+    context.insert("total_selected".to_string(), serde_json::json!(total));
+    context.insert(
+        "limit".to_string(),
+        serde_json::json!(EVENTS_SNAPSHOT_LIMIT),
+    );
 
     send_control_message(
         ws_tx,
         ServerMessage::SnapshotBegin {
             topic: Topic::EventsNew.code().to_string(),
             total,
+            context: Some(serde_json::Value::Object(context.clone())),
         },
     )
     .await?;
 
+    log_snapshot_event(
+        "SNAPSHOT_BEGIN",
+        conn_id,
+        Topic::EventsNew.code(),
+        request_id.as_deref(),
+        filter_hash.as_deref(),
+        &format!("total={} limit={}", total, EVENTS_SNAPSHOT_LIMIT),
+    );
+
     let mut last_id = None;
 
-    for event in snapshot_events.into_iter() {
+    for (idx, event) in snapshot_events.into_iter().enumerate() {
         if let Some(id) = event.id {
             last_id = Some(id);
         }
         let seq = hub.next_seq(Topic::EventsNew.code()).await;
-        let envelope = topics::events::event_to_envelope(&event, seq).as_snapshot();
+        let mut envelope = topics::events::event_to_envelope(&event, seq);
+
+        if idx == 0 {
+            let mut extra = Map::new();
+            extra.insert("total".to_string(), serde_json::json!(total));
+            if let Some(id) = request_id.as_deref() {
+                extra.insert("request_id".to_string(), serde_json::json!(id));
+            }
+            if let Some(hash) = filter_hash.as_deref() {
+                extra.insert("filter_hash".to_string(), serde_json::json!(hash));
+            }
+            if let Some(severity) = &filter.severity {
+                extra.insert("severity".to_string(), serde_json::json!(severity));
+            }
+            if let Some(search) = &filter.search {
+                extra.insert("search".to_string(), serde_json::json!(search));
+            }
+            if let Some(mint) = &filter.mint {
+                extra.insert("mint".to_string(), serde_json::json!(mint));
+            }
+            if let Some(reference) = &filter.reference {
+                extra.insert("reference".to_string(), serde_json::json!(reference));
+            }
+            let meta = MessageMetadata {
+                snapshot: None,
+                dropped: None,
+                extra: Some(extra),
+            };
+            envelope = envelope.with_meta(meta);
+        }
+
+        envelope = envelope.as_snapshot();
+
         let msg = ServerMessage::Data(envelope);
         let json = msg
             .to_json()
@@ -1101,9 +1355,19 @@ async fn send_events_snapshot(
         ServerMessage::SnapshotEnd {
             topic: Topic::EventsNew.code().to_string(),
             sent: total,
+            context: Some(serde_json::Value::Object(context)),
         },
     )
     .await?;
+
+    log_snapshot_event(
+        "SNAPSHOT_END",
+        conn_id,
+        Topic::EventsNew.code(),
+        request_id.as_deref(),
+        filter_hash.as_deref(),
+        &format!("sent={}", total),
+    );
 
     Ok(last_id)
 }
@@ -1329,40 +1593,78 @@ async fn send_tokens_snapshot(
     hub: &Arc<WsHub>,
     metrics: &Arc<ConnectionMetrics>,
     filter: TokensRealtimeFilter,
+    conn_id: ConnectionId,
 ) -> Result<(), String> {
     let response = build_tokens_snapshot(&filter);
     let corr = format!("{}:{}", filter.view, filter.sort_by);
 
     let total_sent = response.items.len();
     let total_available = response.total;
+    let request_id = filter.request_id.clone();
+    let filter_hash = filter.filter_hash.clone();
 
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "TOKENS_SNAPSHOT_BEGIN",
-            &format!(
-                "corr={} view={} search='{}' sort_by={} sort_dir={} limit={} total_available={} to_send={}",
-                corr,
-                filter.view,
-                filter.search.clone().unwrap_or_default(),
-                filter.sort_by,
-                filter.sort_dir,
-                filter.limit,
-                total_available,
-                total_sent
-            ),
-        );
+    log_snapshot_event(
+        "SNAPSHOT_REQ",
+        conn_id,
+        Topic::TokensUpdate.code(),
+        request_id.as_deref(),
+        filter_hash.as_deref(),
+        &format!(
+            "view={} sort_by={} sort_dir={} limit={} search='{}' total_available={} to_send={}",
+            filter.view,
+            filter.sort_by,
+            filter.sort_dir,
+            filter.limit,
+            filter.search.clone().unwrap_or_default(),
+            total_available,
+            total_sent
+        ),
+    );
+
+    let mut context = Map::new();
+    if let Some(id) = request_id.as_deref() {
+        context.insert("request_id".to_string(), serde_json::json!(id));
     }
+    if let Some(hash) = filter_hash.as_deref() {
+        context.insert("filter_hash".to_string(), serde_json::json!(hash));
+    }
+    context.insert("view".to_string(), serde_json::json!(filter.view.clone()));
+    context.insert(
+        "sort_by".to_string(),
+        serde_json::json!(filter.sort_by.clone()),
+    );
+    context.insert(
+        "sort_dir".to_string(),
+        serde_json::json!(filter.sort_dir.clone()),
+    );
+    context.insert("limit".to_string(), serde_json::json!(filter.limit));
+    if let Some(search) = filter.search.clone() {
+        context.insert("search".to_string(), serde_json::json!(search));
+    }
+    context.insert(
+        "total_available".to_string(),
+        serde_json::json!(total_available),
+    );
+    context.insert("total_selected".to_string(), serde_json::json!(total_sent));
 
-    // Include filter meta in begin for client-side validation
     send_control_message(
         ws_tx,
         ServerMessage::SnapshotBegin {
             topic: Topic::TokensUpdate.code().to_string(),
             total: total_sent,
+            context: Some(serde_json::Value::Object(context.clone())),
         },
     )
     .await?;
+
+    log_snapshot_event(
+        "SNAPSHOT_BEGIN",
+        conn_id,
+        Topic::TokensUpdate.code(),
+        request_id.as_deref(),
+        filter_hash.as_deref(),
+        &format!("sent={} total_available={}", total_sent, total_available),
+    );
 
     for (idx, summary) in response.items.into_iter().enumerate() {
         let seq = hub.next_seq(Topic::TokensUpdate.code()).await;
@@ -1392,8 +1694,15 @@ async fn send_tokens_snapshot(
                 "sort_dir".to_string(),
                 serde_json::json!(filter.sort_dir.clone()),
             );
+            extra.insert("limit".to_string(), serde_json::json!(filter.limit));
             if let Some(search) = filter.search.clone() {
                 extra.insert("search".to_string(), serde_json::json!(search));
+            }
+            if let Some(id) = request_id.as_deref() {
+                extra.insert("request_id".to_string(), serde_json::json!(id));
+            }
+            if let Some(hash) = filter_hash.as_deref() {
+                extra.insert("filter_hash".to_string(), serde_json::json!(hash));
             }
             let meta = MessageMetadata {
                 snapshot: None,
@@ -1435,17 +1744,19 @@ async fn send_tokens_snapshot(
         ServerMessage::SnapshotEnd {
             topic: Topic::TokensUpdate.code().to_string(),
             sent: total_sent,
+            context: Some(serde_json::Value::Object(context)),
         },
     )
     .await?;
 
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "TOKENS_SNAPSHOT_END",
-            &format!("corr={} sent={}/{}", corr, total_sent, total_available),
-        );
-    }
+    log_snapshot_event(
+        "SNAPSHOT_END",
+        conn_id,
+        Topic::TokensUpdate.code(),
+        request_id.as_deref(),
+        filter_hash.as_deref(),
+        &format!("sent={} total_available={}", total_sent, total_available),
+    );
 
     Ok(())
 }
@@ -1455,6 +1766,7 @@ async fn send_positions_snapshot(
     hub: &Arc<WsHub>,
     metrics: &Arc<ConnectionMetrics>,
     filter: PositionsRealtimeFilter,
+    conn_id: ConnectionId,
 ) -> Result<(), String> {
     let status = filter.primary_status().to_string();
     let limit = filter.normalized_limit();
@@ -1465,14 +1777,53 @@ async fn send_positions_snapshot(
 
     let total = positions.len();
 
+    let request_id = filter.request_id.clone();
+    let filter_hash = filter.filter_hash.clone();
+
+    log_snapshot_event(
+        "SNAPSHOT_REQ",
+        conn_id,
+        Topic::PositionsUpdate.code(),
+        request_id.as_deref(),
+        filter_hash.as_deref(),
+        &format!(
+            "status={} limit={} mint={:?} total={}",
+            status, limit, mint_filter, total
+        ),
+    );
+
+    let mut context = Map::new();
+    if let Some(id) = request_id.as_deref() {
+        context.insert("request_id".to_string(), serde_json::json!(id));
+    }
+    if let Some(hash) = filter_hash.as_deref() {
+        context.insert("filter_hash".to_string(), serde_json::json!(hash));
+    }
+    context.insert("status".to_string(), serde_json::json!(status.clone()));
+    context.insert("limit".to_string(), serde_json::json!(limit));
+    if let Some(mint) = mint_filter.as_deref() {
+        context.insert("mint".to_string(), serde_json::json!(mint));
+    }
+    context.insert("total_selected".to_string(), serde_json::json!(total));
+
     send_control_message(
         ws_tx,
         ServerMessage::SnapshotBegin {
             topic: Topic::PositionsUpdate.code().to_string(),
             total,
+            context: Some(serde_json::Value::Object(context.clone())),
         },
     )
     .await?;
+
+    log_snapshot_event(
+        "SNAPSHOT_BEGIN",
+        conn_id,
+        Topic::PositionsUpdate.code(),
+        request_id.as_deref(),
+        filter_hash.as_deref(),
+        &format!("total={} limit={}", total, limit),
+    );
 
     for (idx, position) in positions.into_iter().enumerate() {
         let seq = hub.next_seq(Topic::PositionsUpdate.code()).await;
@@ -1509,6 +1860,13 @@ async fn send_positions_snapshot(
             if let Some(mint) = mint_filter.as_deref() {
                 extra.insert("mint".to_string(), serde_json::json!(mint));
             }
+            extra.insert("total".to_string(), serde_json::json!(total));
+            if let Some(id) = request_id.as_deref() {
+                extra.insert("request_id".to_string(), serde_json::json!(id));
+            }
+            if let Some(hash) = filter_hash.as_deref() {
+                extra.insert("filter_hash".to_string(), serde_json::json!(hash));
+            }
             let meta = MessageMetadata {
                 snapshot: None,
                 dropped: None,
@@ -1534,9 +1892,148 @@ async fn send_positions_snapshot(
         ServerMessage::SnapshotEnd {
             topic: Topic::PositionsUpdate.code().to_string(),
             sent: total,
+            context: Some(serde_json::Value::Object(context)),
         },
     )
     .await?;
+
+    log_snapshot_event(
+        "SNAPSHOT_END",
+        conn_id,
+        Topic::PositionsUpdate.code(),
+        request_id.as_deref(),
+        filter_hash.as_deref(),
+        &format!("sent={} limit={}", total, limit),
+    );
+
+    Ok(())
+}
+
+async fn send_services_snapshot(
+    ws_tx: &mut futures::stream::SplitSink<WebSocket, Message>,
+    hub: &Arc<WsHub>,
+    metrics: &Arc<ConnectionMetrics>,
+    filter: ServicesRealtimeFilter,
+    conn_id: ConnectionId,
+) -> Result<(), String> {
+    let snapshot = crate::webserver::routes::services::gather_services_overview_snapshot().await;
+    let total_services = snapshot.services.len();
+    let unhealthy = snapshot.summary.unhealthy_services;
+    let degraded = snapshot.summary.degraded_services;
+
+    let request_id = filter.request_id.clone();
+    let filter_hash = filter.filter_hash.clone();
+
+    log_snapshot_event(
+        "SNAPSHOT_REQ",
+        conn_id,
+        Topic::ServicesMetrics.code(),
+        request_id.as_deref(),
+        filter_hash.as_deref(),
+        &format!(
+            "services={} unhealthy={} degraded={}",
+            total_services, unhealthy, degraded
+        ),
+    );
+
+    let mut context = Map::new();
+    if let Some(id) = request_id.as_deref() {
+        context.insert("request_id".to_string(), serde_json::json!(id));
+    }
+    if let Some(hash) = filter_hash.as_deref() {
+        context.insert("filter_hash".to_string(), serde_json::json!(hash));
+    }
+    context.insert(
+        "total_services".to_string(),
+        serde_json::json!(total_services),
+    );
+    context.insert(
+        "unhealthy_services".to_string(),
+        serde_json::json!(unhealthy),
+    );
+    context.insert("degraded_services".to_string(), serde_json::json!(degraded));
+
+    send_control_message(
+        ws_tx,
+        ServerMessage::SnapshotBegin {
+            topic: Topic::ServicesMetrics.code().to_string(),
+            total: total_services,
+            context: Some(serde_json::Value::Object(context.clone())),
+        },
+    )
+    .await?;
+
+    log_snapshot_event(
+        "SNAPSHOT_BEGIN",
+        conn_id,
+        Topic::ServicesMetrics.code(),
+        request_id.as_deref(),
+        filter_hash.as_deref(),
+        &format!(
+            "services={} unhealthy={} degraded={}",
+            total_services, unhealthy, degraded
+        ),
+    );
+
+    let seq = hub.next_seq(Topic::ServicesMetrics.code()).await;
+    let mut envelope = topics::services::services_to_envelope(&snapshot, seq);
+
+    let mut extra = Map::new();
+    extra.insert(
+        "total_services".to_string(),
+        serde_json::json!(total_services),
+    );
+    extra.insert(
+        "unhealthy_services".to_string(),
+        serde_json::json!(unhealthy),
+    );
+    extra.insert("degraded_services".to_string(), serde_json::json!(degraded));
+    if let Some(id) = request_id.as_deref() {
+        extra.insert("request_id".to_string(), serde_json::json!(id));
+    }
+    if let Some(hash) = filter_hash.as_deref() {
+        extra.insert("filter_hash".to_string(), serde_json::json!(hash));
+    }
+
+    let meta = MessageMetadata {
+        snapshot: None,
+        dropped: None,
+        extra: Some(extra),
+    };
+
+    envelope = envelope.with_meta(meta).as_snapshot();
+
+    let msg = ServerMessage::Data(envelope);
+    let json = msg
+        .to_json()
+        .map_err(|e| format!("Serialization error: {}", e))?;
+    ws_tx
+        .send(Message::Text(json))
+        .await
+        .map_err(|e| format!("Send error: {}", e))?;
+    metrics.inc_sent();
+
+    send_control_message(
+        ws_tx,
+        ServerMessage::SnapshotEnd {
+            topic: Topic::ServicesMetrics.code().to_string(),
+            sent: total_services,
+            context: Some(serde_json::Value::Object(context)),
+        },
+    )
+    .await?;
+
+    log_snapshot_event(
+        "SNAPSHOT_END",
+        conn_id,
+        Topic::ServicesMetrics.code(),
+        request_id.as_deref(),
+        filter_hash.as_deref(),
+        &format!(
+            "services={} unhealthy={} degraded={}",
+            total_services, unhealthy, degraded
+        ),
+    );
 
     Ok(())
 }

@@ -49,6 +49,8 @@
     began: false,
     currentView: null,
     searchAutoCleared: false,
+    requestId: null,
+    context: null,
   };
   var TOKENS_SNAPSHOT_LIMIT = 200;
   var TOKENS_SNAPSHOT_TIMEOUT_MS = 12000;
@@ -1161,6 +1163,8 @@
     tokensSnapshotState.began = false;
     tokensSnapshotState.currentView = null;
     tokensSnapshotState.searchAutoCleared = false;
+    tokensSnapshotState.requestId = null;
+    tokensSnapshotState.context = null;
     // If we already have something rendered, keep it visible and just update the status
     if (Array.isArray(allTokensData) && allTokensData.length > 0) {
       setTokenCountStatus(tokensSnapshotState.message);
@@ -1169,7 +1173,14 @@
     }
     if (window.Realtime && typeof Realtime.updateFilters === "function") {
       scheduleTokensSnapshotTimer("request");
-      Realtime.updateFilters({ snapshotTopics: ["tokens.update", "tokens"] });
+      const result =
+        Realtime.updateFilters({
+          snapshotTopics: ["tokens.update", "tokens"],
+        }) || {};
+      const requestId = result["tokens.update"] || result["tokens"] || null;
+      if (requestId) {
+        tokensSnapshotState.requestId = requestId;
+      }
       return;
     }
 
@@ -1250,12 +1261,55 @@
         sortDir: tokensState.sortDir,
       });
     }
+    const context = (payload && payload.context) || {};
+    const requestId =
+      context.request_id ||
+      context.requestId ||
+      payload?.request_id ||
+      payload?.requestId ||
+      null;
+    const realtime = window.Realtime;
+    const latestRequestId =
+      realtime && realtime.lastSnapshotRequestIds
+        ? realtime.lastSnapshotRequestIds["tokens.update"] ||
+          realtime.lastSnapshotRequestIds["tokens"] ||
+          null
+        : null;
+
+    if (
+      requestId &&
+      latestRequestId &&
+      requestId !== latestRequestId &&
+      tokensSnapshotState.requestId !== requestId
+    ) {
+      if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
+        console.warn("[TokensDBG] Ignoring stale snapshot_begin", {
+          requestId,
+          latestRequestId,
+          stateRequestId: tokensSnapshotState.requestId,
+        });
+      }
+      return;
+    }
+
+    if (requestId) {
+      tokensSnapshotState.requestId = requestId;
+    }
+    tokensSnapshotState.context = context || null;
     tokensSnapshotState.inProgress = true;
     tokensSnapshotState.began = true;
     tokensSnapshotState.pending = [];
-    tokensSnapshotState.expected = Number(payload?.total) || 0;
-    tokensSnapshotState.totalAvailable = tokensSnapshotState.expected;
-    tokensSnapshotState.currentView = null;
+    const totalSelected =
+      Number(context.total_selected ?? context.total ?? payload?.total) || 0;
+    const totalAvailable =
+      Number(context.total_available ?? totalSelected) || 0;
+    tokensSnapshotState.expected = totalSelected;
+    tokensSnapshotState.totalAvailable = totalAvailable;
+    const reportedView =
+      typeof context.view === "string" && context.view.length > 0
+        ? context.view
+        : null;
+    tokensSnapshotState.currentView = reportedView;
     const message =
       tokensSnapshotState.message ||
       `Receiving snapshot (${tokensSnapshotState.expected} tokens)...`;
@@ -1341,14 +1395,83 @@
         pending: tokensSnapshotState.pending.length,
       });
     }
+    const context = (payload && payload.context) || {};
+    const requestId =
+      context.request_id ||
+      context.requestId ||
+      payload?.request_id ||
+      payload?.requestId ||
+      null;
+    const realtime = window.Realtime;
+    const latestRequestId =
+      realtime && realtime.lastSnapshotRequestIds
+        ? realtime.lastSnapshotRequestIds["tokens.update"] ||
+          realtime.lastSnapshotRequestIds["tokens"] ||
+          null
+        : null;
+
+    if (
+      requestId &&
+      latestRequestId &&
+      requestId !== latestRequestId &&
+      tokensSnapshotState.requestId !== requestId
+    ) {
+      if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
+        console.warn("[TokensDBG] Ignoring stale snapshot_end", {
+          requestId,
+          latestRequestId,
+          stateRequestId: tokensSnapshotState.requestId,
+        });
+      }
+      return;
+    }
+
+    if (
+      requestId &&
+      tokensSnapshotState.requestId &&
+      requestId !== tokensSnapshotState.requestId
+    ) {
+      if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
+        console.warn("[TokensDBG] snapshot_end request mismatch", {
+          requestId,
+          stateRequestId: tokensSnapshotState.requestId,
+        });
+      }
+      return;
+    }
+
+    if (requestId) {
+      tokensSnapshotState.requestId = requestId;
+    }
+    if (context && Object.keys(context).length > 0) {
+      tokensSnapshotState.context = context;
+    }
     tokensSnapshotState.inProgress = false;
     tokensSnapshotState.began = false;
     tokensSnapshotState.currentView = null;
-    const sent = Number(payload?.sent);
+    const sent = Number(
+      context.total_selected ?? context.total ?? payload?.sent
+    );
     if (Number.isFinite(sent)) {
+      const availableFromContext = Number(
+        typeof context.total_available === "number"
+          ? context.total_available
+          : tokensSnapshotState.totalAvailable
+      );
+      const normalizedAvailable = Number.isFinite(availableFromContext)
+        ? availableFromContext
+        : tokensSnapshotState.totalAvailable;
       tokensSnapshotState.totalAvailable = Math.max(
         tokensSnapshotState.totalAvailable,
+        normalizedAvailable,
         sent
+      );
+    }
+    const contextAvailable = Number(context.total_available);
+    if (Number.isFinite(contextAvailable)) {
+      tokensSnapshotState.totalAvailable = Math.max(
+        tokensSnapshotState.totalAvailable,
+        contextAvailable
       );
     }
     clearTokensSnapshotTimer();
@@ -1369,6 +1492,28 @@
     }
 
     if (isSnapshot) {
+      const chunkRequestId =
+        meta?.extra?.request_id ||
+        meta?.extra?.requestId ||
+        meta?.request_id ||
+        meta?.requestId ||
+        null;
+      if (
+        tokensSnapshotState.requestId &&
+        chunkRequestId &&
+        chunkRequestId !== tokensSnapshotState.requestId
+      ) {
+        if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
+          console.warn(
+            "[TokensDBG] Ignoring snapshot chunk for stale request",
+            {
+              chunkRequestId,
+              stateRequestId: tokensSnapshotState.requestId,
+            }
+          );
+        }
+        return;
+      }
       if (!tokensSnapshotState.began) {
         if (window.__DEBUG_REALTIME) {
           console.warn("[TokensDBG] Ignoring snapshot chunk before begin", {
@@ -1378,7 +1523,8 @@
         return;
       }
       // Optional: if server includes the view in meta, ensure it matches current UI view
-      const snapshotView = envelope?.meta?.view || envelope?.view;
+      const snapshotView =
+        envelope?.meta?.view || envelope?.meta?.extra?.view || envelope?.view;
       if (snapshotView && !tokensSnapshotState.currentView) {
         tokensSnapshotState.currentView = snapshotView;
       }

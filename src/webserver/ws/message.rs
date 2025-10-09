@@ -221,10 +221,20 @@ pub enum ServerMessage {
     },
 
     /// Snapshot begin marker
-    SnapshotBegin { topic: String, total: usize },
+    SnapshotBegin {
+        topic: String,
+        total: usize,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        context: Option<serde_json::Value>,
+    },
 
     /// Snapshot end marker
-    SnapshotEnd { topic: String, sent: usize },
+    SnapshotEnd {
+        topic: String,
+        sent: usize,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        context: Option<serde_json::Value>,
+    },
 }
 
 // ============================================================================
@@ -289,7 +299,12 @@ mod tests {
 
     #[test]
     fn test_topic_code_roundtrip() {
-        for topic in &[Topic::SystemStatus, Topic::ServicesMetrics, Topic::PositionsUpdate, Topic::EventsNew] {
+        for topic in &[
+            Topic::SystemStatus,
+            Topic::ServicesMetrics,
+            Topic::PositionsUpdate,
+            Topic::EventsNew,
+        ] {
             let code = topic.code();
             let parsed = Topic::from_code(code);
             assert_eq!(parsed, Some(*topic));
