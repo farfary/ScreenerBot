@@ -675,7 +675,9 @@
           console.log("[Services] Requesting snapshot via filter update", {
             reason,
           });
-          window.Realtime.updateFilters({ snapshotTopics: ["services"] });
+          window.Realtime.updateFilters({
+            snapshotTopics: ["services", "services.metrics"],
+          });
         } else {
           console.warn(
             "[Services] Realtime helper not available; cannot request snapshot"
@@ -686,12 +688,17 @@
 
     window.PageRealtime = window.PageRealtime || {};
     window.PageRealtime.services = {
-      topics: ["services"],
+      // Subscribe to both alias and concrete topic name for robustness
+      topics: ["services", "services.metrics"],
       getFilters() {
-        return { services: {} };
+        // Provide filters for both alias and concrete topic routing keys
+        return { services: {}, "services.metrics": {} };
       },
       channels: {
         services(snapshot) {
+          controller.handleServicesSnapshot(snapshot);
+        },
+        "services.metrics": function (snapshot) {
           controller.handleServicesSnapshot(snapshot);
         },
         _warning(message) {

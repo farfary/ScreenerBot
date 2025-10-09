@@ -16,21 +16,35 @@ static SUMMARY_CACHE: Lazy<DashMap<String, TokenSummary>> = Lazy::new(DashMap::n
 /// Tracks the Unix timestamp (seconds) of the most recent cache update.
 static LAST_UPDATED: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
 
+#[inline]
+fn set_last_updated_now_monotonic() {
+    let now = current_unix_ts();
+    // Ensure LAST_UPDATED never goes backwards if the system clock skews
+    let mut prev = LAST_UPDATED.load(Ordering::Relaxed);
+    while now > prev {
+        match LAST_UPDATED.compare_exchange(prev, now, Ordering::Relaxed, Ordering::Relaxed) {
+            Ok(_) => break,
+            Err(actual) => prev = actual,
+        }
+    }
+}
+
 /// Store or update the cached summary for a mint.
 pub fn store(summary: TokenSummary) {
-    LAST_UPDATED.store(current_unix_ts(), Ordering::Relaxed);
+    // Insert first, then advance the timestamp monotonically
     SUMMARY_CACHE.insert(summary.mint.clone(), summary);
+    set_last_updated_now_monotonic();
 }
 
 /// Remove a token from the cache when it is deleted.
 pub fn remove(mint: &str) {
     SUMMARY_CACHE.remove(mint);
-    LAST_UPDATED.store(current_unix_ts(), Ordering::Relaxed);
+    set_last_updated_now_monotonic();
 }
 
 /// Get a cached summary for a single mint.
 pub fn get(mint: &str) -> Option<TokenSummary> {
-    SUMMARY_CACHE.get(mint).map(|entry| entry.clone())
+    SUMMARY_CACHE.get(mint).map(|entry| entry.value().clone())
 }
 
 /// Get cached summaries for a list of mints, returning any that were missing.
@@ -40,7 +54,7 @@ pub fn get_for_mints(mints: &[String]) -> (Vec<TokenSummary>, Vec<String>) {
 
     for mint in mints {
         match SUMMARY_CACHE.get(mint) {
-            Some(entry) => summaries.push(entry.clone()),
+            Some(entry) => summaries.push(entry.value().clone()),
             None => missing.push(mint.clone()),
         }
     }
@@ -50,7 +64,12 @@ pub fn get_for_mints(mints: &[String]) -> (Vec<TokenSummary>, Vec<String>) {
 
 /// Return all cached summaries.
 pub fn all() -> Vec<TokenSummary> {
-    SUMMARY_CACHE.iter().map(|entry| entry.clone()).collect()
+    let cap = SUMMARY_CACHE.len();
+    let mut out = Vec::with_capacity(cap);
+    for entry in SUMMARY_CACHE.iter() {
+        out.push(entry.value().clone());
+    }
+    out
 }
 
 /// Cache statistics for observability.
