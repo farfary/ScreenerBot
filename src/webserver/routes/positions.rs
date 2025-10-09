@@ -77,8 +77,17 @@ pub fn routes() -> Router<Arc<AppState>> {
 async fn get_positions(Query(params): Query<PositionsQuery>) -> Json<Vec<PositionResponse>> {
     let status = params.status.as_deref().unwrap_or("all");
     let limit = params.limit.unwrap_or(100);
+    let mint_filter = params.mint.as_deref();
 
-    // Get positions from database based on status
+    let responses = load_positions_with_filters(status, limit, mint_filter).await;
+    Json(responses)
+}
+
+pub async fn load_positions_with_filters(
+    status: &str,
+    limit: usize,
+    mint_filter: Option<&str>,
+) -> Vec<PositionResponse> {
     let positions_result = match status {
         "open" => positions::db::get_open_positions().await,
         "closed" => positions::db::get_closed_positions().await,
@@ -89,110 +98,109 @@ async fn get_positions(Query(params): Query<PositionsQuery>) -> Json<Vec<Positio
         Ok(pos) => pos,
         Err(e) => {
             eprintln!("Failed to load positions: {}", e);
-            return Json(vec![]);
+            return Vec::new();
         }
     };
 
-    // Filter by mint if provided
-    let mut filtered_positions = if let Some(mint) = &params.mint {
+    let mut filtered_positions: Vec<_> = if let Some(mint) = mint_filter {
         positions
             .into_iter()
             .filter(|p| p.mint.contains(mint))
-            .collect::<Vec<_>>()
+            .collect()
     } else {
         positions
     };
 
-    // Apply limit
-    filtered_positions.truncate(limit);
+    if limit > 0 {
+        filtered_positions.truncate(limit);
+    }
 
-    // Convert to response format
-    let responses: Vec<PositionResponse> = filtered_positions
+    filtered_positions
         .iter()
-        .map(|p| {
-            let entry_time_ts = p.entry_time.timestamp();
-            let exit_time_ts = p.exit_time.map(|dt| dt.timestamp());
-            let current_price_updated_ts = p.current_price_updated.map(|dt| dt.timestamp());
+        .map(map_position_to_response)
+        .collect()
+}
 
-            // Calculate P&L for closed positions
-            let (pnl, pnl_percent) = if p.transaction_exit_verified {
-                if let (Some(exit_price), Some(sol_received)) =
-                    (p.effective_exit_price, p.sol_received)
-                {
-                    let invested = p.entry_size_sol;
-                    let pnl_value = sol_received - invested;
-                    let pnl_pct = if invested > 0.0 {
-                        (pnl_value / invested) * 100.0
-                    } else {
-                        0.0
-                    };
-                    (Some(pnl_value), Some(pnl_pct))
-                } else if let (Some(exit_price), entry_price) = (p.exit_price, p.entry_price) {
-                    let pnl_pct = ((exit_price - entry_price) / entry_price) * 100.0;
-                    let pnl_value = p.entry_size_sol * (pnl_pct / 100.0);
-                    (Some(pnl_value), Some(pnl_pct))
-                } else {
-                    (None, None)
-                }
+fn map_position_to_response(p: &positions::Position) -> PositionResponse {
+    let entry_time_ts = p.entry_time.timestamp();
+    let exit_time_ts = p.exit_time.map(|dt| dt.timestamp());
+    let current_price_updated_ts = p.current_price_updated.map(|dt| dt.timestamp());
+
+    let (pnl, pnl_percent) = if p.transaction_exit_verified {
+        if let (Some(exit_price), Some(sol_received)) = (p.effective_exit_price, p.sol_received) {
+            let invested = p.entry_size_sol;
+            let pnl_value = sol_received - invested;
+            let pnl_pct = if invested > 0.0 {
+                (pnl_value / invested) * 100.0
+            } else {
+                0.0
+            };
+            (Some(pnl_value), Some(pnl_pct))
+        } else if let (Some(exit_price), entry_price) = (p.exit_price, p.entry_price) {
+            let pnl_pct = ((exit_price - entry_price) / entry_price) * 100.0;
+            let pnl_value = p.entry_size_sol * (pnl_pct / 100.0);
+            (Some(pnl_value), Some(pnl_pct))
+        } else {
+            (None, None)
+        }
+    } else {
+        (None, None)
+    };
+
+    let (unrealized_pnl, unrealized_pnl_percent) = if !p.transaction_exit_verified {
+        if let Some(current_price) = p.current_price {
+            let entry_price = p.effective_entry_price.unwrap_or(p.entry_price);
+            if entry_price > 0.0 {
+                let pnl_pct = ((current_price - entry_price) / entry_price) * 100.0;
+                let pnl_value = p.entry_size_sol * (pnl_pct / 100.0);
+                (Some(pnl_value), Some(pnl_pct))
             } else {
                 (None, None)
-            };
-
-            // Calculate unrealized P&L for open positions
-            let (unrealized_pnl, unrealized_pnl_percent) = if !p.transaction_exit_verified {
-                if let Some(current_price) = p.current_price {
-                    let entry_price = p.effective_entry_price.unwrap_or(p.entry_price);
-                    let pnl_pct = ((current_price - entry_price) / entry_price) * 100.0;
-                    let pnl_value = p.entry_size_sol * (pnl_pct / 100.0);
-                    (Some(pnl_value), Some(pnl_pct))
-                } else {
-                    (None, None)
-                }
-            } else {
-                (None, None)
-            };
-
-            PositionResponse {
-                id: p.id,
-                mint: p.mint.clone(),
-                symbol: p.symbol.clone(),
-                name: p.name.clone(),
-                entry_price: p.entry_price,
-                entry_time: entry_time_ts,
-                exit_price: p.exit_price,
-                exit_time: exit_time_ts,
-                position_type: p.position_type.clone(),
-                entry_size_sol: p.entry_size_sol,
-                total_size_sol: p.total_size_sol,
-                price_highest: p.price_highest,
-                price_lowest: p.price_lowest,
-                entry_transaction_signature: p.entry_transaction_signature.clone(),
-                exit_transaction_signature: p.exit_transaction_signature.clone(),
-                token_amount: p.token_amount,
-                effective_entry_price: p.effective_entry_price,
-                effective_exit_price: p.effective_exit_price,
-                sol_received: p.sol_received,
-                profit_target_min: p.profit_target_min,
-                profit_target_max: p.profit_target_max,
-                liquidity_tier: p.liquidity_tier.clone(),
-                transaction_entry_verified: p.transaction_entry_verified,
-                transaction_exit_verified: p.transaction_exit_verified,
-                entry_fee_lamports: p.entry_fee_lamports,
-                exit_fee_lamports: p.exit_fee_lamports,
-                current_price: p.current_price,
-                current_price_updated: current_price_updated_ts,
-                phantom_confirmations: p.phantom_confirmations,
-                synthetic_exit: p.synthetic_exit,
-                closed_reason: p.closed_reason.clone(),
-                pnl,
-                pnl_percent,
-                unrealized_pnl,
-                unrealized_pnl_percent,
             }
-        })
-        .collect();
+        } else {
+            (None, None)
+        }
+    } else {
+        (None, None)
+    };
 
-    Json(responses)
+    PositionResponse {
+        id: p.id,
+        mint: p.mint.clone(),
+        symbol: p.symbol.clone(),
+        name: p.name.clone(),
+        entry_price: p.entry_price,
+        entry_time: entry_time_ts,
+        exit_price: p.exit_price,
+        exit_time: exit_time_ts,
+        position_type: p.position_type.clone(),
+        entry_size_sol: p.entry_size_sol,
+        total_size_sol: p.total_size_sol,
+        price_highest: p.price_highest,
+        price_lowest: p.price_lowest,
+        entry_transaction_signature: p.entry_transaction_signature.clone(),
+        exit_transaction_signature: p.exit_transaction_signature.clone(),
+        token_amount: p.token_amount,
+        effective_entry_price: p.effective_entry_price,
+        effective_exit_price: p.effective_exit_price,
+        sol_received: p.sol_received,
+        profit_target_min: p.profit_target_min,
+        profit_target_max: p.profit_target_max,
+        liquidity_tier: p.liquidity_tier.clone(),
+        transaction_entry_verified: p.transaction_entry_verified,
+        transaction_exit_verified: p.transaction_exit_verified,
+        entry_fee_lamports: p.entry_fee_lamports,
+        exit_fee_lamports: p.exit_fee_lamports,
+        current_price: p.current_price,
+        current_price_updated: current_price_updated_ts,
+        phantom_confirmations: p.phantom_confirmations,
+        synthetic_exit: p.synthetic_exit,
+        closed_reason: p.closed_reason.clone(),
+        pnl,
+        pnl_percent,
+        unrealized_pnl,
+        unrealized_pnl_percent,
+    }
 }
 
 async fn get_positions_stats() -> Json<PositionsStatsResponse> {

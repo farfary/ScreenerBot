@@ -6,13 +6,7 @@
     services: "services.metrics",
     events: "events.new",
     positions: "positions.update",
-    prices: "prices.update",
     tokens: "tokens.update",
-    ohlcvs: "ohlcvs.update",
-    trader: "trader.state",
-    wallet: "wallet.balances",
-    transactions: "transactions.activity",
-    security: "security.alerts",
   };
 
   const topicToAlias = Object.entries(aliasToTopic).reduce(
@@ -21,12 +15,13 @@
         acc[topic] = alias;
       }
       return acc;
-      if (typeof global.__statusTelemetryRequired === "undefined") {
-        global.__statusTelemetryRequired = false;
-      }
     },
     {}
   );
+
+  if (typeof global.__statusTelemetryRequired === "undefined") {
+    global.__statusTelemetryRequired = false;
+  }
 
   function resolveTopicFromAlias(alias) {
     return aliasToTopic[alias] || alias;
@@ -419,16 +414,6 @@
         }
       },
       includeInFilters: () => global.Realtime?.activePage === "positions",
-      getFilters: () => ({}),
-    },
-    {
-      alias: "prices",
-      handler(data, envelope) {
-        if (global.PageRealtime?.tokens?.channels?.prices) {
-          global.PageRealtime.tokens.channels.prices(data, envelope);
-        }
-      },
-      includeInFilters: () => global.Realtime?.activePage === "tokens",
       getFilters: () => ({}),
     },
   ];

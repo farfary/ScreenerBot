@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::time::{interval, Duration};
+use tokio::time::{interval, Duration, MissedTickBehavior};
 
 use crate::{
     arguments::is_debug_webserver_enabled,
@@ -173,24 +173,61 @@ pub fn start(hub: Arc<WsHub>) {
 }
 
 async fn run(hub: Arc<WsHub>) {
-    // Phase 1 cleanup: slow cadence to 10s until Phase 2 demand-gating is wired.
-    // TODO(Phase 2): restore dynamic cadence with explicit subscription tracking instead of fixed sleep.
-    let mut ticker = interval(Duration::from_secs(10));
+    const TOPIC: &str = "system.status";
+
     loop {
-        ticker.tick().await;
-        let snapshot = gather_status_snapshot().await;
-        let seq = hub.next_seq("system.status").await;
-        let envelope = topics::status::status_to_envelope(&snapshot, seq);
-        hub.broadcast(envelope).await;
-        if is_debug_webserver_enabled() {
-            log(
-                LogTag::Webserver,
-                "DEBUG",
-                &format!(
-                    "ws.sources.status snapshot: positions={}, ws_connections={}",
-                    snapshot.open_positions, snapshot.ws_connections
-                ),
-            );
+        hub.wait_for_subscribers(TOPIC).await;
+
+        let active = hub.topic_subscriber_count(TOPIC).await;
+        log(
+            LogTag::Webserver,
+            "INFO",
+            &format!(
+                "ws.sources.status streaming activated (subscribers={})",
+                active
+            ),
+        );
+
+        publish_snapshot(&hub).await;
+
+        let mut ticker = interval(Duration::from_secs(10));
+        ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
+
+        loop {
+            ticker.tick().await;
+
+            if !hub.has_subscribers(TOPIC).await {
+                let remaining = hub.topic_subscriber_count(TOPIC).await;
+                log(
+                    LogTag::Webserver,
+                    "INFO",
+                    &format!(
+                        "ws.sources.status streaming paused (subscribers={})",
+                        remaining
+                    ),
+                );
+                break;
+            }
+
+            publish_snapshot(&hub).await;
         }
+    }
+}
+
+async fn publish_snapshot(hub: &Arc<WsHub>) {
+    let snapshot = gather_status_snapshot().await;
+    let seq = hub.next_seq("system.status").await;
+    let envelope = topics::status::status_to_envelope(&snapshot, seq);
+    hub.broadcast(envelope).await;
+
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "DEBUG",
+            &format!(
+                "ws.sources.status snapshot: positions={}, ws_connections={}",
+                snapshot.open_positions, snapshot.ws_connections
+            ),
+        );
     }
 }

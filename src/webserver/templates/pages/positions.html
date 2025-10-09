@@ -39,7 +39,7 @@
 <div class="page-section">
   <div class="toolbar">
     <span style="font-weight: 600">💰 Positions</span>
-    <select id="statusFilter" onchange="loadPositions({ reason: 'filter-change', force: true })" style="
+    <select id="statusFilter" onchange="onPositionsStatusChanged()" style="
         padding: 6px 8px;
         border: 1px solid var(--border-color);
         border-radius: 6px;
@@ -63,7 +63,7 @@
       " />
     <div class="spacer"></div>
     <span id="positionCount" style="color: var(--text-secondary); font-size: 0.9em">Loading...</span>
-    <button onclick="loadPositions({ reason: 'manual-refresh', force: true })" class="btn btn-primary">
+    <button onclick="refreshPositions()" class="btn btn-primary">
       🔄 Refresh
     </button>
   </div>
@@ -96,10 +96,11 @@
 
 <script>
   var positionsStore = window.positionsStore || new Map();
-  var positionsLoading = false;
   var positionsInitialized = false;
-  var positionsFallbackInterval = null;
-  var positionsRequestController = null;
+  var positionsInSnapshot = false;
+  var positionsSnapshotHandlersRegistered = false;
+  var lastPositionsSnapshotMeta = null;
+  const POSITIONS_SNAPSHOT_LIMIT = 1000;
 
   // Truncate address
   function truncateAddress(address) {
@@ -142,6 +143,108 @@
     return null;
   }
 
+  function toFiniteNumber(value) {
+    try {
+      if (
+        typeof Utils !== "undefined" &&
+        Utils &&
+        typeof Utils.coerceNumber === "function"
+      ) {
+        const coerced = Utils.coerceNumber(value);
+        return Number.isFinite(coerced) ? coerced : null;
+      }
+    } catch (_) { }
+
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+  }
+
+  function computeDerivedMetrics(position) {
+    if (!position || typeof position !== "object") {
+      return position;
+    }
+
+    const entrySize = toFiniteNumber(position.entry_size_sol);
+    const entryPrice = toFiniteNumber(
+      position.effective_entry_price ?? position.entry_price
+    );
+    const currentPrice = toFiniteNumber(position.current_price);
+    const solReceived = toFiniteNumber(position.sol_received);
+    const exitPrice = toFiniteNumber(
+      position.effective_exit_price ?? position.exit_price
+    );
+
+    if (position.transaction_exit_verified) {
+      let pnlValue = null;
+      let pnlPercent = null;
+
+      if (solReceived != null && entrySize != null) {
+        pnlValue = solReceived - entrySize;
+        if (entrySize > 0) {
+          pnlPercent = (pnlValue / entrySize) * 100;
+        }
+      } else if (exitPrice != null && entryPrice != null && entryPrice > 0) {
+        pnlPercent = ((exitPrice - entryPrice) / entryPrice) * 100;
+        if (entrySize != null) {
+          pnlValue = entrySize * (pnlPercent / 100);
+        }
+      }
+
+      if (pnlValue != null && Number.isFinite(pnlValue)) {
+        position.pnl = pnlValue;
+      } else if (position.pnl === undefined) {
+        position.pnl = null;
+      }
+
+      if (pnlPercent != null && Number.isFinite(pnlPercent)) {
+        position.pnl_percent = pnlPercent;
+      } else if (position.pnl_percent === undefined) {
+        position.pnl_percent = null;
+      }
+
+      if (position.unrealized_pnl === undefined) {
+        position.unrealized_pnl = null;
+      }
+      if (position.unrealized_pnl_percent === undefined) {
+        position.unrealized_pnl_percent = null;
+      }
+    } else {
+      let unrealizedValue = null;
+      let unrealizedPercent = null;
+
+      if (
+        currentPrice != null &&
+        entryPrice != null &&
+        entryPrice > 0 &&
+        entrySize != null
+      ) {
+        unrealizedPercent = ((currentPrice - entryPrice) / entryPrice) * 100;
+        unrealizedValue = entrySize * (unrealizedPercent / 100);
+      }
+
+      if (unrealizedValue != null && Number.isFinite(unrealizedValue)) {
+        position.unrealized_pnl = unrealizedValue;
+      } else if (position.unrealized_pnl === undefined) {
+        position.unrealized_pnl = null;
+      }
+
+      if (unrealizedPercent != null && Number.isFinite(unrealizedPercent)) {
+        position.unrealized_pnl_percent = unrealizedPercent;
+      } else if (position.unrealized_pnl_percent === undefined) {
+        position.unrealized_pnl_percent = null;
+      }
+
+      if (position.pnl === undefined) {
+        position.pnl = null;
+      }
+      if (position.pnl_percent === undefined) {
+        position.pnl_percent = null;
+      }
+    }
+
+    return position;
+  }
+
   function normalizePositionFromApi(raw) {
     if (!raw || typeof raw !== "object") return raw;
     const position = { ...raw };
@@ -152,7 +255,7 @@
       position.current_price_updated
     );
 
-    return position;
+    return computeDerivedMetrics(position);
   }
 
   function getPositionKey(position) {
@@ -303,34 +406,16 @@
             `;
   }
 
-  function startPositionsFallback(intervalMs = 3000) {
-    if (positionsFallbackInterval) return;
-    positionsFallbackInterval = setInterval(() => {
-      loadPositions({ reason: "fallback" });
-    }, intervalMs);
-
-    if (window.Router && typeof Router.registerCleanup === "function") {
-      Router.registerCleanup(() => {
-        if (positionsFallbackInterval) {
-          clearInterval(positionsFallbackInterval);
-          positionsFallbackInterval = null;
-        }
-      });
-    }
-  }
-
-  function stopPositionsFallback() {
-    if (!positionsFallbackInterval) return;
-    clearInterval(positionsFallbackInterval);
-    positionsFallbackInterval = null;
-  }
-
   function renderPositionsTable() {
     const tbody = document.getElementById("positionsTableBody");
     if (!tbody) return;
 
     if (!positionsInitialized && positionsStore.size === 0) {
-      renderEmptyState("Loading positions...");
+      renderEmptyState(
+        positionsInSnapshot
+          ? "Loading positions..."
+          : "Waiting for realtime snapshot..."
+      );
       return;
     }
 
@@ -356,22 +441,57 @@
     updatePositionCount(rows.length);
   }
 
-  function syncPositionsStore(positions) {
+  function handlePositionsSnapshotBegin(payload) {
+    if (!payload || payload.topic !== "positions.update") return;
+    positionsInSnapshot = true;
+    positionsInitialized = false;
+    lastPositionsSnapshotMeta = payload;
     positionsStore.clear();
-    positions.forEach((pos) => {
-      const normalized = normalizePositionFromApi(pos);
-      const key = getPositionKey(normalized);
-      if (key) {
-        positionsStore.set(key, normalized);
-      }
-    });
+    renderEmptyState("Loading positions...");
+    updatePositionCount(0);
   }
 
-  function handlePositionBroadcast(update) {
-    if (!update || typeof update !== "object") return;
+  function handlePositionsSnapshotEnd(payload) {
+    if (!payload || payload.topic !== "positions.update") return;
+    positionsInSnapshot = false;
+    positionsInitialized = true;
+    lastPositionsSnapshotMeta = payload;
+    renderPositionsTable();
+  }
 
-    // Receiving live updates means WebSocket is active
-    stopPositionsFallback();
+  function setupPositionsRealtimeHooks() {
+    if (positionsSnapshotHandlersRegistered) {
+      return;
+    }
+    if (!window.WsHub || typeof WsHub.subscribe !== "function") {
+      return;
+    }
+
+    const beginChannel = "snapshot_begin:positions.update";
+    const endChannel = "snapshot_end:positions.update";
+
+    WsHub.subscribe(beginChannel, handlePositionsSnapshotBegin);
+    WsHub.subscribe(endChannel, handlePositionsSnapshotEnd);
+    positionsSnapshotHandlersRegistered = true;
+
+    const cleanup = () => {
+      if (window.WsHub && typeof WsHub.unsubscribe === "function") {
+        WsHub.unsubscribe(beginChannel, handlePositionsSnapshotBegin);
+        WsHub.unsubscribe(endChannel, handlePositionsSnapshotEnd);
+      }
+      positionsSnapshotHandlersRegistered = false;
+      positionsInSnapshot = false;
+    };
+
+    if (window.Router && typeof Router.registerCleanup === "function") {
+      Router.registerCleanup(cleanup);
+    } else {
+      window.addEventListener("beforeunload", cleanup, { once: true });
+    }
+  }
+
+  function handlePositionBroadcast(update, envelope) {
+    if (!update || typeof update !== "object") return;
 
     if (update.type === "balance_changed") {
       return;
@@ -395,80 +515,77 @@
       positionsStore.delete(key);
     }
 
-    positionsInitialized = true;
-    renderPositionsTable();
+    if (!positionsInSnapshot) {
+      positionsInitialized = true;
+      renderPositionsTable();
+    }
   }
 
   function handlePositionsWarning(message) {
-    if (!message || message.channel !== "positions") return;
+    if (!message) return;
+    const channel = message.alias || message.channel || message.topic;
+    if (channel !== "positions" && channel !== "positions.update") return;
     console.warn("[Positions] WebSocket warning received:", message);
-    startPositionsFallback();
-    loadPositions({ reason: "ws-warning", force: true });
+    if (!positionsInitialized) {
+      renderEmptyState("Realtime warning – waiting for data...");
+    }
   }
 
   function handlePositionsDisconnect() {
-    startPositionsFallback();
+    console.warn("[Positions] WebSocket disconnected");
+    if (!positionsInitialized && positionsStore.size === 0) {
+      renderEmptyState("Realtime connection lost");
+      updatePositionCount(0);
+    }
   }
 
   function handlePositionsReconnect() {
-    stopPositionsFallback();
-    loadPositions({ reason: "ws-reconnect", force: true });
+    console.info("[Positions] WebSocket reconnected – requesting snapshot");
+    requestPositionsSnapshot("ws-reconnect");
   }
 
-  async function loadPositions(options = {}) {
-    const { reason = "manual", force = false } = options;
-
-    if (!force && isDropdownOpen()) {
-      return;
-    }
-
-    if (positionsLoading && !force) {
-      return;
-    }
-
-    const statusFilter = getCurrentStatusFilter();
-
-    if (positionsStore.size === 0 && !positionsInitialized) {
-      renderEmptyState("Loading positions...");
-    }
-
-    positionsLoading = true;
-
-    if (positionsRequestController) {
-      positionsRequestController.abort();
-    }
-
-    positionsRequestController = new AbortController();
-
-    try {
-      const response = await fetch(
-        `/api/positions?status=${statusFilter}&limit=1000`,
-        {
-          signal: positionsRequestController.signal,
-        }
+  function requestPositionsSnapshot(reason = "manual") {
+    if (
+      window.Realtime &&
+      typeof Realtime.requestSnapshotForAliases === "function"
+    ) {
+      console.log("[Positions] Requesting snapshot", { reason });
+      Realtime.requestSnapshotForAliases(["positions"]);
+    } else if (window.Realtime && typeof Realtime.updateFilters === "function") {
+      console.log("[Positions] Requesting snapshot via update", { reason });
+      Realtime.updateFilters({ snapshotTopics: ["positions"] });
+    } else {
+      console.warn(
+        "[Positions] Realtime helper not available; cannot request snapshot"
       );
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
+    }
+  }
 
-      const positions = await response.json();
-      const array = Array.isArray(positions) ? positions : [];
+  window.onPositionsStatusChanged = function () {
+    positionsStore.clear();
+    positionsInitialized = false;
+    renderEmptyState("Loading positions...");
+    updatePositionCount(0);
+    requestPositionsSnapshot("status-filter");
+  };
 
-      syncPositionsStore(array);
-      positionsInitialized = true;
-      renderPositionsTable();
-    } catch (error) {
-      if (error.name === "AbortError") {
-        return;
-      }
-      console.error("Failed to load positions:", error);
-      if (!positionsInitialized || positionsStore.size === 0) {
-        renderEmptyState("⚠️ Failed to load positions", "#ef4444");
-        updatePositionCount(0);
-      }
-    } finally {
-      positionsRequestController = null;
-      positionsLoading = false;
+  window.refreshPositions = function () {
+    console.log("[Positions] Manual refresh requested");
+    positionsInitialized = false;
+    renderEmptyState("Refreshing positions...");
+    updatePositionCount(0);
+    requestPositionsSnapshot("manual-refresh");
+  };
+
+  function handlePositionsWarningOrDisconnect(message) {
+    if (message) {
+      console.warn("[Positions] Realtime disruption", message);
+    } else {
+      console.warn("[Positions] Realtime disruption detected");
+    }
+    if (!positionsInitialized && positionsStore.size === 0) {
+      renderEmptyState("Realtime unavailable");
+      updatePositionCount(0);
     }
   }
 
@@ -476,43 +593,66 @@
   window.initPositionsPage = function () {
     console.log("[Positions] Initializing page");
 
+    setupPositionsRealtimeHooks();
+
     const searchInput = document.getElementById("searchInput");
-    if (searchInput) {
+    if (searchInput && !searchInput.__positionsBound) {
       searchInput.addEventListener("input", () => {
         renderPositionsTable();
       });
+      searchInput.__positionsBound = true;
     }
-    loadPositions({ reason: "initial", force: true });
+
+    if (!positionsInitialized && positionsStore.size === 0) {
+      renderEmptyState("Loading positions...");
+      updatePositionCount(0);
+    } else {
+      renderPositionsTable();
+    }
   };
 
   // Execute initialization immediately (works for both initial load and SPA navigation)
   window.PageRealtime = window.PageRealtime || {};
   window.PageRealtime.positions = {
+    topics: ["positions"],
+    getFilters() {
+      const status = getCurrentStatusFilter();
+      const search = getSearchTerm();
+      const filter = { limit: POSITIONS_SNAPSHOT_LIMIT };
+      if (status && status !== "all") {
+        filter.status = [status];
+      }
+      if (search) {
+        filter.search = search;
+      }
+      return { positions: filter };
+    },
     channels: {
       positions: handlePositionBroadcast,
       _warning: handlePositionsWarning,
-      _disconnected: handlePositionsDisconnect,
-      _failed: handlePositionsDisconnect,
+      _disconnected: handlePositionsWarningOrDisconnect,
+      _failed: handlePositionsWarningOrDisconnect,
       _connected: handlePositionsReconnect,
     },
-    onInitial(status) {
-      if (status !== "connected") {
-        startPositionsFallback();
+    onInitial() {
+      setupPositionsRealtimeHooks();
+      if (!positionsInitialized && positionsStore.size === 0) {
+        renderEmptyState("Loading positions...");
+        updatePositionCount(0);
       }
     },
-    onEnter(status) {
-      if (status === "connected") {
-        stopPositionsFallback();
+    onEnter() {
+      if (!positionsInitialized && positionsStore.size === 0) {
+        renderEmptyState("Loading positions...");
+        updatePositionCount(0);
       }
     },
     onUnavailable() {
-      console.warn(
-        "[Positions] WebSocket unavailable, enabling HTTP polling fallback."
-      );
-      startPositionsFallback();
+      console.warn("[Positions] Realtime unavailable");
+      handlePositionsWarningOrDisconnect({});
     },
     onExit() {
-      stopPositionsFallback();
+      positionsInSnapshot = false;
     },
   };
 

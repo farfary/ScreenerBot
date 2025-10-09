@@ -21,7 +21,10 @@ use crate::{
     logger::{log, LogTag},
     pools,
     tokens::{summary_cache, TokenSummary},
-    webserver::routes::tokens::TokenListResponse,
+    webserver::routes::{
+        positions::{load_positions_with_filters, PositionResponse},
+        tokens::TokenListResponse,
+    },
 };
 
 use super::{
@@ -35,6 +38,8 @@ use super::{
 const EVENTS_SNAPSHOT_LIMIT: usize = 100;
 const EVENTS_SNAPSHOT_FETCH_LIMIT: usize = EVENTS_SNAPSHOT_LIMIT * 3;
 const TOKENS_SNAPSHOT_DEFAULT_LIMIT: usize = 200;
+const POSITIONS_SNAPSHOT_DEFAULT_LIMIT: usize = 1000;
+const POSITIONS_SNAPSHOT_MAX_LIMIT: usize = 2000;
 
 #[derive(Default)]
 struct ConnectionState {
@@ -52,6 +57,7 @@ struct FilterUpdateResult {
 enum TopicFilter {
     Events(EventsRealtimeFilter),
     Tokens(TokensRealtimeFilter),
+    Positions(PositionsRealtimeFilter),
     Passthrough,
 }
 
@@ -72,6 +78,23 @@ struct TokensRealtimeFilter {
     sort_by: String,
     sort_dir: String,
     limit: usize,
+}
+
+#[derive(Clone, Debug)]
+struct PositionsRealtimeFilter {
+    status: Vec<String>,
+    mints: Vec<String>,
+    limit: usize,
+}
+
+impl Default for PositionsRealtimeFilter {
+    fn default() -> Self {
+        Self {
+            status: Vec::new(),
+            mints: Vec::new(),
+            limit: POSITIONS_SNAPSHOT_DEFAULT_LIMIT,
+        }
+    }
 }
 
 impl Default for TokensRealtimeFilter {
@@ -133,6 +156,106 @@ impl TokensRealtimeFilter {
     }
 }
 
+impl PositionsRealtimeFilter {
+    fn from_value(raw: &Value) -> Self {
+        let mut filter = PositionsRealtimeFilter::default();
+
+        if let Some(map) = raw.as_object() {
+            if let Some(status_value) = map.get("status").or_else(|| map.get("statuses")) {
+                match status_value {
+                    Value::String(status) => {
+                        let normalized = status.trim().to_lowercase();
+                        if !normalized.is_empty() {
+                            filter.status.push(normalized);
+                        }
+                    }
+                    Value::Array(values) => {
+                        for value in values {
+                            if let Some(status) = value.as_str() {
+                                let normalized = status.trim().to_lowercase();
+                                if !normalized.is_empty() {
+                                    filter.status.push(normalized);
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            if let Some(mints_value) = map.get("mints") {
+                if let Some(array) = mints_value.as_array() {
+                    for mint in array.iter().filter_map(|v| v.as_str()) {
+                        let trimmed = mint.trim();
+                        if !trimmed.is_empty() {
+                            filter.mints.push(trimmed.to_string());
+                        }
+                    }
+                }
+            }
+
+            if let Some(mint_value) = map.get("mint").and_then(|v| v.as_str()) {
+                let trimmed = mint_value.trim();
+                if !trimmed.is_empty() {
+                    filter.mints.push(trimmed.to_string());
+                }
+            }
+
+            if let Some(limit) = map
+                .get("limit")
+                .or_else(|| map.get("page_size"))
+                .and_then(|v| v.as_u64())
+            {
+                filter.limit = limit as usize;
+            }
+        }
+
+        filter.normalize();
+        filter
+    }
+
+    fn normalized_limit(&self) -> usize {
+        self.limit
+            .max(1)
+            .min(POSITIONS_SNAPSHOT_MAX_LIMIT)
+    }
+
+    fn primary_status(&self) -> &str {
+        self.status
+            .iter()
+            .find(|status| !status.trim().is_empty())
+            .map(|s| s.as_str())
+            .unwrap_or("all")
+    }
+
+    fn primary_mint(&self) -> Option<&str> {
+        self.mints
+            .iter()
+            .find(|mint| !mint.trim().is_empty())
+            .map(|s| s.as_str())
+    }
+
+    fn normalize(&mut self) {
+        if self.limit == 0 {
+            self.limit = POSITIONS_SNAPSHOT_DEFAULT_LIMIT;
+        }
+        self.limit = self
+            .limit
+            .max(1)
+            .min(POSITIONS_SNAPSHOT_MAX_LIMIT);
+
+        if self.status.len() > 1 {
+            self.status.sort();
+            self.status.dedup();
+        }
+
+        if self.mints.len() > 1 {
+            self.mints.sort();
+            self.mints.dedup();
+        }
+    }
+}
+
 impl ConnectionState {
     fn new() -> Self {
         Self::default()
@@ -157,6 +280,11 @@ impl ConnectionState {
                 let filter = TokensRealtimeFilter::from_value(raw);
                 self.filters
                     .insert(normalized_topic.clone(), TopicFilter::Tokens(filter));
+            }
+            Some(Topic::PositionsUpdate) => {
+                let filter = PositionsRealtimeFilter::from_value(raw);
+                self.filters
+                    .insert(normalized_topic.clone(), TopicFilter::Positions(filter));
             }
             _ => {
                 self.filters
@@ -195,6 +323,20 @@ impl ConnectionState {
         self.filters.insert(
             Topic::TokensUpdate.code().to_string(),
             TopicFilter::Tokens(filter),
+        );
+    }
+
+    fn positions_filter(&self) -> Option<&PositionsRealtimeFilter> {
+        match self.filters.get(Topic::PositionsUpdate.code()) {
+            Some(TopicFilter::Positions(filter)) => Some(filter),
+            _ => None,
+        }
+    }
+
+    fn set_positions_filter(&mut self, filter: PositionsRealtimeFilter) {
+        self.filters.insert(
+            Topic::PositionsUpdate.code().to_string(),
+            TopicFilter::Positions(filter),
         );
     }
 
@@ -266,6 +408,7 @@ impl TopicFilter {
         match self {
             TopicFilter::Events(filter) => filter.matches_value(&envelope.data),
             TopicFilter::Tokens(_) => true,
+            TopicFilter::Positions(_) => true,
             TopicFilter::Passthrough => true,
         }
     }
@@ -746,6 +889,10 @@ async fn handle_client_message(
                         let filter = state.tokens_filter().cloned().unwrap_or_default();
                         send_tokens_snapshot(ws_tx, hub, metrics, filter).await?;
                     }
+                    Some(Topic::PositionsUpdate) => {
+                        let filter = state.positions_filter().cloned().unwrap_or_default();
+                        send_positions_snapshot(ws_tx, hub, metrics, filter).await?;
+                    }
                     _ => {}
                 }
             }
@@ -825,6 +972,11 @@ async fn handle_client_message(
                         let filter = TokensRealtimeFilter::from_value(value);
                         state.set_tokens_filter(filter.clone());
                         send_tokens_snapshot(ws_tx, hub, metrics, filter).await?;
+                    }
+                    Some(Topic::PositionsUpdate) => {
+                        let filter = PositionsRealtimeFilter::from_value(value);
+                        state.set_positions_filter(filter.clone());
+                        send_positions_snapshot(ws_tx, hub, metrics, filter).await?;
                     }
                     _ => {}
                 }
@@ -1187,6 +1339,101 @@ async fn send_tokens_snapshot(
         ServerMessage::SnapshotEnd {
             topic: Topic::TokensUpdate.code().to_string(),
             sent: total_sent,
+        },
+    )
+    .await?;
+
+    Ok(())
+}
+
+async fn send_positions_snapshot(
+    ws_tx: &mut futures::stream::SplitSink<WebSocket, Message>,
+    hub: &Arc<WsHub>,
+    metrics: &Arc<ConnectionMetrics>,
+    filter: PositionsRealtimeFilter,
+) -> Result<(), String> {
+    let status = filter.primary_status().to_string();
+    let limit = filter.normalized_limit();
+    let mint_filter = filter.primary_mint().map(|s| s.to_string());
+
+    let positions = load_positions_with_filters(
+        status.as_str(),
+        limit,
+        mint_filter.as_deref(),
+    )
+    .await;
+
+    let total = positions.len();
+
+    send_control_message(
+        ws_tx,
+        ServerMessage::SnapshotBegin {
+            topic: Topic::PositionsUpdate.code().to_string(),
+            total,
+        },
+    )
+    .await?;
+
+    for (idx, position) in positions.into_iter().enumerate() {
+        let seq = hub.next_seq(Topic::PositionsUpdate.code()).await;
+        let mint = position.mint.clone();
+
+        let position_value = serde_json::to_value(&position).unwrap_or_else(|err| {
+            log(
+                LogTag::Webserver,
+                "ERROR",
+                &format!(
+                    "Failed to serialize position snapshot for {}: {}",
+                    mint, err
+                ),
+            );
+            serde_json::json!({
+                "mint": mint.clone(),
+            })
+        });
+
+        let mut envelope = WsEnvelope::new(
+            Topic::PositionsUpdate,
+            seq,
+            serde_json::json!({
+                "type": "snapshot",
+                "position": position_value,
+            }),
+        )
+        .with_key(mint.clone());
+
+        if idx == 0 {
+            let mut extra = Map::new();
+            extra.insert("status".to_string(), serde_json::json!(status.clone()));
+            extra.insert("limit".to_string(), serde_json::json!(limit));
+            if let Some(mint) = mint_filter.as_deref() {
+                extra.insert("mint".to_string(), serde_json::json!(mint));
+            }
+            let meta = MessageMetadata {
+                snapshot: None,
+                dropped: None,
+                extra: Some(extra),
+            };
+            envelope = envelope.with_meta(meta);
+        }
+
+        envelope = envelope.as_snapshot();
+        let msg = ServerMessage::Data(envelope);
+        let json = msg
+            .to_json()
+            .map_err(|e| format!("Serialization error: {}", e))?;
+        ws_tx
+            .send(Message::Text(json))
+            .await
+            .map_err(|e| format!("Send error: {}", e))?;
+        metrics.inc_sent();
+    }
+
+    send_control_message(
+        ws_tx,
+        ServerMessage::SnapshotEnd {
+            topic: Topic::PositionsUpdate.code().to_string(),
+            sent: total,
         },
     )
     .await?;

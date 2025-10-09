@@ -5,7 +5,6 @@
 pub mod events;
 pub mod ohlcvs;
 pub mod positions;
-pub mod prices;
 pub mod security;
 pub mod services;
 pub mod status;

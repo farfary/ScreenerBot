@@ -43,18 +43,6 @@ pub struct PositionsFilter {
     pub only_profitable: Option<bool>,
 }
 
-/// Prices filter
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct PricesFilter {
-    /// Filter by specific mints
-    #[serde(default)]
-    pub mints: Vec<String>,
-
-    /// Minimum price change threshold (percent)
-    #[serde(default)]
-    pub min_change_percent: Option<f64>,
-}
-
 /// Tokens filter
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct TokensFilter {
@@ -226,25 +214,6 @@ impl PositionsFilter {
             (self.only_profitable, is_profitable)
         {
             if filter_profitable != actual_profitable {
-                return false;
-            }
-        }
-
-        true
-    }
-}
-
-impl PricesFilter {
-    /// Check if a price update matches this filter
-    pub fn matches(&self, mint: &str, change_percent: Option<f64>) -> bool {
-        // Check mint filter
-        if !self.mints.is_empty() && !self.mints.contains(&mint.to_string()) {
-            return false;
-        }
-
-        // Check change threshold
-        if let (Some(threshold), Some(actual)) = (self.min_change_percent, change_percent) {
-            if actual.abs() < threshold {
                 return false;
             }
         }

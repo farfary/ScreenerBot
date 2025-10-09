@@ -27,7 +27,7 @@ pub use api::{
 };
 pub use broadcast::{
     emit_price_update, get_subscriber_count as get_prices_subscriber_count,
-    initialize_prices_broadcaster, subscribe as subscribe_prices, PriceUpdate,
+    initialize_prices_broadcaster,
 };
 pub use discovery::{
     get_canonical_pool_address, PoolDiscovery, ENABLE_DEXSCREENER_DISCOVERY,

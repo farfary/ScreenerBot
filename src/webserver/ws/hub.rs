@@ -10,7 +10,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{mpsc, Notify, RwLock};
 
 use crate::{
     arguments::is_debug_webserver_enabled,
@@ -45,6 +45,12 @@ pub struct WsHub {
     /// Topic subscriptions per connection (topic codes)
     connection_topics: RwLock<HashMap<ConnectionId, HashSet<String>>>,
 
+    /// Active subscriber counts per topic
+    topic_counts: RwLock<HashMap<String, u64>>,
+
+    /// Topic activity notifiers (signalled when subscriber counts change)
+    topic_notifiers: RwLock<HashMap<String, Arc<Notify>>>,
+
     /// Next connection ID
     next_conn_id: AtomicU64,
 
@@ -62,6 +68,8 @@ impl WsHub {
             sequences: RwLock::new(HashMap::new()),
             connections: RwLock::new(HashMap::new()),
             connection_topics: RwLock::new(HashMap::new()),
+            topic_counts: RwLock::new(HashMap::new()),
+            topic_notifiers: RwLock::new(HashMap::new()),
             next_conn_id: AtomicU64::new(1),
             metrics: HubMetrics::new(),
             buffer_size,
@@ -115,7 +123,17 @@ impl WsHub {
     /// Unregister a connection
     pub async fn unregister_connection(&self, conn_id: ConnectionId) {
         self.connections.write().await.remove(&conn_id);
-        self.connection_topics.write().await.remove(&conn_id);
+
+        let topics = {
+            let mut topic_map = self.connection_topics.write().await;
+            topic_map.remove(&conn_id)
+        };
+
+        if let Some(topics) = topics {
+            self.adjust_topic_counts(Vec::new(), topics.into_iter().collect())
+                .await;
+        }
+
         self.metrics.connection_closed();
 
         if is_debug_webserver_enabled() {
@@ -142,6 +160,10 @@ impl WsHub {
 
         let topics_map = self.connection_topics.read().await;
         let topic_code = envelope.t.clone();
+
+        if !self.has_subscribers(&topic_code).await {
+            return;
+        }
 
         let mut sent = 0;
         let mut dropped = 0;
@@ -183,11 +205,30 @@ impl WsHub {
 
     /// Update the topic subscription set for a connection
     pub async fn update_connection_topics(&self, conn_id: ConnectionId, topics: HashSet<String>) {
-        let mut map = self.connection_topics.write().await;
-        if topics.is_empty() {
-            map.remove(&conn_id);
-        } else {
-            map.insert(conn_id, topics);
+        let (added, removed) = {
+            let mut map = self.connection_topics.write().await;
+            let previous = map.get(&conn_id).cloned().unwrap_or_default();
+
+            if topics.is_empty() {
+                map.remove(&conn_id);
+            } else {
+                map.insert(conn_id, topics.clone());
+            }
+
+            let added = topics
+                .difference(&previous)
+                .cloned()
+                .collect::<Vec<String>>();
+            let removed = previous
+                .difference(&topics)
+                .cloned()
+                .collect::<Vec<String>>();
+
+            (added, removed)
+        };
+
+        if !added.is_empty() || !removed.is_empty() {
+            self.adjust_topic_counts(added, removed).await;
         }
     }
 
@@ -199,6 +240,92 @@ impl WsHub {
     /// Get active connection count
     pub async fn active_connections(&self) -> usize {
         self.connections.read().await.len()
+    }
+
+    /// Return true if a topic currently has subscribers
+    pub async fn has_subscribers(&self, topic: &str) -> bool {
+        self.topic_subscriber_count(topic).await > 0
+    }
+
+    /// Get the subscriber count for a topic
+    pub async fn topic_subscriber_count(&self, topic: &str) -> u64 {
+        let counts = self.topic_counts.read().await;
+        counts.get(topic).copied().unwrap_or(0)
+    }
+
+    /// Wait until a topic has at least one subscriber
+    pub async fn wait_for_subscribers(&self, topic: &str) {
+        if self.has_subscribers(topic).await {
+            return;
+        }
+
+        let notifier = self.topic_notifier(topic).await;
+        loop {
+            notifier.notified().await;
+            if self.has_subscribers(topic).await {
+                break;
+            }
+        }
+    }
+
+    async fn adjust_topic_counts(&self, added: Vec<String>, removed: Vec<String>) {
+        if added.is_empty() && removed.is_empty() {
+            return;
+        }
+
+        let mut newly_active = Vec::new();
+        let mut became_inactive = Vec::new();
+
+        {
+            let mut counts = self.topic_counts.write().await;
+
+            for topic in &added {
+                let entry = counts.entry(topic.clone()).or_insert(0);
+                let was_zero = *entry == 0;
+                *entry += 1;
+                if was_zero {
+                    newly_active.push(topic.clone());
+                }
+            }
+
+            for topic in &removed {
+                let mut remove_entry = false;
+                if let Some(entry) = counts.get_mut(topic) {
+                    if *entry > 0 {
+                        *entry -= 1;
+                        if *entry == 0 {
+                            became_inactive.push(topic.clone());
+                            remove_entry = true;
+                        }
+                    }
+                }
+
+                if remove_entry {
+                    counts.remove(topic);
+                }
+            }
+        }
+
+        for topic in newly_active.iter().chain(became_inactive.iter()) {
+            self.notify_topic(topic).await;
+        }
+    }
+
+    async fn topic_notifier(&self, topic: &str) -> Arc<Notify> {
+        if let Some(existing) = self.topic_notifiers.read().await.get(topic).cloned() {
+            return existing;
+        }
+
+        let mut notifiers = self.topic_notifiers.write().await;
+        notifiers
+            .entry(topic.to_string())
+            .or_insert_with(|| Arc::new(Notify::new()))
+            .clone()
+    }
+
+    async fn notify_topic(&self, topic: &str) {
+        let notifier = self.topic_notifier(topic).await;
+        notifier.notify_waiters();
     }
 }
 
@@ -225,7 +352,10 @@ mod tests {
     async fn test_hub_broadcast() {
         let hub = WsHub::new(10);
 
-        let (_conn_id, mut rx) = hub.register_connection().await;
+        let (conn_id, mut rx) = hub.register_connection().await;
+        let mut topics = HashSet::new();
+        topics.insert("events.new".to_string());
+        hub.update_connection_topics(conn_id, topics).await;
 
         let envelope = WsEnvelope::new(Topic::EventsNew, 1, serde_json::json!({"test": "data"}));
 
@@ -247,5 +377,25 @@ mod tests {
         assert_eq!(seq1, 0);
         assert_eq!(seq2, 1);
         assert_eq!(seq3, 0); // Different topic, separate counter
+    }
+
+    #[tokio::test]
+    async fn test_topic_subscriber_counts() {
+        let hub = WsHub::new(10);
+
+        assert_eq!(hub.topic_subscriber_count("events.new").await, 0);
+        assert!(!hub.has_subscribers("events.new").await);
+
+        let (conn_id, _rx) = hub.register_connection().await;
+        let mut topics = HashSet::new();
+        topics.insert("events.new".to_string());
+        hub.update_connection_topics(conn_id, topics).await;
+
+        assert_eq!(hub.topic_subscriber_count("events.new").await, 1);
+        assert!(hub.has_subscribers("events.new").await);
+
+        hub.unregister_connection(conn_id).await;
+        assert_eq!(hub.topic_subscriber_count("events.new").await, 0);
+        assert!(!hub.has_subscribers("events.new").await);
     }
 }

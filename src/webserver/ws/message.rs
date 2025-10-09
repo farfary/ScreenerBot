@@ -30,7 +30,6 @@ pub enum Topic {
 
     // Trading topics
     PositionsUpdate,
-    PricesUpdate,
     TokensUpdate,
 
     // Activity topics
@@ -49,7 +48,6 @@ impl Topic {
             Topic::SystemStatus => "system.status",
             Topic::ServicesMetrics => "services.metrics",
             Topic::PositionsUpdate => "positions.update",
-            Topic::PricesUpdate => "prices.update",
             Topic::TokensUpdate => "tokens.update",
             Topic::EventsNew => "events.new",
             Topic::OhlcvsUpdate => "ohlcvs.update",
@@ -66,7 +64,6 @@ impl Topic {
             "system.status" => Some(Topic::SystemStatus),
             "services.metrics" => Some(Topic::ServicesMetrics),
             "positions.update" => Some(Topic::PositionsUpdate),
-            "prices.update" => Some(Topic::PricesUpdate),
             "tokens.update" => Some(Topic::TokensUpdate),
             "events.new" => Some(Topic::EventsNew),
             "ohlcvs.update" => Some(Topic::OhlcvsUpdate),
@@ -292,13 +289,7 @@ mod tests {
 
     #[test]
     fn test_topic_code_roundtrip() {
-        for topic in &[
-            Topic::SystemStatus,
-            Topic::ServicesMetrics,
-            Topic::PositionsUpdate,
-            Topic::PricesUpdate,
-            Topic::EventsNew,
-        ] {
+        for topic in &[Topic::SystemStatus, Topic::ServicesMetrics, Topic::PositionsUpdate, Topic::EventsNew] {
             let code = topic.code();
             let parsed = Topic::from_code(code);
             assert_eq!(parsed, Some(*topic));
