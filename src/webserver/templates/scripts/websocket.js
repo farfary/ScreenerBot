@@ -513,9 +513,12 @@
       handler(data, envelope) {
         if (
           global.Realtime?.activePage === "services" &&
-          global.PageRealtime?.services?.channels?.services
+          global.PageRealtime?.services?.channels?.["services.metrics"]
         ) {
-          global.PageRealtime.services.channels.services(data, envelope);
+          global.PageRealtime.services.channels["services.metrics"](
+            data,
+            envelope
+          );
         }
       },
       includeInFilters: () => global.Realtime?.activePage === "services",
