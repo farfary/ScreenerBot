@@ -116,7 +116,20 @@
   var positionsInSnapshot = false;
   var positionsSnapshotHandlersRegistered = false;
   var lastPositionsSnapshotMeta = null;
+  var POSITIONS_SNAPSHOT_TIMEOUT_MS = 15000;
   const POSITIONS_SNAPSHOT_LIMIT = 1000;
+
+  var positionsSnapshotState = {
+    inProgress: false,
+    started: false,
+    requestId: null,
+    context: null,
+    expected: 0,
+    received: 0,
+    totalAvailable: 0,
+    timeoutHandle: null,
+    lastTimerReason: null,
+  };
 
   // Truncate address
   function truncateAddress(address) {
@@ -124,6 +137,61 @@
     return (
       address.substring(0, 8) + "..." + address.substring(address.length - 6)
     );
+  }
+
+  function clearPositionsSnapshotTimer() {
+    if (positionsSnapshotState.timeoutHandle) {
+      clearTimeout(positionsSnapshotState.timeoutHandle);
+      positionsSnapshotState.timeoutHandle = null;
+    }
+    positionsSnapshotState.lastTimerReason = null;
+  }
+
+  function schedulePositionsSnapshotTimer(reason) {
+    clearPositionsSnapshotTimer();
+
+    if (
+      !Number.isFinite(POSITIONS_SNAPSHOT_TIMEOUT_MS) ||
+      POSITIONS_SNAPSHOT_TIMEOUT_MS <= 0
+    ) {
+      return;
+    }
+
+    positionsSnapshotState.lastTimerReason = reason || null;
+    positionsSnapshotState.timeoutHandle = setTimeout(() => {
+      positionsSnapshotState.timeoutHandle = null;
+      if (!positionsSnapshotState.inProgress) {
+        return;
+      }
+
+      console.warn(
+        `[Positions] Snapshot timeout (${
+          positionsSnapshotState.lastTimerReason || "unknown"
+        })`
+      );
+
+      if (positionsSnapshotState.received > 0 || positionsStore.size > 0) {
+        handlePositionsSnapshotEnd({
+          topic: "positions.update",
+          sent: positionsSnapshotState.received,
+          request_id: positionsSnapshotState.requestId,
+          context: Object.assign(
+            {
+              request_id: positionsSnapshotState.requestId,
+              total_selected: positionsSnapshotState.received,
+              total_available: Math.max(
+                positionsSnapshotState.totalAvailable,
+                positionsStore.size
+              ),
+            },
+            positionsSnapshotState.context || {}
+          ),
+        });
+      } else {
+        renderEmptyState("Snapshot timed out — retrying...", "#f97316");
+        requestPositionsSnapshot("timeout-retry");
+      }
+    }, POSITIONS_SNAPSHOT_TIMEOUT_MS);
   }
 
   function getCurrentStatusFilter() {
@@ -434,7 +502,7 @@
 
     if (!positionsInitialized && positionsStore.size === 0) {
       renderEmptyState(
-        positionsInSnapshot
+        positionsSnapshotState.inProgress
           ? "Loading positions..."
           : "Waiting for realtime snapshot..."
       );
@@ -461,20 +529,155 @@
 
     tbody.innerHTML = rows.map(renderPositionRow).join("");
     updatePositionCount(rows.length);
+    positionsSnapshotState.totalAvailable = Math.max(
+      positionsSnapshotState.totalAvailable,
+      rows.length
+    );
   }
 
   function handlePositionsSnapshotBegin(payload) {
     if (!payload || payload.topic !== "positions.update") return;
+
+    const context = (payload && payload.context) || {};
+    const requestId =
+      context.request_id ||
+      context.requestId ||
+      payload?.request_id ||
+      payload?.requestId ||
+      null;
+
+    const realtime = window.Realtime;
+    const latestRequestId =
+      realtime && realtime.lastSnapshotRequestIds
+        ? realtime.lastSnapshotRequestIds["positions.update"] ||
+          realtime.lastSnapshotRequestIds["positions"] ||
+          null
+        : null;
+
+    if (
+      requestId &&
+      latestRequestId &&
+      requestId !== latestRequestId &&
+      positionsSnapshotState.requestId !== requestId
+    ) {
+      if (window.__DEBUG_REALTIME) {
+        console.warn("[Positions] Ignoring stale snapshot_begin", {
+          requestId,
+          latestRequestId,
+          stateRequestId: positionsSnapshotState.requestId,
+        });
+      }
+      return;
+    }
+
+    positionsSnapshotState.inProgress = true;
+    positionsSnapshotState.started = true;
+    positionsSnapshotState.requestId =
+      requestId || positionsSnapshotState.requestId;
+    positionsSnapshotState.context = context || null;
+    positionsSnapshotState.expected =
+      Number(context.total_selected ?? context.total ?? payload?.total) || 0;
+    positionsSnapshotState.received = 0;
+    positionsSnapshotState.totalAvailable = Number(
+      context.total_available ?? positionsSnapshotState.expected
+    );
+    positionsSnapshotState.totalAvailable = Number.isFinite(
+      positionsSnapshotState.totalAvailable
+    )
+      ? positionsSnapshotState.totalAvailable
+      : 0;
+
     positionsInSnapshot = true;
     positionsInitialized = false;
     lastPositionsSnapshotMeta = payload;
     positionsStore.clear();
     renderEmptyState("Loading positions...");
     updatePositionCount(0);
+    schedulePositionsSnapshotTimer("begin");
   }
 
   function handlePositionsSnapshotEnd(payload) {
     if (!payload || payload.topic !== "positions.update") return;
+
+    clearPositionsSnapshotTimer();
+
+    const context = (payload && payload.context) || {};
+    const requestId =
+      context.request_id ||
+      context.requestId ||
+      payload?.request_id ||
+      payload?.requestId ||
+      null;
+
+    const realtime = window.Realtime;
+    const latestRequestId =
+      realtime && realtime.lastSnapshotRequestIds
+        ? realtime.lastSnapshotRequestIds["positions.update"] ||
+          realtime.lastSnapshotRequestIds["positions"] ||
+          null
+        : null;
+
+    if (
+      requestId &&
+      latestRequestId &&
+      requestId !== latestRequestId &&
+      positionsSnapshotState.requestId !== requestId
+    ) {
+      if (window.__DEBUG_REALTIME) {
+        console.warn("[Positions] Ignoring stale snapshot_end", {
+          requestId,
+          latestRequestId,
+          stateRequestId: positionsSnapshotState.requestId,
+        });
+      }
+      return;
+    }
+
+    if (
+      requestId &&
+      positionsSnapshotState.requestId &&
+      requestId !== positionsSnapshotState.requestId
+    ) {
+      if (window.__DEBUG_REALTIME) {
+        console.warn("[Positions] snapshot_end request mismatch", {
+          requestId,
+          stateRequestId: positionsSnapshotState.requestId,
+        });
+      }
+      return;
+    }
+
+    if (requestId) {
+      positionsSnapshotState.requestId = requestId;
+    }
+
+    if (context && Object.keys(context).length > 0) {
+      positionsSnapshotState.context = context;
+    }
+
+    const sent = Number(
+      context.total_selected ??
+        context.total ??
+        payload?.sent ??
+        positionsSnapshotState.received
+    );
+    if (Number.isFinite(sent)) {
+      positionsSnapshotState.received = sent;
+    }
+
+    const available = Number(
+      context.total_available ?? positionsSnapshotState.totalAvailable ?? sent
+    );
+    if (Number.isFinite(available)) {
+      positionsSnapshotState.totalAvailable = Math.max(
+        positionsSnapshotState.totalAvailable,
+        available,
+        positionsStore.size
+      );
+    }
+
+    positionsSnapshotState.inProgress = false;
+    positionsSnapshotState.started = false;
     positionsInSnapshot = false;
     positionsInitialized = true;
     lastPositionsSnapshotMeta = payload;
@@ -503,6 +706,10 @@
       }
       positionsSnapshotHandlersRegistered = false;
       positionsInSnapshot = false;
+      positionsSnapshotState.inProgress = false;
+      positionsSnapshotState.started = false;
+      positionsSnapshotState.requestId = null;
+      clearPositionsSnapshotTimer();
     };
 
     if (window.Router && typeof Router.registerCleanup === "function") {
@@ -527,6 +734,37 @@
       return;
     }
 
+    const meta = envelope?.meta || {};
+    const isSnapshotMessage =
+      meta.snapshot === true || update.type === "snapshot";
+    if (isSnapshotMessage) {
+      const chunkRequestId =
+        meta?.extra?.request_id ||
+        meta?.extra?.requestId ||
+        meta?.request_id ||
+        meta?.requestId ||
+        null;
+      if (
+        positionsSnapshotState.requestId &&
+        chunkRequestId &&
+        chunkRequestId !== positionsSnapshotState.requestId
+      ) {
+        if (window.__DEBUG_REALTIME) {
+          console.warn("[Positions] Ignoring stale snapshot chunk", {
+            chunkRequestId,
+            stateRequestId: positionsSnapshotState.requestId,
+          });
+        }
+        return;
+      }
+      if (!positionsSnapshotState.started) {
+        if (window.__DEBUG_REALTIME) {
+          console.warn("[Positions] Snapshot chunk before begin", { meta });
+        }
+        return;
+      }
+    }
+
     const normalized = normalizePositionFromApi(update.position);
     const key = getPositionKey(normalized);
     if (!key) {
@@ -542,6 +780,30 @@
       positionsStore.set(key, normalized);
     } else {
       positionsStore.delete(key);
+    }
+
+    if (isSnapshotMessage) {
+      positionsSnapshotState.received += 1;
+      const totalMeta =
+        meta?.extra?.total_selected || meta?.extra?.total || meta?.total;
+      if (Number.isFinite(totalMeta)) {
+        positionsSnapshotState.totalAvailable = Math.max(
+          positionsSnapshotState.totalAvailable,
+          Number(totalMeta),
+          positionsStore.size
+        );
+      } else {
+        positionsSnapshotState.totalAvailable = Math.max(
+          positionsSnapshotState.totalAvailable,
+          positionsStore.size
+        );
+      }
+      schedulePositionsSnapshotTimer("chunk");
+    } else {
+      positionsSnapshotState.totalAvailable = Math.max(
+        positionsSnapshotState.totalAvailable,
+        positionsStore.size
+      );
     }
 
     if (!positionsInSnapshot) {
@@ -578,27 +840,65 @@
 
   function requestPositionsSnapshot(reason = "manual") {
     if (
+      !window.Realtime ||
+      (typeof Realtime.requestSnapshotForAliases !== "function" &&
+        typeof Realtime.updateFilters !== "function")
+    ) {
+      console.warn(
+        "[Positions] Realtime helper not available; cannot request snapshot"
+      );
+      return;
+    }
+
+    positionsSnapshotState.inProgress = true;
+    positionsSnapshotState.started = false;
+    positionsSnapshotState.requestId = null;
+    positionsSnapshotState.context = null;
+    positionsSnapshotState.expected = 0;
+    positionsSnapshotState.received = 0;
+    positionsSnapshotState.totalAvailable = 0;
+    positionsInSnapshot = true;
+    schedulePositionsSnapshotTimer("request");
+
+    if (
       window.Realtime &&
       typeof Realtime.requestSnapshotForAliases === "function"
     ) {
       console.log("[Positions] Requesting snapshot", { reason });
-      Realtime.requestSnapshotForAliases(["positions"]);
+      const result = Realtime.requestSnapshotForAliases(["positions"]) || {};
+      const requestId =
+        result["positions.update"] || result["positions"] || null;
+      if (requestId) {
+        positionsSnapshotState.requestId = requestId;
+      }
     } else if (
       window.Realtime &&
       typeof Realtime.updateFilters === "function"
     ) {
       console.log("[Positions] Requesting snapshot via update", { reason });
-      Realtime.updateFilters({ snapshotTopics: ["positions"] });
-    } else {
-      console.warn(
-        "[Positions] Realtime helper not available; cannot request snapshot"
-      );
+      const result =
+        Realtime.updateFilters({
+          snapshotTopics: ["positions.update", "positions"],
+        }) || {};
+      const requestId =
+        result["positions.update"] || result["positions"] || null;
+      if (requestId) {
+        positionsSnapshotState.requestId = requestId;
+      }
     }
   }
 
   window.onPositionsStatusChanged = function () {
     positionsStore.clear();
     positionsInitialized = false;
+    positionsSnapshotState.inProgress = true;
+    positionsSnapshotState.started = false;
+    positionsSnapshotState.requestId = null;
+    positionsSnapshotState.context = null;
+    positionsSnapshotState.expected = 0;
+    positionsSnapshotState.received = 0;
+    positionsSnapshotState.totalAvailable = 0;
+    schedulePositionsSnapshotTimer("status-filter");
     renderEmptyState("Loading positions...");
     updatePositionCount(0);
     requestPositionsSnapshot("status-filter");
@@ -607,12 +907,23 @@
   window.refreshPositions = function () {
     console.log("[Positions] Manual refresh requested");
     positionsInitialized = false;
+    positionsSnapshotState.inProgress = true;
+    positionsSnapshotState.started = false;
+    positionsSnapshotState.requestId = null;
+    positionsSnapshotState.context = null;
+    positionsSnapshotState.expected = 0;
+    positionsSnapshotState.received = 0;
+    positionsSnapshotState.totalAvailable = 0;
+    schedulePositionsSnapshotTimer("manual-refresh");
     renderEmptyState("Refreshing positions...");
     updatePositionCount(0);
     requestPositionsSnapshot("manual-refresh");
   };
 
   function handlePositionsWarningOrDisconnect(message) {
+    clearPositionsSnapshotTimer();
+    positionsSnapshotState.inProgress = false;
+    positionsSnapshotState.started = false;
     if (message) {
       console.warn("[Positions] Realtime disruption", {
         code: message?.code,
