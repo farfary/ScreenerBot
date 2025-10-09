@@ -459,6 +459,14 @@ Loading...</pre
   }
 
   function requestEventsSnapshot(message) {
+    // Prevent duplicate requests while snapshot is in progress
+    if (snapshotState.inProgress) {
+      console.log(
+        "[Events] Snapshot already in progress, ignoring duplicate request"
+      );
+      return;
+    }
+
     const statusKey = isEventsPaused() ? "paused" : "connecting";
     const statusMessage =
       message ||

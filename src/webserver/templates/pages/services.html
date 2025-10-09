@@ -887,6 +887,14 @@
       },
 
       requestSnapshot(reason = "manual") {
+        // Prevent duplicate requests while snapshot is in progress
+        if (this.snapshotState.inProgress) {
+          console.log(
+            "[Services] Snapshot already in progress, ignoring duplicate request"
+          );
+          return;
+        }
+
         const status = window.Realtime?.isConnected?.()
           ? "connected"
           : window.WsHub?.getStatus?.() || "unknown";
@@ -973,13 +981,12 @@
         if (status !== "connected") {
           controller.setLoading("Waiting for realtime connection...");
         } else if (!controller.hasInitialSnapshot) {
-          controller.requestSnapshot("initial-load");
+          controller.setLoading("Loading services...");
         }
       },
       onEnter() {
         if (!controller.hasInitialSnapshot) {
-          controller.setLoading("Requesting snapshot...");
-          controller.requestSnapshot("page-enter");
+          controller.setLoading("Loading services...");
         }
       },
       onUnavailable() {

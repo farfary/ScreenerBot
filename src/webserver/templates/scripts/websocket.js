@@ -85,24 +85,30 @@
 
   global.PageRealtime = global.PageRealtime || {};
 
-  global.WsHub = {
-    conn: null,
-    enabled: true,
-    attempts: 0,
-    maxAttempts: 5,
-    isConnecting: false,
-    listeners: {},
-    clientId: ensureClientId(),
-    heartbeatTimer: null,
-    protocolVersion: null,
-    connectTimeoutTimer: null,
-    watchdogTimer: null,
-    lastPongAt: 0,
-    lastPingAt: 0,
-    lastPingId: 0,
-    rttMs: null,
-    pingSeq: 0,
+  // CRITICAL: Only create WsHub once - reuse across page navigations to avoid connection leaks
+  if (!global.WsHub) {
+    global.WsHub = {
+      conn: null,
+      enabled: true,
+      attempts: 0,
+      maxAttempts: 5,
+      isConnecting: false,
+      listeners: {},
+      clientId: ensureClientId(),
+      heartbeatTimer: null,
+      protocolVersion: null,
+      connectTimeoutTimer: null,
+      watchdogTimer: null,
+      lastPongAt: 0,
+      lastPingAt: 0,
+      lastPingId: 0,
+      rttMs: null,
+      pingSeq: 0,
+    };
+  }
 
+  // Ensure WsHub methods exist (in case they were lost during hot reload or page nav)
+  Object.assign(global.WsHub, {
     connect() {
       if (this.isConnecting) return;
       if (
@@ -485,7 +491,7 @@
         this.watchdogTimer = null;
       }
     },
-  };
+  });
 
   function hasWsHub() {
     return (
