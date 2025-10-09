@@ -106,17 +106,21 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
             log(
                 LogTag::Webserver,
                 "DEBUG",
-                "ServiceManager reference obtained, acquiring read lock",
+                "ServiceManager reference obtained, attempting non-blocking read lock",
             );
         }
 
-        if let Some(manager) = manager_ref.read().await.as_ref() {
-            let service_names = manager.get_all_service_names();
-            let health_map = manager.get_health().await;
-            let metrics_map = manager.get_metrics().await;
+        // Use try_read() to avoid deadlock - returns immediately if lock is held
+        match manager_ref.try_read() {
+            Ok(guard) => {
+                if let Some(manager) = guard.as_ref() {
+                    let service_names = manager.get_all_service_names();
+                    // Use cached data to avoid blocking on async service health/metrics calls
+                    let health_map = manager.get_health_cached().await;
+                    let metrics_map = manager.get_metrics_cached().await;
 
-            if is_debug_webserver_enabled() {
-                log(
+                    if is_debug_webserver_enabled() {
+                        log(
                     LogTag::Webserver,
                     "DEBUG",
                     &format!(
@@ -126,32 +130,33 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
                         metrics_map.len()
                     )
                 );
-            }
+                    }
 
-            for name in service_names {
-                if let Some(service) = manager.get_service(name) {
-                    let priority = service.priority();
-                    let dependencies = service
-                        .dependencies()
-                        .iter()
-                        .map(|dep| dep.to_string())
-                        .collect::<Vec<_>>();
-                    let enabled = manager.is_service_enabled(name);
-                    let health = health_map
-                        .get(name)
-                        .cloned()
-                        .unwrap_or(ServiceHealth::Unhealthy(
-                            "Health status unavailable".to_string(),
-                        ));
-                    let metrics = metrics_map
-                        .get(name)
-                        .cloned()
-                        .unwrap_or_else(ServiceMetrics::default)
-                        .sanitized();
-                    let uptime_seconds = metrics.uptime_seconds;
+                    for name in service_names {
+                        if let Some(service) = manager.get_service(name) {
+                            let priority = service.priority();
+                            let dependencies = service
+                                .dependencies()
+                                .iter()
+                                .map(|dep| dep.to_string())
+                                .collect::<Vec<_>>();
+                            let enabled = manager.is_service_enabled(name);
+                            let health =
+                                health_map
+                                    .get(name)
+                                    .cloned()
+                                    .unwrap_or(ServiceHealth::Unhealthy(
+                                        "Health status unavailable".to_string(),
+                                    ));
+                            let metrics = metrics_map
+                                .get(name)
+                                .cloned()
+                                .unwrap_or_else(ServiceMetrics::default)
+                                .sanitized();
+                            let uptime_seconds = metrics.uptime_seconds;
 
-                    if is_debug_webserver_enabled() {
-                        log(
+                            if is_debug_webserver_enabled() {
+                                log(
                             LogTag::Webserver,
                             "DEBUG",
                             &format!(
@@ -163,54 +168,63 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
                                 metrics.task_count
                             )
                         );
+                            }
+
+                            if enabled {
+                                summary.enabled_services += 1;
+                            }
+
+                            match &health {
+                                ServiceHealth::Healthy => {
+                                    summary.healthy_services += 1;
+                                }
+                                ServiceHealth::Degraded(_) => {
+                                    summary.degraded_services += 1;
+                                }
+                                ServiceHealth::Unhealthy(_) => {
+                                    summary.unhealthy_services += 1;
+                                }
+                                ServiceHealth::Starting => {
+                                    summary.starting_services += 1;
+                                }
+                                ServiceHealth::Stopping => {
+                                    summary.unhealthy_services += 1;
+                                }
+                            }
+
+                            dependency_graph.push(ServiceDependencyNode {
+                                name: name.to_string(),
+                                priority,
+                                dependencies: dependencies.clone(),
+                                health: health.clone(),
+                            });
+
+                            services.push(ServiceDetailResponse {
+                                name: name.to_string(),
+                                priority,
+                                dependencies,
+                                enabled,
+                                health,
+                                metrics,
+                                uptime_seconds,
+                            });
+                        }
                     }
-
-                    if enabled {
-                        summary.enabled_services += 1;
+                } else {
+                    if is_debug_webserver_enabled() {
+                        log(
+                            LogTag::Webserver,
+                            "DEBUG",
+                            "ServiceManager read lock acquired but manager is None",
+                        );
                     }
-
-                    match &health {
-                        ServiceHealth::Healthy => {
-                            summary.healthy_services += 1;
-                        }
-                        ServiceHealth::Degraded(_) => {
-                            summary.degraded_services += 1;
-                        }
-                        ServiceHealth::Unhealthy(_) => {
-                            summary.unhealthy_services += 1;
-                        }
-                        ServiceHealth::Starting => {
-                            summary.starting_services += 1;
-                        }
-                        ServiceHealth::Stopping => {
-                            summary.unhealthy_services += 1;
-                        }
-                    }
-
-                    dependency_graph.push(ServiceDependencyNode {
-                        name: name.to_string(),
-                        priority,
-                        dependencies: dependencies.clone(),
-                        health: health.clone(),
-                    });
-
-                    services.push(ServiceDetailResponse {
-                        name: name.to_string(),
-                        priority,
-                        dependencies,
-                        enabled,
-                        health,
-                        metrics,
-                        uptime_seconds,
-                    });
                 }
             }
-        } else {
-            if is_debug_webserver_enabled() {
+            Err(_) => {
                 log(
                     LogTag::Webserver,
-                    "DEBUG",
-                    "ServiceManager read lock acquired but manager is None",
+                    "WARN",
+                    "ServiceManager read lock is held (try_read failed) - returning empty snapshot to avoid blocking",
                 );
             }
         }

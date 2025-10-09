@@ -906,7 +906,8 @@
   window.initPositionsPage = function () {
     console.log("[Positions] Initializing page");
 
-    setupPositionsRealtimeHooks();
+    // Realtime hooks are set up via PageRealtime.positions.channels
+    // No need for setupPositionsRealtimeHooks() - removed obsolete call
 
     const searchInput = document.getElementById("searchInput");
     if (searchInput && !searchInput.__positionsBound) {

@@ -154,6 +154,9 @@ pub struct ServiceManager {
     shutdown: Arc<Notify>,
     metrics_collector: MetricsCollector,
     task_monitors: HashMap<&'static str, tokio_metrics::TaskMonitor>,
+    // Cached health/metrics to avoid blocking during snapshot collection
+    cached_health: Arc<RwLock<HashMap<&'static str, ServiceHealth>>>,
+    cached_metrics: Arc<RwLock<HashMap<&'static str, ServiceMetrics>>>,
 }
 
 impl ServiceManager {
@@ -164,6 +167,8 @@ impl ServiceManager {
             shutdown: Arc::new(Notify::new()),
             metrics_collector: MetricsCollector::new(),
             task_monitors: HashMap::new(),
+            cached_health: Arc::new(RwLock::new(HashMap::new())),
+            cached_metrics: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -489,6 +494,27 @@ impl ServiceManager {
         metrics
     }
 
+    /// Get cached health status (non-blocking, instant read)
+    pub async fn get_health_cached(&self) -> HashMap<&'static str, ServiceHealth> {
+        self.cached_health.read().await.clone()
+    }
+
+    /// Get cached metrics (non-blocking, instant read)
+    pub async fn get_metrics_cached(&self) -> HashMap<&'static str, ServiceMetrics> {
+        self.cached_metrics.read().await.clone()
+    }
+
+    /// Update cached health and metrics (called periodically by background task)
+    pub async fn update_cache(&self) {
+        // Collect fresh health
+        let health = self.get_health().await;
+        *self.cached_health.write().await = health;
+
+        // Collect fresh metrics
+        let metrics = self.get_metrics().await;
+        *self.cached_metrics.write().await = metrics;
+    }
+
     /// Get all registered service names
     pub fn get_all_service_names(&self) -> Vec<&'static str> {
         self.services.keys().copied().collect()
@@ -514,6 +540,9 @@ impl ServiceManager {
 
 /// Initialize global ServiceManager instance
 pub async fn init_global_service_manager(manager: ServiceManager) {
+    // Do initial cache update
+    manager.update_cache().await;
+
     let mut global = GLOBAL_SERVICE_MANAGER.write().await;
     *global = Some(manager);
     log(
@@ -521,6 +550,19 @@ pub async fn init_global_service_manager(manager: ServiceManager) {
         "INFO",
         "✅ Global ServiceManager initialized",
     );
+
+    // Spawn background task to update cache every 2 seconds
+    tokio::spawn(async {
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+            if let Some(manager_ref) = get_service_manager().await {
+                if let Some(manager) = manager_ref.read().await.as_ref() {
+                    manager.update_cache().await;
+                }
+            }
+        }
+    });
 }
 
 /// Get reference to global ServiceManager
