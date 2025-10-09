@@ -325,8 +325,9 @@
     subTabsContainer.innerHTML = views
       .map(
         (view) => `
-                    <button class="sub-tab ${view.id === statusState.view ? "active" : ""
-          }" data-view="${view.id}">
+                    <button class="sub-tab ${
+                      view.id === statusState.view ? "active" : ""
+                    }" data-view="${view.id}">
                         ${view.label}
                     </button>
                 `
@@ -455,12 +456,12 @@
                                     </div>
                                     <div class="status-metric-value">
                                         ${Utils.formatNumber(
-      metrics.cpu_system_percent ||
-      metrics.cpu_usage_percent ||
-      0,
-      1,
-      { fallback: "N/A" }
-    )}<span class="status-metric-unit">%</span>
+                                          metrics.cpu_system_percent ||
+                                            metrics.cpu_usage_percent ||
+                                            0,
+                                          1,
+                                          { fallback: "N/A" }
+                                        )}<span class="status-metric-unit">%</span>
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -470,10 +471,10 @@
                                     </div>
                                     <div class="status-metric-value">
                                         ${Utils.formatNumber(
-      metrics.cpu_process_percent || 0,
-      1,
-      { fallback: "N/A" }
-    )}<span class="status-metric-unit">%</span>
+                                          metrics.cpu_process_percent || 0,
+                                          1,
+                                          { fallback: "N/A" }
+                                        )}<span class="status-metric-unit">%</span>
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -483,12 +484,12 @@
                                     </div>
                                     <div class="status-metric-value">
                                         ${Utils.formatNumber(
-      metrics.system_memory_used_mb ||
-      metrics.memory_usage_mb ||
-      0,
-      0,
-      { fallback: "N/A" }
-    )}<span class="status-metric-unit">MB</span>
+                                          metrics.system_memory_used_mb ||
+                                            metrics.memory_usage_mb ||
+                                            0,
+                                          0,
+                                          { fallback: "N/A" }
+                                        )}<span class="status-metric-unit">MB</span>
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -498,10 +499,10 @@
                                     </div>
                                     <div class="status-metric-value">
                                         ${Utils.formatNumber(
-      metrics.process_memory_mb || 0,
-      0,
-      { fallback: "N/A" }
-    )}<span class="status-metric-unit">MB</span>
+                                          metrics.process_memory_mb || 0,
+                                          0,
+                                          { fallback: "N/A" }
+                                        )}<span class="status-metric-unit">MB</span>
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -529,10 +530,10 @@
                                     </div>
                                     <div class="status-metric-value">
                                         ${Utils.formatNumber(
-      metrics.rpc_calls_total || 0,
-      0,
-      { fallback: "N/A" }
-    )}
+                                          metrics.rpc_calls_total || 0,
+                                          0,
+                                          { fallback: "N/A" }
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -575,14 +576,15 @@
                     <tr>
                         <td><strong>${label}</strong></td>
                         <td>
-                            <span class="status-badge ${ready ? "ready" : "not-ready"
-          }">
+                            <span class="status-badge ${
+                              ready ? "ready" : "not-ready"
+                            }">
                                 ${ready ? "✅ Ready" : "⏳ Loading"}
                             </span>
                         </td>
                         <td>${Utils.formatTimestamp(lastCheck, {
-            fallback: "N/A",
-          })}</td>
+                          fallback: "N/A",
+                        })}</td>
                     </tr>
                 `;
       })
@@ -630,10 +632,10 @@
         successRate:
           calls > 0
             ? (
-              ((calls - ((rpcStats.errors_per_url || {})[url] || 0)) /
-                calls) *
-              100
-            ).toFixed(2)
+                ((calls - ((rpcStats.errors_per_url || {})[url] || 0)) /
+                  calls) *
+                100
+              ).toFixed(2)
             : "100.00",
       }))
       .sort((a, b) => b.calls - a.calls);
@@ -647,10 +649,10 @@
         successRate:
           calls > 0
             ? (
-              ((calls - ((rpcStats.errors_per_method || {})[method] || 0)) /
-                calls) *
-              100
-            ).toFixed(2)
+                ((calls - ((rpcStats.errors_per_method || {})[method] || 0)) /
+                  calls) *
+                100
+              ).toFixed(2)
             : "100.00",
       }))
       .sort((a, b) => b.calls - a.calls);
@@ -671,10 +673,10 @@
                                     </div>
                                     <div class="status-metric-value">
                                         ${Utils.formatNumber(
-      rpcStats.total_calls,
-      0,
-      { fallback: "N/A" }
-    )}
+                                          rpcStats.total_calls,
+                                          0,
+                                          { fallback: "N/A" }
+                                        )}
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -684,10 +686,10 @@
                                     </div>
                                     <div class="status-metric-value">
                                         ${Utils.formatNumber(
-      rpcStats.total_errors,
-      0,
-      { fallback: "N/A" }
-    )}
+                                          rpcStats.total_errors,
+                                          0,
+                                          { fallback: "N/A" }
+                                        )}
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -697,10 +699,10 @@
                                     </div>
                                     <div class="status-metric-value">
                                         ${Utils.formatNumber(
-      rpcStats.success_rate,
-      2,
-      { fallback: "N/A" }
-    )}<span class="status-metric-unit">%</span>
+                                          rpcStats.success_rate,
+                                          2,
+                                          { fallback: "N/A" }
+                                        )}<span class="status-metric-unit">%</span>
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -710,10 +712,10 @@
                                     </div>
                                     <div class="status-metric-value">
                                         ${Utils.formatNumber(
-      rpcStats.calls_per_second,
-      2,
-      { fallback: "N/A" }
-    )}
+                                          rpcStats.calls_per_second,
+                                          2,
+                                          { fallback: "N/A" }
+                                        )}
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -723,10 +725,10 @@
                                     </div>
                                     <div class="status-metric-value">
                                         ${Utils.formatNumber(
-      rpcStats.average_response_time_ms,
-      1,
-      { fallback: "N/A" }
-    )}<span class="status-metric-unit">ms</span>
+                                          rpcStats.average_response_time_ms,
+                                          1,
+                                          { fallback: "N/A" }
+                                        )}<span class="status-metric-unit">ms</span>
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -752,47 +754,50 @@
                                 </thead>
                                 <tbody>
                                     ${urlsArray
-        .map(
-          (item) => `
+                                      .map(
+                                        (item) => `
                                         <tr>
                                             <td>
                                                 <code style="font-size: 0.85em; word-break: break-all;">
-                                                    ${item.url.length > 60
-              ? item.url.slice(
-                0,
-                57
-              ) + "..."
-              : item.url
-            }
+                                                    ${
+                                                      item.url.length > 60
+                                                        ? item.url.slice(
+                                                            0,
+                                                            57
+                                                          ) + "..."
+                                                        : item.url
+                                                    }
                                                 </code>
                                             </td>
                                             <td style="text-align: right;"><strong>${Utils.formatNumber(
-              item.calls,
-              0,
-              { fallback: "N/A" }
-            )}</strong></td>
-                                            <td style="text-align: right; color: ${item.errors > 0
-              ? "#ef4444"
-              : "inherit"
-            };">
+                                              item.calls,
+                                              0,
+                                              { fallback: "N/A" }
+                                            )}</strong></td>
+                                            <td style="text-align: right; color: ${
+                                              item.errors > 0
+                                                ? "#ef4444"
+                                                : "inherit"
+                                            };">
                                                 ${Utils.formatNumber(
-              item.errors,
-              0,
-              { fallback: "N/A" }
-            )}
+                                                  item.errors,
+                                                  0,
+                                                  { fallback: "N/A" }
+                                                )}
                                             </td>
                                             <td style="text-align: right;">
-                                                <span class="status-badge ${item.successRate >= 99
-              ? "ready"
-              : "not-ready"
-            }">
+                                                <span class="status-badge ${
+                                                  item.successRate >= 99
+                                                    ? "ready"
+                                                    : "not-ready"
+                                                }">
                                                     ${item.successRate}%
                                                 </span>
                                             </td>
                                         </tr>
                                     `
-        )
-        .join("")}
+                                      )
+                                      .join("")}
                                 </tbody>
                             </table>
 
@@ -808,49 +813,53 @@
                                 </thead>
                                 <tbody>
                                     ${methodsArray
-        .slice(0, 15)
-        .map(
-          (item) => `
+                                      .slice(0, 15)
+                                      .map(
+                                        (item) => `
                                         <tr>
-                                            <td><code style="font-size: 0.85em;">${item.method
-            }</code></td>
+                                            <td><code style="font-size: 0.85em;">${
+                                              item.method
+                                            }</code></td>
                                             <td style="text-align: right;"><strong>${Utils.formatNumber(
-              item.calls,
-              0,
-              { fallback: "N/A" }
-            )}</strong></td>
-                                            <td style="text-align: right; color: ${item.errors > 0
-              ? "#ef4444"
-              : "inherit"
-            };">
+                                              item.calls,
+                                              0,
+                                              { fallback: "N/A" }
+                                            )}</strong></td>
+                                            <td style="text-align: right; color: ${
+                                              item.errors > 0
+                                                ? "#ef4444"
+                                                : "inherit"
+                                            };">
                                                 ${Utils.formatNumber(
-              item.errors,
-              0,
-              { fallback: "N/A" }
-            )}
+                                                  item.errors,
+                                                  0,
+                                                  { fallback: "N/A" }
+                                                )}
                                             </td>
                                             <td style="text-align: right;">
-                                                <span class="status-badge ${item.successRate >= 99
-              ? "ready"
-              : "not-ready"
-            }">
+                                                <span class="status-badge ${
+                                                  item.successRate >= 99
+                                                    ? "ready"
+                                                    : "not-ready"
+                                                }">
                                                     ${item.successRate}%
                                                 </span>
                                             </td>
                                         </tr>
                                     `
-        )
-        .join("")}
-                                    ${methodsArray.length > 15
-        ? `
+                                      )
+                                      .join("")}
+                                    ${
+                                      methodsArray.length > 15
+                                        ? `
                                         <tr>
                                             <td colspan="4" style="text-align: center; color: var(--text-secondary); font-size: 0.9em; padding: 16px;">
                                                 Showing top 15 of ${methodsArray.length} methods
                                             </td>
                                         </tr>
                                     `
-        : ""
-      }
+                                        : ""
+                                    }
                                 </tbody>
                             </table>
                         </div>
@@ -917,8 +926,8 @@
                                     </div>
                                     <div class="status-metric-value">
                                         ${Utils.formatNumber(solBalance, 4, {
-      fallback: "N/A",
-    })}<span class="status-metric-unit">SOL</span>
+                                          fallback: "N/A",
+                                        })}<span class="status-metric-unit">SOL</span>
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -941,8 +950,9 @@
                                 </div>
                             </div>
 
-                            ${tokenBalances.length > 0
-        ? `
+                            ${
+                              tokenBalances.length > 0
+                                ? `
                                 <h3 class="status-section-title">Token Balances</h3>
                                 <div class="status-wallet-tokens">
                                     <table class="status-services-table">
@@ -955,33 +965,44 @@
                                         </thead>
                                         <tbody>
                                             ${tokenBalances
-          .map((token) => {
-            const mint = (token.mint || "").toString();
-            const shortMint =
-              mint.length > 14
-                ? `${mint.slice(0, 8)}...${mint.slice(-6)}`
-                : mint || "Unknown";
-            const balance = Utils.formatNumber(token.balance_ui, 6, {
-              fallback: "N/A",
-            });
-            const tokenType = token.is_token_2022
-              ? "Token-2022"
-              : "SPL Token";
-            return `
+                                              .map((token) => {
+                                                const mint = (
+                                                  token.mint || ""
+                                                ).toString();
+                                                const shortMint =
+                                                  mint.length > 14
+                                                    ? `${mint.slice(
+                                                        0,
+                                                        8
+                                                      )}...${mint.slice(-6)}`
+                                                    : mint || "Unknown";
+                                                const balance =
+                                                  Utils.formatNumber(
+                                                    token.balance_ui,
+                                                    6,
+                                                    {
+                                                      fallback: "N/A",
+                                                    }
+                                                  );
+                                                const tokenType =
+                                                  token.is_token_2022
+                                                    ? "Token-2022"
+                                                    : "SPL Token";
+                                                return `
                                                 <tr>
                                                     <td><code style="font-size: 0.85em;">${shortMint}</code></td>
                                                     <td><strong>${balance}</strong></td>
                                                     <td>${tokenType}</td>
                                                 </tr>
                                             `;
-          })
-          .join("")}
+                                              })
+                                              .join("")}
                                         </tbody>
                                     </table>
                                 </div>
                             `
-        : '<p style="text-align: center; color: var(--text-secondary); margin-top: 24px;">No token balances found</p>'
-      }
+                                : '<p style="text-align: center; color: var(--text-secondary); margin-top: 24px;">No token balances found</p>'
+                            }
                         </div>
                     </div>
                 </div>
@@ -1016,12 +1037,14 @@
                                         <span>Trading Status</span>
                                     </div>
                                     <div class="status-metric-value" style="font-size: 1.4em;">
-                                        <span class="status-badge ${tradingEnabled ? "ready" : "not-ready"
-      }">
-                                            ${tradingEnabled
-        ? "✅ Enabled"
-        : "❌ Disabled"
-      }
+                                        <span class="status-badge ${
+                                          tradingEnabled ? "ready" : "not-ready"
+                                        }">
+                                            ${
+                                              tradingEnabled
+                                                ? "✅ Enabled"
+                                                : "❌ Disabled"
+                                            }
                                         </span>
                                     </div>
                                 </div>
@@ -1031,8 +1054,9 @@
                                         <span>Running</span>
                                     </div>
                                     <div class="status-metric-value" style="font-size: 1.4em;">
-                                        <span class="status-badge ${isRunning ? "ready" : "not-ready"
-      }">
+                                        <span class="status-badge ${
+                                          isRunning ? "ready" : "not-ready"
+                                        }">
                                             ${isRunning ? "✅ Yes" : "❌ No"}
                                         </span>
                                     </div>
@@ -1070,18 +1094,21 @@
                             <div class="status-trader-info">
                                 <div class="status-trader-row">
                                     <span class="status-trader-label">Configuration Status</span>
-                                    <span class="status-trader-value">${tradingEnabled ? "Enabled" : "Disabled"
-      }</span>
+                                    <span class="status-trader-value">${
+                                      tradingEnabled ? "Enabled" : "Disabled"
+                                    }</span>
                                 </div>
                                 <div class="status-trader-row">
                                     <span class="status-trader-label">Runtime Status</span>
-                                    <span class="status-trader-value">${isRunning ? "Running" : "Stopped"
-      }</span>
+                                    <span class="status-trader-value">${
+                                      isRunning ? "Running" : "Stopped"
+                                    }</span>
                                 </div>
                                 <div class="status-trader-row">
                                     <span class="status-trader-label">Active Monitoring</span>
-                                    <span class="status-trader-value">${isRunning ? "Active" : "Inactive"
-      }</span>
+                                    <span class="status-trader-value">${
+                                      isRunning ? "Active" : "Inactive"
+                                    }</span>
                 </div>
                 <div class="status-trader-row">
                   <span class="status-trader-label">Closed Positions Today</span>
@@ -1149,10 +1176,10 @@
                                     </div>
                                     <div class="status-metric-value">
                                         ${Utils.formatNumber(
-      ohlcvStats.cache_hit_rate || 0,
-      1,
-      { fallback: "N/A" }
-    )}<span class="status-metric-unit">%</span>
+                                          ohlcvStats.cache_hit_rate || 0,
+                                          1,
+                                          { fallback: "N/A" }
+                                        )}<span class="status-metric-unit">%</span>
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -1162,10 +1189,10 @@
                                     </div>
                                     <div class="status-metric-value">
                                         ${Utils.formatNumber(
-      ohlcvStats.api_calls_per_minute || 0,
-      1,
-      { fallback: "N/A" }
-    )}
+                                          ohlcvStats.api_calls_per_minute || 0,
+                                          1,
+                                          { fallback: "N/A" }
+                                        )}
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
@@ -1185,40 +1212,44 @@
                                     <div style="display: flex; align-items: center; gap: 12px;">
                                         <div style="min-width: 100px; font-weight: 500; color: var(--text-secondary);">Critical</div>
                                         <div style="flex: 1; height: 32px; background: var(--card-bg); border-radius: 8px; overflow: hidden; position: relative;">
-                                            <div style="height: 100%; background: linear-gradient(90deg, #ef4444, #dc2626); width: ${totalTokens > 0
-        ? (critical / totalTokens) * 100
-        : 0
-      }%; transition: width 0.3s;"></div>
+                                            <div style="height: 100%; background: linear-gradient(90deg, #ef4444, #dc2626); width: ${
+                                              totalTokens > 0
+                                                ? (critical / totalTokens) * 100
+                                                : 0
+                                            }%; transition: width 0.3s;"></div>
                                             <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-weight: 600; color: var(--text-primary);">${critical}</span>
                                         </div>
                                     </div>
                                     <div style="display: flex; align-items: center; gap: 12px;">
                                         <div style="min-width: 100px; font-weight: 500; color: var(--text-secondary);">High</div>
                                         <div style="flex: 1; height: 32px; background: var(--card-bg); border-radius: 8px; overflow: hidden; position: relative;">
-                                            <div style="height: 100%; background: linear-gradient(90deg, #f59e0b, #d97706); width: ${totalTokens > 0
-        ? (high / totalTokens) * 100
-        : 0
-      }%; transition: width 0.3s;"></div>
+                                            <div style="height: 100%; background: linear-gradient(90deg, #f59e0b, #d97706); width: ${
+                                              totalTokens > 0
+                                                ? (high / totalTokens) * 100
+                                                : 0
+                                            }%; transition: width 0.3s;"></div>
                                             <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-weight: 600; color: var(--text-primary);">${high}</span>
                                         </div>
                                     </div>
                                     <div style="display: flex; align-items: center; gap: 12px;">
                                         <div style="min-width: 100px; font-weight: 500; color: var(--text-secondary);">Medium</div>
                                         <div style="flex: 1; height: 32px; background: var(--card-bg); border-radius: 8px; overflow: hidden; position: relative;">
-                                            <div style="height: 100%; background: linear-gradient(90deg, #3b82f6, #2563eb); width: ${totalTokens > 0
-        ? (medium / totalTokens) * 100
-        : 0
-      }%; transition: width 0.3s;"></div>
+                                            <div style="height: 100%; background: linear-gradient(90deg, #3b82f6, #2563eb); width: ${
+                                              totalTokens > 0
+                                                ? (medium / totalTokens) * 100
+                                                : 0
+                                            }%; transition: width 0.3s;"></div>
                                             <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-weight: 600; color: var(--text-primary);">${medium}</span>
                                         </div>
                                     </div>
                                     <div style="display: flex; align-items: center; gap: 12px;">
                                         <div style="min-width: 100px; font-weight: 500; color: var(--text-secondary);">Low</div>
                                         <div style="flex: 1; height: 32px; background: var(--card-bg); border-radius: 8px; overflow: hidden; position: relative;">
-                                            <div style="height: 100%; background: linear-gradient(90deg, #6b7280, #4b5563); width: ${totalTokens > 0
-        ? (low / totalTokens) * 100
-        : 0
-      }%; transition: width 0.3s;"></div>
+                                            <div style="height: 100%; background: linear-gradient(90deg, #6b7280, #4b5563); width: ${
+                                              totalTokens > 0
+                                                ? (low / totalTokens) * 100
+                                                : 0
+                                            }%; transition: width 0.3s;"></div>
                                             <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-weight: 600; color: var(--text-primary);">${low}</span>
                                         </div>
                                     </div>
@@ -1337,11 +1368,13 @@
 
 <div id="statusContent">
   <div class="page-section">
-    <div style="
+    <div
+      style="
         text-align: center;
         padding: 60px 20px;
         color: var(--text-secondary);
-      ">
+      "
+    >
       <div class="loading-text">Loading status...</div>
     </div>
   </div>

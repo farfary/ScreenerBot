@@ -173,7 +173,12 @@
 <div class="services-container">
   <div class="services-toolbar">
     <div class="toolbar-left">
-      <input id="serviceSearch" class="input" type="text" placeholder="Search services..." />
+      <input
+        id="serviceSearch"
+        class="input"
+        type="text"
+        placeholder="Search services..."
+      />
       <select id="statusFilter" class="input">
         <option value="all">All statuses</option>
         <option value="healthy">Healthy</option>
@@ -187,9 +192,7 @@
       </label>
     </div>
     <div class="toolbar-right">
-      <div class="chip">
-        Total <span id="totalServices">-</span>
-      </div>
+      <div class="chip">Total <span id="totalServices">-</span></div>
       <div class="chip chip-success">
         Healthy <span id="healthyServices">-</span>
       </div>
@@ -235,7 +238,10 @@
       </thead>
       <tbody id="servicesTableBody">
         <tr>
-          <td colspan="14" style="text-align: center; padding: 20px; color: var(--text-muted);">
+          <td
+            colspan="14"
+            style="text-align: center; padding: 20px; color: var(--text-muted)"
+          >
             Loading services...
           </td>
         </tr>
@@ -308,7 +314,9 @@
         }
         if (starting) {
           starting.textContent =
-            summary?.starting_services != null ? summary.starting_services : "-";
+            summary?.starting_services != null
+              ? summary.starting_services
+              : "-";
         }
         if (unhealthy) {
           const degraded = summary?.degraded_services || 0;
@@ -339,10 +347,10 @@
       },
 
       currentFilters() {
-        const q =
-          (document.getElementById("serviceSearch")?.value || "").toLowerCase();
-        const status =
-          document.getElementById("statusFilter")?.value || "all";
+        const q = (
+          document.getElementById("serviceSearch")?.value || ""
+        ).toLowerCase();
+        const status = document.getElementById("statusFilter")?.value || "all";
         const enabledOnly =
           document.getElementById("enabledOnly")?.checked || false;
         return { q, status, enabledOnly };
@@ -450,8 +458,8 @@
         const metrics = service.metrics || {};
         const dependencies = Array.isArray(service.dependencies)
           ? service.dependencies.map(
-            (dep) => `<span class="dependency-badge">${dep}</span>`
-          )
+              (dep) => `<span class="dependency-badge">${dep}</span>`
+            )
           : [];
 
         const total =
@@ -463,12 +471,12 @@
           activity > 80
             ? "#10b981"
             : activity > 50
-              ? "#3b82f6"
-              : activity > 20
-                ? "#f59e0b"
-                : activity > 5
-                  ? "#6b7280"
-                  : "#9ca3af";
+            ? "#3b82f6"
+            : activity > 20
+            ? "#f59e0b"
+            : activity > 5
+            ? "#6b7280"
+            : "#9ca3af";
 
         const lastCycle = Utils.formatDuration(
           metrics.last_cycle_duration_ns || 0
@@ -485,11 +493,13 @@
 
         const taskInfo =
           metrics.task_count > 0
-            ? `${metrics.task_count} tasks\nLast cycle: ${lastCycle}\nAvg cycle: ${avgCycle}\nPoll: ${Utils.formatDuration(
-              metrics.mean_poll_duration_ns
-            )}\nIdle: ${Utils.formatDuration(
-              metrics.mean_idle_duration_ns
-            )}\nTotal Polls: ${metrics.total_polls || 0}`
+            ? `${
+                metrics.task_count
+              } tasks\nLast cycle: ${lastCycle}\nAvg cycle: ${avgCycle}\nPoll: ${Utils.formatDuration(
+                metrics.mean_poll_duration_ns
+              )}\nIdle: ${Utils.formatDuration(
+                metrics.mean_idle_duration_ns
+              )}\nTotal Polls: ${metrics.total_polls || 0}`
             : "No instrumented tasks";
 
         return `
@@ -502,12 +512,14 @@
             </td>
             <td>${service.priority ?? "-"}</td>
             <td>${service.enabled ? "✅" : "❌"}</td>
-            <td>${Utils.formatUptime(service.uptime_seconds, { style: "compact" })}</td>
+            <td>${Utils.formatUptime(service.uptime_seconds, {
+              style: "compact",
+            })}</td>
             <td class="activity-cell" title="${activity.toFixed(1)}% busy">
               <div class="activity-track">
                 <div class="activity-fill" style="width:${activity.toFixed(
-          1
-        )}%; background:${activityColor};"></div>
+                  1
+                )}%; background:${activityColor};"></div>
               </div>
               <div class="activity-meta">
                 <span>${activity.toFixed(1)}%</span>
@@ -520,13 +532,14 @@
             <td title="Cycles per second">${cycleRate}</td>
             <td title="${taskInfo}">${metrics.task_count || 0}</td>
             <td title="Operations per second">${(
-            metrics.operations_per_second || 0
-          ).toFixed(2)}</td>
+              metrics.operations_per_second || 0
+            ).toFixed(2)}</td>
             <td title="Total errors">${metrics.errors_total || 0}</td>
-            <td>${dependencies.length > 0
-            ? dependencies.join(" ")
-            : '<span class="detail-value">None</span>'
-          }</td>
+            <td>${
+              dependencies.length > 0
+                ? dependencies.join(" ")
+                : '<span class="detail-value">None</span>'
+            }</td>
           </tr>
         `;
       },

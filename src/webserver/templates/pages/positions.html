@@ -39,19 +39,27 @@
 <div class="page-section">
   <div class="toolbar">
     <span style="font-weight: 600">💰 Positions</span>
-    <select id="statusFilter" onchange="onPositionsStatusChanged()" style="
+    <select
+      id="statusFilter"
+      onchange="onPositionsStatusChanged()"
+      style="
         padding: 6px 8px;
         border: 1px solid var(--border-color);
         border-radius: 6px;
         font-size: 0.9em;
         background: var(--bg-primary);
         color: var(--text-primary);
-      ">
+      "
+    >
       <option value="all">All</option>
       <option value="open" selected>Open</option>
       <option value="closed">Closed</option>
     </select>
-    <input type="text" id="searchInput" placeholder="Search symbol, name, or mint" style="
+    <input
+      type="text"
+      id="searchInput"
+      placeholder="Search symbol, name, or mint"
+      style="
         flex: 1;
         min-width: 200px;
         padding: 6px 8px;
@@ -60,9 +68,14 @@
         font-size: 0.9em;
         background: var(--bg-primary);
         color: var(--text-primary);
-      " />
+      "
+    />
     <div class="spacer"></div>
-    <span id="positionCount" style="color: var(--text-secondary); font-size: 0.9em">Loading...</span>
+    <span
+      id="positionCount"
+      style="color: var(--text-secondary); font-size: 0.9em"
+      >Loading...</span
+    >
     <button onclick="refreshPositions()" class="btn btn-primary">
       🔄 Refresh
     </button>
@@ -85,7 +98,10 @@
       </thead>
       <tbody id="positionsTableBody">
         <tr>
-          <td colspan="10" style="text-align: center; padding: 20px; color: #64748b">
+          <td
+            colspan="10"
+            style="text-align: center; padding: 20px; color: #64748b"
+          >
             Loading positions...
           </td>
         </tr>
@@ -153,7 +169,7 @@
         const coerced = Utils.coerceNumber(value);
         return Number.isFinite(coerced) ? coerced : null;
       }
-    } catch (_) { }
+    } catch (_) {}
 
     const num = Number(value);
     return Number.isFinite(num) ? num : null;
@@ -302,22 +318,22 @@
     const statusBadge = pos.synthetic_exit
       ? '<span class="status-badge status-synthetic">SYNTHETIC</span>'
       : isOpen
-        ? '<span class="status-badge status-open">OPEN</span>'
-        : '<span class="status-badge status-closed">CLOSED</span>';
+      ? '<span class="status-badge status-open">OPEN</span>'
+      : '<span class="status-badge status-closed">CLOSED</span>';
 
     const currentOrExitPrice = isOpen
       ? pos.current_price
         ? Utils.formatNumber(pos.current_price, 8, {
-          fallback: "-",
-          useGrouping: false,
-        })
+            fallback: "-",
+            useGrouping: false,
+          })
         : "-"
       : pos.effective_exit_price || pos.exit_price
-        ? Utils.formatNumber(pos.effective_exit_price || pos.exit_price, 8, {
+      ? Utils.formatNumber(pos.effective_exit_price || pos.exit_price, 8, {
           fallback: "-",
           useGrouping: false,
         })
-        : "-";
+      : "-";
 
     const pnl = isOpen ? pos.unrealized_pnl : pos.pnl;
     const pnlPercent = isOpen ? pos.unrealized_pnl_percent : pos.pnl_percent;
@@ -328,56 +344,62 @@
                     <td><strong>${pos.symbol}</strong></td>
                     <td style="font-size: 0.85em;">${pos.name}</td>
                     <td>${Utils.formatNumber(
-      pos.effective_entry_price || pos.entry_price,
-      8,
-      { fallback: "-", useGrouping: false }
-    )}</td>
+                      pos.effective_entry_price || pos.entry_price,
+                      8,
+                      { fallback: "-", useGrouping: false }
+                    )}</td>
                     <td>${currentOrExitPrice}</td>
                     <td>${Utils.formatSol(pos.entry_size_sol, {
-      decimals: 4,
-      fallback: "-",
-    })}</td>
+                      decimals: 4,
+                      fallback: "-",
+                    })}</td>
                     <td>${Utils.formatPnL(pnl, {
-      decimals: 4,
-      fallback: "-",
-    })}</td>
+                      decimals: 4,
+                      fallback: "-",
+                    })}</td>
                     <td>${Utils.formatPercent(pnlPercent, {
-      style: "pnl",
-      decimals: 2,
-      fallback: "-",
-    })}</td>
+                      style: "pnl",
+                      decimals: 2,
+                      fallback: "-",
+                    })}</td>
                     <td style="font-size: 0.85em;">${Utils.formatTimeFromSeconds(
-      pos.entry_time,
-      { fallback: "-" }
-    )}</td>
+                      pos.entry_time,
+                      { fallback: "-" }
+                    )}</td>
                     <td>
                         <div class="dropdown-container">
                             <button class="dropdown-btn" onclick="Utils.toggleDropdown(event)" aria-label="Actions">
                                 ⋮
                             </button>
                             <div class="dropdown-menu">
-                                <button onclick="Utils.copyDebugInfo('${pos.mint
-      }', 'position')" class="dropdown-item">
+                                <button onclick="Utils.copyDebugInfo('${
+                                  pos.mint
+                                }', 'position')" class="dropdown-item">
                                     📋 Copy Debug Info
                                 </button>
-                                <button onclick="Utils.copyMint('${pos.mint
-      }')" class="dropdown-item">
+                                <button onclick="Utils.copyMint('${
+                                  pos.mint
+                                }')" class="dropdown-item">
                                     📋 Copy Mint
                                 </button>
-                                <button onclick="Utils.openGMGN('${pos.mint
-      }')" class="dropdown-item">
+                                <button onclick="Utils.openGMGN('${
+                                  pos.mint
+                                }')" class="dropdown-item">
                                     🔗 Open GMGN
                                 </button>
-                                <button onclick="Utils.openDexScreener('${pos.mint
-      }')" class="dropdown-item">
+                                <button onclick="Utils.openDexScreener('${
+                                  pos.mint
+                                }')" class="dropdown-item">
                                     📊 Open DexScreener
                                 </button>
-                                <button onclick="Utils.openSolscan('${pos.mint
-      }')" class="dropdown-item">
+                                <button onclick="Utils.openSolscan('${
+                                  pos.mint
+                                }')" class="dropdown-item">
                                     🔍 Open Solscan
                                 </button>
-                                <button onclick="showDebugModal('${pos.mint
-      }', 'position')" class="dropdown-item">
+                                <button onclick="showDebugModal('${
+                                  pos.mint
+                                }', 'position')" class="dropdown-item">
                                     🐛 Debug Info
                                 </button>
                             </div>
@@ -551,7 +573,10 @@
     ) {
       console.log("[Positions] Requesting snapshot", { reason });
       Realtime.requestSnapshotForAliases(["positions"]);
-    } else if (window.Realtime && typeof Realtime.updateFilters === "function") {
+    } else if (
+      window.Realtime &&
+      typeof Realtime.updateFilters === "function"
+    ) {
       console.log("[Positions] Requesting snapshot via update", { reason });
       Realtime.updateFilters({ snapshotTopics: ["positions"] });
     } else {
