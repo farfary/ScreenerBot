@@ -47,6 +47,7 @@
     timeoutHandle: null,
     retryCount: 0,
     began: false,
+    currentView: null,
   };
   var TOKENS_SNAPSHOT_LIMIT = 200;
   var TOKENS_SNAPSHOT_TIMEOUT_MS = 12000;
@@ -1058,6 +1059,7 @@
     tokensSnapshotState.message = message || "Loading tokens...";
     tokensSnapshotState.retryCount = 0;
     tokensSnapshotState.began = false;
+    tokensSnapshotState.currentView = null;
     // If we already have something rendered, keep it visible and just update the status
     if (Array.isArray(allTokensData) && allTokensData.length > 0) {
       setTokenCountStatus(tokensSnapshotState.message);
@@ -1141,6 +1143,7 @@
     tokensSnapshotState.pending = [];
     tokensSnapshotState.expected = Number(payload?.total) || 0;
     tokensSnapshotState.totalAvailable = tokensSnapshotState.expected;
+    tokensSnapshotState.currentView = null;
     const message =
       tokensSnapshotState.message ||
       `Receiving snapshot (${tokensSnapshotState.expected} tokens)...`;
@@ -1155,6 +1158,7 @@
     const deduped = dedupeTokensByMint(tokensSnapshotState.pending);
     tokensSnapshotState.pending = [];
     tokensSnapshotState.expected = 0;
+    tokensSnapshotState.currentView = null;
     allTokensData = deduped;
 
     const total =
@@ -1190,6 +1194,7 @@
     }
     tokensSnapshotState.inProgress = false;
     tokensSnapshotState.began = false;
+    tokensSnapshotState.currentView = null;
     const sent = Number(payload?.sent);
     if (Number.isFinite(sent)) {
       tokensSnapshotState.totalAvailable = Math.max(
@@ -1228,13 +1233,18 @@
       }
       // Optional: if server includes the view in meta, ensure it matches current UI view
       const snapshotView = envelope?.meta?.view || envelope?.view;
-      if (snapshotView && snapshotView !== tokensState.view) {
+      if (snapshotView && !tokensSnapshotState.currentView) {
+        tokensSnapshotState.currentView = snapshotView;
+      }
+      const effectiveView = tokensSnapshotState.currentView || snapshotView;
+      if (effectiveView && effectiveView !== tokensState.view) {
         console.warn(
-          "[Tokens] Snapshot chunk view mismatch",
-          snapshotView,
+          "[Tokens] Dropping snapshot chunk for different view",
+          effectiveView,
           "!=",
           tokensState.view
         );
+        return;
       }
       if (window.__DEBUG_REALTIME) {
         const k = envelope?.key || data?.mint || "?";
