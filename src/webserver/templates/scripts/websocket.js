@@ -458,7 +458,8 @@
       this.pingSeq = (this.pingSeq + 1) >>> 0; // uint wrap
       this.lastPingId = this.pingSeq;
       this.lastPingAt = Date.now();
-      this.send({ type: "ping", id: this.lastPingId });
+      // Server expects a string ID; send as string to avoid schema errors
+      this.send({ type: "ping", id: String(this.lastPingId) });
     },
 
     startWatchdog() {
@@ -580,6 +581,7 @@
     lastSentFilters: null,
     pendingTopics: null,
     pausedAliases: new Set(),
+    activeSubscriptions: [],
 
     ensureHubInitialized() {
       if (!hasWsHub()) {
@@ -875,6 +877,9 @@
         }
       }
 
+      // Unsubscribe previous page-specific channels
+      this.unbindActiveChannels();
+
       this.activePage = pageName;
       const config = global.PageRealtime
         ? global.PageRealtime[pageName]
@@ -901,6 +906,9 @@
           console.error("[Realtime] onInitial handler failed:", err);
         }
       }
+
+      // Bind channels BEFORE triggering onEnter/snapshot to avoid missing early messages
+      this.bindActiveChannels();
 
       if (typeof config.onEnter === "function") {
         try {
@@ -960,6 +968,9 @@
           global.WsHub.send({ type: "pause", topics });
         }
       }
+
+      // Ensure active channels bound after reconnect (in case subscriptions cleared)
+      this.bindActiveChannels();
     },
 
     onHubDisconnected() {
@@ -1026,6 +1037,32 @@
         return this.setAliasPaused("events", Boolean(aliasOrPaused));
       }
       return this.setAliasPaused(aliasOrPaused, Boolean(maybePaused));
+    },
+
+    bindActiveChannels() {
+      if (!hasWsHub()) return;
+      const cfg = this.activeConfig;
+      if (!cfg || !cfg.channels || typeof cfg.channels !== "object") return;
+      for (const [channel, handler] of Object.entries(cfg.channels)) {
+        if (typeof handler !== "function") continue;
+        global.WsHub.subscribe(channel, handler);
+        this.activeSubscriptions.push({ channel, handler });
+      }
+    },
+
+    unbindActiveChannels() {
+      if (!hasWsHub()) {
+        this.activeSubscriptions = [];
+        return;
+      }
+      const subs = this.activeSubscriptions.splice(0);
+      for (const { channel, handler } of subs) {
+        try {
+          global.WsHub.unsubscribe(channel, handler);
+        } catch (err) {
+          console.warn("[Realtime] Failed to unbind channel", channel, err);
+        }
+      }
     },
   };
 

@@ -855,6 +855,26 @@ async fn handle_client_message(
                 if result.snapshot_requested {
                     snapshot_topics.push(result.topic.clone());
                 }
+
+                if is_debug_webserver_enabled()
+                    && result.topic == super::message::Topic::TokensUpdate.code()
+                {
+                    let f = TokensRealtimeFilter::from_value(value);
+                    log(
+                        LogTag::Webserver,
+                        "TOKENS_FILTER",
+                        &format!(
+                            "conn={} view={} search='{}' sort_by={} sort_dir={} limit={} snapshot_req={}",
+                            conn_id,
+                            f.view,
+                            f.search.clone().unwrap_or_default(),
+                            f.sort_by,
+                            f.sort_dir,
+                            f.limit,
+                            result.snapshot_requested
+                        ),
+                    );
+                }
             }
 
             state.prune_filters(&desired_topics);
@@ -890,6 +910,21 @@ async fn handle_client_message(
                     }
                     Some(Topic::TokensUpdate) => {
                         let filter = state.tokens_filter().cloned().unwrap_or_default();
+                        if is_debug_webserver_enabled() {
+                            log(
+                                LogTag::Webserver,
+                                "TOKENS_SNAPSHOT_REQ",
+                                &format!(
+                                    "conn={} view={} search='{}' sort_by={} sort_dir={} limit={}",
+                                    conn_id,
+                                    filter.view,
+                                    filter.search.clone().unwrap_or_default(),
+                                    filter.sort_by,
+                                    filter.sort_dir,
+                                    filter.limit,
+                                ),
+                            );
+                        }
                         send_tokens_snapshot(ws_tx, hub, metrics, filter).await?;
                     }
                     Some(Topic::PositionsUpdate) => {
@@ -1277,6 +1312,23 @@ async fn send_tokens_snapshot(
     let total_sent = response.items.len();
     let total_available = response.total;
 
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "TOKENS_SNAPSHOT_BEGIN",
+            &format!(
+                "view={} search='{}' sort_by={} sort_dir={} limit={} total_available={} to_send={}",
+                filter.view,
+                filter.search.clone().unwrap_or_default(),
+                filter.sort_by,
+                filter.sort_dir,
+                filter.limit,
+                total_available,
+                total_sent
+            ),
+        );
+    }
+
     send_control_message(
         ws_tx,
         ServerMessage::SnapshotBegin {
@@ -1335,6 +1387,20 @@ async fn send_tokens_snapshot(
             .await
             .map_err(|e| format!("Send error: {}", e))?;
         metrics.inc_sent();
+
+        if is_debug_webserver_enabled() && idx < 3 {
+            log(
+                LogTag::Webserver,
+                "TOKENS_SNAPSHOT_ITEM",
+                &format!(
+                    "#{} mint={} symbol={} liq_usd={:?}",
+                    idx + 1,
+                    summary.mint,
+                    summary.symbol,
+                    summary.liquidity_usd
+                ),
+            );
+        }
     }
 
     send_control_message(
@@ -1345,6 +1411,14 @@ async fn send_tokens_snapshot(
         },
     )
     .await?;
+
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "TOKENS_SNAPSHOT_END",
+            &format!("sent={}/{}", total_sent, total_available),
+        );
+    }
 
     Ok(())
 }

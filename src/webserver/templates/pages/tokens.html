@@ -1,14 +1,18 @@
 <script>
-  var TOKENS_VIEWS = [
-    "pool",
-    "all",
-    "passed",
-    "rejected",
-    "blacklisted",
-    "positions",
-    "secure",
-    "recent",
+  var DEFAULT_TOKENS_VIEW = "pool";
+  var TOKENS_VIEW_DEFS = [
+    { id: "pool", label: "💧 Pool Service" },
+    { id: "all", label: "📋 All Tokens" },
+    { id: "passed", label: "✅ Passed" },
+    { id: "rejected", label: "⛔ Rejected" },
+    { id: "blacklisted", label: "🚫 Blacklisted" },
+    { id: "positions", label: "📊 Positions" },
+    { id: "secure", label: "🛡️ Secure" },
+    { id: "recent", label: "🆕 Recent" },
   ];
+  var TOKENS_VIEWS = TOKENS_VIEW_DEFS.map(function (view) {
+    return view.id;
+  });
   var VIEW_LABELS = {
     pool: "with available prices",
     all: "in database",
@@ -21,13 +25,16 @@
   };
 
   var tokensState = window.tokensState || {
-    view: "pool",
+    view: DEFAULT_TOKENS_VIEW,
     sortBy: "symbol",
     sortDir: "asc",
     searchTerm: "",
   };
 
   var allTokensData = [];
+  // Per-view cache to preserve last loaded snapshot per tab
+  // Entry shape: { items: TokenSummary[], total: number, sortBy, sortDir, searchTerm, ts }
+  var tokensViewCache = window.tokensViewCache || {};
   var currentModalMint = null;
   var tokenModalData = null;
   var searchDebounceHandle = null;
@@ -38,6 +45,8 @@
     totalAvailable: 0,
     message: "",
     timeoutHandle: null,
+    retryCount: 0,
+    began: false,
   };
   var TOKENS_SNAPSHOT_LIMIT = 200;
   var TOKENS_SNAPSHOT_TIMEOUT_MS = 12000;
@@ -56,6 +65,14 @@
     const savedView = window.sessionStorage.getItem("tokens.view");
     if (savedView && TOKENS_VIEWS.includes(savedView)) {
       tokensState.view = savedView;
+    } else if (savedView) {
+      console.warn("[Tokens] Ignoring unsupported stored view", savedView);
+      window.sessionStorage.removeItem("tokens.view");
+    }
+
+    if (!TOKENS_VIEWS.includes(tokensState.view)) {
+      tokensState.view = DEFAULT_TOKENS_VIEW;
+      window.sessionStorage.setItem("tokens.view", tokensState.view);
     }
     window.PageRealtime = window.PageRealtime || {};
     // Tokens list is served exclusively over realtime snapshots (no HTTP fallback)
@@ -77,6 +94,10 @@
       getFilters() {
         const topic = "tokens.update";
         const limit = TOKENS_SNAPSHOT_LIMIT;
+        if (!TOKENS_VIEWS.includes(tokensState.view)) {
+          tokensState.view = DEFAULT_TOKENS_VIEW;
+          window.sessionStorage.setItem("tokens.view", tokensState.view);
+        }
         const filter = {
           view: tokensState.view,
           sort_by: tokensState.sortBy,
@@ -595,25 +616,18 @@
     const subTabsContainer = document.getElementById("subTabsContainer");
     if (!subTabsContainer) return;
 
-    const views = [
-      { id: "pool", label: "💧 Pool Service" },
-      { id: "all", label: "📋 All Tokens" },
-      { id: "passed", label: "✅ Passed" },
-      { id: "rejected", label: "⛔ Rejected" },
-      { id: "blacklisted", label: "🚫 Blacklisted" },
-    ];
-
-    subTabsContainer.innerHTML = views
-      .map(
-        (view) => `
-                    <button class="sub-tab ${
-                      view.id === tokensState.view ? "active" : ""
-                    }" data-view="${view.id}">
-                        ${view.label}
-                    </button>
-                `
-      )
-      .join("");
+    subTabsContainer.innerHTML = TOKENS_VIEW_DEFS.map(function (view) {
+      var isActive = view.id === tokensState.view;
+      return (
+        '<button class="sub-tab ' +
+        (isActive ? "active" : "") +
+        '" data-view="' +
+        view.id +
+        '">' +
+        view.label +
+        "</button>"
+      );
+    }).join("");
 
     subTabsContainer.querySelectorAll(".sub-tab").forEach((button) => {
       button.addEventListener("click", () =>
@@ -627,6 +641,11 @@
   function ensureTokensSubTabsVisible() {
     const subTabsContainer = document.getElementById("subTabsContainer");
     if (!subTabsContainer) return;
+
+    if (!TOKENS_VIEWS.includes(tokensState.view)) {
+      tokensState.view = DEFAULT_TOKENS_VIEW;
+      window.sessionStorage.setItem("tokens.view", tokensState.view);
+    }
 
     const needsInit = subTabsContainer.children.length === 0;
     const computed =
@@ -654,16 +673,52 @@
   }
 
   function switchTokensSubTab(view) {
-    if (!view || tokensState.view === view) return;
+    var nextView = view;
+    if (!nextView || !TOKENS_VIEWS.includes(nextView)) {
+      console.warn("[Tokens] Unsupported sub-tab selection", nextView);
+      nextView = DEFAULT_TOKENS_VIEW;
+    }
 
-    tokensState.view = view;
-    window.sessionStorage.setItem("tokens.view", view);
+    if (tokensState.view === nextView) {
+      ensureTokensSubTabsVisible();
+      return;
+    }
+
+    tokensState.view = nextView;
+    window.sessionStorage.setItem("tokens.view", tokensState.view);
 
     document.querySelectorAll("#subTabsContainer .sub-tab").forEach((tab) => {
-      tab.classList.toggle("active", tab.dataset.view === view);
+      tab.classList.toggle("active", tab.dataset.view === tokensState.view);
     });
 
-    requestTokensSnapshot(`Switching to ${view} view...`);
+    // If we have a cache for this view that matches current sort/search, render it immediately
+    const cacheEntry = tokensViewCache[tokensState.view];
+    if (
+      cacheEntry &&
+      cacheEntry.sortBy === tokensState.sortBy &&
+      cacheEntry.sortDir === tokensState.sortDir &&
+      (cacheEntry.searchTerm || "") === (tokensState.searchTerm || "") &&
+      Array.isArray(cacheEntry.items) &&
+      cacheEntry.items.length > 0
+    ) {
+      allTokensData = cacheEntry.items.slice();
+      tokensSnapshotState.totalAvailable =
+        Number(cacheEntry.total) || allTokensData.length;
+      tokensSnapshotState.inProgress = false;
+      tokensSnapshotState.pending = [];
+      tokensSnapshotState.expected = 0;
+      tokensSnapshotState.message = "";
+      updateTokenCount(tokensSnapshotState.totalAvailable);
+      const viewLabel = VIEW_LABELS[tokensState.view] || "";
+      const status = viewLabel
+        ? `Cached • ${tokensSnapshotState.totalAvailable} tokens ${viewLabel}`
+        : `Cached • ${tokensSnapshotState.totalAvailable} tokens`;
+      setTokenCountStatus(status);
+      applySearchFilter();
+    }
+
+    // Always request a fresh snapshot to keep cache up to date
+    requestTokensSnapshot(`Switching to ${tokensState.view} view...`);
   }
 
   function ensureTokensToolbarVisible(options = {}) {
@@ -917,6 +972,9 @@
 
   function clearTokensSnapshotTimer() {
     if (tokensSnapshotState.timeoutHandle) {
+      if (window.__DEBUG_REALTIME) {
+        console.log("[TokensDBG] clearSnapshotTimer");
+      }
       clearTimeout(tokensSnapshotState.timeoutHandle);
       tokensSnapshotState.timeoutHandle = null;
     }
@@ -932,15 +990,32 @@
       return;
     }
 
+    if (window.__DEBUG_REALTIME) {
+      console.log("[TokensDBG] scheduleSnapshotTimer", {
+        reason,
+        timeoutMs: TOKENS_SNAPSHOT_TIMEOUT_MS,
+      });
+    }
+
     tokensSnapshotState.timeoutHandle = setTimeout(() => {
       tokensSnapshotState.timeoutHandle = null;
       if (!tokensSnapshotState.inProgress) {
+        if (window.__DEBUG_REALTIME) {
+          console.log("[TokensDBG] snapshot timer fired but not inProgress");
+        }
         return;
       }
 
       console.warn(
         `[Tokens] Snapshot timeout (${reason || "unknown"}) — retrying`
       );
+      if (window.__DEBUG_REALTIME) {
+        console.log("[TokensDBG] snapshot timeout", {
+          pending: tokensSnapshotState.pending.length,
+          expected: tokensSnapshotState.expected,
+          totalAvailable: tokensSnapshotState.totalAvailable,
+        });
+      }
 
       if (tokensSnapshotState.pending.length > 0) {
         finalizeTokensSnapshot();
@@ -949,18 +1024,46 @@
 
       tokensSnapshotState.inProgress = false;
       tokensSnapshotState.message = "";
+      tokensSnapshotState.retryCount =
+        (tokensSnapshotState.retryCount || 0) + 1;
       setTokenCountStatus("⚠️ Snapshot delayed – retrying...");
+
+      // After 2 consecutive timeouts, fall back to HTTP list to avoid blank UI
+      if (tokensSnapshotState.retryCount >= 2) {
+        if (window.__DEBUG_REALTIME) {
+          console.log("[TokensDBG] timeout fallback → HTTP list");
+        }
+        fetchTokensListForCurrentFilters();
+        return;
+      }
+
       requestTokensSnapshot("Retrying snapshot after timeout...");
     }, TOKENS_SNAPSHOT_TIMEOUT_MS);
   }
 
   function requestTokensSnapshot(message) {
+    if (window.__DEBUG_REALTIME) {
+      console.log("[TokensDBG] requestSnapshot", {
+        message,
+        view: tokensState.view,
+        sortBy: tokensState.sortBy,
+        sortDir: tokensState.sortDir,
+        search: tokensState.searchTerm,
+      });
+    }
     tokensSnapshotState.inProgress = true;
     tokensSnapshotState.pending = [];
     tokensSnapshotState.expected = 0;
     tokensSnapshotState.totalAvailable = 0;
     tokensSnapshotState.message = message || "Loading tokens...";
-    showTokensLoading(tokensSnapshotState.message);
+    tokensSnapshotState.retryCount = 0;
+    tokensSnapshotState.began = false;
+    // If we already have something rendered, keep it visible and just update the status
+    if (Array.isArray(allTokensData) && allTokensData.length > 0) {
+      setTokenCountStatus(tokensSnapshotState.message);
+    } else {
+      showTokensLoading(tokensSnapshotState.message);
+    }
     scheduleTokensSnapshotTimer("request");
 
     if (window.Realtime && typeof Realtime.updateFilters === "function") {
@@ -976,11 +1079,65 @@
     );
   }
 
+  async function fetchTokensListForCurrentFilters() {
+    try {
+      const params = new URLSearchParams();
+      params.set("view", tokensState.view);
+      if (tokensState.searchTerm) params.set("search", tokensState.searchTerm);
+      params.set("sort_by", tokensState.sortBy);
+      params.set("sort_dir", tokensState.sortDir);
+      params.set("page", "1");
+      params.set("page_size", String(TOKENS_SNAPSHOT_LIMIT));
+
+      const url = `/api/tokens/list?${params.toString()}`;
+      if (window.__DEBUG_REALTIME) {
+        console.log("[TokensDBG] HTTP fallback →", url);
+      }
+      const res = await fetch(url, {
+        headers: { "X-Requested-With": "fetch" },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = await res.json();
+      const items = Array.isArray(body.items)
+        ? body.items.map(normalizeTokenFromApi)
+        : [];
+      allTokensData = dedupeTokensByMint(items);
+      tokensSnapshotState.inProgress = false;
+      tokensSnapshotState.pending = [];
+      tokensSnapshotState.expected = 0;
+      tokensSnapshotState.totalAvailable =
+        Number(body.total) || allTokensData.length;
+      tokensSnapshotState.message = "";
+
+      updateTokenCount(tokensSnapshotState.totalAvailable);
+      const viewLabel = VIEW_LABELS[tokensState.view] || "";
+      const status = viewLabel
+        ? `HTTP • ${tokensSnapshotState.totalAvailable} tokens ${viewLabel}`
+        : `HTTP • ${tokensSnapshotState.totalAvailable} tokens`;
+      setTokenCountStatus(status);
+      // Save to cache
+      tokensViewCache[tokensState.view] = {
+        items: allTokensData.slice(),
+        total: tokensSnapshotState.totalAvailable,
+        sortBy: tokensState.sortBy,
+        sortDir: tokensState.sortDir,
+        searchTerm: tokensState.searchTerm || "",
+        ts: Date.now(),
+      };
+
+      applySearchFilter();
+    } catch (err) {
+      console.warn("[Tokens] HTTP fallback failed", err);
+      showTokensError("❌ Snapshot failed and fallback unavailable");
+    }
+  }
+
   function handleTokensSnapshotBegin(payload) {
     if (window.__DEBUG_REALTIME) {
       console.log("[TokensDBG] snapshot_begin", payload);
     }
     tokensSnapshotState.inProgress = true;
+    tokensSnapshotState.began = true;
     tokensSnapshotState.pending = [];
     tokensSnapshotState.expected = Number(payload?.total) || 0;
     tokensSnapshotState.totalAvailable = tokensSnapshotState.expected;
@@ -994,6 +1151,7 @@
   function finalizeTokensSnapshot() {
     clearTokensSnapshotTimer();
     tokensSnapshotState.inProgress = false;
+    tokensSnapshotState.began = false;
     const deduped = dedupeTokensByMint(tokensSnapshotState.pending);
     tokensSnapshotState.pending = [];
     tokensSnapshotState.expected = 0;
@@ -1013,6 +1171,16 @@
       : `Realtime • ${total} tokens`;
     setTokenCountStatus(status);
 
+    // Save to per-view cache with current filters
+    tokensViewCache[tokensState.view] = {
+      items: allTokensData.slice(),
+      total: total,
+      sortBy: tokensState.sortBy,
+      sortDir: tokensState.sortDir,
+      searchTerm: tokensState.searchTerm || "",
+      ts: Date.now(),
+    };
+
     applySearchFilter();
   }
 
@@ -1021,6 +1189,7 @@
       console.log("[TokensDBG] snapshot_end", payload);
     }
     tokensSnapshotState.inProgress = false;
+    tokensSnapshotState.began = false;
     const sent = Number(payload?.sent);
     if (Number.isFinite(sent)) {
       tokensSnapshotState.totalAvailable = Math.max(
@@ -1049,6 +1218,32 @@
     }
 
     if (isSnapshot) {
+      if (!tokensSnapshotState.began) {
+        if (window.__DEBUG_REALTIME) {
+          console.warn("[TokensDBG] Ignoring snapshot chunk before begin", {
+            meta,
+          });
+        }
+        return;
+      }
+      // Optional: if server includes the view in meta, ensure it matches current UI view
+      const snapshotView = envelope?.meta?.view || envelope?.view;
+      if (snapshotView && snapshotView !== tokensState.view) {
+        console.warn(
+          "[Tokens] Snapshot chunk view mismatch",
+          snapshotView,
+          "!=",
+          tokensState.view
+        );
+      }
+      if (window.__DEBUG_REALTIME) {
+        const k = envelope?.key || data?.mint || "?";
+        console.log("[TokensDBG] snapshot:chunk", {
+          key: k,
+          pending: tokensSnapshotState.pending.length + 1,
+          expected: tokensSnapshotState.expected,
+        });
+      }
       const normalized = normalizeTokenFromApi({ ...data });
       tokensSnapshotState.pending.push(normalized);
       scheduleTokensSnapshotTimer("chunk");
@@ -1108,7 +1303,25 @@
         ...summary,
       };
     } else {
-      allTokensData.unshift(summary);
+      // Avoid cross-tab pollution: only auto-insert unknown tokens in 'all' view
+      // For other views, wait for next snapshot/refresh unless we can strongly infer membership
+      const v = tokensState.view;
+      let shouldInsert = false;
+      if (v === "all") shouldInsert = true;
+      else if (v === "pool" && summary.has_pool_price === true)
+        shouldInsert = true;
+      else if (v === "blacklisted" && summary.blacklisted === true)
+        shouldInsert = true;
+      else if (v === "positions" && summary.has_open_position === true)
+        shouldInsert = true;
+      // conservative for other views (passed/rejected/secure/recent): skip insert to prevent wrong-tab entries
+
+      if (shouldInsert) {
+        allTokensData.unshift(summary);
+      } else {
+        // Ignore for now; will appear on next snapshot for this view
+        return;
+      }
     }
 
     const total = allTokensData.length;
