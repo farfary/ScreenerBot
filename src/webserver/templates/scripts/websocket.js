@@ -76,6 +76,13 @@
     clientId: ensureClientId(),
     heartbeatTimer: null,
     protocolVersion: null,
+    connectTimeoutTimer: null,
+    watchdogTimer: null,
+    lastPongAt: 0,
+    lastPingAt: 0,
+    lastPingId: 0,
+    rttMs: null,
+    pingSeq: 0,
 
     connect() {
       if (this.isConnecting) return;
@@ -97,10 +104,34 @@
         const socket = new WebSocket(url);
         this.conn = socket;
 
+        // Guard against a hung CONNECTING state by enforcing a timeout
+        if (this.connectTimeoutTimer) {
+          clearTimeout(this.connectTimeoutTimer);
+        }
+        this.connectTimeoutTimer = setTimeout(() => {
+          if (
+            this.conn === socket &&
+            socket &&
+            socket.readyState === WebSocket.CONNECTING
+          ) {
+            try {
+              console.warn("[WsHub] Connect timeout, forcing close");
+              socket.close();
+            } catch (_) {}
+          }
+        }, 10000);
+
         socket.onopen = () => {
           console.log("[WsHub] Connected");
           this.attempts = 0;
           this.isConnecting = false;
+          if (this.connectTimeoutTimer) {
+            clearTimeout(this.connectTimeoutTimer);
+            this.connectTimeoutTimer = null;
+          }
+          // Ensure heartbeat restarts on every successful (re)connect
+          this.startHeartbeat();
+          this.startWatchdog();
           this.sendHello();
           this.emit("_connected", { status: "connected" });
 
@@ -125,7 +156,12 @@
           console.log("[WsHub] Closed");
           this.isConnecting = false;
           this.conn = null;
+          if (this.connectTimeoutTimer) {
+            clearTimeout(this.connectTimeoutTimer);
+            this.connectTimeoutTimer = null;
+          }
           this.stopHeartbeat();
+          this.stopWatchdog();
           this.emit("_disconnected", {
             status: "disconnected",
             code: event?.code,
@@ -142,6 +178,11 @@
         socket.onerror = (err) => {
           console.error("[WsHub] Error:", err);
           this.isConnecting = false;
+          if (this.connectTimeoutTimer) {
+            clearTimeout(this.connectTimeoutTimer);
+            this.connectTimeoutTimer = null;
+          }
+          this.stopWatchdog();
           this.emit("_failed", { error: err?.message || "unknown" });
           try {
             socket.close();
@@ -156,7 +197,10 @@
 
     reconnect() {
       this.attempts += 1;
-      const delay = Math.min(1000 * Math.pow(2, this.attempts), 15000);
+      const base = Math.min(1000 * Math.pow(2, this.attempts), 15000);
+      // Add jitter (0.5x–1.5x) to avoid thundering herd
+      const jitter = 0.5 + Math.random();
+      const delay = Math.floor(base * jitter);
 
       console.log(
         `[WsHub] Reconnect attempt ${this.attempts}, delay: ${delay}ms`
@@ -217,6 +261,21 @@
           }
           break;
         }
+        case "pong": {
+          // Update lastPongAt and compute RTT if possible
+          const now = Date.now();
+          this.lastPongAt = now;
+          const pongId = typeof msg.id === "number" ? msg.id : null;
+          if (
+            pongId !== null &&
+            pongId === this.lastPingId &&
+            this.lastPingAt
+          ) {
+            this.rttMs = Math.max(0, now - this.lastPingAt);
+          }
+          this.emit("_pong", { rttMs: this.rttMs, ts: now }, msg);
+          break;
+        }
         case "error": {
           const alias = resolveAliasFromTopic(
             msg.topic || msg.channel || "unknown"
@@ -263,8 +322,6 @@
           this.emit("_snapshot_end", payload, payload);
           break;
         }
-        case "pong":
-          break;
         default:
           console.warn("[WsHub] Unknown message type:", msg.type);
       }
@@ -313,9 +370,10 @@
     },
 
     sendSetFilters(topics) {
-      if (!topics || Object.keys(topics).length === 0) {
+      if (!topics || typeof topics !== "object") {
         return;
       }
+      // Allow empty object to indicate clearing filters on the server
       this.send({ type: "set_filters", topics });
     },
 
@@ -332,7 +390,7 @@
       }
       this.heartbeatTimer = setInterval(() => {
         if (this.conn && this.conn.readyState === WebSocket.OPEN) {
-          this.send({ type: "ping" });
+          this.sendPing();
         }
       }, 30000);
     },
@@ -363,6 +421,43 @@
 
     isConnected() {
       return this.conn && this.conn.readyState === WebSocket.OPEN;
+    },
+
+    sendPing() {
+      this.pingSeq = (this.pingSeq + 1) >>> 0; // uint wrap
+      this.lastPingId = this.pingSeq;
+      this.lastPingAt = Date.now();
+      this.send({ type: "ping", id: this.lastPingId });
+    },
+
+    startWatchdog() {
+      if (this.watchdogTimer) return;
+      // Check every 10s; if no pong for >75s, consider degraded and reconnect
+      const thresholdMs = 75_000;
+      this.watchdogTimer = setInterval(() => {
+        if (!this.isConnected()) return;
+        const now = Date.now();
+        const last = this.lastPongAt || 0;
+        if (last > 0 && now - last > thresholdMs) {
+          this.emit("_warning", {
+            alias: "ws",
+            channel: "ws",
+            topic: "system.status",
+            message: "No pong received; reconnecting",
+            recommendation: "http_catchup",
+          });
+          try {
+            this.conn.close();
+          } catch (_) {}
+        }
+      }, 10_000);
+    },
+
+    stopWatchdog() {
+      if (this.watchdogTimer) {
+        clearInterval(this.watchdogTimer);
+        this.watchdogTimer = null;
+      }
     },
   };
 
@@ -655,9 +750,24 @@
       const topics = this.collectFilters(snapshotAliases);
 
       if (Object.keys(topics).length === 0) {
+        const hadPrev = !!this.lastSentFilters;
         this.lastSentFilters = null;
         this.pendingFilterUpdate = false;
         this.pendingTopics = null;
+        this.snapshotRequestAliases.clear();
+
+        // Proactively clear server-side filters to avoid stale subscriptions
+        if (hasWsHub()) {
+          if (global.WsHub.isConnected()) {
+            if (hadPrev) {
+              global.WsHub.sendSetFilters({});
+            }
+          } else if (hadPrev) {
+            // Defer clearing until connection is available
+            this.pendingFilterUpdate = true;
+            this.pendingTopics = {};
+          }
+        }
         return;
       }
 
@@ -670,6 +780,18 @@
       if (!global.WsHub.isConnected()) {
         this.pendingFilterUpdate = true;
         this.pendingTopics = topics;
+        return;
+      }
+
+      // Avoid redundant updates if nothing changed and no snapshot was requested
+      const snapshotRequested = snapshotAliases.size > 0;
+      if (
+        !snapshotRequested &&
+        deepEqualObjects(topics, this.lastSentFilters)
+      ) {
+        this.pendingFilterUpdate = false;
+        this.pendingTopics = null;
+        this.snapshotRequestAliases.clear();
         return;
       }
 
@@ -864,6 +986,41 @@
     realtime.ensureHubInitialized();
     realtime.initializeOnce();
 
+    // Network awareness: recover immediately when network returns; quiesce on offline
+    if (typeof window !== "undefined") {
+      const onOnline = () => {
+        if (hasWsHub()) {
+          global.WsHub.attempts = 0; // reset backoff
+          global.WsHub.isConnecting = false;
+          // If not connected, attempt immediate reconnect
+          if (!global.WsHub.isConnected()) {
+            global.WsHub.connect();
+          } else {
+            global.WsHub.startHeartbeat();
+          }
+        }
+      };
+      const onOffline = () => {
+        if (hasWsHub()) {
+          global.WsHub.emit("_warning", {
+            alias: "ws",
+            channel: "ws",
+            topic: "system.status",
+            message: "Network offline; realtime paused",
+            recommendation: "http_catchup",
+          });
+          global.WsHub.stopHeartbeat();
+          try {
+            if (global.WsHub.conn) {
+              global.WsHub.conn.close();
+            }
+          } catch (_) {}
+        }
+      };
+      window.addEventListener("online", onOnline, { once: false });
+      window.addEventListener("offline", onOffline, { once: false });
+    }
+
     const initialPage =
       (global.Router && Router.currentPage) ||
       (global.location
@@ -897,4 +1054,26 @@
   });
 
   global.Realtime = realtime;
+
+  // Shallow-deep equality for plain objects and arrays
+  function deepEqualObjects(a, b) {
+    if (a === b) return true;
+    if (typeof a !== typeof b) return false;
+    if (a == null || b == null) return false;
+    if (typeof a !== "object") return a === b;
+    if (Array.isArray(a)) {
+      if (!Array.isArray(b) || a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) {
+        if (!deepEqualObjects(a[i], b[i])) return false;
+      }
+      return true;
+    }
+    const aKeys = Object.keys(a).sort();
+    const bKeys = Object.keys(b).sort();
+    if (!deepEqualObjects(aKeys, bKeys)) return false;
+    for (const k of aKeys) {
+      if (!deepEqualObjects(a[k], b[k])) return false;
+    }
+    return true;
+  }
 })();

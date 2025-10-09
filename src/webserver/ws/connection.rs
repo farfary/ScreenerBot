@@ -215,9 +215,7 @@ impl PositionsRealtimeFilter {
     }
 
     fn normalized_limit(&self) -> usize {
-        self.limit
-            .max(1)
-            .min(POSITIONS_SNAPSHOT_MAX_LIMIT)
+        self.limit.max(1).min(POSITIONS_SNAPSHOT_MAX_LIMIT)
     }
 
     fn primary_status(&self) -> &str {
@@ -239,10 +237,7 @@ impl PositionsRealtimeFilter {
         if self.limit == 0 {
             self.limit = POSITIONS_SNAPSHOT_DEFAULT_LIMIT;
         }
-        self.limit = self
-            .limit
-            .max(1)
-            .min(POSITIONS_SNAPSHOT_MAX_LIMIT);
+        self.limit = self.limit.max(1).min(POSITIONS_SNAPSHOT_MAX_LIMIT);
 
         if self.status.len() > 1 {
             self.status.sort();
@@ -866,6 +861,14 @@ async fn handle_client_message(
             hub.update_connection_topics(conn_id, state.active_topics())
                 .await;
 
+            if desired_topics.is_empty() && is_debug_webserver_enabled() {
+                log(
+                    LogTag::Webserver,
+                    "DEBUG",
+                    &format!("Connection {}: filters cleared (no active topics)", conn_id),
+                );
+            }
+
             let response = ServerMessage::Ack {
                 message: format!("Filters updated for {} topics", topics.len()),
                 context: Some(serde_json::json!({
@@ -1356,12 +1359,8 @@ async fn send_positions_snapshot(
     let limit = filter.normalized_limit();
     let mint_filter = filter.primary_mint().map(|s| s.to_string());
 
-    let positions = load_positions_with_filters(
-        status.as_str(),
-        limit,
-        mint_filter.as_deref(),
-    )
-    .await;
+    let positions =
+        load_positions_with_filters(status.as_str(), limit, mint_filter.as_deref()).await;
 
     let total = positions.len();
 
