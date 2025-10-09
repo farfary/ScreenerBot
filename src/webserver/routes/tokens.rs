@@ -191,8 +191,6 @@ pub struct FilterRequest {
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
-        // NOTE: /api/tokens/list is retained for external tooling. SPA now relies on
-        // websocket snapshots exclusively (see docs/cleanup-phase-1.md).
         .route("/tokens/list", get(get_tokens_list))
         .route("/tokens/stats", get(get_tokens_stats))
         .route("/tokens/filter", post(filter_tokens))
@@ -204,10 +202,12 @@ pub fn routes() -> Router<Arc<AppState>> {
 // HANDLERS
 // =============================================================================
 
-/// List tokens with simple query params and view selection
-/// GET /api/tokens/list?view=pool|all|blacklisted|positions|secure|recent&search=...&sort_by=...&sort_dir=...&page=1&page_size=50
-/// GET /api/tokens/list - Legacy HTTP list endpoint (external tools only)
-/// SPA dashboards must use websocket snapshots; see docs/cleanup-phase-1.md.
+/// GET /api/tokens/list
+///
+/// NOTE: Deprecated for SPA use. External tooling only.
+/// SPA dashboards should use WebSocket snapshots (tokens.update topic).
+///
+/// Query: view, search, sort_by, sort_dir, page, page_size
 pub(crate) async fn get_tokens_list(
     Query(query): Query<TokenListQuery>,
 ) -> Json<TokenListResponse> {
@@ -296,12 +296,11 @@ pub(crate) async fn get_tokens_list(
                         LogTag::Webserver,
                         "WARN",
                         &format!(
-                            "Paginated tokens query failed (falling back to legacy path): {}",
+                            "Paginated tokens query failed (fallback to generic path): {}",
                             err
                         ),
                     );
                 }
-                // Fall through to legacy path below
             }
         }
     }

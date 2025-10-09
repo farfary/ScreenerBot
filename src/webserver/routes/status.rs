@@ -63,18 +63,13 @@ pub struct ServiceState {
 /// System resource metrics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemMetricsResponse {
-    // Backward-compat (kept for existing UI):
-    pub memory_usage_mb: u64,   // maps to system used memory
-    pub cpu_usage_percent: f32, // maps to system CPU usage
-
-    // Detailed metrics (new):
+    pub memory_usage_mb: u64,
+    pub cpu_usage_percent: f32,
     pub system_memory_used_mb: u64,
     pub system_memory_total_mb: u64,
     pub process_memory_mb: u64,
     pub cpu_system_percent: f32,
     pub cpu_process_percent: f32,
-
-    // Others
     pub active_threads: usize,
     pub rpc_calls_total: u64,
     pub rpc_calls_failed: u64,
@@ -95,6 +90,10 @@ pub struct HealthResponse {
 // ================================================================================================
 
 /// Create status routes
+///
+/// NOTE: /status* endpoints are deprecated and maintained only for external tooling.
+/// SPA dashboards should use WebSocket snapshots (system.status topic) instead.
+/// See docs/PHASE2_LEGACY_REMOVAL_AND_COMPLETION.md
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/health", get(health_check))
@@ -325,11 +324,8 @@ async fn get_system_metrics_internal(state: &AppState) -> SystemMetricsResponse 
     let ws_connections = state.ws_connection_count().await;
 
     SystemMetricsResponse {
-        // Backward-compat fields map to system-wide view
         memory_usage_mb: system_memory_used_mb,
         cpu_usage_percent: cpu_system_percent,
-
-        // Detailed
         system_memory_used_mb,
         system_memory_total_mb,
         process_memory_mb,
@@ -337,7 +333,7 @@ async fn get_system_metrics_internal(state: &AppState) -> SystemMetricsResponse 
         cpu_process_percent,
         active_threads: thread_count,
         rpc_calls_total: total_calls,
-        rpc_calls_failed: 0, // RpcStats doesn't track failures separately
+        rpc_calls_failed: 0,
         rpc_success_rate: success_rate,
         ws_connections,
     }

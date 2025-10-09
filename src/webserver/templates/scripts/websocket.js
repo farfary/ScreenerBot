@@ -374,8 +374,6 @@
     );
   }
 
-  // Phase 1: reintroduce persistent topics with gating so pages like tokens do not
-  // implicitly subscribe to status/services traffic.
   const persistentRealtimeConfigs = [
     {
       alias: "status",

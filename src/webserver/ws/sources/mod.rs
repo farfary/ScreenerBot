@@ -18,8 +18,6 @@
 /// - status: periodic snapshot gather from ws::snapshots
 /// - services: periodic overview gather from routes::services helper
 ///
-/// Missing topics (stubs may be added later): tokens, ohlcvs, trader, wallet,
-/// transactions, security.
 pub mod events;
 pub mod ohlcvs;
 pub mod positions;
@@ -55,11 +53,4 @@ pub fn start_all(hub: Arc<WsHub>) {
             "✅ ws.sources started (events, positions, tokens, status, services)",
         );
     }
-
-    // Additional sources (currently stubs) for uniform structure:
-    // trader::start(hub.clone());
-    // wallet::start(hub.clone());
-    // ohlcvs::start(hub.clone());
-    // transactions::start(hub.clone());
-    // security::start(hub);
 }
