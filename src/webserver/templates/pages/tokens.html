@@ -88,9 +88,16 @@
         if (tokensState.searchTerm) {
           filter.search = tokensState.searchTerm;
         }
-        return { [topic]: filter };
+        const out = { [topic]: filter };
+        if (window.__DEBUG_REALTIME) {
+          console.log("[TokensDBG] getFilters", out);
+        }
+        return out;
       },
       onInitial(status) {
+        if (window.__DEBUG_REALTIME) {
+          console.log("[TokensDBG] onInitial", status);
+        }
         if (status === "connected") {
           setTokenCountStatus("🔌 Realtime connected • Loading tokens...");
         } else if (status === "connecting") {
@@ -103,10 +110,18 @@
       },
       onUnavailable() {
         console.warn("[Tokens] Realtime unavailable – retrying snapshot");
+        if (window.__DEBUG_REALTIME) {
+          console.log("[TokensDBG] onUnavailable");
+        }
         setTokenCountStatus("⚠️ Realtime unavailable – retrying...");
         requestTokensSnapshot("Retrying after realtime unavailable...");
       },
       onEnter(status) {
+        if (window.__DEBUG_REALTIME) {
+          console.log("[TokensDBG] onEnter", status, {
+            view: tokensState.view,
+          });
+        }
         if (status === "connected") {
           requestTokensSnapshot("Loading tokens...");
         } else if (status === "connecting") {
@@ -121,6 +136,9 @@
         clearTokensSnapshotTimer();
         tokensSnapshotState.inProgress = false;
         tokensSnapshotState.pending = [];
+        if (window.__DEBUG_REALTIME) {
+          console.log("[TokensDBG] onExit");
+        }
         if (window.__tokensVisibilityHandler) {
           document.removeEventListener(
             "visibilitychange",
@@ -959,6 +977,9 @@
   }
 
   function handleTokensSnapshotBegin(payload) {
+    if (window.__DEBUG_REALTIME) {
+      console.log("[TokensDBG] snapshot_begin", payload);
+    }
     tokensSnapshotState.inProgress = true;
     tokensSnapshotState.pending = [];
     tokensSnapshotState.expected = Number(payload?.total) || 0;
@@ -996,6 +1017,9 @@
   }
 
   function handleTokensSnapshotEnd(payload) {
+    if (window.__DEBUG_REALTIME) {
+      console.log("[TokensDBG] snapshot_end", payload);
+    }
     tokensSnapshotState.inProgress = false;
     const sent = Number(payload?.sent);
     if (Number.isFinite(sent)) {
@@ -1009,6 +1033,9 @@
   }
 
   function handleTokensRealtime(data, envelope) {
+    if (window.__DEBUG_REALTIME) {
+      console.log("[TokensDBG] recv", { meta: envelope?.meta, data });
+    }
     if (!data || typeof data !== "object") return;
     const meta = envelope?.meta || {};
     const isSnapshot = meta.snapshot === true;
@@ -1051,11 +1078,17 @@
         (typeof data.symbol === "string" || typeof data.name === "string"))
     ) {
       const normalized = normalizeTokenFromApi({ ...data });
+      if (window.__DEBUG_REALTIME) {
+        console.log("[TokensDBG] summary", normalized);
+      }
       handleTokenSummaryDelta(normalized);
       return;
     }
 
     if (data.price_result) {
+      if (window.__DEBUG_REALTIME) {
+        console.log("[TokensDBG] price_update", data);
+      }
       handlePriceUpdate(data);
     }
   }

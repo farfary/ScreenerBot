@@ -1,5 +1,24 @@
 (function () {
   const global = window;
+  // Enable verbose realtime logging by setting localStorage.debugRealtime = '1'
+  if (typeof global.__DEBUG_REALTIME === "undefined") {
+    try {
+      global.__DEBUG_REALTIME =
+        (global.localStorage &&
+          global.localStorage.getItem("debugRealtime") === "1") ||
+        false;
+    } catch (_) {
+      global.__DEBUG_REALTIME = false;
+    }
+  }
+
+  function dbg(...args) {
+    if (global.__DEBUG_REALTIME) {
+      try {
+        console.log("[RealtimeDBG]", ...args);
+      } catch (_) {}
+    }
+  }
 
   const aliasToTopic = {
     status: "system.status",
@@ -236,6 +255,7 @@
         app_version: global.APP_VERSION || null,
         pages_supported: Object.keys(global.PageRealtime || {}),
       };
+      dbg("sendHello", payload);
       this.send(payload);
     },
 
@@ -244,6 +264,13 @@
         case "data": {
           const envelope = normalizeEnvelope(msg);
           this.protocolVersion = envelope.raw?.v ?? this.protocolVersion;
+          dbg("recv:data", {
+            alias: envelope.alias,
+            topic: envelope.topic,
+            key: envelope.key,
+            snapshot: envelope.meta?.snapshot === true,
+            meta: envelope.meta,
+          });
           this.emit(envelope.alias, envelope.data, envelope);
           this.emit(`topic:${envelope.topic}`, envelope.data, envelope);
           break;
@@ -308,6 +335,7 @@
             ...msg,
             alias,
           };
+          dbg("recv:snapshot_begin", payload);
           this.emit(`snapshot_begin:${msg.topic}`, payload, payload);
           this.emit("_snapshot_begin", payload, payload);
           break;
@@ -318,6 +346,7 @@
             ...msg,
             alias,
           };
+          dbg("recv:snapshot_end", payload);
           this.emit(`snapshot_end:${msg.topic}`, payload, payload);
           this.emit("_snapshot_end", payload, payload);
           break;
@@ -363,6 +392,7 @@
 
     send(msg) {
       if (this.conn && this.conn.readyState === WebSocket.OPEN) {
+        dbg("ws:send", msg);
         this.conn.send(JSON.stringify(msg));
       } else {
         console.warn("[WsHub] Not connected, cannot send:", msg?.type || msg);
@@ -374,6 +404,7 @@
         return;
       }
       // Allow empty object to indicate clearing filters on the server
+      dbg("ws:set_filters", topics);
       this.send({ type: "set_filters", topics });
     },
 
@@ -734,6 +765,10 @@
         }
       }
 
+      dbg("collectFilters", {
+        snapshotAliases: Array.from(snapshotAliases),
+        topics,
+      });
       return topics;
     },
 
@@ -760,6 +795,7 @@
         if (hasWsHub()) {
           if (global.WsHub.isConnected()) {
             if (hadPrev) {
+              dbg("updateFilters:clearing_server_filters");
               global.WsHub.sendSetFilters({});
             }
           } else if (hadPrev) {
@@ -772,12 +808,14 @@
       }
 
       if (!hasWsHub()) {
+        dbg("updateFilters:hub_unavailable", topics);
         this.pendingFilterUpdate = true;
         this.pendingTopics = topics;
         return;
       }
 
       if (!global.WsHub.isConnected()) {
+        dbg("updateFilters:ws_disconnected", topics);
         this.pendingFilterUpdate = true;
         this.pendingTopics = topics;
         return;
@@ -789,12 +827,17 @@
         !snapshotRequested &&
         deepEqualObjects(topics, this.lastSentFilters)
       ) {
+        dbg("updateFilters:skipped_redundant", { topics });
         this.pendingFilterUpdate = false;
         this.pendingTopics = null;
         this.snapshotRequestAliases.clear();
         return;
       }
 
+      dbg("updateFilters:sending", {
+        topics,
+        snapshotAliases: Array.from(snapshotAliases),
+      });
       global.WsHub.sendSetFilters(topics);
       this.lastSentFilters = topics;
       this.pendingFilterUpdate = false;
@@ -847,6 +890,7 @@
         this.updateFilters();
         return;
       }
+      dbg("activate", { page: pageName, topics: config.topics });
 
       const status = hasWsHub() ? global.WsHub.getStatus() : "disconnected";
 
@@ -891,6 +935,7 @@
     },
 
     onHubConnected() {
+      dbg("hub:connected");
       if (this.pendingFilterUpdate && this.pendingTopics) {
         global.WsHub.sendSetFilters(this.pendingTopics);
         this.lastSentFilters = this.pendingTopics;
@@ -899,6 +944,7 @@
         this.snapshotRequestAliases.clear();
       } else {
         const aliases = Array.from(this.getActiveAliases());
+        dbg("hub:connected:active_aliases", aliases);
         if (aliases.length > 0) {
           this.requestSnapshotForAliases(aliases);
         } else if (this.lastSentFilters) {
@@ -917,6 +963,7 @@
     },
 
     onHubDisconnected() {
+      dbg("hub:disconnected");
       this.pendingFilterUpdate = true;
       if (this.lastSentFilters) {
         this.pendingTopics = this.lastSentFilters;
