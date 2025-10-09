@@ -264,13 +264,7 @@
         case "data": {
           const envelope = normalizeEnvelope(msg);
           this.protocolVersion = envelope.raw?.v ?? this.protocolVersion;
-          dbg("recv:data", {
-            alias: envelope.alias,
-            topic: envelope.topic,
-            key: envelope.key,
-            snapshot: envelope.meta?.snapshot === true,
-            meta: envelope.meta,
-          });
+          // Note: Per-item logging removed to avoid console spam
           this.emit(envelope.alias, envelope.data, envelope);
           this.emit(`topic:${envelope.topic}`, envelope.data, envelope);
           break;
