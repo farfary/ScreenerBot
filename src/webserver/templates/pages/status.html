@@ -182,14 +182,117 @@
   var statusState = window.statusState || {
     view: "system",
     currentData: null,
+    hasSnapshot: false,
+    pendingMessage: "Waiting for realtime snapshot...",
+    lastSnapshotAt: null,
+  };
+
+  window.statusState = statusState;
+
+  var STATUS_REALTIME_ALIAS = "status";
+
+  var statusController = {
+    cleanupRegistered: false,
+
+    initialize() {
+      console.log("[Status] Initializing page");
+      hydrateStatusState();
+      initStatusSubTabs();
+      statusState.currentData = null;
+      statusState.hasSnapshot = false;
+      statusState.lastSnapshotAt = null;
+      this.ensureCleanupHook();
+      this.setPending("Waiting for realtime snapshot...");
+      this.requestSnapshot("page-init");
+    },
+
+    ensureCleanupHook() {
+      if (this.cleanupRegistered) {
+        return;
+      }
+      if (window.Router && typeof Router.registerCleanup === "function") {
+        Router.registerCleanup(() => {
+          this.onExit();
+        });
+        this.cleanupRegistered = true;
+      }
+    },
+
+    requestSnapshot(reason = "manual") {
+      if (
+        window.Realtime &&
+        typeof window.Realtime.requestSnapshotForAliases === "function"
+      ) {
+        window.Realtime.requestSnapshotForAliases([STATUS_REALTIME_ALIAS]);
+        console.log("[Status] Requested snapshot", { reason });
+      } else if (
+        window.Realtime &&
+        typeof window.Realtime.updateFilters === "function"
+      ) {
+        window.Realtime.updateFilters({
+          snapshotTopics: [STATUS_REALTIME_ALIAS],
+        });
+        console.log("[Status] Requested snapshot via filter update", {
+          reason,
+        });
+      } else {
+        console.warn(
+          "[Status] Realtime helper unavailable; cannot request snapshot"
+        );
+      }
+    },
+
+    handleSnapshot(snapshot) {
+      statusState.pendingMessage = null;
+      statusState.hasSnapshot = true;
+      statusState.lastSnapshotAt = Date.now();
+      statusState.currentData = snapshot;
+      ensureStatusSubTabsVisible();
+      renderStatusContent();
+    },
+
+    setPending(message = "Waiting for realtime snapshot...") {
+      statusState.pendingMessage = message;
+      if (!statusState.currentData) {
+        renderStatusContent();
+      }
+    },
+
+    handleRealtimeConnected() {
+      this.requestSnapshot("ws-connected");
+    },
+
+    handleRealtimeDisconnect() {
+      if (!statusState.hasSnapshot) {
+        this.setPending("Waiting for realtime snapshot...");
+      }
+    },
+
+    handleRealtimeWarning(payload) {
+      console.warn("[Status] Realtime warning:", payload);
+    },
+
+    handleRealtimeUnavailable() {
+      if (!statusState.hasSnapshot) {
+        this.setPending("Realtime unavailable");
+      }
+    },
+
+    onEnter() {
+      if (!statusState.hasSnapshot) {
+        this.setPending("Waiting for realtime snapshot...");
+      }
+      this.requestSnapshot("page-enter");
+    },
+
+    onExit() {
+      statusState.pendingMessage = "Waiting for realtime snapshot...";
+    },
   };
 
   // Global init function for Router to call during SPA navigation
   window.initStatusPage = function () {
-    console.log("[Status] Initializing page");
-    hydrateStatusState();
-    initStatusSubTabs();
-    loadInitialStatusData();
+    statusController.initialize();
   };
 
   function hydrateStatusState() {
@@ -280,33 +383,7 @@
   }
 
   function handleStatusUpdate(data) {
-    console.log("[Status] Received update:", data);
-    statusState.currentData = data;
-    // Make sure sub-tabs are shown even if initial mount was skipped
-    ensureStatusSubTabsVisible();
-    renderStatusContent();
-  }
-
-  // Load initial data via HTTP
-  async function loadInitialStatusData() {
-    try {
-      const [status, services, metrics] = await Promise.all([
-        fetch("/api/status").then((r) => r.json()),
-        fetch("/api/status/services").then((r) => r.json()),
-        fetch("/api/status/metrics").then((r) => r.json()),
-      ]);
-
-      statusState.currentData = {
-        ...status,
-        services,
-        metrics,
-      };
-      ensureStatusSubTabsVisible();
-      renderStatusContent();
-    } catch (error) {
-      console.error("[Status] Failed to load initial data:", error);
-      showStatusError("Failed to load status data");
-    }
+    statusController.handleSnapshot(data);
   }
 
   function renderStatusContent() {
@@ -315,10 +392,11 @@
 
     const data = statusState.currentData;
     if (!data) {
+      const message = statusState.pendingMessage || "Loading status...";
       contentContainer.innerHTML = `
                     <div class="page-section">
                         <div style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
-                            <div class="loading-text">Loading status...</div>
+                            <div class="loading-text">${message}</div>
                         </div>
                     </div>
                 `;
@@ -781,23 +859,47 @@
             `;
   }
 
-  async function renderWalletTab(data) {
+  function renderWalletTab(data) {
     const contentContainer = document.getElementById("statusContent");
 
-    // Get SOL balance from status data
-    const solBalance = data.sol_balance || 0;
+    const wallet = data.wallet || null;
 
-    // Fetch detailed wallet info
-    let walletData = null;
-    try {
-      const response = await fetch("/api/wallet/current");
-      walletData = await response.json();
-    } catch (error) {
-      console.error("[Status] Failed to fetch wallet data:", error);
+    if (!wallet) {
+      contentContainer.innerHTML = `
+                <div class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">👛</span>
+                            <span class="card-title">Wallet Status</span>
+                        </div>
+                        <div class="status-placeholder">
+                            <div class="status-placeholder-icon">👛</div>
+                            <div class="status-placeholder-title">Wallet snapshot unavailable</div>
+                            <div class="status-placeholder-text">No wallet data has been captured yet</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+      return;
     }
 
-    const tokenCount = walletData ? walletData.total_tokens_count : 0;
-    const tokenBalances = walletData ? walletData.token_balances : [];
+    const solBalance = Number.isFinite(wallet.sol_balance)
+      ? wallet.sol_balance
+      : 0;
+    const tokenCount = Number.isFinite(wallet.total_tokens_count)
+      ? wallet.total_tokens_count
+      : (wallet.token_balances || []).length;
+    const tokenBalances = Array.isArray(wallet.token_balances)
+      ? wallet.token_balances
+      : [];
+
+    let snapshotTime = "Unknown";
+    if (wallet.snapshot_time) {
+      const parsed = new Date(wallet.snapshot_time);
+      snapshotTime = Number.isNaN(parsed.getTime())
+        ? "Unknown"
+        : parsed.toLocaleString();
+    }
 
     contentContainer.innerHTML = `
                 <div class="page-section">
@@ -828,6 +930,15 @@
                                         ${tokenCount}
                                     </div>
                                 </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">⏱️</span>
+                                        <span>Snapshot Time</span>
+                                    </div>
+                                    <div class="status-metric-value" style="font-size: 1.1em;">
+                                        ${snapshotTime}
+                                    </div>
+                                </div>
                             </div>
 
                             ${tokenBalances.length > 0
@@ -844,27 +955,26 @@
                                         </thead>
                                         <tbody>
                                             ${tokenBalances
-          .map(
-            (token) => `
+          .map((token) => {
+            const mint = (token.mint || "").toString();
+            const shortMint =
+              mint.length > 14
+                ? `${mint.slice(0, 8)}...${mint.slice(-6)}`
+                : mint || "Unknown";
+            const balance = Utils.formatNumber(token.balance_ui, 6, {
+              fallback: "N/A",
+            });
+            const tokenType = token.is_token_2022
+              ? "Token-2022"
+              : "SPL Token";
+            return `
                                                 <tr>
-                                                    <td><code style="font-size: 0.85em;">${token.mint.slice(
-              0,
-              8
-            )}...${token.mint.slice(
-              -6
-            )}</code></td>
-                                                    <td><strong>${Utils.formatNumber(
-              token.balance_ui,
-              6,
-              { fallback: "N/A" }
-            )}</strong></td>
-                                                    <td>${token.is_token_2022
-                ? "Token-2022"
-                : "SPL Token"
-              }</td>
+                                                    <td><code style="font-size: 0.85em;">${shortMint}</code></td>
+                                                    <td><strong>${balance}</strong></td>
+                                                    <td>${tokenType}</td>
                                                 </tr>
-                                            `
-          )
+                                            `;
+          })
           .join("")}
                                         </tbody>
                                     </table>
@@ -878,24 +988,18 @@
             `;
   }
 
-  async function renderTraderTab(data) {
+  function renderTraderTab(data) {
     const contentContainer = document.getElementById("statusContent");
 
-    const tradingEnabled = data.trading_enabled || false;
-    const traderMode = data.trader_mode || "unknown";
-    const openPositions = data.open_positions || 0;
-
-    // Fetch detailed trader status
-    let traderStatus = null;
-    try {
-      const response = await fetch("/api/trader/status");
-      const result = await response.json();
-      traderStatus = result.data || result;
-    } catch (error) {
-      console.error("[Status] Failed to fetch trader status:", error);
-    }
-
-    const isRunning = traderStatus ? traderStatus.running : false;
+    const tradingEnabled = !!data.trading_enabled;
+    const traderMode = (data.trader_mode || "unknown").toString();
+    const openPositions = Number.isFinite(data.open_positions)
+      ? data.open_positions
+      : 0;
+    const closedToday = Number.isFinite(data.closed_positions_today)
+      ? data.closed_positions_today
+      : 0;
+    const isRunning = !!data.trader_running;
 
     contentContainer.innerHTML = `
                 <div class="page-section">
@@ -951,6 +1055,15 @@
                                         ${openPositions}
                                     </div>
                                 </div>
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">✅</span>
+                    <span>Closed Today</span>
+                  </div>
+                  <div class="status-metric-value">
+                    ${closedToday}
+                  </div>
+                </div>
                             </div>
 
                             <h3 class="status-section-title">Trader Information</h3>
@@ -969,6 +1082,10 @@
                                     <span class="status-trader-label">Active Monitoring</span>
                                     <span class="status-trader-value">${isRunning ? "Active" : "Inactive"
       }</span>
+                </div>
+                <div class="status-trader-row">
+                  <span class="status-trader-label">Closed Positions Today</span>
+                  <span class="status-trader-value">${closedToday}</span>
                                 </div>
                             </div>
                         </div>
@@ -1179,25 +1296,38 @@
 
   window.PageRealtime = window.PageRealtime || {};
   window.PageRealtime.status = {
+    topics: [STATUS_REALTIME_ALIAS],
+    getFilters() {
+      return { status: {} };
+    },
     channels: {
       status: handleStatusUpdate,
-      _connected: () => {
-        console.log("[Status] WebSocket connected – refreshing snapshot");
-        loadInitialStatusData();
+      _connected() {
+        statusController.handleRealtimeConnected();
       },
-      _disconnected: () => {
-        console.warn(
-          "[Status] WebSocket disconnected – continuing HTTP polling"
-        );
+      _disconnected() {
+        statusController.handleRealtimeDisconnect();
       },
-      _failed: () => {
-        console.warn("[Status] WebSocket error – continuing HTTP polling");
+      _failed() {
+        statusController.handleRealtimeDisconnect();
+      },
+      _warning(payload) {
+        statusController.handleRealtimeWarning(payload);
       },
     },
+    onInitial(connectionStatus) {
+      if (connectionStatus !== "connected") {
+        statusController.setPending("Waiting for realtime snapshot...");
+      }
+    },
+    onEnter() {
+      statusController.onEnter();
+    },
     onUnavailable() {
-      console.warn(
-        "[Status] WebSocket unavailable – falling back to HTTP polling"
-      );
+      statusController.handleRealtimeUnavailable();
+    },
+    onExit() {
+      statusController.onExit();
     },
   };
 

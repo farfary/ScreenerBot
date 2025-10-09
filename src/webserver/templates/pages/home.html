@@ -145,160 +145,414 @@
 </div>
 
 <script>
-    async function loadHomeData() {
-        const sentinel = document.getElementById("openPositions");
-        if (!sentinel) {
-            return;
+    (function () {
+        const state = {
+            overviewTimer: null,
+            configTimer: null,
+            overview: null,
+            config: null,
+            status: null,
+            cleanupRegistered: false,
+            elements: new Map(),
+        };
+
+        const realtimeMetricIds = [
+            "servicesStatus",
+            "rpcRate",
+            "homeCpu",
+            "homeMem",
+            "systemUptime",
+            "solBalance",
+            "tokenCount",
+            "walletUpdated",
+        ];
+
+        function getElement(id) {
+            if (state.elements.has(id)) {
+                return state.elements.get(id);
+            }
+            const el = document.getElementById(id) || null;
+            state.elements.set(id, el);
+            return el;
         }
 
-        const getMetric = (id) => document.getElementById(id);
-        const setMetric = (id, value) => {
-            const el = getMetric(id);
+        function setMetric(id, value, options = {}) {
+            const el = getElement(id);
             if (!el) {
                 return null;
             }
             el.textContent = value;
-            el.classList.remove("loading-text");
+            if (!options.keepLoading) {
+                el.classList.remove("loading-text");
+            }
+            if (options.color) {
+                el.style.color = options.color;
+            } else if (options.resetColor) {
+                el.style.color = "";
+            }
             return el;
+        }
+
+        function setPendingMetric(id, value = "--") {
+            const el = getElement(id);
+            if (!el) {
+                return null;
+            }
+            el.textContent = value;
+            el.classList.add("loading-text");
+            return el;
+        }
+
+        function formatTime(value) {
+            if (!value) {
+                return "N/A";
+            }
+            try {
+                return new Date(value).toLocaleTimeString();
+            } catch (_) {
+                return "N/A";
+            }
+        }
+
+        const controller = {
+            initialize() {
+                this.teardown();
+                state.status = null;
+                this.setRealtimePending();
+                this.fetchOverview();
+                this.scheduleOverview(10000);
+                this.fetchConfig();
+                this.scheduleConfig(60000);
+                this.ensureCleanupHook();
+            },
+
+            ensureCleanupHook() {
+                if (state.cleanupRegistered) {
+                    return;
+                }
+                if (window.Router && typeof Router.registerCleanup === "function") {
+                    Router.registerCleanup(() => {
+                        this.teardown();
+                    });
+                    state.cleanupRegistered = true;
+                }
+            },
+
+            teardown() {
+                if (state.overviewTimer) {
+                    clearInterval(state.overviewTimer);
+                    state.overviewTimer = null;
+                }
+                if (state.configTimer) {
+                    clearInterval(state.configTimer);
+                    state.configTimer = null;
+                }
+            },
+
+            scheduleOverview(intervalMs) {
+                if (state.overviewTimer) {
+                    clearInterval(state.overviewTimer);
+                }
+                state.overviewTimer = setInterval(() => {
+                    this.fetchOverview();
+                }, intervalMs);
+            },
+
+            scheduleConfig(intervalMs) {
+                if (state.configTimer) {
+                    clearInterval(state.configTimer);
+                }
+                state.configTimer = setInterval(() => {
+                    this.fetchConfig();
+                }, intervalMs);
+            },
+
+            async fetchOverview() {
+                try {
+                    const res = await fetch("/api/dashboard/overview");
+                    if (!res.ok) {
+                        throw new Error(`HTTP ${res.status}`);
+                    }
+                    const data = await res.json();
+                    state.overview = data;
+                    this.applyOverview(data);
+                } catch (error) {
+                    console.error("[Home] Failed to load overview:", error);
+                }
+            },
+
+            applyOverview(data) {
+                const positions = data?.positions || {};
+                const monitoring = data?.monitoring || {};
+                const blacklist = data?.blacklist || {};
+
+                const open = Number.isFinite(positions.open_positions)
+                    ? positions.open_positions
+                    : 0;
+                const maxPositions = state.config?.trading_limits?.max_open_positions;
+                const openLabel = Number.isFinite(maxPositions)
+                    ? `${open}/${maxPositions}`
+                    : `${open}`;
+                setMetric("openPositions", openLabel);
+
+                if (Number.isFinite(positions.total_invested_sol)) {
+                    setMetric(
+                        "totalInvested",
+                        `${positions.total_invested_sol.toFixed(4)} SOL`
+                    );
+                }
+
+                if (Number.isFinite(positions.total_pnl)) {
+                    const pnl = positions.total_pnl;
+                    const pnlEl = setMetric(
+                        "totalPnl",
+                        `${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} SOL`
+                    );
+                    if (pnlEl) {
+                        pnlEl.style.color = pnl >= 0 ? "#00ff00" : "#ff4444";
+                    }
+
+                    const allTimeEl = setMetric(
+                        "allTimePnl",
+                        `${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} SOL`
+                    );
+                    if (allTimeEl) {
+                        allTimeEl.style.color = pnl >= 0 ? "#00ff00" : "#ff4444";
+                    }
+                }
+
+                if (Number.isFinite(positions.win_rate)) {
+                    setMetric("winRate", `${positions.win_rate.toFixed(1)}%`);
+                    setMetric("overallWinRate", `${positions.win_rate.toFixed(1)}%`);
+                }
+
+                if (Number.isFinite(positions.total_positions)) {
+                    setMetric("totalPositions", positions.total_positions);
+                }
+                if (Number.isFinite(positions.closed_positions)) {
+                    setMetric("closedPositions", positions.closed_positions);
+                }
+
+                if (Number.isFinite(monitoring.tokens_tracked)) {
+                    setMetric("tokensTracked", monitoring.tokens_tracked);
+                }
+                if (Number.isFinite(blacklist.total_blacklisted)) {
+                    setMetric("blacklisted", blacklist.total_blacklisted);
+                }
+                if (Number.isFinite(monitoring.entry_check_interval_secs)) {
+                    setMetric(
+                        "entryInterval",
+                        `Every ${monitoring.entry_check_interval_secs}s`
+                    );
+                }
+                if (Number.isFinite(monitoring.position_monitor_interval_secs)) {
+                    setMetric(
+                        "positionInterval",
+                        `Every ${monitoring.position_monitor_interval_secs}s`
+                    );
+                }
+            },
+
+            async fetchConfig() {
+                try {
+                    const res = await fetch("/api/trading/config");
+                    if (!res.ok) {
+                        throw new Error(`HTTP ${res.status}`);
+                    }
+                    const data = await res.json();
+                    state.config = data;
+                    this.applyConfig(data);
+                    if (state.overview) {
+                        this.applyOverview(state.overview);
+                    }
+                } catch (error) {
+                    console.warn("[Home] Failed to load trading config:", error);
+                }
+            },
+
+            applyConfig(config) {
+                const limits = config?.trading_limits || {};
+                const risk = config?.risk_management || {};
+                const targets = config?.profit_targets || {};
+
+                if (Number.isFinite(limits.max_open_positions)) {
+                    setMetric("maxPositions", limits.max_open_positions);
+                }
+                if (Number.isFinite(limits.trade_size_sol)) {
+                    setMetric("tradeSize", `${limits.trade_size_sol} SOL`);
+                }
+                if (Number.isFinite(risk.stop_loss_percent)) {
+                    setMetric("stopLoss", `${risk.stop_loss_percent}%`);
+                }
+                if (Number.isFinite(targets.base_min_profit_percent)) {
+                    setMetric("minProfit", `${targets.base_min_profit_percent}%`);
+                }
+            },
+
+            handleStatusSnapshot(snapshot) {
+                state.status = snapshot;
+                this.applyStatus(snapshot);
+            },
+
+            applyStatus(snapshot) {
+                const services = snapshot?.services || {};
+                const ready = !!services.all_ready;
+                const servicesEl = setMetric(
+                    "servicesStatus",
+                    ready ? "●●●●● All Ready" : "○ Starting..."
+                );
+                if (servicesEl) {
+                    servicesEl.style.color = ready ? "#00ff00" : "#ffaa00";
+                }
+
+                const rpcRate = snapshot?.rpc_stats?.calls_per_second;
+                if (Number.isFinite(rpcRate)) {
+                    setMetric("rpcRate", `${rpcRate.toFixed(1)}/sec`);
+                }
+
+                const metrics = snapshot?.metrics || {};
+                if (Number.isFinite(metrics.cpu_system_percent)) {
+                    setMetric("homeCpu", `${metrics.cpu_system_percent.toFixed(1)}%`);
+                }
+                if (
+                    Number.isFinite(metrics.system_memory_used_mb) &&
+                    Number.isFinite(metrics.system_memory_total_mb) &&
+                    metrics.system_memory_total_mb > 0
+                ) {
+                    const used = Utils.formatNumber(
+                        metrics.system_memory_used_mb,
+                        0,
+                        { fallback: "-" }
+                    );
+                    const total = Utils.formatNumber(
+                        metrics.system_memory_total_mb,
+                        0,
+                        { fallback: "-" }
+                    );
+                    setMetric("homeMem", `${used} / ${total} MB`);
+                }
+
+                const uptime = snapshot?.uptime_formatted ||
+                    (Number.isFinite(snapshot?.uptime_seconds)
+                        ? `${snapshot.uptime_seconds}s`
+                        : "N/A");
+                setMetric("systemUptime", uptime);
+
+                if (snapshot?.wallet) {
+                    const wallet = snapshot.wallet;
+                    if (Number.isFinite(wallet.sol_balance)) {
+                        setMetric("solBalance", `${wallet.sol_balance.toFixed(4)} SOL`);
+                    }
+                    if (Number.isFinite(wallet.total_tokens_count)) {
+                        setMetric("tokenCount", `${wallet.total_tokens_count} tokens`);
+                    }
+                    setMetric("walletUpdated", formatTime(wallet.snapshot_time), {
+                        resetColor: true,
+                    });
+                }
+            },
+
+            handleRealtimeConnected() {
+                console.info("[Home] Realtime connected – requesting snapshot");
+                this.requestStatusSnapshot("ws-connected");
+            },
+
+            handleRealtimeDisconnect() {
+                console.warn("[Home] Realtime disconnected");
+                if (!state.status) {
+                    this.setRealtimePending("Waiting for realtime...");
+                }
+            },
+
+            handleRealtimeWarning(message) {
+                console.warn("[Home] Realtime warning:", message);
+            },
+
+            handleRealtimeUnavailable() {
+                console.warn("[Home] Realtime unavailable");
+                if (!state.status) {
+                    this.setRealtimePending("Waiting for realtime...");
+                }
+            },
+
+            requestStatusSnapshot(reason = "manual") {
+                if (
+                    window.Realtime &&
+                    typeof window.Realtime.requestSnapshotForAliases === "function"
+                ) {
+                    window.Realtime.requestSnapshotForAliases(["status"]);
+                    console.log("[Home] Requested status snapshot", { reason });
+                } else if (
+                    window.Realtime &&
+                    typeof window.Realtime.updateFilters === "function"
+                ) {
+                    window.Realtime.updateFilters({ snapshotTopics: ["status"] });
+                    console.log("[Home] Requested status snapshot via filter update", {
+                        reason,
+                    });
+                }
+            },
+
+            onEnter() {
+                if (!state.status) {
+                    this.setRealtimePending();
+                }
+                this.requestStatusSnapshot("page-enter");
+            },
+
+            setRealtimePending(message = "--") {
+                for (const id of realtimeMetricIds) {
+                    setPendingMetric(id, message);
+                }
+            },
         };
 
-        try {
-            const res = await fetch("/api/dashboard/overview");
-            const data = await res.json();
+        window.initHomePage = function () {
+            console.log("[Home] Initializing page");
+            controller.initialize();
+        };
 
-            // Trading Overview
-            const openPos = data.positions.open_positions;
-            const interimMaxPos = 2; // Placeholder until config fetch completes
-            const openPositionsEl = setMetric(
-                "openPositions",
-                `${openPos}/${interimMaxPos}`
-            );
-
-            setMetric(
-                "totalInvested",
-                `${data.positions.total_invested_sol.toFixed(4)} SOL`
-            );
-
-            const pnl = data.positions.total_pnl;
-            const pnlEl = setMetric(
-                "totalPnl",
-                `${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} SOL`
-            );
-            if (pnlEl) {
-                pnlEl.style.color = pnl >= 0 ? "#00ff00" : "#ff4444";
-            }
-
-            setMetric("winRate", `${data.positions.win_rate.toFixed(1)}%`);
-
-            // Wallet Status
-            setMetric("solBalance", `${data.wallet.sol_balance.toFixed(4)} SOL`);
-            setMetric("tokenCount", `${data.wallet.total_tokens_count} tokens`);
-
-            const walletTime = data.wallet.last_updated
-                ? new Date(data.wallet.last_updated).toLocaleTimeString()
-                : "N/A";
-            setMetric("walletUpdated", walletTime);
-
-            // System Health
-            const allReady = data.system.all_services_ready;
-            const servicesEl = setMetric(
-                "servicesStatus",
-                allReady ? "●●●●● All Ready" : "○ Starting..."
-            );
-            if (servicesEl) {
-                servicesEl.style.color = allReady ? "#00ff00" : "#ffaa00";
-            }
-
-            setMetric("rpcRate", `${data.rpc.calls_per_second.toFixed(1)}/sec`);
-
-            const cpuEl = getMetric("homeCpu");
-            const memEl = getMetric("homeMem");
-
-            // Fetch detailed system metrics for CPU/memory
-            try {
-                const mres = await fetch("/api/status/metrics");
-                const m = await mres.json();
-                if (cpuEl) {
-                    cpuEl.textContent = `${m.cpu_system_percent.toFixed(1)}%`;
-                    cpuEl.classList.remove("loading-text");
+        window.PageRealtime = window.PageRealtime || {};
+        window.PageRealtime.home = {
+            topics: ["status"],
+            getFilters() {
+                return { status: {} };
+            },
+            channels: {
+                status(snapshot) {
+                    controller.handleStatusSnapshot(snapshot);
+                },
+                _connected() {
+                    controller.handleRealtimeConnected();
+                },
+                _disconnected() {
+                    controller.handleRealtimeDisconnect();
+                },
+                _failed() {
+                    controller.handleRealtimeDisconnect();
+                },
+                _warning(payload) {
+                    controller.handleRealtimeWarning(payload);
+                },
+            },
+            onInitial(status) {
+                if (status !== "connected") {
+                    if (!state.status) {
+                        controller.setRealtimePending("Waiting for realtime...");
+                    }
                 }
-                if (memEl) {
-                    memEl.textContent = `${m.system_memory_used_mb} / ${m.system_memory_total_mb} MB`;
-                    memEl.classList.remove("loading-text");
-                }
-            } catch (e) {
-                // fallback: use simplified fields from overview
-                if (cpuEl) {
-                    cpuEl.textContent = `${data.system.cpu_percent.toFixed(1)}%`;
-                    cpuEl.classList.remove("loading-text");
-                }
-                if (memEl) {
-                    memEl.textContent = `${data.system.memory_mb.toFixed(0)} MB`;
-                    memEl.classList.remove("loading-text");
-                }
-            }
+            },
+            onEnter() {
+                controller.onEnter();
+            },
+            onUnavailable() {
+                controller.handleRealtimeUnavailable();
+            },
+            onExit() {
+                controller.teardown();
+            },
+        };
 
-            setMetric("systemUptime", data.system.uptime_formatted);
-
-            // Performance Summary
-            setMetric("totalPositions", data.positions.total_positions);
-            setMetric("closedPositions", data.positions.closed_positions);
-
-            const allTimePnl = data.positions.total_pnl;
-            const allTimePnlEl = setMetric(
-                "allTimePnl",
-                `${allTimePnl >= 0 ? "+" : ""}${allTimePnl.toFixed(4)} SOL`
-            );
-            if (allTimePnlEl) {
-                allTimePnlEl.style.color = allTimePnl >= 0 ? "#00ff00" : "#ff4444";
-            }
-
-            setMetric("overallWinRate", `${data.positions.win_rate.toFixed(1)}%`);
-
-            // Monitoring
-            setMetric("tokensTracked", data.monitoring.tokens_tracked);
-            setMetric("blacklisted", data.blacklist.total_blacklisted);
-            setMetric(
-                "entryInterval",
-                `Every ${data.monitoring.entry_check_interval_secs}s`
-            );
-            setMetric(
-                "positionInterval",
-                `Every ${data.monitoring.position_monitor_interval_secs}s`
-            );
-
-            // Load trading config
-            try {
-                const configRes = await fetch("/api/trading/config");
-                const config = await configRes.json();
-
-                const maxPositionsEl = setMetric(
-                    "maxPositions",
-                    config.trading_limits.max_open_positions
-                );
-                setMetric("tradeSize", `${config.trading_limits.trade_size_sol} SOL`);
-                setMetric("stopLoss", `${config.risk_management.stop_loss_percent}%`);
-                setMetric(
-                    "minProfit",
-                    `${config.profit_targets.base_min_profit_percent}%`
-                );
-
-                if (maxPositionsEl && openPositionsEl) {
-                    openPositionsEl.textContent = `${openPos}/${config.trading_limits.max_open_positions}`;
-                }
-            } catch (configError) {
-                console.warn("Failed to load trading config:", configError);
-            }
-        } catch (error) {
-            console.error("Failed to load home data:", error);
-        }
-    }
-
-    loadHomeData();
-    const homeDataInterval = setInterval(loadHomeData, 1000);
-    if (window.Router && typeof Router.registerCleanup === "function") {
-        Router.registerCleanup(() => {
-            clearInterval(homeDataInterval);
-        });
-    }
+        initHomePage();
+    })();
 </script>
