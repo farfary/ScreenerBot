@@ -60,11 +60,15 @@
     window.PageRealtime = window.PageRealtime || {};
     // Tokens list is served exclusively over realtime snapshots (no HTTP fallback)
     window.PageRealtime.tokens = {
-      topics: ["tokens"],
+      topics: ["tokens", "tokens.update"],
       channels: {
         tokens: handleTokensRealtime,
+        "tokens.update": handleTokensRealtime,
         "snapshot_begin:tokens.update": handleTokensSnapshotBegin,
         "snapshot_end:tokens.update": handleTokensSnapshotEnd,
+        // Support alias-based snapshot lifecycle events as well
+        "snapshot_begin:tokens": handleTokensSnapshotBegin,
+        "snapshot_end:tokens": handleTokensSnapshotEnd,
         _warning: handleTokensWarning,
         _disconnected: handleTokensDisconnect,
         _failed: handleTokensDisconnect,
@@ -117,6 +121,13 @@
         clearTokensSnapshotTimer();
         tokensSnapshotState.inProgress = false;
         tokensSnapshotState.pending = [];
+        if (window.__tokensVisibilityHandler) {
+          document.removeEventListener(
+            "visibilitychange",
+            window.__tokensVisibilityHandler
+          );
+          window.__tokensVisibilityHandler = null;
+        }
       },
     };
 
@@ -547,7 +558,13 @@
   }
 
   function attachGlobalListeners() {
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+    if (!window.__tokensVisibilityHandler) {
+      window.__tokensVisibilityHandler = handleVisibilityChange;
+      document.addEventListener(
+        "visibilitychange",
+        window.__tokensVisibilityHandler
+      );
+    }
   }
 
   function handleVisibilityChange() {
@@ -929,7 +946,7 @@
     scheduleTokensSnapshotTimer("request");
 
     if (window.Realtime && typeof Realtime.updateFilters === "function") {
-      Realtime.updateFilters({ snapshotTopics: ["tokens"] });
+      Realtime.updateFilters({ snapshotTopics: ["tokens.update", "tokens"] });
       return;
     }
 
@@ -1049,6 +1066,8 @@
     const existingIndex = allTokensData.findIndex(
       (token) => token.mint === summary.mint
     );
+    const prev =
+      existingIndex >= 0 ? { ...allTokensData[existingIndex] } : null;
 
     if (existingIndex >= 0) {
       allTokensData[existingIndex] = {
@@ -1062,12 +1081,98 @@
     const total = allTokensData.length;
     tokensSnapshotState.totalAvailable = total;
     updateTokenCount(total);
-    applySearchFilter();
+    const sortKey = tokensState.sortBy;
+    const curr = existingIndex >= 0 ? allTokensData[existingIndex] : summary;
+    const sortChanged =
+      prev && sortKey in curr && prev[sortKey] !== curr[sortKey];
+    if (!prev || sortChanged) {
+      applySearchFilter();
+    } else {
+      updateTokenRow(summary.mint, curr);
+    }
     const viewLabel = VIEW_LABELS[tokensState.view] || "";
     const status = viewLabel
       ? `Realtime • ${total} tokens ${viewLabel}`
       : `Realtime • ${total} tokens`;
     setTokenCountStatus(status);
+  }
+
+  function updateTokenRow(mint, token) {
+    const row = document.querySelector(`tr[data-mint="${mint}"]`);
+    if (!row) return;
+    try {
+      const priceCell = row.cells?.[1];
+      const liqCell = row.cells?.[2];
+      const vol24hCell = row.cells?.[3];
+      const fdvCell = row.cells?.[4];
+      const mcapCell = row.cells?.[5];
+      const ch1hCell = row.cells?.[6];
+      const ch24hCell = row.cells?.[7];
+      const secCell = row.cells?.[8];
+      const statusCell = row.cells?.[9];
+      const timeCell = row.cells?.[10];
+
+      if (priceCell) {
+        const val = Utils.formatPriceSol(token.price_sol, { fallback: "N/A" });
+        if (priceCell.innerHTML !== val) {
+          priceCell.innerHTML = val;
+          priceCell.style.animation = "highlight 0.6s ease-out";
+          setTimeout(() => (priceCell.style.animation = ""), 600);
+        }
+      }
+      if (liqCell) {
+        const val = Utils.formatCurrencyUSD(token.liquidity_usd, {
+          fallback: "—",
+        });
+        if (liqCell.innerHTML !== val) liqCell.innerHTML = val;
+      }
+      if (vol24hCell) {
+        const val = Utils.formatCurrencyUSD(token.volume_24h, {
+          fallback: "—",
+        });
+        if (vol24hCell.innerHTML !== val) vol24hCell.innerHTML = val;
+      }
+      if (fdvCell) {
+        const val = Utils.formatCurrencyUSD(token.fdv, { fallback: "—" });
+        if (fdvCell.innerHTML !== val) fdvCell.innerHTML = val;
+      }
+      if (mcapCell) {
+        const val = Utils.formatCurrencyUSD(token.market_cap, {
+          fallback: "—",
+        });
+        if (mcapCell.innerHTML !== val) mcapCell.innerHTML = val;
+      }
+      if (ch1hCell) {
+        const val = Utils.formatPercent(token.price_change_h1, {
+          style: "token",
+          fallback: "—",
+        });
+        if (ch1hCell.innerHTML !== val) ch1hCell.innerHTML = val;
+      }
+      if (ch24hCell) {
+        const val = Utils.formatPercent(token.price_change_h24, {
+          style: "token",
+          fallback: "—",
+        });
+        if (ch24hCell.innerHTML !== val) ch24hCell.innerHTML = val;
+      }
+      if (secCell) {
+        const val = renderSecurity(token.security_score, token.rugged);
+        if (secCell.innerHTML !== val) secCell.innerHTML = val;
+      }
+      if (statusCell) {
+        const val = renderStatusBadges(token);
+        if (statusCell.innerHTML !== val) statusCell.innerHTML = val;
+      }
+      if (timeCell) {
+        const ts = token.price_updated_at;
+        const val = ts ? Utils.formatTimeAgo(ts, { fallback: "-" }) : "N/A";
+        if (timeCell.textContent !== val) timeCell.textContent = val;
+      }
+    } catch (e) {
+      console.debug("[Tokens] Row patch failed; re-rendering list", e);
+      applySearchFilter();
+    }
   }
 
   function handleTokenRemoval(mint) {
@@ -1213,6 +1318,7 @@
   function setupSortableHeaders() {
     const thead = document.querySelector("#tokensTable thead");
     if (!thead) return;
+    if (window.__tokensSortHeadersSetup) return;
     thead.addEventListener("click", (e) => {
       const th = e.target.closest("th.sortable");
       if (!th) return;
@@ -1228,6 +1334,7 @@
       requestTokensSnapshot("Sorting tokens...");
     });
     updateSortIndicators();
+    window.__tokensSortHeadersSetup = true;
   }
 
   function updateSortIndicators() {
