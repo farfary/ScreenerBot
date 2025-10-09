@@ -173,8 +173,9 @@ pub fn start(hub: Arc<WsHub>) {
 }
 
 async fn run(hub: Arc<WsHub>) {
-    let interval_secs = config::with_config(|cfg| cfg.webserver.websocket.heartbeat_secs.max(2));
-    let mut ticker = interval(Duration::from_secs(interval_secs));
+    // Phase 1 cleanup: slow cadence to 10s until Phase 2 demand-gating is wired.
+    // TODO(Phase 2): restore dynamic cadence with explicit subscription tracking instead of fixed sleep.
+    let mut ticker = interval(Duration::from_secs(10));
     loop {
         ticker.tick().await;
         let snapshot = gather_status_snapshot().await;

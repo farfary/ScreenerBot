@@ -15,7 +15,7 @@
 /// Sources implemented:
 /// - events: consumes events::subscribe()
 /// - positions: consumes positions::subscribe_positions()
-/// - prices: consumes pools::subscribe_prices()
+/// - prices: consumes pools::subscribe_prices() (deprecated, see notes below)
 /// - status: periodic snapshot gather from ws::snapshots
 /// - services: periodic overview gather from routes::services helper
 ///
@@ -46,7 +46,7 @@ pub fn start_all(hub: Arc<WsHub>) {
     // Start active sources in deterministic order
     events::start(hub.clone());
     positions::start(hub.clone());
-    prices::start(hub.clone());
+    // prices::start(hub.clone()); // Deprecated: rely on tokens::start broadcasts instead.
     tokens::start(hub.clone());
     status::start(hub.clone());
     services::start(hub);
@@ -55,7 +55,7 @@ pub fn start_all(hub: Arc<WsHub>) {
         log(
             LogTag::Webserver,
             "INFO",
-            "✅ ws.sources started (events, positions, prices, tokens, status, services)",
+            "✅ ws.sources started (events, positions, tokens, status, services)",
         );
     }
 

@@ -30,8 +30,6 @@
   var allTokensData = [];
   var currentModalMint = null;
   var tokenModalData = null;
-  var tokensRequestController = null;
-  var tokensLoading = false;
   var searchDebounceHandle = null;
   var tokensSnapshotState = {
     inProgress: false,
@@ -60,6 +58,7 @@
       tokensState.view = savedView;
     }
     window.PageRealtime = window.PageRealtime || {};
+    // Tokens list is served exclusively over realtime snapshots (no HTTP fallback)
     window.PageRealtime.tokens = {
       topics: ["tokens"],
       channels: {
@@ -93,13 +92,13 @@
         } else if (status === "connecting") {
           setTokenCountStatus("🔄 Connecting to realtime...");
         } else {
-          setTokenCountStatus("⚠️ Realtime unavailable – using fallback cache");
+          setTokenCountStatus("⚠️ Realtime unavailable – waiting for connection");
         }
       },
       onUnavailable() {
-        console.warn("[Tokens] Realtime unavailable – switching to fallback fetch");
-        setTokenCountStatus("⚠️ Realtime unavailable – using fallback cache");
-        fetchTokensFallback({ reason: "realtime-unavailable", force: true });
+        console.warn("[Tokens] Realtime unavailable – retrying snapshot");
+        setTokenCountStatus("⚠️ Realtime unavailable – retrying...");
+        requestTokensSnapshot("Retrying after realtime unavailable...");
       },
       onEnter(status) {
         if (status === "connected") {
@@ -108,8 +107,8 @@
           setTokenCountStatus("🔄 Connecting to realtime...");
           requestTokensSnapshot("Connecting to realtime...");
         } else {
-          setTokenCountStatus("⚠️ Waiting for realtime...");
-          fetchTokensFallback({ reason: "enter-fallback", force: true });
+          setTokenCountStatus("⚠️ Waiting for realtime connection...");
+          requestTokensSnapshot("Waiting for realtime connection...");
         }
       },
       onExit() {
@@ -785,68 +784,6 @@
     return deduped;
   }
 
-  async function fetchTokensFallback(options = {}) {
-    const { force = false } = options;
-
-    if (tokensLoading && !force) {
-      return;
-    }
-
-    if (tokensRequestController) {
-      tokensRequestController.abort();
-    }
-
-    tokensRequestController = new AbortController();
-    tokensLoading = true;
-    clearTokensSnapshotTimer();
-
-    setTokenCountStatus("📥 Loading fallback data...");
-    showTokensLoading("Loading tokens from cache...");
-
-    const params = new URLSearchParams({
-      view: tokensState.view,
-      search: tokensState.searchTerm,
-      sort_by: tokensState.sortBy,
-      sort_dir: tokensState.sortDir,
-      page: "1",
-      page_size: String(TOKENS_SNAPSHOT_LIMIT),
-    });
-
-    try {
-      const res = await fetch(`/api/tokens/list?${params.toString()}`, {
-        signal: tokensRequestController.signal,
-      });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-
-      const data = await res.json();
-      const items = Array.isArray(data.items) ? data.items : [];
-      const normalized = items.map(normalizeTokenFromApi);
-      allTokensData = dedupeTokensByMint(normalized);
-      tokensSnapshotState.inProgress = false;
-      tokensSnapshotState.totalAvailable = data.total ?? allTokensData.length;
-      tokensSnapshotState.message = "";
-      updateTokenCount(tokensSnapshotState.totalAvailable);
-      applySearchFilter();
-
-      const viewLabel = VIEW_LABELS[tokensState.view] || "";
-      const status = viewLabel
-        ? `Fallback • ${tokensSnapshotState.totalAvailable} tokens ${viewLabel}`
-        : `Fallback • ${tokensSnapshotState.totalAvailable} tokens`;
-      setTokenCountStatus(status);
-    } catch (error) {
-      if (error.name === "AbortError") {
-        return;
-      }
-      console.error("Failed to load tokens:", error);
-      showTokensError("Failed to load tokens");
-      setTokenCountStatus("❌ Failed to load tokens");
-    } finally {
-      tokensLoading = false;
-    }
-  }
-
   function showTokensError(message) {
     const tbody = document.getElementById("tokensTableBody");
     if (!tbody) return;
@@ -964,7 +901,7 @@
       }
 
       console.warn(
-        `[Tokens] Snapshot timeout (${reason || "unknown"}) — triggering fallback`
+        `[Tokens] Snapshot timeout (${reason || "unknown"}) — retrying`
       );
 
       if (tokensSnapshotState.pending.length > 0) {
@@ -974,8 +911,8 @@
 
       tokensSnapshotState.inProgress = false;
       tokensSnapshotState.message = "";
-      setTokenCountStatus("⚠️ Snapshot delayed – using fallback cache");
-      fetchTokensFallback({ reason: "snapshot-timeout", force: true });
+      setTokenCountStatus("⚠️ Snapshot delayed – retrying...");
+      requestTokensSnapshot("Retrying snapshot after timeout...");
     }, TOKENS_SNAPSHOT_TIMEOUT_MS);
   }
 
@@ -990,12 +927,13 @@
 
     if (window.Realtime && typeof Realtime.updateFilters === "function") {
       Realtime.updateFilters({ snapshotTopics: ["tokens"] });
-    } else {
-      console.warn(
-        "[Tokens] Realtime controller unavailable; falling back to HTTP fetch"
-      );
-      fetchTokensFallback({ reason: "realtime-missing", force: true });
+      return;
     }
+
+    console.warn(
+      "[Tokens] Realtime controller unavailable; cannot request snapshot"
+    );
+    setTokenCountStatus("⚠️ Realtime controller unavailable – retrying shortly...");
   }
 
   function handleTokensSnapshotBegin(payload) {
@@ -1148,17 +1086,12 @@
     const recommendation = payload.recommendation || payload.action;
     setTokenCountStatus("⚠️ Realtime warning – resyncing...");
 
-    if (recommendation === "http_catchup") {
-      fetchTokensFallback({ reason: "warning", force: true });
-    } else {
-      requestTokensSnapshot("Resyncing after warning...");
-    }
+    requestTokensSnapshot("Resyncing after warning...");
   }
 
   function handleTokensDisconnect() {
     clearTokensSnapshotTimer();
-    setTokenCountStatus("⚠️ Realtime disconnected – using fallback cache");
-    fetchTokensFallback({ reason: "disconnect", force: true });
+    setTokenCountStatus("⚠️ Realtime disconnected – waiting for reconnection");
   }
 
   function handleTokensReconnect() {

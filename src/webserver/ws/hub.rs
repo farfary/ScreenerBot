@@ -163,7 +163,7 @@ impl WsHub {
                     if is_debug_webserver_enabled() {
                         log(
                             LogTag::Webserver,
-                            "DEBUG",
+                            "TRACE",
                             &format!(
                                 "WsHub: message dropped for connection {} (queue full)",
                                 conn_id

@@ -21,6 +21,9 @@
         acc[topic] = alias;
       }
       return acc;
+      if (typeof global.__statusTelemetryRequired === "undefined") {
+        global.__statusTelemetryRequired = false;
+      }
     },
     {}
   );
@@ -376,11 +379,13 @@
     );
   }
 
+  // Phase 1: reintroduce persistent topics with gating so pages like tokens do not
+  // implicitly subscribe to status/services traffic.
   const persistentRealtimeConfigs = [
     {
       alias: "status",
       handler: null,
-      includeInFilters: () => true,
+      includeInFilters: () => global.__statusTelemetryRequired === true,
       getFilters: () => ({}),
     },
     {
@@ -498,6 +503,8 @@
         }
         return;
       }
+
+      global.__statusTelemetryRequired = true;
 
       const renderSnapshot =
         typeof global.renderStatusBadgesFromSnapshot === "function"

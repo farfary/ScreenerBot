@@ -1,3 +1,9 @@
+//! Deprecated: price updates are now published via `tokens.update` snapshots.
+//!
+//! This module remains for legacy tooling during the cleanup phase but is no
+//! longer started by default (see `sources::start_all`). Remove after any
+//! dependent scripts migrate to the consolidated token stream.
+
 use std::sync::Arc;
 use tokio::sync::broadcast;
 

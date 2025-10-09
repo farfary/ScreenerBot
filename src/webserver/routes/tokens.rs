@@ -191,6 +191,8 @@ pub struct FilterRequest {
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
+        // NOTE: /api/tokens/list is retained for external tooling. SPA now relies on
+        // websocket snapshots exclusively (see docs/cleanup-phase-1.md).
         .route("/tokens/list", get(get_tokens_list))
         .route("/tokens/stats", get(get_tokens_stats))
         .route("/tokens/filter", post(filter_tokens))
@@ -204,6 +206,8 @@ pub fn routes() -> Router<Arc<AppState>> {
 
 /// List tokens with simple query params and view selection
 /// GET /api/tokens/list?view=pool|all|blacklisted|positions|secure|recent&search=...&sort_by=...&sort_dir=...&page=1&page_size=50
+/// GET /api/tokens/list - Legacy HTTP list endpoint (external tools only)
+/// SPA dashboards must use websocket snapshots; see docs/cleanup-phase-1.md.
 pub(crate) async fn get_tokens_list(
     Query(query): Query<TokenListQuery>,
 ) -> Json<TokenListResponse> {

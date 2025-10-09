@@ -3,7 +3,6 @@ use tokio::time::{interval, Duration};
 
 use crate::{
     arguments::is_debug_webserver_enabled,
-    config,
     logger::{log, LogTag},
     webserver::ws::{hub::WsHub, topics},
 };
@@ -16,8 +15,9 @@ pub fn start(hub: Arc<WsHub>) {
 }
 
 async fn run(hub: Arc<WsHub>) {
-    let interval_secs = config::with_config(|cfg| cfg.webserver.websocket.heartbeat_secs.max(3));
-    let mut ticker = interval(Duration::from_secs(interval_secs));
+    // Phase 1 cleanup: slow cadence to 10s until Phase 2 demand-gating is wired.
+    // TODO(Phase 2): restore dynamic cadence with explicit subscription tracking instead of fixed sleep.
+    let mut ticker = interval(Duration::from_secs(10));
     loop {
         ticker.tick().await;
         let snapshot =
