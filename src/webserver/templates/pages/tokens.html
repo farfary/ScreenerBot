@@ -48,6 +48,7 @@
     retryCount: 0,
     began: false,
     currentView: null,
+    searchAutoCleared: false,
   };
   var TOKENS_SNAPSHOT_LIMIT = 200;
   var TOKENS_SNAPSHOT_TIMEOUT_MS = 12000;
@@ -718,6 +719,21 @@
       applySearchFilter();
     }
 
+    if (
+      cacheEntry &&
+      (!Array.isArray(cacheEntry.items) || cacheEntry.items.length === 0) &&
+      tokensState.searchTerm
+    ) {
+      const cleared = clearTokensSearch(
+        "Search filter cleared for new tab – showing all tokens."
+      );
+      if (cleared) {
+        setTokenCountStatus(
+          "🔍 Search cleared for new view – loading tokens..."
+        );
+      }
+    }
+
     // Always request a fresh snapshot to keep cache up to date
     requestTokensSnapshot(`Switching to ${tokensState.view} view...`);
   }
@@ -920,6 +936,39 @@
     renderTokens(filtered);
   }
 
+  function clearTokensSearch(reason) {
+    if (!tokensState.searchTerm) {
+      return false;
+    }
+
+    if (window.__DEBUG_REALTIME) {
+      console.log("[TokensDBG] clearing search filter", {
+        reason,
+        previous: tokensState.searchTerm,
+      });
+    }
+
+    tokensState.searchTerm = "";
+    try {
+      window.sessionStorage.removeItem("tokens.search");
+    } catch (_) {}
+
+    const searchInput = document.querySelector("#searchInput");
+    if (searchInput) {
+      searchInput.value = "";
+    }
+
+    if (
+      reason &&
+      typeof Utils !== "undefined" &&
+      typeof Utils.showToast === "function"
+    ) {
+      Utils.showToast(reason, "info");
+    }
+
+    return true;
+  }
+
   function renderTokens(tokens) {
     const tbody = document.getElementById("tokensTableBody");
     if (!tbody) return;
@@ -942,7 +991,29 @@
           began: tokensSnapshotState.began,
         });
       }
-      tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 20px; color: #94a3b8;">No tokens found for view: ${tokensState.view}</td></tr>`;
+
+      let statusMessage = "No tokens available.";
+      if (
+        tokensState &&
+        typeof tokensState.searchTerm === "string" &&
+        tokensState.searchTerm.trim() !== ""
+      ) {
+        statusMessage = `No tokens match “${tokensState.searchTerm.trim()}” in this view.`;
+      } else if (tokensState.view === "pool") {
+        statusMessage =
+          "Pool service is warming up — waiting for price-enabled tokens.";
+      } else {
+        const viewLabel = VIEW_LABELS[tokensState.view];
+        if (viewLabel) {
+          statusMessage = `No tokens ${viewLabel}.`;
+        } else if (tokensState.view) {
+          statusMessage = `No tokens available for view: ${tokensState.view}.`;
+        }
+      }
+
+      setTokenCountStatus(statusMessage);
+      const safeMessage = Utils.escapeHtml(statusMessage);
+      tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 20px; color: #94a3b8;">${safeMessage}</td></tr>`;
       return;
     }
 
@@ -1110,6 +1181,7 @@
     tokensSnapshotState.retryCount = 0;
     tokensSnapshotState.began = false;
     tokensSnapshotState.currentView = null;
+    tokensSnapshotState.searchAutoCleared = false;
     // If we already have something rendered, keep it visible and just update the status
     if (Array.isArray(allTokensData) && allTokensData.length > 0) {
       setTokenCountStatus(tokensSnapshotState.message);
@@ -1217,6 +1289,24 @@
     tokensSnapshotState.inProgress = false;
     tokensSnapshotState.began = false;
     const deduped = dedupeTokensByMint(tokensSnapshotState.pending);
+    if (
+      !tokensSnapshotState.searchAutoCleared &&
+      tokensState.searchTerm &&
+      tokensState.searchTerm.trim() !== "" &&
+      deduped.length === 0
+    ) {
+      const cleared = clearTokensSearch(
+        "Search filter cleared automatically — no tokens matched this view."
+      );
+      if (cleared) {
+        tokensSnapshotState.searchAutoCleared = true;
+        tokensSnapshotState.pending = [];
+        tokensSnapshotState.expected = 0;
+        tokensSnapshotState.totalAvailable = 0;
+        requestTokensSnapshot("Reloading after clearing search filter...");
+        return;
+      }
+    }
     if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
       console.log("[TokensDBG] finalizeSnapshot", {
         pendingBefore: tokensSnapshotState.pending.length,

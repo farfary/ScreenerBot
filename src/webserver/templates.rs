@@ -3,6 +3,7 @@
 /// Templates are stored in `src/webserver/templates/` and embedded at compile time
 /// using `include_str!`. This keeps the Rust module focused on wiring helpers
 /// while HTML, CSS, and JavaScript live in dedicated files.
+use crate::arguments;
 
 const BASE_TEMPLATE: &str = include_str!("templates/base.html");
 const FOUNDATION_STYLES: &str = include_str!("templates/styles/foundation.css");
@@ -37,7 +38,24 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     ]
     .join("\n");
     html = html.replace("/*__INJECTED_STYLES__*/", &combined_styles);
-    html = html.replace("/*__UTIL_SCRIPTS__*/", UTIL_SCRIPTS);
+    if arguments::is_debug_webserver_enabled() {
+        const DEBUG_BOOTSTRAP: &str = r#"
+      try {
+        const shouldPersist = window.localStorage && window.localStorage.getItem('debugRealtime') !== '1';
+        if (window.localStorage && shouldPersist) {
+          window.localStorage.setItem('debugRealtime', '1');
+        }
+      } catch (_) {}
+      window.__DEBUG_REALTIME = true;
+      window.__DEBUG_TOKENS_VERBOSE = true;
+"#;
+        let mut util_block = String::with_capacity(DEBUG_BOOTSTRAP.len() + UTIL_SCRIPTS.len());
+        util_block.push_str(DEBUG_BOOTSTRAP);
+        util_block.push_str(UTIL_SCRIPTS);
+        html = html.replace("/*__UTIL_SCRIPTS__*/", &util_block);
+    } else {
+        html = html.replace("/*__UTIL_SCRIPTS__*/", UTIL_SCRIPTS);
+    }
     html = html.replace("/*__COMMON_SCRIPTS__*/", COMMON_SCRIPTS);
     html = html.replace("/*__WEBSOCKET_SCRIPTS__*/", WEBSOCKET_SCRIPTS);
     html = html.replace("/*__THEME_SCRIPTS__*/", THEME_SCRIPTS);
