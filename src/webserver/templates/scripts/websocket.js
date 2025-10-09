@@ -859,6 +859,10 @@
       this.updateFilters();
     },
 
+    isConnected() {
+      return hasWsHub() && global.WsHub.isConnected();
+    },
+
     activate(pageName) {
       if (!pageName) {
         return;

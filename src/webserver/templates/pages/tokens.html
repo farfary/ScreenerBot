@@ -1008,13 +1008,14 @@
       }
 
       console.warn(
-        `[Tokens] Snapshot timeout (${reason || "unknown"}) — retrying`
+        `[Tokens] Snapshot timeout (${reason || "unknown"}) — checking state`
       );
       if (window.__DEBUG_REALTIME) {
         console.log("[TokensDBG] snapshot timeout", {
           pending: tokensSnapshotState.pending.length,
           expected: tokensSnapshotState.expected,
           totalAvailable: tokensSnapshotState.totalAvailable,
+          wsConnected: window.Realtime?.isConnected?.() || false,
         });
       }
 
@@ -1027,6 +1028,20 @@
       tokensSnapshotState.message = "";
       tokensSnapshotState.retryCount =
         (tokensSnapshotState.retryCount || 0) + 1;
+
+      // Check if WebSocket is connected before retrying
+      const isConnected = window.Realtime?.isConnected?.() || false;
+      if (!isConnected) {
+        if (window.__DEBUG_REALTIME) {
+          console.log(
+            "[TokensDBG] WS disconnected, skipping retry → will retry on reconnect"
+          );
+        }
+        setTokenCountStatus("⚠️ Disconnected – waiting for connection...");
+        // Don't retry - let reconnect handler trigger refresh
+        return;
+      }
+
       setTokenCountStatus("⚠️ Snapshot delayed – retrying...");
 
       // After 2 consecutive timeouts, fall back to HTTP list to avoid blank UI
@@ -1066,19 +1081,24 @@
     } else {
       showTokensLoading(tokensSnapshotState.message);
     }
-    scheduleTokensSnapshotTimer("request");
-
     if (window.Realtime && typeof Realtime.updateFilters === "function") {
+      scheduleTokensSnapshotTimer("request");
       Realtime.updateFilters({ snapshotTopics: ["tokens.update", "tokens"] });
       return;
     }
 
+    // Realtime unavailable - cancel timer and fallback to HTTP immediately
+    if (tokensSnapshotState.timeoutHandle) {
+      clearTimeout(tokensSnapshotState.timeoutHandle);
+      tokensSnapshotState.timeoutHandle = null;
+    }
+    tokensSnapshotState.inProgress = false;
+
     console.warn(
-      "[Tokens] Realtime controller unavailable; cannot request snapshot"
+      "[Tokens] Realtime controller unavailable; falling back to HTTP"
     );
-    setTokenCountStatus(
-      "⚠️ Realtime controller unavailable – retrying shortly..."
-    );
+    setTokenCountStatus("⚠️ Loading via HTTP...");
+    fetchTokensListForCurrentFilters();
   }
 
   async function fetchTokensListForCurrentFilters() {

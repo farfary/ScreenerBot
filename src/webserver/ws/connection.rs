@@ -1114,7 +1114,30 @@ fn collect_pool_summaries() -> Vec<TokenSummary> {
         return Vec::new();
     }
 
-    let (summaries, _missing) = summary_cache::get_for_mints(&mints);
+    let (mut summaries, _missing) = summary_cache::get_for_mints(&mints);
+
+    // CRITICAL FIX: Refresh has_pool_price flag based on current pool cache
+    // The summary cache may be stale (built at prewarm); pool cache is the source of truth
+    // for which tokens have FRESH prices (< 30s old per PRICE_CACHE_TTL_SECONDS)
+    let available_mints_set: std::collections::HashSet<String> = mints.into_iter().collect();
+    for summary in &mut summaries {
+        let has_fresh_price = available_mints_set.contains(&summary.mint);
+        summary.has_pool_price = has_fresh_price;
+
+        // Also refresh price_sol and price_updated_at if available
+        if has_fresh_price {
+            if let Some(price_result) = pools::get_pool_price(&summary.mint) {
+                summary.price_sol = Some(price_result.price_sol);
+                let age_secs = price_result.timestamp.elapsed().as_secs();
+                let now_unix = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs() as i64;
+                summary.price_updated_at = Some(now_unix - (age_secs as i64));
+            }
+        }
+    }
+
     summaries
 }
 
