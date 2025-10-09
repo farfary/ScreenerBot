@@ -520,14 +520,21 @@
     }
 
     if (!update.position) {
-      console.warn("[Positions] Update missing position payload:", update);
+      console.warn("[Positions] Update missing position payload", {
+        type: update?.type,
+        keys: Object.keys(update || {}),
+      });
       return;
     }
 
     const normalized = normalizePositionFromApi(update.position);
     const key = getPositionKey(normalized);
     if (!key) {
-      console.warn("[Positions] Unable to derive key for update:", update);
+      console.warn("[Positions] Unable to derive key for update", {
+        type: update?.type,
+        hasId: Boolean(update?.position?.id),
+        hasMint: Boolean(update?.position?.mint),
+      });
       return;
     }
 
@@ -547,7 +554,10 @@
     if (!message) return;
     const channel = message.alias || message.channel || message.topic;
     if (channel !== "positions" && channel !== "positions.update") return;
-    console.warn("[Positions] WebSocket warning received:", message);
+    console.warn("[Positions] WebSocket warning received", {
+      code: message?.code,
+      text: message?.message,
+    });
     if (!positionsInitialized) {
       renderEmptyState("Realtime warning – waiting for data...");
     }
@@ -604,7 +614,10 @@
 
   function handlePositionsWarningOrDisconnect(message) {
     if (message) {
-      console.warn("[Positions] Realtime disruption", message);
+      console.warn("[Positions] Realtime disruption", {
+        code: message?.code,
+        text: message?.message,
+      });
     } else {
       console.warn("[Positions] Realtime disruption detected");
     }

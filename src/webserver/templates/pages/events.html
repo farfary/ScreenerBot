@@ -851,7 +851,10 @@ Loading...</pre
 
   function handleWebSocketWarning(message) {
     if (!message || message.alias !== "events") return;
-    console.warn("[Events] Channel warning:", message);
+    console.warn("[Events] Channel warning", {
+      code: message?.code,
+      text: message?.message,
+    });
     updateConnectionStatus("connecting", "Warning received, resyncing...");
     requestEventsSnapshot("Resyncing after warning...");
   }

@@ -462,7 +462,11 @@
       },
 
       handleRealtimeWarning(message) {
-        console.warn("[Home] Realtime warning:", message);
+        console.warn("[Home] Realtime warning", {
+          alias: message?.alias || message?.channel,
+          code: message?.code,
+          text: message?.message,
+        });
       },
 
       handleRealtimeUnavailable() {

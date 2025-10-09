@@ -269,7 +269,11 @@
     },
 
     handleRealtimeWarning(payload) {
-      console.warn("[Status] Realtime warning:", payload);
+      console.warn("[Status] Realtime warning", {
+        alias: payload?.alias || payload?.channel,
+        code: payload?.code,
+        text: payload?.message,
+      });
     },
 
     handleRealtimeUnavailable() {

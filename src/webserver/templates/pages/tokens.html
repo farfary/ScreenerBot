@@ -512,7 +512,6 @@
     const modal = document.getElementById("tokenModal");
     if (modal) {
       modal.classList.add("active");
-      console.log("Modal opened successfully");
     } else {
       console.error("Modal element not found!");
     }
@@ -533,25 +532,18 @@
       return;
     }
 
-    console.log("openTokenModal: opening modal for", mint);
-
     const cached = getTokenByMint(mint);
     if (!cached) {
-      console.warn("openTokenModal: token not found in cache", mint);
+      console.warn("openTokenModal: token not found in cache");
       Utils.showToast("❌ Token not found in cache", "error");
       return;
     }
 
     const detail = await fetchTokenDetail(mint);
     if (!detail) {
-      console.warn("openTokenModal: failed to fetch token detail", mint);
+      console.warn("openTokenModal: failed to fetch token detail");
       return; // fetchTokenDetail already shows error toast
     }
-
-    console.log("openTokenModal: populating modal with data", {
-      cached,
-      detail,
-    });
     currentModalMint = mint;
     tokenModalData = { token: cached, detail };
     populateTokenModal(cached, detail);
@@ -1022,19 +1014,6 @@
         count: tokens.length,
         view: tokensState.view,
       });
-      if (window.__DEBUG_TOKENS_VERBOSE) {
-        console.debug(
-          "[TokensDBG] sample items",
-          tokens.slice(0, Math.min(5, tokens.length)).map((t) => ({
-            mint: t.mint,
-            symbol: t.symbol,
-            has_pool_price: t.has_pool_price,
-            has_open_position: t.has_open_position,
-            blacklisted: t.blacklisted,
-            liquidity_usd: t.liquidity_usd,
-          }))
-        );
-      }
     }
 
     tbody.innerHTML = tokens.map(createTokenRowHtml).join("");
@@ -1377,9 +1356,6 @@
   }
 
   function handleTokensRealtime(data, envelope) {
-    if (window.__DEBUG_REALTIME) {
-      console.log("[TokensDBG] recv", { meta: envelope?.meta, data });
-    }
     if (!data || typeof data !== "object") return;
     const meta = envelope?.meta || {};
     const isSnapshot = meta.snapshot === true;
@@ -1416,25 +1392,6 @@
         );
         return;
       }
-      if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
-        const k = envelope?.key || data?.mint || "?";
-        const logObj = {
-          key: k,
-          pending: tokensSnapshotState.pending.length + 1,
-          expected: tokensSnapshotState.expected,
-        };
-        if (window.__DEBUG_TOKENS_VERBOSE) {
-          logObj.data = {
-            mint: data?.mint,
-            symbol: data?.symbol,
-            has_pool_price: data?.has_pool_price,
-            has_open_position: data?.has_open_position,
-            blacklisted: data?.blacklisted,
-            liq_usd: data?.liquidity_usd,
-          };
-        }
-        console.log("[TokensDBG] snapshot:chunk", logObj);
-      }
       const normalized = normalizeTokenFromApi({ ...data });
       tokensSnapshotState.pending.push(normalized);
       scheduleTokensSnapshotTimer("chunk");
@@ -1470,17 +1427,11 @@
         (typeof data.symbol === "string" || typeof data.name === "string"))
     ) {
       const normalized = normalizeTokenFromApi({ ...data });
-      if (window.__DEBUG_REALTIME) {
-        console.log("[TokensDBG] summary", normalized);
-      }
       handleTokenSummaryDelta(normalized);
       return;
     }
 
     if (data.price_result) {
-      if (window.__DEBUG_REALTIME) {
-        console.log("[TokensDBG] price_update", data);
-      }
       handlePriceUpdate(data);
     }
   }

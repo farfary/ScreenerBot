@@ -624,7 +624,10 @@
 
       handleServicesSnapshot(snapshot) {
         if (!snapshot || !Array.isArray(snapshot.services)) {
-          console.warn("[Services] Invalid snapshot received", snapshot);
+          console.warn("[Services] Invalid snapshot received", {
+            hasServices: Array.isArray(snapshot?.services),
+            keys: snapshot ? Object.keys(snapshot) : [],
+          });
           this.showError("No services available");
           return;
         }
@@ -639,7 +642,11 @@
       },
 
       handleRealtimeWarning(message) {
-        console.warn("[Services] Realtime warning", message);
+        console.warn("[Services] Realtime warning", {
+          alias: message?.alias || message?.channel,
+          code: message?.code,
+          text: message?.message,
+        });
         if (!this.hasInitialSnapshot) {
           this.setLoading("Realtime warning – waiting for data...");
         }
