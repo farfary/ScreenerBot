@@ -633,6 +633,7 @@
         this.servicesData = snapshot;
         console.log("[Services] Snapshot applied", {
           serviceCount: snapshot.services.length,
+          unhealthy: snapshot?.summary?.unhealthy_services,
         });
         this.renderServicesTable();
       },
@@ -662,19 +663,19 @@
       },
 
       requestSnapshot(reason = "manual") {
+        const status = window.Realtime?.isConnected?.()
+          ? "connected"
+          : window.WsHub?.getStatus?.() || "unknown";
+        console.log("[Services] Requesting snapshot", { reason, status });
         if (
           window.Realtime &&
           typeof window.Realtime.requestSnapshotForAliases === "function"
         ) {
-          console.log("[Services] Requesting snapshot", { reason });
           window.Realtime.requestSnapshotForAliases(["services"]);
         } else if (
           window.Realtime &&
           typeof window.Realtime.updateFilters === "function"
         ) {
-          console.log("[Services] Requesting snapshot via filter update", {
-            reason,
-          });
           window.Realtime.updateFilters({
             snapshotTopics: ["services", "services.metrics"],
           });

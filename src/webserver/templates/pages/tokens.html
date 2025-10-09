@@ -927,8 +927,43 @@
     const openState = captureOpenDropdownState();
 
     if (!tokens || tokens.length === 0) {
+      if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
+        console.warn("[TokensDBG] renderTokens: empty data", {
+          view: tokensState.view,
+          search: tokensState.searchTerm,
+          sortBy: tokensState.sortBy,
+          sortDir: tokensState.sortDir,
+          allTokensDataLen: Array.isArray(allTokensData)
+            ? allTokensData.length
+            : 0,
+          totalAvailable: tokensSnapshotState.totalAvailable,
+          expected: tokensSnapshotState.expected,
+          inProgress: tokensSnapshotState.inProgress,
+          began: tokensSnapshotState.began,
+        });
+      }
       tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 20px; color: #94a3b8;">No tokens found for view: ${tokensState.view}</td></tr>`;
       return;
+    }
+
+    if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
+      console.log("[TokensDBG] renderTokens: rendering rows", {
+        count: tokens.length,
+        view: tokensState.view,
+      });
+      if (window.__DEBUG_TOKENS_VERBOSE) {
+        console.debug(
+          "[TokensDBG] sample items",
+          tokens.slice(0, Math.min(5, tokens.length)).map((t) => ({
+            mint: t.mint,
+            symbol: t.symbol,
+            has_pool_price: t.has_pool_price,
+            has_open_position: t.has_open_position,
+            blacklisted: t.blacklisted,
+            liquidity_usd: t.liquidity_usd,
+          }))
+        );
+      }
     }
 
     tbody.innerHTML = tokens.map(createTokenRowHtml).join("");
@@ -1155,8 +1190,14 @@
   }
 
   function handleTokensSnapshotBegin(payload) {
-    if (window.__DEBUG_REALTIME) {
-      console.log("[TokensDBG] snapshot_begin", payload);
+    if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
+      console.log("[TokensDBG] snapshot_begin", {
+        payload,
+        view: tokensState.view,
+        search: tokensState.searchTerm,
+        sortBy: tokensState.sortBy,
+        sortDir: tokensState.sortDir,
+      });
     }
     tokensSnapshotState.inProgress = true;
     tokensSnapshotState.began = true;
@@ -1176,6 +1217,13 @@
     tokensSnapshotState.inProgress = false;
     tokensSnapshotState.began = false;
     const deduped = dedupeTokensByMint(tokensSnapshotState.pending);
+    if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
+      console.log("[TokensDBG] finalizeSnapshot", {
+        pendingBefore: tokensSnapshotState.pending.length,
+        dedupedCount: deduped.length,
+        expected: tokensSnapshotState.expected,
+      });
+    }
     tokensSnapshotState.pending = [];
     tokensSnapshotState.expected = 0;
     tokensSnapshotState.currentView = null;
@@ -1195,6 +1243,14 @@
       : `Realtime • ${total} tokens`;
     setTokenCountStatus(status);
 
+    if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
+      console.log("[TokensDBG] snapshot_applied", {
+        totalApplied: total,
+        tableRendered: allTokensData.length,
+        view: tokensState.view,
+      });
+    }
+
     // Save to per-view cache with current filters
     tokensViewCache[tokensState.view] = {
       items: allTokensData.slice(),
@@ -1209,8 +1265,12 @@
   }
 
   function handleTokensSnapshotEnd(payload) {
-    if (window.__DEBUG_REALTIME) {
-      console.log("[TokensDBG] snapshot_end", payload);
+    if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
+      console.log("[TokensDBG] snapshot_end", {
+        payload,
+        expected: tokensSnapshotState.expected,
+        pending: tokensSnapshotState.pending.length,
+      });
     }
     tokensSnapshotState.inProgress = false;
     tokensSnapshotState.began = false;
@@ -1266,13 +1326,24 @@
         );
         return;
       }
-      if (window.__DEBUG_REALTIME) {
+      if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
         const k = envelope?.key || data?.mint || "?";
-        console.log("[TokensDBG] snapshot:chunk", {
+        const logObj = {
           key: k,
           pending: tokensSnapshotState.pending.length + 1,
           expected: tokensSnapshotState.expected,
-        });
+        };
+        if (window.__DEBUG_TOKENS_VERBOSE) {
+          logObj.data = {
+            mint: data?.mint,
+            symbol: data?.symbol,
+            has_pool_price: data?.has_pool_price,
+            has_open_position: data?.has_open_position,
+            blacklisted: data?.blacklisted,
+            liq_usd: data?.liquidity_usd,
+          };
+        }
+        console.log("[TokensDBG] snapshot:chunk", logObj);
       }
       const normalized = normalizeTokenFromApi({ ...data });
       tokensSnapshotState.pending.push(normalized);
@@ -1287,6 +1358,12 @@
       console.debug(
         "[Tokens] Completing snapshot from realtime delta (missing snapshot_end)"
       );
+      if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
+        console.log("[TokensDBG] complete_from_delta", {
+          pending: tokensSnapshotState.pending.length,
+          expected: tokensSnapshotState.expected,
+        });
+      }
       finalizeTokensSnapshot();
     }
 

@@ -1331,6 +1331,7 @@ async fn send_tokens_snapshot(
     filter: TokensRealtimeFilter,
 ) -> Result<(), String> {
     let response = build_tokens_snapshot(&filter);
+    let corr = format!("{}:{}", filter.view, filter.sort_by);
 
     let total_sent = response.items.len();
     let total_available = response.total;
@@ -1340,7 +1341,8 @@ async fn send_tokens_snapshot(
             LogTag::Webserver,
             "TOKENS_SNAPSHOT_BEGIN",
             &format!(
-                "view={} search='{}' sort_by={} sort_dir={} limit={} total_available={} to_send={}",
+                "corr={} view={} search='{}' sort_by={} sort_dir={} limit={} total_available={} to_send={}",
+                corr,
                 filter.view,
                 filter.search.clone().unwrap_or_default(),
                 filter.sort_by,
@@ -1352,6 +1354,7 @@ async fn send_tokens_snapshot(
         );
     }
 
+    // Include filter meta in begin for client-side validation
     send_control_message(
         ws_tx,
         ServerMessage::SnapshotBegin {
@@ -1411,12 +1414,13 @@ async fn send_tokens_snapshot(
             .map_err(|e| format!("Send error: {}", e))?;
         metrics.inc_sent();
 
-        if is_debug_webserver_enabled() && idx < 3 {
+        if is_debug_webserver_enabled() && (idx < 3 || (idx + 1) % 25 == 0) {
             log(
                 LogTag::Webserver,
                 "TOKENS_SNAPSHOT_ITEM",
                 &format!(
-                    "#{} mint={} symbol={} liq_usd={:?}",
+                    "corr={} #{} mint={} symbol={} liq_usd={:?}",
+                    corr,
                     idx + 1,
                     summary.mint,
                     summary.symbol,
@@ -1439,7 +1443,7 @@ async fn send_tokens_snapshot(
         log(
             LogTag::Webserver,
             "TOKENS_SNAPSHOT_END",
-            &format!("sent={}/{}", total_sent, total_available),
+            &format!("corr={} sent={}/{}", corr, total_sent, total_available),
         );
     }
 
