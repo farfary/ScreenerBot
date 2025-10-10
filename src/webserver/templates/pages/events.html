@@ -270,7 +270,37 @@ Loading...</pre
     endReached: false,
     limitReached: false,
     pageSize: EVENTS_SCROLL_PAGE_SIZE,
+    filteredEnd: false,
   };
+  var eventsRenderState = {
+    renderedIds: [],
+    rowsById: new Map(),
+    dirtyIds: new Set(),
+    pending: false,
+    rafId: null,
+    forceFull: false,
+    lastSearchTerm: "",
+  };
+
+  function resetEventsRenderState() {
+    eventsRenderState.renderedIds = [];
+    eventsRenderState.rowsById.clear();
+    eventsRenderState.dirtyIds.clear();
+    eventsRenderState.pending = false;
+    if (eventsRenderState.rafId) {
+      cancelAnimationFrame(eventsRenderState.rafId);
+      eventsRenderState.rafId = null;
+    }
+    eventsRenderState.forceFull = false;
+    eventsRenderState.lastSearchTerm = "";
+  }
+
+  function markEventDirty(eventId) {
+    const idNum = Number(eventId);
+    if (Number.isFinite(idNum)) {
+      eventsRenderState.dirtyIds.add(idNum);
+    }
+  }
 
   function resetEventsScrollState() {
     if (eventsScrollState.observer) {
@@ -280,6 +310,7 @@ Loading...</pre
     eventsScrollState.loading = false;
     eventsScrollState.endReached = false;
     eventsScrollState.limitReached = false;
+    eventsScrollState.filteredEnd = false;
   }
 
   function isEventsPaused() {
@@ -417,11 +448,14 @@ Loading...</pre
 
   function clearEventsCache() {
     resetEventsScrollState();
+    resetEventsRenderState();
     eventsStore.clear();
     allEventsData = [];
     snapshotState.totalAvailable = 0;
     snapshotState.received = 0;
     updateEventsScrollControls(false);
+    eventsScrollState.filteredEnd = false;
+    scheduleEventsRender({ forceFull: true, immediate: true });
   }
 
   function clearEventsSnapshotTimer() {
@@ -592,6 +626,7 @@ Loading...</pre
       const existing = eventsStore.get(eventId);
       if (hasEventChanged(existing, event)) {
         eventsStore.set(eventId, event);
+        markEventDirty(eventId);
         updated = true;
       }
     }
@@ -614,7 +649,8 @@ Loading...</pre
     if (!eventsScrollState.limitReached) {
       eventsScrollState.endReached = false;
     }
-    renderEvents();
+    eventsScrollState.filteredEnd = false;
+    scheduleEventsRender();
     return true;
   }
 
@@ -695,6 +731,9 @@ Loading...</pre
       cell.textContent = `Loaded browser limit (${EVENTS_BROWSER_LIMIT.toLocaleString()} events)`;
     } else if (state === "end") {
       cell.textContent = allEventsData.length ? "No more results" : "";
+    } else if (state === "filtered") {
+      cell.textContent =
+        "No more results match the current search. Clear filters to load older events.";
     } else {
       cell.textContent = "";
     }
@@ -749,6 +788,15 @@ Loading...</pre
       return;
     }
 
+    if (eventsScrollState.filteredEnd) {
+      setEventsScrollGuardState("filtered");
+      if (eventsScrollState.observer) {
+        eventsScrollState.observer.disconnect();
+        eventsScrollState.observer = null;
+      }
+      return;
+    }
+
     if (eventsScrollState.limitReached) {
       setEventsScrollGuardState("limit");
       if (eventsScrollState.observer) {
@@ -784,6 +832,16 @@ Loading...</pre
     ) {
       return;
     }
+
+    const searchTerm = getSearchTerm();
+    if (searchTerm) {
+      eventsScrollState.filteredEnd = true;
+      eventsScrollState.endReached = true;
+      updateEventsScrollControls(allEventsData.length > 0);
+      return;
+    }
+
+    eventsScrollState.filteredEnd = false;
 
     if (allEventsData.length >= EVENTS_BROWSER_LIMIT) {
       eventsScrollState.limitReached = true;
@@ -868,6 +926,7 @@ Loading...</pre
           uniqueToAppend.push(event);
         }
         eventsStore.set(id, event);
+        markEventDirty(id);
       });
 
       if (uniqueToAppend.length) {
@@ -889,7 +948,7 @@ Loading...</pre
         allEventsData.length
       );
 
-      renderEvents();
+      scheduleEventsRender({ forceFull: true });
     } catch (err) {
       console.error("[Events] Failed to load older events", err);
       Utils.showToast("⚠️ Failed to load more events", "warn");
@@ -899,13 +958,156 @@ Loading...</pre
     }
   }
 
-  function renderEvents(forcedEvents) {
-    const tbody = document.getElementById("eventsTableBody");
+  function areIdArraysEqual(a, b) {
+    if (!Array.isArray(a) || !Array.isArray(b)) return false;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i += 1) {
+      if (a[i] !== b[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function createEventRow(event) {
+    const row = document.createElement("tr");
+    row.className = "event-row";
+    row.style.borderBottom = "1px solid var(--border-color)";
+    row.dataset.eventId = String(event.id);
+    updateEventRow(row, event);
+    return row;
+  }
+
+  function updateEventRow(row, event) {
+    if (!row) return;
+    const time = Utils.formatTimeAgo(new Date(event.event_time), {
+      fallback: "-",
+    });
+    const severityColor = getSeverityColor(event.severity);
+    let referenceCell = "-";
+    if (event.reference_id) {
+      const snippet = Utils.escapeHtml(
+        formatReferenceSnippet(event.reference_id)
+      );
+      const full = Utils.escapeHtml(event.reference_id);
+      const encoded = encodeURIComponent(event.reference_id);
+      referenceCell = `
+        <span class="event-ref" title="${full}">${snippet}</span>
+        <button class="event-ref-copy" type="button" data-ref="${encoded}" title="Copy reference">📋</button>
+      `;
+    }
+    const messageText = Utils.escapeHtml(event.message);
+    const categoryLabel = event.categoryLabel || event.category || "-";
+    const severityLabel = (event.severity || "-").toString().toUpperCase();
+
+    row.dataset.eventId = String(event.id);
+    row.innerHTML = `
+      <td style="padding: 10px; white-space: nowrap;">${time}</td>
+      <td style="padding: 10px;">
+        <span style="background: var(--badge-loading); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85em;">
+          ${Utils.escapeHtml(categoryLabel)}
+        </span>
+      </td>
+      <td style="padding: 10px; font-size: 0.9em;">${event.subtype || "-"}</td>
+      <td style="padding: 10px;">
+        <span style="background: ${severityColor}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85em;">
+          ${severityLabel}
+        </span>
+      </td>
+      <td style="padding: 10px; max-width: 420px;">
+        <div class="event-message-cell">
+          <span class="event-message-text" title="${messageText}">${messageText}</span>
+          <button class="event-detail-btn" type="button" data-event-id="${
+            event.id
+          }" title="View full event">Details</button>
+        </div>
+      </td>
+      <td style="padding: 10px; font-size: 0.85em;">
+        <span class="event-ref-cell">${referenceCell}</span>
+      </td>
+    `;
+  }
+
+  function collectFilteredEvents() {
     const searchTerm = getSearchTerm();
-    const events = Array.isArray(forcedEvents) ? forcedEvents : allEventsData;
-    const filtered = events.filter((event) => matchesSearch(event, searchTerm));
+    const filtered = [];
+    const ids = [];
+    for (const event of allEventsData) {
+      if (!event) continue;
+      if (!matchesSearch(event, searchTerm)) continue;
+      const idNum = Number(event.id ?? event.event_id ?? event.eventId);
+      if (!Number.isFinite(idNum)) continue;
+      filtered.push(event);
+      ids.push(idNum);
+    }
+    return { events: filtered, ids, searchTerm };
+  }
+
+  function setEventsEmptyState(message) {
+    const tbody = document.getElementById("eventsTableBody");
+    if (!tbody) return;
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">
+          ${message}
+        </td>
+      </tr>
+    `;
+  }
+
+  function scheduleEventsRender(options) {
+    const opts = Object.assign(
+      { forceFull: false, immediate: false },
+      options || {}
+    );
+    if (opts.forceFull) {
+      eventsRenderState.forceFull = true;
+    }
+
+    if (opts.immediate) {
+      if (eventsRenderState.rafId) {
+        cancelAnimationFrame(eventsRenderState.rafId);
+        eventsRenderState.rafId = null;
+      }
+      eventsRenderState.pending = false;
+      applyScheduledEventsRender();
+      return;
+    }
+
+    if (eventsRenderState.pending) {
+      return;
+    }
+
+    eventsRenderState.pending = true;
+    eventsRenderState.rafId = window.requestAnimationFrame(() => {
+      eventsRenderState.rafId = null;
+      eventsRenderState.pending = false;
+      applyScheduledEventsRender();
+    });
+  }
+
+  function applyScheduledEventsRender() {
+    const forceFull = eventsRenderState.forceFull;
+    eventsRenderState.forceFull = false;
+    performEventsRender(forceFull);
+  }
+
+  function performEventsRender(forceFull) {
+    const tbody = document.getElementById("eventsTableBody");
+    if (!tbody) return;
+
+    const {
+      events: filtered,
+      ids: filteredIds,
+      searchTerm,
+    } = collectFilteredEvents();
 
     if (!filtered || filtered.length === 0) {
+      eventsRenderState.renderedIds = [];
+      eventsRenderState.rowsById.clear();
+      eventsRenderState.dirtyIds.clear();
+      eventsRenderState.lastSearchTerm = searchTerm;
+
       const message = snapshotState.inProgress
         ? "📦 Receiving snapshot..."
         : connectionStatus === "error"
@@ -918,70 +1120,81 @@ Loading...</pre
         ? "📴 Realtime connection lost. Waiting to resync..."
         : "📋 No events found. Events will appear here as they occur.";
 
-      tbody.innerHTML = `
-                    <tr>
-                        <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">
-                            ${message}
-                        </td>
-                    </tr>
-                `;
+      setEventsEmptyState(message);
       updateEventsScrollControls(false);
       return;
     }
 
-    tbody.innerHTML = filtered
-      .map((event) => {
-        const time = Utils.formatTimeAgo(new Date(event.event_time), {
-          fallback: "-",
-        });
-        const severityColor = getSeverityColor(event.severity);
-        let referenceCell = "-";
-        if (event.reference_id) {
-          const snippet = Utils.escapeHtml(
-            formatReferenceSnippet(event.reference_id)
-          );
-          const full = Utils.escapeHtml(event.reference_id);
-          const encoded = encodeURIComponent(event.reference_id);
-          referenceCell = `
-                        <span class="event-ref" title="${full}">${snippet}</span>
-                        <button class="event-ref-copy" type="button" data-ref="${encoded}" title="Copy reference">📋</button>
-                    `;
+    const sameIds = areIdArraysEqual(
+      filteredIds,
+      eventsRenderState.renderedIds
+    );
+    if (
+      !forceFull &&
+      eventsRenderState.dirtyIds.size === 0 &&
+      sameIds &&
+      eventsRenderState.lastSearchTerm === searchTerm
+    ) {
+      ensureEventsScrollGuard(true);
+      updateEventsScrollControls(true);
+      return;
+    }
+
+    const filteredIdSet = new Set(filteredIds);
+    const attachMap = new Map();
+
+    for (const id of filteredIds) {
+      const row = eventsRenderState.rowsById.get(id);
+      if (row && row.parentElement === tbody) {
+        attachMap.set(id, row);
+      }
+    }
+
+    for (const existingId of eventsRenderState.renderedIds) {
+      if (!filteredIdSet.has(existingId)) {
+        eventsRenderState.rowsById.delete(existingId);
+      }
+    }
+
+    const fragment = document.createDocumentFragment();
+    for (let index = 0; index < filteredIds.length; index += 1) {
+      const id = filteredIds[index];
+      const event = filtered[index];
+      let row = eventsRenderState.rowsById.get(id);
+      if (!row) {
+        row = createEventRow(event);
+        eventsRenderState.rowsById.set(id, row);
+      } else if (forceFull || eventsRenderState.dirtyIds.has(id)) {
+        updateEventRow(row, event);
+      }
+      if (attachMap.has(id)) {
+        const existingRow = attachMap.get(id);
+        if (existingRow !== row) {
+          attachMap.set(id, row);
         }
-        const messageText = Utils.escapeHtml(event.message);
-        const detailButton = `<button class="event-detail-btn" type="button" data-event-id="${event.id}" title="View full event">Details</button>`;
+      }
+      fragment.appendChild(row);
+    }
 
-        return `
-                    <tr style="border-bottom: 1px solid var(--border-color);">
-                        <td style="padding: 10px; white-space: nowrap;">${time}</td>
-            <td style="padding: 10px;">
-              <span style="background: var(--badge-loading); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85em;">
-                ${Utils.escapeHtml(
-                  event.categoryLabel || event.category || "-"
-                )}
-                            </span>
-                        </td>
-                        <td style="padding: 10px; font-size: 0.9em;">${
-                          event.subtype || "-"
-                        }</td>
-                        <td style="padding: 10px;">
-                            <span style="background: ${severityColor}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85em;">
-                                ${event.severity.toUpperCase()}
-                            </span>
-                        </td>
-                        <td style="padding: 10px; max-width: 420px;">
-                            <div class="event-message-cell">
-                                <span class="event-message-text" title="${messageText}">${messageText}</span>
-                                ${detailButton}
-                            </div>
-                        </td>
-                        <td style="padding: 10px; font-size: 0.85em;">
-                            <span class="event-ref-cell">${referenceCell}</span>
-                        </td>
-                    </tr>
-                `;
-      })
-      .join("");
+    if (tbody.firstChild) {
+      while (
+        tbody.firstChild &&
+        tbody.firstChild.id !== "events-scroll-guard"
+      ) {
+        tbody.removeChild(tbody.firstChild);
+      }
+    }
 
+    tbody.insertBefore(
+      fragment,
+      document.getElementById("events-scroll-guard")
+    );
+
+    eventsRenderState.renderedIds = filteredIds.slice();
+    eventsRenderState.dirtyIds.clear();
+    eventsRenderState.lastSearchTerm = searchTerm;
+
+    ensureEventsScrollGuard(true);
     updateEventsScrollControls(true);
   }
 
@@ -1005,7 +1218,10 @@ Loading...</pre
       clearTimeout(searchDebounceHandle);
     }
     searchDebounceHandle = setTimeout(() => {
-      renderEvents();
+      eventsScrollState.filteredEnd = false;
+      eventsScrollState.endReached = false;
+      eventsScrollState.limitReached = false;
+      scheduleEventsRender({ forceFull: true });
     }, 120);
   });
 
@@ -1385,7 +1601,7 @@ Loading...</pre
       statusKey,
       `${prefix} • ${formatEventCountLabel(totalDisplayed)}`
     );
-    renderEvents();
+    scheduleEventsRender({ forceFull: true, immediate: true });
   }
 
   function handleWebSocketWarning(message) {
@@ -1528,6 +1744,8 @@ Loading...</pre
         eventsScrollState.observer.disconnect();
         eventsScrollState.observer = null;
       }
+      resetEventsRenderState();
+      eventsScrollState.filteredEnd = false;
     },
   };
 
