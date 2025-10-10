@@ -244,7 +244,9 @@ Loading...</pre
   var maxEventId = 0;
   var connectionStatus = "connecting"; // 'connecting', 'connected', 'disconnected', 'error'
   var eventsStore = window.eventsStore || new Map();
-  var EVENT_MAX_RECORDS = 100;
+  var EVENTS_BROWSER_LIMIT = 5000; // hard ceiling for historical records kept client-side
+  var EVENT_MAX_RECORDS = EVENTS_BROWSER_LIMIT; // keep store aligned with browser ceiling
+  var EVENTS_SCROLL_PAGE_SIZE = 200;
   var EVENTS_SNAPSHOT_TIMEOUT_MS = 12000;
   var searchDebounceHandle = null;
   var snapshotState = {
@@ -262,6 +264,23 @@ Loading...</pre
     paused: false,
     pending: false,
   };
+  var eventsScrollState = {
+    observer: null,
+    loading: false,
+    endReached: false,
+    limitReached: false,
+    pageSize: EVENTS_SCROLL_PAGE_SIZE,
+  };
+
+  function resetEventsScrollState() {
+    if (eventsScrollState.observer) {
+      eventsScrollState.observer.disconnect();
+      eventsScrollState.observer = null;
+    }
+    eventsScrollState.loading = false;
+    eventsScrollState.endReached = false;
+    eventsScrollState.limitReached = false;
+  }
 
   function isEventsPaused() {
     return eventsPauseState.paused;
@@ -397,10 +416,12 @@ Loading...</pre
   }
 
   function clearEventsCache() {
+    resetEventsScrollState();
     eventsStore.clear();
     allEventsData = [];
     snapshotState.totalAvailable = 0;
     snapshotState.received = 0;
+    updateEventsScrollControls(false);
   }
 
   function clearEventsSnapshotTimer() {
@@ -588,6 +609,11 @@ Loading...</pre
     }
 
     allEventsData = orderedIds.map((id) => eventsStore.get(id));
+    eventsScrollState.limitReached =
+      allEventsData.length >= EVENTS_BROWSER_LIMIT;
+    if (!eventsScrollState.limitReached) {
+      eventsScrollState.endReached = false;
+    }
     renderEvents();
     return true;
   }
@@ -624,6 +650,255 @@ Loading...</pre
     return `${value.slice(0, 6)}…${value.slice(-6)}`;
   }
 
+  function ensureEventsScrollGuard(hasRows) {
+    const tbody = document.getElementById("eventsTableBody");
+    if (!tbody) return;
+    let guard = document.getElementById("events-scroll-guard");
+
+    if (!hasRows) {
+      if (guard && guard.parentElement === tbody) {
+        tbody.removeChild(guard);
+      }
+      return;
+    }
+
+    if (!guard) {
+      guard = document.createElement("tr");
+      guard.id = "events-scroll-guard";
+      guard.className = "scroll-guard-row";
+      const cell = document.createElement("td");
+      cell.colSpan = 6;
+      cell.className = "scroll-guard-cell";
+      guard.appendChild(cell);
+    }
+
+    if (!guard.parentElement || guard.parentElement !== tbody) {
+      if (guard.parentElement) {
+        guard.parentElement.removeChild(guard);
+      }
+      tbody.appendChild(guard);
+    } else if (tbody.lastElementChild !== guard) {
+      tbody.appendChild(guard);
+    }
+  }
+
+  function setEventsScrollGuardState(state) {
+    const cell = document.querySelector(
+      "#events-scroll-guard .scroll-guard-cell"
+    );
+    if (!cell) return;
+    cell.dataset.state = state || "idle";
+    cell.classList.toggle("loading", state === "loading");
+    if (state === "loading") {
+      cell.textContent = "Loading more events…";
+    } else if (state === "limit") {
+      cell.textContent = `Loaded browser limit (${EVENTS_BROWSER_LIMIT.toLocaleString()} events)`;
+    } else if (state === "end") {
+      cell.textContent = allEventsData.length ? "No more results" : "";
+    } else {
+      cell.textContent = "";
+    }
+  }
+
+  function setupEventsScrollObserver() {
+    if (eventsScrollState.observer) {
+      eventsScrollState.observer.disconnect();
+      eventsScrollState.observer = null;
+    }
+
+    if (eventsScrollState.loading || eventsScrollState.endReached) {
+      return;
+    }
+
+    const guard = document.getElementById("events-scroll-guard");
+    const container = document.querySelector(".table-wrap");
+    if (!guard || !container || !guard.parentElement) {
+      return;
+    }
+
+    eventsScrollState.observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            loadOlderEvents();
+          }
+        });
+      },
+      { root: container, rootMargin: "320px 0px 0px 0px", threshold: 0 }
+    );
+
+    eventsScrollState.observer.observe(guard);
+  }
+
+  function getOldestEventId() {
+    if (!allEventsData || allEventsData.length === 0) return null;
+    const last = allEventsData[allEventsData.length - 1];
+    const id = Number(last?.id ?? last?.event_id ?? last?.eventId);
+    return Number.isFinite(id) ? id : null;
+  }
+
+  function updateEventsScrollControls(hasRows) {
+    ensureEventsScrollGuard(hasRows);
+
+    if (!hasRows) {
+      setEventsScrollGuardState("idle");
+      if (eventsScrollState.observer) {
+        eventsScrollState.observer.disconnect();
+        eventsScrollState.observer = null;
+      }
+      return;
+    }
+
+    if (eventsScrollState.limitReached) {
+      setEventsScrollGuardState("limit");
+      if (eventsScrollState.observer) {
+        eventsScrollState.observer.disconnect();
+        eventsScrollState.observer = null;
+      }
+      return;
+    }
+
+    if (eventsScrollState.endReached) {
+      setEventsScrollGuardState("end");
+      if (eventsScrollState.observer) {
+        eventsScrollState.observer.disconnect();
+        eventsScrollState.observer = null;
+      }
+      return;
+    }
+
+    if (eventsScrollState.loading) {
+      setEventsScrollGuardState("loading");
+    } else {
+      setEventsScrollGuardState("idle");
+    }
+
+    setupEventsScrollObserver();
+  }
+
+  async function loadOlderEvents() {
+    if (
+      eventsScrollState.loading ||
+      eventsScrollState.endReached ||
+      eventsScrollState.limitReached
+    ) {
+      return;
+    }
+
+    if (allEventsData.length >= EVENTS_BROWSER_LIMIT) {
+      eventsScrollState.limitReached = true;
+      updateEventsScrollControls(true);
+      return;
+    }
+
+    const oldestId = getOldestEventId();
+    if (!Number.isFinite(oldestId)) {
+      eventsScrollState.endReached = true;
+      updateEventsScrollControls(allEventsData.length > 0);
+      return;
+    }
+
+    const remainingBeforeRequest = Math.max(
+      0,
+      EVENTS_BROWSER_LIMIT - allEventsData.length
+    );
+    if (remainingBeforeRequest <= 0) {
+      eventsScrollState.limitReached = true;
+      updateEventsScrollControls(true);
+      return;
+    }
+
+    eventsScrollState.loading = true;
+    updateEventsScrollControls(allEventsData.length > 0);
+
+    const params = new URLSearchParams();
+    params.set("before_id", oldestId.toString());
+    params.set(
+      "limit",
+      Math.min(eventsScrollState.pageSize, remainingBeforeRequest).toString()
+    );
+    const category = document.getElementById("categoryFilter")?.value;
+    const severity = document.getElementById("severityFilter")?.value;
+    if (category) params.set("category", category);
+    if (severity) params.set("severity", severity);
+
+    try {
+      const res = await fetch(`/api/events/before?${params.toString()}`);
+      if (!res.ok) {
+        throw new Error(`Failed to load older events (${res.status})`);
+      }
+
+      const payload = await res.json();
+      const rows = Array.isArray(payload?.events) ? payload.events : [];
+      if (!rows.length) {
+        eventsScrollState.endReached = true;
+        updateEventsScrollControls(allEventsData.length > 0);
+        return;
+      }
+
+      const normalizedRows = rows
+        .map((raw) => normalizeEvent(raw))
+        .filter((ev) => ev && typeof ev.id === "number")
+        .sort((a, b) => b.id - a.id);
+
+      if (!normalizedRows.length) {
+        eventsScrollState.endReached = true;
+        updateEventsScrollControls(allEventsData.length > 0);
+        return;
+      }
+
+      const remainingCapacity = Math.max(
+        0,
+        EVENTS_BROWSER_LIMIT - allEventsData.length
+      );
+      if (remainingCapacity <= 0) {
+        eventsScrollState.limitReached = true;
+        updateEventsScrollControls(true);
+        return;
+      }
+
+      const toAppend = normalizedRows.slice(0, remainingCapacity);
+      const uniqueToAppend = [];
+      toAppend.forEach((event) => {
+        const id = Number(event.id);
+        if (!Number.isFinite(id)) {
+          return;
+        }
+        if (!eventsStore.has(id)) {
+          uniqueToAppend.push(event);
+        }
+        eventsStore.set(id, event);
+      });
+
+      if (uniqueToAppend.length) {
+        allEventsData = allEventsData.concat(uniqueToAppend);
+      }
+
+      if (toAppend.length < normalizedRows.length) {
+        eventsScrollState.limitReached = true;
+      }
+
+      eventsScrollState.endReached = false;
+
+      const fetchedCount = Array.isArray(payload?.events)
+        ? payload.events.length
+        : Number(payload?.count) || 0;
+      snapshotState.totalAvailable = Math.max(
+        snapshotState.totalAvailable || 0,
+        fetchedCount,
+        allEventsData.length
+      );
+
+      renderEvents();
+    } catch (err) {
+      console.error("[Events] Failed to load older events", err);
+      Utils.showToast("⚠️ Failed to load more events", "warn");
+    } finally {
+      eventsScrollState.loading = false;
+      updateEventsScrollControls(allEventsData.length > 0);
+    }
+  }
+
   function renderEvents(forcedEvents) {
     const tbody = document.getElementById("eventsTableBody");
     const searchTerm = getSearchTerm();
@@ -650,6 +925,7 @@ Loading...</pre
                         </td>
                     </tr>
                 `;
+      updateEventsScrollControls(false);
       return;
     }
 
@@ -705,6 +981,8 @@ Loading...</pre
                 `;
       })
       .join("");
+
+    updateEventsScrollControls(true);
   }
 
   // Get color for severity
@@ -1246,6 +1524,10 @@ Loading...</pre
       snapshotState.started = false;
       snapshotState.requestId = null;
       clearEventsSnapshotTimer();
+      if (eventsScrollState.observer) {
+        eventsScrollState.observer.disconnect();
+        eventsScrollState.observer = null;
+      }
     },
   };
 

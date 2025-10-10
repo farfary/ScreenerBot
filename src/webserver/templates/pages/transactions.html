@@ -174,7 +174,7 @@
     <table class="table" id="tx-table">
       <thead>
         <tr>
-          <th style="min-width: 90px">Time</th>
+          <th style="min-width: 150px">Date / Time</th>
           <th style="min-width: 140px">Signature</th>
           <th style="min-width: 80px">Type</th>
           <th style="min-width: 80px">Direction</th>
@@ -236,9 +236,19 @@
         return Number.isFinite(parsed) ? parsed : null;
       }
 
+      const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+
       function renderRow(row) {
         const tr = document.createElement("tr");
-        const time = new Date(row.timestamp).toLocaleTimeString();
+        const timestamp = new Date(row.timestamp);
+        const dateTime = dateTimeFormatter.format(timestamp);
         const sigShort =
           row.signature.slice(0, 8) + "…" + row.signature.slice(-6);
         const type = row.type || row.transaction_type || "—";
@@ -251,7 +261,7 @@
         const ata = (row.ata_rents ?? 0).toFixed(6);
         const instr = row.instructions_count ?? 0;
         tr.innerHTML = `
-          <td title="${new Date(row.timestamp).toLocaleString()}">${time}</td>
+          <td title="${timestamp.toLocaleString()}">${dateTime}</td>
           <td><a href="#" data-signature="${
             row.signature
           }" class="tx-link">${sigShort}</a></td>
