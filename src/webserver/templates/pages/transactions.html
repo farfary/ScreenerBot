@@ -1,0 +1,400 @@
+<div class="page-content transactions-page">
+  <div class="page-header">
+    <h1>Transactions</h1>
+    <div class="subtext">Live stream + on-demand filtering</div>
+  </div>
+
+  <div class="toolbar" id="tx-toolbar">
+    <div class="toolbar-row">
+      <div class="field-group">
+        <label>Type</label>
+        <select id="tx-filter-type" multiple>
+          <option value="buy">Buy</option>
+          <option value="sell">Sell</option>
+          <option value="swap">Swap</option>
+          <option value="transfer">Transfer</option>
+          <option value="ata">ATA</option>
+          <option value="failed">Failed</option>
+          <option value="unknown">Unknown</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label>Direction</label>
+        <select id="tx-filter-direction">
+          <option value="">Any</option>
+          <option value="Incoming">Incoming</option>
+          <option value="Outgoing">Outgoing</option>
+          <option value="Internal">Internal</option>
+          <option value="Unknown">Unknown</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label>Status</label>
+        <select id="tx-filter-status">
+          <option value="">Any</option>
+          <option value="Pending">Pending</option>
+          <option value="Confirmed">Confirmed</option>
+          <option value="Finalized">Finalized</option>
+          <option value="Failed">Failed</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label>Router</label>
+        <input
+          type="text"
+          id="tx-filter-router"
+          placeholder="jupiter | raydium | orca"
+        />
+      </div>
+      <div class="field-group">
+        <label>Mint</label>
+        <input type="text" id="tx-filter-mint" placeholder="Token mint..." />
+      </div>
+      <div class="field-group">
+        <label>Time</label>
+        <input type="datetime-local" id="tx-filter-from" />
+        <span style="padding: 0 0.25rem">→</span>
+        <input type="datetime-local" id="tx-filter-to" />
+      </div>
+      <div class="field-group">
+        <label>SOL Δ</label>
+        <input
+          type="number"
+          step="0.0001"
+          id="tx-filter-min-sol"
+          placeholder="min"
+        />
+        <span style="padding: 0 0.25rem">–</span>
+        <input
+          type="number"
+          step="0.0001"
+          id="tx-filter-max-sol"
+          placeholder="max"
+        />
+      </div>
+      <div class="field-group">
+        <label>&nbsp;</label>
+        <button id="tx-apply-filters" class="btn primary">Apply</button>
+        <button id="tx-reset-filters" class="btn">Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="left">Latest transactions</div>
+      <div class="right">
+        <span id="tx-summary"></span>
+      </div>
+    </div>
+    <div class="card-body no-padding">
+      <div class="table-container" style="overflow: auto">
+        <table class="data-table" id="tx-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Signature</th>
+              <th>Type</th>
+              <th>Dir</th>
+              <th>Status</th>
+              <th>Mint</th>
+              <th>Router</th>
+              <th>SOL Δ</th>
+              <th>Fee</th>
+              <th>ATA Rent</th>
+              <th>Instr</th>
+            </tr>
+          </thead>
+          <tbody id="tx-tbody">
+            <!-- Filled by JS -->
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination" id="tx-pagination">
+        <button class="btn" id="tx-load-more">Load more</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      function toRfc3339Local(dtInput) {
+        if (!dtInput || !dtInput.value) return null;
+        try {
+          const d = new Date(dtInput.value);
+          return d.toISOString();
+        } catch (_) {
+          return null;
+        }
+      }
+
+      function el(id) {
+        return document.getElementById(id);
+      }
+
+      function renderRow(row) {
+        const tr = document.createElement("tr");
+        const time = new Date(row.timestamp).toLocaleTimeString();
+        const sigShort =
+          row.signature.slice(0, 8) + "…" + row.signature.slice(-6);
+        const type = row.type || row.transaction_type || "—";
+        const dir = row.direction || "—";
+        const status = row.status || "—";
+        const mint = row.token_mint ? row.token_mint.slice(0, 8) + "…" : "—";
+        const router = row.router || "—";
+        const sol = (row.sol_delta ?? 0).toFixed(6);
+        const fee = (row.fee_sol ?? 0).toFixed(6);
+        const ata = (row.ata_rents ?? 0).toFixed(6);
+        const instr = row.instructions_count ?? 0;
+        tr.innerHTML = `
+          <td title="${new Date(row.timestamp).toLocaleString()}">${time}</td>
+          <td><a href="#" data-signature="${
+            row.signature
+          }" class="tx-link">${sigShort}</a></td>
+          <td>${type}</td>
+          <td>${dir}</td>
+          <td>${status}</td>
+          <td title="${row.token_mint || ""}">${mint}</td>
+          <td>${router}</td>
+          <td class="monospace">${sol}</td>
+          <td class="monospace">${fee}</td>
+          <td class="monospace">${ata}</td>
+          <td>${instr}</td>
+        `;
+        return tr;
+      }
+
+      function buildFilters() {
+        const selectedTypes = Array.from(
+          el("tx-filter-type").selectedOptions
+        ).map((o) => o.value);
+        const direction = el("tx-filter-direction").value || null;
+        const status = el("tx-filter-status").value || null;
+        const router = el("tx-filter-router").value.trim() || null;
+        const mint = el("tx-filter-mint").value.trim() || null;
+        const min_sol = el("tx-filter-min-sol").value
+          ? parseFloat(el("tx-filter-min-sol").value)
+          : null;
+        const max_sol = el("tx-filter-max-sol").value
+          ? parseFloat(el("tx-filter-max-sol").value)
+          : null;
+        const time_from = toRfc3339Local(el("tx-filter-from"));
+        const time_to = toRfc3339Local(el("tx-filter-to"));
+        return {
+          types: selectedTypes,
+          direction,
+          status,
+          router,
+          mint,
+          min_sol,
+          max_sol,
+          time_from,
+          time_to,
+        };
+      }
+
+      function applySavedFilters() {
+        const saved = AppState.load("tx.filters", null);
+        if (!saved) return;
+        const typeSel = el("tx-filter-type");
+        Array.from(typeSel.options).forEach((opt) => {
+          opt.selected = (saved.types || []).includes(opt.value);
+        });
+        el("tx-filter-direction").value = saved.direction || "";
+        el("tx-filter-status").value = saved.status || "";
+        el("tx-filter-router").value = saved.router || "";
+        el("tx-filter-mint").value = saved.mint || "";
+        el("tx-filter-min-sol").value = saved.min_sol ?? "";
+        el("tx-filter-max-sol").value = saved.max_sol ?? "";
+        if (saved.time_from)
+          el("tx-filter-from").value = new Date(saved.time_from)
+            .toISOString()
+            .slice(0, 16);
+        if (saved.time_to)
+          el("tx-filter-to").value = new Date(saved.time_to)
+            .toISOString()
+            .slice(0, 16);
+      }
+
+      async function fetchList(filters, cursor, limit = 50) {
+        const body = { filters, pagination: { cursor, limit } };
+        const res = await fetch("/api/transactions/list", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error("List request failed");
+        return res.json();
+      }
+
+      async function fetchSummary() {
+        const res = await fetch("/api/transactions/summary", {
+          method: "POST",
+        });
+        if (!res.ok) return null;
+        return res.json();
+      }
+
+      function updateSummaryBar(summary) {
+        if (!summary) return;
+        const text = `Total: ${summary.total} • Success: ${
+          summary.success_count
+        } • Failed: ${
+          summary.failed_count
+        } • Success Rate: ${summary.success_rate.toFixed(1)}%`;
+        el("tx-summary").textContent = text;
+      }
+
+      function wireRowClicks() {
+        document.querySelectorAll(".tx-link").forEach((a) => {
+          a.addEventListener("click", async (e) => {
+            e.preventDefault();
+            const sig = a.getAttribute("data-signature");
+            // For now, open solscan (could add modal later)
+            window.open(`https://solscan.io/tx/${sig}`, "_blank");
+          });
+        });
+      }
+
+      const State = {
+        items: [],
+        next_cursor: null,
+        loading: false,
+        filters: null,
+      };
+
+      async function loadInitial() {
+        State.filters = buildFilters();
+        AppState.save("tx.filters", State.filters);
+        const data = await fetchList(State.filters, null, 50);
+        State.items = data.items || [];
+        State.next_cursor = data.next_cursor || null;
+        const tbody = el("tx-tbody");
+        tbody.innerHTML = "";
+        State.items.forEach((row) => tbody.appendChild(renderRow(row)));
+        wireRowClicks();
+        const summary = await fetchSummary();
+        updateSummaryBar(summary);
+      }
+
+      async function loadMore() {
+        if (State.loading || !State.next_cursor) return;
+        State.loading = true;
+        try {
+          const data = await fetchList(State.filters, State.next_cursor, 50);
+          const tbody = el("tx-tbody");
+          (data.items || []).forEach((row) => {
+            State.items.push(row);
+            tbody.appendChild(renderRow(row));
+          });
+          State.next_cursor = data.next_cursor || null;
+          wireRowClicks();
+        } finally {
+          State.loading = false;
+        }
+      }
+
+      function applyFilters() {
+        State.items = [];
+        State.next_cursor = null;
+        State.filters = buildFilters();
+        AppState.save("tx.filters", State.filters);
+        loadInitial();
+      }
+
+      function resetFilters() {
+        [
+          "tx-filter-direction",
+          "tx-filter-status",
+          "tx-filter-router",
+          "tx-filter-mint",
+          "tx-filter-min-sol",
+          "tx-filter-max-sol",
+        ].forEach((id) => (el(id).value = ""));
+        const typeSel = el("tx-filter-type");
+        Array.from(typeSel.options).forEach((opt) => (opt.selected = false));
+        el("tx-filter-from").value = "";
+        el("tx-filter-to").value = "";
+        applyFilters();
+      }
+
+      function onWsUnavailable() {
+        // Fallback: ensure polling keeps the table updated
+        if (!State.loading) {
+          loadInitial();
+        }
+      }
+
+      function onWsNew(envelope) {
+        const data =
+          envelope && envelope.data ? envelope.data.transaction : null;
+        if (!data) return;
+        const tbody = el("tx-tbody");
+        const tr = renderRow(data);
+        tbody.insertBefore(tr, tbody.firstChild);
+        State.items.unshift(data);
+        // keep around first ~500 by trimming
+        if (State.items.length > 500) {
+          State.items.pop();
+          if (tbody.lastChild) tbody.removeChild(tbody.lastChild);
+        }
+        wireRowClicks();
+      }
+
+      window.PageRealtime = window.PageRealtime || {};
+      window.PageRealtime.transactions = {
+        channels: {
+          transactions: "transactions",
+          _connected: "_connected",
+          _disconnected: "_disconnected",
+          _failed: "_failed",
+          _warning: "_warning",
+        },
+        onInitial() {
+          applySavedFilters();
+          loadInitial();
+          document
+            .getElementById("tx-apply-filters")
+            .addEventListener("click", applyFilters);
+          document
+            .getElementById("tx-reset-filters")
+            .addEventListener("click", resetFilters);
+          document
+            .getElementById("tx-load-more")
+            .addEventListener("click", loadMore);
+        },
+        onEnter() {
+          // Subscribe to live stream
+          if (window.WsHub) {
+            try {
+              window.WsHub.subscribe("transactions", (env) => {
+                if (!env || !env.data) return;
+                if (env.data.action === "new") {
+                  onWsNew(env);
+                }
+              });
+            } catch (e) {
+              console.warn("WS subscribe failed", e);
+            }
+          }
+        },
+        onExit() {
+          if (window.WsHub) {
+            try {
+              window.WsHub.unsubscribe("transactions");
+            } catch (_) {}
+          }
+        },
+        onUnavailable() {
+          onWsUnavailable();
+        },
+      };
+
+      window.initTransactionsPage = function () {
+        if (window.Realtime) {
+          window.Realtime.activate("transactions");
+        }
+      };
+    })();
+  </script>
+</div>

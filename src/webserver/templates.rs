@@ -24,6 +24,7 @@ const TOKENS_PAGE: &str = include_str!("templates/pages/tokens.html");
 const EVENTS_PAGE: &str = include_str!("templates/pages/events.html");
 const SERVICES_PAGE: &str = include_str!("templates/pages/services.html");
 const CONFIG_PAGE: &str = include_str!("templates/pages/config.html");
+const TRANSACTIONS_PAGE: &str = include_str!("templates/pages/transactions.html");
 
 /// Render the base layout with shared chrome and inject the requested content.
 pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
@@ -122,10 +123,5 @@ pub fn config_content() -> String {
 }
 
 pub fn transactions_content() -> String {
-    // TODO: Create full template - placeholder for now
-    r#"<div class="page-content">
-        <h1>Transactions</h1>
-        <p>Transactions page is under construction</p>
-    </div>"#
-        .to_string()
+    render_page(TRANSACTIONS_PAGE)
 }

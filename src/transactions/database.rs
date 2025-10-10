@@ -79,14 +79,6 @@ pub struct TransactionListRow {
     pub fee_lamports: Option<u64>,
     pub ata_rents: f64,
     pub instructions_count: usize,
-
-    // Internal fields for filtering (not serialized to API)
-    #[serde(skip)]
-    pub _token_swap_info_json: Option<String>,
-    #[serde(skip)]
-    pub _token_transfers_json: Option<String>,
-    #[serde(skip)]
-    pub _ata_operations_json: Option<String>,
 }
 
 /// Result of list_transactions query
@@ -1269,43 +1261,114 @@ impl TransactionDatabase {
 
         let rows = stmt
             .query_map(params_refs.as_slice(), |row| {
-                let timestamp_str: String = row.get(1)?;
-                let timestamp = DateTime::parse_from_rfc3339(&timestamp_str)
-                    .map(|dt| dt.with_timezone(&Utc))
-                    .unwrap_or_else(|_| Utc::now());
+                let signature: String = row.get(0)?;
+                let timestamp = {
+                    let timestamp_str: String = row.get(1)?;
+                    DateTime::parse_from_rfc3339(&timestamp_str)
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or_else(|_| Utc::now())
+                };
 
-                let status_str: String = row.get(3)?;
+                let slot = row.get::<_, Option<i64>>(2)?.and_then(|raw| {
+                    if raw >= 0 {
+                        Some(raw as u64)
+                    } else {
+                        None
+                    }
+                });
+                let status: String = row.get(3)?;
                 let success: bool = row.get(4)?;
 
-                // Parse processed data from JSON columns
-                let transaction_type_str: Option<String> = row.get(7).ok();
-                let direction_str: Option<String> = row.get(8).ok();
-                let token_swap_info_json: Option<String> = row.get(9).ok();
-                let token_transfers_json: Option<String> = row.get(10).ok();
-                let sol_balance_change: Option<f64> = row.get(11).ok();
-                let ata_operations_json: Option<String> = row.get(12).ok();
-                let fee_sol: Option<f64> = row.get(13).ok();
+                let fee_lamports = row.get::<_, Option<i64>>(5)?.and_then(|raw| {
+                    if raw >= 0 {
+                        Some(raw as u64)
+                    } else {
+                        None
+                    }
+                });
+                let instructions_count = row.get::<_, Option<i64>>(6)?.unwrap_or(0).max(0) as usize;
+
+                let transaction_type: Option<String> = row.get(7)?;
+                let direction: Option<String> = row.get(8)?;
+                let token_swap_info_json: Option<String> = row.get(9)?;
+                let token_transfers_json: Option<String> = row.get(10)?;
+                let sol_balance_change_json: Option<String> = row.get(11)?;
+                let ata_operations_json: Option<String> = row.get(12)?;
+                let fee_sol = row.get::<_, Option<f64>>(13)?.unwrap_or(0.0);
+
+                let swap_info: Option<TokenSwapInfo> = token_swap_info_json
+                    .as_ref()
+                    .and_then(|json| serde_json::from_str(json).ok());
+                let token_transfers: Option<Vec<TokenTransfer>> = token_transfers_json
+                    .as_ref()
+                    .and_then(|json| serde_json::from_str(json).ok());
+                let sol_balance_changes: Option<Vec<SolBalanceChange>> = sol_balance_change_json
+                    .as_ref()
+                    .and_then(|json| serde_json::from_str(json).ok());
+                let ata_operations: Option<Vec<AtaOperation>> = ata_operations_json
+                    .as_ref()
+                    .and_then(|json| serde_json::from_str(json).ok());
+
+                let sol_delta = sol_balance_changes
+                    .as_ref()
+                    .map(|changes| changes.iter().map(|change| change.change).sum())
+                    .unwrap_or(0.0);
+
+                let ata_rents = ata_operations
+                    .as_ref()
+                    .map(|ops| ops.iter().map(|op| op.rent_amount).sum())
+                    .unwrap_or(0.0);
+
+                let mut token_mint = swap_info
+                    .as_ref()
+                    .map(|info| info.mint.clone())
+                    .filter(|mint| !mint.is_empty());
+
+                if token_mint.is_none() {
+                    token_mint = swap_info
+                        .as_ref()
+                        .map(|info| info.output_mint.clone())
+                        .filter(|mint| !mint.is_empty());
+                }
+
+                if token_mint.is_none() {
+                    if let Some(transfers) = token_transfers.as_ref() {
+                        token_mint = transfers.iter().find_map(|transfer| {
+                            if transfer.mint.is_empty() {
+                                None
+                            } else {
+                                Some(transfer.mint.clone())
+                            }
+                        });
+                    }
+                }
+
+                let token_symbol = swap_info
+                    .as_ref()
+                    .map(|info| info.symbol.clone())
+                    .filter(|symbol| !symbol.is_empty());
+
+                let router = swap_info
+                    .as_ref()
+                    .map(|info| info.router.clone())
+                    .filter(|router| !router.is_empty());
 
                 Ok(TransactionListRow {
-                    signature: row.get(0)?,
+                    signature,
                     timestamp,
-                    slot: row.get(2).ok(),
-                    status: status_str,
+                    slot,
+                    status,
                     success,
-                    direction: direction_str,
-                    transaction_type: transaction_type_str,
-                    token_mint: None, // Will be extracted below
-                    token_symbol: None,
-                    router: None,
-                    sol_delta: sol_balance_change.unwrap_or(0.0),
-                    fee_sol: fee_sol.unwrap_or(0.0),
-                    fee_lamports: row.get(5).ok(),
-                    ata_rents: 0.0, // Will be calculated below
-                    instructions_count: row.get(6).unwrap_or(0),
-                    // Store JSON for Rust-side filtering
-                    _token_swap_info_json: token_swap_info_json,
-                    _token_transfers_json: token_transfers_json,
-                    _ata_operations_json: ata_operations_json,
+                    direction,
+                    transaction_type,
+                    token_mint,
+                    token_symbol,
+                    router,
+                    sol_delta,
+                    fee_sol,
+                    fee_lamports,
+                    ata_rents,
+                    instructions_count,
                 })
             })
             .map_err(|e| format!("Failed to execute list query: {}", e))?;
@@ -1314,37 +1377,8 @@ impl TransactionDatabase {
         let mut results: Vec<TransactionListRow> = Vec::new();
 
         for row_result in rows {
-            let mut row = row_result.map_err(|e| format!("Failed to parse row: {}", e))?;
+            let row = row_result.map_err(|e| format!("Failed to parse row: {}", e))?;
 
-            // Extract token info from JSON
-            if let Some(ref json_str) = row._token_swap_info_json {
-                if let Ok(swap_info) = serde_json::from_str::<serde_json::Value>(json_str) {
-                    row.token_mint = swap_info
-                        .get("output_mint")
-                        .or_else(|| swap_info.get("input_mint"))
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string());
-                    row.router = swap_info
-                        .get("router")
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string());
-                }
-            }
-
-            // Calculate ATA rents from JSON
-            if let Some(ref json_str) = row._ata_operations_json {
-                if let Ok(ops) = serde_json::from_str::<Vec<serde_json::Value>>(json_str) {
-                    let total_rent: f64 = ops
-                        .iter()
-                        .filter_map(|op| op.get("rent_lamports"))
-                        .filter_map(|v| v.as_u64())
-                        .map(|lamports| lamports as f64 / 1_000_000_000.0)
-                        .sum();
-                    row.ata_rents = total_rent;
-                }
-            }
-
-            // Apply Rust-side filters
             if !Self::row_matches_filters(&row, filters) {
                 continue;
             }
