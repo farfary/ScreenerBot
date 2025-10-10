@@ -1715,6 +1715,23 @@
                         `
       : "";
 
+    // Show waiting message if no cycles have completed yet
+    const waitingDisplay =
+      discovery.running &&
+      discovery.total_cycles === 0 &&
+      !discovery.last_cycle_started
+        ? `
+                            <div style="margin-top: 16px; padding: 12px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; color: #3b82f6;">
+                                <strong>ℹ️ Waiting for first discovery cycle...</strong>
+                                <p style="margin: 8px 0 0 0; font-size: 0.9em; color: var(--text-secondary);">
+                                    The discovery service is running but hasn't completed its first cycle yet. 
+                                    Discovery cycles fetch data from multiple APIs and may take 30-60 seconds to complete. 
+                                    Data will appear here once the first cycle finishes.
+                                </p>
+                            </div>
+                        `
+        : "";
+
     contentContainer.innerHTML = `
                 <div class="page-section">
                     <div class="card">
@@ -1835,6 +1852,7 @@
                                 </div>
                             </div>
 
+                            ${waitingDisplay}
                             ${errorDisplay}
                         </div>
                     </div>

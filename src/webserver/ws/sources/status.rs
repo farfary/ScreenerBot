@@ -704,10 +704,26 @@ fn collect_pool_service_snapshot() -> Option<PoolServiceStatusSnapshot> {
 }
 
 async fn collect_token_discovery_snapshot() -> Option<TokenDiscoveryStatusSnapshot> {
-    let stats = crate::tokens::discovery::get_discovery_stats().await;
+    // Check if discovery service is registered and enabled
+    // Note: We always return a snapshot if the service exists, even if no stats yet
+    // This allows the UI to show "Waiting for first cycle..." messages
+    let running = if let Some(manager_lock) = crate::services::get_service_manager().await {
+        if let Some(manager) = manager_lock.read().await.as_ref() {
+            manager.is_service_enabled("token_discovery")
+        } else {
+            false
+        }
+    } else {
+        false
+    };
 
-    // Check if discovery service is actually running by looking at recent activity
-    let running = stats.last_cycle_started.is_some();
+    // If service is not registered, return None to hide the tab
+    if !running {
+        return None;
+    }
+
+    // Get stats (may be empty if first cycle hasn't completed yet)
+    let stats = crate::tokens::discovery::get_discovery_stats().await;
 
     Some(TokenDiscoveryStatusSnapshot {
         running,
