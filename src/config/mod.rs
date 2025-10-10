@@ -69,6 +69,8 @@
 ///    ```
 ///
 /// That's it! No helper functions, no boilerplate, no repetition.
+// Metadata helpers (must be declared before macros so macro expansions can use them)
+pub mod metadata;
 
 // Export the macro
 #[macro_use]
@@ -81,10 +83,14 @@ pub mod schemas;
 pub mod utils;
 
 // Re-export commonly used items for convenience
+pub use metadata::{
+    collect_config_metadata, ConfigMetadata, FieldMetadata, FieldMetadataExtras, FieldType,
+};
+
 pub use schemas::{
-    Config, EventsConfig, FilteringConfig, MonitoringConfig, PositionsConfig, RpcConfig,
-    ServicesConfig, SolPriceConfig, SummaryConfig, SwapsConfig, TokensConfig, TraderConfig,
-    WebserverConfig,
+    Config, EventsConfig, FilteringConfig, MonitoringConfig, OhlcvConfig, PositionsConfig,
+    RpcConfig, ServicesConfig, SolPriceConfig, SummaryConfig, SwapsConfig, TokensConfig,
+    TraderConfig, WebserverConfig,
 };
 
 pub use utils::{

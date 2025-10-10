@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::config;
+use crate::config::metadata::collect_config_metadata;
 use crate::webserver::state::AppState;
 use crate::webserver::utils::{error_response, success_response};
 
@@ -43,6 +44,12 @@ pub struct FullConfigResponse {
     pub timestamp: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct ConfigMetadataResponse {
+    pub data: config::metadata::ConfigMetadata,
+    pub timestamp: String,
+}
+
 // ============================================================================
 // ROUTES
 // ============================================================================
@@ -63,6 +70,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/config/webserver", get(get_webserver_config))
         .route("/config/services", get(get_services_config))
         .route("/config/monitoring", get(get_monitoring_config))
+        .route("/config/metadata", get(get_config_metadata))
         // PATCH endpoints - Partial updates (use JSON with only fields to update)
         .route(
             "/config/trader",
@@ -258,6 +266,16 @@ async fn get_monitoring_config() -> Response {
     });
 
     success_response(data)
+}
+
+/// GET /api/config/metadata - Get configuration metadata for UI rendering
+async fn get_config_metadata() -> Response {
+    let response = ConfigMetadataResponse {
+        data: collect_config_metadata(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    };
+
+    success_response(response)
 }
 
 // ============================================================================

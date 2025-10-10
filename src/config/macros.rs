@@ -35,7 +35,8 @@ macro_rules! config_struct {
         $(#[$meta:meta])*
         $vis:vis struct $name:ident {
             $(
-                $(#[$field_meta:meta])*
+                $(#[doc = $doc:expr])*
+                $(#[metadata($metadata:expr)])?
                 $field_name:ident: $field_type:ty = $default_value:expr
             ),*
             $(,)?
@@ -46,7 +47,7 @@ macro_rules! config_struct {
         #[serde(default)]
         $vis struct $name {
             $(
-                $(#[$field_meta])*
+                $(#[doc = $doc])*
                 pub $field_name: $field_type,
             )*
         }
@@ -58,6 +59,41 @@ macro_rules! config_struct {
                         $field_name: $default_value,
                     )*
                 }
+            }
+        }
+
+        impl $crate::config::metadata::FieldTypeInfo for $name {
+            fn field_type() -> $crate::config::metadata::FieldType {
+                $crate::config::metadata::FieldType::Object
+            }
+        }
+
+        impl $name {
+            /// Generate metadata for all fields defined in this configuration struct.
+            pub fn field_metadata() -> $crate::config::metadata::SectionMetadata {
+                let mut fields = $crate::config::metadata::SectionMetadata::new();
+
+                $(
+                    #[allow(unused_mut)]
+                    let mut extras = $crate::config::metadata::FieldMetadataExtras::default();
+                    $(extras = $metadata;)?
+
+                    let docs: Option<&'static str> = {
+                        let doc = concat!($($doc, "\n",)* "");
+                        let doc = doc.trim();
+                        if doc.is_empty() { None } else { Some(doc) }
+                    };
+
+                    let default_value: $field_type = $default_value;
+                    let metadata = $crate::config::metadata::FieldMetadata::from_parts::<$field_type>(
+                        &default_value,
+                        extras,
+                        docs,
+                    );
+                    fields.insert(stringify!($field_name), metadata);
+                )*
+
+                fields
             }
         }
     };
