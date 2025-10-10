@@ -387,6 +387,14 @@
     box-shadow: 0 8px 22px rgba(5, 8, 20, 0.25);
   }
 
+  .field.object-field textarea {
+    font-family: monospace;
+    min-height: 140px;
+    white-space: pre;
+    line-height: 1.45;
+    resize: vertical;
+  }
+
   .field.hidden {
     display: none !important;
   }
@@ -458,6 +466,10 @@
 
   .field textarea {
     min-height: 64px;
+  }
+
+  .field textarea.object-editor {
+    white-space: pre;
   }
 
   .field input:focus,
@@ -1426,9 +1438,13 @@
                 <option value="false">Disabled</option>
             </select>
         `;
+    } else if (field.type === "object") {
+      inputHTML = `
+            <textarea id="${fieldId}" data-field-type="object" class="object-editor" rows="6" placeholder="JSON object" oninput="validateField(this)"></textarea>
+        `;
     } else if (field.type === "array") {
       inputHTML = `
-            <textarea id="${fieldId}" rows="2" placeholder="Comma-separated values" oninput="validateField(this)"></textarea>
+            <textarea id="${fieldId}" data-field-type="array" rows="2" placeholder="Comma-separated values" oninput="validateField(this)"></textarea>
         `;
     } else if (field.type === "string") {
       inputHTML = `
@@ -1448,10 +1464,15 @@
         `;
     }
 
+    const fieldClasses = ["field"];
+    if (field.type === "object") {
+      fieldClasses.push("object-field");
+    }
+
     return `
-        <div class="field" data-impact="${impactValue}" data-field-key="${
-      field.key
-    }">
+        <div class="${fieldClasses.join(
+          " "
+        )}" data-impact="${impactValue}" data-field-key="${field.key}">
             <div class="field-header">
                 <label>${labelText}${
       field.unit ? ` (${field.unit})` : ""
@@ -1473,6 +1494,19 @@
     }
 
     if (input.tagName === "TEXTAREA") {
+      if (input.dataset.fieldType === "object") {
+        const raw = input.value || "";
+        if (raw.trim() === "") {
+          return {};
+        }
+
+        try {
+          return JSON.parse(raw);
+        } catch (_jsonErr) {
+          return raw;
+        }
+      }
+
       const value = input.value || "";
       const parts = value
         .split(",")
@@ -1634,8 +1668,19 @@
             if (input.tagName === "SELECT") {
               input.value = value.toString();
             } else if (input.tagName === "TEXTAREA") {
-              // Handle arrays
-              input.value = Array.isArray(value) ? value.join(", ") : value;
+              if (input.dataset.fieldType === "object") {
+                if (value === null || value === undefined) {
+                  input.value = "";
+                } else {
+                  try {
+                    input.value = JSON.stringify(value, null, 2);
+                  } catch (_jsonErr) {
+                    input.value = String(value);
+                  }
+                }
+              } else {
+                input.value = Array.isArray(value) ? value.join(", ") : value;
+              }
             } else {
               input.value = value;
             }
@@ -1743,6 +1788,19 @@
     const requiresInteger = input.dataset.integer === "true";
     const isNumericField =
       metadata.type === "number" || metadata.type === "integer";
+
+    if (metadata.type === "object") {
+      const raw = input.value || "";
+      if (raw.trim() === "") {
+        errors.push("Value required");
+      } else {
+        try {
+          JSON.parse(raw);
+        } catch (jsonError) {
+          errors.push(`Invalid JSON: ${jsonError.message}`);
+        }
+      }
+    }
 
     if (isNumericField) {
       const value = parseFloat(input.value);
@@ -1943,9 +2001,18 @@
   async function exportConfig() {
     try {
       const response = await fetch("/api/config");
-      const config = await response.json();
+      const payload = await response
+        .json()
+        .catch(() => ({ error: { message: "Unable to parse response" } }));
 
-      const blob = new Blob([JSON.stringify(config, null, 2)], {
+      if (!response.ok || payload?.error) {
+        throw new Error(payload?.error?.message || "Export failed");
+      }
+
+      const { timestamp, ...rest } = payload || {};
+      const exportData = Object.keys(rest).length > 0 ? rest : payload;
+
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], {
         type: "application/json",
       });
       const url = URL.createObjectURL(blob);
@@ -1991,13 +2058,22 @@
         }
 
         try {
-          await fetch(`/api/config/${section}`, {
+          const response = await fetch(`/api/config/${section}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(data),
           });
+          const result = await response
+            .json()
+            .catch(() => ({ error: { message: "Unable to parse response" } }));
+
+          if (!response.ok || result?.error) {
+            const message = result?.error?.message || "Update failed";
+            throw new Error(message);
+          }
         } catch (sectionError) {
           console.error(`Failed to import section ${section}:`, sectionError);
+          throw new Error(`Section ${section} failed: ${sectionError.message}`);
         }
       }
 
