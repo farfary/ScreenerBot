@@ -615,6 +615,11 @@
         tab.textContent.includes(tabId.charAt(0).toUpperCase())
       );
     });
+
+    // Initialize chart when chart tab is activated
+    if (tabId === "chart" && currentModalMint) {
+      initTokenChart(currentModalMint);
+    }
   }
 
   function copyMintFromModal() {
@@ -2689,6 +2694,155 @@
       }
     }
   }
+
+  // ============================================================================
+  // CHART INTEGRATION
+  // ============================================================================
+
+  let tokenChartManager = null;
+
+  /**
+   * Initialize token chart in modal
+   * @param {string} mint - Token mint address
+   */
+  async function initTokenChart(mint) {
+    console.log("[TokenChart] Initializing chart for mint:", mint);
+
+    // Destroy existing chart if any
+    if (tokenChartManager) {
+      tokenChartManager.destroy();
+      tokenChartManager = null;
+    }
+
+    // Get current theme
+    const currentTheme =
+      document.documentElement.getAttribute("data-theme") || "dark";
+
+    try {
+      // Create chart manager
+      tokenChartManager = new ChartManager("token-chart", {
+        theme: currentTheme,
+        height: 500,
+        responsive: true,
+        showVolume: document.getElementById("show-volume")?.checked !== false,
+        indicators: [],
+      });
+
+      // Load token data with default timeframe
+      const activeTimeframe =
+        document.querySelector(".tf-btn.active")?.dataset.tf || "5m";
+      await tokenChartManager.loadToken(mint, activeTimeframe);
+
+      // Setup timeframe buttons
+      setupTimeframeButtons(mint);
+
+      // Setup indicator toggles
+      setupIndicatorToggles();
+
+      console.log("[TokenChart] Chart initialized successfully");
+    } catch (error) {
+      console.error("[TokenChart] Initialization error:", error);
+    }
+  }
+
+  /**
+   * Setup timeframe button handlers
+   * @param {string} mint - Token mint address
+   */
+  function setupTimeframeButtons(mint) {
+    const tfButtons = document.querySelectorAll(".tf-btn");
+    tfButtons.forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        // Update active state
+        tfButtons.forEach((b) => b.classList.remove("active"));
+        e.target.classList.add("active");
+
+        // Change timeframe
+        const timeframe = e.target.dataset.tf;
+        if (tokenChartManager) {
+          await tokenChartManager.setTimeframe(timeframe);
+        }
+      });
+    });
+  }
+
+  /**
+   * Setup indicator toggle handlers
+   */
+  function setupIndicatorToggles() {
+    const volumeToggle = document.getElementById("show-volume");
+    const ma20Toggle = document.getElementById("show-ma20");
+    const ma50Toggle = document.getElementById("show-ma50");
+
+    if (volumeToggle) {
+      volumeToggle.addEventListener("change", (e) => {
+        if (tokenChartManager) {
+          tokenChartManager.toggleOverlay("volume");
+        }
+      });
+    }
+
+    if (ma20Toggle) {
+      ma20Toggle.addEventListener("change", async (e) => {
+        if (tokenChartManager) {
+          if (e.target.checked) {
+            await tokenChartManager.addIndicator("SMA", {
+              period: 20,
+              color: "#2196F3",
+            });
+          } else {
+            tokenChartManager.removeIndicator("indicator:SMA:20");
+          }
+        }
+      });
+    }
+
+    if (ma50Toggle) {
+      ma50Toggle.addEventListener("change", async (e) => {
+        if (tokenChartManager) {
+          if (e.target.checked) {
+            await tokenChartManager.addIndicator("SMA", {
+              period: 50,
+              color: "#FF9800",
+            });
+          } else {
+            tokenChartManager.removeIndicator("indicator:SMA:50");
+          }
+        }
+      });
+    }
+  }
+
+  /**
+   * Retry chart load (called from error button)
+   */
+  function retryChartLoad() {
+    if (currentModalMint) {
+      initTokenChart(currentModalMint);
+    }
+  }
+
+  /**
+   * Update chart theme when dashboard theme changes
+   */
+  function updateChartTheme(theme) {
+    if (tokenChartManager) {
+      tokenChartManager.setTheme(theme);
+    }
+  }
+
+  // Listen for theme changes
+  if (window.ThemeManager) {
+    const originalSetTheme = window.ThemeManager.setTheme;
+    window.ThemeManager.setTheme = function (theme) {
+      originalSetTheme.call(window.ThemeManager, theme);
+      updateChartTheme(theme);
+    };
+  }
+
+  // Make retryChartLoad globally accessible
+  window.retryChartLoad = retryChartLoad;
+
   // Execute initialization immediately (works for both initial load and SPA navigation)
   initTokensPage();
 </script>
