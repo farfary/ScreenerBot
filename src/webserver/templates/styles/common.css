@@ -120,15 +120,51 @@
   cursor: pointer;
 }
 
-/* Full-height page utilities */
-.page-section {
-  flex: 1;
+/* PAGE PATTERNS ------------------------------------------------- */
+
+/* Table Page Pattern: Fixed toolbar + scrollable table + fixed footer */
+.page-table {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   min-height: 0;
-  /* allow child scrolling */
+  height: 100%;
+  padding: 10px;
+  gap: 8px;
 }
 
+.page-table .toolbar,
+.page-table .footer-bar {
+  flex: 0 0 auto;
+}
+
+.page-table .table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-card);
+  position: relative;
+}
+
+.page-table .table-wrap table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--table-header-bg);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+/* Content Page Pattern: Standard scrolling content */
+.page-content {
+  padding: 10px;
+  flex: 1 1 auto;
+  overflow: auto;
+  min-height: 0;
+}
+
+/* Toolbar component (reusable) */
 .toolbar {
   display: flex;
   gap: 8px;
@@ -138,15 +174,26 @@
   border: 1px solid var(--border-color);
   border-radius: 6px;
   background: var(--bg-secondary);
-  margin-bottom: 8px;
 }
 
 .toolbar .spacer {
   flex: 1;
+  min-width: 10px;
+}
+
+/* LEGACY SUPPORT (to be removed after migration) */
+.page-section {
+  display: flex;
+  flex-direction: column;
+  flex: 1 0 100%;
+  min-height: 0;
+  padding: 10px;
+  gap: 8px;
 }
 
 .table-scroll {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   border: 1px solid var(--border-color);
   border-radius: 8px;

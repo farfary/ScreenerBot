@@ -1,559 +1,565 @@
-<div class="grid">
-  <!-- Trading Overview Card -->
-  <div class="card">
-    <div class="card-header">
-      <span class="card-icon">�</span>
-      <span class="card-title">Trading Overview</span>
+<div class="page-content">
+  <div class="grid">
+    <!-- Trading Overview Card -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-icon">�</span>
+        <span class="card-title">Trading Overview</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Open Positions</span>
+        <span class="metric-value loading-text" id="openPositions">--</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Total Invested</span>
+        <span class="metric-value loading-text" id="totalInvested">--</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Total P&L</span>
+        <span class="metric-value loading-text" id="totalPnl">--</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Win Rate</span>
+        <span class="metric-value loading-text" id="winRate">--</span>
+      </div>
     </div>
-    <div class="metric-row">
-      <span class="metric-label">Open Positions</span>
-      <span class="metric-value loading-text" id="openPositions">--</span>
+
+    <!-- Wallet Status Card -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-icon">�</span>
+        <span class="card-title">Wallet Status</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">SOL Balance</span>
+        <span class="metric-value loading-text" id="solBalance">--</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Token Holdings</span>
+        <span class="metric-value loading-text" id="tokenCount">--</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Last Updated</span>
+        <span class="metric-value loading-text" id="walletUpdated">--</span>
+      </div>
     </div>
-    <div class="metric-row">
-      <span class="metric-label">Total Invested</span>
-      <span class="metric-value loading-text" id="totalInvested">--</span>
+
+    <!-- System Health Card -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-icon">⚙️</span>
+        <span class="card-title">System Health</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Services</span>
+        <span class="metric-value loading-text" id="servicesStatus">--</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">RPC Calls/sec</span>
+        <span class="metric-value loading-text" id="rpcRate">--</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">CPU (System)</span>
+        <span class="metric-value loading-text" id="homeCpu">--</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Memory (Sys)</span>
+        <span class="metric-value loading-text" id="homeMem">--</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Uptime</span>
+        <span class="metric-value loading-text" id="systemUptime">--</span>
+      </div>
     </div>
-    <div class="metric-row">
-      <span class="metric-label">Total P&L</span>
-      <span class="metric-value loading-text" id="totalPnl">--</span>
+
+    <!-- Performance Summary Card -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-icon">📊</span>
+        <span class="card-title">All-Time Performance</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Total Positions</span>
+        <span class="metric-value loading-text" id="totalPositions">--</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Closed Positions</span>
+        <span class="metric-value loading-text" id="closedPositions">--</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">All-Time P&L</span>
+        <span class="metric-value loading-text" id="allTimePnl">--</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Overall Win Rate</span>
+        <span class="metric-value loading-text" id="overallWinRate">--</span>
+      </div>
     </div>
-    <div class="metric-row">
-      <span class="metric-label">Win Rate</span>
-      <span class="metric-value loading-text" id="winRate">--</span>
+
+    <!-- Monitoring Status Card -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-icon">�</span>
+        <span class="card-title">Monitoring</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Tokens Tracked</span>
+        <span class="metric-value loading-text" id="tokensTracked">--</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Blacklisted</span>
+        <span class="metric-value loading-text" id="blacklisted">--</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Entry Check</span>
+        <span class="metric-value loading-text" id="entryInterval">--</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Position Check</span>
+        <span class="metric-value loading-text" id="positionInterval">--</span>
+      </div>
+    </div>
+
+    <!-- Trading Config Card -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-icon">⚡</span>
+        <span class="card-title">Trading Config</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Max Positions</span>
+        <span class="metric-value loading-text" id="maxPositions">--</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Trade Size</span>
+        <span class="metric-value loading-text" id="tradeSize">--</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Stop Loss</span>
+        <span class="metric-value loading-text" id="stopLoss">--</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Min Profit</span>
+        <span class="metric-value loading-text" id="minProfit">--</span>
+      </div>
     </div>
   </div>
 
-  <!-- Wallet Status Card -->
-  <div class="card">
-    <div class="card-header">
-      <span class="card-icon">�</span>
-      <span class="card-title">Wallet Status</span>
-    </div>
-    <div class="metric-row">
-      <span class="metric-label">SOL Balance</span>
-      <span class="metric-value loading-text" id="solBalance">--</span>
-    </div>
-    <div class="metric-row">
-      <span class="metric-label">Token Holdings</span>
-      <span class="metric-value loading-text" id="tokenCount">--</span>
-    </div>
-    <div class="metric-row">
-      <span class="metric-label">Last Updated</span>
-      <span class="metric-value loading-text" id="walletUpdated">--</span>
-    </div>
-  </div>
+  <script>
+    (function () {
+      const state = {
+        overviewTimer: null,
+        configTimer: null,
+        overview: null,
+        config: null,
+        status: null,
+        cleanupRegistered: false,
+        elements: new Map(),
+      };
 
-  <!-- System Health Card -->
-  <div class="card">
-    <div class="card-header">
-      <span class="card-icon">⚙️</span>
-      <span class="card-title">System Health</span>
-    </div>
-    <div class="metric-row">
-      <span class="metric-label">Services</span>
-      <span class="metric-value loading-text" id="servicesStatus">--</span>
-    </div>
-    <div class="metric-row">
-      <span class="metric-label">RPC Calls/sec</span>
-      <span class="metric-value loading-text" id="rpcRate">--</span>
-    </div>
-    <div class="metric-row">
-      <span class="metric-label">CPU (System)</span>
-      <span class="metric-value loading-text" id="homeCpu">--</span>
-    </div>
-    <div class="metric-row">
-      <span class="metric-label">Memory (Sys)</span>
-      <span class="metric-value loading-text" id="homeMem">--</span>
-    </div>
-    <div class="metric-row">
-      <span class="metric-label">Uptime</span>
-      <span class="metric-value loading-text" id="systemUptime">--</span>
-    </div>
-  </div>
+      const realtimeMetricIds = [
+        "servicesStatus",
+        "rpcRate",
+        "homeCpu",
+        "homeMem",
+        "systemUptime",
+        "solBalance",
+        "tokenCount",
+        "walletUpdated",
+      ];
 
-  <!-- Performance Summary Card -->
-  <div class="card">
-    <div class="card-header">
-      <span class="card-icon">📊</span>
-      <span class="card-title">All-Time Performance</span>
-    </div>
-    <div class="metric-row">
-      <span class="metric-label">Total Positions</span>
-      <span class="metric-value loading-text" id="totalPositions">--</span>
-    </div>
-    <div class="metric-row">
-      <span class="metric-label">Closed Positions</span>
-      <span class="metric-value loading-text" id="closedPositions">--</span>
-    </div>
-    <div class="metric-row">
-      <span class="metric-label">All-Time P&L</span>
-      <span class="metric-value loading-text" id="allTimePnl">--</span>
-    </div>
-    <div class="metric-row">
-      <span class="metric-label">Overall Win Rate</span>
-      <span class="metric-value loading-text" id="overallWinRate">--</span>
-    </div>
-  </div>
-
-  <!-- Monitoring Status Card -->
-  <div class="card">
-    <div class="card-header">
-      <span class="card-icon">�</span>
-      <span class="card-title">Monitoring</span>
-    </div>
-    <div class="metric-row">
-      <span class="metric-label">Tokens Tracked</span>
-      <span class="metric-value loading-text" id="tokensTracked">--</span>
-    </div>
-    <div class="metric-row">
-      <span class="metric-label">Blacklisted</span>
-      <span class="metric-value loading-text" id="blacklisted">--</span>
-    </div>
-    <div class="metric-row">
-      <span class="metric-label">Entry Check</span>
-      <span class="metric-value loading-text" id="entryInterval">--</span>
-    </div>
-    <div class="metric-row">
-      <span class="metric-label">Position Check</span>
-      <span class="metric-value loading-text" id="positionInterval">--</span>
-    </div>
-  </div>
-
-  <!-- Trading Config Card -->
-  <div class="card">
-    <div class="card-header">
-      <span class="card-icon">⚡</span>
-      <span class="card-title">Trading Config</span>
-    </div>
-    <div class="metric-row">
-      <span class="metric-label">Max Positions</span>
-      <span class="metric-value loading-text" id="maxPositions">--</span>
-    </div>
-    <div class="metric-row">
-      <span class="metric-label">Trade Size</span>
-      <span class="metric-value loading-text" id="tradeSize">--</span>
-    </div>
-    <div class="metric-row">
-      <span class="metric-label">Stop Loss</span>
-      <span class="metric-value loading-text" id="stopLoss">--</span>
-    </div>
-    <div class="metric-row">
-      <span class="metric-label">Min Profit</span>
-      <span class="metric-value loading-text" id="minProfit">--</span>
-    </div>
-  </div>
-</div>
-
-<script>
-  (function () {
-    const state = {
-      overviewTimer: null,
-      configTimer: null,
-      overview: null,
-      config: null,
-      status: null,
-      cleanupRegistered: false,
-      elements: new Map(),
-    };
-
-    const realtimeMetricIds = [
-      "servicesStatus",
-      "rpcRate",
-      "homeCpu",
-      "homeMem",
-      "systemUptime",
-      "solBalance",
-      "tokenCount",
-      "walletUpdated",
-    ];
-
-    function getElement(id) {
-      if (state.elements.has(id)) {
-        return state.elements.get(id);
-      }
-      const el = document.getElementById(id) || null;
-      state.elements.set(id, el);
-      return el;
-    }
-
-    function setMetric(id, value, options = {}) {
-      const el = getElement(id);
-      if (!el) {
-        return null;
-      }
-      el.textContent = value;
-      if (!options.keepLoading) {
-        el.classList.remove("loading-text");
-      }
-      if (options.color) {
-        el.style.color = options.color;
-      } else if (options.resetColor) {
-        el.style.color = "";
-      }
-      return el;
-    }
-
-    function setPendingMetric(id, value = "--") {
-      const el = getElement(id);
-      if (!el) {
-        return null;
-      }
-      el.textContent = value;
-      el.classList.add("loading-text");
-      return el;
-    }
-
-    function formatTime(value) {
-      if (!value) {
-        return "N/A";
-      }
-      try {
-        return new Date(value).toLocaleTimeString();
-      } catch (_) {
-        return "N/A";
-      }
-    }
-
-    const controller = {
-      initialize() {
-        this.teardown();
-        state.status = null;
-        this.setRealtimePending();
-        this.fetchOverview();
-        this.scheduleOverview(10000);
-        this.fetchConfig();
-        this.scheduleConfig(60000);
-        this.ensureCleanupHook();
-      },
-
-      ensureCleanupHook() {
-        if (state.cleanupRegistered) {
-          return;
+      function getElement(id) {
+        if (state.elements.has(id)) {
+          return state.elements.get(id);
         }
-        if (window.Router && typeof Router.registerCleanup === "function") {
-          Router.registerCleanup(() => {
-            this.teardown();
-          });
-          state.cleanupRegistered = true;
-        }
-      },
+        const el = document.getElementById(id) || null;
+        state.elements.set(id, el);
+        return el;
+      }
 
-      teardown() {
-        if (state.overviewTimer) {
-          clearInterval(state.overviewTimer);
-          state.overviewTimer = null;
+      function setMetric(id, value, options = {}) {
+        const el = getElement(id);
+        if (!el) {
+          return null;
         }
-        if (state.configTimer) {
-          clearInterval(state.configTimer);
-          state.configTimer = null;
+        el.textContent = value;
+        if (!options.keepLoading) {
+          el.classList.remove("loading-text");
         }
-      },
+        if (options.color) {
+          el.style.color = options.color;
+        } else if (options.resetColor) {
+          el.style.color = "";
+        }
+        return el;
+      }
 
-      scheduleOverview(intervalMs) {
-        if (state.overviewTimer) {
-          clearInterval(state.overviewTimer);
+      function setPendingMetric(id, value = "--") {
+        const el = getElement(id);
+        if (!el) {
+          return null;
         }
-        state.overviewTimer = setInterval(() => {
-          this.fetchOverview();
-        }, intervalMs);
-      },
+        el.textContent = value;
+        el.classList.add("loading-text");
+        return el;
+      }
 
-      scheduleConfig(intervalMs) {
-        if (state.configTimer) {
-          clearInterval(state.configTimer);
+      function formatTime(value) {
+        if (!value) {
+          return "N/A";
         }
-        state.configTimer = setInterval(() => {
-          this.fetchConfig();
-        }, intervalMs);
-      },
-
-      async fetchOverview() {
         try {
-          const res = await fetch("/api/dashboard/overview");
-          if (!res.ok) {
-            throw new Error(`HTTP ${res.status}`);
-          }
-          const data = await res.json();
-          state.overview = data;
-          this.applyOverview(data);
-        } catch (error) {
-          console.error("[Home] Failed to load overview:", error);
+          return new Date(value).toLocaleTimeString();
+        } catch (_) {
+          return "N/A";
         }
-      },
+      }
 
-      applyOverview(data) {
-        const positions = data?.positions || {};
-        const monitoring = data?.monitoring || {};
-        const blacklist = data?.blacklist || {};
-
-        const open = Number.isFinite(positions.open_positions)
-          ? positions.open_positions
-          : 0;
-        const maxPositions = state.config?.trading_limits?.max_open_positions;
-        const openLabel = Number.isFinite(maxPositions)
-          ? `${open}/${maxPositions}`
-          : `${open}`;
-        setMetric("openPositions", openLabel);
-
-        if (Number.isFinite(positions.total_invested_sol)) {
-          setMetric(
-            "totalInvested",
-            `${positions.total_invested_sol.toFixed(4)} SOL`
-          );
-        }
-
-        if (Number.isFinite(positions.total_pnl)) {
-          const pnl = positions.total_pnl;
-          const pnlEl = setMetric(
-            "totalPnl",
-            `${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} SOL`
-          );
-          if (pnlEl) {
-            pnlEl.style.color = pnl >= 0 ? "#00ff00" : "#ff4444";
-          }
-
-          const allTimeEl = setMetric(
-            "allTimePnl",
-            `${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} SOL`
-          );
-          if (allTimeEl) {
-            allTimeEl.style.color = pnl >= 0 ? "#00ff00" : "#ff4444";
-          }
-        }
-
-        if (Number.isFinite(positions.win_rate)) {
-          setMetric("winRate", `${positions.win_rate.toFixed(1)}%`);
-          setMetric("overallWinRate", `${positions.win_rate.toFixed(1)}%`);
-        }
-
-        if (Number.isFinite(positions.total_positions)) {
-          setMetric("totalPositions", positions.total_positions);
-        }
-        if (Number.isFinite(positions.closed_positions)) {
-          setMetric("closedPositions", positions.closed_positions);
-        }
-
-        if (Number.isFinite(monitoring.tokens_tracked)) {
-          setMetric("tokensTracked", monitoring.tokens_tracked);
-        }
-        if (Number.isFinite(blacklist.total_blacklisted)) {
-          setMetric("blacklisted", blacklist.total_blacklisted);
-        }
-        if (Number.isFinite(monitoring.entry_check_interval_secs)) {
-          setMetric(
-            "entryInterval",
-            `Every ${monitoring.entry_check_interval_secs}s`
-          );
-        }
-        if (Number.isFinite(monitoring.position_monitor_interval_secs)) {
-          setMetric(
-            "positionInterval",
-            `Every ${monitoring.position_monitor_interval_secs}s`
-          );
-        }
-      },
-
-      async fetchConfig() {
-        try {
-          const res = await fetch("/api/trading/config");
-          if (!res.ok) {
-            throw new Error(`HTTP ${res.status}`);
-          }
-          const data = await res.json();
-          state.config = data;
-          this.applyConfig(data);
-          if (state.overview) {
-            this.applyOverview(state.overview);
-          }
-        } catch (error) {
-          console.warn("[Home] Failed to load trading config:", error);
-        }
-      },
-
-      applyConfig(config) {
-        const limits = config?.trading_limits || {};
-        const risk = config?.risk_management || {};
-        const targets = config?.profit_targets || {};
-
-        if (Number.isFinite(limits.max_open_positions)) {
-          setMetric("maxPositions", limits.max_open_positions);
-        }
-        if (Number.isFinite(limits.trade_size_sol)) {
-          setMetric("tradeSize", `${limits.trade_size_sol} SOL`);
-        }
-        if (Number.isFinite(risk.stop_loss_percent)) {
-          setMetric("stopLoss", `${risk.stop_loss_percent}%`);
-        }
-        if (Number.isFinite(targets.base_min_profit_percent)) {
-          setMetric("minProfit", `${targets.base_min_profit_percent}%`);
-        }
-      },
-
-      handleStatusSnapshot(snapshot) {
-        state.status = snapshot;
-        this.applyStatus(snapshot);
-      },
-
-      applyStatus(snapshot) {
-        const services = snapshot?.services || {};
-        const ready = !!services.all_ready;
-        const servicesEl = setMetric(
-          "servicesStatus",
-          ready ? "●●●●● All Ready" : "○ Starting..."
-        );
-        if (servicesEl) {
-          servicesEl.style.color = ready ? "#00ff00" : "#ffaa00";
-        }
-
-        const rpcRate = snapshot?.rpc_stats?.calls_per_second;
-        if (Number.isFinite(rpcRate)) {
-          setMetric("rpcRate", `${rpcRate.toFixed(1)}/sec`);
-        }
-
-        const metrics = snapshot?.metrics || {};
-        if (Number.isFinite(metrics.cpu_system_percent)) {
-          setMetric("homeCpu", `${metrics.cpu_system_percent.toFixed(1)}%`);
-        }
-        if (
-          Number.isFinite(metrics.system_memory_used_mb) &&
-          Number.isFinite(metrics.system_memory_total_mb) &&
-          metrics.system_memory_total_mb > 0
-        ) {
-          const used = Utils.formatNumber(metrics.system_memory_used_mb, 0, {
-            fallback: "-",
-          });
-          const total = Utils.formatNumber(metrics.system_memory_total_mb, 0, {
-            fallback: "-",
-          });
-          setMetric("homeMem", `${used} / ${total} MB`);
-        }
-
-        const uptime =
-          snapshot?.uptime_formatted ||
-          (Number.isFinite(snapshot?.uptime_seconds)
-            ? `${snapshot.uptime_seconds}s`
-            : "N/A");
-        setMetric("systemUptime", uptime);
-
-        if (snapshot?.wallet) {
-          const wallet = snapshot.wallet;
-          if (Number.isFinite(wallet.sol_balance)) {
-            setMetric("solBalance", `${wallet.sol_balance.toFixed(4)} SOL`);
-          }
-          if (Number.isFinite(wallet.total_tokens_count)) {
-            setMetric("tokenCount", `${wallet.total_tokens_count} tokens`);
-          }
-          setMetric("walletUpdated", formatTime(wallet.snapshot_time), {
-            resetColor: true,
-          });
-        }
-      },
-
-      handleRealtimeConnected() {
-        console.info("[Home] Realtime connected – requesting snapshot");
-        this.requestStatusSnapshot("ws-connected");
-      },
-
-      handleRealtimeDisconnect() {
-        console.warn("[Home] Realtime disconnected");
-        if (!state.status) {
-          this.setRealtimePending("Waiting for realtime...");
-        }
-      },
-
-      handleRealtimeWarning(message) {
-        console.warn("[Home] Realtime warning", {
-          alias: message?.alias || message?.channel,
-          code: message?.code,
-          text: message?.message,
-        });
-      },
-
-      handleRealtimeUnavailable() {
-        console.warn("[Home] Realtime unavailable");
-        if (!state.status) {
-          this.setRealtimePending("Waiting for realtime...");
-        }
-      },
-
-      requestStatusSnapshot(reason = "manual") {
-        if (
-          window.Realtime &&
-          typeof window.Realtime.requestSnapshotForAliases === "function"
-        ) {
-          window.Realtime.requestSnapshotForAliases(["status"]);
-          console.log("[Home] Requested status snapshot", { reason });
-        } else if (
-          window.Realtime &&
-          typeof window.Realtime.updateFilters === "function"
-        ) {
-          window.Realtime.updateFilters({ snapshotTopics: ["status"] });
-          console.log("[Home] Requested status snapshot via filter update", {
-            reason,
-          });
-        }
-      },
-
-      onEnter() {
-        if (!state.status) {
+      const controller = {
+        initialize() {
+          this.teardown();
+          state.status = null;
           this.setRealtimePending();
-        }
-        this.requestStatusSnapshot("page-enter");
-      },
+          this.fetchOverview();
+          this.scheduleOverview(10000);
+          this.fetchConfig();
+          this.scheduleConfig(60000);
+          this.ensureCleanupHook();
+        },
 
-      setRealtimePending(message = "--") {
-        for (const id of realtimeMetricIds) {
-          setPendingMetric(id, message);
-        }
-      },
-    };
-
-    window.initHomePage = function () {
-      console.log("[Home] Initializing page");
-      controller.initialize();
-    };
-
-    window.PageRealtime = window.PageRealtime || {};
-    window.PageRealtime.home = {
-      topics: ["status"],
-      getFilters() {
-        return { status: {} };
-      },
-      channels: {
-        status(snapshot) {
-          controller.handleStatusSnapshot(snapshot);
-        },
-        _connected() {
-          controller.handleRealtimeConnected();
-        },
-        _disconnected() {
-          controller.handleRealtimeDisconnect();
-        },
-        _failed() {
-          controller.handleRealtimeDisconnect();
-        },
-        _warning(payload) {
-          controller.handleRealtimeWarning(payload);
-        },
-      },
-      onInitial(status) {
-        if (status !== "connected") {
-          if (!state.status) {
-            controller.setRealtimePending("Waiting for realtime...");
+        ensureCleanupHook() {
+          if (state.cleanupRegistered) {
+            return;
           }
-        }
-      },
-      onEnter() {
-        controller.onEnter();
-      },
-      onUnavailable() {
-        controller.handleRealtimeUnavailable();
-      },
-      onExit() {
-        controller.teardown();
-      },
-    };
+          if (window.Router && typeof Router.registerCleanup === "function") {
+            Router.registerCleanup(() => {
+              this.teardown();
+            });
+            state.cleanupRegistered = true;
+          }
+        },
 
-    initHomePage();
-  })();
-</script>
+        teardown() {
+          if (state.overviewTimer) {
+            clearInterval(state.overviewTimer);
+            state.overviewTimer = null;
+          }
+          if (state.configTimer) {
+            clearInterval(state.configTimer);
+            state.configTimer = null;
+          }
+        },
+
+        scheduleOverview(intervalMs) {
+          if (state.overviewTimer) {
+            clearInterval(state.overviewTimer);
+          }
+          state.overviewTimer = setInterval(() => {
+            this.fetchOverview();
+          }, intervalMs);
+        },
+
+        scheduleConfig(intervalMs) {
+          if (state.configTimer) {
+            clearInterval(state.configTimer);
+          }
+          state.configTimer = setInterval(() => {
+            this.fetchConfig();
+          }, intervalMs);
+        },
+
+        async fetchOverview() {
+          try {
+            const res = await fetch("/api/dashboard/overview");
+            if (!res.ok) {
+              throw new Error(`HTTP ${res.status}`);
+            }
+            const data = await res.json();
+            state.overview = data;
+            this.applyOverview(data);
+          } catch (error) {
+            console.error("[Home] Failed to load overview:", error);
+          }
+        },
+
+        applyOverview(data) {
+          const positions = data?.positions || {};
+          const monitoring = data?.monitoring || {};
+          const blacklist = data?.blacklist || {};
+
+          const open = Number.isFinite(positions.open_positions)
+            ? positions.open_positions
+            : 0;
+          const maxPositions = state.config?.trading_limits?.max_open_positions;
+          const openLabel = Number.isFinite(maxPositions)
+            ? `${open}/${maxPositions}`
+            : `${open}`;
+          setMetric("openPositions", openLabel);
+
+          if (Number.isFinite(positions.total_invested_sol)) {
+            setMetric(
+              "totalInvested",
+              `${positions.total_invested_sol.toFixed(4)} SOL`
+            );
+          }
+
+          if (Number.isFinite(positions.total_pnl)) {
+            const pnl = positions.total_pnl;
+            const pnlEl = setMetric(
+              "totalPnl",
+              `${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} SOL`
+            );
+            if (pnlEl) {
+              pnlEl.style.color = pnl >= 0 ? "#00ff00" : "#ff4444";
+            }
+
+            const allTimeEl = setMetric(
+              "allTimePnl",
+              `${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} SOL`
+            );
+            if (allTimeEl) {
+              allTimeEl.style.color = pnl >= 0 ? "#00ff00" : "#ff4444";
+            }
+          }
+
+          if (Number.isFinite(positions.win_rate)) {
+            setMetric("winRate", `${positions.win_rate.toFixed(1)}%`);
+            setMetric("overallWinRate", `${positions.win_rate.toFixed(1)}%`);
+          }
+
+          if (Number.isFinite(positions.total_positions)) {
+            setMetric("totalPositions", positions.total_positions);
+          }
+          if (Number.isFinite(positions.closed_positions)) {
+            setMetric("closedPositions", positions.closed_positions);
+          }
+
+          if (Number.isFinite(monitoring.tokens_tracked)) {
+            setMetric("tokensTracked", monitoring.tokens_tracked);
+          }
+          if (Number.isFinite(blacklist.total_blacklisted)) {
+            setMetric("blacklisted", blacklist.total_blacklisted);
+          }
+          if (Number.isFinite(monitoring.entry_check_interval_secs)) {
+            setMetric(
+              "entryInterval",
+              `Every ${monitoring.entry_check_interval_secs}s`
+            );
+          }
+          if (Number.isFinite(monitoring.position_monitor_interval_secs)) {
+            setMetric(
+              "positionInterval",
+              `Every ${monitoring.position_monitor_interval_secs}s`
+            );
+          }
+        },
+
+        async fetchConfig() {
+          try {
+            const res = await fetch("/api/trading/config");
+            if (!res.ok) {
+              throw new Error(`HTTP ${res.status}`);
+            }
+            const data = await res.json();
+            state.config = data;
+            this.applyConfig(data);
+            if (state.overview) {
+              this.applyOverview(state.overview);
+            }
+          } catch (error) {
+            console.warn("[Home] Failed to load trading config:", error);
+          }
+        },
+
+        applyConfig(config) {
+          const limits = config?.trading_limits || {};
+          const risk = config?.risk_management || {};
+          const targets = config?.profit_targets || {};
+
+          if (Number.isFinite(limits.max_open_positions)) {
+            setMetric("maxPositions", limits.max_open_positions);
+          }
+          if (Number.isFinite(limits.trade_size_sol)) {
+            setMetric("tradeSize", `${limits.trade_size_sol} SOL`);
+          }
+          if (Number.isFinite(risk.stop_loss_percent)) {
+            setMetric("stopLoss", `${risk.stop_loss_percent}%`);
+          }
+          if (Number.isFinite(targets.base_min_profit_percent)) {
+            setMetric("minProfit", `${targets.base_min_profit_percent}%`);
+          }
+        },
+
+        handleStatusSnapshot(snapshot) {
+          state.status = snapshot;
+          this.applyStatus(snapshot);
+        },
+
+        applyStatus(snapshot) {
+          const services = snapshot?.services || {};
+          const ready = !!services.all_ready;
+          const servicesEl = setMetric(
+            "servicesStatus",
+            ready ? "●●●●● All Ready" : "○ Starting..."
+          );
+          if (servicesEl) {
+            servicesEl.style.color = ready ? "#00ff00" : "#ffaa00";
+          }
+
+          const rpcRate = snapshot?.rpc_stats?.calls_per_second;
+          if (Number.isFinite(rpcRate)) {
+            setMetric("rpcRate", `${rpcRate.toFixed(1)}/sec`);
+          }
+
+          const metrics = snapshot?.metrics || {};
+          if (Number.isFinite(metrics.cpu_system_percent)) {
+            setMetric("homeCpu", `${metrics.cpu_system_percent.toFixed(1)}%`);
+          }
+          if (
+            Number.isFinite(metrics.system_memory_used_mb) &&
+            Number.isFinite(metrics.system_memory_total_mb) &&
+            metrics.system_memory_total_mb > 0
+          ) {
+            const used = Utils.formatNumber(metrics.system_memory_used_mb, 0, {
+              fallback: "-",
+            });
+            const total = Utils.formatNumber(
+              metrics.system_memory_total_mb,
+              0,
+              {
+                fallback: "-",
+              }
+            );
+            setMetric("homeMem", `${used} / ${total} MB`);
+          }
+
+          const uptime =
+            snapshot?.uptime_formatted ||
+            (Number.isFinite(snapshot?.uptime_seconds)
+              ? `${snapshot.uptime_seconds}s`
+              : "N/A");
+          setMetric("systemUptime", uptime);
+
+          if (snapshot?.wallet) {
+            const wallet = snapshot.wallet;
+            if (Number.isFinite(wallet.sol_balance)) {
+              setMetric("solBalance", `${wallet.sol_balance.toFixed(4)} SOL`);
+            }
+            if (Number.isFinite(wallet.total_tokens_count)) {
+              setMetric("tokenCount", `${wallet.total_tokens_count} tokens`);
+            }
+            setMetric("walletUpdated", formatTime(wallet.snapshot_time), {
+              resetColor: true,
+            });
+          }
+        },
+
+        handleRealtimeConnected() {
+          console.info("[Home] Realtime connected – requesting snapshot");
+          this.requestStatusSnapshot("ws-connected");
+        },
+
+        handleRealtimeDisconnect() {
+          console.warn("[Home] Realtime disconnected");
+          if (!state.status) {
+            this.setRealtimePending("Waiting for realtime...");
+          }
+        },
+
+        handleRealtimeWarning(message) {
+          console.warn("[Home] Realtime warning", {
+            alias: message?.alias || message?.channel,
+            code: message?.code,
+            text: message?.message,
+          });
+        },
+
+        handleRealtimeUnavailable() {
+          console.warn("[Home] Realtime unavailable");
+          if (!state.status) {
+            this.setRealtimePending("Waiting for realtime...");
+          }
+        },
+
+        requestStatusSnapshot(reason = "manual") {
+          if (
+            window.Realtime &&
+            typeof window.Realtime.requestSnapshotForAliases === "function"
+          ) {
+            window.Realtime.requestSnapshotForAliases(["status"]);
+            console.log("[Home] Requested status snapshot", { reason });
+          } else if (
+            window.Realtime &&
+            typeof window.Realtime.updateFilters === "function"
+          ) {
+            window.Realtime.updateFilters({ snapshotTopics: ["status"] });
+            console.log("[Home] Requested status snapshot via filter update", {
+              reason,
+            });
+          }
+        },
+
+        onEnter() {
+          if (!state.status) {
+            this.setRealtimePending();
+          }
+          this.requestStatusSnapshot("page-enter");
+        },
+
+        setRealtimePending(message = "--") {
+          for (const id of realtimeMetricIds) {
+            setPendingMetric(id, message);
+          }
+        },
+      };
+
+      window.initHomePage = function () {
+        console.log("[Home] Initializing page");
+        controller.initialize();
+      };
+
+      window.PageRealtime = window.PageRealtime || {};
+      window.PageRealtime.home = {
+        topics: ["status"],
+        getFilters() {
+          return { status: {} };
+        },
+        channels: {
+          status(snapshot) {
+            controller.handleStatusSnapshot(snapshot);
+          },
+          _connected() {
+            controller.handleRealtimeConnected();
+          },
+          _disconnected() {
+            controller.handleRealtimeDisconnect();
+          },
+          _failed() {
+            controller.handleRealtimeDisconnect();
+          },
+          _warning(payload) {
+            controller.handleRealtimeWarning(payload);
+          },
+        },
+        onInitial(status) {
+          if (status !== "connected") {
+            if (!state.status) {
+              controller.setRealtimePending("Waiting for realtime...");
+            }
+          }
+        },
+        onEnter() {
+          controller.onEnter();
+        },
+        onUnavailable() {
+          controller.handleRealtimeUnavailable();
+        },
+        onExit() {
+          controller.teardown();
+        },
+      };
+
+      initHomePage();
+    })();
+  </script>
+</div>

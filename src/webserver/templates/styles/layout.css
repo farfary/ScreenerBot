@@ -1,4 +1,6 @@
-/* Layout ------------------------------------------------------- */
+/* CLEAN LAYOUT - Fixed chrome + single viewport scroll --------- */
+
+/* Fixed top chrome */
 .header {
   background: var(--header-bg);
   color: var(--header-text);
@@ -7,7 +9,7 @@
   justify-content: space-between;
   align-items: center;
   box-shadow: 0 2px 10px var(--shadow-md);
-  flex-shrink: 0;
+  flex: 0 0 auto;
 }
 
 .header h1 {
@@ -132,7 +134,7 @@
   box-shadow: 0 1px 3px var(--shadow-md);
   display: flex;
   overflow-x: auto;
-  flex-shrink: 0;
+  flex: 0 0 auto;
 }
 
 .tab {
@@ -165,7 +167,7 @@
   display: flex;
   gap: 4px;
   overflow-x: auto;
-  flex-shrink: 0;
+  flex: 0 0 auto;
 }
 
 .sub-tab {
@@ -202,7 +204,7 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  flex-shrink: 0;
+  flex: 0 0 auto;
 }
 
 .toolbar-container .spacer {
@@ -210,16 +212,25 @@
   min-width: 10px;
 }
 
+/* VIEWPORT - The single scroll region for content */
 .content {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  padding: 10px;
-  overflow-y: auto;
-  overflow-x: hidden;
 }
 
+/* Router inserts .page-container wrappers around page markup */
+.content > .page-container {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Content page components */
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -395,13 +406,23 @@
   border-bottom: 2px solid var(--border-color);
 }
 
+/* Sticky table headers (legacy - new pattern in common.css) */
 .table-scroll .table thead th,
 .sticky-table thead th {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: inherit;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+  background: var(--table-header-bg);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* New pattern sticky headers */
+.table-wrap table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--table-header-bg);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 #tokensTable th.sortable {

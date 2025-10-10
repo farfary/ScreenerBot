@@ -1,16 +1,14 @@
 <style>
-  .services-container {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
   .services-toolbar {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-secondary);
   }
 
   .services-toolbar .toolbar-left,
@@ -56,10 +54,8 @@
     color: #ef4444;
   }
 
-  .table-scroll {
+  .services-page .table-wrap {
     border-radius: 12px;
-    border: 1px solid var(--border-color);
-    overflow: auto;
   }
 
   .services-table {
@@ -170,7 +166,7 @@
     }
   }
 </style>
-<div class="services-container">
+<div class="page-table services-page">
   <div class="services-toolbar">
     <div class="toolbar-left">
       <input
@@ -214,8 +210,8 @@
     </div>
   </div>
 
-  <div class="table-scroll">
-    <table class="table services-table sticky-table" id="servicesTable">
+  <div class="table-wrap">
+    <table class="table services-table" id="servicesTable">
       <thead>
         <tr>
           <th data-sort="name">Name</th>
