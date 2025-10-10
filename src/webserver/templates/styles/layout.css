@@ -7,6 +7,7 @@
   justify-content: space-between;
   align-items: center;
   box-shadow: 0 2px 10px var(--shadow-md);
+  flex-shrink: 0;
 }
 
 .header h1 {
@@ -131,6 +132,7 @@
   box-shadow: 0 1px 3px var(--shadow-md);
   display: flex;
   overflow-x: auto;
+  flex-shrink: 0;
 }
 
 .tab {
@@ -163,6 +165,7 @@
   display: flex;
   gap: 4px;
   overflow-x: auto;
+  flex-shrink: 0;
 }
 
 .sub-tab {
@@ -199,6 +202,7 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .toolbar-container .spacer {
@@ -212,6 +216,8 @@
   flex-direction: column;
   min-height: 0;
   padding: 10px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .grid {
@@ -387,6 +393,15 @@
   font-weight: 600;
   color: var(--table-header-text);
   border-bottom: 2px solid var(--border-color);
+}
+
+.table-scroll .table thead th,
+.sticky-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: inherit;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
 }
 
 #tokensTable th.sortable {
