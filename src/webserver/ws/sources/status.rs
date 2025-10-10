@@ -45,6 +45,7 @@ pub struct StatusSnapshot {
     pub rpc_stats: Option<RpcStatsSnapshot>,
     pub wallet: Option<WalletStatusSnapshot>,
     pub ohlcv_stats: Option<OhlcvStatsSnapshot>,
+    pub pools: Option<PoolServiceStatusSnapshot>,
     pub transactions: Option<TransactionsStatusSnapshot>,
 }
 
@@ -114,6 +115,58 @@ pub struct OhlcvStatsSnapshot {
     pub cache_hit_rate: f64,
     pub api_calls_per_minute: f64,
     pub queue_size: usize,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct PoolServiceStatusSnapshot {
+    pub running: bool,
+    pub system_ready: bool,
+    pub single_pool_mode: bool,
+    pub monitored_tokens: usize,
+    pub monitored_capacity: usize,
+    pub price_subscribers: usize,
+    pub cache: PoolCacheSnapshot,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub analyzer: Option<PoolAnalyzerSnapshot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fetcher: Option<PoolFetcherSnapshot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub discovery: Option<PoolDiscoverySnapshot>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct PoolCacheSnapshot {
+    pub total_prices: usize,
+    pub fresh_prices: usize,
+    pub history_entries: usize,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct PoolAnalyzerSnapshot {
+    pub total_pools: usize,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub program_distribution: Vec<PoolProgramCount>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct PoolProgramCount {
+    pub program: String,
+    pub count: usize,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct PoolFetcherSnapshot {
+    pub total_bundles: usize,
+    pub bundles_with_data: usize,
+    pub total_accounts_tracked: usize,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct PoolDiscoverySnapshot {
+    pub sources_enabled: Vec<String>,
+    pub debug_override_active: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub debug_override_count: Option<usize>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -254,6 +307,7 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
             queue_size: stats.queue_size,
         });
 
+    let pools = collect_pool_service_snapshot();
     let transactions = collect_transactions_snapshot().await;
 
     StatusSnapshot {
@@ -272,6 +326,7 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
         rpc_stats,
         wallet,
         ohlcv_stats,
+        pools,
         transactions,
     }
 }
@@ -486,6 +541,97 @@ async fn collect_wallet_snapshot() -> Option<WalletStatusSnapshot> {
             None
         }
     }
+}
+
+fn collect_pool_service_snapshot() -> Option<PoolServiceStatusSnapshot> {
+    let running = crate::pools::is_pool_service_running();
+    let system_ready = POOL_SERVICE_READY.load(Ordering::SeqCst);
+
+    let cache_stats = crate::pools::get_cache_stats();
+    let monitored_tokens_count = crate::pools::get_available_tokens().len();
+    let price_subscribers = crate::pools::get_prices_subscriber_count();
+
+    let analyzer_snapshot = crate::pools::get_pool_analyzer().and_then(|analyzer| {
+        let directory = analyzer.get_pool_directory();
+        let guard = directory.read().ok()?;
+
+        let total_pools = guard.len();
+        let mut program_counts: HashMap<String, usize> = HashMap::new();
+        for descriptor in guard.values() {
+            let label = descriptor.program_kind.display_name().to_string();
+            *program_counts.entry(label).or_insert(0) += 1;
+        }
+
+        let mut program_distribution: Vec<PoolProgramCount> = program_counts
+            .into_iter()
+            .map(|(program, count)| PoolProgramCount { program, count })
+            .collect();
+        program_distribution.sort_by(|a, b| {
+            b.count
+                .cmp(&a.count)
+                .then_with(|| a.program.cmp(&b.program))
+        });
+
+        Some(PoolAnalyzerSnapshot {
+            total_pools,
+            program_distribution,
+        })
+    });
+
+    let fetcher_snapshot = crate::pools::get_account_fetcher().map(|fetcher| {
+        let stats = fetcher.get_fetch_stats();
+        PoolFetcherSnapshot {
+            total_bundles: stats.total_bundles,
+            bundles_with_data: stats.bundles_with_data,
+            total_accounts_tracked: stats.total_accounts_tracked,
+        }
+    });
+
+    let debug_override_tokens = crate::pools::get_debug_token_override();
+    let debug_override_count = debug_override_tokens
+        .as_ref()
+        .map(|tokens| tokens.len())
+        .unwrap_or(0);
+
+    let (dexs_enabled, gecko_enabled, raydium_enabled) =
+        crate::pools::PoolDiscovery::get_source_config();
+    let mut sources_enabled = Vec::new();
+    if dexs_enabled {
+        sources_enabled.push("DexScreener".to_string());
+    }
+    if gecko_enabled {
+        sources_enabled.push("GeckoTerminal".to_string());
+    }
+    if raydium_enabled {
+        sources_enabled.push("Raydium".to_string());
+    }
+
+    let discovery_snapshot = PoolDiscoverySnapshot {
+        sources_enabled,
+        debug_override_active: debug_override_count > 0,
+        debug_override_count: if debug_override_count > 0 {
+            Some(debug_override_count)
+        } else {
+            None
+        },
+    };
+
+    Some(PoolServiceStatusSnapshot {
+        running,
+        system_ready,
+        single_pool_mode: crate::pools::is_single_pool_mode_enabled(),
+        monitored_tokens: monitored_tokens_count,
+        monitored_capacity: crate::pools::types::MAX_WATCHED_TOKENS,
+        price_subscribers,
+        cache: PoolCacheSnapshot {
+            total_prices: cache_stats.total_prices,
+            fresh_prices: cache_stats.fresh_prices,
+            history_entries: cache_stats.history_entries,
+        },
+        analyzer: analyzer_snapshot,
+        fetcher: fetcher_snapshot,
+        discovery: Some(discovery_snapshot),
+    })
 }
 
 async fn collect_transactions_snapshot() -> Option<TransactionsStatusSnapshot> {

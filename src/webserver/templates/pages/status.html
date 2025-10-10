@@ -421,6 +421,9 @@
       case "trader":
         renderTraderTab(data);
         break;
+      case "pools":
+        renderPoolsTab(data);
+        break;
       case "transactions":
         renderTransactionsTab(data);
         break;
@@ -1266,6 +1269,299 @@
                     </div>
                 </div>
             `;
+  }
+
+  function renderPoolsTab(data) {
+    const contentContainer = document.getElementById("statusContent");
+    if (!contentContainer) return;
+
+    const pools = data.pools;
+
+    if (!pools) {
+      contentContainer.innerHTML = `
+        <div class="page-section">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-icon">🏊</span>
+              <span class="card-title">Pool Service</span>
+            </div>
+            <div class="status-placeholder">
+              <div class="status-placeholder-icon">🏊</div>
+              <div class="status-placeholder-title">Pool Service Metrics</div>
+              <div class="status-placeholder-text">Pool service details are not available yet. Ensure the pool services are initialized.</div>
+            </div>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    const serviceLabel = pools.running ? "Running" : "Stopped";
+    const readyLabel = pools.system_ready ? "Ready" : "Not Ready";
+    const modeLabel = pools.single_pool_mode ? "Single Pool" : "Multi Pool";
+
+    const monitoredLabel = Utils.formatNumber(
+      Number(pools.monitored_tokens || 0),
+      0,
+      {
+        fallback: "0",
+      }
+    );
+    const capacityLabel = Utils.formatNumber(
+      Number(pools.monitored_capacity || 0),
+      0,
+      {
+        fallback: "0",
+      }
+    );
+    const subscribersLabel = Utils.formatNumber(
+      Number(pools.price_subscribers || 0),
+      0,
+      {
+        fallback: "0",
+      }
+    );
+
+    const cache = pools.cache || {};
+    const totalPricesLabel = Utils.formatNumber(
+      Number(cache.total_prices || 0),
+      0,
+      {
+        fallback: "0",
+      }
+    );
+    const freshPricesLabel = Utils.formatNumber(
+      Number(cache.fresh_prices || 0),
+      0,
+      {
+        fallback: "0",
+      }
+    );
+    const historyEntriesLabel = Utils.formatNumber(
+      Number(cache.history_entries || 0),
+      0,
+      { fallback: "0" }
+    );
+
+    const analyzer = pools.analyzer || null;
+    const analyzerTotalLabel = analyzer
+      ? Utils.formatNumber(Number(analyzer.total_pools || 0), 0, {
+          fallback: "0",
+        })
+      : "N/A";
+
+    const programRows =
+      analyzer &&
+      Array.isArray(analyzer.program_distribution) &&
+      analyzer.program_distribution.length
+        ? analyzer.program_distribution
+            .map(
+              (item) => `
+              <tr>
+                <td>${Utils.escapeHtml(item.program || "Unknown")}</td>
+                <td style="text-align: right;">${Utils.formatNumber(
+                  Number(item.count || 0),
+                  0,
+                  { fallback: "0" }
+                )}</td>
+              </tr>
+            `
+            )
+            .join("")
+        : `
+              <tr>
+                <td colspan="2" style="text-align: center; padding: 16px; color: var(--text-secondary);">
+                  No analyzer data available
+                </td>
+              </tr>
+            `;
+
+    const fetcher = pools.fetcher || null;
+    const fetcherRows = fetcher
+      ? `
+              <tr>
+                <td>Total Bundles</td>
+                <td style="text-align: right;">${Utils.formatNumber(
+                  Number(fetcher.total_bundles || 0),
+                  0,
+                  { fallback: "0" }
+                )}</td>
+              </tr>
+              <tr>
+                <td>Bundles With Data</td>
+                <td style="text-align: right;">${Utils.formatNumber(
+                  Number(fetcher.bundles_with_data || 0),
+                  0,
+                  { fallback: "0" }
+                )}</td>
+              </tr>
+              <tr>
+                <td>Total Accounts Tracked</td>
+                <td style="text-align: right;">${Utils.formatNumber(
+                  Number(fetcher.total_accounts_tracked || 0),
+                  0,
+                  { fallback: "0" }
+                )}</td>
+              </tr>
+            `
+      : `
+              <tr>
+                <td colspan="2" style="text-align: center; padding: 16px; color: var(--text-secondary);">
+                  Fetcher metrics unavailable
+                </td>
+              </tr>
+            `;
+
+    const discovery = pools.discovery || null;
+    const sourcesText = discovery
+      ? discovery.sources_enabled && discovery.sources_enabled.length
+        ? discovery.sources_enabled
+            .map((source) => Utils.escapeHtml(source))
+            .join(", ")
+        : "None"
+      : "Unknown";
+
+    const debugOverrideText = discovery
+      ? discovery.debug_override_active
+        ? `Active (${Utils.formatNumber(
+            Number(discovery.debug_override_count || 0),
+            0,
+            { fallback: "0" }
+          )} tokens)`
+        : "Inactive"
+      : "Unknown";
+
+    contentContainer.innerHTML = `
+        <div class="page-section">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-icon">🏊</span>
+              <span class="card-title">Pool Service</span>
+            </div>
+            <div class="card-body">
+              <div class="status-metrics-grid">
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">⚙️</span>
+                    <span>Service</span>
+                  </div>
+                  <div class="status-metric-value">
+                    ${serviceLabel}
+                    <span class="status-metric-unit">${readyLabel}</span>
+                  </div>
+                </div>
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">🧭</span>
+                    <span>Monitoring Mode</span>
+                  </div>
+                  <div class="status-metric-value">
+                    ${modeLabel}
+                  </div>
+                </div>
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">🔍</span>
+                    <span>Monitored Tokens</span>
+                  </div>
+                  <div class="status-metric-value">
+                    ${monitoredLabel}
+                    <span class="status-metric-unit">of ${capacityLabel}</span>
+                  </div>
+                </div>
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">💾</span>
+                    <span>Fresh Prices</span>
+                  </div>
+                  <div class="status-metric-value">
+                    ${freshPricesLabel}
+                    <span class="status-metric-unit">/ ${totalPricesLabel}</span>
+                  </div>
+                </div>
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">📚</span>
+                    <span>History Entries</span>
+                  </div>
+                  <div class="status-metric-value">
+                    ${historyEntriesLabel}
+                  </div>
+                </div>
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">📡</span>
+                    <span>Price Subscribers</span>
+                  </div>
+                  <div class="status-metric-value">
+                    ${subscribersLabel}
+                  </div>
+                </div>
+              </div>
+
+              <h3 class="status-section-title">Cache Summary</h3>
+              <table class="status-services-table sticky-table">
+                <tbody>
+                  <tr>
+                    <td>Total Prices in Cache</td>
+                    <td style="text-align: right;">${totalPricesLabel}</td>
+                  </tr>
+                  <tr>
+                    <td>Fresh Prices</td>
+                    <td style="text-align: right;">${freshPricesLabel}</td>
+                  </tr>
+                  <tr>
+                    <td>History Entries</td>
+                    <td style="text-align: right;">${historyEntriesLabel}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h3 class="status-section-title">Analyzer Distribution</h3>
+              <table class="status-services-table sticky-table">
+                <thead>
+                  <tr>
+                    <th>Program</th>
+                    <th style="text-align: right;">Pools</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${programRows}
+                </tbody>
+              </table>
+              <div class="status-trader-info" style="margin-top: 12px;">
+                <div class="status-trader-row">
+                  <span class="status-trader-label">Total Pools Tracked</span>
+                  <span class="status-trader-value">${analyzerTotalLabel}</span>
+                </div>
+              </div>
+
+              <h3 class="status-section-title">Fetcher Metrics</h3>
+              <table class="status-services-table sticky-table">
+                <tbody>
+                  ${fetcherRows}
+                </tbody>
+              </table>
+
+              <h3 class="status-section-title">Discovery Configuration</h3>
+              <div class="status-trader-info">
+                <div class="status-trader-row">
+                  <span class="status-trader-label">Enabled Sources</span>
+                  <span class="status-trader-value">${Utils.escapeHtml(
+                    sourcesText
+                  )}</span>
+                </div>
+                <div class="status-trader-row">
+                  <span class="status-trader-label">Debug Token Override</span>
+                  <span class="status-trader-value">${Utils.escapeHtml(
+                    debugOverrideText
+                  )}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
   }
 
   function renderTransactionsTab(data) {

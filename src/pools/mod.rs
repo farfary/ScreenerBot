@@ -42,6 +42,7 @@ pub use service::{
     // New functions for ServiceManager integration
     initialize_pool_components,
     is_pool_service_running,
+    is_single_pool_mode_enabled,
     set_debug_token_override,
     start_helper_tasks,
     stop_pool_service,
