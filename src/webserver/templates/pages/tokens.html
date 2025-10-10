@@ -544,6 +544,14 @@
     if (modal) {
       modal.classList.remove("active");
     }
+
+    // CRITICAL FIX: Destroy chart instance on modal close to prevent stale data
+    if (tokenChartManager) {
+      console.log("[TokenDetail] Destroying chart on modal close");
+      tokenChartManager.destroy();
+      tokenChartManager = null;
+    }
+
     currentModalMint = null;
     tokenModalData = null;
   }
@@ -594,6 +602,21 @@
         populateEnd - modalStart
       ).toFixed(2)}ms`
     );
+
+    // CRITICAL FIX: Check if chart tab is already active from previous modal session
+    // If so, initialize chart immediately with new token
+    const chartTab = document.querySelector('.modal-tab[onclick*="chart"]');
+    const chartTabPane = document.getElementById("tab-chart");
+    if (
+      chartTab?.classList.contains("active") ||
+      chartTabPane?.classList.contains("active")
+    ) {
+      console.log(
+        "[TokenDetail] Chart tab already active, initializing chart for:",
+        mint
+      );
+      initTokenChart(mint);
+    }
   }
 
   function closeTokenModal(event) {
@@ -616,8 +639,13 @@
       );
     });
 
-    // Initialize chart when chart tab is activated
+    // CRITICAL FIX: Always re-initialize chart when switching to chart tab
+    // This ensures correct token data is loaded, even if chart was previously initialized
     if (tabId === "chart" && currentModalMint) {
+      console.log(
+        "[TokenDetail] Switching to chart tab, initializing chart for:",
+        currentModalMint
+      );
       initTokenChart(currentModalMint);
     }
   }
@@ -2702,6 +2730,26 @@
   let tokenChartManager = null;
 
   /**
+   * Show chart error message
+   * @param {string} message - Error message to display
+   */
+  function showChartError(message) {
+    const loading = document.getElementById("chart-loading");
+    const error = document.getElementById("chart-error");
+
+    console.log("[TokenChart] showChartError:", message);
+
+    if (loading) loading.style.display = "none";
+    if (error) {
+      error.style.display = "flex";
+      const errorText = error.querySelector("p");
+      if (errorText) {
+        errorText.textContent = message;
+      }
+    }
+  }
+
+  /**
    * Initialize token chart in modal
    * @param {string} mint - Token mint address
    */
@@ -2713,6 +2761,22 @@
       tokenChartManager.destroy();
       tokenChartManager = null;
     }
+
+    // CRITICAL FIX: Validate token has OHLCV data before attempting to load
+    const tokenData = tokenModalData?.token || getTokenByMint(mint);
+    if (!tokenData?.has_ohlcv) {
+      console.warn("[TokenChart] Token does not have OHLCV data available:", {
+        mint,
+        has_ohlcv: tokenData?.has_ohlcv,
+        tokenData: tokenData,
+      });
+      showChartError("📊 OHLCV data not available for this token");
+      return;
+    }
+
+    console.log(
+      "[TokenChart] Token has OHLCV data, proceeding with initialization"
+    );
 
     // Get current theme
     const currentTheme =
@@ -2742,6 +2806,7 @@
       console.log("[TokenChart] Chart initialized successfully");
     } catch (error) {
       console.error("[TokenChart] Initialization error:", error);
+      showChartError(`Failed to load chart: ${error.message}`);
     }
   }
 

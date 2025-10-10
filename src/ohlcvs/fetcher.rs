@@ -137,7 +137,7 @@ impl OhlcvFetcher {
             url.push_str(&format!("?before_timestamp={}", before));
         }
         url.push_str(&format!(
-            "{}limit={}",
+            "{}limit={}&currency=token",
             if before_timestamp.is_some() { "&" } else { "?" },
             limit.min(MAX_CANDLES_PER_REQUEST)
         ));
