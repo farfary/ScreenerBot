@@ -457,6 +457,16 @@
     background: rgba(245, 87, 108, 0.1);
     color: #f5576c;
   }
+
+  .diff-section {
+    margin-bottom: 16px;
+  }
+
+  .diff-section h4 {
+    margin: 0 0 8px;
+    font-size: 14px;
+    font-weight: 600;
+  }
 </style>
 
 <!-- DYNAMIC CONFIG UI -->
@@ -563,6 +573,7 @@
   };
 
   let SECTION_STATE = {};
+  let SECTION_BASELINES = {};
 
   function formatSectionTitle(sectionName) {
     if (SECTION_TITLE_MAP[sectionName]) {
@@ -572,6 +583,15 @@
       .split("_")
       .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
       .join(" ");
+  }
+
+  function deepClone(value) {
+    if (value === undefined) return undefined;
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch (_err) {
+      return value;
+    }
   }
 
   function formatFieldLabel(fieldKey) {
@@ -611,6 +631,7 @@
       });
 
       SECTION_STATE = {};
+      SECTION_BASELINES = {};
       sectionNames.forEach((sectionName) => {
         SECTION_STATE[sectionName] = {
           icon: SECTION_ICON_MAP[sectionName] || "⚙️",
@@ -769,6 +790,107 @@
     `;
   }
 
+  function collectSectionValues(sectionName, inputsOverride) {
+    const body = document.getElementById(`${sectionName}-body`);
+    if (!body) return null;
+
+    const inputs =
+      inputsOverride || body.querySelectorAll("input, select, textarea");
+    if (!inputs || inputs.length === 0) {
+      return null;
+    }
+
+    const values = {};
+
+    inputs.forEach((input) => {
+      const key = input.id.replace(`${sectionName}_`, "");
+      let value = input.value;
+      const requiresInteger = input.dataset.integer === "true";
+
+      if (input.type === "number") {
+        if (value === "") {
+          value = "";
+        } else {
+          value = requiresInteger ? parseInt(value, 10) : parseFloat(value);
+          if (Number.isNaN(value)) {
+            value = "";
+          }
+        }
+      } else if (input.tagName === "SELECT") {
+        value = value === "true";
+      } else if (input.tagName === "TEXTAREA") {
+        const parts = value
+          .split(",")
+          .map((v) => v.trim())
+          .filter((v) => v.length > 0);
+
+        if (parts.length === 0) {
+          value = [];
+        } else {
+          const numericParts = parts.map((v) => Number(v));
+          if (numericParts.every((n) => !Number.isNaN(n))) {
+            value = numericParts;
+          } else {
+            value = parts;
+          }
+        }
+      }
+
+      values[key] = value;
+    });
+
+    return values;
+  }
+
+  function valuesEqual(a, b) {
+    return JSON.stringify({ value: a }) === JSON.stringify({ value: b });
+  }
+
+  function computeLocalDiff() {
+    const diffs = [];
+
+    for (const [sectionName, baseline] of Object.entries(SECTION_BASELINES)) {
+      const currentValues = collectSectionValues(sectionName);
+      if (!currentValues) continue;
+
+      const keys = new Set([
+        ...Object.keys(baseline || {}),
+        ...Object.keys(currentValues || {}),
+      ]);
+
+      keys.forEach((key) => {
+        const originalValue = baseline ? baseline[key] : undefined;
+        const currentValue = currentValues[key];
+
+        if (!valuesEqual(originalValue, currentValue)) {
+          diffs.push({
+            section: sectionName,
+            field: key,
+            original: originalValue,
+            current: currentValue,
+          });
+        }
+      });
+    }
+
+    diffs.sort((a, b) => {
+      if (a.section === b.section) {
+        return a.field.localeCompare(b.field);
+      }
+      return a.section.localeCompare(b.section);
+    });
+
+    return diffs;
+  }
+
+  function formatDiffValue(value) {
+    if (value === undefined) return "—";
+    if (typeof value === "string") {
+      return value === "" ? '""' : value;
+    }
+    return JSON.stringify(value);
+  }
+
   // =============================================================================
   // LOAD & SAVE FUNCTIONS
   // =============================================================================
@@ -785,6 +907,7 @@
       const result = await response.json();
 
       if (result.data) {
+        SECTION_BASELINES[sectionName] = deepClone(result.data);
         // Populate fields
         for (const [key, value] of Object.entries(result.data)) {
           const fieldId = `${sectionName}_${key}`;
@@ -831,31 +954,10 @@
 
     try {
       // Collect data
-      const updates = {};
-      inputs.forEach((input) => {
-        const key = input.id.replace(`${sectionName}_`, "");
-        let value = input.value;
-        const requiresInteger = input.dataset.integer === "true";
-
-        if (input.type === "number") {
-          value = requiresInteger ? parseInt(value, 10) : parseFloat(value);
-        } else if (input.tagName === "SELECT") {
-          value = value === "true";
-        } else if (input.tagName === "TEXTAREA") {
-          // Handle arrays
-          value = value
-            .split(",")
-            .map((v) => v.trim())
-            .filter((v) => v);
-          // Try to convert to numbers if possible
-          const numValue = value.map((v) => parseFloat(v));
-          if (numValue.every((v) => !isNaN(v))) {
-            value = numValue;
-          }
-        }
-
-        updates[key] = value;
-      });
+      const updates = collectSectionValues(sectionName, inputs);
+      if (!updates) {
+        throw new Error("Unable to gather section values");
+      }
 
       // Save
       const response = await fetch(`/api/config/${sectionName}`, {
@@ -872,6 +974,7 @@
           "success",
           result.message || "Saved successfully"
         );
+        SECTION_BASELINES[sectionName] = deepClone(updates);
         btn.innerHTML = "✅ Saved";
         setTimeout(() => {
           btn.innerHTML = "💾 Save";
@@ -1156,77 +1259,122 @@
     body.innerHTML = '<p style="text-align:center;opacity:0.6;">Loading...</p>';
 
     try {
-      const response = await fetch("/api/config/diff");
-      const result = await response.json();
+      const localDiff = computeLocalDiff();
 
-      if (!response.ok) {
-        throw new Error(result.error?.message || "Failed to fetch diff");
-      }
+      const localHtml = (() => {
+        if (localDiff.length === 0) {
+          return '<p style="text-align:center;opacity:0.7;">No unsaved changes detected.</p>';
+        }
 
-      if (!result.has_changes) {
-        body.innerHTML =
-          '<p style="text-align:center;">No changes detected - memory and disk configs match</p>';
-        return;
-      }
+        const rows = localDiff
+          .map(
+            (entry) => `
+              <tr>
+                  <td>${entry.section}</td>
+                  <td>${entry.field}</td>
+                  <td class="old-value">${formatDiffValue(entry.original)}</td>
+                  <td class="new-value">${formatDiffValue(entry.current)}</td>
+              </tr>
+            `
+          )
+          .join("");
 
-      if (!result.memory || !result.disk) {
-        body.innerHTML =
-          '<p style="color:#f5576c;text-align:center;">Diff data unavailable</p>';
-        return;
-      }
-
-      // Build diff table
-      let diffRows = "";
-
-      for (const [section, memData] of Object.entries(result.memory)) {
-        if (!memData || typeof memData !== "object") continue;
-        const diskData = result.disk[section] || {};
-        const fieldKeys = new Set([
-          ...Object.keys(memData),
-          ...Object.keys(diskData),
-        ]);
-
-        fieldKeys.forEach((key) => {
-          const memValue = memData[key];
-          const diskValue = diskData[key];
-          if (JSON.stringify(memValue) !== JSON.stringify(diskValue)) {
-            diffRows += `
-                        <tr>
-                            <td>${section}</td>
-                            <td>${key}</td>
-                            <td class="new-value">${JSON.stringify(
-                              memValue
-                            )}</td>
-                            <td class="old-value">${JSON.stringify(
-                              diskValue
-                            )}</td>
-                        </tr>
-                    `;
-          }
-        });
-      }
-
-      if (!diffRows) {
-        body.innerHTML =
-          '<p style="text-align:center;">Changes detected but could not be itemized.</p>';
-        return;
-      }
-
-      body.innerHTML = `
+        return `
             <table class="diff-table sticky-table">
                 <thead>
                     <tr>
                         <th>Section</th>
                         <th>Field</th>
-                        <th>Memory</th>
-                        <th>Disk</th>
+                        <th>Saved</th>
+                        <th>Current</th>
                     </tr>
                 </thead>
                 <tbody>
-                    ${diffRows}
+                    ${rows}
                 </tbody>
             </table>
         `;
+      })();
+
+      let serverHtml = "";
+
+      try {
+        const response = await fetch("/api/config/diff");
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error?.message || "Failed to fetch diff");
+        }
+
+        if (!result.memory || !result.disk) {
+          serverHtml =
+            '<p style="color:#f5576c;text-align:center;">Diff data unavailable</p>';
+        } else {
+          let diffRows = "";
+
+          for (const [section, memData] of Object.entries(result.memory)) {
+            if (!memData || typeof memData !== "object") continue;
+            const diskData = result.disk[section] || {};
+            const fieldKeys = new Set([
+              ...Object.keys(memData),
+              ...Object.keys(diskData),
+            ]);
+
+            fieldKeys.forEach((key) => {
+              const memValue = memData[key];
+              const diskValue = diskData[key];
+              if (JSON.stringify(memValue) !== JSON.stringify(diskValue)) {
+                diffRows += `
+                            <tr>
+                                <td>${section}</td>
+                                <td>${key}</td>
+                                <td class="new-value">${formatDiffValue(
+                                  memValue
+                                )}</td>
+                                <td class="old-value">${formatDiffValue(
+                                  diskValue
+                                )}</td>
+                            </tr>
+                        `;
+              }
+            });
+          }
+
+          if (!diffRows) {
+            serverHtml =
+              '<p style="text-align:center;opacity:0.7;">In-memory configuration matches disk version.</p>';
+          } else {
+            serverHtml = `
+                <table class="diff-table sticky-table">
+                    <thead>
+                        <tr>
+                            <th>Section</th>
+                            <th>Field</th>
+                            <th>Memory</th>
+                            <th>Disk</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${diffRows}
+                    </tbody>
+                </table>
+            `;
+          }
+        }
+      } catch (error) {
+        serverHtml = `<p style="color:#f5576c;text-align:center;">Backend diff failed: ${error.message}</p>`;
+      }
+
+      body.innerHTML = `
+        <div class="diff-section">
+            <h4>Unsaved Changes (UI vs Saved)</h4>
+            ${localHtml}
+        </div>
+        <div class="diff-section">
+            <h4>Backend vs Disk</h4>
+            ${serverHtml}
+        </div>
+      `;
     } catch (error) {
       body.innerHTML = `<p style="color:#f5576c;text-align:center;">Error: ${error.message}</p>`;
     }
