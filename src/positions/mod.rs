@@ -43,6 +43,7 @@ pub use loss_detection::{
 // Database and library exports
 pub use db::{
     delete_position_by_id, force_database_sync, get_closed_positions as get_db_closed_positions,
+    get_closed_positions_count_since as get_db_closed_positions_count_since,
     get_open_positions as get_db_open_positions, get_position_by_id as get_db_position_by_id,
     get_position_by_mint as get_db_position_by_mint, get_positions_database,
     get_recent_closed_positions_for_mint, get_token_snapshot, get_token_snapshots,

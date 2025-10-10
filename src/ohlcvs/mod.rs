@@ -18,6 +18,7 @@ pub use types::{
     Timeframe, TokenOhlcvConfig,
 };
 
+pub use monitor::MonitorStats;
 pub use priorities::ActivityType;
 pub use service::OhlcvService;
 
@@ -61,6 +62,10 @@ pub async fn request_refresh(mint: &str) -> OhlcvResult<()> {
 
 pub async fn get_metrics() -> OhlcvMetrics {
     service::get_metrics().await
+}
+
+pub async fn get_monitor_stats() -> Option<MonitorStats> {
+    service::get_monitor_stats().await
 }
 
 pub async fn has_data(mint: &str) -> OhlcvResult<bool> {

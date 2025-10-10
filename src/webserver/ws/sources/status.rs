@@ -138,7 +138,17 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
         .await
         .map(|positions| positions.len())
         .unwrap_or(0);
-    let closed_positions_today = 0;
+
+    let day_start_naive = Utc::now()
+        .date_naive()
+        .and_hms_opt(0, 0, 0)
+        .unwrap_or_else(|| Utc::now().naive_utc());
+    let day_start = DateTime::<Utc>::from_naive_utc_and_offset(day_start_naive, Utc);
+
+    let closed_positions_today = crate::positions::get_db_closed_positions_count_since(day_start)
+        .await
+        .map(|count| std::cmp::max(count, 0) as usize)
+        .unwrap_or(0);
 
     let app_state = get_app_state().await;
     let uptime_seconds = app_state
@@ -171,6 +181,19 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
     let sol_balance = wallet.as_ref().map(|w| w.sol_balance).unwrap_or(0.0);
     let usdc_balance = wallet.as_ref().map(|w| w.usdc_balance).unwrap_or(0.0);
 
+    let ohlcv_stats = crate::ohlcvs::get_monitor_stats()
+        .await
+        .map(|stats| OhlcvStatsSnapshot {
+            total_tokens: stats.total_tokens,
+            critical_tokens: stats.critical_tokens,
+            high_tokens: stats.high_tokens,
+            medium_tokens: stats.medium_tokens,
+            low_tokens: stats.low_tokens,
+            cache_hit_rate: (stats.cache_hit_rate * 100.0).clamp(0.0, 100.0),
+            api_calls_per_minute: stats.api_calls_per_minute,
+            queue_size: stats.queue_size,
+        });
+
     StatusSnapshot {
         timestamp: Utc::now(),
         uptime_seconds,
@@ -186,7 +209,7 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
         metrics,
         rpc_stats,
         wallet,
-        ohlcv_stats: None,
+        ohlcv_stats,
     }
 }
 

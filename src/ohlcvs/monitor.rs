@@ -850,3 +850,18 @@ pub struct MonitorStats {
     pub api_calls_per_minute: f64,
     pub queue_size: usize,
 }
+
+impl Default for MonitorStats {
+    fn default() -> Self {
+        Self {
+            total_tokens: 0,
+            critical_tokens: 0,
+            high_tokens: 0,
+            medium_tokens: 0,
+            low_tokens: 0,
+            cache_hit_rate: 0.0,
+            api_calls_per_minute: 0.0,
+            queue_size: 0,
+        }
+    }
+}

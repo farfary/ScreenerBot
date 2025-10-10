@@ -8,7 +8,7 @@ use crate::ohlcvs::database::OhlcvDatabase;
 use crate::ohlcvs::fetcher::OhlcvFetcher;
 use crate::ohlcvs::gaps::GapManager;
 use crate::ohlcvs::manager::PoolManager;
-use crate::ohlcvs::monitor::OhlcvMonitor;
+use crate::ohlcvs::monitor::{MonitorStats, OhlcvMonitor};
 use crate::ohlcvs::priorities::ActivityType;
 use crate::ohlcvs::types::{
     OhlcvDataPoint, OhlcvError, OhlcvMetrics, OhlcvResult, PoolMetadata, Priority, Timeframe,
@@ -314,6 +314,14 @@ pub async fn get_metrics() -> OhlcvMetrics {
         get_metrics_impl(service.as_ref()).await
     } else {
         OhlcvMetrics::default()
+    }
+}
+
+pub async fn get_monitor_stats() -> Option<MonitorStats> {
+    if let Some(service) = OHLCV_SERVICE.get() {
+        Some(service.monitor.get_stats().await)
+    } else {
+        None
     }
 }
 

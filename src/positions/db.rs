@@ -901,6 +901,30 @@ impl PositionsDatabase {
         Ok(positions)
     }
 
+    /// Count closed positions since the provided timestamp
+    pub async fn count_closed_positions_since(&self, since: DateTime<Utc>) -> Result<i64, String> {
+        let conn = self.get_connection()?;
+
+        let mut stmt = conn
+            .prepare(
+                r#"
+            SELECT COUNT(1)
+            FROM positions
+            WHERE transaction_exit_verified = 1
+              AND exit_time IS NOT NULL
+              AND datetime(exit_time) >= datetime(?1)
+            "#,
+            )
+            .map_err(|e| format!("Failed to prepare closed position count query: {}", e))?;
+
+        let since_str = since.to_rfc3339();
+        let count: i64 = stmt
+            .query_row(params![since_str], |row| row.get(0))
+            .map_err(|e| format!("Failed to execute closed position count query: {}", e))?;
+
+        Ok(count)
+    }
+
     /// Get recent closed & verified positions for a specific mint (exit verified)
     /// Ordered by most recent exit_time DESC. Used for adaptive re-entry profit capping.
     pub async fn get_recent_closed_positions_for_mint(
@@ -1947,6 +1971,15 @@ pub async fn get_closed_positions() -> Result<Vec<Position>, String> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_closed_positions().await,
+        None => Err("Positions database not initialized".to_string()),
+    }
+}
+
+/// Count closed positions since the provided UTC timestamp
+pub async fn get_closed_positions_count_since(since: DateTime<Utc>) -> Result<i64, String> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => db.count_closed_positions_since(since).await,
         None => Err("Positions database not initialized".to_string()),
     }
 }
