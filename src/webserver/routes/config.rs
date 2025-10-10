@@ -41,6 +41,7 @@ pub struct FullConfigResponse {
     pub webserver: config::WebserverConfig,
     pub services: config::ServicesConfig,
     pub monitoring: config::MonitoringConfig,
+    pub ohlcv: config::OhlcvConfig,
     pub timestamp: String,
 }
 
@@ -70,6 +71,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/config/webserver", get(get_webserver_config))
         .route("/config/services", get(get_services_config))
         .route("/config/monitoring", get(get_monitoring_config))
+        .route("/config/ohlcv", get(get_ohlcv_config))
         .route("/config/metadata", get(get_config_metadata))
         // PATCH endpoints - Partial updates (use JSON with only fields to update)
         .route(
@@ -117,6 +119,10 @@ pub fn routes() -> Router<Arc<AppState>> {
             "/config/monitoring",
             patch(patch_any_config::<config::MonitoringConfig>),
         )
+        .route(
+            "/config/ohlcv",
+            patch(patch_any_config::<config::OhlcvConfig>),
+        )
         // Utility endpoints
         .route("/config/reload", post(reload_config_from_disk))
         .route("/config/reset", post(reset_config_to_defaults))
@@ -142,6 +148,7 @@ async fn get_full_config() -> Response {
         webserver: cfg.webserver.clone(),
         services: cfg.services.clone(),
         monitoring: cfg.monitoring.clone(),
+        ohlcv: cfg.ohlcv.clone(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     });
 
@@ -268,6 +275,16 @@ async fn get_monitoring_config() -> Response {
     success_response(data)
 }
 
+/// GET /api/config/ohlcv - Get OHLCV configuration
+async fn get_ohlcv_config() -> Response {
+    let data = config::with_config(|cfg| ConfigResponse {
+        data: cfg.ohlcv.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    });
+
+    success_response(data)
+}
+
 /// GET /api/config/metadata - Get configuration metadata for UI rendering
 async fn get_config_metadata() -> Response {
     let response = ConfigMetadataResponse {
@@ -310,6 +327,7 @@ where
             "WebserverConfig" => serde_json::to_value(&cfg.webserver).ok(),
             "ServicesConfig" => serde_json::to_value(&cfg.services).ok(),
             "MonitoringConfig" => serde_json::to_value(&cfg.monitoring).ok(),
+            "OhlcvConfig" => serde_json::to_value(&cfg.ohlcv).ok(),
             _ => None,
         });
 
@@ -446,6 +464,16 @@ where
                 config::update_config_section(
                     |cfg| {
                         cfg.monitoring = new_config;
+                    },
+                    true,
+                )?;
+            }
+            "OhlcvConfig" => {
+                let new_config: config::OhlcvConfig = serde_json::from_value(section_json)
+                    .map_err(|e| format!("Invalid OhlcvConfig: {}", e))?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.ohlcv = new_config;
                     },
                     true,
                 )?;
