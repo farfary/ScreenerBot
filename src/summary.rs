@@ -400,7 +400,7 @@ pub struct WalletTransactionDisplay {
     total_fetched: String,
     #[tabled(rename = "⏰ Last Sync")]
     last_sync: String,
-    #[tabled(rename = "� Periodic Sync")]
+    #[tabled(rename = "🔁 Periodic Sync")]
     periodic_sync_status: String,
     #[tabled(rename = "📅 Oldest Signature")]
     oldest_signature: String,

@@ -942,7 +942,7 @@ fn log_filtering_stats(filtering_stats: &FilteringStats, total_in_db: usize) {
     };
     summary.push_str(&format!(
         "{} processed={}, final={} ({}%)\n",
-        "� Pipeline:".bright_white().bold(),
+        "🧪 Pipeline:".bright_white().bold(),
         format!("{}", filtering_stats.total_processed)
             .bright_yellow()
             .bold(),

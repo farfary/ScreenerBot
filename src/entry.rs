@@ -752,7 +752,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         log(
             LogTag::Entry,
             "DEBUG",
-            &format!("� Using pool price for {}", price_info.mint),
+            &format!("✅ Using pool price for {}", price_info.mint),
         );
     }
 
