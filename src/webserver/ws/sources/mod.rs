@@ -43,6 +43,7 @@ pub fn start_all(hub: Arc<WsHub>) {
     events::start(hub.clone());
     positions::start(hub.clone());
     tokens::start(hub.clone());
+    transactions::start(hub.clone());
     status::start(hub.clone());
     services::start(hub);
 
@@ -50,7 +51,7 @@ pub fn start_all(hub: Arc<WsHub>) {
         log(
             LogTag::Webserver,
             "INFO",
-            "✅ ws.sources started (events, positions, tokens, status, services)",
+            "✅ ws.sources started (events, positions, tokens, transactions, status, services)",
         );
     }
 }

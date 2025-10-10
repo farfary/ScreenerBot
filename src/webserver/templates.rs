@@ -71,6 +71,7 @@ fn nav_tabs(active: &str) -> String {
         ("services", "🔧 Services"),
         ("positions", "💰 Positions"),
         ("tokens", "🪙 Tokens"),
+        ("transactions", "💱 Transactions"),
         ("events", "📡 Events"),
         ("config", "⚙️ Config"),
     ];
@@ -118,4 +119,13 @@ pub fn services_content() -> String {
 
 pub fn config_content() -> String {
     render_page(CONFIG_PAGE)
+}
+
+pub fn transactions_content() -> String {
+    // TODO: Create full template - placeholder for now
+    r#"<div class="page-content">
+        <h1>Transactions</h1>
+        <p>Transactions page is under construction</p>
+    </div>"#
+        .to_string()
 }

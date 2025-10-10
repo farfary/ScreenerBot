@@ -20,6 +20,84 @@ use crate::logger::{log, LogTag};
 use crate::transactions::{types::*, utils::*};
 
 // =============================================================================
+// LIST/FILTER TYPES FOR UI
+// =============================================================================
+
+/// Cursor for pagination (timestamp desc, signature desc)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransactionCursor {
+    pub timestamp: String, // RFC3339 format
+    pub signature: String,
+}
+
+/// Filters for listing transactions
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TransactionListFilters {
+    /// Transaction types to include: ["buy", "sell", "swap", "transfer", "ata", "failed", "unknown"]
+    #[serde(default)]
+    pub types: Vec<String>,
+
+    /// Filter by token mint (partial match)
+    pub mint: Option<String>,
+
+    /// Only confirmed/finalized transactions
+    pub only_confirmed: Option<bool>,
+
+    /// Filter by direction: "Incoming", "Outgoing", "Internal", "Unknown"
+    pub direction: Option<String>,
+
+    /// Filter by status: "Pending", "Confirmed", "Finalized", "Failed"
+    pub status: Option<String>,
+
+    /// Time range (RFC3339)
+    pub time_from: Option<DateTime<Utc>>,
+    pub time_to: Option<DateTime<Utc>>,
+
+    /// Filter by router (partial match)
+    pub router: Option<String>,
+
+    /// SOL delta range
+    pub min_sol: Option<f64>,
+    pub max_sol: Option<f64>,
+}
+
+/// Lightweight transaction row for list views
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransactionListRow {
+    pub signature: String,
+    pub timestamp: DateTime<Utc>,
+    pub slot: Option<u64>,
+    pub status: String,
+    pub success: bool,
+    pub direction: Option<String>,
+    pub transaction_type: Option<String>,
+    pub token_mint: Option<String>,
+    pub token_symbol: Option<String>,
+    pub router: Option<String>,
+    pub sol_delta: f64,
+    pub fee_sol: f64,
+    pub fee_lamports: Option<u64>,
+    pub ata_rents: f64,
+    pub instructions_count: usize,
+
+    // Internal fields for filtering (not serialized to API)
+    #[serde(skip)]
+    pub _token_swap_info_json: Option<String>,
+    #[serde(skip)]
+    pub _token_transfers_json: Option<String>,
+    #[serde(skip)]
+    pub _ata_operations_json: Option<String>,
+}
+
+/// Result of list_transactions query
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransactionListResult {
+    pub items: Vec<TransactionListRow>,
+    pub next_cursor: Option<TransactionCursor>,
+    pub total_estimate: Option<u64>,
+}
+
+// =============================================================================
 // DATABASE SCHEMA AND CONSTANTS
 // =============================================================================
 
@@ -1112,6 +1190,298 @@ impl TransactionDatabase {
             )
             .map_err(|e| format!("Failed to reconcile known signatures: {}", e))?;
         Ok(affected as usize)
+    }
+
+    // =============================================================================
+    // LIST AND FILTER OPERATIONS FOR UI
+    // =============================================================================
+
+    /// List transactions with filtering and cursor-based pagination
+    /// Returns lightweight rows suitable for UI list views
+    pub async fn list_transactions(
+        &self,
+        filters: &TransactionListFilters,
+        cursor: Option<&TransactionCursor>,
+        limit: usize,
+    ) -> Result<TransactionListResult, String> {
+        let conn = self.get_connection()?;
+
+        // Limit page size to max 200 for performance
+        let effective_limit = limit.min(200);
+
+        // Build SQL query with filters
+        let mut query = String::from(
+            "SELECT 
+                r.signature, r.timestamp, r.slot, r.status, r.success, 
+                r.fee_lamports, r.instructions_count,
+                p.transaction_type, p.direction, p.token_swap_info, 
+                p.token_transfers, p.sol_balance_change, p.ata_operations,
+                p.fee_sol
+            FROM raw_transactions r
+            LEFT JOIN processed_transactions p ON r.signature = p.signature
+            WHERE 1=1",
+        );
+
+        let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        // Apply cursor for pagination (timestamp desc, signature desc)
+        if let Some(cursor) = cursor {
+            query.push_str(" AND (r.timestamp < ?1 OR (r.timestamp = ?1 AND r.signature < ?2))");
+            params_vec.push(Box::new(cursor.timestamp.clone()));
+            params_vec.push(Box::new(cursor.signature.clone()));
+        }
+
+        // Apply time range filters
+        if let Some(ref from) = filters.time_from {
+            query.push_str(&format!(" AND r.timestamp >= ?{}", params_vec.len() + 1));
+            params_vec.push(Box::new(from.to_rfc3339()));
+        }
+
+        if let Some(ref to) = filters.time_to {
+            query.push_str(&format!(" AND r.timestamp <= ?{}", params_vec.len() + 1));
+            params_vec.push(Box::new(to.to_rfc3339()));
+        }
+
+        // Apply status filter
+        if let Some(ref status) = filters.status {
+            query.push_str(&format!(" AND r.status = ?{}", params_vec.len() + 1));
+            params_vec.push(Box::new(status.clone()));
+        }
+
+        // Apply success filter
+        if filters.only_confirmed.unwrap_or(false) {
+            query.push_str(" AND r.status IN ('Confirmed', 'Finalized')");
+        }
+
+        // Fetch 3x limit to allow Rust-side filtering
+        let fetch_limit = effective_limit * 3;
+        query.push_str(&format!(
+            " ORDER BY r.timestamp DESC, r.signature DESC LIMIT {}",
+            fetch_limit
+        ));
+
+        // Execute query
+        let params_refs: Vec<&dyn rusqlite::ToSql> =
+            params_vec.iter().map(|p| p.as_ref()).collect();
+        let mut stmt = conn
+            .prepare(&query)
+            .map_err(|e| format!("Failed to prepare list query: {}", e))?;
+
+        let rows = stmt
+            .query_map(params_refs.as_slice(), |row| {
+                let timestamp_str: String = row.get(1)?;
+                let timestamp = DateTime::parse_from_rfc3339(&timestamp_str)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now());
+
+                let status_str: String = row.get(3)?;
+                let success: bool = row.get(4)?;
+
+                // Parse processed data from JSON columns
+                let transaction_type_str: Option<String> = row.get(7).ok();
+                let direction_str: Option<String> = row.get(8).ok();
+                let token_swap_info_json: Option<String> = row.get(9).ok();
+                let token_transfers_json: Option<String> = row.get(10).ok();
+                let sol_balance_change: Option<f64> = row.get(11).ok();
+                let ata_operations_json: Option<String> = row.get(12).ok();
+                let fee_sol: Option<f64> = row.get(13).ok();
+
+                Ok(TransactionListRow {
+                    signature: row.get(0)?,
+                    timestamp,
+                    slot: row.get(2).ok(),
+                    status: status_str,
+                    success,
+                    direction: direction_str,
+                    transaction_type: transaction_type_str,
+                    token_mint: None, // Will be extracted below
+                    token_symbol: None,
+                    router: None,
+                    sol_delta: sol_balance_change.unwrap_or(0.0),
+                    fee_sol: fee_sol.unwrap_or(0.0),
+                    fee_lamports: row.get(5).ok(),
+                    ata_rents: 0.0, // Will be calculated below
+                    instructions_count: row.get(6).unwrap_or(0),
+                    // Store JSON for Rust-side filtering
+                    _token_swap_info_json: token_swap_info_json,
+                    _token_transfers_json: token_transfers_json,
+                    _ata_operations_json: ata_operations_json,
+                })
+            })
+            .map_err(|e| format!("Failed to execute list query: {}", e))?;
+
+        // Collect and apply Rust-side filters
+        let mut results: Vec<TransactionListRow> = Vec::new();
+
+        for row_result in rows {
+            let mut row = row_result.map_err(|e| format!("Failed to parse row: {}", e))?;
+
+            // Extract token info from JSON
+            if let Some(ref json_str) = row._token_swap_info_json {
+                if let Ok(swap_info) = serde_json::from_str::<serde_json::Value>(json_str) {
+                    row.token_mint = swap_info
+                        .get("output_mint")
+                        .or_else(|| swap_info.get("input_mint"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    row.router = swap_info
+                        .get("router")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                }
+            }
+
+            // Calculate ATA rents from JSON
+            if let Some(ref json_str) = row._ata_operations_json {
+                if let Ok(ops) = serde_json::from_str::<Vec<serde_json::Value>>(json_str) {
+                    let total_rent: f64 = ops
+                        .iter()
+                        .filter_map(|op| op.get("rent_lamports"))
+                        .filter_map(|v| v.as_u64())
+                        .map(|lamports| lamports as f64 / 1_000_000_000.0)
+                        .sum();
+                    row.ata_rents = total_rent;
+                }
+            }
+
+            // Apply Rust-side filters
+            if !Self::row_matches_filters(&row, filters) {
+                continue;
+            }
+
+            results.push(row);
+
+            // Stop when we have enough results
+            if results.len() >= effective_limit {
+                break;
+            }
+        }
+
+        // Determine next cursor
+        let next_cursor = if results.len() == effective_limit {
+            results.last().map(|row| TransactionCursor {
+                timestamp: row.timestamp.to_rfc3339(),
+                signature: row.signature.clone(),
+            })
+        } else {
+            None
+        };
+
+        Ok(TransactionListResult {
+            items: results,
+            next_cursor,
+            total_estimate: None, // Optional, can be computed with COUNT query
+        })
+    }
+
+    /// Helper to check if a row matches all filters
+    fn row_matches_filters(row: &TransactionListRow, filters: &TransactionListFilters) -> bool {
+        // Type filter
+        if !filters.types.is_empty() {
+            let row_type = row.transaction_type.as_deref().unwrap_or("Unknown");
+            let matches_type = filters.types.iter().any(|t| match t.as_str() {
+                "buy" => row_type.contains("SwapSolToToken"),
+                "sell" => row_type.contains("SwapTokenToSol"),
+                "swap" => row_type.contains("Swap"),
+                "transfer" => row_type.contains("Transfer"),
+                "ata" => row_type.contains("AtaOperation") || row_type.contains("CreateAta"),
+                "failed" => row_type == "Failed" || !row.success,
+                "unknown" => row_type == "Unknown",
+                _ => false,
+            });
+            if !matches_type {
+                return false;
+            }
+        }
+
+        // Mint filter
+        if let Some(ref mint) = filters.mint {
+            if let Some(ref row_mint) = row.token_mint {
+                if !row_mint.contains(mint) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        // Direction filter
+        if let Some(ref dir) = filters.direction {
+            if let Some(ref row_dir) = row.direction {
+                if !row_dir.eq_ignore_ascii_case(dir) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        // Router filter
+        if let Some(ref router) = filters.router {
+            if let Some(ref row_router) = row.router {
+                if !row_router.contains(router) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        // SOL delta range filter
+        if let Some(min_sol) = filters.min_sol {
+            if row.sol_delta < min_sol {
+                return false;
+            }
+        }
+
+        if let Some(max_sol) = filters.max_sol {
+            if row.sol_delta > max_sol {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Get estimated count of transactions matching filters (optional, for UI)
+    pub async fn count_transactions(
+        &self,
+        filters: &TransactionListFilters,
+    ) -> Result<u64, String> {
+        let conn = self.get_connection()?;
+
+        let mut query = String::from("SELECT COUNT(*) FROM raw_transactions r WHERE 1=1");
+
+        let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        // Apply coarse filters (can't filter by JSON columns efficiently)
+        if let Some(ref from) = filters.time_from {
+            query.push_str(&format!(" AND r.timestamp >= ?{}", params_vec.len() + 1));
+            params_vec.push(Box::new(from.to_rfc3339()));
+        }
+
+        if let Some(ref to) = filters.time_to {
+            query.push_str(&format!(" AND r.timestamp <= ?{}", params_vec.len() + 1));
+            params_vec.push(Box::new(to.to_rfc3339()));
+        }
+
+        if let Some(ref status) = filters.status {
+            query.push_str(&format!(" AND r.status = ?{}", params_vec.len() + 1));
+            params_vec.push(Box::new(status.clone()));
+        }
+
+        if filters.only_confirmed.unwrap_or(false) {
+            query.push_str(" AND r.status IN ('Confirmed', 'Finalized')");
+        }
+
+        let params_refs: Vec<&dyn rusqlite::ToSql> =
+            params_vec.iter().map(|p| p.as_ref()).collect();
+
+        let count: i64 = conn
+            .query_row(&query, params_refs.as_slice(), |row| row.get(0))
+            .map_err(|e| format!("Failed to count transactions: {}", e))?;
+
+        Ok(count as u64)
     }
 }
 

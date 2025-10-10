@@ -14,6 +14,7 @@ pub mod system;
 pub mod tokens;
 pub mod trader;
 pub mod trading;
+pub mod transactions;
 pub mod wallet;
 pub mod websocket;
 
@@ -27,6 +28,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/events", axum::routing::get(events_page))
         .route("/services", axum::routing::get(services_page))
         .route("/config", axum::routing::get(config_page))
+        .route("/transactions", axum::routing::get(transactions_page))
         .nest("/api", api_routes())
         .with_state(state)
 }
@@ -77,6 +79,16 @@ async fn config_page() -> Html<String> {
     ))
 }
 
+/// Transactions page handler
+async fn transactions_page() -> Html<String> {
+    let content = templates::transactions_content();
+    Html(templates::base_template(
+        "Transactions",
+        "transactions",
+        &content,
+    ))
+}
+
 fn api_routes() -> Router<Arc<AppState>> {
     Router::new()
         .merge(status::routes())
@@ -93,6 +105,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .nest("/trading", trading::routes())
         .nest("/trader", trader::routes())
         .nest("/system", system::routes())
+        .nest("/transactions", transactions::routes())
         .route("/pages/:page", axum::routing::get(get_page_content))
 }
 
@@ -106,6 +119,7 @@ async fn get_page_content(axum::extract::Path(page): axum::extract::Path<String>
         "events" => templates::events_content(),
         "services" => templates::services_content(),
         "config" => templates::config_content(),
+        "transactions" => templates::transactions_content(),
         _ => format!("<h1>Page Not Found: {}</h1>", page),
     };
 

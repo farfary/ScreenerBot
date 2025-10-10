@@ -1505,6 +1505,8 @@ config_struct! {
         auth: AuthConfig = AuthConfig::default(),
         websocket: WebSocketConfig = WebSocketConfig::default(),
         tokens_tab: TokensTabConfig = TokensTabConfig::default(),
+        transactions_page_default_limit: usize = 50,
+        transactions_poll_interval_ms: u64 = 2000,
     }
 }
 

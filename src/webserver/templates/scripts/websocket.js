@@ -26,6 +26,7 @@
     events: "events.new",
     positions: "positions.update",
     tokens: "tokens.update",
+    transactions: "transactions.activity",
   };
 
   const topicToAlias = Object.entries(aliasToTopic).reduce(
