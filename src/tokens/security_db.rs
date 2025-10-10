@@ -555,6 +555,26 @@ impl SecurityDatabase {
 
         Ok(tokens_without_security)
     }
+
+    // =============================================================================
+    // ASYNC-SAFE WRAPPERS FOR WEBSERVER ROUTES
+    // =============================================================================
+
+    /// Async-safe method to get security info by mint
+    ///
+    /// Use this in async contexts (webserver routes) instead of creating SecurityDatabase
+    /// and calling get_security_info() directly, which would block the async runtime.
+    pub async fn get_security_info_async(mint: &str) -> Result<Option<SecurityInfo>, String> {
+        let mint = mint.to_string();
+        tokio::task::spawn_blocking(move || {
+            let db = SecurityDatabase::new("data/security.db")
+                .map_err(|e| format!("Failed to create security database: {}", e))?;
+            db.get_security_info(&mint)
+                .map_err(|e| format!("Failed to query security database: {}", e))
+        })
+        .await
+        .map_err(|e| format!("Task join error: {}", e))?
+    }
 }
 
 // Helper function to parse Rugcheck JSON response into SecurityInfo

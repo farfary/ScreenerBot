@@ -369,55 +369,37 @@ pub(crate) async fn get_tokens_list(
 
 /// Get token detail
 async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse> {
+    let request_start = std::time::Instant::now();
+
     if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "TOKEN_DETAIL", &format!("mint={}", mint));
+        log(
+            LogTag::Webserver,
+            "TOKEN_DETAIL_START",
+            &format!("mint={}", mint),
+        );
     }
 
-    // Fetch token from database (ONE async call)
-    let db = match TokenDatabase::new() {
-        Ok(db) => db,
-        Err(_) => {
-            return Json(TokenDetailResponse {
-                mint: mint.clone(),
-                symbol: "ERROR".to_string(),
-                name: Some("Database unavailable".to_string()),
-                logo_url: None,
-                website: None,
-                verified: false,
-                tags: vec![],
-                price_sol: None,
-                price_confidence: None,
-                price_updated_at: None,
-                liquidity_usd: None,
-                volume_24h: None,
-                fdv: None,
-                market_cap: None,
-                price_change_h1: None,
-                price_change_h24: None,
-                pool_address: None,
-                pool_dex: None,
-                pool_reserves_sol: None,
-                pool_reserves_token: None,
-                security_score: None,
-                security_score_normalized: None,
-                rugged: None,
-                mint_authority: None,
-                freeze_authority: None,
-                total_holders: None,
-                top_10_concentration: None,
-                security_risks: vec![],
-                has_ohlcv: false,
-                has_pool_price: false,
-                has_open_position: false,
-                blacklisted: false,
-                timestamp: chrono::Utc::now().to_rfc3339(),
-            });
+    // Fetch token from database using async wrapper (prevents blocking async runtime)
+    let db_start = std::time::Instant::now();
+    let token = match TokenDatabase::get_token_by_mint_async(&mint).await {
+        Ok(Some(t)) => {
+            if is_debug_webserver_enabled() {
+                log(
+                    LogTag::Webserver,
+                    "TOKEN_DETAIL_DB",
+                    &format!("mint={} elapsed={}ms", mint, db_start.elapsed().as_millis()),
+                );
+            }
+            t
         }
-    };
-
-    let token = match db.get_token_by_mint(&mint) {
-        Ok(Some(t)) => t,
         Ok(None) => {
+            if is_debug_webserver_enabled() {
+                log(
+                    LogTag::Webserver,
+                    "TOKEN_DETAIL_NOT_FOUND",
+                    &format!("mint={} elapsed={}ms", mint, db_start.elapsed().as_millis()),
+                );
+            }
             return Json(TokenDetailResponse {
                 mint: mint.clone(),
                 symbol: "NOT_FOUND".to_string(),
@@ -494,6 +476,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     };
 
     // Get enrichment data (all sync or from cache)
+    let pool_start = std::time::Instant::now();
     let (
         price_sol,
         price_confidence,
@@ -521,7 +504,21 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         (None, None, None, None, None, None, None)
     };
 
-    // Get security info (sync DB call)
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "TOKEN_DETAIL_POOL",
+            &format!(
+                "mint={} elapsed={}ms has_price={}",
+                mint,
+                pool_start.elapsed().as_millis(),
+                price_sol.is_some()
+            ),
+        );
+    }
+
+    // Get security info using async wrapper (prevents blocking async runtime)
+    let security_start = std::time::Instant::now();
     let (
         security_score,
         security_score_normalized,
@@ -531,10 +528,8 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         total_holders,
         top_10_concentration,
         security_risks,
-    ) = SecurityDatabase::new("data/security.db")
-        .ok()
-        .and_then(|db| db.get_security_info(&mint).ok().flatten())
-        .map(|sec| {
+    ) = match SecurityDatabase::get_security_info_async(&mint).await {
+        Ok(Some(sec)) => {
             let top_10_conc = if sec.top_holders.len() >= 10 {
                 Some(sec.top_holders.iter().take(10).map(|h| h.pct).sum::<f64>())
             } else {
@@ -560,10 +555,25 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
                 top_10_conc,
                 risks,
             )
-        })
-        .unwrap_or((None, None, None, None, None, None, None, vec![]));
+        }
+        Ok(None) | Err(_) => (None, None, None, None, None, None, None, vec![]),
+    };
+
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "TOKEN_DETAIL_SECURITY",
+            &format!(
+                "mint={} elapsed={}ms has_score={}",
+                mint,
+                security_start.elapsed().as_millis(),
+                security_score.is_some()
+            ),
+        );
+    }
 
     // Get status flags (mix of sync and cache checks)
+    let ohlcv_start = std::time::Instant::now();
     let has_ohlcv = match crate::ohlcvs::has_data(&mint).await {
         Ok(flag) => flag,
         Err(e) => {
@@ -576,14 +586,42 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         }
     };
 
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "TOKEN_DETAIL_OHLCV",
+            &format!(
+                "mint={} elapsed={}ms has_data={}",
+                mint,
+                ohlcv_start.elapsed().as_millis(),
+                has_ohlcv
+            ),
+        );
+    }
+
     let has_pool_price = price_sol.is_some();
     let blacklisted = blacklist::is_token_blacklisted_db(&mint);
 
     // Position check - this is the ONLY additional async, keep it last and simple
+    let position_start = std::time::Instant::now();
     let has_open_position = positions::is_open_position(&mint).await;
+
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "TOKEN_DETAIL_POSITION",
+            &format!(
+                "mint={} elapsed={}ms has_position={}",
+                mint,
+                position_start.elapsed().as_millis(),
+                has_open_position
+            ),
+        );
+    }
 
     // Add token to OHLCV monitoring with appropriate priority
     // This ensures chart data will be available when users view this token again
+    let monitoring_start = std::time::Instant::now();
     let priority = if has_open_position {
         crate::ohlcvs::Priority::Critical
     } else {
@@ -606,6 +644,30 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
             LogTag::Webserver,
             "WARN",
             &format!("Failed to record token view for {}: {}", mint, e),
+        );
+    }
+
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "TOKEN_DETAIL_MONITORING",
+            &format!(
+                "mint={} elapsed={}ms",
+                mint,
+                monitoring_start.elapsed().as_millis()
+            ),
+        );
+    }
+
+    if is_debug_webserver_enabled() {
+        log(
+            LogTag::Webserver,
+            "TOKEN_DETAIL_COMPLETE",
+            &format!(
+                "mint={} total_elapsed={}ms",
+                mint,
+                request_start.elapsed().as_millis()
+            ),
         );
     }
 

@@ -928,6 +928,32 @@ impl TokenDatabase {
         drop(migration_conn);
         Ok(())
     }
+
+    // =============================================================================
+    // ASYNC-SAFE WRAPPERS FOR WEBSERVER ROUTES
+    // =============================================================================
+    // These methods wrap the SYNCHRONOUS get_token_by_mint() method in spawn_blocking
+    // to prevent blocking the async runtime. Use these in async handlers (webserver routes).
+    //
+    // NOTE: Most TokenDatabase methods are already async (get_all_tokens, get_tokens_by_mints, etc)
+    // and use spawn_blocking internally. Only wrap methods that are actually synchronous.
+
+    /// Async-safe method to get token by mint
+    ///
+    /// Wraps the synchronous get_token_by_mint() in spawn_blocking.
+    /// Use this in async contexts (webserver routes) instead of creating TokenDatabase
+    /// and calling get_token_by_mint() directly, which would block the async runtime.
+    pub async fn get_token_by_mint_async(mint: &str) -> Result<Option<ApiToken>, String> {
+        let mint = mint.to_string();
+        tokio::task::spawn_blocking(move || {
+            let db =
+                TokenDatabase::new().map_err(|e| format!("Failed to create database: {}", e))?;
+            db.get_token_by_mint(&mint)
+                .map_err(|e| format!("Failed to query database: {}", e))
+        })
+        .await
+        .map_err(|e| format!("Task join error: {}", e))?
+    }
 }
 
 /// Database statistics

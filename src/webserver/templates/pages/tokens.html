@@ -186,10 +186,30 @@
   }
 
   async function fetchTokenDetail(mint) {
+    const fetchStart = performance.now();
+    console.log(`[TokenDetail] fetchTokenDetail START mint=${mint}`);
     try {
       const res = await fetch(`/api/tokens/${mint}`);
+      const fetchEnd = performance.now();
+      console.log(
+        `[TokenDetail] fetch completed elapsed=${(
+          fetchEnd - fetchStart
+        ).toFixed(2)}ms`
+      );
       if (!res.ok) throw new Error(`Token request failed (${res.status})`);
+      const parseStart = performance.now();
       const data = await res.json();
+      const parseEnd = performance.now();
+      console.log(
+        `[TokenDetail] JSON parse elapsed=${(parseEnd - parseStart).toFixed(
+          2
+        )}ms`
+      );
+      console.log(
+        `[TokenDetail] fetchTokenDetail COMPLETE total_elapsed=${(
+          parseEnd - fetchStart
+        ).toFixed(2)}ms`
+      );
       return data;
     } catch (error) {
       console.error("Failed to fetch token detail:", error);
@@ -529,12 +549,23 @@
   }
 
   async function openTokenModal(mint) {
+    const modalStart = performance.now();
+    console.log(`[TokenDetail] openTokenModal START mint=${mint}`);
+
     if (!mint) {
       console.warn("openTokenModal: no mint provided");
       return;
     }
 
+    const cacheStart = performance.now();
     const cached = getTokenByMint(mint);
+    const cacheEnd = performance.now();
+    console.log(
+      `[TokenDetail] cache lookup elapsed=${(cacheEnd - cacheStart).toFixed(
+        2
+      )}ms found=${!!cached}`
+    );
+
     if (!cached) {
       console.warn("openTokenModal: token not found in cache");
       Utils.showToast("❌ Token not found in cache", "error");
@@ -546,9 +577,23 @@
       console.warn("openTokenModal: failed to fetch token detail");
       return; // fetchTokenDetail already shows error toast
     }
+
+    const populateStart = performance.now();
     currentModalMint = mint;
     tokenModalData = { token: cached, detail };
     populateTokenModal(cached, detail);
+    const populateEnd = performance.now();
+
+    console.log(
+      `[TokenDetail] populateTokenModal elapsed=${(
+        populateEnd - populateStart
+      ).toFixed(2)}ms`
+    );
+    console.log(
+      `[TokenDetail] openTokenModal COMPLETE total_elapsed=${(
+        populateEnd - modalStart
+      ).toFixed(2)}ms`
+    );
   }
 
   function closeTokenModal(event) {
@@ -1347,6 +1392,23 @@
         expected: tokensSnapshotState.expected,
       });
     }
+
+    // Don't clear existing data if we got no new data (race condition/stale snapshot)
+    if (deduped.length === 0 && allTokensData.length > 0) {
+      if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
+        console.warn(
+          "[TokensDBG] Ignoring empty finalize - keeping existing data",
+          {
+            existingCount: allTokensData.length,
+          }
+        );
+      }
+      tokensSnapshotState.pending = [];
+      tokensSnapshotState.expected = 0;
+      tokensSnapshotState.currentView = null;
+      return;
+    }
+
     tokensSnapshotState.pending = [];
     tokensSnapshotState.expected = 0;
     tokensSnapshotState.currentView = null;
