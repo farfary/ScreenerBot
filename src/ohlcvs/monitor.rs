@@ -222,6 +222,25 @@ impl OhlcvMonitor {
     async fn monitor_loop(self: Arc<Self>) {
         let mut tick = interval(Duration::from_secs(5)); // Check every 5 seconds
 
+        // Calculate delay based on configured rate limit to respect API limits
+        // Formula: (60,000ms / rate_limit_per_minute) + buffer
+        let rate_limit = with_config(|cfg| cfg.tokens.geckoterminal_rate_limit_per_minute);
+        let delay_ms: u64 = if rate_limit > 0 {
+            ((60_000 / rate_limit) + 100) as u64 // Add 100ms buffer for safety
+        } else {
+            2_000 // Fallback to 2 seconds if config invalid
+        };
+
+        // Always log this critical info
+        log(
+            LogTag::Ohlcv,
+            "INFO",
+            &format!(
+                "OHLCV monitor starting: rate_limit={}/min, delay={}ms between tokens",
+                rate_limit, delay_ms
+            ),
+        );
+
         loop {
             tick.tick().await;
 
@@ -277,8 +296,8 @@ impl OhlcvMonitor {
                     }
                 }
 
-                // Small delay between tokens
-                sleep(Duration::from_millis(100)).await;
+                // Rate-limit-aware delay between tokens
+                sleep(Duration::from_millis(delay_ms)).await;
             }
         }
     }
