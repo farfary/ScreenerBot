@@ -765,6 +765,7 @@
       tab.classList.toggle("active", tab.dataset.view === tokensState.view);
     });
 
+    let usedCachedData = false;
     // If we have a cache for this view that matches current sort/search, render it immediately
     const cacheEntry = tokensViewCache[tokensState.view];
     if (
@@ -789,6 +790,7 @@
         : `Cached • ${tokensSnapshotState.totalAvailable} tokens`;
       setTokenCountStatus(status);
       applySearchFilter();
+      usedCachedData = true;
     }
 
     if (
@@ -804,6 +806,15 @@
           "🔍 Search cleared for new view – loading tokens..."
         );
       }
+    }
+
+    if (!usedCachedData) {
+      allTokensData = [];
+      const viewLabel = VIEW_LABELS[tokensState.view] || "";
+      const loadMessage = viewLabel
+        ? `Loading tokens ${viewLabel}...`
+        : "Loading tokens...";
+      showTokensLoading(loadMessage);
     }
 
     // Always request a fresh snapshot to keep cache up to date
@@ -1418,16 +1429,32 @@
         return;
       }
     }
+    const contextTotals = tokensSnapshotState.context || {};
+    const contextSelected = Number(
+      contextTotals.total_selected ?? contextTotals.total
+    );
+    const contextAvailable = Number(contextTotals.total_available);
+    const snapshotReportedEmpty =
+      deduped.length === 0 &&
+      (tokensSnapshotState.expected === 0 ||
+        (Number.isFinite(contextSelected) && contextSelected === 0) ||
+        (Number.isFinite(contextAvailable) && contextAvailable === 0));
+
     if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
       console.log("[TokensDBG] finalizeSnapshot", {
         pendingBefore: tokensSnapshotState.pending.length,
         dedupedCount: deduped.length,
         expected: tokensSnapshotState.expected,
+        snapshotReportedEmpty,
       });
     }
 
     // Don't clear existing data if we got no new data (race condition/stale snapshot)
-    if (deduped.length === 0 && allTokensData.length > 0) {
+    if (
+      deduped.length === 0 &&
+      allTokensData.length > 0 &&
+      !snapshotReportedEmpty
+    ) {
       if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
         console.warn(
           "[TokensDBG] Ignoring empty finalize - keeping existing data",
@@ -1446,6 +1473,10 @@
     tokensSnapshotState.expected = 0;
     tokensSnapshotState.currentView = null;
     allTokensData = deduped;
+
+    if (snapshotReportedEmpty) {
+      tokensSnapshotState.totalAvailable = 0;
+    }
 
     const total =
       tokensSnapshotState.totalAvailable ||
