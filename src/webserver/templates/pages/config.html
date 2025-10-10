@@ -493,10 +493,10 @@
 </div>
 
 <div class="filter-chips">
-  <div class="chip active" onclick="filterByImpact('all')">All</div>
-  <div class="chip" onclick="filterByImpact('critical')">Critical</div>
-  <div class="chip" onclick="filterByImpact('high')">High</div>
-  <div class="chip" onclick="filterByImpact('medium')">Medium</div>
+  <div class="chip active" onclick="filterByImpact('all', this)">All</div>
+  <div class="chip" onclick="filterByImpact('critical', this)">Critical</div>
+  <div class="chip" onclick="filterByImpact('high', this)">High</div>
+  <div class="chip" onclick="filterByImpact('medium', this)">Medium</div>
 </div>
 
 <div id="globalStatus" class="status"></div>
@@ -523,24 +523,55 @@
   // CONFIGURATION METADATA - Loaded dynamically from backend
   let CONFIG_METADATA = {};
   let diffModalListenerAttached = false;
-  const SECTION_INFO = {
-    trader: { icon: "🤖", title: "Trader" },
-    positions: { icon: "💰", title: "Positions" },
-    filtering: { icon: "🔍", title: "Filtering" },
-    swaps: { icon: "🔄", title: "Swaps" },
-    tokens: { icon: "🪙", title: "Tokens" },
-    rpc: { icon: "🌐", title: "RPC" },
-    sol_price: { icon: "💲", title: "SOL Price" },
-    summary: { icon: "📊", title: "Summary" },
-    events: { icon: "📝", title: "Events" },
-    webserver: { icon: "🖥️", title: "Webserver" },
-    services: { icon: "🛠️", title: "Services" },
-    monitoring: { icon: "📈", title: "Monitoring" },
-    ohlcv: { icon: "🕒", title: "OHLCV" },
+
+  const SECTION_ORDER = [
+    "trader",
+    "positions",
+    "filtering",
+    "swaps",
+    "tokens",
+    "rpc",
+    "sol_price",
+    "summary",
+    "events",
+    "webserver",
+    "services",
+    "monitoring",
+    "ohlcv",
+  ];
+
+  const SECTION_ICON_MAP = {
+    trader: "🤖",
+    positions: "�",
+    filtering: "🔍",
+    swaps: "🔄",
+    tokens: "🪙",
+    rpc: "🌐",
+    sol_price: "💲",
+    summary: "📊",
+    events: "📝",
+    webserver: "🖥️",
+    services: "🛠️",
+    monitoring: "📈",
+    ohlcv: "🕒",
   };
 
-  function getSectionFieldCount(sectionName) {
-    return Object.keys(CONFIG_METADATA[sectionName] || {}).length;
+  const SECTION_TITLE_MAP = {
+    rpc: "RPC",
+    sol_price: "SOL Price",
+    ohlcv: "OHLCV",
+  };
+
+  let SECTION_STATE = {};
+
+  function formatSectionTitle(sectionName) {
+    if (SECTION_TITLE_MAP[sectionName]) {
+      return SECTION_TITLE_MAP[sectionName];
+    }
+    return sectionName
+      .split("_")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
   }
 
   function isIntegerField(sectionName, fieldKey) {
@@ -561,9 +592,25 @@
 
       CONFIG_METADATA = result.data || {};
 
-      for (const sectionName of Object.keys(SECTION_INFO)) {
-        SECTION_INFO[sectionName].fields = getSectionFieldCount(sectionName);
-      }
+      const sectionNames = Object.keys(CONFIG_METADATA).sort((a, b) => {
+        const indexA = SECTION_ORDER.indexOf(a);
+        const indexB = SECTION_ORDER.indexOf(b);
+        const safeA = indexA === -1 ? Number.POSITIVE_INFINITY : indexA;
+        const safeB = indexB === -1 ? Number.POSITIVE_INFINITY : indexB;
+        if (safeA === safeB) {
+          return a.localeCompare(b);
+        }
+        return safeA - safeB;
+      });
+
+      SECTION_STATE = {};
+      sectionNames.forEach((sectionName) => {
+        SECTION_STATE[sectionName] = {
+          icon: SECTION_ICON_MAP[sectionName] || "⚙️",
+          title: formatSectionTitle(sectionName),
+          fields: Object.keys(CONFIG_METADATA[sectionName] || {}).length,
+        };
+      });
     } catch (error) {
       console.error("[Config] Metadata fetch failed", error);
       showStatus(
@@ -583,7 +630,7 @@
     const container = document.getElementById("configContainer");
     container.innerHTML = "";
 
-    for (const [sectionName, sectionInfo] of Object.entries(SECTION_INFO)) {
+    for (const [sectionName, sectionInfo] of Object.entries(SECTION_STATE)) {
       container.innerHTML += renderSection(sectionName, sectionInfo);
     }
   }
@@ -591,7 +638,7 @@
   function renderSection(sectionName, sectionInfo) {
     const metadata = CONFIG_METADATA[sectionName];
     if (!metadata) return "";
-    const fieldCount = getSectionFieldCount(sectionName);
+    const fieldCount = sectionInfo.fields;
 
     // Group fields by category
     const categories = {};
@@ -717,7 +764,7 @@
   // =============================================================================
 
   async function loadAllConfigs() {
-    for (const sectionName of Object.keys(SECTION_INFO)) {
+    for (const sectionName of Object.keys(SECTION_STATE)) {
       await loadSection(sectionName);
     }
   }
@@ -835,7 +882,9 @@
 
   async function resetSection(sectionName) {
     if (
-      !confirm(`Reset ${SECTION_INFO[sectionName].title} to last saved values?`)
+      !confirm(
+        `Reset ${SECTION_STATE[sectionName].title} to last saved values?`
+      )
     )
       return;
     await loadSection(sectionName);
@@ -934,14 +983,17 @@
     });
   }
 
-  function filterByImpact(level) {
+  function filterByImpact(level, el) {
     currentImpactFilter = level;
 
-    // Update chip states
-    document.querySelectorAll(".chip").forEach((chip) => {
+    const chips = document.querySelectorAll(".chip");
+    chips.forEach((chip) => {
       chip.classList.remove("active");
     });
-    event.target.classList.add("active");
+
+    if (el) {
+      el.classList.add("active");
+    }
 
     // Reapply filter
     const searchQuery = document.getElementById("searchInput").value;
@@ -1219,14 +1271,6 @@
     }
 
     renderAllSections();
-
-    // Auto-expand first section with available metadata
-    const firstSection = Object.keys(SECTION_INFO).find(
-      (name) => CONFIG_METADATA[name]
-    );
-    if (firstSection) {
-      toggleSection(firstSection);
-    }
 
     // Close modal when clicking outside
     if (!diffModalListenerAttached) {
