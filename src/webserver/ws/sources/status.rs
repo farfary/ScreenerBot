@@ -47,6 +47,7 @@ pub struct StatusSnapshot {
     pub ohlcv_stats: Option<OhlcvStatsSnapshot>,
     pub pools: Option<PoolServiceStatusSnapshot>,
     pub discovery: Option<TokenDiscoveryStatusSnapshot>,
+    pub events: Option<EventsStatusSnapshot>,
     pub transactions: Option<TransactionsStatusSnapshot>,
 }
 
@@ -209,6 +210,31 @@ pub struct DiscoverySourceSnapshot {
 }
 
 #[derive(Clone, Debug, Serialize)]
+pub struct EventsStatusSnapshot {
+    pub running: bool,
+    pub total_events: i64,
+    pub events_24h: i64,
+    pub db_size_bytes: i64,
+    pub category_counts: HashMap<String, u64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub recent_events: Vec<EventSnapshot>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct EventSnapshot {
+    pub id: i64,
+    pub event_time: String,
+    pub category: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subtype: Option<String>,
+    pub severity: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reference_id: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
 pub struct TransactionsStatusSnapshot {
     pub running: bool,
     pub system_ready: bool,
@@ -348,6 +374,7 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
 
     let pools = collect_pool_service_snapshot();
     let discovery = collect_token_discovery_snapshot().await;
+    let events = collect_events_snapshot().await;
     let transactions = collect_transactions_snapshot().await;
 
     StatusSnapshot {
@@ -368,6 +395,7 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
         ohlcv_stats,
         pools,
         discovery,
+        events,
         transactions,
     }
 }
@@ -710,6 +738,83 @@ async fn collect_token_discovery_snapshot() -> Option<TokenDiscoveryStatusSnapsh
             defillama_protocols: stats.per_source.defillama_protocols,
         },
         last_error: stats.last_error,
+    })
+}
+
+async fn collect_events_snapshot() -> Option<EventsStatusSnapshot> {
+    // Check if events system is initialized
+    let running = crate::events::EVENTS_DB.get().is_some();
+
+    if !running {
+        return None;
+    }
+
+    // Get database stats
+    let db_stats = match crate::events::EVENTS_DB.get() {
+        Some(db) => match db.get_stats().await {
+            Ok(stats) => stats,
+            Err(e) => {
+                log(
+                    LogTag::Webserver,
+                    "WARN",
+                    &format!("Failed to load events database stats: {}", e),
+                );
+                HashMap::new()
+            }
+        },
+        None => HashMap::new(),
+    };
+
+    let total_events = db_stats.get("total_events").copied().unwrap_or(0);
+    let events_24h = db_stats.get("events_24h").copied().unwrap_or(0);
+    let db_size_bytes = db_stats.get("db_size_bytes").copied().unwrap_or(0);
+
+    // Get category counts for last 24 hours
+    let category_counts = match crate::events::count_by_category(24).await {
+        Ok(counts) => counts,
+        Err(e) => {
+            log(
+                LogTag::Webserver,
+                "WARN",
+                &format!("Failed to load events category counts: {}", e),
+            );
+            HashMap::new()
+        }
+    };
+
+    // Get recent events (last 10)
+    let recent_events_raw = match crate::events::recent_all(10).await {
+        Ok(events) => events,
+        Err(e) => {
+            log(
+                LogTag::Webserver,
+                "WARN",
+                &format!("Failed to load recent events: {}", e),
+            );
+            Vec::new()
+        }
+    };
+
+    let recent_events = recent_events_raw
+        .into_iter()
+        .map(|event| EventSnapshot {
+            id: event.id.unwrap_or(0),
+            event_time: event.event_time.to_rfc3339(),
+            category: event.category.to_string(),
+            subtype: event.subtype,
+            severity: event.severity.to_string(),
+            mint: event.mint,
+            reference_id: event.reference_id,
+        })
+        .collect();
+
+    Some(EventsStatusSnapshot {
+        running,
+        total_events,
+        events_24h,
+        db_size_bytes,
+        category_counts,
+        recent_events,
     })
 }
 

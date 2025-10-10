@@ -430,6 +430,9 @@
       case "transactions":
         renderTransactionsTab(data);
         break;
+      case "events":
+        renderEventsTab(data);
+        break;
       case "ohlcvs":
         renderOHLCVSTab(data);
         break;
@@ -1833,6 +1836,213 @@
                             </div>
 
                             ${errorDisplay}
+                        </div>
+                    </div>
+                </div>
+            `;
+  }
+
+  function renderEventsTab(data) {
+    const contentContainer = document.getElementById("statusContent");
+    if (!contentContainer) return;
+
+    const events = data.events;
+
+    if (!events) {
+      contentContainer.innerHTML = `
+                <div class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">📋</span>
+                            <span class="card-title">Events System</span>
+                        </div>
+                        <div class="status-placeholder">
+                            <div class="status-placeholder-icon">📋</div>
+                            <div class="status-placeholder-title">Events Data</div>
+                            <div class="status-placeholder-text">Events metrics are not available yet. Ensure the events service is running.</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+      return;
+    }
+
+    const serviceLabel = events.running ? "Running" : "Stopped";
+    const totalEventsLabel = Utils.formatNumber(
+      Number(events.total_events || 0),
+      0,
+      { fallback: "0" }
+    );
+    const events24hLabel = Utils.formatNumber(
+      Number(events.events_24h || 0),
+      0,
+      { fallback: "0" }
+    );
+    const dbSizeLabel = Utils.formatBytes(
+      Number(events.db_size_bytes || 0),
+      "0 B"
+    );
+
+    // Build category counts table
+    const categoryCountsMap = events.category_counts || {};
+    const categoryEntries = Object.entries(categoryCountsMap).sort(
+      (a, b) => b[1] - a[1]
+    );
+    const categoriesDisplay =
+      categoryEntries.length > 0
+        ? categoryEntries
+            .map(
+              ([category, count]) => `
+                            <tr>
+                                <td>${Utils.escapeHtml(category)}</td>
+                                <td style="text-align: right;">${Utils.formatNumber(
+                                  Number(count),
+                                  0,
+                                  { fallback: "0" }
+                                )}</td>
+                            </tr>
+                        `
+            )
+            .join("")
+        : `
+                            <tr>
+                                <td colspan="2" style="text-align: center; color: #888;">
+                                    No category data for last 24 hours
+                                </td>
+                            </tr>
+                        `;
+
+    // Build recent events table
+    const recentEventsList = events.recent_events || [];
+    const recentEventsDisplay =
+      recentEventsList.length > 0
+        ? recentEventsList
+            .map((event) => {
+              const severity = event.severity || "INFO";
+              const severityBadge =
+                severity === "ERROR"
+                  ? '<span style="padding: 2px 8px; border-radius: 4px; background: rgba(239, 68, 68, 0.2); color: #ef4444; font-size: 0.75em; font-weight: 600;">ERROR</span>'
+                  : severity === "WARN"
+                  ? '<span style="padding: 2px 8px; border-radius: 4px; background: rgba(245, 158, 11, 0.2); color: #f59e0b; font-size: 0.75em; font-weight: 600;">WARN</span>'
+                  : '<span style="padding: 2px 8px; border-radius: 4px; background: rgba(59, 130, 246, 0.2); color: #3b82f6; font-size: 0.75em; font-weight: 600;">INFO</span>';
+
+              let eventTime = "Unknown";
+              if (event.event_time) {
+                const parsed = new Date(event.event_time);
+                eventTime = Number.isNaN(parsed.getTime())
+                  ? "Unknown"
+                  : parsed.toLocaleString();
+              }
+
+              const mint = event.mint || "";
+              const shortMint =
+                mint.length > 14
+                  ? `${mint.slice(0, 8)}...${mint.slice(-6)}`
+                  : mint || "—";
+              const category = Utils.escapeHtml(event.category || "—");
+              const subtype = Utils.escapeHtml(event.subtype || "—");
+              const refId = event.reference_id || "";
+              const shortRefId =
+                refId.length > 14
+                  ? `${refId.slice(0, 8)}...${refId.slice(-6)}`
+                  : refId || "—";
+
+              return `
+                            <tr>
+                                <td>${eventTime}</td>
+                                <td>${severityBadge}</td>
+                                <td>${category}</td>
+                                <td>${subtype}</td>
+                                <td style="font-family: 'SF Mono', Monaco, monospace; font-size: 0.9em;">${shortMint}</td>
+                                <td style="font-family: 'SF Mono', Monaco, monospace; font-size: 0.9em;">${shortRefId}</td>
+                            </tr>
+                        `;
+            })
+            .join("")
+        : `
+                            <tr>
+                                <td colspan="6" style="text-align: center; color: #888;">
+                                    No recent events
+                                </td>
+                            </tr>
+                        `;
+
+    contentContainer.innerHTML = `
+                <div class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">📋</span>
+                            <span class="card-title">Events System</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="status-metrics-grid">
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">⚙️</span>
+                                        <span>Service Status</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${serviceLabel}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">📊</span>
+                                        <span>Total Events</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${totalEventsLabel}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">⏰</span>
+                                        <span>Events (24h)</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${events24hLabel}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">💾</span>
+                                        <span>Database Size</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${dbSizeLabel}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <h3 class="status-section-title">Category Breakdown (24h)</h3>
+                            <table class="status-services-table sticky-table">
+                                <thead>
+                                    <tr>
+                                        <th>Category</th>
+                                        <th style="text-align: right;">Count</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${categoriesDisplay}
+                                </tbody>
+                            </table>
+
+                            <h3 class="status-section-title" style="margin-top: 24px;">Recent Events</h3>
+                            <table class="status-services-table sticky-table">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Severity</th>
+                                        <th>Category</th>
+                                        <th>Subtype</th>
+                                        <th>Mint</th>
+                                        <th>Reference ID</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${recentEventsDisplay}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
