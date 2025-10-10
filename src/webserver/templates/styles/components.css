@@ -346,3 +346,208 @@
   color: var(--text-primary);
   font-size: 0.9em;
 }
+
+/* Transactions Toolbar -------------------------------------------------- */
+.transactions-toolbar {
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+}
+
+.transactions-toolbar .toolbar-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.transactions-toolbar .toolbar-row-head {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.transactions-toolbar .toolbar-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.transactions-toolbar .toolbar-title {
+  font-weight: 600;
+  font-size: 1.05em;
+  color: var(--text-primary);
+}
+
+.transactions-toolbar .toolbar-meta {
+  font-size: 0.85em;
+  color: var(--text-secondary);
+  min-height: 1em;
+}
+
+.transactions-toolbar .toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.transactions-toolbar .filter-row {
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.transactions-toolbar .filter-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 120px;
+}
+
+.transactions-toolbar .filter-section.stretch {
+  flex: 1 1 220px;
+  min-width: 200px;
+}
+
+.transactions-toolbar .filter-section .filter-label {
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.transactions-toolbar .filter-chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.transactions-toolbar .filter-chip {
+  padding: 6px 10px;
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 0.8em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.transactions-toolbar .filter-chip:hover {
+  color: var(--text-primary);
+  border-color: var(--link-color);
+}
+
+.transactions-toolbar .filter-chip.active {
+  background: rgba(21, 101, 192, 0.18);
+  border-color: var(--link-color);
+  color: var(--link-color);
+  box-shadow: 0 0 0 1px rgba(21, 101, 192, 0.2);
+}
+
+.transactions-toolbar .filter-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.transactions-toolbar .filter-input input {
+  width: 100%;
+  padding-right: 28px;
+}
+
+.transactions-toolbar .input-clear {
+  position: absolute;
+  right: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.8em;
+  padding: 2px;
+  border-radius: 4px;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.transactions-toolbar .input-clear:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.transactions-toolbar .advanced-toggle {
+  justify-content: flex-start;
+}
+
+.transactions-toolbar .btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px dashed var(--border-color);
+}
+
+.transactions-toolbar .btn-ghost:hover {
+  color: var(--text-primary);
+  border-color: var(--link-color);
+}
+
+.transactions-toolbar .advanced-panel {
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+  padding: 10px;
+  gap: 12px;
+}
+
+.transactions-toolbar .advanced-panel[data-expanded="false"] {
+  display: none;
+}
+
+.transactions-toolbar .advanced-panel[data-expanded="true"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.transactions-toolbar .date-range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.transactions-toolbar .range-separator {
+  color: var(--text-secondary);
+  font-size: 0.85em;
+}
+
+.transactions-toolbar input[type="text"],
+.transactions-toolbar input[type="number"],
+.transactions-toolbar input[type="datetime-local"] {
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.85em;
+}
+
+.transactions-toolbar input[type="text"]:focus,
+.transactions-toolbar input[type="number"]:focus,
+.transactions-toolbar input[type="datetime-local"]:focus {
+  outline: none;
+  border-color: var(--link-color);
+  box-shadow: 0 0 0 1px rgba(21, 101, 192, 0.25);
+}
+
+@media (max-width: 960px) {
+  .transactions-toolbar .toolbar-row-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .transactions-toolbar .toolbar-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .transactions-toolbar .filter-section {
+    flex: 1 1 100%;
+  }
+}

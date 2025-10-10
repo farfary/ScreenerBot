@@ -49,6 +49,9 @@ pub struct TransactionListFilters {
     /// Filter by status: "Pending", "Confirmed", "Finalized", "Failed"
     pub status: Option<String>,
 
+    /// Filter by signature (partial match)
+    pub signature: Option<String>,
+
     /// Time range (RFC3339)
     pub time_from: Option<DateTime<Utc>>,
     pub time_to: Option<DateTime<Utc>>,
@@ -1236,13 +1239,24 @@ impl TransactionDatabase {
 
         // Apply status filter
         if let Some(ref status) = filters.status {
-            query.push_str(&format!(" AND r.status = ?{}", params_vec.len() + 1));
-            params_vec.push(Box::new(status.clone()));
+            if let Some(normalized) = canonical_status(status) {
+                query.push_str(&format!(" AND r.status = ?{}", params_vec.len() + 1));
+                params_vec.push(Box::new(normalized));
+            }
         }
 
         // Apply success filter
         if filters.only_confirmed.unwrap_or(false) {
             query.push_str(" AND r.status IN ('Confirmed', 'Finalized')");
+        }
+
+        // Apply signature filter
+        if let Some(ref signature) = filters.signature {
+            let trimmed = signature.trim();
+            if !trimmed.is_empty() {
+                query.push_str(&format!(" AND r.signature LIKE ?{}", params_vec.len() + 1));
+                params_vec.push(Box::new(format!("%{}%", trimmed)));
+            }
         }
 
         // Fetch 3x limit to allow Rust-side filtering
@@ -1413,16 +1427,10 @@ impl TransactionDatabase {
         // Type filter
         if !filters.types.is_empty() {
             let row_type = row.transaction_type.as_deref().unwrap_or("Unknown");
-            let matches_type = filters.types.iter().any(|t| match t.as_str() {
-                "buy" => row_type.contains("SwapSolToToken"),
-                "sell" => row_type.contains("SwapTokenToSol"),
-                "swap" => row_type.contains("Swap"),
-                "transfer" => row_type.contains("Transfer"),
-                "ata" => row_type.contains("AtaOperation") || row_type.contains("CreateAta"),
-                "failed" => row_type == "Failed" || !row.success,
-                "unknown" => row_type == "Unknown",
-                _ => false,
-            });
+            let matches_type = filters
+                .types
+                .iter()
+                .any(|t| matches_transaction_type(t, row_type, row.success));
             if !matches_type {
                 return false;
             }
@@ -1430,34 +1438,49 @@ impl TransactionDatabase {
 
         // Mint filter
         if let Some(ref mint) = filters.mint {
-            if let Some(ref row_mint) = row.token_mint {
-                if !row_mint.contains(mint) {
+            let mint_trimmed = mint.trim();
+            if !mint_trimmed.is_empty() {
+                if let Some(ref row_mint) = row.token_mint {
+                    if !row_mint.contains(mint_trimmed) {
+                        return false;
+                    }
+                } else {
                     return false;
                 }
-            } else {
-                return false;
             }
         }
 
         // Direction filter
         if let Some(ref dir) = filters.direction {
-            if let Some(ref row_dir) = row.direction {
-                if !row_dir.eq_ignore_ascii_case(dir) {
+            if let Some(expected) = canonical_direction(dir) {
+                let row_dir = row.direction.as_deref().unwrap_or("Unknown");
+                if !row_dir.eq_ignore_ascii_case(&expected) {
                     return false;
                 }
-            } else {
-                return false;
             }
         }
 
-        // Router filter
-        if let Some(ref router) = filters.router {
-            if let Some(ref row_router) = row.router {
-                if !row_router.contains(router) {
+        // Status filter (safety check, SQL already applies exact match)
+        if let Some(ref status) = filters.status {
+            if let Some(expected) = canonical_status(status) {
+                if !row.status.eq_ignore_ascii_case(&expected) {
                     return false;
                 }
-            } else {
-                return false;
+            }
+        }
+
+        // Router filter (case-insensitive contains)
+        if let Some(ref router) = filters.router {
+            let router_trimmed = router.trim();
+            if !router_trimmed.is_empty() {
+                let needle = router_trimmed.to_ascii_lowercase();
+                if let Some(ref row_router) = row.router {
+                    if !row_router.to_ascii_lowercase().contains(&needle) {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
             }
         }
 
@@ -1500,12 +1523,22 @@ impl TransactionDatabase {
         }
 
         if let Some(ref status) = filters.status {
-            query.push_str(&format!(" AND r.status = ?{}", params_vec.len() + 1));
-            params_vec.push(Box::new(status.clone()));
+            if let Some(normalized) = canonical_status(status) {
+                query.push_str(&format!(" AND r.status = ?{}", params_vec.len() + 1));
+                params_vec.push(Box::new(normalized));
+            }
         }
 
         if filters.only_confirmed.unwrap_or(false) {
             query.push_str(" AND r.status IN ('Confirmed', 'Finalized')");
+        }
+
+        if let Some(ref signature) = filters.signature {
+            let trimmed = signature.trim();
+            if !trimmed.is_empty() {
+                query.push_str(&format!(" AND r.signature LIKE ?{}", params_vec.len() + 1));
+                params_vec.push(Box::new(format!("%{}%", trimmed)));
+            }
         }
 
         let params_refs: Vec<&dyn rusqlite::ToSql> =
@@ -1516,6 +1549,62 @@ impl TransactionDatabase {
             .map_err(|e| format!("Failed to count transactions: {}", e))?;
 
         Ok(count as u64)
+    }
+}
+
+fn canonical_status(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let lowered = trimmed.to_ascii_lowercase();
+    let normalized = match lowered.as_str() {
+        "pending" => "Pending",
+        "confirmed" => "Confirmed",
+        "finalized" => "Finalized",
+        "failed" => "Failed",
+        _ => return Some(trimmed.to_string()),
+    };
+
+    Some(normalized.to_string())
+}
+
+fn canonical_direction(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let lowered = trimmed.to_ascii_lowercase();
+    let normalized = match lowered.as_str() {
+        "incoming" => "Incoming",
+        "outgoing" => "Outgoing",
+        "internal" => "Internal",
+        "unknown" => "Unknown",
+        _ => return Some(trimmed.to_string()),
+    };
+
+    Some(normalized.to_string())
+}
+
+fn matches_transaction_type(filter: &str, row_type: &str, success: bool) -> bool {
+    let filter_norm = filter.trim().to_ascii_lowercase();
+    if filter_norm.is_empty() {
+        return false;
+    }
+
+    let row_lower = row_type.to_ascii_lowercase();
+
+    match filter_norm.as_str() {
+        "buy" => row_lower.contains("swapsoltotoken") || row_lower == "buy",
+        "sell" => row_lower.contains("swaptokentosol") || row_lower == "sell",
+        "swap" => row_lower.contains("swap") || row_lower == "buy" || row_lower == "sell",
+        "transfer" => row_lower.contains("transfer"),
+        "ata" => row_lower.contains("ata"),
+        "failed" => !success || row_lower.contains("fail"),
+        "unknown" => row_lower.contains("unknown"),
+        _ => false,
     }
 }
 
@@ -1530,6 +1619,32 @@ mod tests {
     use crate::transactions::types::{
         SolBalanceChange, TransactionDirection, TransactionStatus, TransactionType,
     };
+
+    fn sample_row(
+        transaction_type: Option<&str>,
+        direction: Option<&str>,
+        success: bool,
+        router: Option<&str>,
+        sol_delta: f64,
+    ) -> TransactionListRow {
+        TransactionListRow {
+            signature: "sig".to_string(),
+            timestamp: Utc::now(),
+            slot: None,
+            status: "Finalized".to_string(),
+            success,
+            direction: direction.map(|s| s.to_string()),
+            transaction_type: transaction_type.map(|s| s.to_string()),
+            token_mint: None,
+            token_symbol: None,
+            router: router.map(|s| s.to_string()),
+            sol_delta,
+            fee_sol: 0.0,
+            fee_lamports: None,
+            ata_rents: 0.0,
+            instructions_count: 0,
+        }
+    }
 
     #[tokio::test]
     async fn upsert_and_fetch_transaction_caches_raw_and_processed() {
@@ -1595,6 +1710,69 @@ mod tests {
             )
             .expect("query processed fee");
         assert!((stored_fee - transaction.fee_sol).abs() < 1e-12);
+    }
+
+    #[test]
+    fn type_filters_match_modern_and_legacy_variants() {
+        let row_swap = sample_row(
+            Some("SwapSolToToken { .. }"),
+            Some("Outgoing"),
+            true,
+            None,
+            0.0,
+        );
+        let row_buy = sample_row(Some("Buy"), Some("Outgoing"), true, None, 0.0);
+
+        let filters = TransactionListFilters {
+            types: vec!["buy".to_string()],
+            ..Default::default()
+        };
+
+        assert!(TransactionDatabase::row_matches_filters(
+            &row_swap, &filters
+        ));
+        assert!(TransactionDatabase::row_matches_filters(&row_buy, &filters));
+
+        let failed_filters = TransactionListFilters {
+            types: vec!["failed".to_string()],
+            ..Default::default()
+        };
+
+        let failed_row = sample_row(
+            Some("SwapTokenToSol { .. }"),
+            Some("Outgoing"),
+            false,
+            None,
+            0.0,
+        );
+        assert!(TransactionDatabase::row_matches_filters(
+            &failed_row,
+            &failed_filters
+        ));
+    }
+
+    #[test]
+    fn direction_filter_is_case_insensitive() {
+        let row = sample_row(Some("Transfer"), Some("Incoming"), true, None, 0.0);
+
+        let filters = TransactionListFilters {
+            direction: Some("incoming".to_string()),
+            ..Default::default()
+        };
+
+        assert!(TransactionDatabase::row_matches_filters(&row, &filters));
+    }
+
+    #[test]
+    fn router_filter_handles_case_insensitive_search() {
+        let row = sample_row(Some("Swap"), Some("Outgoing"), true, Some("Raydium"), 0.0);
+
+        let filters = TransactionListFilters {
+            router: Some("ray".to_string()),
+            ..Default::default()
+        };
+
+        assert!(TransactionDatabase::row_matches_filters(&row, &filters));
     }
 }
 

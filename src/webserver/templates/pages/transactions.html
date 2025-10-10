@@ -1,144 +1,174 @@
 <div class="page-table">
-  <div class="toolbar">
-    <span style="font-weight: 600">💱 Transactions</span>
-    <select
-      id="tx-filter-type"
-      multiple
-      size="1"
-      style="
-        padding: 6px 8px;
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        background: var(--bg-primary);
-        color: var(--text-primary);
-        min-width: 100px;
-      "
-      title="Hold Ctrl/Cmd to select multiple types"
+  <div class="toolbar transactions-toolbar">
+    <div class="toolbar-row toolbar-row-head">
+      <div class="toolbar-title-block">
+        <span class="toolbar-title">💱 Transactions</span>
+        <span id="tx-summary" class="toolbar-meta"></span>
+      </div>
+      <div class="toolbar-actions">
+        <button id="tx-apply-filters" class="btn btn-primary" type="button">
+          Apply Filters
+        </button>
+        <button id="tx-reset-filters" class="btn" type="button">Reset</button>
+      </div>
+    </div>
+
+    <div class="toolbar-row filter-row">
+      <div class="filter-section">
+        <span class="filter-label">Type</span>
+        <div
+          class="filter-chip-group"
+          data-filter-group="type"
+          data-multi="true"
+        >
+          <button class="filter-chip active" data-value="all" type="button">
+            All
+          </button>
+          <button class="filter-chip" data-value="buy" type="button">
+            Buy
+          </button>
+          <button class="filter-chip" data-value="sell" type="button">
+            Sell
+          </button>
+          <button class="filter-chip" data-value="swap" type="button">
+            Swap
+          </button>
+          <button class="filter-chip" data-value="transfer" type="button">
+            Transfer
+          </button>
+          <button class="filter-chip" data-value="ata" type="button">
+            ATA
+          </button>
+          <button class="filter-chip" data-value="failed" type="button">
+            Failed
+          </button>
+          <button class="filter-chip" data-value="unknown" type="button">
+            Unknown
+          </button>
+        </div>
+      </div>
+
+      <div class="filter-section">
+        <span class="filter-label">Direction</span>
+        <div class="filter-chip-group" data-filter-group="direction">
+          <button class="filter-chip active" data-value="all" type="button">
+            All
+          </button>
+          <button class="filter-chip" data-value="Incoming" type="button">
+            Incoming
+          </button>
+          <button class="filter-chip" data-value="Outgoing" type="button">
+            Outgoing
+          </button>
+          <button class="filter-chip" data-value="Internal" type="button">
+            Internal
+          </button>
+          <button class="filter-chip" data-value="Unknown" type="button">
+            Unknown
+          </button>
+        </div>
+      </div>
+
+      <div class="filter-section">
+        <span class="filter-label">Status</span>
+        <div class="filter-chip-group" data-filter-group="status">
+          <button class="filter-chip active" data-value="all" type="button">
+            All
+          </button>
+          <button class="filter-chip" data-value="Pending" type="button">
+            Pending
+          </button>
+          <button class="filter-chip" data-value="Confirmed" type="button">
+            Confirmed
+          </button>
+          <button class="filter-chip" data-value="Finalized" type="button">
+            Finalized
+          </button>
+          <button class="filter-chip" data-value="Failed" type="button">
+            Failed
+          </button>
+        </div>
+      </div>
+
+      <div class="filter-section stretch">
+        <span class="filter-label">Signature</span>
+        <div class="filter-input">
+          <input
+            type="text"
+            id="tx-filter-signature"
+            placeholder="Signature contains..."
+            autocomplete="off"
+          />
+          <button
+            class="input-clear"
+            type="button"
+            id="tx-clear-signature"
+            title="Clear signature filter"
+            aria-label="Clear signature filter"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toolbar-row advanced-toggle">
+      <button class="btn btn-ghost" type="button" id="tx-toggle-advanced">
+        <span class="toggle-icon">▼</span>
+        Advanced filters
+      </button>
+    </div>
+
+    <div
+      class="toolbar-row advanced-panel"
+      id="tx-advanced-filters"
+      data-expanded="false"
     >
-      <option value="buy">Buy</option>
-      <option value="sell">Sell</option>
-      <option value="swap">Swap</option>
-      <option value="transfer">Transfer</option>
-      <option value="ata">ATA</option>
-      <option value="failed">Failed</option>
-      <option value="unknown">Unknown</option>
-    </select>
-    <select
-      id="tx-filter-direction"
-      style="
-        padding: 6px 8px;
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        background: var(--bg-primary);
-        color: var(--text-primary);
-      "
-    >
-      <option value="">All Directions</option>
-      <option value="Incoming">Incoming</option>
-      <option value="Outgoing">Outgoing</option>
-      <option value="Internal">Internal</option>
-      <option value="Unknown">Unknown</option>
-    </select>
-    <select
-      id="tx-filter-status"
-      style="
-        padding: 6px 8px;
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        background: var(--bg-primary);
-        color: var(--text-primary);
-      "
-    >
-      <option value="">All Status</option>
-      <option value="Pending">Pending</option>
-      <option value="Confirmed">Confirmed</option>
-      <option value="Finalized">Finalized</option>
-      <option value="Failed">Failed</option>
-    </select>
-    <input
-      type="text"
-      id="tx-filter-router"
-      placeholder="Router (jupiter, raydium...)"
-      style="
-        padding: 6px 8px;
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        background: var(--bg-primary);
-        color: var(--text-primary);
-        min-width: 140px;
-      "
-    />
-    <input
-      type="text"
-      id="tx-filter-mint"
-      placeholder="Token mint..."
-      style="
-        padding: 6px 8px;
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        background: var(--bg-primary);
-        color: var(--text-primary);
-        min-width: 140px;
-      "
-    />
-    <input
-      type="datetime-local"
-      id="tx-filter-from"
-      style="
-        padding: 6px 8px;
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        background: var(--bg-primary);
-        color: var(--text-primary);
-      "
-    />
-    <span style="color: var(--text-secondary)">→</span>
-    <input
-      type="datetime-local"
-      id="tx-filter-to"
-      style="
-        padding: 6px 8px;
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        background: var(--bg-primary);
-        color: var(--text-primary);
-      "
-    />
-    <input
-      type="number"
-      step="0.0001"
-      id="tx-filter-min-sol"
-      placeholder="Min SOL"
-      style="
-        padding: 6px 8px;
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        background: var(--bg-primary);
-        color: var(--text-primary);
-        width: 90px;
-      "
-    />
-    <input
-      type="number"
-      step="0.0001"
-      id="tx-filter-max-sol"
-      placeholder="Max SOL"
-      style="
-        padding: 6px 8px;
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        background: var(--bg-primary);
-        color: var(--text-primary);
-        width: 90px;
-      "
-    />
-    <button id="tx-apply-filters" class="btn btn-primary">Apply</button>
-    <button id="tx-reset-filters" class="btn">Reset</button>
-    <div class="spacer"></div>
-    <span
-      id="tx-summary"
-      style="color: var(--text-secondary); font-size: 0.9em"
-    ></span>
+      <div class="filter-section">
+        <span class="filter-label">Router</span>
+        <input
+          type="text"
+          id="tx-filter-router"
+          placeholder="Router (jupiter, raydium...)"
+          autocomplete="off"
+        />
+      </div>
+      <div class="filter-section">
+        <span class="filter-label">Token Mint</span>
+        <input
+          type="text"
+          id="tx-filter-mint"
+          placeholder="Token mint..."
+          autocomplete="off"
+        />
+      </div>
+      <div class="filter-section date-range">
+        <span class="filter-label">Time Range</span>
+        <div class="date-range-inputs">
+          <input type="datetime-local" id="tx-filter-from" />
+          <span class="range-separator">→</span>
+          <input type="datetime-local" id="tx-filter-to" />
+        </div>
+      </div>
+      <div class="filter-section">
+        <span class="filter-label">Min SOL Δ</span>
+        <input
+          type="number"
+          step="0.0001"
+          id="tx-filter-min-sol"
+          placeholder="Min SOL"
+        />
+      </div>
+      <div class="filter-section">
+        <span class="filter-label">Max SOL Δ</span>
+        <input
+          type="number"
+          step="0.0001"
+          id="tx-filter-max-sol"
+          placeholder="Max SOL"
+        />
+      </div>
+    </div>
   </div>
   <div class="table-wrap">
     <table class="table" id="tx-table">
@@ -191,6 +221,30 @@
         return document.getElementById(id);
       }
 
+      function qs(selector, scope = document) {
+        return scope.querySelector(selector);
+      }
+
+      function qsa(selector, scope = document) {
+        return Array.from(scope.querySelectorAll(selector));
+      }
+
+      function textFromInput(id) {
+        const input = el(id);
+        if (!input) return null;
+        const value = input.value.trim();
+        return value ? value : null;
+      }
+
+      function numberFromInput(id) {
+        const input = el(id);
+        if (!input) return null;
+        const raw = input.value.trim();
+        if (raw === "") return null;
+        const parsed = parseFloat(raw);
+        return Number.isFinite(parsed) ? parsed : null;
+      }
+
       function renderRow(row) {
         const tr = document.createElement("tr");
         const time = new Date(row.timestamp).toLocaleTimeString();
@@ -223,26 +277,147 @@
         return tr;
       }
 
+      function getChipGroups() {
+        return qsa(".filter-chip-group");
+      }
+
+      function setChipActive(btn, active) {
+        if (!btn) return;
+        btn.classList.toggle("active", !!active);
+        btn.setAttribute("aria-pressed", !!active ? "true" : "false");
+      }
+
+      function resetGroupToAll(group) {
+        if (!group) return;
+        const buttons = qsa(".filter-chip", group);
+        buttons.forEach((btn) => {
+          const isAll = btn.dataset.value === "all";
+          setChipActive(btn, isAll);
+        });
+      }
+
+      function handleMultiChip(group, target) {
+        const value = target.dataset.value;
+        const buttons = qsa(".filter-chip", group);
+        const allButton = buttons.find((btn) => btn.dataset.value === "all");
+
+        if (value === "all") {
+          resetGroupToAll(group);
+          return;
+        }
+
+        const nowActive = !target.classList.contains("active");
+        setChipActive(target, nowActive);
+
+        if (nowActive) {
+          if (allButton) setChipActive(allButton, false);
+        } else {
+          const stillActive = buttons.some(
+            (btn) => btn !== allButton && btn.classList.contains("active")
+          );
+          if (!stillActive) {
+            resetGroupToAll(group);
+          }
+        }
+      }
+
+      function handleSingleChip(group, target) {
+        const buttons = qsa(".filter-chip", group);
+        buttons.forEach((btn) => setChipActive(btn, btn === target));
+      }
+
+      function initChipGroups() {
+        getChipGroups().forEach((group) => {
+          const isMulti = group.dataset.multi === "true";
+          qsa(".filter-chip", group).forEach((btn) => {
+            if (!btn.dataset.value) return;
+            btn.setAttribute(
+              "aria-pressed",
+              btn.classList.contains("active") ? "true" : "false"
+            );
+            if (btn.__chipListenerAttached) return;
+            btn.addEventListener("click", () => {
+              if (isMulti) {
+                handleMultiChip(group, btn);
+              } else {
+                handleSingleChip(group, btn);
+              }
+              updateFilterMeta();
+            });
+            btn.__chipListenerAttached = true;
+          });
+        });
+      }
+
+      function getGroupValues(groupName) {
+        const group = qs(
+          `.filter-chip-group[data-filter-group="${groupName}"]`
+        );
+        if (!group) return groupName === "type" ? [] : null;
+        const isMulti = group.dataset.multi === "true";
+        const activeButtons = qsa(".filter-chip.active", group).map(
+          (btn) => btn.dataset.value
+        );
+        if (isMulti) {
+          return activeButtons.includes("all") ? [] : activeButtons;
+        }
+        const value = activeButtons[0] || "all";
+        return value === "all" ? null : value;
+      }
+
+      function setGroupValues(groupName, values) {
+        const group = qs(
+          `.filter-chip-group[data-filter-group="${groupName}"]`
+        );
+        if (!group) return;
+        const isMulti = group.dataset.multi === "true";
+        const buttons = qsa(".filter-chip", group);
+        if (isMulti) {
+          const normalized = Array.isArray(values)
+            ? values.filter(Boolean)
+            : [];
+          const valueSet = new Set(normalized);
+          buttons.forEach((btn) => {
+            const val = btn.dataset.value;
+            if (val === "all") {
+              setChipActive(btn, valueSet.size === 0);
+            } else {
+              setChipActive(btn, valueSet.size > 0 ? valueSet.has(val) : false);
+            }
+          });
+          const anyActive = buttons.some(
+            (btn) =>
+              btn.dataset.value !== "all" && btn.classList.contains("active")
+          );
+          if (!anyActive) resetGroupToAll(group);
+        } else {
+          const normalized = values || "all";
+          buttons.forEach((btn) => {
+            const shouldActive = btn.dataset.value === normalized;
+            setChipActive(btn, shouldActive);
+          });
+          if (!buttons.some((btn) => btn.classList.contains("active"))) {
+            resetGroupToAll(group);
+          }
+        }
+      }
+
       function buildFilters() {
-        const selectedTypes = Array.from(
-          el("tx-filter-type").selectedOptions
-        ).map((o) => o.value);
-        const direction = el("tx-filter-direction").value || null;
-        const status = el("tx-filter-status").value || null;
-        const router = el("tx-filter-router").value.trim() || null;
-        const mint = el("tx-filter-mint").value.trim() || null;
-        const min_sol = el("tx-filter-min-sol").value
-          ? parseFloat(el("tx-filter-min-sol").value)
-          : null;
-        const max_sol = el("tx-filter-max-sol").value
-          ? parseFloat(el("tx-filter-max-sol").value)
-          : null;
+        const selectedTypes = getGroupValues("type");
+        const direction = getGroupValues("direction");
+        const status = getGroupValues("status");
+        const router = textFromInput("tx-filter-router");
+        const mint = textFromInput("tx-filter-mint");
+        const signature = textFromInput("tx-filter-signature");
+        const min_sol = numberFromInput("tx-filter-min-sol");
+        const max_sol = numberFromInput("tx-filter-max-sol");
         const time_from = toRfc3339Local(el("tx-filter-from"));
         const time_to = toRfc3339Local(el("tx-filter-to"));
         return {
           types: selectedTypes,
           direction,
           status,
+          signature,
           router,
           mint,
           min_sol,
@@ -252,27 +427,90 @@
         };
       }
 
+      function countActiveFilters(filters) {
+        if (!filters) return 0;
+        let count = 0;
+        if (filters.types && filters.types.length) count += 1;
+        if (filters.direction) count += 1;
+        if (filters.status) count += 1;
+        if (filters.signature) count += 1;
+        if (filters.router) count += 1;
+        if (filters.mint) count += 1;
+        const hasMin =
+          filters.min_sol !== null && filters.min_sol !== undefined;
+        const hasMax =
+          filters.max_sol !== null && filters.max_sol !== undefined;
+        if (hasMin || hasMax) count += 1;
+        if (filters.time_from || filters.time_to) count += 1;
+        return count;
+      }
+
+      function updateFilterMeta() {
+        const current = buildFilters();
+        const count = countActiveFilters(current);
+        const metaEl = el("tx-summary");
+        if (!metaEl) return;
+        const summaryText = metaEl.dataset.summaryText || "";
+        let finalText = summaryText;
+        if (count > 0) {
+          const filtersLabel = `${count} filter${
+            count === 1 ? "" : "s"
+          } active`;
+          finalText = summaryText
+            ? `${summaryText} • ${filtersLabel}`
+            : filtersLabel;
+        }
+        metaEl.textContent = finalText || summaryText;
+      }
+
       function applySavedFilters() {
-        const saved = AppState.load("tx.filters", null);
-        if (!saved) return;
-        const typeSel = el("tx-filter-type");
-        Array.from(typeSel.options).forEach((opt) => {
-          opt.selected = (saved.types || []).includes(opt.value);
-        });
-        el("tx-filter-direction").value = saved.direction || "";
-        el("tx-filter-status").value = saved.status || "";
-        el("tx-filter-router").value = saved.router || "";
-        el("tx-filter-mint").value = saved.mint || "";
-        el("tx-filter-min-sol").value = saved.min_sol ?? "";
-        el("tx-filter-max-sol").value = saved.max_sol ?? "";
-        if (saved.time_from)
-          el("tx-filter-from").value = new Date(saved.time_from)
-            .toISOString()
-            .slice(0, 16);
-        if (saved.time_to)
-          el("tx-filter-to").value = new Date(saved.time_to)
-            .toISOString()
-            .slice(0, 16);
+        const savedFilters = AppState.load("tx.filters", null);
+        if (savedFilters) {
+          setGroupValues("type", savedFilters.types || []);
+          setGroupValues("direction", savedFilters.direction || null);
+          setGroupValues("status", savedFilters.status || null);
+          el("tx-filter-router").value = savedFilters.router || "";
+          el("tx-filter-mint").value = savedFilters.mint || "";
+          el("tx-filter-signature").value = savedFilters.signature || "";
+          el("tx-filter-min-sol").value = savedFilters.min_sol ?? "";
+          el("tx-filter-max-sol").value = savedFilters.max_sol ?? "";
+          if (savedFilters.time_from) {
+            el("tx-filter-from").value = new Date(savedFilters.time_from)
+              .toISOString()
+              .slice(0, 16);
+          }
+          if (savedFilters.time_to) {
+            el("tx-filter-to").value = new Date(savedFilters.time_to)
+              .toISOString()
+              .slice(0, 16);
+          }
+          State.filters = savedFilters;
+        }
+
+        const savedUi = AppState.load("tx.ui", null);
+        const isAdvancedOpen = savedUi?.advancedOpen ?? false;
+        setAdvancedPanel(isAdvancedOpen);
+      }
+
+      function setAdvancedPanel(expanded) {
+        const panel = el("tx-advanced-filters");
+        const toggle = el("tx-toggle-advanced");
+        if (!panel || !toggle) return;
+        const isExpanded = !!expanded;
+        panel.dataset.expanded = isExpanded ? "true" : "false";
+        toggle.setAttribute("aria-expanded", isExpanded ? "true" : "false");
+        const icon = toggle.querySelector(".toggle-icon");
+        if (icon) {
+          icon.textContent = isExpanded ? "▲" : "▼";
+        }
+      }
+
+      function toggleAdvancedPanel() {
+        const panel = el("tx-advanced-filters");
+        if (!panel) return;
+        const nextState = panel.dataset.expanded !== "true";
+        setAdvancedPanel(nextState);
+        AppState.save("tx.ui", { advancedOpen: nextState });
       }
 
       async function fetchList(filters, cursor, limit = 50) {
@@ -295,13 +533,21 @@
       }
 
       function updateSummaryBar(summary) {
-        if (!summary) return;
+        const metaEl = el("tx-summary");
+        if (!metaEl) return;
+        if (!summary) {
+          metaEl.dataset.summaryText = "";
+          updateFilterMeta();
+          return;
+        }
         const text = `Total: ${summary.total} • Success: ${
           summary.success_count
         } • Failed: ${
           summary.failed_count
         } • Success Rate: ${summary.success_rate.toFixed(1)}%`;
-        el("tx-summary").textContent = text;
+        metaEl.dataset.summaryText = text;
+        metaEl.textContent = text;
+        updateFilterMeta();
       }
 
       function updateItemsCount() {
@@ -328,26 +574,74 @@
         next_cursor: null,
         loading: false,
         filters: null,
+        pendingReload: false,
       };
 
-      async function loadInitial() {
-        State.filters = buildFilters();
-        AppState.save("tx.filters", State.filters);
-        const data = await fetchList(State.filters, null, 50);
-        State.items = data.items || [];
-        State.next_cursor = data.next_cursor || null;
-        const tbody = el("tx-tbody");
-        tbody.innerHTML = "";
-        if (State.items.length === 0) {
-          tbody.innerHTML =
-            '<tr><td colspan="11" style="text-align: center; padding: 40px; color: var(--text-secondary)">No transactions found</td></tr>';
-        } else {
-          State.items.forEach((row) => tbody.appendChild(renderRow(row)));
+      async function loadInitial(options = {}) {
+        const reuseState = options.reuseState ?? false;
+        if (State.loading) {
+          State.pendingReload = true;
+          return;
         }
-        wireRowClicks();
-        updateItemsCount();
-        const summary = await fetchSummary();
-        updateSummaryBar(summary);
+        State.loading = true;
+        if (!reuseState || !State.filters) {
+          State.filters = buildFilters();
+          AppState.save("tx.filters", State.filters);
+        }
+        const tbody = el("tx-tbody");
+        if (tbody) {
+          tbody.innerHTML =
+            '<tr><td colspan="11" style="text-align: center; padding: 40px; color: var(--text-secondary)">Loading transactions...</td></tr>';
+        }
+        const loadMoreBtn = el("tx-load-more");
+        try {
+          const data = await fetchList(State.filters, null, 50);
+          State.items = data.items || [];
+          State.next_cursor = data.next_cursor || null;
+          if (tbody) {
+            tbody.innerHTML = "";
+            if (State.items.length === 0) {
+              tbody.innerHTML =
+                '<tr><td colspan="11" style="text-align: center; padding: 40px; color: var(--text-secondary)">No transactions found</td></tr>';
+            } else {
+              State.items.forEach((row) => tbody.appendChild(renderRow(row)));
+            }
+          }
+          wireRowClicks();
+          updateItemsCount();
+          if (loadMoreBtn) {
+            if (State.next_cursor) {
+              loadMoreBtn.style.display = "inline-block";
+              loadMoreBtn.disabled = false;
+              loadMoreBtn.textContent = "Load more";
+            } else {
+              loadMoreBtn.style.display = "none";
+              loadMoreBtn.disabled = true;
+            }
+          }
+          const summary = await fetchSummary();
+          updateSummaryBar(summary);
+        } catch (err) {
+          console.error("Failed to load transactions", err);
+          if (tbody) {
+            tbody.innerHTML =
+              '<tr><td colspan="11" style="text-align: center; padding: 40px; color: var(--badge-error)">Failed to load transactions</td></tr>';
+          }
+          if (loadMoreBtn) {
+            loadMoreBtn.style.display = "none";
+            loadMoreBtn.disabled = true;
+          }
+          State.items = [];
+          State.next_cursor = null;
+          updateItemsCount();
+          updateSummaryBar(null);
+        } finally {
+          State.loading = false;
+          if (State.pendingReload) {
+            State.pendingReload = false;
+            setTimeout(() => loadInitial({ reuseState: true }), 0);
+          }
+        }
       }
 
       async function loadMore() {
@@ -380,31 +674,36 @@
         State.next_cursor = null;
         State.filters = buildFilters();
         AppState.save("tx.filters", State.filters);
+        updateFilterMeta();
         el("tx-load-more").style.display = "inline-block";
-        loadInitial();
+        loadInitial({ reuseState: true });
       }
 
       function resetFilters() {
+        resetGroupToAll(qs('.filter-chip-group[data-filter-group="type"]'));
+        resetGroupToAll(
+          qs('.filter-chip-group[data-filter-group="direction"]')
+        );
+        resetGroupToAll(qs('.filter-chip-group[data-filter-group="status"]'));
         [
-          "tx-filter-direction",
-          "tx-filter-status",
           "tx-filter-router",
           "tx-filter-mint",
+          "tx-filter-signature",
           "tx-filter-min-sol",
           "tx-filter-max-sol",
         ].forEach((id) => (el(id).value = ""));
-        const typeSel = el("tx-filter-type");
-        Array.from(typeSel.options).forEach((opt) => (opt.selected = false));
         el("tx-filter-from").value = "";
         el("tx-filter-to").value = "";
         AppState.save("tx.filters", null);
+        AppState.save("tx.ui", { advancedOpen: false });
+        setAdvancedPanel(false);
         applyFilters();
       }
 
       function onWsUnavailable() {
         // Fallback: ensure polling keeps the table updated
         if (!State.loading) {
-          loadInitial();
+          loadInitial({ reuseState: true });
         }
       }
 
@@ -434,8 +733,10 @@
           _warning: "_warning",
         },
         onInitial() {
+          initChipGroups();
           applySavedFilters();
-          loadInitial();
+          updateFilterMeta();
+          loadInitial({ reuseState: true });
           const applyBtn = document.getElementById("tx-apply-filters");
           const resetBtn = document.getElementById("tx-reset-filters");
           const loadMoreBtn = document.getElementById("tx-load-more");
@@ -452,6 +753,37 @@
             loadMoreBtn.addEventListener("click", loadMore);
             loadMoreBtn.__listenerAttached = true;
           }
+
+          const toggleBtn = document.getElementById("tx-toggle-advanced");
+          if (toggleBtn && !toggleBtn.__listenerAttached) {
+            toggleBtn.addEventListener("click", toggleAdvancedPanel);
+            toggleBtn.__listenerAttached = true;
+          }
+
+          const signatureClear = document.getElementById("tx-clear-signature");
+          if (signatureClear && !signatureClear.__listenerAttached) {
+            signatureClear.addEventListener("click", () => {
+              el("tx-filter-signature").value = "";
+              updateFilterMeta();
+            });
+            signatureClear.__listenerAttached = true;
+          }
+
+          [
+            "tx-filter-router",
+            "tx-filter-mint",
+            "tx-filter-signature",
+            "tx-filter-min-sol",
+            "tx-filter-max-sol",
+            "tx-filter-from",
+            "tx-filter-to",
+          ].forEach((id) => {
+            const input = el(id);
+            if (input && !input.__metaListenerAttached) {
+              input.addEventListener("input", updateFilterMeta);
+              input.__metaListenerAttached = true;
+            }
+          });
         },
         onEnter() {
           // Subscribe to live stream
