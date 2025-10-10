@@ -33,6 +33,26 @@
     opacity: 0.6;
   }
 
+  .search-box .search-clear {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 2px 4px;
+    transition: color 0.15s ease;
+  }
+
+  .search-box .search-clear:hover,
+  .search-box .search-clear:focus {
+    color: rgba(255, 255, 255, 0.8);
+    outline: none;
+  }
+
   .toolbar-btn {
     padding: 6px 14px;
     background: rgba(30, 30, 50, 0.8);
@@ -65,9 +85,28 @@
     border: none;
   }
 
+  .toolbar-select {
+    padding: 6px 32px 6px 10px;
+    background: rgba(20, 20, 35, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    color: white;
+    font-size: 12px;
+    min-width: 160px;
+    cursor: pointer;
+  }
+
+  .toolbar-select:focus {
+    outline: none;
+    border-color: rgba(21, 101, 192, 0.6);
+    box-shadow: 0 0 0 2px rgba(21, 101, 192, 0.25);
+  }
+
   .filter-chips {
     display: flex;
     gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
   }
 
   .chip {
@@ -78,11 +117,46 @@
     font-size: 11px;
     cursor: pointer;
     transition: all 0.15s;
+    line-height: 1.3;
+    color: rgba(255, 255, 255, 0.8);
   }
 
   .chip.active {
     background: rgba(21, 101, 192, 0.3);
     border-color: #1565c0;
+    color: white;
+  }
+
+  .chip[data-impact="modified"] {
+    border-color: rgba(56, 239, 125, 0.6);
+  }
+
+  .toolbar-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .dirty-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(56, 239, 125, 0.15);
+    border: 1px solid rgba(56, 239, 125, 0.4);
+    border-radius: 999px;
+    color: rgba(56, 239, 125, 0.9);
+    font-weight: 600;
+    letter-spacing: 0.2px;
+  }
+
+  .dirty-pill.hidden {
+    display: none;
   }
 
   .config-card {
@@ -91,6 +165,28 @@
     border-radius: 8px;
     margin-bottom: 12px;
     overflow: hidden;
+  }
+
+  .config-card.hidden {
+    display: none;
+  }
+
+  .config-card.search-active {
+    border-color: rgba(21, 101, 192, 0.5);
+    box-shadow: 0 0 0 1px rgba(21, 101, 192, 0.3);
+  }
+
+  .config-card.pulse {
+    animation: configCardPulse 1.2s ease;
+  }
+
+  @keyframes configCardPulse {
+    0% {
+      box-shadow: 0 0 0 0 rgba(21, 101, 192, 0.6);
+    }
+    100% {
+      box-shadow: 0 0 0 12px rgba(21, 101, 192, 0);
+    }
   }
 
   .card-header {
@@ -102,6 +198,12 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     cursor: pointer;
     user-select: none;
+  }
+
+  .card-header-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
   }
 
   .card-header h3 {
@@ -117,6 +219,11 @@
     font-size: 11px;
     opacity: 0.6;
     font-weight: 400;
+  }
+
+  .field-count[data-dirty="true"] {
+    color: rgba(56, 239, 125, 0.8);
+    opacity: 1;
   }
 
   .expand-icon {
@@ -144,6 +251,10 @@
     margin-bottom: 8px;
   }
 
+  .category.hidden {
+    display: none;
+  }
+
   .category-header {
     padding: 8px 12px;
     font-size: 13px;
@@ -153,10 +264,21 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 8px;
   }
 
   .category-header:hover {
     background: rgba(255, 255, 255, 0.02);
+  }
+
+  .category-header .category-title {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .category-header .category-count {
+    font-size: 11px;
+    opacity: 0.6;
   }
 
   .category-body {
@@ -182,6 +304,20 @@
   .field:hover {
     background: rgba(20, 20, 35, 0.7);
     border-color: rgba(255, 255, 255, 0.14);
+  }
+
+  .field.hidden {
+    display: none !important;
+  }
+
+  .field.modified {
+    border-color: rgba(56, 239, 125, 0.6);
+    background: rgba(56, 239, 125, 0.08);
+  }
+
+  .field.search-match {
+    border-color: rgba(21, 101, 192, 0.6);
+    background: rgba(21, 101, 192, 0.08);
   }
 
   .field-header {
@@ -476,14 +612,97 @@
       type="text"
       id="searchInput"
       placeholder="Search configurations..."
+      title="Search configurations (/ to focus)"
       oninput="filterConfigs(this.value)"
     />
+    <button
+      type="button"
+      class="search-clear"
+      onclick="clearConfigSearch()"
+      aria-label="Clear search"
+    >
+      ✕
+    </button>
   </div>
-  <button class="toolbar-btn success" onclick="exportConfig()">
+  <select
+    id="sectionJump"
+    class="toolbar-select"
+    onchange="jumpToSection(this.value)"
+  >
+    <option value="">Jump to section...</option>
+  </select>
+  <button
+    type="button"
+    class="toolbar-btn"
+    onclick="toggleAllSections(true)"
+    title="Expand all sections"
+  >
+    ⬇️ Expand
+  </button>
+  <button
+    type="button"
+    class="toolbar-btn"
+    onclick="toggleAllSections(false)"
+    title="Collapse all sections"
+  >
+    ⬆️ Collapse
+  </button>
+  <div class="filter-chips" id="impactChips">
+    <div
+      class="chip active"
+      data-impact="all"
+      data-label="All"
+      onclick="filterByImpact('all')"
+    >
+      All
+    </div>
+    <div
+      class="chip"
+      data-impact="critical"
+      data-label="Critical"
+      onclick="filterByImpact('critical')"
+    >
+      Critical
+    </div>
+    <div
+      class="chip"
+      data-impact="high"
+      data-label="High"
+      onclick="filterByImpact('high')"
+    >
+      High
+    </div>
+    <div
+      class="chip"
+      data-impact="medium"
+      data-label="Medium"
+      onclick="filterByImpact('medium')"
+    >
+      Medium
+    </div>
+    <div
+      class="chip"
+      data-impact="low"
+      data-label="Low"
+      onclick="filterByImpact('low')"
+    >
+      Low
+    </div>
+    <div
+      class="chip"
+      data-impact="modified"
+      data-label="Modified"
+      onclick="filterByImpact('modified')"
+    >
+      Modified
+    </div>
+  </div>
+  <button class="toolbar-btn success" type="button" onclick="exportConfig()">
     📥 Export
   </button>
   <button
     class="toolbar-btn primary"
+    type="button"
     onclick="document.getElementById('importFile').click()"
   >
     📤 Import
@@ -495,18 +714,20 @@
     accept=".json"
     onchange="importConfig(this.files[0])"
   />
-  <button class="toolbar-btn primary" onclick="reloadConfig()">
+  <button class="toolbar-btn primary" type="button" onclick="reloadConfig()">
     🔄 Reload
   </button>
-  <button class="toolbar-btn danger" onclick="resetConfig()">⚠️ Reset</button>
-  <button class="toolbar-btn" onclick="viewDiff()">📋 Diff</button>
+  <button class="toolbar-btn danger" type="button" onclick="resetConfig()">
+    ⚠️ Reset
+  </button>
+  <button class="toolbar-btn" type="button" onclick="viewDiff()">
+    📋 Diff
+  </button>
 </div>
 
-<div class="filter-chips">
-  <div class="chip active" onclick="filterByImpact('all', this)">All</div>
-  <div class="chip" onclick="filterByImpact('critical', this)">Critical</div>
-  <div class="chip" onclick="filterByImpact('high', this)">High</div>
-  <div class="chip" onclick="filterByImpact('medium', this)">Medium</div>
+<div class="toolbar-meta">
+  <span id="configResultsMeta">Preparing configuration...</span>
+  <span id="configDirtyBadge" class="dirty-pill hidden">Unsaved edits: 0</span>
 </div>
 
 <div id="globalStatus" class="status"></div>
@@ -574,6 +795,16 @@
 
   let SECTION_STATE = {};
   let SECTION_BASELINES = {};
+  let TOTAL_FIELD_COUNT = 0;
+  let currentImpactFilter = "all";
+  let searchShortcutAttached = false;
+  let dirtySummaryRaf = null;
+
+  const STORAGE_KEYS = {
+    search: "config.search",
+    impact: "config.impact",
+    section: "config.section",
+  };
 
   function formatSectionTitle(sectionName) {
     if (SECTION_TITLE_MAP[sectionName]) {
@@ -651,6 +882,359 @@
   }
 
   // =============================================================================
+  // TOOLBAR HELPERS & STATE MANAGEMENT
+  // =============================================================================
+
+  function ensureSearchShortcut() {
+    if (searchShortcutAttached) return;
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+
+      const active = document.activeElement;
+      if (active && ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName)) {
+        return;
+      }
+
+      const searchInput = document.getElementById("searchInput");
+      if (!searchInput) return;
+
+      event.preventDefault();
+      searchInput.focus();
+      searchInput.select();
+    });
+
+    searchShortcutAttached = true;
+  }
+
+  function initializeToolbarEnhancements() {
+    ensureSearchShortcut();
+
+    const searchInput = document.getElementById("searchInput");
+    if (searchInput && !searchInput.dataset.enhanced) {
+      searchInput.dataset.enhanced = "true";
+      searchInput.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          event.stopPropagation();
+          clearConfigSearch();
+          searchInput.blur();
+        }
+      });
+    }
+
+    const sectionJump = document.getElementById("sectionJump");
+    if (sectionJump && !sectionJump.dataset.enhanced) {
+      sectionJump.dataset.enhanced = "true";
+      sectionJump.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && sectionJump.value) {
+          jumpToSection(sectionJump.value);
+        }
+      });
+    }
+  }
+
+  function populateSectionJump() {
+    const select = document.getElementById("sectionJump");
+    if (!select) return;
+
+    const savedValue =
+      window.sessionStorage.getItem(STORAGE_KEYS.section) || "";
+
+    const options = ['<option value="">Jump to section...</option>'];
+    Object.entries(SECTION_STATE).forEach(([sectionName, info]) => {
+      const optionLabel = `${info.icon} ${info.title}`.trim();
+      options.push(
+        `<option value="${sectionName}"${
+          savedValue === sectionName ? " selected" : ""
+        }>${optionLabel}</option>`
+      );
+    });
+
+    select.innerHTML = options.join("");
+  }
+
+  function jumpToSection(sectionName) {
+    if (!sectionName) {
+      window.sessionStorage.removeItem(STORAGE_KEYS.section);
+      return;
+    }
+
+    const card = document.querySelector(
+      `.config-card[data-section="${sectionName}"]`
+    );
+    if (!card) return;
+
+    window.sessionStorage.setItem(STORAGE_KEYS.section, sectionName);
+    setSectionExpansion(sectionName, true);
+
+    window.requestAnimationFrame(() => {
+      card.scrollIntoView({ behavior: "smooth", block: "start" });
+      card.classList.add("pulse");
+      window.setTimeout(() => card.classList.remove("pulse"), 900);
+    });
+  }
+
+  function toggleAllSections(shouldExpand) {
+    Object.keys(SECTION_STATE).forEach((sectionName) => {
+      setSectionExpansion(sectionName, shouldExpand);
+    });
+
+    if (!shouldExpand) {
+      window.sessionStorage.removeItem(STORAGE_KEYS.section);
+    }
+  }
+
+  function setSectionExpansion(sectionName, shouldExpand, options = {}) {
+    const body = document.getElementById(`${sectionName}-body`);
+    const icon = document.getElementById(`${sectionName}-icon`);
+    const card = document.querySelector(
+      `.config-card[data-section="${sectionName}"]`
+    );
+    if (!body || !icon) return;
+
+    const isExpanded = body.classList.contains("expanded");
+
+    if (shouldExpand) {
+      if (!isExpanded) {
+        body.classList.add("expanded");
+        icon.classList.add("expanded");
+        if (options.auto) {
+          body.dataset.autoExpanded = "1";
+        } else {
+          delete body.dataset.autoExpanded;
+        }
+        loadSection(sectionName);
+      }
+
+      if (options.auto) {
+        card?.classList.add("search-active");
+      } else {
+        card?.classList.remove("search-active");
+      }
+    } else {
+      if (isExpanded) {
+        body.classList.remove("expanded");
+        icon.classList.remove("expanded");
+        delete body.dataset.autoExpanded;
+      }
+      card?.classList.remove("search-active");
+    }
+  }
+
+  function setCategoryExpansion(header, shouldExpand, options = {}) {
+    if (!header) return;
+
+    const body = header.nextElementSibling;
+    const toggle = header.querySelector(".category-toggle");
+    if (!body || !toggle) return;
+
+    const isCollapsed = body.classList.contains("collapsed");
+
+    if (shouldExpand) {
+      if (isCollapsed) {
+        body.classList.remove("collapsed");
+        toggle.textContent = "▼";
+        if (options.auto) {
+          body.dataset.autoExpanded = "1";
+        } else {
+          delete body.dataset.autoExpanded;
+        }
+      }
+    } else {
+      if (!isCollapsed) {
+        body.classList.add("collapsed");
+        toggle.textContent = "▶";
+      }
+      if (options.auto) {
+        delete body.dataset.autoExpanded;
+      }
+    }
+
+    if (!shouldExpand && !options.auto) {
+      delete body.dataset.autoExpanded;
+    }
+  }
+
+  function setImpactChipActive(level) {
+    const chips = document.querySelectorAll("#impactChips .chip");
+    chips.forEach((chip) => {
+      chip.classList.toggle("active", chip.dataset.impact === level);
+      if (!chip.dataset.label) {
+        chip.dataset.label = chip.textContent.trim();
+      }
+    });
+    currentImpactFilter = level;
+  }
+
+  function clearConfigSearch() {
+    const searchInput = document.getElementById("searchInput");
+    if (!searchInput) return;
+    if (searchInput.value === "") return;
+
+    searchInput.value = "";
+    window.sessionStorage.removeItem(STORAGE_KEYS.search);
+    filterConfigs("");
+  }
+
+  function restoreToolbarState() {
+    let savedImpact =
+      window.sessionStorage.getItem(STORAGE_KEYS.impact) || "all";
+    if (
+      !document.querySelector(
+        `#impactChips .chip[data-impact="${savedImpact}"]`
+      )
+    ) {
+      window.sessionStorage.removeItem(STORAGE_KEYS.impact);
+      savedImpact = "all";
+    }
+
+    setImpactChipActive(savedImpact);
+
+    const searchInput = document.getElementById("searchInput");
+    const savedSearch =
+      window.sessionStorage.getItem(STORAGE_KEYS.search) || "";
+    if (searchInput) {
+      searchInput.value = savedSearch;
+    }
+
+    const savedSection = window.sessionStorage.getItem(STORAGE_KEYS.section);
+    if (savedSection && !SECTION_STATE[savedSection]) {
+      window.sessionStorage.removeItem(STORAGE_KEYS.section);
+    }
+
+    const sectionJump = document.getElementById("sectionJump");
+    if (sectionJump) {
+      if (savedSection && SECTION_STATE[savedSection]) {
+        sectionJump.value = savedSection;
+      } else {
+        sectionJump.value = "";
+      }
+    }
+
+    filterConfigs(savedSearch);
+
+    if (savedSection && SECTION_STATE[savedSection]) {
+      jumpToSection(savedSection);
+    }
+  }
+
+  function updateImpactChipCounts() {
+    const chipsContainer = document.getElementById("impactChips");
+    if (!chipsContainer) return;
+
+    const counts = {
+      all: 0,
+      critical: 0,
+      high: 0,
+      medium: 0,
+      low: 0,
+      modified: 0,
+    };
+
+    const fields = document.querySelectorAll(".field");
+    fields.forEach((field) => {
+      const impact = field.dataset.impact || "medium";
+      counts.all += 1;
+      if (counts[impact] !== undefined) {
+        counts[impact] += 1;
+      }
+      if (field.dataset.modified === "true") {
+        counts.modified += 1;
+      }
+    });
+
+    TOTAL_FIELD_COUNT = counts.all;
+
+    chipsContainer.querySelectorAll(".chip").forEach((chip) => {
+      const impact = chip.dataset.impact;
+      if (!impact) return;
+      const baseLabel = chip.dataset.label || chip.textContent.trim();
+      const total = counts[impact] ?? 0;
+      chip.dataset.label = baseLabel;
+      chip.textContent = `${baseLabel} (${total})`;
+    });
+  }
+
+  function updateResultsSummary(visibleFields, visibleSections) {
+    const summary = document.getElementById("configResultsMeta");
+    if (!summary) return;
+
+    const totalSections = Object.keys(SECTION_STATE).length;
+    const fieldText = `${visibleFields} of ${TOTAL_FIELD_COUNT} fields visible`;
+    const sectionText = `${visibleSections} of ${totalSections} sections shown`;
+    summary.textContent = `${fieldText} • ${sectionText}`;
+  }
+
+  function scheduleDirtySummaryUpdate() {
+    if (dirtySummaryRaf !== null) return;
+    dirtySummaryRaf = window.requestAnimationFrame(() => {
+      dirtySummaryRaf = null;
+      updateDirtySummary();
+      updateImpactChipCounts();
+    });
+  }
+
+  function updateDirtySummary() {
+    const badge = document.getElementById("configDirtyBadge");
+    if (!badge) return;
+
+    const dirtyFields = document.querySelectorAll(
+      '.field[data-modified="true"]'
+    ).length;
+
+    if (dirtyFields > 0) {
+      badge.textContent = `Unsaved edits: ${dirtyFields}`;
+      badge.classList.remove("hidden");
+    } else {
+      badge.classList.add("hidden");
+      badge.textContent = "Unsaved edits: 0";
+    }
+
+    document.querySelectorAll(".config-card").forEach((card) => {
+      const sectionName = card.dataset.section;
+      const countEl = document.getElementById(`${sectionName}-count`);
+      if (!countEl) return;
+
+      const total =
+        Number(countEl.dataset.total) || card.querySelectorAll(".field").length;
+      const visible = Number(countEl.dataset.visible ?? total) || total;
+      const dirty = card.querySelectorAll(
+        '.field[data-modified="true"]'
+      ).length;
+
+      countEl.dataset.dirty = dirty > 0 ? "true" : "false";
+      let label =
+        visible === total ? `${total} fields` : `${visible} / ${total} visible`;
+      if (dirty > 0) {
+        label += ` • ${dirty} edited`;
+      }
+      countEl.textContent = label;
+    });
+
+    document.querySelectorAll(".category-header").forEach((header) => {
+      const body = header.nextElementSibling;
+      const countEl = header.querySelector(".category-count");
+      if (!body || !countEl) return;
+
+      const total =
+        Number(countEl.dataset.total) || body.querySelectorAll(".field").length;
+      const visible = Number(countEl.dataset.visible ?? total) || total;
+      const dirty = body.querySelectorAll(
+        '.field[data-modified="true"]'
+      ).length;
+
+      let label =
+        visible === total ? `${total} fields` : `${visible} / ${total} visible`;
+      if (dirty > 0) {
+        label += ` • ${dirty} edited`;
+      }
+      countEl.textContent = label;
+    });
+  }
+
+  // =============================================================================
   // DYNAMIC RENDERING ENGINE
   // =============================================================================
 
@@ -677,17 +1261,19 @@
     }
 
     let html = `
-        <div class="config-card" data-section="${sectionName}">
-            <div class="card-header" onclick="toggleSection('${sectionName}')">
-                <h3>
-                    <span>${sectionInfo.icon}</span>
-                    <span>${sectionInfo.title}</span>
-          <span class="field-count">(${fieldCount} fields)</span>
-                </h3>
-                <span class="expand-icon" id="${sectionName}-icon">▼</span>
-            </div>
-            <div class="card-body" id="${sectionName}-body">
-    `;
+    <div class="config-card" id="section-${sectionName}" data-section="${sectionName}">
+      <div class="card-header" onclick="toggleSection('${sectionName}')">
+        <h3>
+          <span>${sectionInfo.icon}</span>
+          <span>${sectionInfo.title}</span>
+        </h3>
+        <div class="card-header-meta">
+          <span class="field-count" id="${sectionName}-count" data-total="${fieldCount}" data-visible="${fieldCount}">${fieldCount} fields</span>
+          <span class="expand-icon" id="${sectionName}-icon">▼</span>
+        </div>
+      </div>
+      <div class="card-body" id="${sectionName}-body">
+  `;
 
     // Render categories
     for (const [catName, fields] of Object.entries(categories)) {
@@ -714,12 +1300,14 @@
       catName.includes("Delay") ||
       catName.includes("Advanced");
     const collapsedClass = isAdvanced ? " collapsed" : "";
+    const toggleSymbol = collapsedClass ? "▶" : "▼";
 
     let html = `
         <div class="category">
             <div class="category-header" onclick="toggleCategory(this)">
-                ${catName} (${fields.length})
-                <span class="category-toggle">▼</span>
+  <span class="category-title">${catName}</span>
+  <span class="category-count" data-total="${fields.length}" data-visible="${fields.length}">${fields.length} fields</span>
+  <span class="category-toggle">${toggleSymbol}</span>
             </div>
             <div class="category-body${collapsedClass}">
     `;
@@ -790,6 +1378,46 @@
     `;
   }
 
+  function readInputValue(input) {
+    if (!input) return undefined;
+
+    if (input.tagName === "SELECT") {
+      return input.value === "true";
+    }
+
+    if (input.tagName === "TEXTAREA") {
+      const value = input.value || "";
+      const parts = value
+        .split(",")
+        .map((v) => v.trim())
+        .filter((v) => v.length > 0);
+
+      if (parts.length === 0) {
+        return [];
+      }
+
+      const numericParts = parts.map((v) => Number(v));
+      if (numericParts.every((n) => !Number.isNaN(n))) {
+        return numericParts;
+      }
+
+      return parts;
+    }
+
+    if (input.type === "number") {
+      if (input.value === "") {
+        return "";
+      }
+      const requiresInteger = input.dataset.integer === "true";
+      const parsed = requiresInteger
+        ? parseInt(input.value, 10)
+        : parseFloat(input.value);
+      return Number.isNaN(parsed) ? "" : parsed;
+    }
+
+    return input.value;
+  }
+
   function collectSectionValues(sectionName, inputsOverride) {
     const body = document.getElementById(`${sectionName}-body`);
     if (!body) return null;
@@ -804,39 +1432,7 @@
 
     inputs.forEach((input) => {
       const key = input.id.replace(`${sectionName}_`, "");
-      let value = input.value;
-      const requiresInteger = input.dataset.integer === "true";
-
-      if (input.type === "number") {
-        if (value === "") {
-          value = "";
-        } else {
-          value = requiresInteger ? parseInt(value, 10) : parseFloat(value);
-          if (Number.isNaN(value)) {
-            value = "";
-          }
-        }
-      } else if (input.tagName === "SELECT") {
-        value = value === "true";
-      } else if (input.tagName === "TEXTAREA") {
-        const parts = value
-          .split(",")
-          .map((v) => v.trim())
-          .filter((v) => v.length > 0);
-
-        if (parts.length === 0) {
-          value = [];
-        } else {
-          const numericParts = parts.map((v) => Number(v));
-          if (numericParts.every((n) => !Number.isNaN(n))) {
-            value = numericParts;
-          } else {
-            value = parts;
-          }
-        }
-      }
-
-      values[key] = value;
+      values[key] = readInputValue(input);
     });
 
     return values;
@@ -844,6 +1440,41 @@
 
   function valuesEqual(a, b) {
     return JSON.stringify({ value: a }) === JSON.stringify({ value: b });
+  }
+
+  function updateFieldDirtyState(input) {
+    if (!input) return;
+    const fieldEl = input.closest(".field");
+    if (!fieldEl) return;
+
+    const [sectionName, ...keyParts] = input.id.split("_");
+    const fieldKey = keyParts.join("_");
+    const baselineSection = SECTION_BASELINES[sectionName];
+    const hasBaseline =
+      baselineSection &&
+      Object.prototype.hasOwnProperty.call(baselineSection, fieldKey);
+
+    if (!hasBaseline) {
+      fieldEl.dataset.modified = "false";
+      fieldEl.classList.remove("modified");
+      return;
+    }
+
+    const currentValue = readInputValue(input);
+    const baselineValue = baselineSection[fieldKey];
+    const isDirty = !valuesEqual(baselineValue, currentValue);
+
+    fieldEl.dataset.modified = isDirty ? "true" : "false";
+    fieldEl.classList.toggle("modified", isDirty);
+    scheduleDirtySummaryUpdate();
+  }
+
+  function refreshSectionDirtyState(sectionName) {
+    const body = document.getElementById(`${sectionName}-body`);
+    if (!body) return;
+
+    const inputs = body.querySelectorAll("input, select, textarea");
+    inputs.forEach((input) => updateFieldDirtyState(input));
   }
 
   function computeLocalDiff() {
@@ -975,6 +1606,7 @@
           result.message || "Saved successfully"
         );
         SECTION_BASELINES[sectionName] = deepClone(updates);
+        refreshSectionDirtyState(sectionName);
         btn.innerHTML = "✅ Saved";
         setTimeout(() => {
           btn.innerHTML = "💾 Save";
@@ -1045,72 +1677,176 @@
       }
     }
 
-    if (errors.length > 0) {
+    const isValid = errors.length === 0;
+
+    if (!isValid) {
       input.classList.add("invalid");
       input.classList.remove("valid");
       errorEl.textContent = errors.join(", ");
       errorEl.classList.add("visible");
-      return false;
     } else {
       input.classList.remove("invalid");
       input.classList.add("valid");
       errorEl.classList.remove("visible");
-      return true;
     }
+
+    updateFieldDirtyState(input);
+    return isValid;
   }
 
   // =============================================================================
   // SEARCH & FILTER
   // =============================================================================
 
-  let currentImpactFilter = "all";
-
   function filterConfigs(query) {
-    query = query.toLowerCase();
+    const rawQuery = (query || "").trim();
+    const normalizedQuery = rawQuery.toLowerCase();
+    const queryActive = normalizedQuery.length > 0;
+    const highlightMode = queryActive || currentImpactFilter === "modified";
 
-    document.querySelectorAll(".field").forEach((field) => {
-      const label = field.querySelector("label").textContent.toLowerCase();
-      const hint = field.querySelector(".field-hint").textContent.toLowerCase();
-      const impactMatch =
-        currentImpactFilter === "all" ||
-        field.dataset.impact === currentImpactFilter;
-      const textMatch = !query || label.includes(query) || hint.includes(query);
-
-      field.style.display = impactMatch && textMatch ? "block" : "none";
-    });
-
-    // Hide empty categories
-    document.querySelectorAll(".category").forEach((cat) => {
-      const visibleFields = cat.querySelectorAll(
-        '.field[style*="block"]'
-      ).length;
-      cat.style.display = visibleFields > 0 ? "block" : "none";
-    });
-
-    // Hide empty sections
-    document.querySelectorAll(".config-card").forEach((card) => {
-      const visibleCategories = card.querySelectorAll(
-        '.category[style*="block"]'
-      ).length;
-      card.style.display = visibleCategories > 0 ? "block" : "none";
-    });
-  }
-
-  function filterByImpact(level, el) {
-    currentImpactFilter = level;
-
-    const chips = document.querySelectorAll(".chip");
-    chips.forEach((chip) => {
-      chip.classList.remove("active");
-    });
-
-    if (el) {
-      el.classList.add("active");
+    if (rawQuery) {
+      window.sessionStorage.setItem(STORAGE_KEYS.search, rawQuery);
+    } else {
+      window.sessionStorage.removeItem(STORAGE_KEYS.search);
     }
 
-    // Reapply filter
-    const searchQuery = document.getElementById("searchInput").value;
-    filterConfigs(searchQuery);
+    let visibleFieldCount = 0;
+
+    document.querySelectorAll(".field").forEach((field) => {
+      const label =
+        field.querySelector("label")?.textContent.toLowerCase() || "";
+      const hint =
+        field.querySelector(".field-hint")?.textContent.toLowerCase() || "";
+      const impact = field.dataset.impact || "medium";
+      const isModified = field.dataset.modified === "true";
+
+      const impactMatch =
+        currentImpactFilter === "all"
+          ? true
+          : currentImpactFilter === "modified"
+          ? isModified
+          : impact === currentImpactFilter;
+
+      const textMatch =
+        !queryActive ||
+        label.includes(normalizedQuery) ||
+        hint.includes(normalizedQuery);
+
+      const shouldShow = impactMatch && textMatch;
+      field.classList.toggle("hidden", !shouldShow);
+      field.classList.toggle("search-match", shouldShow && queryActive);
+
+      if (shouldShow) {
+        visibleFieldCount += 1;
+      }
+    });
+
+    let visibleSectionCount = 0;
+
+    document.querySelectorAll(".config-card").forEach((card) => {
+      const sectionName = card.dataset.section;
+      const body = document.getElementById(`${sectionName}-body`);
+      const visibleFieldsInSection = card.querySelectorAll(
+        ".field:not(.hidden)"
+      ).length;
+      const dirtyFieldsInSection = card.querySelectorAll(
+        '.field[data-modified="true"]'
+      ).length;
+      const hasVisibleFields = visibleFieldsInSection > 0;
+
+      const countEl = document.getElementById(`${sectionName}-count`);
+      if (countEl) {
+        countEl.dataset.visible = visibleFieldsInSection;
+        countEl.dataset.dirty = dirtyFieldsInSection > 0 ? "true" : "false";
+        const totalFields =
+          Number(countEl.dataset.total) || visibleFieldsInSection;
+        let label =
+          visibleFieldsInSection === totalFields
+            ? `${totalFields} fields`
+            : `${visibleFieldsInSection} / ${totalFields} visible`;
+        if (dirtyFieldsInSection > 0) {
+          label += ` • ${dirtyFieldsInSection} edited`;
+        }
+        countEl.textContent = label;
+      }
+
+      card.classList.toggle("hidden", !hasVisibleFields);
+
+      if (highlightMode && hasVisibleFields) {
+        setSectionExpansion(sectionName, true, { auto: true });
+      } else if (!highlightMode && body?.dataset.autoExpanded === "1") {
+        setSectionExpansion(sectionName, false, { auto: true });
+      }
+
+      if (!highlightMode) {
+        card.classList.remove("search-active");
+      }
+
+      if (hasVisibleFields) {
+        visibleSectionCount += 1;
+      }
+    });
+
+    document.querySelectorAll(".category-header").forEach((header) => {
+      const body = header.nextElementSibling;
+      if (!body) return;
+
+      const countEl = header.querySelector(".category-count");
+      const total =
+        Number(countEl?.dataset.total) ||
+        body.querySelectorAll(".field").length;
+      const visible = body.querySelectorAll(".field:not(.hidden)").length;
+      const dirty = body.querySelectorAll(
+        '.field[data-modified="true"]'
+      ).length;
+
+      if (countEl) {
+        countEl.dataset.visible = visible;
+        let label =
+          visible === total
+            ? `${total} fields`
+            : `${visible} / ${total} visible`;
+        if (dirty > 0) {
+          label += ` • ${dirty} edited`;
+        }
+        countEl.textContent = label;
+      }
+
+      const hasVisible = visible > 0;
+      header.parentElement.classList.toggle("hidden", !hasVisible);
+
+      if (highlightMode && hasVisible) {
+        setCategoryExpansion(header, true, { auto: true });
+      } else if (!highlightMode && body.dataset.autoExpanded === "1") {
+        setCategoryExpansion(header, false, { auto: true });
+      }
+    });
+
+    updateResultsSummary(visibleFieldCount, visibleSectionCount);
+    scheduleDirtySummaryUpdate();
+  }
+
+  function filterByImpact(level) {
+    let impactLevel = level || "all";
+    if (
+      !document.querySelector(
+        `#impactChips .chip[data-impact="${impactLevel}"]`
+      )
+    ) {
+      impactLevel = "all";
+    }
+
+    if (impactLevel === "all") {
+      window.sessionStorage.removeItem(STORAGE_KEYS.impact);
+    } else {
+      window.sessionStorage.setItem(STORAGE_KEYS.impact, impactLevel);
+    }
+
+    setImpactChipActive(impactLevel);
+
+    const searchInput = document.getElementById("searchInput");
+    const currentQuery = searchInput ? searchInput.value : "";
+    filterConfigs(currentQuery);
   }
 
   // =============================================================================
@@ -1386,23 +2122,17 @@
 
   function toggleSection(sectionName) {
     const body = document.getElementById(`${sectionName}-body`);
-    const icon = document.getElementById(`${sectionName}-icon`);
-
-    body.classList.toggle("expanded");
-    icon.classList.toggle("expanded");
-
-    // Load when expanding
-    if (body.classList.contains("expanded")) {
-      loadSection(sectionName);
-    }
+    if (!body) return;
+    const shouldExpand = !body.classList.contains("expanded");
+    setSectionExpansion(sectionName, shouldExpand);
   }
 
   function toggleCategory(header) {
+    if (!header) return;
     const body = header.nextElementSibling;
-    const toggle = header.querySelector(".category-toggle");
-
-    body.classList.toggle("collapsed");
-    toggle.textContent = body.classList.contains("collapsed") ? "▶" : "▼";
+    if (!body) return;
+    const shouldExpand = body.classList.contains("collapsed");
+    setCategoryExpansion(header, shouldExpand);
   }
 
   function showStatus(element, type, message) {
@@ -1429,6 +2159,11 @@
     }
 
     renderAllSections();
+    populateSectionJump();
+    initializeToolbarEnhancements();
+    updateImpactChipCounts();
+    restoreToolbarState();
+    updateDirtySummary();
 
     // Close modal when clicking outside
     if (!diffModalListenerAttached) {
