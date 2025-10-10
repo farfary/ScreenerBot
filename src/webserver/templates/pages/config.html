@@ -1,11 +1,77 @@
 <style>
   /* COMPACT PROFESSIONAL CONFIG UI */
+  .config-page {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    padding: 20px 28px 32px;
+    box-sizing: border-box;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .config-page > * {
+    width: 100%;
+    max-width: 1200px;
+  }
+
+  .config-scroll-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 8px;
+    padding-bottom: 56px;
+    scroll-behavior: smooth;
+  }
+
+  .config-scroll-body::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .config-scroll-body::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+  }
+
+  #configContainer {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .config-page #globalStatus {
+    margin-top: -4px;
+  }
+
+  @media (max-width: 1200px) {
+    .config-page {
+      padding: 16px 20px 28px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .config-page {
+      padding: 14px 16px 24px;
+    }
+
+    .config-scroll-body {
+      padding-right: 0;
+      padding-bottom: 40px;
+    }
+  }
+
   .config-toolbar {
     display: flex;
-    gap: 8px;
-    margin-bottom: 12px;
+    gap: 10px;
     flex-wrap: wrap;
     align-items: center;
+    padding: 14px 18px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(15, 17, 30, 0.85);
+    box-shadow: 0 18px 40px rgba(5, 8, 20, 0.35);
   }
 
   .search-box {
@@ -137,7 +203,11 @@
     align-items: center;
     flex-wrap: wrap;
     gap: 8px;
-    margin-bottom: 12px;
+    margin: 0;
+    padding: 10px 16px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(15, 17, 30, 0.7);
     font-size: 12px;
     color: rgba(255, 255, 255, 0.6);
   }
@@ -160,11 +230,18 @@
   }
 
   .config-card {
-    background: rgba(30, 30, 50, 0.6);
+    background: rgba(21, 23, 38, 0.85);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    margin-bottom: 12px;
+    border-radius: 14px;
+    margin: 0;
     overflow: hidden;
+    box-shadow: 0 14px 36px rgba(8, 10, 24, 0.35);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .config-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 40px rgba(10, 12, 30, 0.45);
   }
 
   .config-card.hidden {
@@ -193,8 +270,8 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 14px;
-    background: rgba(20, 20, 35, 0.4);
+    padding: 14px 20px;
+    background: rgba(13, 16, 28, 0.85);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     cursor: pointer;
     user-select: none;
@@ -237,7 +314,9 @@
 
   .card-body {
     display: none;
-    padding: 8px;
+    padding: 18px 20px 20px;
+    background: rgba(13, 16, 28, 0.65);
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
   }
 
   .card-body.expanded {
@@ -245,10 +324,10 @@
   }
 
   .category {
-    background: rgba(20, 20, 35, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 6px;
-    margin-bottom: 8px;
+    background: rgba(20, 22, 38, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    margin-bottom: 12px;
   }
 
   .category.hidden {
@@ -256,7 +335,7 @@
   }
 
   .category-header {
-    padding: 8px 12px;
+    padding: 12px 16px;
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
@@ -264,11 +343,11 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
   }
 
   .category-header:hover {
-    background: rgba(255, 255, 255, 0.02);
+    background: rgba(255, 255, 255, 0.04);
   }
 
   .category-header .category-title {
@@ -285,8 +364,8 @@
     /* Vertical stacked layout for all fields */
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 8px;
+    gap: 10px;
+    padding: 14px 16px 16px;
   }
 
   .category-body.collapsed {
@@ -294,16 +373,18 @@
   }
 
   .field {
-    background: rgba(15, 15, 25, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 5px;
-    padding: 10px;
-    transition: border-color 0.15s ease, background 0.15s ease;
+    background: rgba(15, 16, 28, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 12px 14px;
+    transition: border-color 0.15s ease, background 0.15s ease,
+      box-shadow 0.15s ease;
   }
 
   .field:hover {
-    background: rgba(20, 20, 35, 0.7);
-    border-color: rgba(255, 255, 255, 0.14);
+    background: rgba(22, 24, 40, 0.85);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 8px 22px rgba(5, 8, 20, 0.25);
   }
 
   .field.hidden {
@@ -324,22 +405,22 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 5px;
+    margin-bottom: 6px;
   }
 
   .field-header label {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
-    color: #ddd;
+    color: #f1f1f5;
   }
 
   .impact {
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-size: 9px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.6px;
   }
 
   .impact.critical {
@@ -366,10 +447,10 @@
   .field select,
   .field textarea {
     width: 100%;
-    padding: 5px 8px;
-    background: rgba(10, 10, 20, 0.8);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 4px;
+    padding: 6px 10px;
+    background: rgba(11, 12, 22, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
     color: white;
     font-size: 13px;
     font-family: monospace;
@@ -606,132 +687,138 @@
 </style>
 
 <!-- DYNAMIC CONFIG UI -->
-<div class="config-toolbar">
-  <div class="search-box">
-    <input
-      type="text"
-      id="searchInput"
-      placeholder="Search configurations..."
-      title="Search configurations (/ to focus)"
-      oninput="filterConfigs(this.value)"
-    />
+<div class="config-page">
+  <div class="config-toolbar">
+    <div class="search-box">
+      <input
+        type="text"
+        id="searchInput"
+        placeholder="Search configurations..."
+        title="Search configurations (/ to focus)"
+        oninput="filterConfigs(this.value)"
+      />
+      <button
+        type="button"
+        class="search-clear"
+        onclick="clearConfigSearch()"
+        aria-label="Clear search"
+      >
+        ✕
+      </button>
+    </div>
+    <select
+      id="sectionJump"
+      class="toolbar-select"
+      onchange="jumpToSection(this.value)"
+    >
+      <option value="">Jump to section...</option>
+    </select>
     <button
       type="button"
-      class="search-clear"
-      onclick="clearConfigSearch()"
-      aria-label="Clear search"
+      class="toolbar-btn"
+      onclick="toggleAllSections(true)"
+      title="Expand all sections"
     >
-      ✕
+      ⬇️ Expand
+    </button>
+    <button
+      type="button"
+      class="toolbar-btn"
+      onclick="toggleAllSections(false)"
+      title="Collapse all sections"
+    >
+      ⬆️ Collapse
+    </button>
+    <div class="filter-chips" id="impactChips">
+      <div
+        class="chip active"
+        data-impact="all"
+        data-label="All"
+        onclick="filterByImpact('all')"
+      >
+        All
+      </div>
+      <div
+        class="chip"
+        data-impact="critical"
+        data-label="Critical"
+        onclick="filterByImpact('critical')"
+      >
+        Critical
+      </div>
+      <div
+        class="chip"
+        data-impact="high"
+        data-label="High"
+        onclick="filterByImpact('high')"
+      >
+        High
+      </div>
+      <div
+        class="chip"
+        data-impact="medium"
+        data-label="Medium"
+        onclick="filterByImpact('medium')"
+      >
+        Medium
+      </div>
+      <div
+        class="chip"
+        data-impact="low"
+        data-label="Low"
+        onclick="filterByImpact('low')"
+      >
+        Low
+      </div>
+      <div
+        class="chip"
+        data-impact="modified"
+        data-label="Modified"
+        onclick="filterByImpact('modified')"
+      >
+        Modified
+      </div>
+    </div>
+    <button class="toolbar-btn success" type="button" onclick="exportConfig()">
+      📥 Export
+    </button>
+    <button
+      class="toolbar-btn primary"
+      type="button"
+      onclick="document.getElementById('importFile').click()"
+    >
+      📤 Import
+    </button>
+    <input
+      type="file"
+      id="importFile"
+      style="display: none"
+      accept=".json"
+      onchange="importConfig(this.files[0])"
+    />
+    <button class="toolbar-btn primary" type="button" onclick="reloadConfig()">
+      🔄 Reload
+    </button>
+    <button class="toolbar-btn danger" type="button" onclick="resetConfig()">
+      ⚠️ Reset
+    </button>
+    <button class="toolbar-btn" type="button" onclick="viewDiff()">
+      📋 Diff
     </button>
   </div>
-  <select
-    id="sectionJump"
-    class="toolbar-select"
-    onchange="jumpToSection(this.value)"
-  >
-    <option value="">Jump to section...</option>
-  </select>
-  <button
-    type="button"
-    class="toolbar-btn"
-    onclick="toggleAllSections(true)"
-    title="Expand all sections"
-  >
-    ⬇️ Expand
-  </button>
-  <button
-    type="button"
-    class="toolbar-btn"
-    onclick="toggleAllSections(false)"
-    title="Collapse all sections"
-  >
-    ⬆️ Collapse
-  </button>
-  <div class="filter-chips" id="impactChips">
-    <div
-      class="chip active"
-      data-impact="all"
-      data-label="All"
-      onclick="filterByImpact('all')"
+
+  <div class="toolbar-meta">
+    <span id="configResultsMeta">Preparing configuration...</span>
+    <span id="configDirtyBadge" class="dirty-pill hidden"
+      >Unsaved edits: 0</span
     >
-      All
-    </div>
-    <div
-      class="chip"
-      data-impact="critical"
-      data-label="Critical"
-      onclick="filterByImpact('critical')"
-    >
-      Critical
-    </div>
-    <div
-      class="chip"
-      data-impact="high"
-      data-label="High"
-      onclick="filterByImpact('high')"
-    >
-      High
-    </div>
-    <div
-      class="chip"
-      data-impact="medium"
-      data-label="Medium"
-      onclick="filterByImpact('medium')"
-    >
-      Medium
-    </div>
-    <div
-      class="chip"
-      data-impact="low"
-      data-label="Low"
-      onclick="filterByImpact('low')"
-    >
-      Low
-    </div>
-    <div
-      class="chip"
-      data-impact="modified"
-      data-label="Modified"
-      onclick="filterByImpact('modified')"
-    >
-      Modified
-    </div>
   </div>
-  <button class="toolbar-btn success" type="button" onclick="exportConfig()">
-    📥 Export
-  </button>
-  <button
-    class="toolbar-btn primary"
-    type="button"
-    onclick="document.getElementById('importFile').click()"
-  >
-    📤 Import
-  </button>
-  <input
-    type="file"
-    id="importFile"
-    style="display: none"
-    accept=".json"
-    onchange="importConfig(this.files[0])"
-  />
-  <button class="toolbar-btn primary" type="button" onclick="reloadConfig()">
-    🔄 Reload
-  </button>
-  <button class="toolbar-btn danger" type="button" onclick="resetConfig()">
-    ⚠️ Reset
-  </button>
-  <button class="toolbar-btn" type="button" onclick="viewDiff()">
-    📋 Diff
-  </button>
-</div>
 
-<div class="toolbar-meta">
-  <span id="configResultsMeta">Preparing configuration...</span>
-  <span id="configDirtyBadge" class="dirty-pill hidden">Unsaved edits: 0</span>
+  <div id="globalStatus" class="status"></div>
+  <div class="config-scroll-body">
+    <div id="configContainer"></div>
+  </div>
 </div>
-
-<div id="globalStatus" class="status"></div>
-<div id="configContainer"></div>
 
 <!-- Diff Modal -->
 <div id="diffModal" class="modal">
