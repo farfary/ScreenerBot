@@ -3,12 +3,13 @@ use crate::global::is_debug_discovery_enabled;
 use crate::logger::{log, LogTag};
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::dexscreener::get_global_dexscreener_api;
+use crate::tokens::geckoterminal::try_acquire_gecko_api_permit;
 use crate::tokens::is_token_excluded_from_trading;
 use chrono::{DateTime, Utc};
 use futures::FutureExt;
 use reqwest::Client;
 use std::sync::{Arc, OnceLock};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tokio::time::{sleep, Duration}; // for now_or_never on shutdown future
 
 // =============================================================================
@@ -22,6 +23,48 @@ const DISCOVERY_HTTP_TIMEOUT_SECS: u64 = 15;
 /// Delay between API calls in discovery cycle (seconds)
 /// Prevents overwhelming external APIs with rapid consecutive requests
 const DISCOVERY_API_DELAY_SECS: u64 = 3;
+
+/// Maximum time discovery is willing to wait for a shared GeckoTerminal permit (milliseconds)
+const GECKO_DISCOVERY_PERMIT_WAIT_MS: u64 = 2_500;
+
+/// Maximum GeckoTerminal trending requests the discovery cycle will execute per run
+const GECKO_TRENDING_MAX_REQUESTS_PER_CYCLE: usize = 5;
+
+/// GeckoTerminal trending pagination limits
+const GECKO_TRENDING_PAGE_LIMIT: usize = 10;
+const GECKO_TRENDING_DURATIONS: [&str; 4] = ["5m", "1h", "6h", "24h"];
+
+#[derive(Debug, Clone)]
+struct GeckoTrendingCursor {
+    duration_index: usize,
+    page: usize,
+}
+
+impl Default for GeckoTrendingCursor {
+    fn default() -> Self {
+        Self {
+            duration_index: 0,
+            page: 1,
+        }
+    }
+}
+
+static GECKO_TRENDING_CURSOR: OnceLock<Arc<Mutex<GeckoTrendingCursor>>> = OnceLock::new();
+
+fn gecko_trending_cursor_handle() -> Arc<Mutex<GeckoTrendingCursor>> {
+    GECKO_TRENDING_CURSOR
+        .get_or_init(|| Arc::new(Mutex::new(GeckoTrendingCursor::default())))
+        .clone()
+}
+
+fn advance_gecko_trending_cursor(cursor: &mut GeckoTrendingCursor, saw_results: bool) {
+    if saw_results && cursor.page < GECKO_TRENDING_PAGE_LIMIT {
+        cursor.page += 1;
+    } else {
+        cursor.page = 1;
+        cursor.duration_index = (cursor.duration_index + 1) % GECKO_TRENDING_DURATIONS.len();
+    }
+}
 
 /// Build a reqwest client with a short timeout suitable for discovery endpoints.
 fn build_discovery_client() -> Result<Client, String> {
@@ -433,13 +476,38 @@ pub async fn fetch_geckoterminal_recently_updated() -> Result<Vec<String>, Strin
     }
 
     let client = build_discovery_client()?;
-    let response = client
+    let permit_wait = Duration::from_millis(GECKO_DISCOVERY_PERMIT_WAIT_MS);
+    let permit = match try_acquire_gecko_api_permit(permit_wait, "discovery:gecko_recently_updated")
+        .await?
+    {
+        Some(permit) => permit,
+        None => {
+            if is_debug_discovery_enabled() {
+                log(
+                    LogTag::Discovery,
+                    "SKIP",
+                    &format!(
+                        "Shared GeckoTerminal permit busy, deferring recently updated request (waited {}ms)",
+                        permit_wait.as_millis()
+                    ),
+                );
+            }
+            return Ok(Vec::new());
+        }
+    };
+
+    let response_result = client
         .get(
             "https://api.geckoterminal.com/api/v2/tokens/info_recently_updated?include=network&network=solana"
         )
         .header("accept", "application/json")
-        .send().await
-        .map_err(|e| format!("HTTP request failed (gecko_updated): {}", e))?;
+        .send()
+        .await;
+
+    drop(permit);
+
+    let response =
+        response_result.map_err(|e| format!("HTTP request failed (gecko_updated): {}", e))?;
 
     if !response.status().is_success() {
         return Err(format!("API returned status: {}", response.status()));
@@ -484,153 +552,194 @@ pub async fn fetch_geckoterminal_trending_pools() -> Result<Vec<String>, String>
         log(
             LogTag::Discovery,
             "API",
-            "Fetching trending pools tokens from GeckoTerminal (all pages & durations)",
+            "Fetching trending pools tokens from GeckoTerminal (rotating pagination)",
         );
     }
 
     let client = build_discovery_client()?;
+    let permit_wait = Duration::from_millis(GECKO_DISCOVERY_PERMIT_WAIT_MS);
     let mut all_mints = Vec::new();
+    let cursor_handle = gecko_trending_cursor_handle();
+    let mut cursor = {
+        let guard = cursor_handle.lock().await;
+        guard.clone()
+    };
 
-    // Available durations: 5m, 1h, 6h, 24h
-    let durations = ["5m", "1h", "6h", "24h"];
+    let mut requests_used = 0usize;
 
-    for duration in durations.iter() {
+    while requests_used < GECKO_TRENDING_MAX_REQUESTS_PER_CYCLE {
+        let duration = GECKO_TRENDING_DURATIONS[cursor.duration_index];
+        let page = cursor.page;
+
         if is_debug_discovery_enabled() {
             log(
                 LogTag::Discovery,
-                "DURATION",
-                &format!("Fetching trending pools for duration: {}", duration),
+                "PAGE",
+                &format!(
+                    "GeckoTerminal trending request {} of {} → duration {} page {}",
+                    requests_used + 1,
+                    GECKO_TRENDING_MAX_REQUESTS_PER_CYCLE,
+                    duration,
+                    page
+                ),
             );
         }
 
-        // Fetch all pages (1-10) for this duration
-        for page in 1..=10 {
-            let url = format!(
-                "https://api.geckoterminal.com/api/v2/networks/solana/trending_pools?include=base_token%2Cquote_token%2Cdex&page={}&duration={}",
-                page,
-                duration
-            );
-
-            if is_debug_discovery_enabled() {
-                log(
-                    LogTag::Discovery,
-                    "PAGE",
-                    &format!("Fetching page {} for duration {}", page, duration),
-                );
-            }
-
-            let response = client
-                .get(&url)
-                .header("accept", "application/json")
-                .send()
-                .await
-                .map_err(|e| {
-                    format!(
-                        "HTTP request failed (gecko_trending page {} duration {}): {}",
-                        page, duration, e
-                    )
-                })?;
-
-            if !response.status().is_success() {
+        let permit = match try_acquire_gecko_api_permit(permit_wait, "discovery:gecko_trending")
+            .await?
+        {
+            Some(permit) => permit,
+            None => {
                 if is_debug_discovery_enabled() {
                     log(
                         LogTag::Discovery,
-                        "WARN",
+                        "SKIP",
                         &format!(
-                            "Page {} duration {} returned status: {} - skipping",
-                            page,
-                            duration,
-                            response.status()
+                            "Deferring GeckoTerminal trending fetch – shared permit busy (waited {}ms)",
+                            permit_wait.as_millis()
                         ),
                     );
                 }
-                continue; // Skip this page but continue with others
+                break;
             }
+        };
 
-            let text = response
-                .text()
-                .await
-                .map_err(|e| format!("Failed to read response: {}", e))?;
+        let url = format!(
+            "https://api.geckoterminal.com/api/v2/networks/solana/trending_pools?include=base_token%2Cquote_token%2Cdex&page={}&duration={}",
+            page, duration
+        );
 
-            let json: serde_json::Value =
-                serde_json::from_str(&text).map_err(|e| format!("Failed to parse JSON: {}", e))?;
+        let response_result = client
+            .get(&url)
+            .header("accept", "application/json")
+            .send()
+            .await;
 
-            let mut page_mints = Vec::new();
+        drop(permit);
+        requests_used += 1;
 
-            // Extract token mints from pools data
-            if let Some(data) = json.get("data").and_then(|v| v.as_array()) {
-                if data.is_empty() {
-                    if is_debug_discovery_enabled() {
-                        log(
-                            LogTag::Discovery,
-                            "END",
-                            &format!(
-                                "No more data at page {} for duration {} - stopping pagination",
-                                page, duration
-                            ),
-                        );
-                    }
-                    break; // No more data for this duration
-                }
+        let response = response_result.map_err(|e| {
+            format!(
+                "HTTP request failed (gecko_trending page {} duration {}): {}",
+                page, duration, e
+            )
+        })?;
 
-                for pool in data {
-                    if let Some(relationships) = pool.get("relationships") {
-                        // Extract base token address
-                        if let Some(base_token) = relationships
-                            .get("base_token")
-                            .and_then(|bt| bt.get("data"))
-                            .and_then(|data| data.get("id"))
-                            .and_then(|id| id.as_str())
-                        {
-                            // Extract the actual address from the ID (format: "solana_ADDRESS")
-                            if let Some(address) = base_token.strip_prefix("solana_") {
-                                page_mints.push(address.to_string());
-                            }
-                        }
-
-                        // Extract quote token address
-                        if let Some(quote_token) = relationships
-                            .get("quote_token")
-                            .and_then(|qt| qt.get("data"))
-                            .and_then(|data| data.get("id"))
-                            .and_then(|id| id.as_str())
-                        {
-                            // Extract the actual address from the ID (format: "solana_ADDRESS")
-                            if let Some(address) = quote_token.strip_prefix("solana_") {
-                                page_mints.push(address.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-
+        if !response.status().is_success() {
             if is_debug_discovery_enabled() {
                 log(
                     LogTag::Discovery,
-                    "EXTRACTED",
+                    "WARN",
                     &format!(
-                        "Page {} duration {}: found {} token mints",
-                        page,
+                        "GeckoTerminal trending duration {} page {} returned status {}",
                         duration,
-                        page_mints.len()
+                        page,
+                        response.status()
                     ),
                 );
             }
-
-            all_mints.extend(page_mints);
+            advance_gecko_trending_cursor(&mut cursor, false);
+            continue;
         }
+
+        let text = response
+            .text()
+            .await
+            .map_err(|e| format!("Failed to read response: {}", e))?;
+
+        let json: serde_json::Value =
+            serde_json::from_str(&text).map_err(|e| format!("Failed to parse JSON: {}", e))?;
+
+        let mut page_mints = Vec::new();
+
+        if let Some(data) = json.get("data").and_then(|v| v.as_array()) {
+            if data.is_empty() {
+                if is_debug_discovery_enabled() {
+                    log(
+                        LogTag::Discovery,
+                        "END",
+                        &format!(
+                            "No results at duration {} page {} – advancing to next duration",
+                            duration, page
+                        ),
+                    );
+                }
+                advance_gecko_trending_cursor(&mut cursor, false);
+                continue;
+            }
+
+            for pool in data {
+                if let Some(relationships) = pool.get("relationships") {
+                    if let Some(base_token) = relationships
+                        .get("base_token")
+                        .and_then(|bt| bt.get("data"))
+                        .and_then(|data| data.get("id"))
+                        .and_then(|id| id.as_str())
+                    {
+                        if let Some(address) = base_token.strip_prefix("solana_") {
+                            page_mints.push(address.to_string());
+                        }
+                    }
+
+                    if let Some(quote_token) = relationships
+                        .get("quote_token")
+                        .and_then(|qt| qt.get("data"))
+                        .and_then(|data| data.get("id"))
+                        .and_then(|id| id.as_str())
+                    {
+                        if let Some(address) = quote_token.strip_prefix("solana_") {
+                            page_mints.push(address.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        if is_debug_discovery_enabled() {
+            log(
+                LogTag::Discovery,
+                "EXTRACTED",
+                &format!(
+                    "GeckoTerminal trending duration {} page {} yielded {} addresses",
+                    duration,
+                    page,
+                    page_mints.len()
+                ),
+            );
+        }
+
+        all_mints.extend(page_mints);
+        advance_gecko_trending_cursor(&mut cursor, true);
     }
 
-    if is_debug_discovery_enabled() {
+    if requests_used > 0 {
+        let next_duration_index = cursor.duration_index;
+        let next_page = cursor.page;
+        {
+            let mut guard = cursor_handle.lock().await;
+            *guard = cursor;
+        }
+
+        if is_debug_discovery_enabled() {
+            log(
+                LogTag::Discovery,
+                "CURSOR",
+                &format!(
+                    "Trending pagination advanced after {} requests – next fetch duration {} page {}",
+                    requests_used,
+                    GECKO_TRENDING_DURATIONS[next_duration_index],
+                    next_page
+                ),
+            );
+        }
+    } else if is_debug_discovery_enabled() {
         log(
             LogTag::Discovery,
-            "EXTRACTED",
-            &format!(
-                "Found {} total token mints from GeckoTerminal trending pools (all durations & pages)",
-                all_mints.len()
-            )
+            "CURSOR",
+            "Trending pagination unchanged – GeckoTerminal permit unavailable this cycle",
         );
     }
+
     Ok(all_mints)
 }
 

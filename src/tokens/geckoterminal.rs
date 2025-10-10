@@ -294,22 +294,63 @@ async fn get_rate_limiter() -> Arc<Mutex<RateLimitState>> {
         .clone()
 }
 
-/// Apply strict rate limiting and concurrency control before making API requests
-/// Returns a guard that must be held for the duration of the API call
-async fn apply_rate_limit_and_concurrency_control(
-) -> Result<tokio::sync::OwnedSemaphorePermit, String> {
-    // Get semaphore permit first (ensures only 1 concurrent call)
-    let semaphore = get_api_semaphore().await;
-    let permit = semaphore
-        .clone()
-        .acquire_owned()
-        .await
-        .map_err(|e| format!("Failed to acquire semaphore: {}", e))?;
+/// Acquire a GeckoTerminal permit with optional timeout handling so callers can
+/// respect their own latency budgets while participating in the shared rate limiter.
+async fn acquire_gecko_permit_inner(
+    max_wait: Option<Duration>,
+    context: Option<&str>,
+) -> Result<Option<tokio::sync::OwnedSemaphorePermit>, String> {
+    let context_label = context.unwrap_or("GeckoTerminal request");
+    let start = Instant::now();
 
-    // Apply rate limiting
+    let semaphore = get_api_semaphore().await;
+    let permit = if let Some(wait) = max_wait {
+        match timeout(wait, semaphore.clone().acquire_owned()).await {
+            Ok(result) => result.map_err(|e| format!("Failed to acquire semaphore: {}", e))?,
+            Err(_) => {
+                if is_debug_api_enabled() {
+                    log(
+                        LogTag::Api,
+                        "GECKO_RATE_LIMIT_TIMEOUT",
+                        &format!(
+                            "🦎 {} timed out after {}ms waiting for GeckoTerminal semaphore",
+                            context_label,
+                            wait.as_millis()
+                        ),
+                    );
+                }
+                return Ok(None);
+            }
+        }
+    } else {
+        semaphore
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|e| format!("Failed to acquire semaphore: {}", e))?
+    };
+
     let rate_limiter = get_rate_limiter().await;
 
     loop {
+        if let Some(wait) = max_wait {
+            if wait <= start.elapsed() {
+                if is_debug_api_enabled() {
+                    log(
+                        LogTag::Api,
+                        "GECKO_RATE_LIMIT_SKIPPED",
+                        &format!(
+                            "🦎 {} skipped: exhausted {}ms wait budget before permit was available",
+                            context_label,
+                            wait.as_millis()
+                        ),
+                    );
+                }
+                drop(permit);
+                return Ok(None);
+            }
+        }
+
         let max_calls_per_minute = geckoterminal_rate_limit_per_minute().max(1);
         let mut state = rate_limiter.lock().await;
 
@@ -320,43 +361,89 @@ async fn apply_rate_limit_and_concurrency_control(
                     LogTag::Api,
                     "GECKO_RATE_LIMIT",
                     &format!(
-                        "🦎 GeckoTerminal API call permitted ({}/{}) calls in last minute",
+                        "🦎 {} allowed ({}/{}) calls in last minute",
+                        context_label,
                         state.call_timestamps.len(),
                         max_calls_per_minute
                     ),
                 );
             }
-            break;
+            drop(state);
+            return Ok(Some(permit));
         }
 
-        // Determine how long to wait
-        let delay = if let Some(time_until_reset) =
-            state.time_until_rate_limit_reset(max_calls_per_minute)
-        {
-            if is_debug_api_enabled() {
-                log(
-                    LogTag::Api,
-                    "GECKO_RATE_LIMIT_WAIT",
-                    &format!(
-                        "🦎 Rate limit hit ({}/{}), waiting {}ms for reset",
-                        state.call_timestamps.len(),
-                        max_calls_per_minute,
-                        time_until_reset.as_millis()
-                    ),
-                );
-            }
-            time_until_reset
-        } else if let Some(time_until_next) = state.time_until_next_request() {
-            time_until_next
-        } else {
-            Duration::from_millis(RATE_LIMIT_DELAY_MS)
-        };
+        let mut delay = state
+            .time_until_rate_limit_reset(max_calls_per_minute)
+            .or_else(|| state.time_until_next_request())
+            .unwrap_or(Duration::from_millis(RATE_LIMIT_DELAY_MS));
 
-        drop(state); // Release lock before sleeping
+        if let Some(wait) = max_wait {
+            match wait.checked_sub(start.elapsed()) {
+                Some(remaining) if remaining.is_zero() => {
+                    if is_debug_api_enabled() {
+                        log(
+                            LogTag::Api,
+                            "GECKO_RATE_LIMIT_SKIPPED",
+                            &format!(
+                                "🦎 {} skipped: no remaining wait budget for GeckoTerminal request",
+                                context_label
+                            ),
+                        );
+                    }
+                    drop(state);
+                    drop(permit);
+                    return Ok(None);
+                }
+                Some(remaining) => {
+                    if remaining <= delay {
+                        if is_debug_api_enabled() {
+                            log(
+                                LogTag::Api,
+                                "GECKO_RATE_LIMIT_SKIPPED",
+                                &format!(
+                                    "🦎 {} skipped: delay {}ms exceeds remaining {}ms budget",
+                                    context_label,
+                                    delay.as_millis(),
+                                    remaining.as_millis()
+                                ),
+                            );
+                        }
+                        drop(state);
+                        drop(permit);
+                        return Ok(None);
+                    }
+                    delay = delay.min(remaining);
+                }
+                None => {
+                    if is_debug_api_enabled() {
+                        log(
+                            LogTag::Api,
+                            "GECKO_RATE_LIMIT_SKIPPED",
+                            &format!(
+                                "🦎 {} skipped: GeckoTerminal wait budget already exhausted",
+                                context_label
+                            ),
+                        );
+                    }
+                    drop(state);
+                    drop(permit);
+                    return Ok(None);
+                }
+            }
+        }
+
+        drop(state);
         sleep(delay).await;
     }
+}
 
-    Ok(permit)
+/// Apply strict rate limiting and concurrency control before making API requests
+/// Returns a guard that must be held for the duration of the API call
+async fn apply_rate_limit_and_concurrency_control(
+) -> Result<tokio::sync::OwnedSemaphorePermit, String> {
+    acquire_gecko_permit_inner(None, None)
+        .await?
+        .ok_or_else(|| "Failed to acquire GeckoTerminal permit".to_string())
 }
 
 // =============================================================================
@@ -1231,6 +1318,15 @@ pub async fn get_current_rate_limit_status() -> (usize, usize, Option<u64>) {
 /// Acquire a GeckoTerminal API rate limit permit for external callers (e.g. OHLCV module)
 pub async fn acquire_gecko_api_permit() -> Result<tokio::sync::OwnedSemaphorePermit, String> {
     apply_rate_limit_and_concurrency_control().await
+}
+
+/// Attempt to acquire a permit but give up if the wait would exceed the caller's budget.
+/// Returns `Ok(None)` when the caller should defer the request for a future cycle.
+pub async fn try_acquire_gecko_api_permit(
+    max_wait: Duration,
+    context: &str,
+) -> Result<Option<tokio::sync::OwnedSemaphorePermit>, String> {
+    acquire_gecko_permit_inner(Some(max_wait), Some(context)).await
 }
 
 fn geckoterminal_rate_limit_per_minute() -> usize {
