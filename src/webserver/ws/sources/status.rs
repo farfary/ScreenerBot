@@ -46,6 +46,7 @@ pub struct StatusSnapshot {
     pub wallet: Option<WalletStatusSnapshot>,
     pub ohlcv_stats: Option<OhlcvStatsSnapshot>,
     pub pools: Option<PoolServiceStatusSnapshot>,
+    pub discovery: Option<TokenDiscoveryStatusSnapshot>,
     pub transactions: Option<TransactionsStatusSnapshot>,
 }
 
@@ -167,6 +168,44 @@ pub struct PoolDiscoverySnapshot {
     pub debug_override_active: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub debug_override_count: Option<usize>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct TokenDiscoveryStatusSnapshot {
+    pub running: bool,
+    pub total_cycles: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_cycle_started: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_cycle_completed: Option<String>,
+    pub last_processed: usize,
+    pub last_added: usize,
+    pub last_deduplicated_removed: usize,
+    pub last_blacklist_removed: usize,
+    pub total_processed: u64,
+    pub total_added: u64,
+    pub sources: DiscoverySourceSnapshot,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct DiscoverySourceSnapshot {
+    pub profiles: usize,
+    pub boosted: usize,
+    pub top_boosts: usize,
+    pub rug_new: usize,
+    pub rug_viewed: usize,
+    pub rug_trending: usize,
+    pub rug_verified: usize,
+    pub gecko_updated: usize,
+    pub gecko_trending: usize,
+    pub jupiter_tokens: usize,
+    pub jupiter_top_organic: usize,
+    pub jupiter_top_traded: usize,
+    pub jupiter_top_trending: usize,
+    pub coingecko_markets: usize,
+    pub defillama_protocols: usize,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -308,6 +347,7 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
         });
 
     let pools = collect_pool_service_snapshot();
+    let discovery = collect_token_discovery_snapshot().await;
     let transactions = collect_transactions_snapshot().await;
 
     StatusSnapshot {
@@ -327,6 +367,7 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
         wallet,
         ohlcv_stats,
         pools,
+        discovery,
         transactions,
     }
 }
@@ -631,6 +672,44 @@ fn collect_pool_service_snapshot() -> Option<PoolServiceStatusSnapshot> {
         analyzer: analyzer_snapshot,
         fetcher: fetcher_snapshot,
         discovery: Some(discovery_snapshot),
+    })
+}
+
+async fn collect_token_discovery_snapshot() -> Option<TokenDiscoveryStatusSnapshot> {
+    let stats = crate::tokens::discovery::get_discovery_stats().await;
+
+    // Check if discovery service is actually running by looking at recent activity
+    let running = stats.last_cycle_started.is_some();
+
+    Some(TokenDiscoveryStatusSnapshot {
+        running,
+        total_cycles: stats.total_cycles,
+        last_cycle_started: stats.last_cycle_started.map(|dt| dt.to_rfc3339()),
+        last_cycle_completed: stats.last_cycle_completed.map(|dt| dt.to_rfc3339()),
+        last_processed: stats.last_processed,
+        last_added: stats.last_added,
+        last_deduplicated_removed: stats.last_deduplicated_removed,
+        last_blacklist_removed: stats.last_blacklist_removed,
+        total_processed: stats.total_processed,
+        total_added: stats.total_added,
+        sources: DiscoverySourceSnapshot {
+            profiles: stats.per_source.profiles,
+            boosted: stats.per_source.boosted,
+            top_boosts: stats.per_source.top_boosts,
+            rug_new: stats.per_source.rug_new,
+            rug_viewed: stats.per_source.rug_viewed,
+            rug_trending: stats.per_source.rug_trending,
+            rug_verified: stats.per_source.rug_verified,
+            gecko_updated: stats.per_source.gecko_updated,
+            gecko_trending: stats.per_source.gecko_trending,
+            jupiter_tokens: stats.per_source.jupiter_tokens,
+            jupiter_top_organic: stats.per_source.jupiter_top_organic,
+            jupiter_top_traded: stats.per_source.jupiter_top_traded,
+            jupiter_top_trending: stats.per_source.jupiter_top_trending,
+            coingecko_markets: stats.per_source.coingecko_markets,
+            defillama_protocols: stats.per_source.defillama_protocols,
+        },
+        last_error: stats.last_error,
     })
 }
 

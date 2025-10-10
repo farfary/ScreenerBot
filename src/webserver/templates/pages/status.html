@@ -424,6 +424,9 @@
       case "pools":
         renderPoolsTab(data);
         break;
+      case "discovery":
+        renderDiscoveryTab(data);
+        break;
       case "transactions":
         renderTransactionsTab(data);
         break;
@@ -1562,6 +1565,278 @@
           </div>
         </div>
       `;
+  }
+
+  function renderDiscoveryTab(data) {
+    const contentContainer = document.getElementById("statusContent");
+    if (!contentContainer) return;
+
+    const discovery = data.discovery;
+
+    if (!discovery) {
+      contentContainer.innerHTML = `
+                <div class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">🔍</span>
+                            <span class="card-title">Token Discovery</span>
+                        </div>
+                        <div class="status-placeholder">
+                            <div class="status-placeholder-icon">🔍</div>
+                            <div class="status-placeholder-title">Token Discovery Metrics</div>
+                            <div class="status-placeholder-text">Discovery service details are not available yet. Ensure the discovery service is running.</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+      return;
+    }
+
+    const serviceLabel = discovery.running ? "Running" : "Stopped";
+
+    const totalCyclesLabel = Utils.formatNumber(
+      Number(discovery.total_cycles || 0),
+      0,
+      {
+        fallback: "0",
+      }
+    );
+    const lastProcessedLabel = Utils.formatNumber(
+      Number(discovery.last_processed || 0),
+      0,
+      {
+        fallback: "0",
+      }
+    );
+    const lastAddedLabel = Utils.formatNumber(
+      Number(discovery.last_added || 0),
+      0,
+      {
+        fallback: "0",
+      }
+    );
+    const deduplicatedLabel = Utils.formatNumber(
+      Number(discovery.last_deduplicated_removed || 0),
+      0,
+      { fallback: "0" }
+    );
+    const blacklistLabel = Utils.formatNumber(
+      Number(discovery.last_blacklist_removed || 0),
+      0,
+      { fallback: "0" }
+    );
+    const totalProcessedLabel = Utils.formatNumber(
+      Number(discovery.total_processed || 0),
+      0,
+      { fallback: "0" }
+    );
+    const totalAddedLabel = Utils.formatNumber(
+      Number(discovery.total_added || 0),
+      0,
+      {
+        fallback: "0",
+      }
+    );
+
+    const lastStarted = Utils.formatTimestamp(discovery.last_cycle_started, {
+      fallback: "Never",
+    });
+    const lastCompleted = Utils.formatTimestamp(
+      discovery.last_cycle_completed,
+      {
+        fallback: "Never",
+      }
+    );
+
+    const sources = discovery.sources || {};
+    const sourceRows = [
+      { name: "DexScreener Profiles", count: sources.profiles || 0 },
+      { name: "DexScreener Boosted", count: sources.boosted || 0 },
+      { name: "DexScreener Top Boosts", count: sources.top_boosts || 0 },
+      { name: "RugCheck New", count: sources.rug_new || 0 },
+      { name: "RugCheck Viewed", count: sources.rug_viewed || 0 },
+      { name: "RugCheck Trending", count: sources.rug_trending || 0 },
+      { name: "RugCheck Verified", count: sources.rug_verified || 0 },
+      { name: "GeckoTerminal Updated", count: sources.gecko_updated || 0 },
+      { name: "GeckoTerminal Trending", count: sources.gecko_trending || 0 },
+      { name: "Jupiter Tokens", count: sources.jupiter_tokens || 0 },
+      { name: "Jupiter Top Organic", count: sources.jupiter_top_organic || 0 },
+      { name: "Jupiter Top Traded", count: sources.jupiter_top_traded || 0 },
+      {
+        name: "Jupiter Top Trending",
+        count: sources.jupiter_top_trending || 0,
+      },
+      { name: "CoinGecko Markets", count: sources.coingecko_markets || 0 },
+      { name: "DeFiLlama Protocols", count: sources.defillama_protocols || 0 },
+    ];
+
+    const totalSourceCount = sourceRows.reduce(
+      (sum, row) => sum + row.count,
+      0
+    );
+
+    const sourceTableRows = sourceRows
+      .filter((row) => row.count > 0)
+      .sort((a, b) => b.count - a.count)
+      .map(
+        (row) => `
+                            <tr>
+                                <td>${Utils.escapeHtml(row.name)}</td>
+                                <td style="text-align: right;">${Utils.formatNumber(
+                                  Number(row.count),
+                                  0,
+                                  { fallback: "0" }
+                                )}</td>
+                            </tr>
+                        `
+      )
+      .join("");
+
+    const sourcesDisplay =
+      sourceTableRows ||
+      `
+                            <tr>
+                                <td colspan="2" style="text-align: center; padding: 16px; color: var(--text-secondary);">
+                                    No source data for last cycle
+                                </td>
+                            </tr>
+                        `;
+
+    const errorDisplay = discovery.last_error
+      ? `
+                            <div style="margin-top: 16px; padding: 12px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; color: #ef4444;">
+                                <strong>Last Error:</strong> ${Utils.escapeHtml(
+                                  discovery.last_error
+                                )}
+                            </div>
+                        `
+      : "";
+
+    contentContainer.innerHTML = `
+                <div class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">🔍</span>
+                            <span class="card-title">Token Discovery</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="status-metrics-grid">
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">⚙️</span>
+                                        <span>Service Status</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${serviceLabel}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🔄</span>
+                                        <span>Total Cycles</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${totalCyclesLabel}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">📊</span>
+                                        <span>Last Processed</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${lastProcessedLabel}
+                                        <span class="status-metric-unit">tokens</span>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">✅</span>
+                                        <span>Last Added</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${lastAddedLabel}
+                                        <span class="status-metric-unit">new</span>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🔁</span>
+                                        <span>Deduplicated</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${deduplicatedLabel}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🚫</span>
+                                        <span>Blacklisted</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${blacklistLabel}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">📈</span>
+                                        <span>Total Processed</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${totalProcessedLabel}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">💾</span>
+                                        <span>Total Added</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${totalAddedLabel}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <h3 class="status-section-title">Cycle Timing</h3>
+                            <div class="status-trader-info">
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">Last Cycle Started</span>
+                                    <span class="status-trader-value">${lastStarted}</span>
+                                </div>
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">Last Cycle Completed</span>
+                                    <span class="status-trader-value">${lastCompleted}</span>
+                                </div>
+                            </div>
+
+                            <h3 class="status-section-title">Discovery Sources (Last Cycle)</h3>
+                            <table class="status-services-table sticky-table">
+                                <thead>
+                                    <tr>
+                                        <th>Source</th>
+                                        <th style="text-align: right;">Tokens Found</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${sourcesDisplay}
+                                </tbody>
+                            </table>
+                            <div class="status-trader-info" style="margin-top: 12px;">
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">Total from All Sources</span>
+                                    <span class="status-trader-value">${Utils.formatNumber(
+                                      Number(totalSourceCount),
+                                      0,
+                                      { fallback: "0" }
+                                    )}</span>
+                                </div>
+                            </div>
+
+                            ${errorDisplay}
+                        </div>
+                    </div>
+                </div>
+            `;
   }
 
   function renderTransactionsTab(data) {
