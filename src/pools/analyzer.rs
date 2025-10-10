@@ -189,7 +189,7 @@ impl PoolAnalyzer {
                                         let mut fp = failed_pairs.write().unwrap();
                                         fp.insert(pair);
 
-                                        if is_debug_pool_analyzer_enabled{
+                                        if is_debug_pool_analyzer_enabled() {
                                             log(
                                                 LogTag::PoolAnalyzer,
                                                 "WARN",
