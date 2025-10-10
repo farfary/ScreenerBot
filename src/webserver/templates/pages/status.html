@@ -160,6 +160,26 @@
   .status-placeholder-text {
     font-size: 0.9em;
   }
+
+  .status-page {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .status-page .status-scroll-wrap {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .status-scroll-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
 </style>
 
 <script>
@@ -2521,16 +2541,20 @@
   initStatusPage();
 </script>
 
-<div id="statusContent">
-  <div class="page-section">
-    <div
-      style="
-        text-align: center;
-        padding: 60px 20px;
-        color: var(--text-secondary);
-      "
-    >
-      <div class="loading-text">Loading status...</div>
+<div class="page-table status-page">
+  <div class="table-wrap status-scroll-wrap">
+    <div id="statusContent" class="status-scroll-body">
+      <div class="page-section">
+        <div
+          style="
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+          "
+        >
+          <div class="loading-text">Loading status...</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
