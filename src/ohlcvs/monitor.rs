@@ -1,5 +1,6 @@
 // Background monitoring service
 
+use crate::config::with_config;
 use crate::global::is_debug_ohlcv_enabled;
 use crate::logger::{log, LogTag};
 use crate::ohlcvs::aggregator::OhlcvAggregator;
@@ -236,12 +237,44 @@ impl OhlcvMonitor {
             };
 
             for mint in tokens {
-                if let Err(e) = self.process_token(&mint).await {
-                    log(
-                        LogTag::Ohlcv,
-                        "ERROR",
-                        &format!("Error processing {}: {}", mint, e),
-                    );
+                match self.process_token(&mint).await {
+                    Ok(_) => {}
+                    Err(OhlcvError::NotFound(_)) => {
+                        if is_debug_ohlcv_enabled() {
+                            log(
+                                LogTag::Ohlcv,
+                                "DEBUG",
+                                &format!("Token {} disappeared during processing; skipping", mint),
+                            );
+                        }
+                    }
+                    Err(OhlcvError::PoolNotFound(_)) => {
+                        if is_debug_ohlcv_enabled() {
+                            log(
+                                LogTag::Ohlcv,
+                                "WARN",
+                                &format!("No healthy pools available for {}; deferring", mint),
+                            );
+                        }
+                    }
+                    Err(OhlcvError::RateLimitExceeded) => {
+                        log(
+                            LogTag::Ohlcv,
+                            "WARN",
+                            &format!(
+                                "Rate limit hit while processing {}; backing off briefly",
+                                mint
+                            ),
+                        );
+                        sleep(Duration::from_secs(2)).await;
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Ohlcv,
+                            "ERROR",
+                            &format!("Error processing {}: {}", mint, e),
+                        );
+                    }
                 }
 
                 // Small delay between tokens
@@ -458,12 +491,24 @@ impl OhlcvMonitor {
                 }
             }
             Err(e) => {
-                // Mark failure
-                self.pool_manager.mark_failure(mint, &pool_address).await?;
+                if !matches!(e, OhlcvError::RateLimitExceeded) {
+                    // Only penalize pool health for non-rate-limit failures
+                    self.pool_manager.mark_failure(mint, &pool_address).await?;
+                }
+
+                let level = if matches!(e, OhlcvError::RateLimitExceeded) {
+                    "WARN"
+                } else {
+                    "ERROR"
+                };
+
                 log(
                     LogTag::Ohlcv,
-                    "ERROR",
-                    &format!("Failed to fetch {}: {}", mint, e),
+                    level,
+                    &format!(
+                        "Failed to fetch {} using pool {}: {}",
+                        mint, pool_address, e
+                    ),
                 );
             }
         }
@@ -512,6 +557,14 @@ impl OhlcvMonitor {
                 break;
             }
 
+            // Respect configured maximum monitored tokens (0 = unlimited for backward compatibility)
+            let configured_limit = with_config(|cfg| cfg.ohlcv.max_monitored_tokens);
+            let max_tokens = if configured_limit == 0 {
+                usize::MAX
+            } else {
+                configured_limit
+            };
+
             // Get all tokens with available prices from Pool Service (same list Trader monitors)
             let available_mints = crate::pools::get_available_tokens();
 
@@ -553,7 +606,20 @@ impl OhlcvMonitor {
                     // New token - add with appropriate priority
                     drop(active_tokens);
 
-                    let priority = if open_positions.contains(mint) {
+                    let is_open_position = open_positions.contains(mint);
+
+                    if !is_open_position && max_tokens != usize::MAX {
+                        let current_len = {
+                            let snapshot = self.active_tokens.read().await;
+                            snapshot.len()
+                        };
+
+                        if current_len >= max_tokens {
+                            continue;
+                        }
+                    }
+
+                    let priority = if is_open_position {
                         Priority::Critical
                     } else {
                         Priority::Low
@@ -604,23 +670,93 @@ impl OhlcvMonitor {
                 }
             }
 
-            if added > 0 || upgraded > 0 || removed > 0 {
+            let mut trimmed = 0;
+            if max_tokens != usize::MAX {
+                let tokens_to_trim = self
+                    .determine_tokens_to_trim(max_tokens, &open_positions)
+                    .await;
+
+                for mint in tokens_to_trim {
+                    if let Err(e) = self.remove_token(&mint).await {
+                        log(
+                            LogTag::Ohlcv,
+                            "ERROR",
+                            &format!("Failed to trim token {}: {}", mint, e),
+                        );
+                    } else {
+                        trimmed += 1;
+                    }
+                }
+            }
+
+            if added > 0 || upgraded > 0 || removed > 0 || trimmed > 0 {
                 if is_debug_ohlcv_enabled() {
                     log(
                         LogTag::Ohlcv,
                         "SYNC",
                         &format!(
-                            "Pool Service sync: {} available, {} added, {} upgraded, {} removed, {} already monitored",
+                            "Pool Service sync: {} available, {} added, {} upgraded, {} removed, {} trimmed, {} already monitored",
                             available_mints.len(),
                             added,
                             upgraded,
                             removed,
+                            trimmed,
                             already_monitored
                         )
                     );
                 }
             }
         }
+    }
+
+    async fn determine_tokens_to_trim(
+        &self,
+        max_tokens: usize,
+        open_positions: &std::collections::HashSet<String>,
+    ) -> Vec<String> {
+        if max_tokens == usize::MAX {
+            return Vec::new();
+        }
+
+        let active = self.active_tokens.read().await;
+        let active_len = active.len();
+
+        if active_len <= max_tokens {
+            return Vec::new();
+        }
+
+        let mut candidates: Vec<(String, Priority, chrono::DateTime<Utc>, u32)> = active
+            .iter()
+            .filter(|(mint, _)| !open_positions.contains(*mint))
+            .map(|(mint, config)| {
+                (
+                    mint.clone(),
+                    config.priority,
+                    config.last_activity,
+                    config.consecutive_empty_fetches,
+                )
+            })
+            .collect();
+
+        let mut current_size = active_len;
+        drop(active);
+
+        candidates.sort_by(|a, b| {
+            a.1.cmp(&b.1)
+                .then_with(|| a.2.cmp(&b.2))
+                .then_with(|| b.3.cmp(&a.3))
+        });
+
+        let mut to_remove = Vec::new();
+        for (mint, _, _, _) in candidates {
+            if current_size <= max_tokens {
+                break;
+            }
+            to_remove.push(mint);
+            current_size -= 1;
+        }
+
+        to_remove
     }
 
     async fn cleanup_loop(self: Arc<Self>) {

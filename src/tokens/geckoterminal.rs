@@ -17,6 +17,7 @@
 /// - Pool data normalization to match DexScreener format
 /// - Error handling and timeout management
 /// - Debug logging for troubleshooting and rate limit monitoring
+use crate::config::with_config;
 use crate::global::is_debug_api_enabled;
 use crate::logger::{log, LogTag};
 use chrono::{DateTime, Utc};
@@ -35,14 +36,14 @@ use tokio::time::{sleep, timeout};
 /// GeckoTerminal API base URL
 const GECKOTERMINAL_BASE_URL: &str = "https://api.geckoterminal.com/api/v2";
 
-/// Rate limit: 30 requests per minute (conservative limit)
-const GECKOTERMINAL_RATE_LIMIT_PER_MINUTE: usize = 30;
+/// Default rate limit: 30 requests per minute (configurable)
+const DEFAULT_GECKOTERMINAL_RATE_LIMIT_PER_MINUTE: usize = 30;
 
 /// Rate limiting delay between requests (2000ms to ensure no concurrent calls)
 const RATE_LIMIT_DELAY_MS: u64 = 2000;
 
-/// Maximum tokens per batch request (GeckoTerminal supports multi-token queries)
-const MAX_TOKENS_PER_BATCH: usize = 30;
+/// Default maximum tokens per batch request (configurable)
+const DEFAULT_MAX_TOKENS_PER_BATCH: usize = 30;
 
 /// Request timeout in seconds
 const REQUEST_TIMEOUT_SECS: u64 = 10;
@@ -216,11 +217,11 @@ impl RateLimitState {
             .retain(|&timestamp| timestamp > one_minute_ago);
     }
 
-    fn can_make_request(&mut self) -> bool {
+    fn can_make_request(&mut self, max_calls_per_minute: usize) -> bool {
         self.cleanup_old_calls();
 
         // Check if we've hit the rate limit (30 calls per minute)
-        if self.call_timestamps.len() >= GECKOTERMINAL_RATE_LIMIT_PER_MINUTE {
+        if self.call_timestamps.len() >= max_calls_per_minute {
             return false;
         }
 
@@ -248,8 +249,8 @@ impl RateLimitState {
         }
     }
 
-    fn time_until_rate_limit_reset(&self) -> Option<Duration> {
-        if self.call_timestamps.len() < GECKOTERMINAL_RATE_LIMIT_PER_MINUTE {
+    fn time_until_rate_limit_reset(&self, max_calls_per_minute: usize) -> Option<Duration> {
+        if self.call_timestamps.len() < max_calls_per_minute {
             return None;
         }
 
@@ -309,17 +310,19 @@ async fn apply_rate_limit_and_concurrency_control(
     let rate_limiter = get_rate_limiter().await;
 
     loop {
+        let max_calls_per_minute = geckoterminal_rate_limit_per_minute().max(1);
         let mut state = rate_limiter.lock().await;
 
-        if state.can_make_request() {
+        if state.can_make_request(max_calls_per_minute) {
             state.record_request();
             if is_debug_api_enabled() {
                 log(
                     LogTag::Api,
                     "GECKO_RATE_LIMIT",
                     &format!(
-                        "🦎 GeckoTerminal API call permitted ({}/30 calls in last minute)",
-                        state.call_timestamps.len()
+                        "🦎 GeckoTerminal API call permitted ({}/{}) calls in last minute",
+                        state.call_timestamps.len(),
+                        max_calls_per_minute
                     ),
                 );
             }
@@ -327,13 +330,17 @@ async fn apply_rate_limit_and_concurrency_control(
         }
 
         // Determine how long to wait
-        let delay = if let Some(time_until_reset) = state.time_until_rate_limit_reset() {
+        let delay = if let Some(time_until_reset) =
+            state.time_until_rate_limit_reset(max_calls_per_minute)
+        {
             if is_debug_api_enabled() {
                 log(
                     LogTag::Api,
                     "GECKO_RATE_LIMIT_WAIT",
                     &format!(
-                        "🦎 Rate limit hit (30/30), waiting {}ms for reset",
+                        "🦎 Rate limit hit ({}/{}), waiting {}ms for reset",
+                        state.call_timestamps.len(),
+                        max_calls_per_minute,
                         time_until_reset.as_millis()
                     ),
                 );
@@ -522,7 +529,8 @@ pub async fn get_batch_token_pools_from_geckoterminal(
 
     // Process tokens one by one to ensure no concurrent calls
     // This is required by GeckoTerminal's strict rate limiting
-    for token_address in token_addresses.iter().take(MAX_TOKENS_PER_BATCH) {
+    let max_batch = max_tokens_per_batch_config();
+    for token_address in token_addresses.iter().take(max_batch) {
         match get_token_pools_from_geckoterminal(token_address).await {
             Ok(pools) => {
                 if !pools.is_empty() {
@@ -1199,7 +1207,10 @@ pub async fn get_ohlcv_data_from_geckoterminal_range(
 
 /// Get rate limit information
 pub fn get_rate_limit_info() -> (usize, usize) {
-    (GECKOTERMINAL_RATE_LIMIT_PER_MINUTE, MAX_TOKENS_PER_BATCH)
+    (
+        geckoterminal_rate_limit_per_minute(),
+        max_tokens_per_batch_config(),
+    )
 }
 
 /// Get current rate limit status (async because it needs to check the state)
@@ -1209,10 +1220,33 @@ pub async fn get_current_rate_limit_status() -> (usize, usize, Option<u64>) {
     state.cleanup_old_calls();
 
     let current_calls = state.call_timestamps.len();
-    let max_calls = GECKOTERMINAL_RATE_LIMIT_PER_MINUTE;
+    let max_calls = geckoterminal_rate_limit_per_minute();
     let reset_in_ms = state
-        .time_until_rate_limit_reset()
+        .time_until_rate_limit_reset(max_calls)
         .map(|d| d.as_millis() as u64);
 
     (current_calls, max_calls, reset_in_ms)
+}
+
+/// Acquire a GeckoTerminal API rate limit permit for external callers (e.g. OHLCV module)
+pub async fn acquire_gecko_api_permit() -> Result<tokio::sync::OwnedSemaphorePermit, String> {
+    apply_rate_limit_and_concurrency_control().await
+}
+
+fn geckoterminal_rate_limit_per_minute() -> usize {
+    let configured = with_config(|cfg| cfg.tokens.geckoterminal_rate_limit_per_minute);
+    if configured == 0 {
+        DEFAULT_GECKOTERMINAL_RATE_LIMIT_PER_MINUTE
+    } else {
+        configured
+    }
+}
+
+fn max_tokens_per_batch_config() -> usize {
+    let configured = with_config(|cfg| cfg.tokens.max_tokens_per_batch);
+    if configured == 0 {
+        DEFAULT_MAX_TOKENS_PER_BATCH
+    } else {
+        configured
+    }
 }

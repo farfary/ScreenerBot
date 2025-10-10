@@ -1,15 +1,14 @@
 // GeckoTerminal API fetcher with rate limiting and priority queue
 
 use crate::ohlcvs::types::{OhlcvDataPoint, OhlcvError, OhlcvResult, Priority, Timeframe};
-use chrono::{DateTime, Utc};
-use reqwest::Client;
+use crate::tokens::geckoterminal::acquire_gecko_api_permit;
+use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 use std::collections::{BinaryHeap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
-const MAX_REQUESTS_PER_MINUTE: usize = 30;
 const RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
 const MAX_CANDLES_PER_REQUEST: usize = 1000;
 
@@ -117,8 +116,13 @@ impl OhlcvFetcher {
         before_timestamp: Option<i64>,
         limit: usize,
     ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
-        // Wait for rate limit if needed
-        self.wait_for_rate_limit().await?;
+        // Acquire shared GeckoTerminal rate limit permit
+        let _permit = acquire_gecko_api_permit().await.map_err(|e| {
+            OhlcvError::ApiError(format!("Failed to acquire rate limit permit: {}", e))
+        })?;
+
+        // Record request attempt for local metrics
+        self.record_attempt();
 
         let start = Instant::now();
 
@@ -148,14 +152,20 @@ impl OhlcvFetcher {
             .map_err(|e| OhlcvError::ApiError(format!("Request failed: {}", e)))?;
 
         // Check rate limit
-        if response.status() == 429 {
+        let status = response.status();
+
+        if status == StatusCode::TOO_MANY_REQUESTS {
             return Err(OhlcvError::RateLimitExceeded);
         }
 
-        if !response.status().is_success() {
+        if status == StatusCode::NOT_FOUND {
+            return Err(OhlcvError::PoolNotFound(pool_address.to_string()));
+        }
+
+        if !status.is_success() {
             return Err(OhlcvError::ApiError(format!(
                 "API returned status: {}",
-                response.status()
+                status
             )));
         }
 
@@ -190,9 +200,6 @@ impl OhlcvFetcher {
         // Record metrics
         let latency = start.elapsed().as_millis() as u64;
         self.record_api_call(latency);
-
-        // Record request in history
-        self.record_request();
 
         Ok(data_points)
     }
@@ -346,34 +353,7 @@ impl OhlcvFetcher {
         }
     }
 
-    async fn wait_for_rate_limit(&self) -> OhlcvResult<()> {
-        loop {
-            let can_proceed = {
-                let mut history = self
-                    .request_history
-                    .lock()
-                    .map_err(|e| OhlcvError::ApiError(format!("Lock error: {}", e)))?;
-
-                let now = Instant::now();
-
-                // Remove old requests outside the window
-                Self::prune_history(&mut history, now);
-
-                history.len() < MAX_REQUESTS_PER_MINUTE
-            };
-
-            if can_proceed {
-                break;
-            }
-
-            // Wait a bit before checking again
-            sleep(Duration::from_secs(2)).await;
-        }
-
-        Ok(())
-    }
-
-    fn record_request(&self) {
+    fn record_attempt(&self) {
         if let Ok(mut history) = self.request_history.lock() {
             let now = Instant::now();
             history.push_back(now);
