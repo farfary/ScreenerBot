@@ -574,6 +574,13 @@
       .join(" ");
   }
 
+  function formatFieldLabel(fieldKey) {
+    return fieldKey
+      .split("_")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+
   function isIntegerField(sectionName, fieldKey) {
     const fieldMeta = CONFIG_METADATA[sectionName]?.[fieldKey];
     return fieldMeta?.type === "integer";
@@ -711,6 +718,9 @@
   function renderField(sectionName, field) {
     const fieldId = `${sectionName}_${field.key}`;
     const requiresInteger = isIntegerField(sectionName, field.key);
+    const labelText = field.label || formatFieldLabel(field.key);
+    const impactValue = field.impact || "medium";
+    const hintText = field.hint || "";
     let inputHTML = "";
 
     if (field.type === "boolean") {
@@ -743,17 +753,17 @@
     }
 
     return `
-        <div class="field" data-impact="${field.impact}" data-field-key="${
+        <div class="field" data-impact="${impactValue}" data-field-key="${
       field.key
     }">
             <div class="field-header">
-                <label>${field.label}${
+                <label>${labelText}${
       field.unit ? ` (${field.unit})` : ""
     }</label>
-                <span class="impact ${field.impact}">${field.impact}</span>
+                <span class="impact ${impactValue}">${impactValue}</span>
             </div>
             ${inputHTML}
-            <div class="field-hint">${field.hint}</div>
+            <div class="field-hint">${hintText}</div>
             <div class="field-error"></div>
         </div>
     `;
