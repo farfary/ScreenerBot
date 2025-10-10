@@ -1813,16 +1813,19 @@ impl TokenDiscovery {
                                     // CRITICAL: Never proceed without cached decimals
                                     // If decimals fetch fails, we should not add this token to watch list
                                     if let Some(token) = tokens.iter().find(|t| t.mint == *mint) {
-                                        log(
-                                            LogTag::Discovery,
-                                            "ERROR",
-                                            &format!(
-                                                "Failed to fetch decimals for {} ({}): {} - SKIPPING TOKEN",
-                                                token.symbol,
-                                                &token.mint[..8],
-                                                e
-                                            )
-                                        );
+                                        if is_debug_discovery_enabled() {
+                                            log(
+                                                LogTag::Discovery,
+                                                "ERROR",
+                                                &format!(
+                                                    "Failed to fetch decimals for {} ({}): {} - SKIPPING TOKEN",
+                                                    token.symbol,
+                                                    &token.mint[..8],
+                                                    e
+                                                )
+                                            );
+                                        }
+
                                         failed_tokens.push(mint.clone());
                                     }
                                 }
