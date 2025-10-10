@@ -38,6 +38,7 @@ opt-level = 2
 [lib]
 name = "screenerbot"
 path = "src/lib.rs"
+doctest = false
 
 [[bin]]
 name = "screenerbot"
