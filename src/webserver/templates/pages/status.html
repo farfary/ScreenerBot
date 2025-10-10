@@ -421,6 +421,9 @@
       case "trader":
         renderTraderTab(data);
         break;
+      case "transactions":
+        renderTransactionsTab(data);
+        break;
       case "ohlcvs":
         renderOHLCVSTab(data);
         break;
@@ -1257,6 +1260,355 @@
                                             <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-weight: 600; color: var(--text-primary);">${low}</span>
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+  }
+
+  function renderTransactionsTab(data) {
+    const contentContainer = document.getElementById("statusContent");
+    if (!contentContainer) return;
+
+    const tx = data.transactions;
+
+    if (!tx) {
+      contentContainer.innerHTML = `
+                <div class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">💱</span>
+                            <span class="card-title">Transactions System</span>
+                        </div>
+                        <div class="status-placeholder">
+                            <div class="status-placeholder-icon">💱</div>
+                            <div class="status-placeholder-title">Transactions Data</div>
+                            <div class="status-placeholder-text">Transactions metrics are not available yet. Ensure the transactions service is running.</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+      return;
+    }
+
+    const stats = tx.stats || {};
+    const queue = tx.queue || {};
+    const database = tx.database || null;
+    const bootstrap = tx.bootstrap || null;
+
+    const serviceLabel = tx.running ? "Running" : "Stopped";
+    const readyLabel = tx.system_ready ? "Ready" : "Not Ready";
+
+    const totalTxLabel = Utils.formatNumber(
+      Number(stats.total_transactions || 0),
+      0,
+      { fallback: "0" }
+    );
+    const newTransactionsLabel = Utils.formatNumber(
+      Number(stats.new_transactions_count || 0),
+      0,
+      { fallback: "0" }
+    );
+    const successRateLabel = Utils.formatNumber(
+      Number(tx.success_rate || 0),
+      2,
+      {
+        fallback: "0.00",
+      }
+    );
+    const failureRateLabel = Utils.formatNumber(
+      Number(tx.failure_rate || 0),
+      2,
+      {
+        fallback: "0.00",
+      }
+    );
+    const pendingLocalLabel = Utils.formatNumber(
+      Number(queue.pending_local || 0),
+      0,
+      { fallback: "0" }
+    );
+    const pendingGlobalLabel = Utils.formatNumber(
+      Number(queue.pending_global || 0),
+      0,
+      { fallback: "0" }
+    );
+    const knownLabel = Utils.formatNumber(
+      Number(stats.known_signatures_count || 0),
+      0,
+      { fallback: "0" }
+    );
+    const deferredLabel = Utils.formatNumber(
+      Number(queue.deferred_retries || 0),
+      0,
+      { fallback: "0" }
+    );
+    const databaseSizeLabel = database
+      ? Utils.formatBytes(Number(database.size_bytes || 0), "0 B")
+      : "N/A";
+    const oldestPendingLabel = Number.isFinite(queue.oldest_age_seconds)
+      ? Utils.formatUptime(queue.oldest_age_seconds, { fallback: "0s" })
+      : "N/A";
+    const lastSignatureCheck = Utils.formatTimestamp(tx.last_signature_check, {
+      fallback: "Never",
+    });
+    const dbLastUpdated = Utils.formatTimestamp(
+      database ? database.last_updated : null,
+      { fallback: "N/A" }
+    );
+
+    const walletPubkey = tx.wallet_pubkey
+      ? Utils.escapeHtml(tx.wallet_pubkey)
+      : "N/A";
+    const schemaLabel = database
+      ? `Schema v${Utils.escapeHtml(String(database.schema_version))}`
+      : "";
+
+    const formatSignature = (sig) => {
+      if (!sig) {
+        return "N/A";
+      }
+      if (sig.length <= 12) {
+        return Utils.escapeHtml(sig);
+      }
+      const compact = `${sig.slice(0, 6)}…${sig.slice(-6)}`;
+      return Utils.escapeHtml(compact);
+    };
+
+    const pendingSample = queue.sample || [];
+    const pendingRows = pendingSample.length
+      ? pendingSample
+          .map(
+            (item) => `
+                            <tr>
+                                <td><code title="${Utils.escapeHtml(
+                                  String(item.signature || "")
+                                )}">${formatSignature(
+              item.signature
+            )}</code></td>
+                                <td style="text-align: right;">${Utils.formatUptime(
+                                  item.age_seconds || 0,
+                                  { fallback: "0s" }
+                                )}</td>
+                            </tr>
+                        `
+          )
+          .join("")
+      : `
+                            <tr>
+                                <td colspan="2" style="text-align: center; padding: 16px; color: var(--text-secondary);">
+                                    No pending signatures
+                                </td>
+                            </tr>
+                        `;
+
+    const newestSignature = tx.newest_known_signature
+      ? `<code title="${Utils.escapeHtml(
+          String(tx.newest_known_signature)
+        )}">${formatSignature(tx.newest_known_signature)}</code>`
+      : "N/A";
+    const oldestSignature = tx.oldest_known_signature
+      ? `<code title="${Utils.escapeHtml(
+          String(tx.oldest_known_signature)
+        )}">${formatSignature(tx.oldest_known_signature)}</code>`
+      : "N/A";
+
+    const rawCountLabel = Utils.formatNumber(
+      Number(database ? database.raw_transactions : 0),
+      0,
+      { fallback: "0" }
+    );
+    const processedCountLabel = Utils.formatNumber(
+      Number(database ? database.processed_transactions : 0),
+      0,
+      { fallback: "0" }
+    );
+    const pendingRecordLabel = Utils.formatNumber(
+      Number(database ? database.pending_records : 0),
+      0,
+      { fallback: "0" }
+    );
+    const deferredRecordLabel = Utils.formatNumber(
+      Number(database ? database.deferred_retry_records : 0),
+      0,
+      { fallback: "0" }
+    );
+
+    const bootstrapStatusLabel = bootstrap
+      ? bootstrap.full_history_completed
+        ? "Completed"
+        : "In Progress"
+      : "Unknown";
+    const bootstrapCursorLabel =
+      bootstrap && bootstrap.backfill_cursor
+        ? `<code title="${Utils.escapeHtml(
+            String(bootstrap.backfill_cursor)
+          )}">${formatSignature(bootstrap.backfill_cursor)}</code>`
+        : "None";
+
+    contentContainer.innerHTML = `
+                <div class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">💱</span>
+                            <span class="card-title">Transactions System</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="status-metrics-grid">
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">⚙️</span>
+                                        <span>Service</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${serviceLabel}
+                                        <span class="status-metric-unit">${readyLabel}</span>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">📊</span>
+                                        <span>Total Transactions</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${totalTxLabel}
+                                        <span class="status-metric-unit">+${newTransactionsLabel} new</span>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">✅</span>
+                                        <span>Success Rate</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${successRateLabel}<span class="status-metric-unit">%</span>
+                                        <span class="status-metric-unit" style="margin-left: 0;">Fail ${failureRateLabel}%</span>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">⌛</span>
+                                        <span>Pending Queue</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${pendingLocalLabel}
+                                        <span class="status-metric-unit">Global ${pendingGlobalLabel}</span>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🧾</span>
+                                        <span>Known Signatures</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${knownLabel}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🗄️</span>
+                                        <span>Database Size</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${databaseSizeLabel}
+                                        <span class="status-metric-unit">${schemaLabel}</span>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🔁</span>
+                                        <span>Deferred Retries</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${deferredLabel}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <h3 class="status-section-title">Service Details</h3>
+                            <div class="status-trader-info">
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">Wallet Monitored</span>
+                                    <span class="status-trader-value">${walletPubkey}</span>
+                                </div>
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">System Ready</span>
+                                    <span class="status-trader-value">${readyLabel}</span>
+                                </div>
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">Last Signature Check</span>
+                                    <span class="status-trader-value">${lastSignatureCheck}</span>
+                                </div>
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">Newest Known Signature</span>
+                                    <span class="status-trader-value">${newestSignature}</span>
+                                </div>
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">Oldest Known Signature</span>
+                                    <span class="status-trader-value">${oldestSignature}</span>
+                                </div>
+                            </div>
+
+                            <h3 class="status-section-title">Processing Queue</h3>
+                            <table class="status-services-table sticky-table">
+                                <thead>
+                                    <tr>
+                                        <th>Signature</th>
+                                        <th style="text-align: right;">Age</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${pendingRows}
+                                </tbody>
+                            </table>
+                            <div class="status-trader-info" style="margin-top: 12px;">
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">Oldest Pending Age</span>
+                                    <span class="status-trader-value">${oldestPendingLabel}</span>
+                                </div>
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">Deferred Retries</span>
+                                    <span class="status-trader-value">${deferredLabel}</span>
+                                </div>
+                            </div>
+
+                            <h3 class="status-section-title">Database Summary</h3>
+                            <table class="status-services-table sticky-table">
+                                <tbody>
+                                    <tr>
+                                        <td>Total Raw Transactions</td>
+                                        <td style="text-align: right;">${rawCountLabel}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Total Processed Transactions</td>
+                                        <td style="text-align: right;">${processedCountLabel}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Pending Records</td>
+                                        <td style="text-align: right;">${pendingRecordLabel}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Deferred Retry Records</td>
+                                        <td style="text-align: right;">${deferredRecordLabel}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Last Updated</td>
+                                        <td style="text-align: right;">${dbLastUpdated}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <h3 class="status-section-title">Bootstrap Status</h3>
+                            <div class="status-trader-info">
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">History Status</span>
+                                    <span class="status-trader-value">${bootstrapStatusLabel}</span>
+                                </div>
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">Backfill Cursor</span>
+                                    <span class="status-trader-value">${bootstrapCursorLabel}</span>
                                 </div>
                             </div>
                         </div>

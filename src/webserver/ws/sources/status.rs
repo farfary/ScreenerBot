@@ -26,6 +26,7 @@ use crate::{
 use crate::rpc::get_global_rpc_stats;
 
 const MAX_WALLET_TOKENS: usize = 128;
+const MAX_PENDING_QUEUE_SAMPLE: usize = 10;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct StatusSnapshot {
@@ -44,6 +45,7 @@ pub struct StatusSnapshot {
     pub rpc_stats: Option<RpcStatsSnapshot>,
     pub wallet: Option<WalletStatusSnapshot>,
     pub ohlcv_stats: Option<OhlcvStatsSnapshot>,
+    pub transactions: Option<TransactionsStatusSnapshot>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -112,6 +114,64 @@ pub struct OhlcvStatsSnapshot {
     pub cache_hit_rate: f64,
     pub api_calls_per_minute: f64,
     pub queue_size: usize,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct TransactionsStatusSnapshot {
+    pub running: bool,
+    pub system_ready: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wallet_pubkey: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_signature_check: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub newest_known_signature: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub oldest_known_signature: Option<String>,
+    pub stats: crate::transactions::TransactionStats,
+    pub success_rate: f64,
+    pub failure_rate: f64,
+    pub queue: TransactionQueueSnapshot,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub database: Option<TransactionDatabaseSnapshot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bootstrap: Option<TransactionBootstrapSnapshot>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct TransactionQueueSnapshot {
+    pub pending_local: u64,
+    pub pending_global: u64,
+    pub deferred_retries: u64,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub sample: Vec<TransactionPendingSnapshot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub oldest_age_seconds: Option<i64>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct TransactionPendingSnapshot {
+    pub signature: String,
+    pub age_seconds: i64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct TransactionDatabaseSnapshot {
+    pub raw_transactions: u64,
+    pub processed_transactions: u64,
+    pub known_signatures: u64,
+    pub pending_records: u64,
+    pub deferred_retry_records: u64,
+    pub size_bytes: u64,
+    pub schema_version: u32,
+    pub last_updated: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct TransactionBootstrapSnapshot {
+    pub full_history_completed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backfill_cursor: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, serde::Deserialize)]
@@ -194,6 +254,8 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
             queue_size: stats.queue_size,
         });
 
+    let transactions = collect_transactions_snapshot().await;
+
     StatusSnapshot {
         timestamp: Utc::now(),
         uptime_seconds,
@@ -210,6 +272,7 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
         rpc_stats,
         wallet,
         ohlcv_stats,
+        transactions,
     }
 }
 
@@ -423,4 +486,162 @@ async fn collect_wallet_snapshot() -> Option<WalletStatusSnapshot> {
             None
         }
     }
+}
+
+async fn collect_transactions_snapshot() -> Option<TransactionsStatusSnapshot> {
+    let running = crate::transactions::is_global_transaction_service_running().await;
+    let system_ready = TRANSACTIONS_SYSTEM_READY.load(Ordering::SeqCst);
+    let global_pending = crate::transactions::utils::get_pending_transactions_count().await as u64;
+
+    let mut stats = crate::transactions::TransactionStats::default();
+    let mut wallet_pubkey: Option<String> = None;
+    let mut last_signature_check: Option<String> = None;
+    let mut pending_entries: Vec<(String, DateTime<Utc>)> = Vec::new();
+    let mut deferred_retries: u64 = 0;
+    let mut db_arc = None;
+
+    if let Some(manager_arc) = crate::transactions::get_global_transaction_manager().await {
+        let manager = manager_arc.lock().await;
+        stats = manager.get_stats();
+        wallet_pubkey = Some(manager.wallet_pubkey.to_string());
+        last_signature_check = manager.last_signature_check.clone();
+        deferred_retries = manager.get_deferred_retries_count() as u64;
+        pending_entries = manager
+            .pending_transactions
+            .iter()
+            .map(|(sig, ts)| (sig.clone(), *ts))
+            .collect();
+        db_arc = manager.get_transaction_database();
+    } else {
+        db_arc = crate::transactions::get_transaction_database().await;
+    }
+
+    let now = Utc::now();
+    let mut queue_snapshot = TransactionQueueSnapshot {
+        pending_local: pending_entries.len() as u64,
+        pending_global: global_pending,
+        deferred_retries,
+        sample: Vec::new(),
+        oldest_age_seconds: None,
+    };
+
+    if !pending_entries.is_empty() {
+        pending_entries.sort_by_key(|(_, ts)| *ts);
+        queue_snapshot.sample = pending_entries
+            .iter()
+            .take(MAX_PENDING_QUEUE_SAMPLE)
+            .map(|(sig, ts)| TransactionPendingSnapshot {
+                signature: sig.clone(),
+                age_seconds: (now - *ts).num_seconds().max(0),
+            })
+            .collect();
+        if let Some((_, ts)) = pending_entries.first() {
+            queue_snapshot.oldest_age_seconds = Some((now - *ts).num_seconds().max(0));
+        }
+    }
+
+    if db_arc.is_none() {
+        db_arc = crate::transactions::get_transaction_database().await;
+    }
+
+    let mut database_snapshot = None;
+    let mut bootstrap_snapshot = None;
+    let mut newest_signature: Option<String> = None;
+    let mut oldest_signature: Option<String> = None;
+
+    if let Some(db) = db_arc {
+        match db.get_stats().await {
+            Ok(db_stats) => {
+                stats.total_transactions = db_stats.total_raw_transactions;
+                stats.known_signatures_count = db_stats.total_known_signatures;
+                stats.pending_transactions_count = db_stats.total_pending_transactions;
+
+                database_snapshot = Some(TransactionDatabaseSnapshot {
+                    raw_transactions: db_stats.total_raw_transactions,
+                    processed_transactions: db_stats.total_processed_transactions,
+                    known_signatures: db_stats.total_known_signatures,
+                    pending_records: db_stats.total_pending_transactions,
+                    deferred_retry_records: db_stats.total_deferred_retries,
+                    size_bytes: db_stats.database_size_bytes,
+                    schema_version: db_stats.schema_version,
+                    last_updated: db_stats.last_updated.to_rfc3339(),
+                });
+            }
+            Err(err) => {
+                log(
+                    LogTag::Webserver,
+                    "WARN",
+                    &format!("Failed to load transactions database stats: {}", err),
+                );
+            }
+        }
+
+        match db.get_successful_transactions_count().await {
+            Ok(count) => stats.successful_transactions_count = count,
+            Err(err) => log(
+                LogTag::Webserver,
+                "WARN",
+                &format!("Failed to load successful transaction count: {}", err),
+            ),
+        }
+
+        match db.get_failed_transactions_count().await {
+            Ok(count) => stats.failed_transactions_count = count,
+            Err(err) => log(
+                LogTag::Webserver,
+                "WARN",
+                &format!("Failed to load failed transaction count: {}", err),
+            ),
+        }
+
+        match db.get_bootstrap_state().await {
+            Ok(state) => {
+                bootstrap_snapshot = Some(TransactionBootstrapSnapshot {
+                    full_history_completed: state.full_history_completed,
+                    backfill_cursor: state.backfill_before_cursor,
+                });
+            }
+            Err(err) => log(
+                LogTag::Webserver,
+                "WARN",
+                &format!("Failed to load transactions bootstrap state: {}", err),
+            ),
+        }
+
+        match db.get_newest_known_signature().await {
+            Ok(sig) => newest_signature = sig,
+            Err(err) => log(
+                LogTag::Webserver,
+                "WARN",
+                &format!("Failed to load newest known signature: {}", err),
+            ),
+        }
+
+        match db.get_oldest_known_signature().await {
+            Ok(sig) => oldest_signature = sig,
+            Err(err) => log(
+                LogTag::Webserver,
+                "WARN",
+                &format!("Failed to load oldest known signature: {}", err),
+            ),
+        }
+    }
+
+    let success_rate = stats.success_rate();
+    let failure_rate = stats.failure_rate();
+
+    Some(TransactionsStatusSnapshot {
+        running,
+        system_ready,
+        wallet_pubkey,
+        last_signature_check,
+        newest_known_signature: newest_signature,
+        oldest_known_signature: oldest_signature,
+        stats,
+        success_rate,
+        failure_rate,
+        queue: queue_snapshot,
+        database: database_snapshot,
+        bootstrap: bootstrap_snapshot,
+    })
 }
