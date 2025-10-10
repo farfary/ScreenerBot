@@ -196,15 +196,6 @@
       </tbody>
     </table>
   </div>
-  <div class="footer-bar toolbar">
-    <button class="btn" id="tx-load-more">Load more</button>
-    <div class="spacer"></div>
-    <span
-      id="tx-items-count"
-      style="color: var(--text-secondary); font-size: 0.9em"
-    ></span>
-  </div>
-
   <script>
     (function () {
       function toRfc3339Local(dtInput) {
@@ -532,30 +523,26 @@
         return res.json();
       }
 
-      function updateSummaryBar(summary) {
+      function updateSummaryBar(summaryOverride) {
         const metaEl = el("tx-summary");
         if (!metaEl) return;
-        if (!summary) {
-          metaEl.dataset.summaryText = "";
-          updateFilterMeta();
-          return;
+        if (summaryOverride !== undefined) {
+          State.summary = summaryOverride;
         }
-        const text = `Total: ${summary.total} • Success: ${
-          summary.success_count
-        } • Failed: ${
-          summary.failed_count
-        } • Success Rate: ${summary.success_rate.toFixed(1)}%`;
-        metaEl.dataset.summaryText = text;
-        metaEl.textContent = text;
+        const summary = State.summary;
+        const pieces = [];
+        if (summary) {
+          pieces.push(
+            `Total: ${summary.total}`,
+            `Success: ${summary.success_count}`,
+            `Failed: ${summary.failed_count}`,
+            `Success Rate: ${summary.success_rate.toFixed(1)}%`
+          );
+        }
+        pieces.push(`Loaded: ${State.items.length}`);
+        const baseText = pieces.join(" • ");
+        metaEl.dataset.summaryText = baseText;
         updateFilterMeta();
-      }
-
-      function updateItemsCount() {
-        const count = State.items.length;
-        const text = State.next_cursor
-          ? `Showing ${count} (more available)`
-          : `Showing ${count}`;
-        el("tx-items-count").textContent = text;
       }
 
       function wireRowClicks() {
@@ -569,12 +556,88 @@
         });
       }
 
+      function ensureScrollGuard() {
+        const tbody = el("tx-tbody");
+        if (!tbody) return;
+        let guard = el("tx-scroll-guard");
+        if (!guard) {
+          guard = document.createElement("tr");
+          guard.id = "tx-scroll-guard";
+          guard.className = "scroll-guard-row";
+          const cell = document.createElement("td");
+          cell.colSpan = 11;
+          cell.className = "scroll-guard-cell";
+          guard.appendChild(cell);
+        }
+
+        if (guard.parentElement !== tbody) {
+          if (guard.parentElement) {
+            guard.parentElement.removeChild(guard);
+          }
+          tbody.appendChild(guard);
+        } else if (tbody.lastElementChild !== guard) {
+          tbody.appendChild(guard);
+        }
+      }
+
+      function setScrollGuardState(state) {
+        const cell = qs("#tx-scroll-guard .scroll-guard-cell");
+        if (!cell) return;
+        cell.classList.toggle("loading", state === "loading");
+        if (state === "loading") {
+          cell.textContent = "Loading more transactions…";
+        } else if (state === "end") {
+          cell.textContent = State.items.length > 0 ? "No more results" : "";
+          if (State.scrollObserver) {
+            State.scrollObserver.disconnect();
+            State.scrollObserver = null;
+          }
+        } else {
+          cell.textContent = "";
+        }
+      }
+
+      function setupScrollObserver() {
+        if (State.scrollObserver) {
+          State.scrollObserver.disconnect();
+        }
+        const guard = el("tx-scroll-guard");
+        const container = document.querySelector(".table-wrap");
+        if (!guard || !container) {
+          State.scrollObserver = null;
+          State.scrollContainer = null;
+          return;
+        }
+
+        State.scrollContainer = container;
+        if (!State.next_cursor) {
+          State.scrollObserver = null;
+          return;
+        }
+
+        State.scrollObserver = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (entry.isIntersecting) {
+                loadMore();
+              }
+            });
+          },
+          { root: container, rootMargin: "320px 0px 0px 0px", threshold: 0 }
+        );
+
+        State.scrollObserver.observe(guard);
+      }
+
       const State = {
         items: [],
         next_cursor: null,
         loading: false,
         filters: null,
         pendingReload: false,
+        summary: null,
+        scrollObserver: null,
+        scrollContainer: null,
       };
 
       async function loadInitial(options = {}) {
@@ -593,32 +656,32 @@
           tbody.innerHTML =
             '<tr><td colspan="11" style="text-align: center; padding: 40px; color: var(--text-secondary)">Loading transactions...</td></tr>';
         }
-        const loadMoreBtn = el("tx-load-more");
+
         try {
           const data = await fetchList(State.filters, null, 50);
           State.items = data.items || [];
           State.next_cursor = data.next_cursor || null;
+
           if (tbody) {
             tbody.innerHTML = "";
             if (State.items.length === 0) {
               tbody.innerHTML =
                 '<tr><td colspan="11" style="text-align: center; padding: 40px; color: var(--text-secondary)">No transactions found</td></tr>';
             } else {
-              State.items.forEach((row) => tbody.appendChild(renderRow(row)));
+              const fragment = document.createDocumentFragment();
+              State.items.forEach((row) =>
+                fragment.appendChild(renderRow(row))
+              );
+              tbody.appendChild(fragment);
             }
           }
+
           wireRowClicks();
-          updateItemsCount();
-          if (loadMoreBtn) {
-            if (State.next_cursor) {
-              loadMoreBtn.style.display = "inline-block";
-              loadMoreBtn.disabled = false;
-              loadMoreBtn.textContent = "Load more";
-            } else {
-              loadMoreBtn.style.display = "none";
-              loadMoreBtn.disabled = true;
-            }
-          }
+          ensureScrollGuard();
+          setScrollGuardState(State.next_cursor ? "idle" : "end");
+          setupScrollObserver();
+          updateSummaryBar();
+
           const summary = await fetchSummary();
           updateSummaryBar(summary);
         } catch (err) {
@@ -627,13 +690,10 @@
             tbody.innerHTML =
               '<tr><td colspan="11" style="text-align: center; padding: 40px; color: var(--badge-error)">Failed to load transactions</td></tr>';
           }
-          if (loadMoreBtn) {
-            loadMoreBtn.style.display = "none";
-            loadMoreBtn.disabled = true;
-          }
           State.items = [];
           State.next_cursor = null;
-          updateItemsCount();
+          ensureScrollGuard();
+          setScrollGuardState("end");
           updateSummaryBar(null);
         } finally {
           State.loading = false;
@@ -647,25 +707,37 @@
       async function loadMore() {
         if (State.loading || !State.next_cursor) return;
         State.loading = true;
-        el("tx-load-more").textContent = "Loading...";
-        el("tx-load-more").disabled = true;
+        ensureScrollGuard();
+        setScrollGuardState("loading");
         try {
           const data = await fetchList(State.filters, State.next_cursor, 50);
           const tbody = el("tx-tbody");
-          (data.items || []).forEach((row) => {
-            State.items.push(row);
-            tbody.appendChild(renderRow(row));
-          });
-          State.next_cursor = data.next_cursor || null;
-          wireRowClicks();
-          updateItemsCount();
-          if (!State.next_cursor) {
-            el("tx-load-more").style.display = "none";
+          const rows = data.items || [];
+          if (tbody && rows.length) {
+            const fragment = document.createDocumentFragment();
+            rows.forEach((row) => {
+              State.items.push(row);
+              fragment.appendChild(renderRow(row));
+            });
+            tbody.appendChild(fragment);
+            wireRowClicks();
+          } else {
+            rows.forEach((row) => State.items.push(row));
           }
+
+          State.next_cursor = data.next_cursor || null;
+          ensureScrollGuard();
+          setScrollGuardState(State.next_cursor ? "idle" : "end");
+          updateSummaryBar();
+        } catch (err) {
+          console.error("Failed to load additional transactions", err);
+          setScrollGuardState("end");
         } finally {
           State.loading = false;
-          el("tx-load-more").textContent = "Load more";
-          el("tx-load-more").disabled = false;
+          if (State.pendingReload) {
+            State.pendingReload = false;
+            setTimeout(() => loadInitial({ reuseState: true }), 0);
+          }
         }
       }
 
@@ -675,7 +747,6 @@
         State.filters = buildFilters();
         AppState.save("tx.filters", State.filters);
         updateFilterMeta();
-        el("tx-load-more").style.display = "inline-block";
         loadInitial({ reuseState: true });
       }
 
@@ -712,15 +783,27 @@
           envelope && envelope.data ? envelope.data.transaction : null;
         if (!data) return;
         const tbody = el("tx-tbody");
+        if (!tbody) return;
         const tr = renderRow(data);
         tbody.insertBefore(tr, tbody.firstChild);
         State.items.unshift(data);
         // keep around first ~500 by trimming
         if (State.items.length > 500) {
           State.items.pop();
-          if (tbody.lastChild) tbody.removeChild(tbody.lastChild);
+          const guard = el("tx-scroll-guard");
+          if (guard && guard.parentElement === tbody) {
+            const toRemove = guard.previousElementSibling;
+            if (toRemove) {
+              tbody.removeChild(toRemove);
+            }
+          } else if (tbody.lastElementChild) {
+            tbody.removeChild(tbody.lastElementChild);
+          }
         }
         wireRowClicks();
+        ensureScrollGuard();
+        setScrollGuardState(State.next_cursor ? "idle" : "end");
+        updateSummaryBar();
       }
 
       window.PageRealtime = window.PageRealtime || {};
@@ -739,7 +822,6 @@
           loadInitial({ reuseState: true });
           const applyBtn = document.getElementById("tx-apply-filters");
           const resetBtn = document.getElementById("tx-reset-filters");
-          const loadMoreBtn = document.getElementById("tx-load-more");
 
           if (applyBtn && !applyBtn.__listenerAttached) {
             applyBtn.addEventListener("click", applyFilters);
@@ -748,10 +830,6 @@
           if (resetBtn && !resetBtn.__listenerAttached) {
             resetBtn.addEventListener("click", resetFilters);
             resetBtn.__listenerAttached = true;
-          }
-          if (loadMoreBtn && !loadMoreBtn.__listenerAttached) {
-            loadMoreBtn.addEventListener("click", loadMore);
-            loadMoreBtn.__listenerAttached = true;
           }
 
           const toggleBtn = document.getElementById("tx-toggle-advanced");

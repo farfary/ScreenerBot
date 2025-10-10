@@ -551,3 +551,16 @@
     flex: 1 1 100%;
   }
 }
+
+.scroll-guard-row .scroll-guard-cell {
+  padding: 12px 16px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.85em;
+  pointer-events: none;
+}
+
+.scroll-guard-cell.loading {
+  font-style: italic;
+  color: var(--text-secondary);
+}
