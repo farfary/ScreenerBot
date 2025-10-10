@@ -189,13 +189,15 @@ impl PoolAnalyzer {
                                         let mut fp = failed_pairs.write().unwrap();
                                         fp.insert(pair);
 
-                                        log(
-                                            LogTag::PoolAnalyzer,
-                                            "WARN",
-                                            &format!("Failed to analyze pool {} for token {} - will skip retries this run",
-                                                pool_id,
-                                                token_to_check)
-                                        );
+                                        if is_debug_pool_analyzer_enabled{
+                                            log(
+                                                LogTag::PoolAnalyzer,
+                                                "WARN",
+                                                &format!("Failed to analyze pool {} for token {} - will skip retries this run",
+                                                    pool_id,
+                                                    token_to_check)
+                                            );
+                                        }
                                     }
                                 }
 
