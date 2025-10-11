@@ -211,6 +211,8 @@
 
   var statusPollTimer = null;
   var statusIntervalChangeListener = null;
+  var statusIsFetching = false;
+  var statusFetchAbortController = null;
 
   function setStatusMessage(message) {
     statusState.message = message;
@@ -249,27 +251,42 @@
       setStatusMessage("Loading status...");
     }
 
+    if (statusIsFetching) {
+      console.log("[Status] Skipping fetch; request already in flight");
+      return;
+    }
+
     try {
-      const response = await fetch("/api/status");
+      statusIsFetching = true;
+      statusFetchAbortController = new AbortController();
+      const response = await fetch("/api/status", {
+        signal: statusFetchAbortController.signal,
+        headers: { "X-Requested-With": "fetch" },
+      });
       if (!response.ok) {
         throw new Error("HTTP " + response.status);
       }
       const snapshot = await response.json();
       applyStatusSnapshot(snapshot);
     } catch (error) {
+      if (error.name === "AbortError") {
+        console.log("[Status] Fetch aborted");
+        return;
+      }
       console.error("[Status] Failed to load snapshot", error);
       if (!statusState.currentData) {
         setStatusError("Unable to load status snapshot");
       } else if (window.Utils && typeof Utils.showToast === "function") {
         Utils.showToast("⚠️ Failed to refresh status data", "warning");
       }
+    } finally {
+      statusIsFetching = false;
+      statusFetchAbortController = null;
     }
   }
 
   function startStatusPolling() {
-    if (statusPollTimer) {
-      clearInterval(statusPollTimer);
-    }
+    stopStatusPolling();
     const interval = window.PollingManager.getInterval();
     statusPollTimer = setInterval(
       () => fetchStatusSnapshotOnce(false),
@@ -279,12 +296,16 @@
   }
 
   function stopStatusPolling() {
-    if (!statusPollTimer) {
-      return;
+    if (statusPollTimer) {
+      clearInterval(statusPollTimer);
+      statusPollTimer = null;
+      console.log("[Status] Stopped polling");
     }
-    clearInterval(statusPollTimer);
-    statusPollTimer = null;
-    console.log("[Status] Stopped polling");
+    if (statusFetchAbortController) {
+      statusFetchAbortController.abort();
+      statusFetchAbortController = null;
+    }
+    statusIsFetching = false;
   }
 
   // Global init function for Router to call during SPA navigation
@@ -307,10 +328,6 @@
     if (window.Router && typeof Router.registerCleanup === "function") {
       Router.registerCleanup(() => {
         stopStatusPolling();
-        if (statusPollTimer) {
-          clearInterval(statusPollTimer);
-          statusPollTimer = null;
-        }
         // Remove interval change listener
         if (statusIntervalChangeListener && window.PollingManager) {
           window.PollingManager.removeListener(statusIntervalChangeListener);

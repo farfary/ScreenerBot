@@ -220,48 +220,37 @@
         initialize() {
           this.teardown();
           state.status = null;
+          this.ensureCleanupHook();
+          this.ensureIntervalListener();
           this.setRealtimePending();
           this.fetchOverview();
           this.scheduleOverview();
           this.fetchConfig();
           this.scheduleConfig();
-          this.ensureCleanupHook();
         },
 
         ensureCleanupHook() {
-          if (state.cleanupRegistered) {
-            return;
-          }
-          if (window.Router && typeof Router.registerCleanup === "function") {
+          if (
+            window.Router &&
+            typeof Router.registerCleanup === "function" &&
+            !state.cleanupRegistered
+          ) {
             Router.registerCleanup(() => {
               this.teardown();
             });
             state.cleanupRegistered = true;
           }
+        },
 
-          // Register interval change listener
-          if (window.PollingManager && !state.intervalChangeListener) {
-            state.intervalChangeListener = window.PollingManager.onChange(
-              () => {
-                console.log(
-                  "[Home] Polling interval changed, restarting polling"
-                );
-                this.scheduleOverview();
-              }
-            );
-
-            // Cleanup listener on teardown
-            const originalTeardown = this.teardown.bind(this);
-            this.teardown = function () {
-              originalTeardown();
-              if (state.intervalChangeListener && window.PollingManager) {
-                window.PollingManager.removeListener(
-                  state.intervalChangeListener
-                );
-                state.intervalChangeListener = null;
-              }
-            };
+        ensureIntervalListener() {
+          if (!window.PollingManager || state.intervalChangeListener) {
+            return;
           }
+          state.intervalChangeListener = window.PollingManager.onChange(() => {
+            console.log("[Home] Polling interval changed; restarting timers");
+            this.scheduleOverview();
+            this.scheduleConfig();
+          });
         },
 
         teardown() {
@@ -273,6 +262,11 @@
             clearInterval(state.configTimer);
             state.configTimer = null;
           }
+          if (state.intervalChangeListener && window.PollingManager) {
+            window.PollingManager.removeListener(state.intervalChangeListener);
+            state.intervalChangeListener = null;
+          }
+          state.cleanupRegistered = false;
         },
 
         scheduleOverview() {
@@ -290,12 +284,18 @@
           if (state.configTimer) {
             clearInterval(state.configTimer);
           }
-          // Config uses 60x the main interval
-          const interval = window.PollingManager.getInterval() * 60;
+          const baseInterval = window.PollingManager.getInterval();
+          const interval = Math.min(baseInterval * 60, 60000);
           state.configTimer = setInterval(() => {
             this.fetchConfig();
           }, interval);
-          console.log("[Home] Config polling every", interval, "ms");
+          console.log(
+            "[Home] Config polling every",
+            interval,
+            "ms (base",
+            baseInterval,
+            "ms)"
+          );
         },
 
         async fetchOverview() {
