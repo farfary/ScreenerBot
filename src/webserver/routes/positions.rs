@@ -3,12 +3,19 @@ use axum::{
     routing::get,
     Json, Router,
 };
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+use crate::logger::{log, LogTag};
 use crate::positions;
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::security_db::SecurityDatabase;
+use crate::transactions::{
+    get_transaction, TokenTransfer, Transaction, TransactionDirection, TransactionStatus,
+    TransactionType,
+};
+use crate::utils::lamports_to_sol;
 use crate::webserver::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -67,10 +74,82 @@ pub struct PositionsStatsResponse {
     pub total_pnl: f64,
 }
 
+#[derive(Debug, Serialize)]
+pub struct PositionDetailResponse {
+    pub position: Option<PositionDetail>,
+    pub executions: Vec<PositionExecutionRow>,
+    pub transactions: Vec<PositionTransactionSummary>,
+    pub state_history: Vec<PositionStateTimelineEntry>,
+    pub fetched_at: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PositionDetail {
+    #[serde(flatten)]
+    pub summary: PositionResponse,
+    pub phantom_remove: bool,
+    pub phantom_first_seen: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PositionExecutionRow {
+    pub kind: String,
+    pub timestamp: Option<i64>,
+    pub price_sol: Option<f64>,
+    pub effective_price_sol: Option<f64>,
+    pub size_sol: Option<f64>,
+    pub total_size_sol: Option<f64>,
+    pub sol_delta: Option<f64>,
+    pub token_amount: Option<u64>,
+    pub signature: Option<String>,
+    pub verified: bool,
+    pub fee_lamports: Option<u64>,
+    pub fee_sol: Option<f64>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TransactionTokenTransferSummary {
+    pub mint: String,
+    pub amount: f64,
+    pub from: String,
+    pub to: String,
+    pub program_id: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PositionTransactionSummary {
+    pub kind: String,
+    pub signature: Option<String>,
+    pub available: bool,
+    pub status: Option<String>,
+    pub success: Option<bool>,
+    pub timestamp: Option<i64>,
+    pub slot: Option<u64>,
+    pub block_time: Option<i64>,
+    pub fee_sol: Option<f64>,
+    pub fee_lamports: Option<u64>,
+    pub direction: Option<String>,
+    pub transaction_type: Option<String>,
+    pub router: Option<String>,
+    pub sol_change: Option<f64>,
+    pub instructions_count: Option<usize>,
+    pub notes: Option<String>,
+    pub token_transfers: Vec<TransactionTokenTransferSummary>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PositionStateTimelineEntry {
+    pub state: String,
+    pub changed_at: i64,
+    pub reason: Option<String>,
+}
+
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/positions", get(get_positions))
         .route("/positions/stats", get(get_positions_stats))
+        .route("/positions/:key/details", get(get_position_details))
         .route("/positions/:mint/debug", get(get_position_debug_info))
 }
 
@@ -201,6 +280,335 @@ fn map_position_to_response(p: &positions::Position) -> PositionResponse {
         unrealized_pnl,
         unrealized_pnl_percent,
     }
+}
+
+async fn get_position_details(Path(key): Path<String>) -> Json<PositionDetailResponse> {
+    match resolve_position_by_key(&key).await {
+        Ok(Some(position)) => {
+            let detail = map_position_to_detail(&position);
+            let executions = build_execution_rows(&position);
+            let transactions = build_transaction_summaries(&position).await;
+            let state_history = load_state_history_entries(&position).await;
+
+            Json(PositionDetailResponse {
+                position: Some(detail),
+                executions,
+                transactions,
+                state_history,
+                fetched_at: Utc::now().to_rfc3339(),
+            })
+        }
+        Ok(None) => Json(PositionDetailResponse {
+            position: None,
+            executions: Vec::new(),
+            transactions: Vec::new(),
+            state_history: Vec::new(),
+            fetched_at: Utc::now().to_rfc3339(),
+        }),
+        Err(err) => {
+            log(
+                LogTag::Webserver,
+                "POSITIONS_DETAIL_ERROR",
+                &format!("Failed to resolve position for key {}: {}", key, err),
+            );
+
+            Json(PositionDetailResponse {
+                position: None,
+                executions: Vec::new(),
+                transactions: Vec::new(),
+                state_history: Vec::new(),
+                fetched_at: Utc::now().to_rfc3339(),
+            })
+        }
+    }
+}
+
+async fn resolve_position_by_key(key: &str) -> Result<Option<positions::Position>, String> {
+    if let Some(id_part) = key.strip_prefix("id:") {
+        let id: i64 = id_part
+            .parse()
+            .map_err(|_| format!("Invalid position id: {}", id_part))?;
+        return positions::db::get_position_by_id(id).await;
+    }
+
+    if let Some(mint_part) = key.strip_prefix("mint:") {
+        return positions::db::get_position_by_mint(mint_part).await;
+    }
+
+    positions::db::get_position_by_mint(key).await
+}
+
+fn map_position_to_detail(position: &positions::Position) -> PositionDetail {
+    PositionDetail {
+        summary: map_position_to_response(position),
+        phantom_remove: position.phantom_remove,
+        phantom_first_seen: position.phantom_first_seen.map(|dt| dt.timestamp()),
+    }
+}
+
+fn build_execution_rows(position: &positions::Position) -> Vec<PositionExecutionRow> {
+    let mut rows = Vec::with_capacity(2);
+
+    rows.push(PositionExecutionRow {
+        kind: "entry".to_string(),
+        timestamp: Some(position.entry_time.timestamp()),
+        price_sol: Some(position.entry_price),
+        effective_price_sol: position.effective_entry_price,
+        size_sol: Some(position.entry_size_sol),
+        total_size_sol: Some(position.total_size_sol),
+        sol_delta: Some(-position.entry_size_sol.abs()),
+        token_amount: position.token_amount,
+        signature: position.entry_transaction_signature.clone(),
+        verified: position.transaction_entry_verified,
+        fee_lamports: position.entry_fee_lamports,
+        fee_sol: lamports_option_to_sol(position.entry_fee_lamports),
+        notes: Some(format!("Position type: {}", position.position_type)),
+    });
+
+    let mut exit_notes: Vec<String> = Vec::new();
+    if position.synthetic_exit {
+        exit_notes.push("Synthetic exit".to_string());
+    }
+    if let Some(reason) = &position.closed_reason {
+        if !reason.is_empty() {
+            exit_notes.push(reason.clone());
+        }
+    }
+    if !position.transaction_exit_verified && position.exit_time.is_none() {
+        exit_notes.push("Exit pending".to_string());
+    }
+
+    rows.push(PositionExecutionRow {
+        kind: "exit".to_string(),
+        timestamp: position.exit_time.map(|dt| dt.timestamp()),
+        price_sol: position.exit_price,
+        effective_price_sol: position.effective_exit_price,
+        size_sol: Some(position.entry_size_sol),
+        total_size_sol: Some(position.total_size_sol),
+        sol_delta: position.sol_received,
+        token_amount: position.token_amount,
+        signature: position.exit_transaction_signature.clone(),
+        verified: position.transaction_exit_verified,
+        fee_lamports: position.exit_fee_lamports,
+        fee_sol: lamports_option_to_sol(position.exit_fee_lamports),
+        notes: if exit_notes.is_empty() {
+            None
+        } else {
+            Some(exit_notes.join(" · "))
+        },
+    });
+
+    rows
+}
+
+async fn build_transaction_summaries(
+    position: &positions::Position,
+) -> Vec<PositionTransactionSummary> {
+    let entry_sig = position.entry_transaction_signature.clone();
+    let exit_sig = position.exit_transaction_signature.clone();
+
+    let mut summaries = Vec::with_capacity(2);
+    summaries.push(fetch_transaction_summary("entry", entry_sig, position).await);
+    summaries.push(fetch_transaction_summary("exit", exit_sig, position).await);
+    summaries
+}
+
+async fn fetch_transaction_summary(
+    kind: &str,
+    signature: Option<String>,
+    position: &positions::Position,
+) -> PositionTransactionSummary {
+    match signature {
+        Some(sig) => match get_transaction(&sig).await {
+            Ok(Some(tx)) => PositionTransactionSummary::from_transaction(kind, sig, &tx, position),
+            Ok(None) => PositionTransactionSummary::missing(
+                kind,
+                Some(sig),
+                Some("Transaction not available in cache".to_string()),
+            ),
+            Err(err) => {
+                log(
+                    LogTag::Webserver,
+                    "POSITIONS_DETAIL_TX_ERROR",
+                    &format!("Failed to load {} transaction {}: {}", kind, sig, err),
+                );
+                PositionTransactionSummary::missing(kind, Some(sig), Some(err))
+            }
+        },
+        None => {
+            let note = if kind == "exit" && position.synthetic_exit {
+                "Synthetic exit - no signature".to_string()
+            } else {
+                "Signature not recorded".to_string()
+            };
+            PositionTransactionSummary::missing(kind, None, Some(note))
+        }
+    }
+}
+
+async fn load_state_history_entries(
+    position: &positions::Position,
+) -> Vec<PositionStateTimelineEntry> {
+    let Some(id) = position.id else {
+        return Vec::new();
+    };
+
+    match positions::with_positions_database_async(|db| db.get_position_state_history(id)).await {
+        Ok(history) => history
+            .into_iter()
+            .map(|entry| PositionStateTimelineEntry {
+                state: entry.state.to_string(),
+                changed_at: entry.changed_at.timestamp(),
+                reason: entry.reason,
+            })
+            .collect(),
+        Err(err) => {
+            log(
+                LogTag::Webserver,
+                "POSITIONS_DETAIL_STATE_HISTORY_ERROR",
+                &format!("Failed to load state history for position {}: {}", id, err),
+            );
+            Vec::new()
+        }
+    }
+}
+
+impl PositionTransactionSummary {
+    fn from_transaction(
+        kind: &str,
+        signature: String,
+        tx: &Transaction,
+        position: &positions::Position,
+    ) -> Self {
+        let fee_sol = if let Some(lamports) = tx.fee_lamports {
+            Some(lamports_to_sol(lamports))
+        } else if tx.fee_sol > 0.0 {
+            Some(tx.fee_sol)
+        } else {
+            None
+        };
+
+        let router = tx.token_swap_info.as_ref().map(|info| info.router.clone());
+
+        Self {
+            kind: kind.to_string(),
+            signature: Some(signature.clone()),
+            available: true,
+            status: Some(describe_transaction_status(&tx.status)),
+            success: Some(tx.success),
+            timestamp: Some(tx.timestamp.timestamp()),
+            slot: tx.slot,
+            block_time: tx.block_time,
+            fee_sol,
+            fee_lamports: tx.fee_lamports,
+            direction: Some(describe_transaction_direction(&tx.direction)),
+            transaction_type: Some(describe_transaction_type(&tx.transaction_type)),
+            router,
+            sol_change: Some(tx.sol_balance_change),
+            instructions_count: Some(tx.instructions_count),
+            notes: tx.error_message.clone(),
+            token_transfers: map_token_transfers(position, &tx.token_transfers),
+        }
+    }
+
+    fn missing(kind: &str, signature: Option<String>, notes: Option<String>) -> Self {
+        Self {
+            kind: kind.to_string(),
+            signature,
+            available: false,
+            status: None,
+            success: None,
+            timestamp: None,
+            slot: None,
+            block_time: None,
+            fee_sol: None,
+            fee_lamports: None,
+            direction: None,
+            transaction_type: None,
+            router: None,
+            sol_change: None,
+            instructions_count: None,
+            notes,
+            token_transfers: Vec::new(),
+        }
+    }
+}
+
+fn map_token_transfers(
+    position: &positions::Position,
+    transfers: &[TokenTransfer],
+) -> Vec<TransactionTokenTransferSummary> {
+    let mut relevant: Vec<&TokenTransfer> = transfers
+        .iter()
+        .filter(|transfer| transfer.mint == position.mint)
+        .collect();
+
+    if relevant.is_empty() {
+        relevant = transfers.iter().collect();
+    }
+
+    relevant
+        .into_iter()
+        .take(8)
+        .map(|transfer| TransactionTokenTransferSummary {
+            mint: transfer.mint.clone(),
+            amount: transfer.amount,
+            from: transfer.from.clone(),
+            to: transfer.to.clone(),
+            program_id: transfer.program_id.clone(),
+        })
+        .collect()
+}
+
+fn describe_transaction_status(status: &TransactionStatus) -> String {
+    match status {
+        TransactionStatus::Pending => "Pending".to_string(),
+        TransactionStatus::Confirmed => "Confirmed".to_string(),
+        TransactionStatus::Finalized => "Finalized".to_string(),
+        TransactionStatus::Failed(err) => format!("Failed: {}", err),
+    }
+}
+
+fn describe_transaction_direction(direction: &TransactionDirection) -> String {
+    match direction {
+        TransactionDirection::Incoming => "Incoming".to_string(),
+        TransactionDirection::Outgoing => "Outgoing".to_string(),
+        TransactionDirection::Internal => "Internal".to_string(),
+        TransactionDirection::Unknown => "Unknown".to_string(),
+    }
+}
+
+fn describe_transaction_type(transaction_type: &TransactionType) -> String {
+    match transaction_type {
+        TransactionType::Buy => "Buy".to_string(),
+        TransactionType::Sell => "Sell".to_string(),
+        TransactionType::Transfer => "Transfer".to_string(),
+        TransactionType::Compute => "Compute".to_string(),
+        TransactionType::AtaOperation => "ATA Operation".to_string(),
+        TransactionType::Failed => "Failed".to_string(),
+        TransactionType::Unknown => "Unknown".to_string(),
+        TransactionType::SwapSolToToken { router, .. } => {
+            format!("Swap SOL→Token ({})", router)
+        }
+        TransactionType::SwapTokenToSol { router, .. } => {
+            format!("Swap Token→SOL ({})", router)
+        }
+        TransactionType::SwapTokenToToken { router, .. } => {
+            format!("Swap Token→Token ({})", router)
+        }
+        TransactionType::SolTransfer { .. } => "SOL Transfer".to_string(),
+        TransactionType::TokenTransfer { mint, amount, .. } => {
+            format!("Token Transfer {} ({:.4})", mint, amount)
+        }
+        TransactionType::AtaClose { token_mint, .. } => {
+            format!("ATA Close ({})", token_mint)
+        }
+        TransactionType::Other { description, .. } => description.clone(),
+    }
+}
+
+fn lamports_option_to_sol(value: Option<u64>) -> Option<f64> {
+    value.map(lamports_to_sol)
 }
 
 async fn get_positions_stats() -> Json<PositionsStatsResponse> {
