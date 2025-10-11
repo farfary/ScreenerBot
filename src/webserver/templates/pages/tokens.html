@@ -16,6 +16,20 @@
   var TOKENS_VIEWS = TOKENS_VIEW_DEFS.map(function (view) {
     return view.id;
   });
+  var TOKENS_SORT_KEYS = [
+    "symbol",
+    "price_sol",
+    "liquidity_usd",
+    "volume_24h",
+    "fdv",
+    "market_cap",
+    "price_change_h1",
+    "price_change_h24",
+    "security_score",
+    "updated_at",
+  ];
+  var DEFAULT_SORT_KEY = "symbol";
+  var DEFAULT_SORT_DIR = "asc";
   var VIEW_LABELS = {
     pool: "with available prices",
     all: "in database",
@@ -29,8 +43,8 @@
 
   var tokensState = window.tokensState || {
     view: DEFAULT_TOKENS_VIEW,
-    sortBy: "symbol",
-    sortDir: "asc",
+    sortBy: DEFAULT_SORT_KEY,
+    sortDir: DEFAULT_SORT_DIR,
     searchTerm: "",
   };
   window.tokensState = tokensState;
@@ -132,6 +146,42 @@
     if (typeof savedSearch === "string") {
       tokensState.searchTerm = savedSearch;
     }
+
+    const savedSortBy = window.sessionStorage.getItem("tokens.sortBy");
+    if (savedSortBy) {
+      if (TOKENS_SORT_KEYS.includes(savedSortBy)) {
+        tokensState.sortBy = savedSortBy;
+      } else {
+        console.warn(
+          "[Tokens] Ignoring unsupported stored sortBy",
+          savedSortBy
+        );
+        window.sessionStorage.removeItem("tokens.sortBy");
+      }
+    }
+
+    const savedSortDir = window.sessionStorage.getItem("tokens.sortDir");
+    if (savedSortDir) {
+      if (savedSortDir === "asc" || savedSortDir === "desc") {
+        tokensState.sortDir = savedSortDir;
+      } else {
+        console.warn(
+          "[Tokens] Ignoring unsupported stored sortDir",
+          savedSortDir
+        );
+        window.sessionStorage.removeItem("tokens.sortDir");
+      }
+    }
+
+    if (!TOKENS_SORT_KEYS.includes(tokensState.sortBy)) {
+      tokensState.sortBy = DEFAULT_SORT_KEY;
+    }
+
+    if (tokensState.sortDir !== "asc" && tokensState.sortDir !== "desc") {
+      tokensState.sortDir = tokensState.sortBy === "symbol" ? "asc" : "desc";
+    }
+
+    persistTokensSortState();
   }
 
   function getTokenByMint(mint) {
@@ -858,6 +908,15 @@
     searchDebounceHandle = setTimeout(() => {
       reloadTokensList(message, { preserveItems: true });
     }, 350);
+  }
+
+  function persistTokensSortState() {
+    try {
+      window.sessionStorage.setItem("tokens.sortBy", tokensState.sortBy);
+      window.sessionStorage.setItem("tokens.sortDir", tokensState.sortDir);
+    } catch (err) {
+      console.warn("[Tokens] Failed to persist sort state", err);
+    }
   }
 
   async function exportTokens() {
@@ -1620,6 +1679,7 @@
         tokensState.sortBy = key;
         tokensState.sortDir = key === "symbol" ? "asc" : "desc";
       }
+      persistTokensSortState();
       updateSortIndicators();
       reloadTokensList("Sorting tokens...");
     });
