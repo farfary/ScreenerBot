@@ -215,24 +215,6 @@
   var statusFetchAbortController = null;
   var statusPageInitialized = false;
   var statusCleanupRegistered = false;
-  var statusInitRetryTimer = null;
-  var statusInitAttempts = 0;
-  var statusInitWarned = false;
-  var STATUS_INIT_MAX_ATTEMPTS = 200;
-  var STATUS_INIT_RETRY_BASE_DELAY = 50;
-
-  function areStatusDependenciesReady() {
-    const hasUtils =
-      typeof window !== "undefined" &&
-      typeof window.Utils !== "undefined" &&
-      typeof window.Utils.formatNumber === "function";
-    const hasPollingManager =
-      typeof window !== "undefined" &&
-      window.PollingManager &&
-      typeof window.PollingManager.getInterval === "function";
-
-    return hasUtils && hasPollingManager;
-  }
 
   function setStatusMessage(message) {
     statusState.message = message;
@@ -347,25 +329,11 @@
   }
 
   // Global init function for Router to call during SPA navigation
-  window.initStatusPage = function (options) {
-    const opts = options || {};
-    const force = opts.force === true;
+  window.initStatusPage = function () {
+    console.log("[Status] Page initialized");
 
-    if (!areStatusDependenciesReady()) {
-      if (!force) {
-        scheduleStatusPageInit({ force: false });
-      }
-      return;
-    }
-
-    if (statusInitRetryTimer) {
-      clearTimeout(statusInitRetryTimer);
-      statusInitRetryTimer = null;
-    }
-    statusInitAttempts = 0;
-    statusInitWarned = false;
-
-    if (statusPageInitialized && !force) {
+    if (statusPageInitialized) {
+      // Re-entering the page - ensure UI is visible and polling is active
       ensureStatusSubTabsVisible();
       renderStatusContent();
       if (!statusState.currentData) {
@@ -375,6 +343,7 @@
         startStatusTabPolling();
       }
     } else {
+      // First-time initialization
       statusPageInitialized = true;
       hydrateStatusState();
       initStatusSubTabs();
@@ -384,6 +353,7 @@
       startStatusTabPolling();
     }
 
+    // Register interval change listener
     if (
       window.PollingManager &&
       typeof window.PollingManager.onChange === "function" &&
@@ -395,6 +365,7 @@
       });
     }
 
+    // Register cleanup hook for Router navigation
     if (
       !statusCleanupRegistered &&
       window.Router &&
@@ -415,61 +386,13 @@
         statusIntervalChangeListener = null;
         statusPageInitialized = false;
         statusCleanupRegistered = false;
-        statusInitAttempts = 0;
-        statusInitWarned = false;
       });
     }
   };
 
-  function scheduleStatusPageInit(options) {
-    const opts = options || {};
-    const force = opts.force === true;
-
-    if (
-      typeof window.initStatusPage === "function" &&
-      areStatusDependenciesReady()
-    ) {
-      window.initStatusPage({ force });
-      return;
-    }
-
-    if (statusInitAttempts >= STATUS_INIT_MAX_ATTEMPTS) {
-      if (!statusInitWarned) {
-        console.warn(
-          "[Status] Dependencies unavailable after retries; waiting for shared scripts"
-        );
-        statusInitWarned = true;
-      }
-
-      const retryDelay = Math.max(1000, STATUS_INIT_RETRY_BASE_DELAY * 4);
-      clearTimeout(statusInitRetryTimer);
-      statusInitRetryTimer = setTimeout(() => {
-        statusInitRetryTimer = null;
-        scheduleStatusPageInit({ force: true });
-      }, retryDelay);
-      return;
-    }
-
-    statusInitAttempts += 1;
-
-    const delay =
-      typeof opts.delay === "number" && opts.delay >= 0
-        ? opts.delay
-        : Math.min(300, STATUS_INIT_RETRY_BASE_DELAY + statusInitAttempts * 10);
-
-    clearTimeout(statusInitRetryTimer);
-    statusInitRetryTimer = setTimeout(() => {
-      statusInitRetryTimer = null;
-      scheduleStatusPageInit(options);
-    }, delay);
-  }
-
-  window.scheduleStatusPageInit = function (options) {
-    scheduleStatusPageInit(options || {});
-  };
-
+  // Execute initialization immediately if Router not loaded yet
   if (!window.Router) {
-    window.scheduleStatusPageInit();
+    window.initStatusPage();
   }
 
   if (!window.StatusPage) {
