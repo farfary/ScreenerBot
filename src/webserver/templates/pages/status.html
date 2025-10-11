@@ -296,6 +296,10 @@
     if (window.Router && typeof Router.registerCleanup === "function") {
       Router.registerCleanup(() => {
         stopStatusPolling();
+        if (statusPollTimer) {
+          clearInterval(statusPollTimer);
+          statusPollTimer = null;
+        }
       });
     }
   };
@@ -530,15 +534,6 @@
                                     </div>
                                     <div class="status-metric-value">
                                         ${metrics.active_threads || 0}
-                                    </div>
-                                </div>
-                                <div class="status-metric-card">
-                                    <div class="status-metric-header">
-                                        <span class="status-metric-icon">🔌</span>
-                                        <span>WebSocket Connections</span>
-                                    </div>
-                                    <div class="status-metric-value">
-                                        ${metrics.ws_connections || 0}
                                     </div>
                                 </div>
                                 <div class="status-metric-card">
