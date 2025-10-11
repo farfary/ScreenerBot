@@ -81,7 +81,6 @@ pub struct SystemMetricsSnapshot {
     pub rpc_calls_total: u64,
     pub rpc_calls_failed: u64,
     pub rpc_success_rate: f32,
-    pub ws_connections: usize,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -459,8 +458,6 @@ async fn collect_system_metrics_snapshot(
         .map(|n| n.get())
         .unwrap_or(1);
 
-    let ws_connections = 0;
-
     let (rpc_calls_total, rpc_calls_failed, rpc_success_rate) = if let Some(stats) = rpc_stats {
         (
             stats.total_calls(),
@@ -483,7 +480,6 @@ async fn collect_system_metrics_snapshot(
         rpc_calls_total,
         rpc_calls_failed,
         rpc_success_rate,
-        ws_connections,
     }
 }
 
