@@ -2796,7 +2796,7 @@
       await tokenChartManager.loadToken(mint, activeTimeframe);
 
       // Setup timeframe buttons
-      setupTimeframeButtons(mint);
+      setupTimeframeButtons();
 
       // Setup indicator toggles
       setupIndicatorToggles();
@@ -2810,21 +2810,34 @@
 
   /**
    * Setup timeframe button handlers
-   * @param {string} mint - Token mint address
    */
-  function setupTimeframeButtons(mint) {
+  function setupTimeframeButtons() {
     const tfButtons = document.querySelectorAll(".tf-btn");
     tfButtons.forEach((btn) => {
+      if (btn.dataset.chartBound === "1") {
+        return;
+      }
+      btn.dataset.chartBound = "1";
       btn.addEventListener("click", async (e) => {
-        // Update active state
-        tfButtons.forEach((b) => b.classList.remove("active"));
-        e.target.classList.add("active");
-
-        // Change timeframe
-        const timeframe = e.target.dataset.tf;
-        if (tokenChartManager) {
-          await tokenChartManager.setTimeframe(timeframe);
+        if (!tokenChartManager) {
+          return;
         }
+
+        const timeframe = e.currentTarget.dataset.tf;
+        if (!timeframe) {
+          return;
+        }
+
+        const state = tokenChartManager.getState?.();
+        if (state?.loading || state?.timeframe === timeframe) {
+          return;
+        }
+
+        document.querySelectorAll(".tf-btn").forEach((b) => {
+          b.classList.toggle("active", b.dataset.tf === timeframe);
+        });
+
+        await tokenChartManager.setTimeframe(timeframe);
       });
     });
   }
@@ -2837,40 +2850,110 @@
     const ma20Toggle = document.getElementById("show-ma20");
     const ma50Toggle = document.getElementById("show-ma50");
 
-    if (volumeToggle) {
-      volumeToggle.addEventListener("change", (e) => {
-        if (tokenChartManager) {
-          tokenChartManager.toggleOverlay("volume");
+    const managerState = tokenChartManager?.getState?.();
+    const overlayPrefMap = managerState
+      ? new Map(managerState.overlayPreferences || [])
+      : null;
+    const indicatorKeys = managerState
+      ? new Set((managerState.indicators || []).map(([key]) => String(key)))
+      : null;
+
+    if (managerState && volumeToggle) {
+      const overlayPref = overlayPrefMap?.has("volume")
+        ? overlayPrefMap.get("volume")
+        : managerState.overlays?.includes?.("volume");
+      volumeToggle.checked =
+        overlayPref === undefined ? true : Boolean(overlayPref);
+    }
+
+    if (indicatorKeys && ma20Toggle) {
+      ma20Toggle.checked = indicatorKeys.has("indicator:SMA:20");
+    }
+
+    if (indicatorKeys && ma50Toggle) {
+      ma50Toggle.checked = indicatorKeys.has("indicator:SMA:50");
+    }
+
+    if (volumeToggle && volumeToggle.dataset.chartBound !== "1") {
+      volumeToggle.dataset.chartBound = "1";
+      volumeToggle.addEventListener("change", () => {
+        if (!tokenChartManager) {
+          return;
         }
+
+        const state = tokenChartManager.getState?.();
+        if (state?.loading) {
+          const stateOverlayPref = state.overlayPreferences
+            ? new Map(state.overlayPreferences)
+            : null;
+          const previousValue = stateOverlayPref?.has("volume")
+            ? stateOverlayPref.get("volume")
+            : state.overlays?.includes?.("volume");
+          volumeToggle.checked =
+            previousValue === undefined
+              ? volumeToggle.checked
+              : Boolean(previousValue);
+          return;
+        }
+
+        tokenChartManager.toggleOverlay("volume");
       });
     }
 
-    if (ma20Toggle) {
+    if (ma20Toggle && ma20Toggle.dataset.chartBound !== "1") {
+      ma20Toggle.dataset.chartBound = "1";
       ma20Toggle.addEventListener("change", async (e) => {
-        if (tokenChartManager) {
-          if (e.target.checked) {
-            await tokenChartManager.addIndicator("SMA", {
-              period: 20,
-              color: "#2196F3",
-            });
-          } else {
-            tokenChartManager.removeIndicator("indicator:SMA:20");
+        if (!tokenChartManager) {
+          return;
+        }
+
+        const state = tokenChartManager.getState?.();
+        if (state?.loading) {
+          const stateIndicatorKeys = state?.indicators
+            ? new Set(state.indicators.map(([key]) => String(key)))
+            : null;
+          if (stateIndicatorKeys) {
+            ma20Toggle.checked = stateIndicatorKeys.has("indicator:SMA:20");
           }
+          return;
+        }
+
+        if (e.target.checked) {
+          await tokenChartManager.addIndicator("SMA", {
+            period: 20,
+            color: "#2196F3",
+          });
+        } else {
+          tokenChartManager.removeIndicator("indicator:SMA:20");
         }
       });
     }
 
-    if (ma50Toggle) {
+    if (ma50Toggle && ma50Toggle.dataset.chartBound !== "1") {
+      ma50Toggle.dataset.chartBound = "1";
       ma50Toggle.addEventListener("change", async (e) => {
-        if (tokenChartManager) {
-          if (e.target.checked) {
-            await tokenChartManager.addIndicator("SMA", {
-              period: 50,
-              color: "#FF9800",
-            });
-          } else {
-            tokenChartManager.removeIndicator("indicator:SMA:50");
+        if (!tokenChartManager) {
+          return;
+        }
+
+        const state = tokenChartManager.getState?.();
+        if (state?.loading) {
+          const stateIndicatorKeys = state?.indicators
+            ? new Set(state.indicators.map(([key]) => String(key)))
+            : null;
+          if (stateIndicatorKeys) {
+            ma50Toggle.checked = stateIndicatorKeys.has("indicator:SMA:50");
           }
+          return;
+        }
+
+        if (e.target.checked) {
+          await tokenChartManager.addIndicator("SMA", {
+            period: 50,
+            color: "#FF9800",
+          });
+        } else {
+          tokenChartManager.removeIndicator("indicator:SMA:50");
         }
       });
     }

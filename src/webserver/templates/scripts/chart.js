@@ -700,11 +700,14 @@ class ChartManager {
     this.currentTimeframe = "5m";
     this.currentData = null;
 
+    this.boundResizeHandler = null;
+
     this.state = {
       loading: false,
       error: null,
       indicators: new Map(),
       overlays: new Set(),
+      overlayPreferences: new Map(),
     };
 
     this.initialize();
@@ -745,6 +748,14 @@ class ChartManager {
       return;
     }
 
+    const volumePreference = this.state.overlayPreferences.has("volume")
+      ? this.state.overlayPreferences.get("volume")
+      : this.options.showVolume;
+    const shouldRenderVolume = Boolean(volumePreference);
+    if (!this.state.overlayPreferences.has("volume")) {
+      this.state.overlayPreferences.set("volume", shouldRenderVolume);
+    }
+
     this.currentMint = mint;
     this.currentTimeframe = timeframe;
     this.state.loading = true;
@@ -767,23 +778,43 @@ class ChartManager {
       console.log("[ChartManager] Adding candlestick series...");
       this.renderer.addCandlestickSeries(ohlcvData.candles);
 
-      // Render volume if enabled
-      if (this.options.showVolume && ohlcvData.volume.length > 0) {
+      // Render volume if enabled by default or previously selected
+      if (shouldRenderVolume && ohlcvData.volume.length > 0) {
         console.log("[ChartManager] Adding volume histogram...");
         this.renderer.addVolumeHistogram(ohlcvData.volume);
         this.state.overlays.add("volume");
+      } else {
+        this.renderer.removeSeries("volume");
+        this.state.overlays.delete("volume");
       }
 
-      // Apply default indicators
-      console.log(
-        "[ChartManager] Applying indicators:",
-        this.options.indicators
-      );
-      for (const indicatorConfig of this.options.indicators) {
-        if (typeof indicatorConfig === "string") {
-          await this.addIndicator(indicatorConfig);
-        } else {
-          await this.addIndicator(indicatorConfig.id, indicatorConfig.params);
+      // Apply indicators, preserving any user selections
+      const persistedIndicators = this.state.indicators.size
+        ? Array.from(this.state.indicators.values())
+        : null;
+
+      if (persistedIndicators) {
+        this.state.indicators.clear();
+        for (const indicator of persistedIndicators) {
+          await this.addIndicator(indicator.id, {
+            ...indicator.params,
+            color: indicator.color,
+          });
+        }
+      } else {
+        console.log(
+          "[ChartManager] Applying indicators:",
+          this.options.indicators
+        );
+        for (const indicatorConfig of this.options.indicators) {
+          if (typeof indicatorConfig === "string") {
+            await this.addIndicator(indicatorConfig);
+          } else {
+            await this.addIndicator(indicatorConfig.id, {
+              ...indicatorConfig.params,
+              color: indicatorConfig.color,
+            });
+          }
         }
       }
 
@@ -818,7 +849,8 @@ class ChartManager {
         throw new Error(`Indicator ${indicatorId} not found`);
       }
 
-      const mergedParams = { ...config.defaultParams, ...params };
+      const { color: paramColor, ...indicatorParams } = params;
+      const mergedParams = { ...config.defaultParams, ...indicatorParams };
       const indicatorData = this.indicatorService.calculate(
         indicatorId,
         this.currentData.candles,
@@ -828,7 +860,7 @@ class ChartManager {
       const seriesId = `indicator:${indicatorId}:${
         mergedParams.period || "default"
       }`;
-      const color = params.color || config.defaultColor;
+      const color = paramColor || config.defaultColor;
 
       this.renderer.addLineSeries(seriesId, indicatorData, {
         color: color,
@@ -861,11 +893,32 @@ class ChartManager {
    * @param {string} overlayId - Overlay ID
    */
   toggleOverlay(overlayId) {
+    if (!this.renderer) {
+      return;
+    }
+
+    if (overlayId === "volume") {
+      if (this.state.overlays.has("volume")) {
+        this.renderer.removeSeries("volume");
+        this.state.overlays.delete("volume");
+        this.state.overlayPreferences.set("volume", false);
+        return;
+      }
+
+      this.state.overlayPreferences.set("volume", true);
+      if (this.currentData && this.currentData.volume.length > 0) {
+        this.renderer.addVolumeHistogram(this.currentData.volume);
+        this.state.overlays.add("volume");
+      } else {
+        console.warn("[ChartManager] No volume data available to render");
+      }
+      return;
+    }
+
     if (this.state.overlays.has(overlayId)) {
       this.renderer.removeSeries(overlayId);
       this.state.overlays.delete(overlayId);
     } else {
-      // Add overlay logic here
       this.state.overlays.add(overlayId);
     }
   }
@@ -914,9 +967,12 @@ class ChartManager {
    * Setup responsive behavior
    */
   setupResponsive() {
-    window.addEventListener("resize", () => {
-      this.resize();
-    });
+    if (this.boundResizeHandler) {
+      window.removeEventListener("resize", this.boundResizeHandler);
+    }
+
+    this.boundResizeHandler = () => this.resize();
+    window.addEventListener("resize", this.boundResizeHandler);
   }
 
   /**
@@ -988,6 +1044,7 @@ class ChartManager {
       timeframe: this.currentTimeframe,
       indicators: Array.from(this.state.indicators.entries()),
       overlays: Array.from(this.state.overlays),
+      overlayPreferences: Array.from(this.state.overlayPreferences.entries()),
     };
   }
 
@@ -995,6 +1052,11 @@ class ChartManager {
    * Destroy chart and cleanup
    */
   destroy() {
+    if (this.boundResizeHandler) {
+      window.removeEventListener("resize", this.boundResizeHandler);
+      this.boundResizeHandler = null;
+    }
+
     if (this.renderer) {
       this.renderer.destroy();
     }
@@ -1002,6 +1064,7 @@ class ChartManager {
     this.dataService.clearCache();
     this.state.indicators.clear();
     this.state.overlays.clear();
+    this.state.overlayPreferences.clear();
   }
 }
 
