@@ -37,9 +37,16 @@ use super::{
 
 const EVENTS_SNAPSHOT_LIMIT: usize = 100;
 const EVENTS_SNAPSHOT_FETCH_LIMIT: usize = EVENTS_SNAPSHOT_LIMIT * 3;
-const TOKENS_SNAPSHOT_DEFAULT_LIMIT: usize = 200;
 const POSITIONS_SNAPSHOT_DEFAULT_LIMIT: usize = 1000;
 const POSITIONS_SNAPSHOT_MAX_LIMIT: usize = 2000;
+
+fn tokens_snapshot_default_limit() -> usize {
+    config::with_config(|cfg| {
+        let default_limit = cfg.webserver.tokens_tab.default_page_size;
+        let max_limit = cfg.webserver.tokens_tab.max_page_size;
+        default_limit.min(max_limit).max(1)
+    })
+}
 
 fn sanitize_filter_value(value: &Value) -> Value {
     match value {
@@ -182,13 +189,12 @@ impl Default for PositionsRealtimeFilter {
 
 impl Default for TokensRealtimeFilter {
     fn default() -> Self {
-        let max_limit = config::with_config(|cfg| cfg.webserver.tokens_tab.max_page_size);
         Self {
             view: "pool".to_string(),
             search: None,
             sort_by: "liquidity_usd".to_string(),
             sort_dir: "desc".to_string(),
-            limit: max_limit.min(TOKENS_SNAPSHOT_DEFAULT_LIMIT).max(1),
+            limit: tokens_snapshot_default_limit(),
             request_id: None,
             filter_hash: None,
         }

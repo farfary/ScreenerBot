@@ -107,7 +107,21 @@ pub fn positions_content() -> String {
 }
 
 pub fn tokens_content() -> String {
-    render_page(TOKENS_PAGE)
+    use crate::config::with_config;
+
+    let (default_page_size, max_page_size) = with_config(|cfg| {
+        (
+            cfg.webserver.tokens_tab.default_page_size,
+            cfg.webserver.tokens_tab.max_page_size,
+        )
+    });
+
+    TOKENS_PAGE
+        .replace(
+            "__TOKENS_DEFAULT_PAGE_SIZE__",
+            &default_page_size.to_string(),
+        )
+        .replace("__TOKENS_MAX_PAGE_SIZE__", &max_page_size.to_string())
 }
 
 pub fn events_content() -> String {

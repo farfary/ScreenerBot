@@ -1,4 +1,7 @@
 <script>
+  var TOKENS_DEFAULT_PAGE_SIZE = Number("__TOKENS_DEFAULT_PAGE_SIZE__") || 50;
+  var TOKENS_MAX_PAGE_SIZE =
+    Number("__TOKENS_MAX_PAGE_SIZE__") || TOKENS_DEFAULT_PAGE_SIZE;
   var DEFAULT_TOKENS_VIEW = "pool";
   var TOKENS_VIEW_DEFS = [
     { id: "pool", label: "💧 Pool Service" },
@@ -30,11 +33,26 @@
     sortDir: "asc",
     searchTerm: "",
   };
+  var TOKENS_SCROLL_GUARD_HTML =
+    '<tr id="tokens-scroll-guard" class="scroll-guard-row"><td colspan="12" class="scroll-guard-cell"></td></tr>';
 
-  var allTokensData = [];
+  var tokensTableState = window.tokensTableState || {
+    items: [],
+    pageSize: 0,
+    currentPage: 0,
+    totalPages: 0,
+    totalCount: 0,
+    loading: false,
+    pendingReload: false,
+    scrollObserver: null,
+    scrollContainer: null,
+  };
+
+  window.tokensTableState = tokensTableState;
+
+  var allTokensData = tokensTableState.items;
   // Per-view cache to preserve last loaded snapshot per tab
-  // Entry shape: { items: TokenSummary[], total: number, sortBy, sortDir, searchTerm, ts }
-  var tokensViewCache = window.tokensViewCache || {};
+  // Entry shape: { items: TokenSummary[], total: number, sortBy, sortDir, searchTerm, ts, loadedPages, pageSize }
   var currentModalMint = null;
   var tokenModalData = null;
   var searchDebounceHandle = null;
@@ -52,8 +70,46 @@
     requestId: null,
     context: null,
   };
-  var TOKENS_SNAPSHOT_LIMIT = 200;
+  var TOKENS_SNAPSHOT_LIMIT = TOKENS_DEFAULT_PAGE_SIZE;
   var TOKENS_SNAPSHOT_TIMEOUT_MS = 12000;
+
+  function replaceAllTokensData(next) {
+    tokensTableState.items = Array.isArray(next) ? next : [];
+    allTokensData = tokensTableState.items;
+  }
+
+  function appendTokensToState(items) {
+    if (!Array.isArray(items) || items.length === 0) return;
+    if (!Array.isArray(tokensTableState.items)) {
+      tokensTableState.items = [];
+    }
+    Array.prototype.push.apply(tokensTableState.items, items);
+    allTokensData = tokensTableState.items;
+  }
+
+  function clampTokensPageSize(size) {
+    const numeric = Number(size);
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      return TOKENS_SNAPSHOT_LIMIT;
+    }
+    return Math.min(Math.max(1, Math.floor(numeric)), TOKENS_MAX_PAGE_SIZE);
+  }
+
+  function resetTokensPagination(options) {
+    const { preserveItems = false } = options || {};
+    if (!preserveItems) {
+      replaceAllTokensData([]);
+    }
+    tokensTableState.pageSize = TOKENS_SNAPSHOT_LIMIT;
+    tokensTableState.currentPage = 0;
+    tokensTableState.totalPages = 0;
+    tokensTableState.totalCount = preserveItems
+      ? tokensTableState.totalCount
+      : 0;
+    tokensTableState.loading = false;
+    tokensTableState.pendingReload = false;
+    teardownTokensScrollObserver();
+  }
 
   // Global init function for Router to call during SPA navigation
   window.initTokensPage = function () {
@@ -765,59 +821,15 @@
       tab.classList.toggle("active", tab.dataset.view === tokensState.view);
     });
 
-    let usedCachedData = false;
-    // If we have a cache for this view that matches current sort/search, render it immediately
-    const cacheEntry = tokensViewCache[tokensState.view];
-    if (
-      cacheEntry &&
-      cacheEntry.sortBy === tokensState.sortBy &&
-      cacheEntry.sortDir === tokensState.sortDir &&
-      (cacheEntry.searchTerm || "") === (tokensState.searchTerm || "") &&
-      Array.isArray(cacheEntry.items) &&
-      cacheEntry.items.length > 0
-    ) {
-      allTokensData = cacheEntry.items.slice();
-      tokensSnapshotState.totalAvailable =
-        Number(cacheEntry.total) || allTokensData.length;
-      tokensSnapshotState.inProgress = false;
-      tokensSnapshotState.pending = [];
-      tokensSnapshotState.expected = 0;
-      tokensSnapshotState.message = "";
-      updateTokenCount(tokensSnapshotState.totalAvailable);
-      const viewLabel = VIEW_LABELS[tokensState.view] || "";
-      const status = viewLabel
-        ? `Cached • ${tokensSnapshotState.totalAvailable} tokens ${viewLabel}`
-        : `Cached • ${tokensSnapshotState.totalAvailable} tokens`;
-      setTokenCountStatus(status);
-      applySearchFilter();
-      usedCachedData = true;
-    }
+    resetTokensPagination();
+    setTokensScrollGuardState("loading");
+    const viewLabel = VIEW_LABELS[tokensState.view] || "";
+    const loadMessage = viewLabel
+      ? `Loading tokens ${viewLabel}...`
+      : "Loading tokens...";
+    showTokensLoading(loadMessage);
 
-    if (
-      cacheEntry &&
-      (!Array.isArray(cacheEntry.items) || cacheEntry.items.length === 0) &&
-      tokensState.searchTerm
-    ) {
-      const cleared = clearTokensSearch(
-        "Search filter cleared for new tab – showing all tokens."
-      );
-      if (cleared) {
-        setTokenCountStatus(
-          "🔍 Search cleared for new view – loading tokens..."
-        );
-      }
-    }
-
-    if (!usedCachedData) {
-      allTokensData = [];
-      const viewLabel = VIEW_LABELS[tokensState.view] || "";
-      const loadMessage = viewLabel
-        ? `Loading tokens ${viewLabel}...`
-        : "Loading tokens...";
-      showTokensLoading(loadMessage);
-    }
-
-    // Always request a fresh snapshot to keep cache up to date
+    // Always request a fresh snapshot for the active view
     requestTokensSnapshot(`Switching to ${tokensState.view} view...`);
   }
 
@@ -856,13 +868,25 @@
     if (tokensSnapshotState.inProgress && tokensSnapshotState.message) {
       statusMessage = tokensSnapshotState.message;
     } else {
-      const totalAvailable = Number(tokensSnapshotState.totalAvailable) || 0;
-      const total = totalAvailable || allTokensData.length;
-      if (total > 0) {
+      const totalAvailable =
+        Number(tokensTableState.totalCount) ||
+        Number(tokensSnapshotState.totalAvailable) ||
+        0;
+      const loaded = Array.isArray(tokensTableState.items)
+        ? tokensTableState.items.length
+        : allTokensData.length;
+      if (totalAvailable > 0 || loaded > 0) {
         const viewLabel = VIEW_LABELS[tokensState.view] || "";
-        statusMessage = viewLabel
-          ? `${total} tokens ${viewLabel}`
-          : `${total} tokens`;
+        if (totalAvailable > 0 && loaded > 0 && loaded < totalAvailable) {
+          statusMessage = viewLabel
+            ? `${loaded}/${totalAvailable} tokens ${viewLabel}`
+            : `${loaded}/${totalAvailable} tokens`;
+        } else {
+          const value = totalAvailable || loaded;
+          statusMessage = viewLabel
+            ? `${value} tokens ${viewLabel}`
+            : `${value} tokens`;
+        }
       }
     }
 
@@ -923,18 +947,144 @@
     tokensState.searchTerm = event.target.value.trim();
     window.sessionStorage.setItem("tokens.search", tokensState.searchTerm);
 
-    applySearchFilter();
+    resetTokensPagination();
+    tokensSnapshotState.totalAvailable = 0;
+    tokensSnapshotState.message = tokensState.searchTerm
+      ? "Applying search filter..."
+      : "Refreshing tokens...";
+
+    if (
+      Array.isArray(tokensTableState.items) &&
+      tokensTableState.items.length
+    ) {
+      setTokenCountStatus(tokensSnapshotState.message);
+      setTokensScrollGuardState("loading");
+    } else {
+      showTokensLoading(tokensSnapshotState.message);
+    }
 
     if (searchDebounceHandle) {
       clearTimeout(searchDebounceHandle);
     }
     searchDebounceHandle = setTimeout(() => {
-      requestTokensSnapshot("Applying search filter...");
+      requestTokensSnapshot(tokensSnapshotState.message);
     }, 350);
   }
 
-  function exportTokens() {
-    alert("Export functionality - to be implemented");
+  async function exportTokens() {
+    if (window.__DEBUG_REALTIME) {
+      console.log("[TokensDBG] exportTokens triggered");
+    }
+
+    const exportButton = document.getElementById("tokensExportBtn");
+    if (exportButton) {
+      exportButton.disabled = true;
+      exportButton.textContent = "Exporting…";
+    }
+
+    const statusBefore = document.getElementById("tokenCount")?.textContent;
+    setTokenCountStatus("📦 Preparing export…");
+
+    try {
+      const maxPages = 50; // safeguard to prevent unbounded loops
+      let page = 1;
+      const pageSize = clampTokensPageSize(
+        tokensTableState.pageSize || TOKENS_SNAPSHOT_LIMIT
+      );
+      const rows = [];
+      let totalPages = 1;
+      let totalCount = 0;
+
+      while (page <= totalPages && page <= maxPages) {
+        const result = await fetchTokensListPage(page, {
+          pageSize,
+        });
+        rows.push(...result.items);
+        totalPages = result.totalPages || totalPages;
+        totalCount = result.total || totalCount;
+        page += 1;
+        setTokenCountStatus(
+          `📦 Exporting tokens… (${Math.min(rows.length, totalCount)}/${
+            totalCount || "?"
+          })`
+        );
+        if (result.items.length === 0) {
+          break;
+        }
+      }
+
+      if (rows.length === 0) {
+        Utils.showToast("No tokens available to export", "info");
+        return;
+      }
+
+      const header = [
+        "mint",
+        "symbol",
+        "name",
+        "price_sol",
+        "liquidity_usd",
+        "volume_24h",
+        "fdv",
+        "market_cap",
+        "price_change_h1",
+        "price_change_h24",
+        "security_score",
+        "has_pool_price",
+        "has_ohlcv",
+        "has_open_position",
+        "blacklisted",
+        "price_updated_at",
+      ];
+
+      const csvLines = [header.join(",")];
+      rows.forEach((token) => {
+        const line = header
+          .map((field) => {
+            const raw = token[field];
+            if (raw === null || raw === undefined) {
+              return "";
+            }
+            const str = String(raw);
+            const needsEscape = /[",\n]/.test(str);
+            const escaped = str.replace(/"/g, '""');
+            return needsEscape ? `"${escaped}"` : escaped;
+          })
+          .join(",");
+        csvLines.push(line);
+      });
+
+      const blob = new Blob([csvLines.join("\n")], {
+        type: "text/csv;charset=utf-8;",
+      });
+      const url = URL.createObjectURL(blob);
+      const filename = `tokens_${tokensState.view}_${
+        tokensState.searchTerm ? "search" : "all"
+      }_${new Date().toISOString().replace(/[:.]/g, "-")}.csv`;
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      Utils.showToast(`Exported ${rows.length} tokens`, "success");
+    } catch (err) {
+      console.error("[Tokens] Export failed", err);
+      Utils.showToast("❌ Failed to export tokens", "error");
+    } finally {
+      if (statusBefore) {
+        setTokenCountStatus(statusBefore);
+      } else {
+        updateTokenCount(
+          tokensTableState.totalCount || tokensSnapshotState.totalAvailable
+        );
+      }
+      if (exportButton) {
+        exportButton.disabled = false;
+        exportButton.textContent = "📥 Export";
+      }
+    }
   }
 
   function normalizeTokenFromApi(rawToken) {
@@ -977,6 +1127,61 @@
     return deduped;
   }
 
+  function getTokenSortValue(token, key) {
+    if (!token || typeof token !== "object") return null;
+    switch (key) {
+      case "symbol":
+        return (token.symbol || "").toUpperCase();
+      case "liquidity_usd":
+      case "volume_24h":
+      case "price_sol":
+      case "market_cap":
+      case "fdv":
+      case "price_change_h1":
+      case "price_change_h24":
+        return Number(token[key]);
+      case "security_score":
+        return Number(token.security_score);
+      case "updated_at":
+        return Number(token.price_updated_at);
+      default:
+        return token[key] !== undefined ? token[key] : token.mint;
+    }
+  }
+
+  function compareTokensForCurrentSort(a, b) {
+    const key = tokensState.sortBy || "symbol";
+    const dir = tokensState.sortDir === "asc" ? 1 : -1;
+    const valA = getTokenSortValue(a, key);
+    const valB = getTokenSortValue(b, key);
+
+    if (typeof valA === "string" || typeof valB === "string") {
+      const strA = (valA || "").toString();
+      const strB = (valB || "").toString();
+      const cmp = strA.localeCompare(strB);
+      if (cmp !== 0) return cmp * dir;
+    } else {
+      const numA = Number.isFinite(valA) ? valA : Number(valA);
+      const numB = Number.isFinite(valB) ? valB : Number(valB);
+      const safeA = Number.isFinite(numA) ? numA : 0;
+      const safeB = Number.isFinite(numB) ? numB : 0;
+      if (safeA < safeB) return -1 * dir;
+      if (safeA > safeB) return 1 * dir;
+    }
+
+    const symbolCmp = (a.symbol || "").localeCompare(b.symbol || "");
+    if (symbolCmp !== 0) {
+      return symbolCmp * dir;
+    }
+    return (a.mint || "").localeCompare(b.mint || "") * dir;
+  }
+
+  function sortTokensTableStateItems() {
+    if (!Array.isArray(tokensTableState.items)) return;
+    if (tokensTableState.items.length <= 1) return;
+    tokensTableState.items.sort(compareTokensForCurrentSort);
+  }
+
   function showTokensError(message) {
     const tbody = document.getElementById("tokensTableBody");
     if (!tbody) return;
@@ -989,34 +1194,51 @@
     if (!label) return;
 
     const parsedTotal = Number(total);
-    const totalValue = Number.isFinite(parsedTotal)
+    let totalValue = Number.isFinite(parsedTotal)
       ? parsedTotal
+      : tokensSnapshotState.totalAvailable || tokensTableState.totalCount;
+    if (!Number.isFinite(totalValue) || totalValue < 0) {
+      totalValue = allTokensData.length;
+    }
+    const loaded = Array.isArray(tokensTableState.items)
+      ? tokensTableState.items.length
       : allTokensData.length;
     const viewLabel = VIEW_LABELS[tokensState.view] || "";
+    const hasFilter =
+      typeof tokensState.searchTerm === "string" &&
+      tokensState.searchTerm.trim() !== "";
+
+    if (tokensState.view === "all" && !hasFilter) {
+      label.textContent = `${totalValue} tokens in database`;
+      return;
+    }
+
+    if (totalValue > 0 && loaded > 0 && loaded < totalValue) {
+      label.textContent = viewLabel
+        ? `${loaded}/${totalValue} tokens ${viewLabel}`
+        : `${loaded}/${totalValue} tokens`;
+      return;
+    }
+
+    if (loaded > 0 && totalValue === 0) {
+      label.textContent = viewLabel
+        ? `${loaded} tokens ${viewLabel}`
+        : `${loaded} tokens`;
+      return;
+    }
+
     label.textContent = viewLabel
       ? `${totalValue} tokens ${viewLabel}`
       : `${totalValue} tokens`;
   }
 
   function applySearchFilter() {
-    const search = tokensState.searchTerm.toLowerCase();
-    if (!search) {
-      renderTokens(allTokensData);
-      return;
-    }
-
-    const filtered = allTokensData.filter((token) => {
-      const symbol = (token.symbol || "").toString().toLowerCase();
-      const mint = (token.mint || "").toString().toLowerCase();
-      const name = (token.name || "").toString().toLowerCase();
-      return (
-        symbol.includes(search) ||
-        mint.includes(search) ||
-        name.includes(search)
-      );
-    });
-
-    renderTokens(filtered);
+    sortTokensTableStateItems();
+    const items = Array.isArray(tokensTableState.items)
+      ? tokensTableState.items
+      : allTokensData;
+    renderTokens(items, { mode: "replace" });
+    setupTokensScrollObserver();
   }
 
   function clearTokensSearch(reason) {
@@ -1052,13 +1274,18 @@
     return true;
   }
 
-  function renderTokens(tokens) {
+  function renderTokens(tokens, options) {
     const tbody = document.getElementById("tokensTableBody");
     if (!tbody) return;
 
+    const mode = (options && options.mode) || "replace";
     const openState = captureOpenDropdownState();
 
     if (!tokens || tokens.length === 0) {
+      if (mode === "append") {
+        return;
+      }
+
       if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
         console.warn("[TokensDBG] renderTokens: empty data", {
           view: tokensState.view,
@@ -1097,6 +1324,7 @@
       setTokenCountStatus(statusMessage);
       const safeMessage = Utils.escapeHtml(statusMessage);
       tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 20px; color: #94a3b8;">${safeMessage}</td></tr>`;
+      teardownTokensScrollObserver();
       return;
     }
 
@@ -1104,11 +1332,106 @@
       console.log("[TokensDBG] renderTokens: rendering rows", {
         count: tokens.length,
         view: tokensState.view,
+        mode,
       });
     }
 
-    tbody.innerHTML = tokens.map(createTokenRowHtml).join("");
+    if (mode === "replace") {
+      const rowsHtml = tokens.map(createTokenRowHtml).join("");
+      tbody.innerHTML = rowsHtml + TOKENS_SCROLL_GUARD_HTML;
+    } else if (mode === "append") {
+      const guard = ensureTokensScrollGuard();
+      if (!guard) {
+        renderTokens(tokens, { mode: "replace" });
+      } else {
+        const rowsHtml = tokens.map(createTokenRowHtml).join("");
+        if (rowsHtml) {
+          guard.insertAdjacentHTML("beforebegin", rowsHtml);
+        }
+      }
+    }
+
+    ensureTokensScrollGuard();
     restoreDropdownState(openState);
+  }
+
+  function ensureTokensScrollGuard() {
+    const tbody = document.getElementById("tokensTableBody");
+    if (!tbody) return null;
+    let guard = document.getElementById("tokens-scroll-guard");
+    if (!guard) {
+      tbody.insertAdjacentHTML("beforeend", TOKENS_SCROLL_GUARD_HTML);
+      guard = document.getElementById("tokens-scroll-guard");
+    } else if (guard.parentElement !== tbody) {
+      guard.parentElement.removeChild(guard);
+      tbody.appendChild(guard);
+    } else if (tbody.lastElementChild !== guard) {
+      tbody.appendChild(guard);
+    }
+    return guard;
+  }
+
+  function setTokensScrollGuardState(state) {
+    const guard = ensureTokensScrollGuard();
+    if (!guard) return;
+    const cell = guard.querySelector(".scroll-guard-cell");
+    if (!cell) return;
+    if (state === "hidden") {
+      guard.style.display = "none";
+    } else {
+      guard.style.display = "";
+    }
+    cell.classList.toggle("loading", state === "loading");
+    if (state === "loading") {
+      cell.textContent = "Loading more tokens…";
+    } else if (state === "end") {
+      cell.textContent =
+        tokensTableState.items.length > 0 ? "No more tokens" : "";
+    } else {
+      cell.textContent = "";
+    }
+  }
+
+  function teardownTokensScrollObserver() {
+    if (tokensTableState.scrollObserver) {
+      try {
+        tokensTableState.scrollObserver.disconnect();
+      } catch (_) {}
+    }
+    tokensTableState.scrollObserver = null;
+    tokensTableState.scrollContainer = null;
+  }
+
+  function setupTokensScrollObserver() {
+    teardownTokensScrollObserver();
+    const guard = ensureTokensScrollGuard();
+    const container = document.querySelector(".table-wrap");
+    if (!guard || !container) {
+      return;
+    }
+
+    if (
+      tokensTableState.totalPages <= 1 ||
+      tokensTableState.currentPage >= tokensTableState.totalPages
+    ) {
+      setTokensScrollGuardState("end");
+      return;
+    }
+
+    setTokensScrollGuardState("idle");
+    tokensTableState.scrollContainer = container;
+    tokensTableState.scrollObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            loadNextTokensPage({ skipObserverRefresh: true });
+          }
+        });
+      },
+      { root: container, rootMargin: "320px 0px 0px 0px", threshold: 0 }
+    );
+
+    tokensTableState.scrollObserver.observe(guard);
   }
 
   function captureOpenDropdownState() {
@@ -1233,6 +1556,128 @@
     }, TOKENS_SNAPSHOT_TIMEOUT_MS);
   }
 
+  function buildTokensListQuery(page, pageSize) {
+    const params = new URLSearchParams();
+    params.set("view", tokensState.view);
+    if (tokensState.searchTerm) {
+      params.set("search", tokensState.searchTerm);
+    }
+    params.set("sort_by", tokensState.sortBy);
+    params.set("sort_dir", tokensState.sortDir);
+    params.set("page", String(page));
+    const requestedSize =
+      pageSize || tokensTableState.pageSize || TOKENS_SNAPSHOT_LIMIT;
+    const safeSize = clampTokensPageSize(requestedSize);
+    params.set("page_size", String(safeSize));
+    return params;
+  }
+
+  async function fetchTokensListPage(page, options) {
+    const opts = options || {};
+    const requestedSize =
+      opts.pageSize || tokensTableState.pageSize || TOKENS_SNAPSHOT_LIMIT;
+    const pageSize = clampTokensPageSize(requestedSize);
+    const params = buildTokensListQuery(page, pageSize);
+    const url = `/api/tokens/list?${params.toString()}`;
+    if (window.__DEBUG_REALTIME) {
+      console.log("[TokensDBG] HTTP page fetch", { page, pageSize, url });
+    }
+    const res = await fetch(url, {
+      headers: { "X-Requested-With": "fetch" },
+      signal: opts.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const body = await res.json();
+    const normalized = Array.isArray(body.items)
+      ? body.items.map(normalizeTokenFromApi)
+      : [];
+    const total = Number(body.total) || normalized.length;
+    const totalPages =
+      Number(body.total_pages) ||
+      (pageSize > 0 ? Math.ceil(total / pageSize) : 1);
+    const responsePageSize = Number(body.page_size) || pageSize;
+    return {
+      items: dedupeTokensByMint(normalized),
+      total,
+      totalPages,
+      pageSize: responsePageSize,
+    };
+  }
+
+  async function loadNextTokensPage(options) {
+    const opts = options || {};
+    if (tokensTableState.loading) {
+      tokensTableState.pendingReload = true;
+      return false;
+    }
+
+    if (
+      tokensTableState.totalPages <= 1 ||
+      tokensTableState.currentPage >= tokensTableState.totalPages
+    ) {
+      setTokensScrollGuardState("end");
+      return false;
+    }
+
+    const nextPage = tokensTableState.currentPage + 1;
+    tokensTableState.loading = true;
+    setTokensScrollGuardState("loading");
+
+    try {
+      const result = await fetchTokensListPage(nextPage, opts.fetchOptions);
+      tokensTableState.pageSize = clampTokensPageSize(
+        result.pageSize || tokensTableState.pageSize
+      );
+      tokensTableState.totalPages =
+        result.totalPages || tokensTableState.totalPages;
+      tokensTableState.totalCount = result.total || tokensTableState.totalCount;
+
+      const existingMints = new Set(
+        (tokensTableState.items || []).map((token) => token && token.mint)
+      );
+      const fresh = result.items.filter((token) => {
+        if (!token || !token.mint) return false;
+        if (existingMints.has(token.mint)) {
+          return false;
+        }
+        existingMints.add(token.mint);
+        return true;
+      });
+
+      if (fresh.length > 0) {
+        appendTokensToState(fresh);
+        renderTokens(fresh, { mode: "append" });
+      }
+
+      tokensTableState.currentPage = Math.min(
+        nextPage,
+        tokensTableState.totalPages
+      );
+      updateTokenCount(tokensTableState.totalCount);
+
+      if (tokensTableState.currentPage >= tokensTableState.totalPages) {
+        setTokensScrollGuardState("end");
+        teardownTokensScrollObserver();
+      } else {
+        setTokensScrollGuardState("idle");
+        if (!opts.skipObserverRefresh) {
+          setupTokensScrollObserver();
+        }
+      }
+
+      return fresh.length > 0;
+    } catch (err) {
+      console.warn("[Tokens] Failed to load additional tokens", err);
+      setTokensScrollGuardState("end");
+      return false;
+    } finally {
+      tokensTableState.loading = false;
+      tokensTableState.pendingReload = false;
+    }
+  }
+
   function requestTokensSnapshot(message) {
     if (window.__DEBUG_REALTIME) {
       console.log("[TokensDBG] requestSnapshot", {
@@ -1254,6 +1699,10 @@
     tokensSnapshotState.searchAutoCleared = false;
     tokensSnapshotState.requestId = null;
     tokensSnapshotState.context = null;
+    tokensTableState.pendingReload = true;
+    tokensTableState.loading = true;
+    teardownTokensScrollObserver();
+    setTokensScrollGuardState("loading");
     // If we already have something rendered, keep it visible and just update the status
     if (Array.isArray(allTokensData) && allTokensData.length > 0) {
       setTokenCountStatus(tokensSnapshotState.message);
@@ -1289,33 +1738,23 @@
 
   async function fetchTokensListForCurrentFilters() {
     try {
-      const params = new URLSearchParams();
-      params.set("view", tokensState.view);
-      if (tokensState.searchTerm) params.set("search", tokensState.searchTerm);
-      params.set("sort_by", tokensState.sortBy);
-      params.set("sort_dir", tokensState.sortDir);
-      params.set("page", "1");
-      params.set("page_size", String(TOKENS_SNAPSHOT_LIMIT));
-
-      const url = `/api/tokens/list?${params.toString()}`;
-      if (window.__DEBUG_REALTIME) {
-        console.log("[TokensDBG] HTTP fallback →", url);
-      }
-      const res = await fetch(url, {
-        headers: { "X-Requested-With": "fetch" },
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const body = await res.json();
-      const items = Array.isArray(body.items)
-        ? body.items.map(normalizeTokenFromApi)
-        : [];
-      allTokensData = dedupeTokensByMint(items);
+      const result = await fetchTokensListPage(1);
+      replaceAllTokensData(result.items);
       tokensSnapshotState.inProgress = false;
       tokensSnapshotState.pending = [];
       tokensSnapshotState.expected = 0;
       tokensSnapshotState.totalAvailable =
-        Number(body.total) || allTokensData.length;
+        Number(result.total) || tokensTableState.items.length;
       tokensSnapshotState.message = "";
+
+      tokensTableState.pageSize = clampTokensPageSize(
+        result.pageSize || TOKENS_SNAPSHOT_LIMIT
+      );
+      tokensTableState.currentPage = tokensTableState.items.length > 0 ? 1 : 0;
+      tokensTableState.totalPages = result.totalPages || 1;
+      tokensTableState.totalCount = tokensSnapshotState.totalAvailable;
+      tokensTableState.loading = false;
+      tokensTableState.pendingReload = false;
 
       updateTokenCount(tokensSnapshotState.totalAvailable);
       const viewLabel = VIEW_LABELS[tokensState.view] || "";
@@ -1323,17 +1762,12 @@
         ? `HTTP • ${tokensSnapshotState.totalAvailable} tokens ${viewLabel}`
         : `HTTP • ${tokensSnapshotState.totalAvailable} tokens`;
       setTokenCountStatus(status);
-      // Save to cache
-      tokensViewCache[tokensState.view] = {
-        items: allTokensData.slice(),
-        total: tokensSnapshotState.totalAvailable,
-        sortBy: tokensState.sortBy,
-        sortDir: tokensState.sortDir,
-        searchTerm: tokensState.searchTerm || "",
-        ts: Date.now(),
-      };
-
       applySearchFilter();
+      if (tokensTableState.currentPage < tokensTableState.totalPages) {
+        setupTokensScrollObserver();
+      } else {
+        setTokensScrollGuardState("end");
+      }
     } catch (err) {
       console.warn("[Tokens] HTTP fallback failed", err);
       showTokensError("❌ Snapshot failed and fallback unavailable");
@@ -1472,19 +1906,38 @@
     tokensSnapshotState.pending = [];
     tokensSnapshotState.expected = 0;
     tokensSnapshotState.currentView = null;
-    allTokensData = deduped;
+    replaceAllTokensData(deduped);
 
     if (snapshotReportedEmpty) {
       tokensSnapshotState.totalAvailable = 0;
     }
 
+    const contextPageSize = Number(tokensSnapshotState.context?.page_size);
     const total =
       tokensSnapshotState.totalAvailable ||
-      allTokensData.length ||
+      tokensTableState.items.length ||
       deduped.length;
     tokensSnapshotState.totalAvailable = total;
     tokensSnapshotState.message = "";
-    updateTokenCount(total);
+
+    tokensTableState.pageSize = clampTokensPageSize(
+      Number.isFinite(contextPageSize) ? contextPageSize : TOKENS_SNAPSHOT_LIMIT
+    );
+    if (total === 0) {
+      tokensTableState.currentPage = 0;
+      tokensTableState.totalPages = 0;
+    } else {
+      tokensTableState.currentPage = 1;
+      tokensTableState.totalPages = Math.max(
+        1,
+        Math.ceil(total / tokensTableState.pageSize)
+      );
+    }
+    tokensTableState.totalCount = total;
+    tokensTableState.loading = false;
+    tokensTableState.pendingReload = false;
+
+    updateTokenCount(knownTotal);
 
     const viewLabel = VIEW_LABELS[tokensState.view] || "";
     const status = viewLabel
@@ -1500,17 +1953,14 @@
       });
     }
 
-    // Save to per-view cache with current filters
-    tokensViewCache[tokensState.view] = {
-      items: allTokensData.slice(),
-      total: total,
-      sortBy: tokensState.sortBy,
-      sortDir: tokensState.sortDir,
-      searchTerm: tokensState.searchTerm || "",
-      ts: Date.now(),
-    };
-
     applySearchFilter();
+    if (tokensTableState.currentPage < tokensTableState.totalPages) {
+      setTokensScrollGuardState("idle");
+      setupTokensScrollObserver();
+    } else {
+      setTokensScrollGuardState(total > 0 ? "end" : "hidden");
+      teardownTokensScrollObserver();
+    }
   }
 
   function handleTokensSnapshotEnd(payload) {
@@ -1743,9 +2193,14 @@
         return;
       }
     }
-
     const total = allTokensData.length;
-    tokensSnapshotState.totalAvailable = total;
+    const knownTotal = Math.max(
+      total,
+      tokensSnapshotState.totalAvailable || 0,
+      tokensTableState.totalCount || 0
+    );
+    tokensSnapshotState.totalAvailable = knownTotal;
+    tokensTableState.totalCount = Math.max(knownTotal, total);
     updateTokenCount(total);
     const sortKey = tokensState.sortBy;
     const curr = existingIndex >= 0 ? allTokensData[existingIndex] : summary;
@@ -1848,13 +2303,30 @@
 
     allTokensData.splice(index, 1);
     const total = allTokensData.length;
-    tokensSnapshotState.totalAvailable = total;
-    updateTokenCount(total);
+    const previousKnownTotal = Math.max(
+      tokensSnapshotState.totalAvailable || 0,
+      tokensTableState.totalCount || 0,
+      total + 1
+    );
+    const knownTotal = Math.max(total, previousKnownTotal - 1);
+    tokensSnapshotState.totalAvailable = knownTotal;
+    tokensTableState.totalCount = knownTotal;
+    tokensTableState.totalPages = tokensTableState.pageSize
+      ? Math.ceil(tokensTableState.totalCount / tokensTableState.pageSize)
+      : tokensTableState.totalPages;
+    if (tokensTableState.currentPage > tokensTableState.totalPages) {
+      tokensTableState.currentPage = tokensTableState.totalPages;
+    }
+    if (tokensTableState.totalPages <= 1) {
+      setTokensScrollGuardState(total > 0 ? "end" : "hidden");
+      teardownTokensScrollObserver();
+    }
+    updateTokenCount(knownTotal);
     applySearchFilter();
     const viewLabel = VIEW_LABELS[tokensState.view] || "";
     const status = viewLabel
-      ? `Realtime • ${total} tokens ${viewLabel}`
-      : `Realtime • ${total} tokens`;
+      ? `Realtime • ${knownTotal} tokens ${viewLabel}`
+      : `Realtime • ${knownTotal} tokens`;
     setTokenCountStatus(status);
   }
 
@@ -1997,6 +2469,8 @@
         tokensState.sortDir = key === "symbol" ? "asc" : "desc";
       }
       updateSortIndicators();
+      resetTokensPagination();
+      setTokensScrollGuardState("loading");
       requestTokensSnapshot("Sorting tokens...");
     });
     updateSortIndicators();
@@ -2190,7 +2664,7 @@
       <tbody id="tokensTableBody">
         <tr>
           <td
-            colspan="4"
+            colspan="12"
             style="text-align: center; padding: 20px; color: #94a3b8"
           >
             <div class="loading-text">Loading tokens...</div>
