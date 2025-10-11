@@ -125,35 +125,6 @@
     margin: 2px;
   }
 
-  .badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.15rem 0.5rem;
-    border-radius: 999px;
-    font-weight: 600;
-    font-size: 0.8rem;
-  }
-
-  .badge.success {
-    background: var(--badge-online);
-    color: #fff;
-  }
-
-  .badge.warning {
-    background: var(--badge-loading);
-    color: #fff;
-  }
-
-  .badge.error {
-    background: var(--badge-error);
-    color: #fff;
-  }
-
-  .badge.secondary {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-  }
-
   @media (max-width: 900px) {
     .services-toolbar {
       flex-direction: column;
@@ -260,9 +231,7 @@
       lastErrorMessage: null,
       isActive: false,
       cleanupRegistered: false,
-      intervalChangeListener: null,
-
-      pollTimer: null,
+      poller: null,
 
       initialize() {
         console.log("[Services] Initializing controller");
@@ -273,6 +242,7 @@
           this.renderServicesTable();
           return;
         }
+
         this.isActive = true;
         this.servicesData = null;
         this.hasInitialSnapshot = false;
@@ -282,6 +252,7 @@
         this.setLoading("Loading services...");
         this.bindToolbarEventsOnce();
         this.bindSortHandlersOnce();
+
         if (
           window.Router &&
           typeof Router.registerCleanup === "function" &&
@@ -291,59 +262,91 @@
           this.cleanupRegistered = true;
         }
 
-        // Register interval change listener
-        this.intervalChangeListener = window.PollingManager.onChange(() => {
-          if (this.isActive) {
-            console.log(
-              "[Services] Polling interval changed, restarting polling"
-            );
-            this.startPolling();
-          }
-        });
-
         this.fetchServices({ reason: "initial" });
-        this.startPolling();
+        this.ensurePoller();
       },
 
       reset() {
         console.log("[Services] Resetting controller");
         this.isActive = false;
-        this.stopPolling();
+        if (this.poller && typeof this.poller.cleanup === "function") {
+          this.poller.cleanup();
+        }
+        this.poller = null;
         this.abortInFlight();
         this.servicesData = null;
         this.hasInitialSnapshot = false;
         this.lastErrorMessage = null;
         this.cleanupRegistered = false;
-
-        // Remove interval change listener
-        if (this.intervalChangeListener && window.PollingManager) {
-          window.PollingManager.removeListener(this.intervalChangeListener);
-          this.intervalChangeListener = null;
-        }
       },
 
-      startPolling() {
-        if (!this.isActive) {
+      ensurePoller() {
+        if (this.poller) {
+          if (typeof this.poller.start === "function") {
+            this.poller.start({ silent: true });
+          }
           return;
         }
-        this.stopPolling();
-        const interval = window.PollingManager.getInterval();
-        const intervalId = setInterval(() => {
-          this.fetchServices({ reason: "poll" });
-        }, interval);
-        this.pollTimer = intervalId;
-        if (window.Router && typeof Router.trackInterval === "function") {
-          Router.trackInterval(intervalId);
-        }
-        console.log("[Services] Started polling every", interval, "ms");
-      },
 
-      stopPolling() {
-        if (this.pollTimer) {
-          clearInterval(this.pollTimer);
-          this.pollTimer = null;
-          console.log("[Services] Stopped polling");
+        if (
+          window.PagePoller &&
+          typeof window.PagePoller.create === "function"
+        ) {
+          this.poller = window.PagePoller.create({
+            label: "Services",
+            onPoll: () => this.fetchServices({ reason: "poll" }),
+          });
+          this.poller.start();
+          return;
         }
+
+        console.warn(
+          "[Services] PagePoller unavailable; using fallback polling logic"
+        );
+
+        const startFallback = () => {
+          const intervalProvider =
+            window.PollingManager &&
+            typeof window.PollingManager.getInterval === "function"
+              ? window.PollingManager.getInterval.bind(window.PollingManager)
+              : () => 1000;
+
+          const interval = Number(intervalProvider()) || 1000;
+          const id = setInterval(() => {
+            this.fetchServices({ reason: "poll" });
+          }, interval);
+
+          if (window.Router && typeof Router.trackInterval === "function") {
+            Router.trackInterval(id);
+          }
+
+          console.log("[Services] (fallback) Started polling", interval, "ms");
+          return { id, intervalProvider };
+        };
+
+        let fallback = startFallback();
+
+        this.poller = {
+          start: () => {
+            if (fallback?.id) {
+              clearInterval(fallback.id);
+            }
+            fallback = startFallback();
+          },
+          stop: () => {
+            if (fallback?.id) {
+              clearInterval(fallback.id);
+              fallback.id = null;
+              console.log("[Services] (fallback) Stopped polling");
+            }
+          },
+          cleanup: () => {
+            if (fallback?.id) {
+              clearInterval(fallback.id);
+              fallback.id = null;
+            }
+          },
+        };
       },
 
       abortInFlight() {
@@ -412,14 +415,20 @@
           return;
         }
         console.log("[Services] Manual refresh requested");
-        this.stopPolling();
+        if (this.poller && typeof this.poller.stop === "function") {
+          this.poller.stop();
+        }
         this.abortInFlight();
         this.hasInitialSnapshot = false;
         this.servicesData = null;
         this.setLoading("Refreshing services...");
         this.fetchServices({ reason: "manual" }).finally(() => {
           if (this.isActive) {
-            this.startPolling();
+            if (this.poller && typeof this.poller.start === "function") {
+              this.poller.start({ silent: true });
+            } else {
+              this.ensurePoller();
+            }
           }
         });
       },

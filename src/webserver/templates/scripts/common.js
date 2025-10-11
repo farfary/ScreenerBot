@@ -99,6 +99,150 @@ window.PollingManager = {
 // Initialize on load
 PollingManager.init();
 
+// Shared polling lifecycle helper for page controllers
+window.PagePoller = {
+  create(options = {}) {
+    const { label = "Poller", onPoll, getInterval } = options;
+    if (typeof onPoll !== "function") {
+      throw new Error(`[PagePoller:${label}] onPoll callback is required`);
+    }
+
+    const state = {
+      timerId: null,
+      listener: null,
+      active: false,
+    };
+
+    const logPrefix = `[PagePoller:${label}]`;
+
+    const computeInterval = () => {
+      if (typeof getInterval === "function") {
+        try {
+          const value = Number(getInterval());
+          if (Number.isFinite(value) && value > 0) {
+            return value;
+          }
+        } catch (err) {
+          console.warn(`${logPrefix} getInterval failed, falling back`, err);
+        }
+      }
+
+      if (
+        window.PollingManager &&
+        typeof window.PollingManager.getInterval === "function"
+      ) {
+        try {
+          const value = Number(window.PollingManager.getInterval());
+          if (Number.isFinite(value) && value > 0) {
+            return value;
+          }
+        } catch (err) {
+          console.warn(
+            `${logPrefix} PollingManager.getInterval failed, using default`,
+            err
+          );
+        }
+      }
+
+      return 1000;
+    };
+
+    const schedule = () => {
+      const interval = computeInterval();
+      state.timerId = setInterval(() => {
+        try {
+          const result = onPoll();
+          if (result && typeof result.then === "function") {
+            Promise.resolve(result).catch((error) => {
+              console.error(`${logPrefix} Poll callback rejected`, error);
+            });
+          }
+        } catch (error) {
+          console.error(`${logPrefix} Poll callback threw`, error);
+        }
+      }, interval);
+
+      if (window.Router && typeof Router.trackInterval === "function") {
+        Router.trackInterval(state.timerId);
+      }
+
+      state.active = true;
+      return interval;
+    };
+
+    const stop = (options = {}) => {
+      if (!state.timerId) {
+        state.active = false;
+        return;
+      }
+
+      clearInterval(state.timerId);
+      state.timerId = null;
+      state.active = false;
+
+      if (!options.silent) {
+        console.log(`${logPrefix} Stopped polling`);
+      }
+    };
+
+    const start = (options = {}) => {
+      stop({ silent: true });
+      const interval = schedule();
+      ensureListener();
+
+      if (!options.silent) {
+        console.log(`${logPrefix} Started polling every ${interval} ms`);
+      }
+
+      return interval;
+    };
+
+    const ensureListener = () => {
+      if (
+        !window.PollingManager ||
+        typeof window.PollingManager.onChange !== "function" ||
+        state.listener
+      ) {
+        return;
+      }
+
+      state.listener = window.PollingManager.onChange(() => {
+        if (!state.active) {
+          return;
+        }
+        const interval = start({ silent: true });
+        console.log(`${logPrefix} Polling interval changed → ${interval} ms`);
+      });
+    };
+
+    const restart = () => {
+      const interval = start({ silent: true });
+      console.log(`${logPrefix} Restarted polling (${interval} ms)`);
+      return interval;
+    };
+
+    const cleanup = () => {
+      stop();
+      if (
+        state.listener &&
+        window.PollingManager &&
+        typeof window.PollingManager.removeListener === "function"
+      ) {
+        window.PollingManager.removeListener(state.listener);
+      }
+      state.listener = null;
+    };
+
+    return {
+      start,
+      stop: () => stop(),
+      restart,
+      cleanup,
+      isActive: () => state.active,
+    };
+  },
+};
+
 // Client-Side Router - SPA Architecture
 window.Router = {
   currentPage: null,
