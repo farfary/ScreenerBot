@@ -1,4 +1,4 @@
-use rusqlite::{Connection, Result as SqliteResult, Row};
+use rusqlite::{Connection, OptionalExtension, Result as SqliteResult, Row};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -333,128 +333,133 @@ impl SecurityDatabase {
     pub fn get_security_info(&self, mint: &str) -> SqliteResult<Option<SecurityInfo>> {
         let mut stmt = self
             .conn
-            .prepare("SELECT * FROM security_info WHERE mint = ?1")?;
+            .prepare_cached("SELECT * FROM security_info WHERE mint = ?1")?;
 
-        let mut rows = stmt.query_map([mint], |row| {
-            Ok(SecurityInfo {
-                mint: row.get("mint")?,
-                token_program: row.get("token_program")?,
-                creator: row.get("creator")?,
-                creator_balance: row.get("creator_balance")?,
-                symbol: row.get("symbol")?,
+        let mut info = stmt
+            .query_row([mint], |row| {
+                Ok(SecurityInfo {
+                    mint: row.get("mint")?,
+                    token_program: row.get("token_program")?,
+                    creator: row.get("creator")?,
+                    creator_balance: row.get("creator_balance")?,
+                    symbol: row.get("symbol")?,
+                    name: row.get("name")?,
+                    decimals: row.get("decimals")?,
+                    supply: row.get("supply")?,
+                    mint_authority: row.get("mint_authority")?,
+                    freeze_authority: row.get("freeze_authority")?,
+                    score: row.get("score")?,
+                    score_normalised: row.get("score_normalised")?,
+                    rugged: row.get::<_, i32>("rugged")? != 0,
+                    total_market_liquidity: row.get("total_market_liquidity")?,
+                    total_stable_liquidity: row.get("total_stable_liquidity")?,
+                    total_lp_providers: row.get("total_lp_providers")?,
+                    total_holders: row.get("total_holders")?,
+                    price: row.get("price")?,
+                    graph_insiders_detected: row.get("graph_insiders_detected")?,
+                    detected_at: row.get("detected_at")?,
+                    analyzed_at: row.get("analyzed_at")?,
+                    raw_response: row.get("raw_response")?,
+                    risks: Vec::new(),       // Will be filled below
+                    markets: Vec::new(),     // Will be filled below
+                    top_holders: Vec::new(), // Will be filled below
+                })
+            })
+            .optional()?;
+
+        let Some(mut info) = info else {
+            return Ok(None);
+        };
+
+        // Load risks
+        let mut risk_stmt = self
+            .conn
+            .prepare_cached("SELECT * FROM security_risks WHERE mint = ?1")?;
+        let risk_rows = risk_stmt.query_map([mint], |row| {
+            Ok(SecurityRisk {
                 name: row.get("name")?,
-                decimals: row.get("decimals")?,
-                supply: row.get("supply")?,
-                mint_authority: row.get("mint_authority")?,
-                freeze_authority: row.get("freeze_authority")?,
+                value: row.get("value")?,
+                description: row.get("description")?,
                 score: row.get("score")?,
-                score_normalised: row.get("score_normalised")?,
-                rugged: row.get::<_, i32>("rugged")? != 0,
-                total_market_liquidity: row.get("total_market_liquidity")?,
-                total_stable_liquidity: row.get("total_stable_liquidity")?,
-                total_lp_providers: row.get("total_lp_providers")?,
-                total_holders: row.get("total_holders")?,
-                price: row.get("price")?,
-                graph_insiders_detected: row.get("graph_insiders_detected")?,
-                detected_at: row.get("detected_at")?,
-                analyzed_at: row.get("analyzed_at")?,
-                raw_response: row.get("raw_response")?,
-                risks: Vec::new(),       // Will be filled below
-                markets: Vec::new(),     // Will be filled below
-                top_holders: Vec::new(), // Will be filled below
+                level: row.get("level")?,
             })
         })?;
-
-        if let Some(mut info) = rows.next().transpose()? {
-            // Load risks
-            let mut risk_stmt = self
-                .conn
-                .prepare("SELECT * FROM security_risks WHERE mint = ?1")?;
-            let risk_rows = risk_stmt.query_map([mint], |row| {
-                Ok(SecurityRisk {
-                    name: row.get("name")?,
-                    value: row.get("value")?,
-                    description: row.get("description")?,
-                    score: row.get("score")?,
-                    level: row.get("level")?,
-                })
-            })?;
-            for risk in risk_rows {
-                info.risks.push(risk?);
-            }
-
-            // Load markets
-            let mut market_stmt = self
-                .conn
-                .prepare("SELECT * FROM security_markets WHERE mint = ?1")?;
-            let market_rows = market_stmt.query_map([mint], |row| {
-                Ok(MarketInfo {
-                    pubkey: row.get("pubkey")?,
-                    market_type: row.get("market_type")?,
-                    mint_a: row.get("mint_a")?,
-                    mint_b: row.get("mint_b")?,
-                    mint_lp: row.get("mint_lp")?,
-                    liquidity_a: row.get("liquidity_a")?,
-                    liquidity_b: row.get("liquidity_b")?,
-                    lp_locked_pct: row.get("lp_locked_pct")?,
-                    lp_unlocked: row.get("lp_unlocked")?,
-                    base_price: row.get("base_price")?,
-                    quote_price: row.get("quote_price")?,
-                })
-            })?;
-            for market in market_rows {
-                info.markets.push(market?);
-            }
-
-            // Load top holders
-            let mut holder_stmt = self
-                .conn
-                .prepare("SELECT * FROM security_holders WHERE mint = ?1 ORDER BY pct DESC")?;
-            let holder_rows = holder_stmt.query_map([mint], |row| {
-                Ok(HolderInfo {
-                    address: row.get("address")?,
-                    amount: row.get("amount")?,
-                    pct: row.get("pct")?,
-                    owner: row.get("owner")?,
-                    insider: row.get::<_, i32>("insider")? != 0,
-                })
-            })?;
-            for holder in holder_rows {
-                info.top_holders.push(holder?);
-            }
-
-            Ok(Some(info))
-        } else {
-            Ok(None)
+        for risk in risk_rows {
+            info.risks.push(risk?);
         }
+
+        // Load markets
+        let mut market_stmt = self
+            .conn
+            .prepare_cached("SELECT * FROM security_markets WHERE mint = ?1")?;
+        let market_rows = market_stmt.query_map([mint], |row| {
+            Ok(MarketInfo {
+                pubkey: row.get("pubkey")?,
+                market_type: row.get("market_type")?,
+                mint_a: row.get("mint_a")?,
+                mint_b: row.get("mint_b")?,
+                mint_lp: row.get("mint_lp")?,
+                liquidity_a: row.get("liquidity_a")?,
+                liquidity_b: row.get("liquidity_b")?,
+                lp_locked_pct: row.get("lp_locked_pct")?,
+                lp_unlocked: row.get("lp_unlocked")?,
+                base_price: row.get("base_price")?,
+                quote_price: row.get("quote_price")?,
+            })
+        })?;
+        for market in market_rows {
+            info.markets.push(market?);
+        }
+
+        // Load top holders
+        let mut holder_stmt = self
+            .conn
+            .prepare_cached("SELECT * FROM security_holders WHERE mint = ?1 ORDER BY pct DESC")?;
+        let holder_rows = holder_stmt.query_map([mint], |row| {
+            Ok(HolderInfo {
+                address: row.get("address")?,
+                amount: row.get("amount")?,
+                pct: row.get("pct")?,
+                owner: row.get("owner")?,
+                insider: row.get::<_, i32>("insider")? != 0,
+            })
+        })?;
+        for holder in holder_rows {
+            info.top_holders.push(holder?);
+        }
+
+        Ok(Some(info))
     }
 
     pub fn is_stale(&self, mint: &str, max_age_hours: i64) -> SqliteResult<bool> {
-        let mut stmt = self.conn.prepare(
-            "SELECT datetime(analyzed_at, '+' || ?2 || ' hours') < datetime('now') FROM security_info WHERE mint = ?1"
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT datetime(analyzed_at, '+' || ?2 || ' hours') < datetime('now') FROM security_info WHERE mint = ?1",
         )?;
 
-        let mut rows = stmt.query_map(rusqlite::params![mint, max_age_hours], |row| {
-            Ok(row.get::<_, bool>(0)?)
-        })?;
-
-        Ok(rows.next().transpose()?.unwrap_or(true))
+        Ok(stmt
+            .query_row(rusqlite::params![mint, max_age_hours], |row| {
+                row.get::<_, bool>(0)
+            })
+            .optional()?
+            .unwrap_or(true))
     }
 
     pub fn get_security_stats(&self) -> SqliteResult<HashMap<String, i64>> {
         let mut stats = HashMap::new();
 
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM security_info")?;
+        let mut stmt = self
+            .conn
+            .prepare_cached("SELECT COUNT(*) FROM security_info")?;
         stats.insert("total".to_string(), stmt.query_row([], |row| row.get(0))?);
 
         let mut stmt = self
             .conn
-            .prepare("SELECT COUNT(*) FROM security_info WHERE rugged = 0")?;
+            .prepare_cached("SELECT COUNT(*) FROM security_info WHERE rugged = 0")?;
         stats.insert("safe".to_string(), stmt.query_row([], |row| row.get(0))?);
 
         let mut stmt = self
             .conn
-            .prepare("SELECT COUNT(*) FROM security_info WHERE score_normalised >= 70")?;
+            .prepare_cached("SELECT COUNT(*) FROM security_info WHERE score_normalised >= 70")?;
         stats.insert(
             "high_score".to_string(),
             stmt.query_row([], |row| row.get(0))?,
@@ -466,13 +471,13 @@ impl SecurityDatabase {
     pub fn count_safe_tokens(&self) -> SqliteResult<i64> {
         let mut stmt = self
             .conn
-            .prepare("SELECT COUNT(*) FROM security_info WHERE score_normalised >= 70")?;
+            .prepare_cached("SELECT COUNT(*) FROM security_info WHERE score_normalised >= 70")?;
         stmt.query_row([], |row| row.get(0))
     }
 
     pub fn count_warning_tokens(&self) -> SqliteResult<i64> {
-        let mut stmt = self.conn.prepare(
-            "SELECT COUNT(*) FROM security_info WHERE score_normalised >= 40 AND score_normalised < 70"
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT COUNT(*) FROM security_info WHERE score_normalised >= 40 AND score_normalised < 70",
         )?;
         stmt.query_row([], |row| row.get(0))
     }
@@ -480,14 +485,14 @@ impl SecurityDatabase {
     pub fn count_danger_tokens(&self) -> SqliteResult<i64> {
         let mut stmt = self
             .conn
-            .prepare("SELECT COUNT(*) FROM security_info WHERE score_normalised < 40")?;
+            .prepare_cached("SELECT COUNT(*) FROM security_info WHERE score_normalised < 40")?;
         stmt.query_row([], |row| row.get(0))
     }
 
     pub fn count_pump_fun_tokens(&self) -> SqliteResult<i64> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT COUNT(*) FROM security_info WHERE raw_response LIKE '%pump.fun%'")?;
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT COUNT(*) FROM security_info WHERE raw_response LIKE '%pump.fun%'",
+        )?;
         stmt.query_row([], |row| row.get(0))
     }
 
@@ -509,7 +514,7 @@ impl SecurityDatabase {
         // Check each token mint against security_info table
         let mut security_stmt = self
             .conn
-            .prepare("SELECT 1 FROM security_info WHERE mint = ?1 LIMIT 1")?;
+            .prepare_cached("SELECT 1 FROM security_info WHERE mint = ?1 LIMIT 1")?;
 
         for token_result in token_rows {
             let mint = token_result?;
@@ -543,7 +548,7 @@ impl SecurityDatabase {
         // Check each token mint against security_info table
         let mut security_stmt = self
             .conn
-            .prepare("SELECT 1 FROM security_info WHERE mint = ?1 LIMIT 1")?;
+            .prepare_cached("SELECT 1 FROM security_info WHERE mint = ?1 LIMIT 1")?;
 
         for token_result in token_rows {
             let mint = token_result?;

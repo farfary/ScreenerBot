@@ -107,8 +107,9 @@ pub async fn init() -> Result<(), String> {
     );
     let _ = EVENTS_DB.set(db.clone());
 
-    // Initialize broadcaster
-    let (tx, _rx) = broadcast::channel::<Event>(1000);
+    // Initialize broadcaster with larger capacity to reduce lag frequency
+    // (was 1000, increased to 5000 to handle bursts of events during active trading/discovery)
+    let (tx, _rx) = broadcast::channel::<Event>(5000);
     let _ = EVENTS_BROADCAST_TX.set(tx);
 
     // Create channel for async event recording

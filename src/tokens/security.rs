@@ -3,6 +3,7 @@ use crate::logger::{log, LogTag};
 use crate::tokens::security_db::{parse_rugcheck_response, SecurityDatabase, SecurityInfo};
 use once_cell::sync::Lazy;
 use reqwest::{Client, StatusCode};
+use rusqlite::Result as SqliteResult;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -42,7 +43,7 @@ impl SecurityMetrics {
 }
 
 pub struct SecurityAnalyzer {
-    db_path: String,
+    db: Arc<Mutex<SecurityDatabase>>,
     client: Client,
     cache: Arc<RwLock<HashMap<String, SecurityInfo>>>, // In-memory cache for fast access
     metrics: Arc<SecurityMetrics>,
@@ -90,8 +91,7 @@ pub enum RiskLevel {
 
 impl SecurityAnalyzer {
     pub fn new(db_path: &str) -> Result<Self, String> {
-        // Test database connection to ensure it works
-        let _test_db = SecurityDatabase::new(db_path)
+        let db = SecurityDatabase::new(db_path)
             .map_err(|e| format!("Failed to initialize security database: {}", e))?;
 
         let client = Client::builder()
@@ -100,22 +100,27 @@ impl SecurityAnalyzer {
             .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
         Ok(SecurityAnalyzer {
-            db_path: db_path.to_string(),
+            db: Arc::new(Mutex::new(db)),
             client,
             cache: Arc::new(RwLock::new(HashMap::new())),
             metrics: Arc::new(SecurityMetrics::new()),
         })
     }
 
-    fn get_db(&self) -> Result<SecurityDatabase, String> {
-        SecurityDatabase::new(&self.db_path).map_err(|e| format!("Failed to open database: {}", e))
+    fn with_db<T, F>(&self, f: F) -> Result<T, String>
+    where
+        F: FnOnce(&SecurityDatabase) -> SqliteResult<T>,
+    {
+        let db = self
+            .db
+            .lock()
+            .map_err(|e| format!("Failed to lock security database: {}", e))?;
+        f(&*db).map_err(|e| format!("Database error: {}", e))
     }
 
     // Compatibility helper: expose DB security info retrieval
     pub fn get_security_info(&self, mint: &str) -> Result<Option<SecurityInfo>, String> {
-        self.get_db()?
-            .get_security_info(mint)
-            .map_err(|e| format!("Database error: {}", e))
+        self.with_db(|db| db.get_security_info(mint))
     }
 
     // Compatibility helper: check in-memory cache presence
@@ -126,15 +131,11 @@ impl SecurityAnalyzer {
 
     // Public methods for database operations used by test binaries
     pub fn count_tokens_without_security(&self) -> Result<i64, String> {
-        self.get_db()?
-            .count_tokens_without_security()
-            .map_err(|e| format!("Database error: {}", e))
+        self.with_db(|db| db.count_tokens_without_security())
     }
 
     pub fn get_tokens_without_security(&self) -> Result<Vec<String>, String> {
-        self.get_db()?
-            .get_tokens_without_security()
-            .map_err(|e| format!("Database error: {}", e))
+        self.with_db(|db| db.get_tokens_without_security())
     }
 
     pub async fn analyze_token(&self, mint: &str) -> SecurityAnalysis {
@@ -177,72 +178,47 @@ impl SecurityAnalyzer {
             }
         }
 
-        if let Ok(db) = self.get_db() {
-            match db.get_security_info(mint) {
-                Ok(Some(info)) => {
-                    match db.is_stale(mint, MAX_CACHE_AGE_HOURS) {
-                        Ok(false) => {
-                            if is_debug_security_enabled() {
-                                log(
-                                    LogTag::Security,
-                                    "DB_HIT",
-                                    &format!(
-                                        "Using fresh database security data for mint={}",
-                                        mint
-                                    ),
-                                );
-                            }
-                            // Add to cache
-                            {
-                                let mut cache = self.cache.write().await;
-                                cache.insert(mint.to_string(), info.clone());
-                            }
-                            let analysis = self.calculate_security_analysis(&info);
-                            if is_debug_security_enabled() {
-                                log(
-                                    LogTag::Security,
-                                    "ANALYSIS",
-                                    &format!(
-                                        "mint={} risk_level={:?} score={} risks={} pump_fun={} source=db",
-                                        mint,
-                                        analysis.risk_level,
-                                        analysis.score_normalized,
-                                        analysis.risks.len(),
-                                        analysis.pump_fun_token
-                                    )
-                                );
-                            }
-                            return analysis;
-                        }
-                        Ok(true) => {
-                            if is_debug_security_enabled() {
-                                log(
-                                    LogTag::Security,
-                                    "DB_STALE",
-                                    &format!(
-                                        "Database security data is stale for mint={}, refreshing",
-                                        mint
-                                    ),
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            if is_debug_security_enabled() {
-                                log(
-                                    LogTag::Security,
-                                    "DB_ERROR",
-                                    &format!("Error checking staleness for mint={}: {}", mint, e),
-                                );
-                            }
-                        }
-                    }
-                }
-                Ok(None) => {
+        match self.with_db(|db| db.get_security_info(mint)) {
+            Ok(Some(info)) => match self.with_db(|db| db.is_stale(mint, MAX_CACHE_AGE_HOURS)) {
+                Ok(false) => {
                     if is_debug_security_enabled() {
                         log(
                             LogTag::Security,
-                            "DB_MISS",
-                            &format!("No security data in database for mint={}", mint),
+                            "DB_HIT",
+                            &format!("Using fresh database security data for mint={}", mint),
+                        );
+                    }
+                    // Add to cache
+                    {
+                        let mut cache = self.cache.write().await;
+                        cache.insert(mint.to_string(), info.clone());
+                    }
+                    let analysis = self.calculate_security_analysis(&info);
+                    if is_debug_security_enabled() {
+                        log(
+                            LogTag::Security,
+                            "ANALYSIS",
+                            &format!(
+                                "mint={} risk_level={:?} score={} risks={} pump_fun={} source=db",
+                                mint,
+                                analysis.risk_level,
+                                analysis.score_normalized,
+                                analysis.risks.len(),
+                                analysis.pump_fun_token
+                            ),
+                        );
+                    }
+                    return analysis;
+                }
+                Ok(true) => {
+                    if is_debug_security_enabled() {
+                        log(
+                            LogTag::Security,
+                            "DB_STALE",
+                            &format!(
+                                "Database security data is stale for mint={}, refreshing",
+                                mint
+                            ),
                         );
                     }
                 }
@@ -251,9 +227,27 @@ impl SecurityAnalyzer {
                         log(
                             LogTag::Security,
                             "DB_ERROR",
-                            &format!("Database error for mint={}: {}", mint, e),
+                            &format!("Error checking staleness for mint={}: {}", mint, e),
                         );
                     }
+                }
+            },
+            Ok(None) => {
+                if is_debug_security_enabled() {
+                    log(
+                        LogTag::Security,
+                        "DB_MISS",
+                        &format!("No security data in database for mint={}", mint),
+                    );
+                }
+            }
+            Err(e) => {
+                if is_debug_security_enabled() {
+                    log(
+                        LogTag::Security,
+                        "DB_ERROR",
+                        &format!("Database error for mint={}: {}", mint, e),
+                    );
                 }
             }
         }
@@ -263,10 +257,7 @@ impl SecurityAnalyzer {
             Ok(info) => {
                 self.metrics.record_api_call(true).await;
                 // Store in database
-                if let Err(e) = self
-                    .get_db()
-                    .and_then(|db| db.store_security_info(&info).map_err(|e| e.to_string()))
-                {
+                if let Err(e) = self.with_db(|db| db.store_security_info(&info)) {
                     if is_debug_security_enabled() {
                         log(
                             LogTag::Security,
@@ -588,9 +579,7 @@ impl SecurityAnalyzer {
     }
 
     pub async fn get_security_stats(&self) -> Result<HashMap<String, i64>, String> {
-        self.get_db()?
-            .get_security_stats()
-            .map_err(|e| format!("Failed to get security stats: {}", e))
+        self.with_db(|db| db.get_security_stats())
     }
 
     pub async fn clear_cache(&self) {
@@ -611,10 +600,8 @@ impl SecurityAnalyzer {
         }
 
         // Fall back to DB read (non-blocking to callers)
-        if let Ok(db) = self.get_db() {
-            if let Ok(Some(info)) = db.get_security_info(mint) {
-                return Some(info.total_holders as u32);
-            }
+        if let Ok(Some(info)) = self.with_db(|db| db.get_security_info(mint)) {
+            return Some(info.total_holders as u32);
         }
         None
     }
@@ -635,34 +622,29 @@ impl SecurityAnalyzer {
         // Record a cache miss when not found in memory
 
         // 2) Database non-stale path
-        if let Ok(db) = self.get_db() {
-            match db.get_security_info(mint) {
-                Ok(Some(info)) => {
-                    match db.is_stale(mint, MAX_CACHE_AGE_HOURS) {
-                        Ok(false) => {
-                            // Count DB hit
-                            // Put into cache for next time
-                            {
-                                let mut cache = self.cache.write().await;
-                                cache.insert(mint.to_string(), info.clone());
-                            }
-                            let analysis = self.calculate_security_analysis(&info);
-                            return Some(analysis);
-                        }
-                        Ok(true) => {
-                            // Stale counts as a miss for hit-rate visibility
-                        }
-                        Err(_) => {
-                            // Error also treated as miss
-                        }
+        match self.with_db(|db| db.get_security_info(mint)) {
+            Ok(Some(info)) => match self.with_db(|db| db.is_stale(mint, MAX_CACHE_AGE_HOURS)) {
+                Ok(false) => {
+                    // Put into cache for next time
+                    {
+                        let mut cache = self.cache.write().await;
+                        cache.insert(mint.to_string(), info.clone());
                     }
+                    let analysis = self.calculate_security_analysis(&info);
+                    return Some(analysis);
                 }
-                Ok(None) => {
-                    // Not found counts as miss
+                Ok(true) => {
+                    // Stale counts as a miss for hit-rate visibility
                 }
                 Err(_) => {
-                    // Error counts as miss
+                    // Error also treated as miss
                 }
+            },
+            Ok(None) => {
+                // Not found counts as miss
+            }
+            Err(_) => {
+                // Error counts as miss
             }
         }
 
@@ -680,12 +662,9 @@ impl SecurityAnalyzer {
         }
 
         // If that fails, try ANY security data in DB, even if stale
-        if let Ok(db) = self.get_db() {
-            if let Ok(Some(info)) = db.get_security_info(mint) {
-                // Use any available security data, regardless of age
-                let analysis = self.calculate_security_analysis(&info);
-                return Some(analysis);
-            }
+        if let Ok(Some(info)) = self.with_db(|db| db.get_security_info(mint)) {
+            let analysis = self.calculate_security_analysis(&info);
+            return Some(analysis);
         }
 
         None
@@ -694,15 +673,22 @@ impl SecurityAnalyzer {
     pub async fn get_security_summary(&self) -> SecuritySummary {
         let last_api_call = *self.metrics.last_api_call.read().await;
 
-        let (safe, warning, danger, pump_fun, missing) = match self.get_db() {
-            Ok(db) => {
-                let safe = db.count_safe_tokens().unwrap_or(0) as u64;
-                let warning = db.count_warning_tokens().unwrap_or(0) as u64;
-                let danger = db.count_danger_tokens().unwrap_or(0) as u64;
-                let pump_fun = db.count_pump_fun_tokens().unwrap_or(0) as u64;
-                let missing = db.count_tokens_without_security().unwrap_or(0) as u64;
-                (safe, warning, danger, pump_fun, missing)
-            }
+        let (safe, warning, danger, pump_fun, missing) = match self.with_db(|db| {
+            Ok((
+                db.count_safe_tokens()?,
+                db.count_warning_tokens()?,
+                db.count_danger_tokens()?,
+                db.count_pump_fun_tokens()?,
+                db.count_tokens_without_security()?,
+            ))
+        }) {
+            Ok((safe, warning, danger, pump_fun, missing)) => (
+                safe as u64,
+                warning as u64,
+                danger as u64,
+                pump_fun as u64,
+                missing as u64,
+            ),
             Err(_) => (0, 0, 0, 0, 0),
         };
 
@@ -826,82 +812,75 @@ pub async fn start_security_monitoring(
                     // Only fetch if enough time has passed (rate limiting)
                     if last_fetch.elapsed() >= Duration::from_millis(500) {
                         // Get tokens that need security analysis
-                        match analyzer.get_db() {
-                            Ok(db) => {
-                                match db.get_tokens_without_security() {
-                                    Ok(tokens) => {
-                                        if !tokens.is_empty() {
-                                            if is_debug_security_enabled() {
-                                                log(
-                                                    LogTag::Security,
-                                                    "MONITOR_BATCH",
-                                                    &format!(
-                                                        "Found {} tokens without security info, processing batch",
-                                                        tokens.len()
-                                                    ),
-                                                );
+                        match analyzer.with_db(|db| db.get_tokens_without_security()) {
+                            Ok(tokens) => {
+                                if !tokens.is_empty() {
+                                    if is_debug_security_enabled() {
+                                        log(
+                                            LogTag::Security,
+                                            "MONITOR_BATCH",
+                                            &format!(
+                                                "Found {} tokens without security info, processing batch",
+                                                tokens.len()
+                                            ),
+                                        );
+                                    }
+
+                                    // Process tokens one by one to respect rate limits
+                                    for (i, mint) in tokens.iter().enumerate() {
+                                        tokio::select! {
+                                            _ = shutdown.notified() => {
+                                                log(LogTag::Security, "MONITOR_SHUTDOWN",
+                                                    &format!("Shutdown during batch processing at token {}/{}", i+1, tokens.len()));
+                                                return;
                                             }
+                                            _ = async {
+                                                // Fetch security info for this token (uses full analyze_token with API calls)
+                                                let analysis = analyzer.analyze_token(mint).await;
 
-                                            // Process tokens one by one to respect rate limits
-                                            for (i, mint) in tokens.iter().enumerate() {
-                                                tokio::select! {
-                                                    _ = shutdown.notified() => {
-                                                        log(LogTag::Security, "MONITOR_SHUTDOWN",
-                                                            &format!("Shutdown during batch processing at token {}/{}", i+1, tokens.len()));
-                                                        return;
-                                                    }
-                                                    _ = async {
-                                                        // Fetch security info for this token (uses full analyze_token with API calls)
-                                                        let analysis = analyzer.analyze_token(mint).await;
-
-                                                        if is_debug_security_enabled() {
-                                                            log(LogTag::Security, "MONITOR_TOKEN",
-                                                                &format!("Processed {} → risk_level: {:?}, score: {}",
-                                                                mint, analysis.risk_level, analysis.score));
-                                                        }
-
-                                                        // Rate limit: wait 500ms between requests
-                                                        tokio::time::sleep(Duration::from_millis(500)).await;
-                                                    } => {}
-                                                }
-                                            }
-
-                                            last_fetch = Instant::now();
-                                            if is_debug_security_enabled() {
-                                                log(
-                                                    LogTag::Security,
-                                                    "MONITOR_COMPLETE",
-                                                    &format!(
-                                                        "Completed processing batch of {} tokens",
-                                                        tokens.len()
-                                                    ),
-                                                );
-                                            }
-                                        } else {
-                                            // No tokens to process - less frequent logging
-                                            if last_fetch.elapsed() >= Duration::from_secs(300) {
                                                 if is_debug_security_enabled() {
-                                                    log(
-                                                        LogTag::Security,
-                                                        "MONITOR_IDLE",
-                                                        "All tokens have security info - monitoring idle",
-                                                    );
+                                                    log(LogTag::Security, "MONITOR_TOKEN",
+                                                        &format!("Processed {} → risk_level: {:?}, score: {}",
+                                                        mint, analysis.risk_level, analysis.score));
                                                 }
-                                                last_fetch = Instant::now();
-                                            }
+
+                                                // Rate limit: wait 500ms between requests
+                                                tokio::time::sleep(Duration::from_millis(500)).await;
+                                            } => {}
                                         }
                                     }
-                                    Err(e) => {
-                                        log(LogTag::Security, "MONITOR_ERROR",
-                                            &format!("Failed to get tokens without security: {}", e));
-                                        // Back off on error
-                                        tokio::time::sleep(Duration::from_secs(30)).await;
+
+                                    last_fetch = Instant::now();
+                                    if is_debug_security_enabled() {
+                                        log(
+                                            LogTag::Security,
+                                            "MONITOR_COMPLETE",
+                                            &format!(
+                                                "Completed processing batch of {} tokens",
+                                                tokens.len()
+                                            ),
+                                        );
+                                    }
+                                } else {
+                                    // No tokens to process - less frequent logging
+                                    if last_fetch.elapsed() >= Duration::from_secs(300) {
+                                        if is_debug_security_enabled() {
+                                            log(
+                                                LogTag::Security,
+                                                "MONITOR_IDLE",
+                                                "All tokens have security info - monitoring idle",
+                                            );
+                                        }
+                                        last_fetch = Instant::now();
                                     }
                                 }
                             }
                             Err(e) => {
-                                log(LogTag::Security, "MONITOR_ERROR",
-                                    &format!("Failed to open security database: {}", e));
+                                log(
+                                    LogTag::Security,
+                                    "MONITOR_ERROR",
+                                    &format!("Failed to get tokens without security info: {}", e),
+                                );
                                 // Back off on error
                                 tokio::time::sleep(Duration::from_secs(30)).await;
                             }

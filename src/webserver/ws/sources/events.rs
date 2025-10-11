@@ -37,6 +37,11 @@ async fn run(hub: Arc<WsHub>, mut rx: broadcast::Receiver<events::Event>) {
                     "WARN",
                     &format!("ws.sources.events lagged, skipped {} messages", skipped),
                 );
+                // CRITICAL FIX: Add backpressure delay to prevent CPU spin when events come faster
+                // than WebSocket can broadcast them. Without this delay, recv() returns Lagged
+                // error immediately, creating a tight CPU-consuming loop.
+                // 100ms gives the broadcast channel time to drain while keeping latency acceptable.
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
             Err(broadcast::error::RecvError::Closed) => {
                 log(
