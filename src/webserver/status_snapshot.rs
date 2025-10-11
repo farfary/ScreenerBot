@@ -2,29 +2,41 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 use sysinfo::System;
+use tokio::task::spawn_blocking;
 
 use crate::{
-    arguments::is_debug_webserver_enabled,
     config,
     global::{
         are_core_services_ready, get_pending_services, POOL_SERVICE_READY, POSITIONS_SYSTEM_READY,
         SECURITY_ANALYZER_READY, TOKENS_SYSTEM_READY, TRANSACTIONS_SYSTEM_READY,
     },
     logger::{log, LogTag},
+    rpc::get_global_rpc_stats,
     trader::is_trader_running,
     wallet::{get_current_wallet_status, get_snapshot_token_balances},
-    webserver::{
-        state::{get_app_state, AppState},
-        utils::format_duration,
-    },
+    webserver::{state::get_app_state, utils::format_duration},
 };
-
-use crate::rpc::get_global_rpc_stats;
 
 const MAX_WALLET_TOKENS: usize = 128;
 const MAX_PENDING_QUEUE_SAMPLE: usize = 10;
+
+#[derive(Clone, Copy, Debug, Default)]
+struct RpcMetricsSummary {
+    total_calls: u64,
+    total_errors: u64,
+    success_rate: f32,
+}
+
+impl From<&crate::rpc::RpcStats> for RpcMetricsSummary {
+    fn from(stats: &crate::rpc::RpcStats) -> Self {
+        Self {
+            total_calls: stats.total_calls(),
+            total_errors: stats.total_errors(),
+            success_rate: stats.success_rate(),
+        }
+    }
+}
 
 #[derive(Clone, Debug, Serialize)]
 pub struct StatusSnapshot {
@@ -68,7 +80,7 @@ pub struct ServiceStateSnapshot {
     pub error: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Default)]
 pub struct SystemMetricsSnapshot {
     pub memory_usage_mb: u64,
     pub cpu_usage_percent: f32,
@@ -309,19 +321,21 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
     let trader_mode = "Normal".to_string();
     let trader_running = is_trader_running();
 
-    let open_positions = crate::positions::db::get_open_positions()
-        .await
-        .map(|positions| positions.len())
-        .unwrap_or(0);
-
     let day_start_naive = Utc::now()
         .date_naive()
         .and_hms_opt(0, 0, 0)
         .unwrap_or_else(|| Utc::now().naive_utc());
     let day_start = DateTime::<Utc>::from_naive_utc_and_offset(day_start_naive, Utc);
 
-    let closed_positions_today = crate::positions::get_db_closed_positions_count_since(day_start)
-        .await
+    let (open_positions_result, closed_positions_result) = tokio::join!(
+        crate::positions::db::get_open_positions(),
+        crate::positions::get_db_closed_positions_count_since(day_start),
+    );
+
+    let open_positions = open_positions_result
+        .map(|positions| positions.len())
+        .unwrap_or(0);
+    let closed_positions_today = closed_positions_result
         .map(|count| std::cmp::max(count, 0) as usize)
         .unwrap_or(0);
 
@@ -333,9 +347,19 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
     let uptime_formatted = format_duration(uptime_seconds);
 
     let rpc_stats_raw = get_global_rpc_stats();
+    let rpc_metrics_summary = rpc_stats_raw.as_ref().map(RpcMetricsSummary::from);
 
     let services = collect_service_status_snapshot();
-    let metrics = collect_system_metrics_snapshot(rpc_stats_raw.as_ref()).await;
+
+    let (metrics, wallet, ohlcv_stats, pools, discovery, events, transactions) = tokio::join!(
+        collect_system_metrics_snapshot(rpc_metrics_summary),
+        collect_wallet_snapshot(),
+        collect_ohlcv_stats_snapshot(),
+        async { collect_pool_service_snapshot() },
+        collect_token_discovery_snapshot(),
+        collect_events_snapshot(),
+        collect_transactions_snapshot(),
+    );
 
     let rpc_stats = rpc_stats_raw.as_ref().map(|stats| RpcStatsSnapshot {
         total_calls: stats.total_calls(),
@@ -352,27 +376,8 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
             .num_seconds(),
     });
 
-    let wallet = collect_wallet_snapshot().await;
     let sol_balance = wallet.as_ref().map(|w| w.sol_balance).unwrap_or(0.0);
     let usdc_balance = wallet.as_ref().map(|w| w.usdc_balance).unwrap_or(0.0);
-
-    let ohlcv_stats = crate::ohlcvs::get_monitor_stats()
-        .await
-        .map(|stats| OhlcvStatsSnapshot {
-            total_tokens: stats.total_tokens,
-            critical_tokens: stats.critical_tokens,
-            high_tokens: stats.high_tokens,
-            medium_tokens: stats.medium_tokens,
-            low_tokens: stats.low_tokens,
-            cache_hit_rate: (stats.cache_hit_rate * 100.0).clamp(0.0, 100.0),
-            api_calls_per_minute: stats.api_calls_per_minute,
-            queue_size: stats.queue_size,
-        });
-
-    let pools = collect_pool_service_snapshot();
-    let discovery = collect_token_discovery_snapshot().await;
-    let events = collect_events_snapshot().await;
-    let transactions = collect_transactions_snapshot().await;
 
     StatusSnapshot {
         timestamp: Utc::now(),
@@ -437,50 +442,54 @@ impl ServiceStateSnapshot {
 }
 
 async fn collect_system_metrics_snapshot(
-    rpc_stats: Option<&crate::rpc::RpcStats>,
+    rpc_metrics: Option<RpcMetricsSummary>,
 ) -> SystemMetricsSnapshot {
-    let mut sys = System::new_all();
-    sys.refresh_all();
+    spawn_blocking(move || {
+        let mut sys = System::new_all();
+        sys.refresh_all();
 
-    let cpu_system_percent = sys.global_cpu_info().cpu_usage();
-    let system_memory_total_mb = (sys.total_memory() / 1024 / 1024) as u64;
-    let system_memory_used_mb = (sys.used_memory() / 1024 / 1024) as u64;
+        let cpu_system_percent = sys.global_cpu_info().cpu_usage();
+        let system_memory_total_mb = (sys.total_memory() / 1024 / 1024) as u64;
+        let system_memory_used_mb = (sys.used_memory() / 1024 / 1024) as u64;
 
-    let (process_memory_mb, cpu_process_percent) = match sysinfo::get_current_pid() {
-        Ok(pid) => match sys.process(pid) {
-            Some(process) => ((process.memory() / 1024 / 1024) as u64, process.cpu_usage()),
-            None => (0, 0.0),
-        },
-        Err(_) => (0, 0.0),
-    };
+        let (process_memory_mb, cpu_process_percent) = match sysinfo::get_current_pid() {
+            Ok(pid) => match sys.process(pid) {
+                Some(process) => ((process.memory() / 1024 / 1024) as u64, process.cpu_usage()),
+                None => (0, 0.0),
+            },
+            Err(_) => (0, 0.0),
+        };
 
-    let thread_count = std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(1);
+        let thread_count = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
 
-    let (rpc_calls_total, rpc_calls_failed, rpc_success_rate) = if let Some(stats) = rpc_stats {
-        (
-            stats.total_calls(),
-            stats.total_errors(),
-            stats.success_rate(),
-        )
-    } else {
-        (0, 0, 100.0)
-    };
+        let (rpc_calls_total, rpc_calls_failed, rpc_success_rate) = rpc_metrics
+            .map(|summary| {
+                (
+                    summary.total_calls,
+                    summary.total_errors,
+                    summary.success_rate,
+                )
+            })
+            .unwrap_or((0, 0, 100.0));
 
-    SystemMetricsSnapshot {
-        memory_usage_mb: system_memory_used_mb,
-        cpu_usage_percent: cpu_system_percent,
-        system_memory_used_mb,
-        system_memory_total_mb,
-        process_memory_mb,
-        cpu_system_percent,
-        cpu_process_percent,
-        active_threads: thread_count,
-        rpc_calls_total,
-        rpc_calls_failed,
-        rpc_success_rate,
-    }
+        SystemMetricsSnapshot {
+            memory_usage_mb: system_memory_used_mb,
+            cpu_usage_percent: cpu_system_percent,
+            system_memory_used_mb,
+            system_memory_total_mb,
+            process_memory_mb,
+            cpu_system_percent,
+            cpu_process_percent,
+            active_threads: thread_count,
+            rpc_calls_total,
+            rpc_calls_failed,
+            rpc_success_rate,
+        }
+    })
+    .await
+    .unwrap_or_default()
 }
 
 async fn collect_wallet_snapshot() -> Option<WalletStatusSnapshot> {
@@ -532,6 +541,21 @@ async fn collect_wallet_snapshot() -> Option<WalletStatusSnapshot> {
             None
         }
     }
+}
+
+async fn collect_ohlcv_stats_snapshot() -> Option<OhlcvStatsSnapshot> {
+    crate::ohlcvs::get_monitor_stats()
+        .await
+        .map(|stats| OhlcvStatsSnapshot {
+            total_tokens: stats.total_tokens,
+            critical_tokens: stats.critical_tokens,
+            high_tokens: stats.high_tokens,
+            medium_tokens: stats.medium_tokens,
+            low_tokens: stats.low_tokens,
+            cache_hit_rate: (stats.cache_hit_rate * 100.0).clamp(0.0, 100.0),
+            api_calls_per_minute: stats.api_calls_per_minute,
+            queue_size: stats.queue_size,
+        })
 }
 
 fn collect_pool_service_snapshot() -> Option<PoolServiceStatusSnapshot> {
@@ -681,26 +705,22 @@ async fn collect_token_discovery_snapshot() -> Option<TokenDiscoveryStatusSnapsh
 
 async fn collect_events_snapshot() -> Option<EventsStatusSnapshot> {
     // Check if events system is initialized
-    let running = crate::events::EVENTS_DB.get().is_some();
-
-    if !running {
-        return None;
-    }
+    let db = match crate::events::EVENTS_DB.get() {
+        Some(db) => db,
+        None => return None,
+    };
 
     // Get database stats
-    let db_stats = match crate::events::EVENTS_DB.get() {
-        Some(db) => match db.get_stats().await {
-            Ok(stats) => stats,
-            Err(e) => {
-                log(
-                    LogTag::Webserver,
-                    "WARN",
-                    &format!("Failed to load events database stats: {}", e),
-                );
-                HashMap::new()
-            }
-        },
-        None => HashMap::new(),
+    let db_stats = match db.get_stats().await {
+        Ok(stats) => stats,
+        Err(e) => {
+            log(
+                LogTag::Webserver,
+                "WARN",
+                &format!("Failed to load events database stats: {}", e),
+            );
+            HashMap::new()
+        }
     };
 
     let total_events = db_stats.get("total_events").copied().unwrap_or(0);
@@ -747,7 +767,7 @@ async fn collect_events_snapshot() -> Option<EventsStatusSnapshot> {
         .collect();
 
     Some(EventsStatusSnapshot {
-        running,
+        running: true,
         total_events,
         events_24h,
         db_size_bytes,
