@@ -13,7 +13,6 @@ const TOKEN_MODAL_STYLES: &str = include_str!("templates/styles/token-modal.css"
 const COMMON_STYLES: &str = include_str!("templates/styles/common.css");
 const UTIL_SCRIPTS: &str = include_str!("templates/scripts/utils.js");
 const COMMON_SCRIPTS: &str = include_str!("templates/scripts/common.js");
-const REALTIME_SCRIPTS: &str = include_str!("templates/scripts/realtime.js");
 const THEME_SCRIPTS: &str = include_str!("templates/scripts/theme.js");
 const CHART_SCRIPTS: &str = include_str!("templates/scripts/chart.js");
 
@@ -52,7 +51,6 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         html = html.replace("/*__UTIL_SCRIPTS__*/", UTIL_SCRIPTS);
     }
     html = html.replace("/*__COMMON_SCRIPTS__*/", COMMON_SCRIPTS);
-    html = html.replace("/*__REALTIME_SCRIPTS__*/", REALTIME_SCRIPTS);
     html = html.replace("/*__THEME_SCRIPTS__*/", THEME_SCRIPTS);
     html = html.replace("/*__CHART_SCRIPTS__*/", CHART_SCRIPTS);
     html

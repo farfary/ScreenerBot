@@ -453,110 +453,11 @@
             });
           }
         },
-
-        handleRealtimeConnected() {
-          console.info("[Home] Realtime connected – requesting snapshot");
-          this.requestStatusSnapshot("ws-connected");
-        },
-
-        handleRealtimeDisconnect() {
-          console.warn("[Home] Realtime disconnected");
-          if (!state.status) {
-            this.setRealtimePending("Waiting for realtime...");
-          }
-        },
-
-        handleRealtimeWarning(message) {
-          console.warn("[Home] Realtime warning", {
-            alias: message?.alias || message?.channel,
-            code: message?.code,
-            text: message?.message,
-          });
-        },
-
-        handleRealtimeUnavailable() {
-          console.warn("[Home] Realtime unavailable");
-          if (!state.status) {
-            this.setRealtimePending("Waiting for realtime...");
-          }
-        },
-
-        requestStatusSnapshot(reason = "manual") {
-          if (
-            window.Realtime &&
-            typeof window.Realtime.requestSnapshotForAliases === "function"
-          ) {
-            window.Realtime.requestSnapshotForAliases(["status"]);
-            console.log("[Home] Requested status snapshot", { reason });
-          } else if (
-            window.Realtime &&
-            typeof window.Realtime.updateFilters === "function"
-          ) {
-            window.Realtime.updateFilters({ snapshotTopics: ["status"] });
-            console.log("[Home] Requested status snapshot via filter update", {
-              reason,
-            });
-          }
-        },
-
-        onEnter() {
-          if (!state.status) {
-            this.setRealtimePending();
-          }
-          this.requestStatusSnapshot("page-enter");
-        },
-
-        setRealtimePending(message = "--") {
-          for (const id of realtimeMetricIds) {
-            setPendingMetric(id, message);
-          }
-        },
       };
 
       window.initHomePage = function () {
         console.log("[Home] Initializing page");
         controller.initialize();
-      };
-
-      window.PageRealtime = window.PageRealtime || {};
-      window.PageRealtime.home = {
-        topics: ["status"],
-        getFilters() {
-          return { status: {} };
-        },
-        channels: {
-          status(snapshot) {
-            controller.handleStatusSnapshot(snapshot);
-          },
-          _connected() {
-            controller.handleRealtimeConnected();
-          },
-          _disconnected() {
-            controller.handleRealtimeDisconnect();
-          },
-          _failed() {
-            controller.handleRealtimeDisconnect();
-          },
-          _warning(payload) {
-            controller.handleRealtimeWarning(payload);
-          },
-        },
-        onInitial(status) {
-          if (status !== "connected") {
-            if (!state.status) {
-              controller.setRealtimePending("Waiting for realtime...");
-            }
-          }
-        },
-        onEnter() {
-          controller.onEnter();
-        },
-        onUnavailable() {
-          controller.handleRealtimeUnavailable();
-        },
-        onExit() {
-          controller.teardown();
-        },
       };
 
       initHomePage();

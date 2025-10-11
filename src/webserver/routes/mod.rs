@@ -118,7 +118,21 @@ async fn get_page_content(axum::extract::Path(page): axum::extract::Path<String>
         "services" => templates::services_content(),
         "config" => templates::config_content(),
         "transactions" => templates::transactions_content(),
-        _ => format!("<h1>Page Not Found: {}</h1>", page),
+        _ => {
+            // Escape page name to prevent XSS
+            let escaped_page = page
+                .replace('<', "&lt;")
+                .replace('>', "&gt;")
+                .replace('"', "&quot;")
+                .replace('\'', "&#x27;");
+            format!(
+                "<div style=\"padding:2rem;text-align:center;\">
+                    <h1 style=\"color:#ef4444;\">Page Not Found</h1>
+                    <p style=\"color:#9ca3af;margin-top:1rem;\">Page '{}' does not exist.</p>
+                </div>",
+                escaped_page
+            )
+        }
     };
 
     Html(content)

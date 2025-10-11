@@ -105,7 +105,7 @@ window.Router = {
     // Update current page
     this.currentPage = pageName;
 
-    // Run cleanup handlers for previous page (page-specific only, not global WebSocket)
+    // Run cleanup handlers for previous page
     this.runCleanupHandlers();
 
     // Update active tab styling
@@ -133,7 +133,7 @@ window.Router = {
 
       this.displayPageElement(mainContent, pageEl);
 
-      // Initialize page-specific scripts (ensures realtime activation)
+      // Initialize page-specific scripts
       this.initPageScripts(pageName);
 
       // Clean up sub-tabs and toolbar for pages that don't use them
@@ -301,10 +301,6 @@ window.Router = {
           break;
       }
 
-      // Still activate WebSocket subscriptions for this page
-      if (window.Realtime && typeof Realtime.activate === "function") {
-        Realtime.activate(pageName);
-      }
       return;
     }
 
@@ -342,10 +338,6 @@ window.Router = {
 
     // Mark as initialized
     this.initializedPages[pageName] = true;
-
-    if (window.Realtime && typeof Realtime.activate === "function") {
-      Realtime.activate(pageName);
-    }
   },
 };
 
