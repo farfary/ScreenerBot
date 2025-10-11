@@ -244,9 +244,13 @@ Loading...</pre
   var maxEventId = 0;
   var connectionStatus = "connecting"; // 'connecting', 'connected', 'disconnected', 'error'
   var eventsStore = window.eventsStore || new Map();
+  window.eventsStore = eventsStore;
   var EVENTS_BROWSER_LIMIT = 5000; // hard ceiling for historical records kept client-side
   var EVENT_MAX_RECORDS = EVENTS_BROWSER_LIMIT; // keep store aligned with browser ceiling
   var EVENTS_SCROLL_PAGE_SIZE = 200;
+  var EVENTS_HEAD_LIMIT = 500; // initial snapshot size
+  var EVENTS_SINCE_LIMIT = 250; // incremental refresh size
+  var EVENTS_MIN_POLL_INTERVAL_MS = 2000;
   var searchDebounceHandle = null;
   var eventsPauseState = {
     paused: false,
@@ -268,6 +272,23 @@ Loading...</pre
     rafId: null,
     forceFull: false,
     lastSearchTerm: "",
+  };
+  var eventsSnapshotState = {
+    inProgress: false,
+    totalAvailable: 0,
+    received: 0,
+    lastUpdatedAt: null,
+  };
+  var eventsFetchState = {
+    headAbortController: null,
+    sinceAbortController: null,
+    headInFlight: false,
+    sinceInFlight: false,
+    pollIntervalId: null,
+  };
+  var eventsLifecycleState = {
+    cleanupRegistered: false,
+    intervalListener: null,
   };
 
   function resetEventsRenderState() {
@@ -364,6 +385,18 @@ Loading...</pre
       statusMessage
     );
 
+    if (targetPaused) {
+      if (eventsFetchState.sinceAbortController) {
+        eventsFetchState.sinceAbortController.abort();
+        eventsFetchState.sinceAbortController = null;
+      }
+      eventsFetchState.sinceInFlight = false;
+      stopEventsPolling();
+    } else {
+      startEventsPolling();
+      fetchEventsSince({ reason: "resume" });
+    }
+
     return true;
   }
 
@@ -406,8 +439,10 @@ Loading...</pre
     resetEventsRenderState();
     eventsStore.clear();
     allEventsData = [];
-    snapshotState.totalAvailable = 0;
-    snapshotState.received = 0;
+    maxEventId = 0;
+    eventsSnapshotState.totalAvailable = 0;
+    eventsSnapshotState.received = 0;
+    eventsSnapshotState.lastUpdatedAt = null;
     updateEventsScrollControls(false);
     eventsScrollState.filteredEnd = false;
     scheduleEventsRender({ forceFull: true, immediate: true });
@@ -510,6 +545,317 @@ Loading...</pre
     eventsScrollState.filteredEnd = false;
     scheduleEventsRender();
     return true;
+  }
+
+  function buildEventsQueryParams(limit) {
+    const params = new URLSearchParams();
+    if (Number.isFinite(limit) && limit > 0) {
+      params.set("limit", String(limit));
+    }
+    const category = document.getElementById("categoryFilter")?.value;
+    const severity = document.getElementById("severityFilter")?.value;
+    if (category) params.set("category", category);
+    if (severity) params.set("severity", severity);
+    return params;
+  }
+
+  function stopEventsPolling() {
+    if (eventsFetchState.pollIntervalId) {
+      clearInterval(eventsFetchState.pollIntervalId);
+      eventsFetchState.pollIntervalId = null;
+      console.log("[Events] Stopped polling");
+    }
+  }
+
+  function startEventsPolling() {
+    stopEventsPolling();
+    if (isEventsPaused()) {
+      return;
+    }
+    if (!Number.isFinite(maxEventId) || maxEventId <= 0) {
+      return;
+    }
+    const baseInterval = window.PollingManager
+      ? Math.max(
+          window.PollingManager.getInterval(),
+          EVENTS_MIN_POLL_INTERVAL_MS
+        )
+      : 5000;
+    const intervalId = setInterval(() => {
+      fetchEventsSince({ reason: "poll" });
+    }, baseInterval);
+    eventsFetchState.pollIntervalId = intervalId;
+    if (window.Router && typeof Router.trackInterval === "function") {
+      Router.trackInterval(intervalId);
+    }
+    console.log("[Events] Started polling every", baseInterval, "ms");
+  }
+
+  function ensureEventsLifecycle() {
+    if (
+      window.Router &&
+      typeof Router.registerCleanup === "function" &&
+      !eventsLifecycleState.cleanupRegistered
+    ) {
+      Router.registerCleanup(() => {
+        teardownEventsPage();
+      });
+      eventsLifecycleState.cleanupRegistered = true;
+    }
+
+    if (
+      window.PollingManager &&
+      !eventsLifecycleState.intervalListener &&
+      typeof window.PollingManager.onChange === "function"
+    ) {
+      eventsLifecycleState.intervalListener = window.PollingManager.onChange(
+        () => {
+          if (!isEventsPaused()) {
+            startEventsPolling();
+          }
+        }
+      );
+    }
+  }
+
+  function teardownEventsPage() {
+    stopEventsPolling();
+    if (eventsFetchState.headAbortController) {
+      eventsFetchState.headAbortController.abort();
+      eventsFetchState.headAbortController = null;
+    }
+    if (eventsFetchState.sinceAbortController) {
+      eventsFetchState.sinceAbortController.abort();
+      eventsFetchState.sinceAbortController = null;
+    }
+    eventsFetchState.headInFlight = false;
+    eventsFetchState.sinceInFlight = false;
+    if (
+      eventsLifecycleState.intervalListener &&
+      window.PollingManager &&
+      typeof window.PollingManager.removeListener === "function"
+    ) {
+      window.PollingManager.removeListener(
+        eventsLifecycleState.intervalListener
+      );
+      eventsLifecycleState.intervalListener = null;
+    }
+    eventsLifecycleState.cleanupRegistered = false;
+  }
+
+  async function fetchEventsHead(options) {
+    const opts = Object.assign(
+      { message: null, limit: EVENTS_HEAD_LIMIT },
+      options || {}
+    );
+    if (eventsFetchState.headInFlight && eventsFetchState.headAbortController) {
+      eventsFetchState.headAbortController.abort();
+    }
+
+    const limit = Math.min(
+      Number(opts.limit) || EVENTS_HEAD_LIMIT,
+      EVENTS_BROWSER_LIMIT
+    );
+    const params = buildEventsQueryParams(limit);
+    params.set("limit", String(limit));
+
+    eventsFetchState.headAbortController = new AbortController();
+    eventsFetchState.headInFlight = true;
+    const statusMessage = opts.message || "Loading latest events...";
+    updateConnectionStatus("connecting", statusMessage);
+
+    let success = false;
+
+    try {
+      const res = await fetch(`/api/events/head?${params.toString()}`, {
+        signal: eventsFetchState.headAbortController.signal,
+        headers: { "X-Requested-With": "fetch" },
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to load events snapshot (${res.status})`);
+      }
+
+      const payload = await res.json();
+      const rows = Array.isArray(payload?.events) ? payload.events : [];
+
+      if (!rows.length) {
+        eventsSnapshotState.totalAvailable = Number(payload?.count) || 0;
+        eventsSnapshotState.received = 0;
+        eventsSnapshotState.lastUpdatedAt = Date.now();
+        updateConnectionStatus(
+          isEventsPaused() ? "paused" : "connected",
+          rows.length
+            ? `Realtime • ${formatEventCountLabel(rows.length)}`
+            : "No events found yet"
+        );
+        scheduleEventsRender({ forceFull: true, immediate: true });
+        success = true;
+      } else {
+        mergeEvents(rows);
+
+        const responseMaxId = Number(payload?.max_id);
+        if (Number.isFinite(responseMaxId) && responseMaxId > 0) {
+          maxEventId = responseMaxId;
+        } else {
+          const highestFromRows = rows.reduce((acc, row) => {
+            const id = Number(row?.id);
+            return Number.isFinite(id) && id > acc ? id : acc;
+          }, 0);
+          if (highestFromRows > 0) {
+            maxEventId = highestFromRows;
+          }
+        }
+
+        eventsSnapshotState.totalAvailable = Math.max(
+          Number(payload?.count) || rows.length,
+          allEventsData.length
+        );
+        eventsSnapshotState.received = allEventsData.length;
+        eventsSnapshotState.lastUpdatedAt = Date.now();
+
+        const activeStatus = isEventsPaused() ? "paused" : "connected";
+        updateConnectionStatus(
+          activeStatus,
+          activeStatus === "paused"
+            ? `Paused • ${formatEventCountLabel(allEventsData.length)}`
+            : `Realtime • ${formatEventCountLabel(allEventsData.length)}`
+        );
+
+        scheduleEventsRender({ forceFull: true, immediate: true });
+        success = true;
+      }
+    } catch (err) {
+      if (err.name === "AbortError") {
+        console.log("[Events] Snapshot fetch aborted");
+      } else {
+        console.error("[Events] Failed to fetch events snapshot", err);
+        updateConnectionStatus("error", "Failed to load events snapshot");
+        if (window.Utils && typeof Utils.showToast === "function") {
+          Utils.showToast("❌ Failed to load events snapshot", "error");
+        }
+      }
+    } finally {
+      eventsSnapshotState.inProgress = false;
+      eventsFetchState.headInFlight = false;
+      eventsFetchState.headAbortController = null;
+    }
+
+    return success;
+  }
+
+  async function fetchEventsSince(options) {
+    const opts = Object.assign({ reason: "poll" }, options || {});
+    if (eventsFetchState.sinceInFlight) {
+      return;
+    }
+    if (!Number.isFinite(maxEventId) || maxEventId <= 0) {
+      return;
+    }
+    if (isEventsPaused()) {
+      return;
+    }
+
+    const params = buildEventsQueryParams(EVENTS_SINCE_LIMIT);
+    params.set("after_id", String(maxEventId));
+
+    eventsFetchState.sinceAbortController = new AbortController();
+    eventsFetchState.sinceInFlight = true;
+
+    try {
+      const res = await fetch(`/api/events/since?${params.toString()}`, {
+        signal: eventsFetchState.sinceAbortController.signal,
+        headers: { "X-Requested-With": "fetch" },
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to load incremental events (${res.status})`);
+      }
+
+      const payload = await res.json();
+      const rows = Array.isArray(payload?.events) ? payload.events : [];
+      if (!rows.length) {
+        return;
+      }
+
+      const merged = mergeEvents(rows);
+      if (!merged) {
+        return;
+      }
+
+      const responseMaxId = Number(payload?.max_id);
+      if (Number.isFinite(responseMaxId) && responseMaxId > maxEventId) {
+        maxEventId = responseMaxId;
+      } else {
+        const highestFromRows = rows.reduce((acc, row) => {
+          const id = Number(row?.id);
+          return Number.isFinite(id) && id > acc ? id : acc;
+        }, maxEventId);
+        if (highestFromRows > maxEventId) {
+          maxEventId = highestFromRows;
+        }
+      }
+
+      eventsSnapshotState.totalAvailable = Math.max(
+        Number(payload?.count) || rows.length,
+        eventsSnapshotState.totalAvailable || 0,
+        allEventsData.length
+      );
+      eventsSnapshotState.received = allEventsData.length;
+      eventsSnapshotState.lastUpdatedAt = Date.now();
+
+      updateConnectionStatus(
+        "connected",
+        `Realtime • ${formatEventCountLabel(allEventsData.length)}`
+      );
+      scheduleEventsRender({ forceFull: true });
+    } catch (err) {
+      if (err.name === "AbortError") {
+        console.log("[Events] Incremental fetch aborted");
+        return;
+      }
+      console.error("[Events] Failed to load incremental events", err);
+      updateConnectionStatus("error", "Failed to refresh events");
+      if (window.Utils && typeof Utils.showToast === "function") {
+        Utils.showToast("⚠️ Failed to refresh events", "warning");
+      }
+    } finally {
+      eventsFetchState.sinceInFlight = false;
+      eventsFetchState.sinceAbortController = null;
+    }
+  }
+
+  async function requestEventsSnapshot(message) {
+    if (eventsFetchState.headInFlight && eventsFetchState.headAbortController) {
+      eventsFetchState.headAbortController.abort();
+    }
+
+    if (eventsFetchState.sinceAbortController) {
+      eventsFetchState.sinceAbortController.abort();
+      eventsFetchState.sinceAbortController = null;
+      eventsFetchState.sinceInFlight = false;
+    }
+
+    stopEventsPolling();
+
+    eventsSnapshotState.inProgress = true;
+    clearEventsCache();
+    updateConnectionStatus("connecting", message || "Loading latest events...");
+
+    const success = await fetchEventsHead({ message });
+
+    if (!success) {
+      eventsSnapshotState.inProgress = false;
+      return;
+    }
+
+    eventsSnapshotState.inProgress = false;
+
+    if (isEventsPaused()) {
+      stopEventsPolling();
+      return;
+    }
+
+    await fetchEventsSince({ reason: "snapshot" });
+    startEventsPolling();
   }
 
   // Render events in table
@@ -800,11 +1146,13 @@ Loading...</pre
       const fetchedCount = Array.isArray(payload?.events)
         ? payload.events.length
         : Number(payload?.count) || 0;
-      snapshotState.totalAvailable = Math.max(
-        snapshotState.totalAvailable || 0,
+      eventsSnapshotState.totalAvailable = Math.max(
+        eventsSnapshotState.totalAvailable || 0,
         fetchedCount,
         allEventsData.length
       );
+      eventsSnapshotState.received = allEventsData.length;
+      eventsSnapshotState.lastUpdatedAt = Date.now();
 
       scheduleEventsRender({ forceFull: true });
     } catch (err) {
@@ -966,8 +1314,8 @@ Loading...</pre
       eventsRenderState.dirtyIds.clear();
       eventsRenderState.lastSearchTerm = searchTerm;
 
-      const message = snapshotState.inProgress
-        ? "📦 Receiving snapshot..."
+      const message = eventsSnapshotState.inProgress
+        ? "📦 Fetching events..."
         : connectionStatus === "error"
         ? "⚠️ Error loading events. Please check server status."
         : connectionStatus === "connecting"
@@ -1255,6 +1603,8 @@ Loading...</pre
     console.log("[Events] Initializing page");
     restoreSavedFilters();
     initializePauseState();
+    ensureEventsLifecycle();
+    requestEventsSnapshot("Loading latest events...");
   };
 
   // Execute initialization immediately (works for both initial load and SPA navigation)
