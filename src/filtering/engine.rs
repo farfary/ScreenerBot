@@ -217,7 +217,7 @@ async fn check_security_requirements(
         None => return Some(FilterRejectionReason::SecurityNoData),
     };
 
-    analyze_with_security_analyzer(analyzer, mint, config).await
+    analyze_with_security_analyzer(&analyzer, mint, config).await
 }
 
 async fn analyze_with_security_analyzer(

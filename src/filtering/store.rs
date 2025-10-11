@@ -8,6 +8,7 @@ use once_cell::sync::Lazy;
 use tokio::sync::RwLock;
 
 use crate::config::with_config;
+use crate::logger::{log, LogTag};
 use crate::tokens::summary::TokenSummary;
 
 use super::engine::compute_snapshot;
@@ -21,7 +22,7 @@ static GLOBAL_STORE: Lazy<Arc<FilteringStore>> = Lazy::new(|| Arc::new(Filtering
 const STALE_MULTIPLIER: u64 = 3;
 
 pub struct FilteringStore {
-    snapshot: RwLock<Option<FilteringSnapshot>>,
+    snapshot: RwLock<Option<Arc<FilteringSnapshot>>>,
 }
 
 impl FilteringStore {
@@ -31,32 +32,47 @@ impl FilteringStore {
         }
     }
 
-    async fn ensure_snapshot(&self) -> Result<FilteringSnapshot, String> {
+    async fn ensure_snapshot(&self) -> Result<Arc<FilteringSnapshot>, String> {
         let max_age = with_config(|cfg| cfg.filtering.filter_cache_ttl_secs.max(5));
+        let stale_snapshot = self.snapshot.read().await.clone();
 
-        if let Some(existing) = self.snapshot.read().await.clone() {
-            let age_secs = Utc::now()
-                .signed_duration_since(existing.updated_at)
-                .num_seconds()
-                .max(0) as u64;
-            if age_secs <= max_age * STALE_MULTIPLIER {
-                return Ok(existing);
+        if let Some(existing) = stale_snapshot.as_ref() {
+            if !is_snapshot_stale(existing, max_age) {
+                return Ok(existing.clone());
             }
         }
 
-        self.refresh().await?;
-        self.snapshot
-            .read()
-            .await
-            .clone()
-            .ok_or_else(|| "Filtering snapshot unavailable".to_string())
+        match self.try_refresh().await {
+            Ok(snapshot) => Ok(snapshot),
+            Err(err) => {
+                if let Some(existing) = stale_snapshot {
+                    let age_secs = snapshot_age_secs(existing.as_ref());
+                    log(
+                        LogTag::Filtering,
+                        "SNAPSHOT_FALLBACK",
+                        &format!(
+                            "refresh_failed={} using_stale_snapshot age_secs={}",
+                            err, age_secs
+                        ),
+                    );
+                    Ok(existing)
+                } else {
+                    Err(err)
+                }
+            }
+        }
+    }
+
+    async fn try_refresh(&self) -> Result<Arc<FilteringSnapshot>, String> {
+        let config = with_config(|cfg| cfg.filtering.clone());
+        let snapshot = Arc::new(compute_snapshot(config).await?);
+        let mut guard = self.snapshot.write().await;
+        *guard = Some(snapshot.clone());
+        Ok(snapshot)
     }
 
     pub async fn refresh(&self) -> Result<(), String> {
-        let config = with_config(|cfg| cfg.filtering.clone());
-        let snapshot = compute_snapshot(config).await?;
-        *self.snapshot.write().await = Some(snapshot);
-        Ok(())
+        self.try_refresh().await.map(|_| ())
     }
 
     pub async fn get_filtered_mints(&self) -> Result<Vec<String>, String> {
@@ -98,7 +114,12 @@ impl FilteringStore {
             None
         };
 
-        let entries = collect_entries(&snapshot, query.view, secure_threshold, recent_cutoff);
+        let entries = collect_entries(
+            snapshot.as_ref(),
+            query.view,
+            secure_threshold,
+            recent_cutoff,
+        );
         let mut summaries: Vec<_> = entries
             .into_iter()
             .map(|entry| entry.summary.clone())
@@ -114,8 +135,16 @@ impl FilteringStore {
             (total + query.page_size - 1) / query.page_size
         };
 
-        let start_idx = (query.page - 1) * query.page_size;
-        let end_idx = (start_idx + query.page_size).min(total);
+        let normalized_page = if total_pages == 0 {
+            1
+        } else {
+            query.page.min(total_pages)
+        };
+
+        let start_idx = normalized_page
+            .saturating_sub(1)
+            .saturating_mul(query.page_size);
+        let end_idx = start_idx.saturating_add(query.page_size).min(total);
         let items = if start_idx < total {
             summaries[start_idx..end_idx].to_vec()
         } else {
@@ -124,7 +153,7 @@ impl FilteringStore {
 
         Ok(FilteringQueryResult {
             items,
-            page: query.page,
+            page: normalized_page,
             page_size: query.page_size,
             total,
             total_pages,
@@ -137,7 +166,7 @@ impl FilteringStore {
             with_config(|cfg| cfg.webserver.tokens_tab.secure_token_score_threshold);
 
         let snapshot = self.ensure_snapshot().await?;
-        Ok(build_stats(&snapshot, secure_threshold))
+        Ok(build_stats(snapshot.as_ref(), secure_threshold))
     }
 
     pub async fn snapshot_age(&self) -> Option<Duration> {
@@ -394,4 +423,15 @@ fn build_stats(snapshot: &FilteringSnapshot, secure_threshold: i32) -> Filtering
         with_ohlcv,
         updated_at: snapshot.updated_at,
     }
+}
+
+fn snapshot_age_secs(snapshot: &FilteringSnapshot) -> u64 {
+    Utc::now()
+        .signed_duration_since(snapshot.updated_at)
+        .num_seconds()
+        .max(0) as u64
+}
+
+fn is_snapshot_stale(snapshot: &FilteringSnapshot, max_age_secs: u64) -> bool {
+    snapshot_age_secs(snapshot) > max_age_secs.saturating_mul(STALE_MULTIPLIER)
 }
