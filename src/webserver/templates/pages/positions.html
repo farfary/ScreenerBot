@@ -35,6 +35,139 @@
     background: #f59e0b20;
     color: #f59e0b;
   }
+
+  .position-row {
+    cursor: pointer;
+    transition: background-color 0.25s ease;
+  }
+
+  .position-row:hover {
+    background-color: rgba(59, 130, 246, 0.08);
+  }
+
+  .position-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.72);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    z-index: 900;
+  }
+
+  .position-modal-overlay.active {
+    display: flex;
+  }
+
+  .position-modal {
+    width: min(960px, 95vw);
+    max-height: 90vh;
+    background: var(--bg-primary);
+    border-radius: 16px;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .position-modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .position-modal-header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .position-modal-header h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .position-modal-body {
+    padding: 20px 24px 28px;
+    overflow-y: auto;
+    display: grid;
+    gap: 18px;
+  }
+
+  .position-section {
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    padding: 16px 18px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+  }
+
+  .position-section h3 {
+    margin: 0 0 12px 0;
+    font-size: 1rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .position-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px 18px;
+  }
+
+  .position-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .position-metric-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+  }
+
+  .position-metric-value {
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .position-modal-close {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.75rem;
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .position-modal-header .status-badge {
+    font-size: 0.75rem;
+  }
+
+  @media (max-width: 720px) {
+    .position-modal-body {
+      padding: 18px;
+      gap: 14px;
+    }
+
+    .position-modal-header {
+      padding: 18px;
+    }
+
+    .position-modal {
+      width: 100%;
+      max-height: 92vh;
+    }
+  }
 </style>
 <div class="page-table">
   <div class="toolbar">
@@ -110,10 +243,586 @@
   </div>
 </div>
 
+<div
+  class="position-modal-overlay"
+  id="positionModal"
+  onclick="closePositionModal(event)"
+>
+  <div
+    class="position-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="positionModalTitle"
+    onclick="event.stopPropagation()"
+  >
+    <div class="position-modal-header">
+      <h2 id="positionModalTitle">
+        <span id="positionModalSymbol">—</span>
+        <span
+          id="positionModalName"
+          style="font-size: 0.85rem; color: var(--text-secondary)"
+        >
+          —
+        </span>
+      </h2>
+      <div class="position-modal-header-right">
+        <span class="status-badge" id="positionModalStatus">OPEN</span>
+        <button
+          class="position-modal-close"
+          type="button"
+          aria-label="Close"
+          onclick="closePositionModal()"
+        >
+          ×
+        </button>
+      </div>
+    </div>
+    <div class="position-modal-body">
+      <div class="position-section">
+        <h3>Overview</h3>
+        <div class="position-grid">
+          <div class="position-metric">
+            <span class="position-metric-label">Mint</span>
+            <span class="position-metric-value" id="positionMint">—</span>
+          </div>
+          <div class="position-metric">
+            <span class="position-metric-label">Position Id</span>
+            <span class="position-metric-value" id="positionId">—</span>
+          </div>
+          <div class="position-metric">
+            <span class="position-metric-label">Current State</span>
+            <span class="position-metric-value" id="positionState">—</span>
+          </div>
+          <div class="position-metric">
+            <span class="position-metric-label">Strategy</span>
+            <span class="position-metric-value" id="positionStrategy">—</span>
+          </div>
+        </div>
+      </div>
+      <div class="position-section">
+        <h3>Entry</h3>
+        <div class="position-grid">
+          <div class="position-metric">
+            <span class="position-metric-label">Entry Price (SOL)</span>
+            <span class="position-metric-value" id="positionEntryPrice">—</span>
+          </div>
+          <div class="position-metric">
+            <span class="position-metric-label">Entry Size (SOL)</span>
+            <span class="position-metric-value" id="positionEntrySize">—</span>
+          </div>
+          <div class="position-metric">
+            <span class="position-metric-label">Entry Timestamp</span>
+            <span class="position-metric-value" id="positionEntryTime">—</span>
+          </div>
+          <div class="position-metric">
+            <span class="position-metric-label">Entry Signature</span>
+            <span class="position-metric-value" id="positionEntrySig">—</span>
+          </div>
+        </div>
+      </div>
+      <div class="position-section" id="positionCurrentSection">
+        <h3>Current</h3>
+        <div class="position-grid">
+          <div class="position-metric">
+            <span class="position-metric-label">Current Price (SOL)</span>
+            <span class="position-metric-value" id="positionCurrentPrice"
+              >—</span
+            >
+          </div>
+          <div class="position-metric">
+            <span class="position-metric-label">Updated</span>
+            <span class="position-metric-value" id="positionCurrentUpdated"
+              >—</span
+            >
+          </div>
+          <div class="position-metric">
+            <span class="position-metric-label">Unrealized P&L</span>
+            <span class="position-metric-value" id="positionUnrealizedPnl"
+              >—</span
+            >
+          </div>
+          <div class="position-metric">
+            <span class="position-metric-label">Unrealized P&L %</span>
+            <span class="position-metric-value" id="positionUnrealizedPercent"
+              >—</span
+            >
+          </div>
+        </div>
+      </div>
+      <div class="position-section" id="positionExitSection">
+        <h3>Exit</h3>
+        <div class="position-grid">
+          <div class="position-metric">
+            <span class="position-metric-label">Exit Price (SOL)</span>
+            <span class="position-metric-value" id="positionExitPrice">—</span>
+          </div>
+          <div class="position-metric">
+            <span class="position-metric-label">SOL Received</span>
+            <span class="position-metric-value" id="positionSolReceived"
+              >—</span
+            >
+          </div>
+          <div class="position-metric">
+            <span class="position-metric-label">Realized P&L</span>
+            <span class="position-metric-value" id="positionRealizedPnl"
+              >—</span
+            >
+          </div>
+          <div class="position-metric">
+            <span class="position-metric-label">Realized P&L %</span>
+            <span class="position-metric-value" id="positionRealizedPercent"
+              >—</span
+            >
+          </div>
+          <div class="position-metric">
+            <span class="position-metric-label">Exit Timestamp</span>
+            <span class="position-metric-value" id="positionExitTime">—</span>
+          </div>
+          <div class="position-metric">
+            <span class="position-metric-label">Exit Signature</span>
+            <span class="position-metric-value" id="positionExitSig">—</span>
+          </div>
+        </div>
+      </div>
+      <div class="position-section">
+        <h3>Links</h3>
+        <div class="position-grid" style="gap: 10px 12px">
+          <button
+            class="btn btn-secondary"
+            type="button"
+            onclick="copyPositionMint()"
+          >
+            📋 Copy Mint
+          </button>
+          <button
+            class="btn btn-secondary"
+            type="button"
+            onclick="openPositionGMGN()"
+          >
+            🔗 Open GMGN
+          </button>
+          <button
+            class="btn btn-secondary"
+            type="button"
+            onclick="openPositionDexScreener()"
+          >
+            📊 Open DexScreener
+          </button>
+          <button
+            class="btn btn-secondary"
+            type="button"
+            onclick="openPositionSolscan()"
+          >
+            🔍 Open Solscan
+          </button>
+          <button
+            class="btn btn-secondary"
+            type="button"
+            onclick="copyPositionDebug()"
+          >
+            🐛 Copy Debug Info
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
   var positionsStore =
     window.positionsStore instanceof Map ? window.positionsStore : new Map();
   window.positionsStore = positionsStore;
+
+  var positionModalState = window.positionModalState || {
+    currentKey: null,
+    keydownHandler: null,
+  };
+  window.positionModalState = positionModalState;
+
+  function getPositionFromStore(key) {
+    if (!key) {
+      return null;
+    }
+    try {
+      return positionsStore.get(key) || null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function setPositionModalText(id, value) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = value;
+  }
+
+  function formatPositionTimestamp(value) {
+    if (typeof Utils !== "undefined" && Utils?.formatTimeFromSeconds) {
+      return Utils.formatTimeFromSeconds(value, { fallback: "—" });
+    }
+    if (!Number.isFinite(value)) return "—";
+    const date = new Date(value * 1000);
+    if (Number.isNaN(date.getTime())) {
+      return "—";
+    }
+    return date.toLocaleString();
+  }
+
+  function formatPositionPrice(value) {
+    if (typeof Utils !== "undefined" && Utils?.formatPriceSol) {
+      return Utils.formatPriceSol(value, { fallback: "—" });
+    }
+    const num = Number(value);
+    if (!Number.isFinite(num)) return "—";
+    return num.toFixed(12);
+  }
+
+  function formatPositionSol(value) {
+    if (typeof Utils !== "undefined" && Utils?.formatSol) {
+      return Utils.formatSol(value, { decimals: 4, fallback: "—" });
+    }
+    const num = Number(value);
+    if (!Number.isFinite(num)) return "—";
+    return `${num.toFixed(4)} SOL`;
+  }
+
+  function formatPositionPnL(value) {
+    if (typeof Utils !== "undefined" && Utils?.formatPnL) {
+      return Utils.formatPnL(value, { decimals: 4, fallback: "—" });
+    }
+    const num = Number(value);
+    if (!Number.isFinite(num)) return "—";
+    return `${num >= 0 ? "+" : ""}${num.toFixed(4)} SOL`;
+  }
+
+  function formatPositionPercent(value) {
+    if (typeof Utils !== "undefined" && Utils?.formatPercent) {
+      return Utils.formatPercent(value, {
+        style: "pnl",
+        decimals: 2,
+        fallback: "—",
+      });
+    }
+    const num = Number(value);
+    if (!Number.isFinite(num)) return "—";
+    return `${num.toFixed(2)}%`;
+  }
+
+  function getPositionStatusInfo(position) {
+    if (!position) {
+      return {
+        label: "Unknown",
+        className: "status-closed",
+        state: "Unknown",
+      };
+    }
+    if (position.synthetic_exit) {
+      return {
+        label: "Synthetic",
+        className: "status-synthetic",
+        state: "Synthetic Exit",
+      };
+    }
+    if (position.transaction_exit_verified) {
+      return {
+        label: "Closed",
+        className: "status-closed",
+        state: "Closed",
+      };
+    }
+    return {
+      label: "Open",
+      className: "status-open",
+      state: "Open",
+    };
+  }
+
+  function applyStatusBadge(element, info) {
+    if (!element || !info) return;
+    element.classList.remove(
+      "status-open",
+      "status-closed",
+      "status-synthetic"
+    );
+    element.classList.add(info.className);
+    element.textContent = info.label.toUpperCase();
+  }
+
+  function populatePositionModal(position) {
+    if (!position) {
+      resetPositionModal();
+      return;
+    }
+
+    setPositionModalText("positionModalSymbol", position.symbol || "—");
+    setPositionModalText("positionModalName", position.name || "—");
+    setPositionModalText("positionMint", position.mint || "—");
+    setPositionModalText(
+      "positionId",
+      position.id !== undefined && position.id !== null
+        ? String(position.id)
+        : "—"
+    );
+    const statusInfo = getPositionStatusInfo(position);
+    const statusEl = document.getElementById("positionModalStatus");
+    applyStatusBadge(statusEl, statusInfo);
+    setPositionModalText("positionState", statusInfo.state);
+    setPositionModalText(
+      "positionStrategy",
+      position.strategy || position.strategy_id || "—"
+    );
+
+    setPositionModalText(
+      "positionEntryPrice",
+      formatPositionPrice(
+        position.effective_entry_price || position.entry_price
+      )
+    );
+    setPositionModalText(
+      "positionEntrySize",
+      formatPositionSol(position.entry_size_sol)
+    );
+    setPositionModalText(
+      "positionEntryTime",
+      formatPositionTimestamp(position.entry_time)
+    );
+    setPositionModalText(
+      "positionEntrySig",
+      position.entry_signature ? truncateAddress(position.entry_signature) : "—"
+    );
+
+    setPositionModalText(
+      "positionCurrentPrice",
+      formatPositionPrice(position.current_price)
+    );
+    setPositionModalText(
+      "positionCurrentUpdated",
+      formatPositionTimestamp(position.current_price_updated)
+    );
+    setPositionModalText(
+      "positionUnrealizedPnl",
+      formatPositionPnL(position.unrealized_pnl)
+    );
+    setPositionModalText(
+      "positionUnrealizedPercent",
+      formatPositionPercent(position.unrealized_pnl_percent)
+    );
+
+    setPositionModalText(
+      "positionExitPrice",
+      formatPositionPrice(position.effective_exit_price || position.exit_price)
+    );
+    setPositionModalText(
+      "positionSolReceived",
+      formatPositionSol(position.sol_received)
+    );
+    setPositionModalText(
+      "positionRealizedPnl",
+      formatPositionPnL(position.pnl)
+    );
+    setPositionModalText(
+      "positionRealizedPercent",
+      formatPositionPercent(position.pnl_percent)
+    );
+    setPositionModalText(
+      "positionExitTime",
+      formatPositionTimestamp(position.exit_time)
+    );
+    setPositionModalText(
+      "positionExitSig",
+      position.exit_signature ? truncateAddress(position.exit_signature) : "—"
+    );
+
+    const currentSection = document.getElementById("positionCurrentSection");
+    const exitSection = document.getElementById("positionExitSection");
+    if (currentSection) {
+      currentSection.style.display = position.transaction_exit_verified
+        ? "none"
+        : "block";
+    }
+    if (exitSection) {
+      exitSection.style.display = position.transaction_exit_verified
+        ? "block"
+        : "none";
+    }
+  }
+
+  function resetPositionModal() {
+    [
+      "positionModalSymbol",
+      "positionModalName",
+      "positionMint",
+      "positionId",
+      "positionState",
+      "positionStrategy",
+      "positionEntryPrice",
+      "positionEntrySize",
+      "positionEntryTime",
+      "positionEntrySig",
+      "positionCurrentPrice",
+      "positionCurrentUpdated",
+      "positionUnrealizedPnl",
+      "positionUnrealizedPercent",
+      "positionExitPrice",
+      "positionSolReceived",
+      "positionRealizedPnl",
+      "positionRealizedPercent",
+      "positionExitTime",
+      "positionExitSig",
+    ].forEach((id) => setPositionModalText(id, "—"));
+
+    const statusEl = document.getElementById("positionModalStatus");
+    if (statusEl) {
+      applyStatusBadge(statusEl, {
+        label: "Open",
+        className: "status-open",
+        state: "Open",
+      });
+    }
+    const currentSection = document.getElementById("positionCurrentSection");
+    const exitSection = document.getElementById("positionExitSection");
+    if (currentSection) currentSection.style.display = "block";
+    if (exitSection) exitSection.style.display = "block";
+  }
+
+  function handlePositionModalKeyDown(event) {
+    if (event.key === "Escape") {
+      closePositionModal();
+    }
+  }
+
+  function ensurePositionModalKeyListener() {
+    if (positionModalState.keydownHandler) {
+      return;
+    }
+    positionModalState.keydownHandler = handlePositionModalKeyDown;
+    document.addEventListener("keydown", positionModalState.keydownHandler);
+  }
+
+  function removePositionModalKeyListener() {
+    if (!positionModalState.keydownHandler) {
+      return;
+    }
+    document.removeEventListener("keydown", positionModalState.keydownHandler);
+    positionModalState.keydownHandler = null;
+  }
+
+  function openPositionDetail(key) {
+    const position = getPositionFromStore(key);
+    if (!position) {
+      return;
+    }
+    positionModalState.currentKey = key;
+    populatePositionModal(position);
+    const overlay = document.getElementById("positionModal");
+    if (overlay) {
+      overlay.classList.add("active");
+    }
+    ensurePositionModalKeyListener();
+  }
+
+  function getCurrentPosition() {
+    return getPositionFromStore(positionModalState.currentKey);
+  }
+
+  function closePositionModal(event) {
+    if (event && event.target && event.currentTarget) {
+      if (event.target !== event.currentTarget && event.type === "click") {
+        return;
+      }
+    }
+    const overlay = document.getElementById("positionModal");
+    if (overlay) {
+      overlay.classList.remove("active");
+    }
+    positionModalState.currentKey = null;
+    removePositionModalKeyListener();
+    resetPositionModal();
+  }
+
+  function refreshOpenPositionModal() {
+    if (!positionModalState.currentKey) {
+      return;
+    }
+    const position = getCurrentPosition();
+    if (!position) {
+      closePositionModal();
+      return;
+    }
+    populatePositionModal(position);
+  }
+
+  function copyPositionMint() {
+    const position = getCurrentPosition();
+    if (!position || !position.mint || !Utils?.copyMint) return;
+    Utils.copyMint(position.mint);
+  }
+
+  function openPositionGMGN() {
+    const position = getCurrentPosition();
+    if (!position || !position.mint || !Utils?.openGMGN) return;
+    Utils.openGMGN(position.mint);
+  }
+
+  function openPositionDexScreener() {
+    const position = getCurrentPosition();
+    if (!position || !position.mint || !Utils?.openDexScreener) return;
+    Utils.openDexScreener(position.mint);
+  }
+
+  function openPositionSolscan() {
+    const position = getCurrentPosition();
+    if (!position || !position.mint || !Utils?.openSolscan) return;
+    Utils.openSolscan(position.mint);
+  }
+
+  function copyPositionDebug() {
+    const position = getCurrentPosition();
+    if (!position || !position.mint || !Utils?.copyDebugInfo) return;
+    Utils.copyDebugInfo(position.mint, "position");
+  }
+
+  function handlePositionDropdown(event) {
+    if (event?.stopPropagation) {
+      event.stopPropagation();
+    }
+    if (Utils?.toggleDropdown) {
+      Utils.toggleDropdown(event);
+    }
+  }
+
+  function bindPositionRowClicks() {
+    const rows = document.querySelectorAll(
+      "#positionsTableBody tr[data-position-key]"
+    );
+    rows.forEach((row) => {
+      if (row.dataset.clickBound === "1") {
+        return;
+      }
+      row.addEventListener("click", (event) => {
+        if (
+          event?.target?.closest &&
+          event.target.closest(".dropdown-container")
+        ) {
+          return;
+        }
+        const key = row.getAttribute("data-position-key");
+        if (key) {
+          openPositionDetail(key);
+        }
+      });
+      row.dataset.clickBound = "1";
+    });
+  }
+
+  window.openPositionDetail = openPositionDetail;
+  window.closePositionModal = closePositionModal;
+  window.copyPositionMint = copyPositionMint;
+  window.openPositionGMGN = openPositionGMGN;
+  window.openPositionDexScreener = openPositionDexScreener;
+  window.openPositionSolscan = openPositionSolscan;
+  window.copyPositionDebug = copyPositionDebug;
+  window.handlePositionDropdown = handlePositionDropdown;
 
   // Truncate address
   function truncateAddress(address) {
@@ -332,7 +1041,9 @@
     const pnlPercent = isOpen ? pos.unrealized_pnl_percent : pos.pnl_percent;
 
     return `
-                <tr data-position-key="${getPositionKey(pos) || ""}">
+                <tr class="position-row" data-position-key="${
+                  getPositionKey(pos) || ""
+                }">
                     <td>${statusBadge}</td>
                     <td><strong>${pos.symbol}</strong></td>
                     <td style="font-size: 0.85em;">${pos.name}</td>
@@ -361,7 +1072,7 @@
                     )}</td>
                     <td>
                         <div class="dropdown-container">
-                            <button class="dropdown-btn" onclick="Utils.toggleDropdown(event)" aria-label="Actions">
+              <button class="dropdown-btn" onclick="handlePositionDropdown(event)" aria-label="Actions">
                                 ⋮
                             </button>
                             <div class="dropdown-menu">
@@ -430,6 +1141,7 @@
 
     if (!hasSnapshot && positionsStore.size === 0) {
       renderEmptyState("Loading positions...");
+      refreshOpenPositionModal();
       return;
     }
 
@@ -440,6 +1152,7 @@
     ) {
       renderEmptyState(controller.lastErrorMessage, "#ef4444");
       updatePositionCount(0);
+      refreshOpenPositionModal();
       return;
     }
 
@@ -458,10 +1171,13 @@
     if (rows.length === 0) {
       renderEmptyState("No positions found");
       updatePositionCount(0);
+      refreshOpenPositionModal();
       return;
     }
 
     tbody.innerHTML = rows.map(renderPositionRow).join("");
+    bindPositionRowClicks();
+    refreshOpenPositionModal();
     updatePositionCount(rows.length);
   }
 
@@ -527,6 +1243,7 @@
           this.isActive = false;
           this.stopPolling();
           this.abortInFlight();
+          closePositionModal();
 
           // Remove interval change listener
           if (this.intervalChangeListener && window.PollingManager) {
@@ -587,6 +1304,7 @@
           this.abortInFlight();
           this.hasInitialSnapshot = false;
           this.lastErrorMessage = null;
+          closePositionModal();
           positionsStore.clear();
           renderEmptyState("Loading positions...");
           updatePositionCount(0);
@@ -605,6 +1323,7 @@
           this.abortInFlight();
           this.hasInitialSnapshot = false;
           this.lastErrorMessage = null;
+          closePositionModal();
           positionsStore.clear();
           renderEmptyState("Refreshing positions...");
           updatePositionCount(0);
