@@ -326,6 +326,7 @@ pub struct PositionsDatabaseStats {
 
 /// High-performance, thread-safe database manager for positions
 /// Replaces JSON file-based storage with SQLite database
+#[derive(Clone)]
 pub struct PositionsDatabase {
     pool: Pool<SqliteConnectionManager>,
     database_path: String,

@@ -1,5 +1,7 @@
 use axum::{
     extract::{Path, Query},
+    http::StatusCode,
+    response::Response,
     routing::get,
     Json, Router,
 };
@@ -17,6 +19,7 @@ use crate::transactions::{
 };
 use crate::utils::lamports_to_sol;
 use crate::webserver::state::AppState;
+use crate::webserver::utils::{error_response, success_response};
 
 #[derive(Debug, Deserialize)]
 pub struct PositionsQuery {
@@ -282,7 +285,7 @@ fn map_position_to_response(p: &positions::Position) -> PositionResponse {
     }
 }
 
-async fn get_position_details(Path(key): Path<String>) -> Json<PositionDetailResponse> {
+async fn get_position_details(Path(key): Path<String>) -> Response {
     match resolve_position_by_key(&key).await {
         Ok(Some(position)) => {
             let detail = map_position_to_detail(&position);
@@ -290,7 +293,7 @@ async fn get_position_details(Path(key): Path<String>) -> Json<PositionDetailRes
             let transactions = build_transaction_summaries(&position).await;
             let state_history = load_state_history_entries(&position).await;
 
-            Json(PositionDetailResponse {
+            success_response(PositionDetailResponse {
                 position: Some(detail),
                 executions,
                 transactions,
@@ -298,13 +301,12 @@ async fn get_position_details(Path(key): Path<String>) -> Json<PositionDetailRes
                 fetched_at: Utc::now().to_rfc3339(),
             })
         }
-        Ok(None) => Json(PositionDetailResponse {
-            position: None,
-            executions: Vec::new(),
-            transactions: Vec::new(),
-            state_history: Vec::new(),
-            fetched_at: Utc::now().to_rfc3339(),
-        }),
+        Ok(None) => error_response(
+            StatusCode::NOT_FOUND,
+            "POSITION_NOT_FOUND",
+            "Position not found",
+            Some(&format!("No position found for key {}", key)),
+        ),
         Err(err) => {
             log(
                 LogTag::Webserver,
@@ -312,13 +314,12 @@ async fn get_position_details(Path(key): Path<String>) -> Json<PositionDetailRes
                 &format!("Failed to resolve position for key {}: {}", key, err),
             );
 
-            Json(PositionDetailResponse {
-                position: None,
-                executions: Vec::new(),
-                transactions: Vec::new(),
-                state_history: Vec::new(),
-                fetched_at: Utc::now().to_rfc3339(),
-            })
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "POSITION_DETAIL_ERROR",
+                "Failed to load position details",
+                Some(&err),
+            )
         }
     }
 }
@@ -468,8 +469,12 @@ async fn load_state_history_entries(
         }
     };
 
-    let db_guard = db_arc.lock().await;
-    let Some(db) = db_guard.as_ref() else {
+    let db_clone = {
+        let db_guard = db_arc.lock().await;
+        db_guard.clone()
+    };
+
+    let Some(db) = db_clone else {
         log(
             LogTag::Webserver,
             "POSITIONS_DETAIL_STATE_HISTORY_ERROR",
