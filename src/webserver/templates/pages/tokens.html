@@ -108,6 +108,9 @@
     ensureTokensPageReady({ updateStatus: false });
     setupSortableHeaders();
     attachGlobalListeners();
+    if (window.Router && typeof Router.registerCleanup === "function") {
+      Router.registerCleanup(() => cleanupTokensPage());
+    }
     reloadTokensList("Loading tokens...");
   };
 
@@ -632,11 +635,15 @@
   }
 
   function handleVisibilityChange() {
-    if (document.visibilityState === "visible") {
-      reloadTokensList("Refreshing after returning...", {
-        preserveItems: true,
-      });
+    if (document.visibilityState !== "visible") {
+      return;
     }
+    if (window.Router && Router.currentPage !== "tokens") {
+      return;
+    }
+    reloadTokensList("Refreshing after returning...", {
+      preserveItems: true,
+    });
   }
 
   function initTokensSubTabs() {
@@ -788,6 +795,7 @@
   function ensureTokensPageReady(options = {}) {
     ensureTokensSubTabsVisible();
     ensureTokensToolbarVisible(options);
+    attachGlobalListeners();
   }
 
   window.ensureTokensPageReady = ensureTokensPageReady;
@@ -1463,6 +1471,37 @@
       tokensFetchState.message = "";
       tokensTableState.loading = false;
       tokensTableState.pendingReload = false;
+    }
+  }
+
+  function cleanupTokensPage() {
+    teardownTokensScrollObserver();
+
+    if (tokensFetchState.abortController) {
+      try {
+        tokensFetchState.abortController.abort();
+      } catch (_) {
+        /* no-op */
+      }
+      tokensFetchState.abortController = null;
+    }
+
+    tokensFetchState.inProgress = false;
+    tokensFetchState.message = "";
+    tokensTableState.loading = false;
+    tokensTableState.pendingReload = false;
+
+    if (searchDebounceHandle) {
+      clearTimeout(searchDebounceHandle);
+      searchDebounceHandle = null;
+    }
+
+    if (window.__tokensVisibilityHandler) {
+      document.removeEventListener(
+        "visibilitychange",
+        window.__tokensVisibilityHandler
+      );
+      window.__tokensVisibilityHandler = null;
     }
   }
 
@@ -2194,151 +2233,6 @@
 </div>
 
 <script>
-  // ====================================================================
-  // Real-time price updates
-  // ====================================================================
-
-  function handlePriceUpdate(message) {
-    if (!message || typeof message !== "object") return;
-    const { mint, price_result: priceResult, timestamp } = message;
-    if (!mint || !priceResult || typeof priceResult !== "object") return;
-
-    const tokenInList = allTokensData.find((t) => t.mint === mint);
-    const updatedPriceSol = Number(priceResult.price_sol);
-    const updatedPriceUsd = Number(priceResult.price_usd);
-    const updatedTimestamp = (() => {
-      if (Number.isFinite(priceResult.timestamp))
-        return Number(priceResult.timestamp);
-      if (typeof timestamp === "string") {
-        const parsed = Date.parse(timestamp);
-        if (Number.isFinite(parsed)) return Math.floor(parsed / 1000);
-      }
-      return null;
-    })();
-
-    if (tokenInList) {
-      if (Number.isFinite(updatedPriceSol)) {
-        tokenInList.price_sol = updatedPriceSol;
-      }
-      if (Number.isFinite(updatedPriceUsd)) {
-        tokenInList.price_usd = updatedPriceUsd;
-      }
-      if (updatedTimestamp !== null) {
-        tokenInList.price_updated_at = updatedTimestamp;
-      }
-
-      const row = document.querySelector(`tr[data-mint="${mint}"]`);
-      if (row) {
-        const priceCell = row.cells?.[1];
-        const liquidityCell = row.cells?.[2];
-        const timeCell = row.cells?.[10];
-
-        if (priceCell && Number.isFinite(updatedPriceSol)) {
-          priceCell.innerHTML = Utils.formatPriceSol(updatedPriceSol, {
-            fallback: "N/A",
-          });
-          priceCell.style.animation = "highlight 0.6s ease-out";
-          setTimeout(() => {
-            priceCell.style.animation = "";
-          }, 600);
-        }
-
-        if (liquidityCell && Number.isFinite(tokenInList.liquidity_usd)) {
-          liquidityCell.innerHTML = Utils.formatCurrencyUSD(
-            tokenInList.liquidity_usd,
-            { fallback: "—" }
-          );
-        }
-
-        if (timeCell && updatedTimestamp !== null) {
-          timeCell.textContent = Utils.formatTimeAgo(updatedTimestamp, {
-            fallback: "-",
-          });
-        }
-      }
-    }
-
-    if (currentModalMint === mint) {
-      const modalPriceEl = document.getElementById("modalTokenPrice");
-      const sidebarPriceEl = document.getElementById("sidebar-price");
-      const liquidityEl = document.getElementById("detail-liquidity");
-      const sidebarLiqEl = document.getElementById("sidebar-liq");
-      const confidenceEl = document.getElementById("detail-confidence");
-      const solReservesEl = document.getElementById("detail-sol-reserves");
-      const tokenReservesEl = document.getElementById("detail-token-reserves");
-      const poolAddressEl = document.getElementById("detail-pool");
-
-      if (
-        tokenModalData &&
-        tokenModalData.token &&
-        Number.isFinite(updatedPriceSol)
-      ) {
-        tokenModalData.token.price_sol = updatedPriceSol;
-      }
-      if (tokenModalData && tokenModalData.detail) {
-        if (Number.isFinite(updatedPriceSol)) {
-          tokenModalData.detail.price_sol = updatedPriceSol;
-        }
-        if (Number.isFinite(priceResult.confidence)) {
-          tokenModalData.detail.price_confidence = priceResult.confidence;
-        }
-        if (Number.isFinite(priceResult.sol_reserves)) {
-          tokenModalData.detail.pool_reserves_sol = priceResult.sol_reserves;
-        }
-        if (Number.isFinite(priceResult.token_reserves)) {
-          tokenModalData.detail.pool_reserves_token =
-            priceResult.token_reserves;
-        }
-        if (priceResult.pool_address) {
-          tokenModalData.detail.pool_address = priceResult.pool_address;
-        }
-        if (updatedTimestamp !== null) {
-          tokenModalData.detail.price_updated_at = updatedTimestamp;
-        }
-      }
-
-      if (modalPriceEl && Number.isFinite(updatedPriceSol)) {
-        modalPriceEl.textContent = Utils.formatPriceSol(updatedPriceSol, {
-          fallback: "N/A",
-        });
-      }
-      if (sidebarPriceEl && Number.isFinite(updatedPriceSol)) {
-        sidebarPriceEl.textContent = Utils.formatPriceSol(updatedPriceSol, {
-          fallback: "N/A",
-        });
-      }
-
-      if (confidenceEl && Number.isFinite(priceResult.confidence)) {
-        confidenceEl.textContent = priceResult.confidence.toFixed(2);
-      }
-      if (solReservesEl && Number.isFinite(priceResult.sol_reserves)) {
-        solReservesEl.textContent = Utils.formatCompactNumber(
-          priceResult.sol_reserves,
-          2,
-          "—"
-        );
-      }
-      if (tokenReservesEl && Number.isFinite(priceResult.token_reserves)) {
-        tokenReservesEl.textContent = Utils.formatCompactNumber(
-          priceResult.token_reserves,
-          2,
-          "—"
-        );
-      }
-      if (poolAddressEl && priceResult.pool_address) {
-        poolAddressEl.textContent = priceResult.pool_address;
-      }
-
-      if (Number.isFinite(tokenInList?.liquidity_usd)) {
-        const formatted = Utils.formatCurrencyUSD(tokenInList.liquidity_usd, {
-          fallback: "—",
-        });
-        if (liquidityEl) liquidityEl.textContent = formatted;
-        if (sidebarLiqEl) sidebarLiqEl.textContent = formatted;
-      }
-    }
-  }
-
   // ============================================================================
   // CHART INTEGRATION
   // ============================================================================
