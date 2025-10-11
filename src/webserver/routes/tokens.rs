@@ -204,9 +204,6 @@ pub fn routes() -> Router<Arc<AppState>> {
 
 /// GET /api/tokens/list
 ///
-/// NOTE: Deprecated for SPA use. External tooling only.
-/// SPA dashboards should use WebSocket snapshots (tokens.update topic).
-///
 /// Query: view, search, sort_by, sort_dir, page, page_size
 pub(crate) async fn get_tokens_list(
     Query(query): Query<TokenListQuery>,

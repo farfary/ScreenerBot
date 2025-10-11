@@ -255,84 +255,64 @@
       hasInitialSnapshot: false,
       toolbarBound: false,
       sortBound: false,
-      snapshotState: {
-        inProgress: false,
-        started: false,
-        requestId: null,
-        context: null,
-        totalAvailable: 0,
-        timeoutHandle: null,
-        lastTimerReason: null,
-      },
-      SNAPSHOT_TIMEOUT_MS: 10000,
+
+      pollTimer: null,
+      POLL_INTERVAL_MS: 5000,
 
       initialize() {
         console.log("[Services] Initializing controller");
         this.servicesData = null;
         this.hasInitialSnapshot = false;
-        this.setLoading("Waiting for data...");
+        this.setLoading("Loading services...");
         this.bindToolbarEventsOnce();
         this.bindSortHandlersOnce();
+        this.fetchServices();
+        this.startPolling();
       },
 
       reset() {
+        console.log("[Services] Resetting controller");
+        this.stopPolling();
         this.servicesData = null;
         this.hasInitialSnapshot = false;
-        this.snapshotState.inProgress = false;
-        this.snapshotState.started = false;
-        this.snapshotState.requestId = null;
-        this.snapshotState.context = null;
-        this.snapshotState.totalAvailable = 0;
-        this.clearSnapshotTimer();
       },
 
-      clearSnapshotTimer() {
-        if (this.snapshotState.timeoutHandle) {
-          clearTimeout(this.snapshotState.timeoutHandle);
-          this.snapshotState.timeoutHandle = null;
-        }
-        this.snapshotState.lastTimerReason = null;
+      startPolling() {
+        this.stopPolling();
+        this.pollTimer = setInterval(() => {
+          this.fetchServices();
+        }, this.POLL_INTERVAL_MS);
+        console.log(
+          "[Services] Started polling every",
+          this.POLL_INTERVAL_MS,
+          "ms"
+        );
       },
 
-      scheduleSnapshotTimer(reason) {
-        this.clearSnapshotTimer();
-
-        if (
-          !Number.isFinite(this.SNAPSHOT_TIMEOUT_MS) ||
-          this.SNAPSHOT_TIMEOUT_MS <= 0
-        ) {
-          return;
+      stopPolling() {
+        if (this.pollTimer) {
+          clearInterval(this.pollTimer);
+          this.pollTimer = null;
+          console.log("[Services] Stopped polling");
         }
+      },
 
-        this.snapshotState.lastTimerReason = reason || null;
-        this.snapshotState.timeoutHandle = setTimeout(() => {
-          this.snapshotState.timeoutHandle = null;
-          if (!this.snapshotState.inProgress) {
-            return;
+      async fetchServices() {
+        try {
+          const response = await fetch("/api/services/overview");
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
           }
-
-          console.warn(
-            `[Services] Snapshot timeout (${
-              this.snapshotState.lastTimerReason || "unknown"
-            })`
-          );
-
-          if (this.servicesData) {
-            this.handleSnapshotCompletion({
-              topic: "services.metrics",
-              context: Object.assign(
-                {
-                  request_id: this.snapshotState.requestId,
-                  total_services: this.snapshotState.totalAvailable,
-                },
-                this.snapshotState.context || {}
-              ),
-            });
-          } else {
-            this.setLoading("Snapshot timed out — retrying...");
-            this.requestSnapshot("timeout-retry");
+          const data = await response.json();
+          this.servicesData = data;
+          this.hasInitialSnapshot = true;
+          this.renderServicesTable();
+        } catch (error) {
+          console.error("[Services] Failed to fetch services:", error);
+          if (!this.hasInitialSnapshot) {
+            this.showError(`Failed to load services: ${error.message}`);
           }
-        }, this.SNAPSHOT_TIMEOUT_MS);
+        }
       },
 
       setLoading(message = "Loading services...") {
@@ -681,317 +661,22 @@
         if (health?.status === "unhealthy") return "error";
         return "secondary";
       },
-
-      handleServicesSnapshot(snapshot) {
-        if (!snapshot || !Array.isArray(snapshot.services)) {
-          console.warn("[Services] Invalid snapshot received", {
-            hasServices: Array.isArray(snapshot?.services),
-            keys: snapshot ? Object.keys(snapshot) : [],
-          });
-          this.showError("No services available");
-          return;
-        }
-
-        this.hasInitialSnapshot = true;
-        this.servicesData = snapshot;
-        this.snapshotState.totalAvailable = snapshot.services.length;
-        console.log("[Services] Snapshot applied", {
-          serviceCount: snapshot.services.length,
-          unhealthy: snapshot?.summary?.unhealthy_services,
-        });
-        this.renderServicesTable();
-        this.handleSnapshotCompletion({
-          topic: "services.metrics",
-          context:
-            (snapshot?.summary
-              ? Object.assign(
-                  {
-                    request_id: this.snapshotState.requestId,
-                    total_services: snapshot.services.length,
-                    unhealthy_services: snapshot?.summary?.unhealthy_services,
-                    degraded_services: snapshot?.summary?.degraded_services,
-                  },
-                  this.snapshotState.context || {}
-                )
-              : this.snapshotState.context || null) || null,
-        });
-      },
-
-      handleSnapshotBegin(payload) {
-        const context = (payload && payload.context) || {};
-        const requestId =
-          context.request_id ||
-          context.requestId ||
-          payload?.request_id ||
-          payload?.requestId ||
-          null;
-
-        const realtime = window.Realtime;
-        const latestRequestId =
-          realtime && realtime.lastSnapshotRequestIds
-            ? realtime.lastSnapshotRequestIds["services.metrics"] ||
-              realtime.lastSnapshotRequestIds.services ||
-              null
-            : null;
-
-        if (
-          requestId &&
-          latestRequestId &&
-          requestId !== latestRequestId &&
-          this.snapshotState.requestId !== requestId
-        ) {
-          if (window.__DEBUG_REALTIME) {
-            console.warn("[Services] Ignoring stale snapshot_begin", {
-              requestId,
-              latestRequestId,
-              stateRequestId: this.snapshotState.requestId,
-            });
-          }
-          return;
-        }
-
-        this.snapshotState.inProgress = true;
-        this.snapshotState.started = true;
-        this.snapshotState.requestId =
-          requestId || this.snapshotState.requestId;
-        this.snapshotState.context = context || null;
-        this.snapshotState.totalAvailable = Number(
-          context.total_services ?? context.total ?? payload?.total
-        );
-        if (!Number.isFinite(this.snapshotState.totalAvailable)) {
-          this.snapshotState.totalAvailable = 0;
-        }
-
-        this.hasInitialSnapshot = false;
-        this.servicesData = null;
-        this.setLoading("Receiving services snapshot...");
-        this.scheduleSnapshotTimer("begin");
-      },
-
-      handleSnapshotCompletion(payload) {
-        this.clearSnapshotTimer();
-
-        const context = (payload && payload.context) || {};
-        const requestId =
-          context.request_id ||
-          context.requestId ||
-          payload?.request_id ||
-          payload?.requestId ||
-          null;
-
-        const realtime = window.Realtime;
-        const latestRequestId =
-          realtime && realtime.lastSnapshotRequestIds
-            ? realtime.lastSnapshotRequestIds["services.metrics"] ||
-              realtime.lastSnapshotRequestIds.services ||
-              null
-            : null;
-
-        if (
-          requestId &&
-          latestRequestId &&
-          requestId !== latestRequestId &&
-          this.snapshotState.requestId !== requestId
-        ) {
-          if (window.__DEBUG_REALTIME) {
-            console.warn("[Services] Ignoring stale snapshot_end", {
-              requestId,
-              latestRequestId,
-              stateRequestId: this.snapshotState.requestId,
-            });
-          }
-          return;
-        }
-
-        if (
-          requestId &&
-          this.snapshotState.requestId &&
-          requestId !== this.snapshotState.requestId
-        ) {
-          if (window.__DEBUG_REALTIME) {
-            console.warn("[Services] snapshot_end request mismatch", {
-              requestId,
-              stateRequestId: this.snapshotState.requestId,
-            });
-          }
-          return;
-        }
-
-        if (requestId) {
-          this.snapshotState.requestId = requestId;
-        }
-
-        if (context && Object.keys(context).length > 0) {
-          this.snapshotState.context = context;
-        }
-
-        const totalServices = Number(
-          context.total_services ?? context.total ?? payload?.sent
-        );
-        if (Number.isFinite(totalServices)) {
-          this.snapshotState.totalAvailable = Math.max(
-            this.snapshotState.totalAvailable,
-            totalServices,
-            this.servicesData?.services?.length || 0
-          );
-        }
-
-        this.snapshotState.inProgress = false;
-        this.snapshotState.started = false;
-
-        if (!this.hasInitialSnapshot && this.servicesData) {
-          this.renderServicesTable();
-        }
-      },
-
-      handleRealtimeWarning(message) {
-        this.clearSnapshotTimer();
-        this.snapshotState.inProgress = false;
-        this.snapshotState.started = false;
-        console.warn("[Services] Realtime warning", {
-          alias: message?.alias || message?.channel,
-          code: message?.code,
-          text: message?.message,
-        });
-        if (!this.hasInitialSnapshot) {
-          this.setLoading("Realtime warning – waiting for data...");
-        }
-      },
-
-      handleRealtimeDisconnect() {
-        this.clearSnapshotTimer();
-        this.snapshotState.inProgress = false;
-        this.snapshotState.started = false;
-        console.warn("[Services] Realtime disconnected");
-        if (!this.hasInitialSnapshot) {
-          this.showError("Realtime connection lost");
-        }
-      },
-
-      handleRealtimeReconnect() {
-        console.info("[Services] Realtime reconnected – requesting snapshot");
-        this.requestSnapshot("ws-reconnected");
-      },
-
-      handleRealtimeUnavailable() {
-        this.clearSnapshotTimer();
-        this.snapshotState.inProgress = false;
-        this.snapshotState.started = false;
-        console.warn("[Services] Realtime unavailable");
-        this.showError("Realtime unavailable");
-      },
-
-      requestSnapshot(reason = "manual") {
-        // Prevent duplicate requests while snapshot is in progress
-        if (this.snapshotState.inProgress) {
-          console.log(
-            "[Services] Snapshot already in progress, ignoring duplicate request"
-          );
-          return;
-        }
-
-        const status = window.Realtime?.isConnected?.()
-          ? "connected"
-          : window.WsHub?.getStatus?.() || "unknown";
-        console.log("[Services] Requesting snapshot", { reason, status });
-        this.snapshotState.inProgress = true;
-        this.snapshotState.started = false;
-        this.snapshotState.requestId = null;
-        this.snapshotState.context = null;
-        this.snapshotState.totalAvailable = 0;
-        this.scheduleSnapshotTimer("request");
-        if (
-          window.Realtime &&
-          typeof window.Realtime.requestSnapshotForAliases === "function"
-        ) {
-          const result =
-            window.Realtime.requestSnapshotForAliases(["services"]) || {};
-          const requestId =
-            result["services.metrics"] || result.services || null;
-          if (requestId) {
-            this.snapshotState.requestId = requestId;
-          }
-        } else if (
-          window.Realtime &&
-          typeof window.Realtime.updateFilters === "function"
-        ) {
-          const result =
-            window.Realtime.updateFilters({
-              snapshotTopics: ["services", "services.metrics"],
-            }) || {};
-          const requestId =
-            result["services.metrics"] || result.services || null;
-          if (requestId) {
-            this.snapshotState.requestId = requestId;
-          }
-        } else {
-          console.warn(
-            "[Services] Realtime helper not available; cannot request snapshot"
-          );
-        }
-      },
     };
 
-    window.PageRealtime = window.PageRealtime || {};
-    window.PageRealtime.services = {
-      // Subscribe only to the primary topic (no duplicate subscriptions)
-      topics: ["services.metrics"],
-      getFilters() {
-        return { "services.metrics": {} };
-      },
-      channels: {
-        "services.metrics": function (snapshot) {
-          controller.handleServicesSnapshot(snapshot);
-        },
-        "snapshot_begin:services.metrics": function (payload) {
-          controller.handleSnapshotBegin(payload);
-        },
-        "snapshot_end:services.metrics": function (payload) {
-          controller.handleSnapshotCompletion(payload);
-        },
-        _warning(message) {
-          controller.handleRealtimeWarning(message);
-        },
-        _disconnected() {
-          controller.handleRealtimeDisconnect();
-        },
-        _failed() {
-          controller.handleRealtimeDisconnect();
-        },
-        _connected() {
-          controller.handleRealtimeReconnect();
-        },
-      },
-      onInitial(status) {
-        if (status !== "connected") {
-          controller.setLoading("Waiting for realtime connection...");
-        } else if (!controller.hasInitialSnapshot) {
-          controller.setLoading("Loading services...");
-        }
-      },
-      onEnter() {
-        if (!controller.hasInitialSnapshot) {
-          controller.setLoading("Loading services...");
-        }
-      },
-      onUnavailable() {
-        controller.handleRealtimeUnavailable();
-      },
-      onExit() {
-        controller.reset();
-      },
-    };
-
+    // Manual refresh function
     window.refreshServices = function () {
       console.log("[Services] Manual refresh requested");
-      controller.setLoading("Refreshing services...");
-      controller.requestSnapshot("manual-refresh");
+      controller.fetchServices();
     };
 
+    // Page initialization function called by Router
     window.initServicesPage = function () {
+      console.log("[Services] Page initialized");
       controller.initialize();
+      Router.registerCleanup(() => controller.reset());
     };
 
+    // Fallback for non-router usage
     if (!window.Router) {
       controller.initialize();
     }

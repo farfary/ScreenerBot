@@ -247,19 +247,7 @@ Loading...</pre
   var EVENTS_BROWSER_LIMIT = 5000; // hard ceiling for historical records kept client-side
   var EVENT_MAX_RECORDS = EVENTS_BROWSER_LIMIT; // keep store aligned with browser ceiling
   var EVENTS_SCROLL_PAGE_SIZE = 200;
-  var EVENTS_SNAPSHOT_TIMEOUT_MS = 12000;
   var searchDebounceHandle = null;
-  var snapshotState = {
-    inProgress: false,
-    started: false,
-    expected: 0,
-    received: 0,
-    totalAvailable: 0,
-    requestId: null,
-    context: null,
-    timeoutHandle: null,
-    lastTimerReason: null,
-  };
   var eventsPauseState = {
     paused: false,
     pending: false,
@@ -361,31 +349,6 @@ Loading...</pre
       return true;
     }
 
-    if (opts.sendCommand) {
-      const realtime = window.Realtime;
-      if (!realtime || typeof realtime.setEventsPaused !== "function") {
-        if (!opts.silent) {
-          Utils.showToast("⚠️ Realtime controller unavailable", "warn");
-        }
-        return false;
-      }
-
-      eventsPauseState.pending = true;
-      updatePauseButtonUI();
-
-      const success = realtime.setEventsPaused("events", targetPaused);
-      if (!success) {
-        eventsPauseState.pending = false;
-        updatePauseButtonUI();
-        if (!opts.silent) {
-          Utils.showToast("⚠️ Failed to update realtime pause state", "warn");
-        }
-        return false;
-      }
-
-      eventsPauseState.pending = false;
-    }
-
     eventsPauseState.paused = targetPaused;
     AppState.save("events_paused", targetPaused ? "1" : "");
     updatePauseButtonUI();
@@ -396,18 +359,10 @@ Loading...</pre
         ? `Paused • ${formatEventCountLabel(allEventsData.length)}`
         : `Realtime • ${formatEventCountLabel(allEventsData.length)}`);
 
-    if (targetPaused) {
-      updateConnectionStatus("paused", statusMessage);
-      if (opts.refreshSnapshot) {
-        requestEventsSnapshot(
-          opts.message || "Refreshing events while paused..."
-        );
-      }
-    } else if (opts.refreshSnapshot !== false) {
-      requestEventsSnapshot(opts.message || "Resuming events...");
-    } else {
-      updateConnectionStatus("connected", statusMessage);
-    }
+    updateConnectionStatus(
+      targetPaused ? "paused" : "connected",
+      statusMessage
+    );
 
     return true;
   }
@@ -456,103 +411,6 @@ Loading...</pre
     updateEventsScrollControls(false);
     eventsScrollState.filteredEnd = false;
     scheduleEventsRender({ forceFull: true, immediate: true });
-  }
-
-  function clearEventsSnapshotTimer() {
-    if (snapshotState.timeoutHandle) {
-      clearTimeout(snapshotState.timeoutHandle);
-      snapshotState.timeoutHandle = null;
-    }
-    snapshotState.lastTimerReason = null;
-  }
-
-  function scheduleEventsSnapshotTimer(reason) {
-    clearEventsSnapshotTimer();
-
-    if (
-      !Number.isFinite(EVENTS_SNAPSHOT_TIMEOUT_MS) ||
-      EVENTS_SNAPSHOT_TIMEOUT_MS <= 0
-    ) {
-      return;
-    }
-
-    snapshotState.lastTimerReason = reason || null;
-    snapshotState.timeoutHandle = setTimeout(() => {
-      snapshotState.timeoutHandle = null;
-      if (!snapshotState.inProgress) {
-        return;
-      }
-
-      console.warn(
-        `[Events] Snapshot timeout (${
-          snapshotState.lastTimerReason || "unknown"
-        })`
-      );
-
-      if (snapshotState.received > 0) {
-        handleEventsSnapshotEnd({
-          topic: "events.new",
-          sent: snapshotState.received,
-          request_id: snapshotState.requestId,
-          context: Object.assign(
-            {
-              request_id: snapshotState.requestId,
-              total_selected: snapshotState.received,
-              total_available: snapshotState.totalAvailable,
-            },
-            snapshotState.context || {}
-          ),
-        });
-      } else {
-        updateConnectionStatus(
-          "connecting",
-          "Snapshot timeout — retrying events"
-        );
-        requestEventsSnapshot("Retrying events snapshot...");
-      }
-    }, EVENTS_SNAPSHOT_TIMEOUT_MS);
-  }
-
-  function requestEventsSnapshot(message) {
-    // Prevent duplicate requests while snapshot is in progress
-    if (snapshotState.inProgress) {
-      console.log(
-        "[Events] Snapshot already in progress, ignoring duplicate request"
-      );
-      return;
-    }
-
-    const statusKey = isEventsPaused() ? "paused" : "connecting";
-    const statusMessage =
-      message ||
-      (isEventsPaused()
-        ? "Paused snapshot requested..."
-        : "Requesting snapshot...");
-    updateConnectionStatus(statusKey, statusMessage);
-
-    snapshotState.inProgress = true;
-    snapshotState.started = false;
-    snapshotState.expected = 0;
-    snapshotState.received = 0;
-    snapshotState.totalAvailable = 0;
-    snapshotState.context = null;
-    snapshotState.requestId = null;
-    scheduleEventsSnapshotTimer("request");
-
-    if (window.Realtime && typeof Realtime.updateFilters === "function") {
-      const result =
-        Realtime.updateFilters({
-          snapshotTopics: ["events.new", "events"],
-        }) || {};
-      const requestId = result["events.new"] || result["events"] || null;
-      if (requestId) {
-        snapshotState.requestId = requestId;
-      }
-    } else {
-      console.warn(
-        "[Events] Realtime controller unavailable; cannot request snapshot"
-      );
-    }
   }
 
   function normalizeEvent(raw) {
@@ -1385,27 +1243,10 @@ Loading...</pre
 
   function initializePauseState() {
     updatePauseButtonUI();
-    const realtime = window.Realtime;
-    const realtimePaused = !!(realtime &&
-    typeof realtime.isEventsPaused === "function"
-      ? realtime.isEventsPaused("events")
-      : false);
     const savedPaused = AppState.load("events_paused", "") === "1";
-    const shouldPause = realtimePaused || savedPaused;
-    if (shouldPause) {
-      applyEventsPauseState(true, {
-        force: true,
-        refreshSnapshot: false,
-        message: `Paused • ${formatEventCountLabel(allEventsData.length)}`,
-        silent: true,
-      });
-    } else if (eventsPauseState.paused) {
-      applyEventsPauseState(false, {
-        force: true,
-        refreshSnapshot: false,
-        silent: true,
-        message: `Realtime • ${formatEventCountLabel(allEventsData.length)}`,
-      });
+    if (savedPaused) {
+      eventsPauseState.paused = true;
+      updatePauseButtonUI();
     }
   }
 
@@ -1414,10 +1255,6 @@ Loading...</pre
     console.log("[Events] Initializing page");
     restoreSavedFilters();
     initializePauseState();
-    const message = isEventsPaused()
-      ? "Paused • Loading events..."
-      : "Loading events...";
-    requestEventsSnapshot(message);
   };
 
   // Execute initialization immediately (works for both initial load and SPA navigation)
