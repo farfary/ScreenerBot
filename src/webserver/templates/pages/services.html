@@ -255,33 +255,68 @@
       hasInitialSnapshot: false,
       toolbarBound: false,
       sortBound: false,
+      isFetching: false,
+      abortController: null,
+      lastErrorMessage: null,
+      isActive: false,
+      cleanupRegistered: false,
 
       pollTimer: null,
       POLL_INTERVAL_MS: 5000,
 
       initialize() {
         console.log("[Services] Initializing controller");
+        if (this.isActive) {
+          console.log(
+            "[Services] Controller already active; rendering snapshot"
+          );
+          this.renderServicesTable();
+          return;
+        }
+        this.isActive = true;
         this.servicesData = null;
         this.hasInitialSnapshot = false;
+        this.lastErrorMessage = null;
+        this.isFetching = false;
+        this.abortInFlight();
         this.setLoading("Loading services...");
         this.bindToolbarEventsOnce();
         this.bindSortHandlersOnce();
-        this.fetchServices();
+        if (
+          window.Router &&
+          typeof Router.registerCleanup === "function" &&
+          !this.cleanupRegistered
+        ) {
+          Router.registerCleanup(() => this.reset());
+          this.cleanupRegistered = true;
+        }
+        this.fetchServices({ reason: "initial" });
         this.startPolling();
       },
 
       reset() {
         console.log("[Services] Resetting controller");
+        this.isActive = false;
         this.stopPolling();
+        this.abortInFlight();
         this.servicesData = null;
         this.hasInitialSnapshot = false;
+        this.lastErrorMessage = null;
+        this.cleanupRegistered = false;
       },
 
       startPolling() {
+        if (!this.isActive) {
+          return;
+        }
         this.stopPolling();
-        this.pollTimer = setInterval(() => {
-          this.fetchServices();
+        const intervalId = setInterval(() => {
+          this.fetchServices({ reason: "poll" });
         }, this.POLL_INTERVAL_MS);
+        this.pollTimer = intervalId;
+        if (window.Router && typeof Router.trackInterval === "function") {
+          Router.trackInterval(intervalId);
+        }
         console.log(
           "[Services] Started polling every",
           this.POLL_INTERVAL_MS,
@@ -297,22 +332,82 @@
         }
       },
 
-      async fetchServices() {
+      abortInFlight() {
+        if (this.abortController) {
+          this.abortController.abort();
+          this.abortController = null;
+          this.isFetching = false;
+          console.log("[Services] Aborted in-flight request");
+        }
+      },
+
+      async fetchServices({ reason = "poll", showSpinner = false } = {}) {
+        if (!this.isActive && reason !== "initial") {
+          return;
+        }
+
+        if (this.isFetching) {
+          if (reason === "poll") {
+            console.log("[Services] Skipping poll; request already in flight");
+            return;
+          }
+          this.abortInFlight();
+        }
+
+        if (showSpinner) {
+          this.setLoading("Loading services...");
+        }
+
         try {
-          const response = await fetch("/api/services/overview");
+          this.isFetching = true;
+          this.abortController = new AbortController();
+          console.log(`[Services] Fetching overview (${reason})`);
+          const response = await fetch("/api/services/overview", {
+            signal: this.abortController.signal,
+            headers: { "X-Requested-With": "fetch" },
+          });
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
           }
           const data = await response.json();
           this.servicesData = data;
           this.hasInitialSnapshot = true;
+          this.lastErrorMessage = null;
           this.renderServicesTable();
         } catch (error) {
+          if (error.name === "AbortError") {
+            console.log("[Services] Fetch aborted");
+            return;
+          }
           console.error("[Services] Failed to fetch services:", error);
           if (!this.hasInitialSnapshot) {
-            this.showError(`Failed to load services: ${error.message}`);
+            this.lastErrorMessage = `Failed to load services: ${error.message}`;
+            this.showError(this.lastErrorMessage);
+          } else {
+            this.lastErrorMessage = error.message;
           }
+        } finally {
+          this.isFetching = false;
+          this.abortController = null;
         }
+      },
+
+      handleManualRefresh() {
+        if (!this.isActive) {
+          console.log("[Services] Manual refresh ignored; controller inactive");
+          return;
+        }
+        console.log("[Services] Manual refresh requested");
+        this.stopPolling();
+        this.abortInFlight();
+        this.hasInitialSnapshot = false;
+        this.servicesData = null;
+        this.setLoading("Refreshing services...");
+        this.fetchServices({ reason: "manual" }).finally(() => {
+          if (this.isActive) {
+            this.startPolling();
+          }
+        });
       },
 
       setLoading(message = "Loading services...") {
@@ -665,15 +760,21 @@
 
     // Manual refresh function
     window.refreshServices = function () {
-      console.log("[Services] Manual refresh requested");
-      controller.fetchServices();
+      if (controller) {
+        controller.handleManualRefresh();
+      }
+    };
+
+    window.ensureServicesPageReady = function () {
+      if (controller) {
+        controller.initialize();
+      }
     };
 
     // Page initialization function called by Router
     window.initServicesPage = function () {
       console.log("[Services] Page initialized");
       controller.initialize();
-      Router.registerCleanup(() => controller.reset());
     };
 
     // Fallback for non-router usage

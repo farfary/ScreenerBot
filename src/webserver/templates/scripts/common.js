@@ -299,6 +299,11 @@ window.Router = {
             ensureTokensPageReady();
           }
           break;
+        case "services":
+          if (typeof ensureServicesPageReady === "function") {
+            ensureServicesPageReady();
+          }
+          break;
       }
 
       return;
