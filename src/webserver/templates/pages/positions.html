@@ -809,10 +809,6 @@
     "positionPriceLow",
     "positionCurrentPrice",
     "positionCurrentUpdated",
-    "positionUnrealizedPnl",
-    "positionUnrealizedPercent",
-    "positionRealizedPnl",
-    "positionRealizedPercent",
     "positionEntryTime",
     "positionEntrySig",
     "positionEntryVerified",
@@ -844,11 +840,11 @@
   function setPositionModalText(id, value) {
     const el = document.getElementById(id);
     if (!el) return;
-    if (typeof value === "string" && value.includes("<span")) {
-      el.innerHTML = value;
-    } else {
-      el.textContent = value;
+    if (value === undefined || value === null) {
+      el.textContent = "—";
+      return;
     }
+    el.textContent = String(value);
   }
 
   function escapeHtml(value) {
@@ -874,6 +870,9 @@
   }
 
   function formatPositionPrice(value) {
+    if (value === null || value === undefined) {
+      return "—";
+    }
     if (typeof Utils !== "undefined" && Utils?.formatPriceSol) {
       return Utils.formatPriceSol(value, { fallback: "—" });
     }
@@ -883,6 +882,9 @@
   }
 
   function formatPositionSol(value, { decimals = 4, fallback = "—" } = {}) {
+    if (value === null || value === undefined) {
+      return fallback;
+    }
     if (typeof Utils !== "undefined" && Utils?.formatSol) {
       return Utils.formatSol(value, { decimals, fallback });
     }
@@ -892,6 +894,7 @@
   }
 
   function formatPositionSolDelta(value) {
+    if (value === null || value === undefined) return "—";
     const num = Number(value);
     if (!Number.isFinite(num)) return "—";
     const formatted = formatPositionSol(Math.abs(num));
@@ -899,28 +902,6 @@
     if (num > 0) return `+${formatted}`;
     if (num < 0) return `-${formatted}`;
     return formatted;
-  }
-
-  function formatPositionPnL(value) {
-    if (typeof Utils !== "undefined" && Utils?.formatPnL) {
-      return Utils.formatPnL(value, { decimals: 4, fallback: "—" });
-    }
-    const num = Number(value);
-    if (!Number.isFinite(num)) return "—";
-    return `${num >= 0 ? "+" : ""}${num.toFixed(4)} SOL`;
-  }
-
-  function formatPositionPercent(value) {
-    if (typeof Utils !== "undefined" && Utils?.formatPercent) {
-      return Utils.formatPercent(value, {
-        style: "pnl",
-        decimals: 2,
-        fallback: "—",
-      });
-    }
-    const num = Number(value);
-    if (!Number.isFinite(num)) return "—";
-    return `${num.toFixed(2)}%`;
   }
 
   function formatPercentPlain(value) {
@@ -976,6 +957,66 @@
     const minText = hasMin ? formatPercentPlain(min) : "—";
     const maxText = hasMax ? formatPercentPlain(max) : "—";
     return `${minText} / ${maxText}`;
+  }
+
+  function setPositionModalPnl(id, value, { decimals = 4 } = {}) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove("pnl-positive", "pnl-negative", "pnl-neutral");
+    if (value === null || value === undefined) {
+      el.textContent = "—";
+      el.classList.add("pnl-neutral");
+      return;
+    }
+
+    const num = Number(value);
+    if (!Number.isFinite(num)) {
+      el.textContent = "—";
+      el.classList.add("pnl-neutral");
+      return;
+    }
+
+    const sign = num > 0 ? "+" : num < 0 ? "-" : "";
+    const magnitude = Math.abs(num).toFixed(decimals);
+    el.textContent = `${sign}${magnitude} SOL`;
+
+    if (num > 0) {
+      el.classList.add("pnl-positive");
+    } else if (num < 0) {
+      el.classList.add("pnl-negative");
+    } else {
+      el.classList.add("pnl-neutral");
+    }
+  }
+
+  function setPositionModalPercent(id, value, { decimals = 2 } = {}) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove("pnl-positive", "pnl-negative", "pnl-neutral");
+    if (value === null || value === undefined) {
+      el.textContent = "—";
+      el.classList.add("pnl-neutral");
+      return;
+    }
+
+    const num = Number(value);
+    if (!Number.isFinite(num)) {
+      el.textContent = "—";
+      el.classList.add("pnl-neutral");
+      return;
+    }
+
+    const sign = num > 0 ? "+" : num < 0 ? "-" : "";
+    const magnitude = Math.abs(num).toFixed(decimals);
+    el.textContent = `${sign}${magnitude}%`;
+
+    if (num > 0) {
+      el.classList.add("pnl-positive");
+    } else if (num < 0) {
+      el.classList.add("pnl-negative");
+    } else {
+      el.classList.add("pnl-neutral");
+    }
   }
 
   function getPositionStatusInfo(position) {
@@ -1163,22 +1204,13 @@
       "positionCurrentUpdated",
       formatPositionTimestamp(position.current_price_updated)
     );
-    setPositionModalText(
-      "positionUnrealizedPnl",
-      formatPositionPnL(position.unrealized_pnl)
-    );
-    setPositionModalText(
+    setPositionModalPnl("positionUnrealizedPnl", position.unrealized_pnl);
+    setPositionModalPercent(
       "positionUnrealizedPercent",
-      formatPositionPercent(position.unrealized_pnl_percent)
+      position.unrealized_pnl_percent
     );
-    setPositionModalText(
-      "positionRealizedPnl",
-      formatPositionPnL(position.pnl)
-    );
-    setPositionModalText(
-      "positionRealizedPercent",
-      formatPositionPercent(position.pnl_percent)
-    );
+    setPositionModalPnl("positionRealizedPnl", position.pnl);
+    setPositionModalPercent("positionRealizedPercent", position.pnl_percent);
 
     setPositionModalText(
       "positionEntryTime",
@@ -1257,6 +1289,10 @@
 
   function resetPositionModal() {
     POSITION_MODAL_FIELD_IDS.forEach((id) => setPositionModalText(id, "—"));
+    setPositionModalPnl("positionUnrealizedPnl", null);
+    setPositionModalPercent("positionUnrealizedPercent", null);
+    setPositionModalPnl("positionRealizedPnl", null);
+    setPositionModalPercent("positionRealizedPercent", null);
     renderPositionExecutions([]);
     renderPositionTransactions([]);
     renderPositionTimeline([]);
@@ -2013,8 +2049,7 @@
     }
 
     if (position.mint) {
-      const entry = position.entry_time ?? position.created_at ?? "";
-      return `mint:${position.mint}:${entry}`;
+      return `mint:${position.mint}`;
     }
 
     return null;

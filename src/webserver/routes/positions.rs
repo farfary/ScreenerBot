@@ -453,7 +453,35 @@ async fn load_state_history_entries(
         return Vec::new();
     };
 
-    match positions::with_positions_database_async(|db| db.get_position_state_history(id)).await {
+    let db_arc = match positions::get_positions_database().await {
+        Ok(db) => db,
+        Err(err) => {
+            log(
+                LogTag::Webserver,
+                "POSITIONS_DETAIL_STATE_HISTORY_ERROR",
+                &format!(
+                    "Failed to access positions database for position {}: {}",
+                    id, err
+                ),
+            );
+            return Vec::new();
+        }
+    };
+
+    let db_guard = db_arc.lock().await;
+    let Some(db) = db_guard.as_ref() else {
+        log(
+            LogTag::Webserver,
+            "POSITIONS_DETAIL_STATE_HISTORY_ERROR",
+            &format!(
+                "Positions database not initialized when loading history for position {}",
+                id
+            ),
+        );
+        return Vec::new();
+    };
+
+    match db.get_position_state_history(id).await {
         Ok(history) => history
             .into_iter()
             .map(|entry| PositionStateTimelineEntry {
