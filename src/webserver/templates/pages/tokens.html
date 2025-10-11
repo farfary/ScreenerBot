@@ -75,6 +75,10 @@
     abortController: null,
   };
   window.tokensFetchState = tokensFetchState;
+  var tokensAutoRefreshState = window.tokensAutoRefreshState || {
+    poller: null,
+  };
+  window.tokensAutoRefreshState = tokensAutoRefreshState;
   var TOKENS_PAGE_LIMIT = TOKENS_DEFAULT_PAGE_SIZE;
 
   function replaceAllTokensData(next) {
@@ -696,6 +700,177 @@
     });
   }
 
+  function isTokensPageActive() {
+    if (typeof document !== "undefined") {
+      const state = document.visibilityState;
+      if (state && state !== "visible") {
+        return false;
+      }
+    }
+    if (
+      window.Router &&
+      Router.currentPage &&
+      Router.currentPage !== "tokens"
+    ) {
+      return false;
+    }
+    return true;
+  }
+
+  function tokensAutoRefreshPoll() {
+    if (!isTokensPageActive()) {
+      return;
+    }
+    if (tokensFetchState.inProgress) {
+      if (window.__DEBUG_TOKENS_VERBOSE) {
+        console.log("[TokensDBG] Skipping auto refresh; request in flight");
+      }
+      return;
+    }
+    const viewLabel = VIEW_LABELS[tokensState.view] || "";
+    const message = viewLabel
+      ? `Refreshing tokens ${viewLabel}...`
+      : "Refreshing tokens...";
+    reloadTokensList(message, { preserveItems: true });
+  }
+
+  function ensureTokensAutoRefresh() {
+    const state = window.tokensAutoRefreshState;
+    if (!state) {
+      return;
+    }
+
+    if (state.poller) {
+      if (typeof state.poller.start === "function") {
+        state.poller.start({ silent: true });
+      }
+      return;
+    }
+
+    if (window.PagePoller && typeof window.PagePoller.create === "function") {
+      state.poller = window.PagePoller.create({
+        label: "Tokens",
+        onPoll: tokensAutoRefreshPoll,
+      });
+      state.poller.start({ silent: true });
+      return;
+    }
+
+    console.warn(
+      "[Tokens] PagePoller unavailable; using fallback polling logic"
+    );
+    state.poller = createTokensFallbackPoller(tokensAutoRefreshPoll);
+    if (state.poller && typeof state.poller.start === "function") {
+      state.poller.start({ silent: true });
+    }
+  }
+
+  function createTokensFallbackPoller(onPoll) {
+    const logPrefix = "[Tokens] (fallback)";
+    let intervalId = null;
+    let listener = null;
+
+    const computeInterval = () => {
+      if (
+        window.PollingManager &&
+        typeof window.PollingManager.getInterval === "function"
+      ) {
+        const value = Number(window.PollingManager.getInterval());
+        if (Number.isFinite(value) && value > 0) {
+          return value;
+        }
+      }
+      return 1000;
+    };
+
+    const ensureListener = () => {
+      if (
+        !window.PollingManager ||
+        typeof window.PollingManager.onChange !== "function" ||
+        listener
+      ) {
+        return;
+      }
+
+      listener = window.PollingManager.onChange(() => {
+        if (!intervalId) {
+          return;
+        }
+        start({ silent: true });
+        console.log(`${logPrefix} Polling interval changed`);
+      });
+    };
+
+    const start = ({ silent } = {}) => {
+      stop({ silent: true });
+      const interval = computeInterval();
+      intervalId = setInterval(() => {
+        try {
+          onPoll();
+        } catch (error) {
+          console.error(`${logPrefix} Poll failed`, error);
+        }
+      }, interval);
+
+      if (window.Router && typeof Router.trackInterval === "function") {
+        Router.trackInterval(intervalId);
+      }
+
+      ensureListener();
+
+      if (!silent) {
+        console.log(`${logPrefix} Started polling every ${interval} ms`);
+      }
+
+      return interval;
+    };
+
+    const stop = ({ silent } = {}) => {
+      if (!intervalId) {
+        return;
+      }
+      clearInterval(intervalId);
+      intervalId = null;
+      if (!silent) {
+        console.log(`${logPrefix} Stopped polling`);
+      }
+    };
+
+    const cleanup = () => {
+      stop({ silent: true });
+      if (
+        listener &&
+        window.PollingManager &&
+        typeof window.PollingManager.removeListener === "function"
+      ) {
+        window.PollingManager.removeListener(listener);
+      }
+      listener = null;
+    };
+
+    return {
+      start,
+      stop,
+      restart: () => start({ silent: true }),
+      cleanup,
+    };
+  }
+
+  function stopTokensAutoRefresh() {
+    const state = window.tokensAutoRefreshState;
+    if (!state || !state.poller) {
+      return;
+    }
+
+    if (typeof state.poller.cleanup === "function") {
+      state.poller.cleanup();
+    } else if (typeof state.poller.stop === "function") {
+      state.poller.stop();
+    }
+
+    state.poller = null;
+  }
+
   function initTokensSubTabs() {
     const subTabsContainer = document.getElementById("subTabsContainer");
     if (!subTabsContainer) return;
@@ -846,6 +1021,7 @@
     ensureTokensSubTabsVisible();
     ensureTokensToolbarVisible(options);
     attachGlobalListeners();
+    ensureTokensAutoRefresh();
   }
 
   window.ensureTokensPageReady = ensureTokensPageReady;
@@ -1563,6 +1739,8 @@
       );
       window.__tokensVisibilityHandler = null;
     }
+
+    stopTokensAutoRefresh();
   }
 
   function createTokenRowHtml(token) {
