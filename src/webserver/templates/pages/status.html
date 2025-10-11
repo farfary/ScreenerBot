@@ -285,8 +285,8 @@
     }
   }
 
-  function startStatusPolling() {
-    stopStatusPolling();
+  function startStatusTabPolling() {
+    stopStatusTabPolling();
     const interval = window.PollingManager.getInterval();
     statusPollTimer = setInterval(
       () => fetchStatusSnapshotOnce(false),
@@ -295,7 +295,7 @@
     console.log("[Status] Started polling every", interval, "ms");
   }
 
-  function stopStatusPolling() {
+  function stopStatusTabPolling() {
     if (statusPollTimer) {
       clearInterval(statusPollTimer);
       statusPollTimer = null;
@@ -315,19 +315,19 @@
     ensureStatusSubTabsVisible();
     renderStatusContent();
     fetchStatusSnapshotOnce(true);
-    startStatusPolling();
+    startStatusTabPolling();
 
     // Register interval change listener
     if (window.PollingManager && !statusIntervalChangeListener) {
       statusIntervalChangeListener = window.PollingManager.onChange(() => {
         console.log("[Status] Polling interval changed, restarting polling");
-        startStatusPolling();
+        startStatusTabPolling();
       });
     }
 
     if (window.Router && typeof Router.registerCleanup === "function") {
       Router.registerCleanup(() => {
-        stopStatusPolling();
+        stopStatusTabPolling();
         // Remove interval change listener
         if (statusIntervalChangeListener && window.PollingManager) {
           window.PollingManager.removeListener(statusIntervalChangeListener);
@@ -340,6 +340,13 @@
   if (!window.Router) {
     window.initStatusPage();
   }
+
+  if (!window.StatusPage) {
+    window.StatusPage = {};
+  }
+
+  window.StatusPage.startPolling = startStatusTabPolling;
+  window.StatusPage.stopPolling = stopStatusTabPolling;
 
   function hydrateStatusState() {
     const savedView = window.sessionStorage.getItem("status.view");
