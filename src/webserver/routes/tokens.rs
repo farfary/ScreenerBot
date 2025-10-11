@@ -153,10 +153,16 @@ fn default_page_size() -> usize {
 pub struct OhlcvQuery {
     #[serde(default = "default_ohlcv_limit")]
     pub limit: u32,
+    #[serde(default = "default_ohlcv_timeframe")]
+    pub timeframe: String,
 }
 
 fn default_ohlcv_limit() -> u32 {
     100
+}
+
+fn default_ohlcv_timeframe() -> String {
+    "1m".to_string()
 }
 
 /// Filter request body
@@ -663,11 +669,27 @@ async fn get_token_ohlcv(
     Path(mint): Path<String>,
     Query(query): Query<OhlcvQuery>,
 ) -> Result<Json<Vec<OhlcvPoint>>, StatusCode> {
+    let normalized_tf = query.timeframe.trim().to_ascii_lowercase();
+    let timeframe = match crate::ohlcvs::Timeframe::from_str(normalized_tf.as_str()) {
+        Some(tf) => tf,
+        None => {
+            log(
+                LogTag::Webserver,
+                "TOKEN_OHLCV_INVALID_TIMEFRAME",
+                &format!("mint={} timeframe={} (fallback=1m)", mint, query.timeframe),
+            );
+            crate::ohlcvs::Timeframe::Minute1
+        }
+    };
+
     if is_debug_webserver_enabled() {
         log(
             LogTag::Webserver,
             "TOKEN_OHLCV",
-            &format!("mint={} limit={}", mint, query.limit),
+            &format!(
+                "mint={} limit={} timeframe={}",
+                mint, query.limit, timeframe
+            ),
         );
     }
 
@@ -700,16 +722,10 @@ async fn get_token_ohlcv(
     }
 
     // Fetch OHLCV data using new API
-    let data = crate::ohlcvs::get_ohlcv_data(
-        &mint,
-        crate::ohlcvs::Timeframe::Minute1,
-        None,
-        query.limit as usize,
-        None,
-        None,
-    )
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let data =
+        crate::ohlcvs::get_ohlcv_data(&mint, timeframe, None, query.limit as usize, None, None)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let points: Vec<OhlcvPoint> = data
         .iter()
