@@ -1140,6 +1140,21 @@
         }
       }
 
+      async function requestFilteringRefresh() {
+        const response = await fetch("/api/filtering/refresh", {
+          method: "POST",
+          headers: { "X-Requested-With": "fetch" },
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) {
+          const message =
+            (payload && payload.error && payload.error.message) ||
+            `Failed to rebuild filtering snapshot (HTTP ${response.status})`;
+          throw new Error(message);
+        }
+        return payload;
+      }
+
       async function saveChanges() {
         if (state.loading) {
           return;
@@ -1185,12 +1200,31 @@
           state.dirty.clear();
           syncFieldValues();
           updateCategoryBadges();
-          setStatus(
-            "success",
-            (payload && payload.message) || "Filtering configuration saved"
-          );
+          let statusType = "success";
+          let statusMessage =
+            (payload && payload.message) || "Filtering configuration saved";
+          let toastMessage = "Filtering settings saved";
+          let toastType = "success";
+
+          try {
+            const refreshPayload = await requestFilteringRefresh();
+            const refreshMessage = refreshPayload && refreshPayload.message;
+            if (refreshMessage) {
+              statusMessage = `${statusMessage}. ${refreshMessage}`;
+            }
+            toastMessage = "Filtering settings saved and snapshot refreshed";
+          } catch (refreshError) {
+            console.error("[Filtering] Refresh failed", refreshError);
+            statusType = "warning";
+            const refreshMessage = refreshError.message || "Unknown error";
+            statusMessage = `${statusMessage}. Refresh failed: ${refreshMessage}`;
+            toastMessage = `Filtering config saved, but refresh failed: ${refreshMessage}`;
+            toastType = "warning";
+          }
+
+          setStatus(statusType, statusMessage);
           if (window.Utils && typeof Utils.showToast === "function") {
-            Utils.showToast("Filtering settings saved", "success");
+            Utils.showToast(toastMessage, toastType);
           }
         } catch (error) {
           console.error("[Filtering] Failed to save", error);

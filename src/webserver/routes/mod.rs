@@ -6,6 +6,7 @@ pub mod blacklist;
 pub mod config;
 pub mod dashboard;
 pub mod events;
+pub mod filtering_api;
 pub mod ohlcv;
 pub mod positions;
 pub mod services;
@@ -100,6 +101,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .merge(status::routes())
         .merge(tokens::routes())
         .merge(events::routes())
+        .merge(filtering_api::routes())
         .merge(positions::routes())
         .merge(dashboard::routes())
         .merge(wallet::routes())
