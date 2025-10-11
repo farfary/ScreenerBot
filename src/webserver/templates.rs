@@ -42,13 +42,6 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     html = html.replace("/*__INJECTED_STYLES__*/", &combined_styles);
     if arguments::is_debug_webserver_enabled() {
         const DEBUG_BOOTSTRAP: &str = r#"
-      try {
-        const shouldPersist = window.localStorage && window.localStorage.getItem('debugRealtime') !== '1';
-        if (window.localStorage && shouldPersist) {
-          window.localStorage.setItem('debugRealtime', '1');
-        }
-      } catch (_) {}
-      window.__DEBUG_REALTIME = true;
       window.__DEBUG_TOKENS_VERBOSE = true;
 "#;
         let mut util_block = String::with_capacity(DEBUG_BOOTSTRAP.len() + UTIL_SCRIPTS.len());

@@ -312,6 +312,9 @@ window.Router = {
 
     // Re-initialize page-specific functionality after dynamic load
     switch (pageName) {
+      case "home":
+        if (typeof initHomePage === "function") initHomePage();
+        break;
       case "status":
         if (typeof initStatusSubTabs === "function") initStatusSubTabs();
         if (typeof ensureStatusSubTabsVisible === "function")
@@ -322,6 +325,9 @@ window.Router = {
         break;
       case "positions":
         if (typeof initPositionsPage === "function") initPositionsPage();
+        break;
+      case "transactions":
+        if (typeof initTransactionsPage === "function") initTransactionsPage();
         break;
       case "events":
         if (typeof initEventsPage === "function") initEventsPage();

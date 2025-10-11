@@ -788,123 +788,60 @@
         }
       }
 
-      function onWsNew(envelope) {
-        const data =
-          envelope && envelope.data ? envelope.data.transaction : null;
-        if (!data) return;
-        const tbody = el("tx-tbody");
-        if (!tbody) return;
-        const tr = renderRow(data);
-        tbody.insertBefore(tr, tbody.firstChild);
-        State.items.unshift(data);
-        // keep around first ~500 by trimming
-        if (State.items.length > 500) {
-          State.items.pop();
-          const guard = el("tx-scroll-guard");
-          if (guard && guard.parentElement === tbody) {
-            const toRemove = guard.previousElementSibling;
-            if (toRemove) {
-              tbody.removeChild(toRemove);
-            }
-          } else if (tbody.lastElementChild) {
-            tbody.removeChild(tbody.lastElementChild);
-          }
-        }
-        wireRowClicks();
-        ensureScrollGuard();
-        setScrollGuardState(State.next_cursor ? "idle" : "end");
-        updateSummaryBar();
-      }
-
-      window.PageRealtime = window.PageRealtime || {};
-      window.PageRealtime.transactions = {
-        channels: {
-          transactions: "transactions",
-          _connected: "_connected",
-          _disconnected: "_disconnected",
-          _failed: "_failed",
-          _warning: "_warning",
-        },
-        onInitial() {
-          initChipGroups();
-          applySavedFilters();
-          updateFilterMeta();
-          loadInitial({ reuseState: true });
-          const applyBtn = document.getElementById("tx-apply-filters");
-          const resetBtn = document.getElementById("tx-reset-filters");
-
-          if (applyBtn && !applyBtn.__listenerAttached) {
-            applyBtn.addEventListener("click", applyFilters);
-            applyBtn.__listenerAttached = true;
-          }
-          if (resetBtn && !resetBtn.__listenerAttached) {
-            resetBtn.addEventListener("click", resetFilters);
-            resetBtn.__listenerAttached = true;
-          }
-
-          const toggleBtn = document.getElementById("tx-toggle-advanced");
-          if (toggleBtn && !toggleBtn.__listenerAttached) {
-            toggleBtn.addEventListener("click", toggleAdvancedPanel);
-            toggleBtn.__listenerAttached = true;
-          }
-
-          const signatureClear = document.getElementById("tx-clear-signature");
-          if (signatureClear && !signatureClear.__listenerAttached) {
-            signatureClear.addEventListener("click", () => {
-              el("tx-filter-signature").value = "";
-              updateFilterMeta();
-            });
-            signatureClear.__listenerAttached = true;
-          }
-
-          [
-            "tx-filter-router",
-            "tx-filter-mint",
-            "tx-filter-signature",
-            "tx-filter-min-sol",
-            "tx-filter-max-sol",
-            "tx-filter-from",
-            "tx-filter-to",
-          ].forEach((id) => {
-            const input = el(id);
-            if (input && !input.__metaListenerAttached) {
-              input.addEventListener("input", updateFilterMeta);
-              input.__metaListenerAttached = true;
-            }
-          });
-        },
-        onEnter() {
-          // Subscribe to live stream
-          if (window.WsHub) {
-            try {
-              window.WsHub.subscribe("transactions", (env) => {
-                if (!env || !env.data) return;
-                if (env.data.action === "new") {
-                  onWsNew(env);
-                }
-              });
-            } catch (e) {
-              console.warn("WS subscribe failed", e);
-            }
-          }
-        },
-        onExit() {
-          if (window.WsHub) {
-            try {
-              window.WsHub.unsubscribe("transactions");
-            } catch (_) {}
-          }
-        },
-        onUnavailable() {
-          onWsUnavailable();
-        },
-      };
-
+      // Global init function for Router to call during SPA navigation
       window.initTransactionsPage = function () {
-        if (window.Realtime) {
-          window.Realtime.activate("transactions");
+        console.log("[Transactions] Initializing page");
+        initChipGroups();
+        applySavedFilters();
+        updateFilterMeta();
+        loadInitial({ reuseState: true });
+
+        const applyBtn = document.getElementById("tx-apply-filters");
+        const resetBtn = document.getElementById("tx-reset-filters");
+
+        if (applyBtn && !applyBtn.__listenerAttached) {
+          applyBtn.addEventListener("click", applyFilters);
+          applyBtn.__listenerAttached = true;
         }
+        if (resetBtn && !resetBtn.__listenerAttached) {
+          resetBtn.addEventListener("click", resetFilters);
+          resetBtn.__listenerAttached = true;
+        }
+
+        const toggleBtn = document.getElementById("tx-toggle-advanced");
+        if (toggleBtn && !toggleBtn.__listenerAttached) {
+          toggleBtn.addEventListener("click", toggleAdvancedPanel);
+          toggleBtn.__listenerAttached = true;
+        }
+
+        const signatureClear = document.getElementById("tx-clear-signature");
+        if (signatureClear && !signatureClear.__listenerAttached) {
+          signatureClear.addEventListener("click", () => {
+            el("tx-filter-signature").value = "";
+            updateFilterMeta();
+          });
+          signatureClear.__listenerAttached = true;
+        }
+
+        [
+          "tx-filter-router",
+          "tx-filter-mint",
+          "tx-filter-signature",
+          "tx-filter-min-sol",
+          "tx-filter-max-sol",
+          "tx-filter-from",
+          "tx-filter-to",
+        ].forEach((id) => {
+          const input = el(id);
+          if (input && !input.__metaListenerAttached) {
+            input.addEventListener("input", updateFilterMeta);
+            input.__metaListenerAttached = true;
+          }
+        });
       };
+
+      // Execute initialization immediately (works for both initial load and SPA navigation)
+      initTransactionsPage();
     })();
   </script>
 </div>

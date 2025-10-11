@@ -270,10 +270,9 @@
         console.log("[Services] Initializing controller");
         this.servicesData = null;
         this.hasInitialSnapshot = false;
-        this.setLoading("Waiting for realtime data...");
+        this.setLoading("Waiting for data...");
         this.bindToolbarEventsOnce();
         this.bindSortHandlersOnce();
-        // Note: Do NOT request snapshot here - it will be requested by onEnter after Realtime.activate()
       },
 
       reset() {
