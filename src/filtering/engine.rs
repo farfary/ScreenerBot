@@ -44,6 +44,7 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
 
     let mut filtered_mints: Vec<String> = Vec::new();
     let mut passed_tokens: Vec<PassedToken> = Vec::new();
+    let mut rejected_mints: Vec<String> = Vec::new();
     let mut rejected_tokens: Vec<RejectedToken> = Vec::new();
     let mut stats = FilteringStats::new();
 
@@ -78,6 +79,7 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
             Err(reason) => {
                 stats.record_rejection(&reason);
 
+                rejected_mints.push(token_api.mint.clone());
                 if rejected_tokens.len() >= MAX_DECISION_HISTORY {
                     rejected_tokens.remove(0);
                 }
@@ -127,6 +129,7 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
         updated_at: Utc::now(),
         filtered_mints,
         passed_tokens,
+        rejected_mints,
         rejected_tokens,
         tokens: token_entries,
     })

@@ -234,21 +234,11 @@ fn collect_entries<'a>(
                 })
                 .collect()
         }
-        FilteringView::Rejected => {
-            let mut seen = HashSet::new();
-            snapshot
-                .rejected_tokens
-                .iter()
-                .rev()
-                .filter_map(|decision| {
-                    if seen.insert(decision.mint.clone()) {
-                        snapshot.tokens.get(&decision.mint)
-                    } else {
-                        None
-                    }
-                })
-                .collect()
-        }
+        FilteringView::Rejected => snapshot
+            .rejected_mints
+            .iter()
+            .filter_map(|mint| snapshot.tokens.get(mint))
+            .collect(),
         FilteringView::Blacklisted => snapshot
             .tokens
             .values()

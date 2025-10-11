@@ -204,6 +204,7 @@ pub struct FilteringSnapshot {
     pub updated_at: DateTime<Utc>,
     pub filtered_mints: Vec<String>,
     pub passed_tokens: Vec<PassedToken>,
+    pub rejected_mints: Vec<String>,
     pub rejected_tokens: Vec<RejectedToken>,
     pub tokens: HashMap<String, TokenEntry>,
 }
@@ -214,6 +215,7 @@ impl FilteringSnapshot {
             updated_at: Utc::now(),
             filtered_mints: Vec::new(),
             passed_tokens: Vec::new(),
+            rejected_mints: Vec::new(),
             rejected_tokens: Vec::new(),
             tokens: HashMap::new(),
         }
