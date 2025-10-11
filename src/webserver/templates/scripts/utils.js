@@ -78,13 +78,20 @@
     return `$${scaled.toFixed(2)}${suffix}`;
   }
 
-  function formatPriceSol(price, { fallback = "N/A" } = {}) {
+  function formatPriceSol(price, { fallback = "N/A", decimals = 12 } = {}) {
     const num = coerceNumber(price);
     if (!Number.isFinite(num)) {
       return fallback;
     }
-    if (num === 0) return "0";
-    return Math.abs(num) < 0.000001 ? num.toExponential(4) : num.toFixed(8);
+
+    const desired = Math.floor(Number(decimals));
+    const precision = Number.isFinite(desired) && desired >= 0 ? desired : 12;
+    const boundedPrecision = precision > 12 ? 12 : precision;
+    const formatted = num.toFixed(boundedPrecision);
+    if (Object.is(num, -0)) {
+      return `0.${"0".repeat(boundedPrecision)}`;
+    }
+    return formatted;
   }
 
   function formatPercentValue(
@@ -492,7 +499,7 @@
     lines.push(
       `Price (SOL): ${
         price.pool_price_sol != null
-          ? Number(price.pool_price_sol).toPrecision(10)
+          ? formatPriceSol(p.price_sol, { fallback: "N/A" })
           : "N/A"
       }`
     );
@@ -560,7 +567,9 @@
         );
         lines.push(
           `  Price (SOL): ${
-            p.price_sol != null ? Number(p.price_sol).toPrecision(10) : "N/A"
+            p.price_sol != null
+              ? formatPriceSol(p.price_sol, { fallback: "N/A" })
+              : "N/A"
           }`
         );
       });
@@ -618,7 +627,7 @@
           lines.push(
             `  Entry Price: ${
               o.entry_price != null
-                ? Number(o.entry_price).toPrecision(10)
+                ? formatPriceSol(o.entry_price, { fallback: "N/A" })
                 : "N/A"
             }`
           );
@@ -632,7 +641,7 @@
           lines.push(
             `  Current Price: ${
               o.current_price != null
-                ? Number(o.current_price).toPrecision(10)
+                ? formatPriceSol(o.current_price, { fallback: "N/A" })
                 : "N/A"
             }`
           );
@@ -665,18 +674,34 @@
         lines.push("Recent Prices (last 10):");
         pd.price_history.slice(0, 10).forEach((p, i) => {
           const date = new Date(p.timestamp * 1000).toISOString();
+          const historyPrice =
+            p.price_sol != null
+              ? formatPriceSol(p.price_sol, { fallback: "N/A" })
+              : "N/A";
           lines.push(
-            `  ${i + 1}. ${date} - ${Number(p.price_sol).toPrecision(
-              10
-            )} SOL (conf: ${(p.confidence * 100).toFixed(1)}%)`
+            `  ${i + 1}. ${date} - ${historyPrice} SOL (conf: ${(
+              p.confidence * 100
+            ).toFixed(1)}%)`
           );
         });
       }
       if (pd.price_stats) {
         const ps = pd.price_stats;
-        lines.push(`Min Price: ${Number(ps.min_price).toPrecision(10)} SOL`);
-        lines.push(`Max Price: ${Number(ps.max_price).toPrecision(10)} SOL`);
-        lines.push(`Avg Price: ${Number(ps.avg_price).toPrecision(10)} SOL`);
+        lines.push(
+          `Min Price: ${formatPriceSol(ps.min_price, {
+            fallback: "N/A",
+          })} SOL`
+        );
+        lines.push(
+          `Max Price: ${formatPriceSol(ps.max_price, {
+            fallback: "N/A",
+          })} SOL`
+        );
+        lines.push(
+          `Avg Price: ${formatPriceSol(ps.avg_price, {
+            fallback: "N/A",
+          })} SOL`
+        );
         lines.push(`Volatility: ${Number(ps.price_volatility).toFixed(2)}%`);
         lines.push(`Data Points: ${ps.data_points}`);
         lines.push(

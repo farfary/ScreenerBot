@@ -855,8 +855,11 @@ function populateDebugModal(data, type) {
 
   // Price Data Tab
   const priceData = data.price_data || {};
-  document.getElementById("priceSol").textContent = priceData.pool_price_sol
-    ? priceData.pool_price_sol.toFixed(9)
+  const poolPriceValue = Number(priceData.pool_price_sol);
+  document.getElementById("priceSol").textContent = Number.isFinite(
+    poolPriceValue
+  )
+    ? Utils.formatPriceSol(poolPriceValue, { fallback: "N/A" })
     : "N/A";
   document.getElementById("priceConfidence").textContent = priceData.confidence
     ? (priceData.confidence * 100).toFixed(1) + "%"
@@ -911,9 +914,14 @@ function populateDebugModal(data, type) {
                     </div>
                     <div class="debug-row">
                         <span class="debug-label">Price (SOL):</span>
-                        <span class="debug-value"><span class="debug-value-text">${pool.price_sol.toFixed(
-                          9
-                        )}</span></span>
+                        <span class="debug-value"><span class="debug-value-text">${
+                          pool.price_sol != null &&
+                          Number.isFinite(Number(pool.price_sol))
+                            ? Utils.formatPriceSol(pool.price_sol, {
+                                fallback: "N/A",
+                              })
+                            : "N/A"
+                        }</span></span>
                     </div>
                 </div>
             `
@@ -968,11 +976,15 @@ function populateDebugModal(data, type) {
     if (posData.open_position) {
       const open = posData.open_position;
       document.getElementById("positionEntryPrice").textContent =
-        open.entry_price.toFixed(9);
+        open.entry_price != null
+          ? Utils.formatPriceSol(open.entry_price, { fallback: "N/A" })
+          : "N/A";
       document.getElementById("positionEntrySize").textContent =
         open.entry_size_sol.toFixed(4) + " SOL";
       document.getElementById("positionCurrentPrice").textContent =
-        open.current_price ? open.current_price.toFixed(9) : "N/A";
+        open.current_price != null
+          ? Utils.formatPriceSol(open.current_price, { fallback: "N/A" })
+          : "N/A";
       document.getElementById("positionUnrealizedPnL").textContent =
         open.unrealized_pnl
           ? open.unrealized_pnl.toFixed(4) +

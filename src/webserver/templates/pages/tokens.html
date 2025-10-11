@@ -1,3 +1,78 @@
+<style>
+  .token-row {
+    transition: background-color 0.45s ease;
+  }
+
+  .token-row--changed {
+    animation: token-row-flash 1.25s ease-out;
+  }
+
+  .token-row--up {
+    --token-glow-color: rgba(34, 197, 94, 0.2);
+  }
+
+  .token-row--down {
+    --token-glow-color: rgba(239, 68, 68, 0.2);
+  }
+
+  @keyframes token-row-flash {
+    0% {
+      background-color: var(--token-glow-color, rgba(59, 130, 246, 0.14));
+    }
+    75% {
+      background-color: rgba(15, 23, 42, 0.08);
+    }
+    100% {
+      background-color: transparent;
+    }
+  }
+
+  .price-cell {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .price-value {
+    transition: color 0.25s ease;
+  }
+
+  .price-cell--up .price-value {
+    color: #22c55e;
+  }
+
+  .price-cell--down .price-value {
+    color: #ef4444;
+  }
+
+  .price-arrow {
+    display: inline-block;
+    min-width: 0.9em;
+    font-size: 0.85em;
+    opacity: 0;
+    transform: translateY(-1px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+  }
+
+  .price-cell--up .price-arrow--up,
+  .price-cell--down .price-arrow--down {
+    opacity: 1;
+  }
+
+  .price-cell--up .price-arrow--up {
+    color: #22c55e;
+  }
+
+  .price-cell--down .price-arrow--down {
+    color: #ef4444;
+  }
+
+  .price-arrow--flat {
+    opacity: 0;
+  }
+</style>
 <script>
   var TOKENS_DEFAULT_PAGE_SIZE = Number("__TOKENS_DEFAULT_PAGE_SIZE__") || 50;
   var TOKENS_MAX_PAGE_SIZE =
@@ -79,6 +154,22 @@
     poller: null,
   };
   window.tokensAutoRefreshState = tokensAutoRefreshState;
+  var tokensPriceState = window.tokensPriceState || {
+    lastPrices: new Map(),
+    lastDirections: new Map(),
+    lastChangeAt: new Map(),
+  };
+  if (!(tokensPriceState.lastPrices instanceof Map)) {
+    tokensPriceState.lastPrices = new Map();
+  }
+  if (!(tokensPriceState.lastDirections instanceof Map)) {
+    tokensPriceState.lastDirections = new Map();
+  }
+  if (!(tokensPriceState.lastChangeAt instanceof Map)) {
+    tokensPriceState.lastChangeAt = new Map();
+  }
+  window.tokensPriceState = tokensPriceState;
+  var TOKENS_PRICE_HIGHLIGHT_TTL_MS = 4500;
   var TOKENS_PAGE_LIMIT = TOKENS_DEFAULT_PAGE_SIZE;
 
   function replaceAllTokensData(next) {
@@ -1246,6 +1337,103 @@
     return deduped;
   }
 
+  function pruneStalePriceHighlights(now) {
+    if (!tokensPriceState || !tokensPriceState.lastChangeAt) {
+      return;
+    }
+    const ttl = Number(TOKENS_PRICE_HIGHLIGHT_TTL_MS) || 0;
+    if (ttl <= 0) {
+      if (typeof tokensPriceState.lastChangeAt.clear === "function") {
+        tokensPriceState.lastChangeAt.clear();
+      } else {
+        tokensPriceState.lastChangeAt = new Map();
+      }
+      if (typeof tokensPriceState.lastDirections.clear === "function") {
+        tokensPriceState.lastDirections.clear();
+      } else {
+        tokensPriceState.lastDirections = new Map();
+      }
+      return;
+    }
+
+    for (const [mint, timestamp] of tokensPriceState.lastChangeAt) {
+      if (!Number.isFinite(timestamp) || now - timestamp > ttl) {
+        tokensPriceState.lastChangeAt.delete(mint);
+        tokensPriceState.lastDirections.delete(mint);
+      }
+    }
+  }
+
+  function annotateTokensWithPriceChange(tokens) {
+    if (!Array.isArray(tokens) || tokens.length === 0) {
+      return tokens;
+    }
+
+    const now = Date.now();
+    pruneStalePriceHighlights(now);
+    const ttl = Number(TOKENS_PRICE_HIGHLIGHT_TTL_MS) || 0;
+
+    for (const token of tokens) {
+      if (!token || typeof token !== "object") {
+        continue;
+      }
+
+      const mint = token.mint;
+      const currentPrice = Number(token.price_sol);
+      const prevPrice = mint ? tokensPriceState.lastPrices.get(mint) : null;
+      let changed = false;
+      let direction = null;
+
+      if (mint && Number.isFinite(currentPrice)) {
+        if (Number.isFinite(prevPrice)) {
+          if (currentPrice > prevPrice) {
+            direction = "up";
+            changed = true;
+          } else if (currentPrice < prevPrice) {
+            direction = "down";
+            changed = true;
+          }
+        }
+
+        tokensPriceState.lastPrices.set(mint, currentPrice);
+      } else if (mint) {
+        tokensPriceState.lastPrices.delete(mint);
+      }
+
+      if (changed && mint) {
+        tokensPriceState.lastDirections.set(mint, direction);
+        tokensPriceState.lastChangeAt.set(mint, now);
+      }
+
+      const lastDirection = mint
+        ? tokensPriceState.lastDirections.get(mint)
+        : null;
+      const changeAt = mint ? tokensPriceState.lastChangeAt.get(mint) : null;
+      const highlightActive =
+        Boolean(lastDirection) && Number.isFinite(changeAt)
+          ? now - changeAt <= ttl
+          : false;
+      const indicatorDirection = changed
+        ? direction
+        : highlightActive
+        ? lastDirection
+        : null;
+
+      token.__previousPrice = Number.isFinite(prevPrice) ? prevPrice : null;
+      token.__priceChanged = changed;
+      token.__priceHighlight = Boolean(highlightActive);
+      token.__priceDirection = indicatorDirection;
+      token.__priceChangeAt = Number.isFinite(changeAt) ? changeAt : null;
+
+      if (!highlightActive && !changed && mint) {
+        tokensPriceState.lastChangeAt.delete(mint);
+        tokensPriceState.lastDirections.delete(mint);
+      }
+    }
+
+    return tokens;
+  }
+
   function showTokensError(message) {
     const tbody = document.getElementById("tokensTableBody");
     if (!tbody) return;
@@ -1527,13 +1715,15 @@
     const normalized = Array.isArray(body.items)
       ? body.items.map(normalizeTokenFromApi)
       : [];
+    const deduped = dedupeTokensByMint(normalized);
+    annotateTokensWithPriceChange(deduped);
     const total = Number(body.total) || normalized.length;
     const totalPages =
       Number(body.total_pages) ||
       (pageSize > 0 ? Math.ceil(total / pageSize) : 1);
     const responsePageSize = Number(body.page_size) || pageSize;
     return {
-      items: dedupeTokensByMint(normalized),
+      items: deduped,
       total,
       totalPages,
       pageSize: responsePageSize,
@@ -1753,6 +1943,35 @@
     const priceDisplay = Utils.formatPriceSol(token.price_sol, {
       fallback: "N/A",
     });
+    const rawPrice = Number(token.price_sol);
+    const priceTitle = Number.isFinite(rawPrice)
+      ? rawPrice.toFixed(12)
+      : token.price_sol ?? "";
+    const priceIndicator = token.__priceDirection;
+    const highlightActive =
+      token.__priceHighlight === true &&
+      (priceIndicator === "up" || priceIndicator === "down");
+    const rowClassNames = ["token-row"];
+    if (highlightActive) {
+      rowClassNames.push("token-row--changed");
+      rowClassNames.push(
+        priceIndicator === "down" ? "token-row--down" : "token-row--up"
+      );
+    }
+    const priceCellClassNames = ["num", "price-cell"];
+    if (priceIndicator === "up") {
+      priceCellClassNames.push("price-cell--up");
+    } else if (priceIndicator === "down") {
+      priceCellClassNames.push("price-cell--down");
+    }
+    const arrowHtml =
+      priceIndicator === "up"
+        ? '<span class="price-arrow price-arrow--up" aria-hidden="true">▲</span>'
+        : priceIndicator === "down"
+        ? '<span class="price-arrow price-arrow--down" aria-hidden="true">▼</span>'
+        : '<span class="price-arrow price-arrow--flat" aria-hidden="true">▲</span>';
+    const priceCellContent =
+      arrowHtml + '<span class="price-value">' + priceDisplay + "</span>";
     const liquidity = Utils.formatCurrencyUSD(token.liquidity_usd, {
       fallback: "—",
     });
@@ -1774,7 +1993,9 @@
     const logo = safeLogoHtml(token.logo_url, token.symbol);
 
     return `
-                <tr data-mint="${mint}" onclick="openTokenDetail('${mint}')" style="cursor:pointer;" title="Click to view details">
+                <tr class="${rowClassNames.join(
+                  " "
+                )}" data-mint="${mint}" onclick="openTokenDetail('${mint}')" style="cursor:pointer;" title="Click to view details">
                     <td>
                         <div style="display:flex; align-items:center; gap:12px; min-width:0;">
                             ${logo}
@@ -1784,9 +2005,9 @@
                             </div>
                         </div>
                     </td>
-                    <td class="num" style="font-weight:600;" title="${
-                      token.price_sol ?? ""
-                    }">${priceDisplay}</td>
+                    <td class="${priceCellClassNames.join(
+                      " "
+                    )}" style="font-weight:600;" title="${priceTitle}">${priceCellContent}</td>
                     <td class="num" title="${
                       token.liquidity_usd ?? ""
                     }">${liquidity}</td>
