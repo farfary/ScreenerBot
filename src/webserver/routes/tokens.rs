@@ -128,6 +128,8 @@ pub struct TokenListQuery {
     pub page: usize,
     #[serde(default = "default_page_size")]
     pub page_size: usize,
+    #[serde(default)]
+    pub min_holders: Option<i32>,
 }
 
 fn default_view() -> String {
@@ -170,6 +172,7 @@ pub struct FilterRequest {
     pub max_volume_24h: Option<f64>,
     pub min_security_score: Option<i32>,
     pub max_security_score: Option<i32>,
+    pub min_holders: Option<i32>,
     pub has_pool_price: Option<bool>,
     pub has_open_position: Option<bool>,
     pub blacklisted: Option<bool>,
@@ -202,6 +205,7 @@ impl TokenListQuery {
         query.sort_direction = SortDirection::from_str(&self.sort_dir);
         query.page = self.page.max(1);
         query.page_size = self.page_size.max(1);
+        query.min_unique_holders = self.min_holders;
         query.clamp_page_size(max_page_size);
         query
     }
@@ -222,6 +226,7 @@ impl FilterRequest {
         query.max_volume_24h = self.max_volume_24h;
         query.min_security_score = self.min_security_score;
         query.max_security_score = self.max_security_score;
+        query.min_unique_holders = self.min_holders;
         query.has_pool_price = self.has_pool_price;
         query.has_open_position = self.has_open_position;
         query.blacklisted = self.blacklisted;

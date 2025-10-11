@@ -327,6 +327,10 @@ fn apply_filters(items: &mut Vec<TokenSummary>, query: &FilteringQuery) {
         items.retain(|summary| summary.security_score.unwrap_or(i32::MAX) <= max);
     }
 
+    if let Some(min) = query.min_unique_holders {
+        items.retain(|summary| summary.total_holders.unwrap_or(0) >= min);
+    }
+
     if let Some(flag) = query.has_pool_price {
         items.retain(|summary| summary.has_pool_price == flag);
     }

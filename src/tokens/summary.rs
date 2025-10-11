@@ -24,6 +24,7 @@ pub struct TokenSummary {
     pub price_change_h24: Option<f64>,
     pub security_score: Option<i32>,
     pub rugged: Option<bool>,
+    pub total_holders: Option<i32>,
     pub has_pool_price: bool,
     pub has_ohlcv: bool,
     pub has_open_position: bool,
@@ -42,6 +43,7 @@ pub struct TokenSummaryContext {
 pub struct SecuritySnapshot {
     pub score: i32,
     pub rugged: bool,
+    pub total_holders: Option<i32>,
 }
 
 impl TokenSummaryContext {
@@ -107,10 +109,16 @@ pub fn token_to_summary(token: &ApiToken, caches: &TokenSummaryContext) -> Token
     let has_open_position = caches.has_open_position(&token.mint);
     let blacklisted = caches.is_blacklisted(&token.mint);
 
-    let (security_score, rugged) = caches
+    let (security_score, rugged, total_holders) = caches
         .security_snapshot(&token.mint)
-        .map(|snapshot| (Some(snapshot.score), Some(snapshot.rugged)))
-        .unwrap_or((None, None));
+        .map(|snapshot| {
+            (
+                Some(snapshot.score),
+                Some(snapshot.rugged),
+                snapshot.total_holders,
+            )
+        })
+        .unwrap_or((None, None, None));
 
     TokenSummary {
         mint: token.mint.clone(),
@@ -127,6 +135,7 @@ pub fn token_to_summary(token: &ApiToken, caches: &TokenSummaryContext) -> Token
         price_change_h24: token.price_change.as_ref().and_then(|p| p.h24),
         security_score,
         rugged,
+        total_holders,
         has_pool_price,
         has_ohlcv,
         has_open_position,
@@ -163,6 +172,11 @@ fn load_security_snapshots(mints: &HashSet<String>) -> HashMap<String, SecurityS
                     SecuritySnapshot {
                         score: sec.score,
                         rugged: sec.rugged,
+                        total_holders: if sec.total_holders > 0 {
+                            Some(sec.total_holders)
+                        } else {
+                            None
+                        },
                     },
                 );
             }
