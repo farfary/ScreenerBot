@@ -28,7 +28,11 @@
   }
 
   .price-cell {
-    display: flex;
+    text-align: right;
+  }
+
+  .price-cell__inner {
+    display: inline-flex;
     align-items: center;
     justify-content: flex-end;
     gap: 6px;
@@ -39,11 +43,11 @@
     transition: color 0.25s ease;
   }
 
-  .price-cell--up .price-value {
+  .price-cell__inner--up .price-value {
     color: #22c55e;
   }
 
-  .price-cell--down .price-value {
+  .price-cell__inner--down .price-value {
     color: #ef4444;
   }
 
@@ -56,16 +60,16 @@
     transition: opacity 0.25s ease, transform 0.25s ease;
   }
 
-  .price-cell--up .price-arrow--up,
-  .price-cell--down .price-arrow--down {
+  .price-cell__inner--up .price-arrow--up,
+  .price-cell__inner--down .price-arrow--down {
     opacity: 1;
   }
 
-  .price-cell--up .price-arrow--up {
+  .price-cell__inner--up .price-arrow--up {
     color: #22c55e;
   }
 
-  .price-cell--down .price-arrow--down {
+  .price-cell__inner--down .price-arrow--down {
     color: #ef4444;
   }
 
@@ -818,11 +822,7 @@
       }
       return;
     }
-    const viewLabel = VIEW_LABELS[tokensState.view] || "";
-    const message = viewLabel
-      ? `Refreshing tokens ${viewLabel}...`
-      : "Refreshing tokens...";
-    reloadTokensList(message, { preserveItems: true });
+    reloadTokensList(null, { preserveItems: true, silent: true });
   }
 
   function ensureTokensAutoRefresh() {
@@ -1147,9 +1147,19 @@
 
     const refreshBtn = toolbarContainer.querySelector("#tokensRefreshBtn");
     if (refreshBtn) {
-      refreshBtn.addEventListener("click", () =>
-        reloadTokensList("Refreshing tokens...")
-      );
+      refreshBtn.addEventListener("click", () => {
+        const originalLabel = refreshBtn.textContent;
+        refreshBtn.disabled = true;
+        refreshBtn.textContent = "Refreshing…";
+        reloadTokensList(null, { preserveItems: true, silent: true })
+          .catch(() => {
+            /* handled via toast */
+          })
+          .finally(() => {
+            refreshBtn.disabled = false;
+            refreshBtn.textContent = originalLabel;
+          });
+      });
     }
 
     const exportBtn = toolbarContainer.querySelector("#tokensExportBtn");
@@ -1810,6 +1820,7 @@
     const statusMessage = message || "Loading tokens...";
     const preserveItems = opts.preserveItems === true;
     const resetPagination = opts.resetPagination !== false;
+    const silent = opts.silent === true;
 
     if (tokensFetchState.abortController) {
       try {
@@ -1827,7 +1838,7 @@
     }
 
     tokensFetchState.inProgress = true;
-    tokensFetchState.message = statusMessage;
+    tokensFetchState.message = silent ? "" : statusMessage;
     tokensTableState.loading = true;
     tokensTableState.pendingReload = true;
 
@@ -1835,11 +1846,13 @@
       Array.isArray(allTokensData) && allTokensData.length > 0;
     if (!preserveItems || !hasExistingRows) {
       showTokensLoading(statusMessage);
-    } else {
+    } else if (!silent) {
       setTokenCountStatus(statusMessage);
     }
 
-    setTokensScrollGuardState("loading");
+    if (!silent || !hasExistingRows) {
+      setTokensScrollGuardState("loading");
+    }
 
     const controller = new AbortController();
     tokensFetchState.abortController = controller;
@@ -1888,7 +1901,11 @@
         return;
       }
       console.error("[Tokens] Failed to load tokens list", err);
-      showTokensError("❌ Failed to load tokens");
+      if (silent && preserveItems) {
+        Utils.showToast("❌ Failed to refresh tokens", "error");
+      } else {
+        showTokensError("❌ Failed to load tokens");
+      }
     } finally {
       if (tokensFetchState.abortController === controller) {
         tokensFetchState.abortController = null;
@@ -1948,21 +1965,26 @@
       ? rawPrice.toFixed(12)
       : token.price_sol ?? "";
     const priceIndicator = token.__priceDirection;
-    const highlightActive =
-      token.__priceHighlight === true &&
-      (priceIndicator === "up" || priceIndicator === "down");
+    const highlightActive = token.__priceHighlight === true;
+    const justChanged = token.__priceChanged === true;
     const rowClassNames = ["token-row"];
-    if (highlightActive) {
-      rowClassNames.push("token-row--changed");
+    if (
+      highlightActive &&
+      (priceIndicator === "up" || priceIndicator === "down")
+    ) {
       rowClassNames.push(
         priceIndicator === "down" ? "token-row--down" : "token-row--up"
       );
     }
+    if (justChanged && (priceIndicator === "up" || priceIndicator === "down")) {
+      rowClassNames.push("token-row--changed");
+    }
     const priceCellClassNames = ["num", "price-cell"];
+    const priceInnerClassNames = ["price-cell__inner"];
     if (priceIndicator === "up") {
-      priceCellClassNames.push("price-cell--up");
+      priceInnerClassNames.push("price-cell__inner--up");
     } else if (priceIndicator === "down") {
-      priceCellClassNames.push("price-cell--down");
+      priceInnerClassNames.push("price-cell__inner--down");
     }
     const arrowHtml =
       priceIndicator === "up"
@@ -1971,7 +1993,13 @@
         ? '<span class="price-arrow price-arrow--down" aria-hidden="true">▼</span>'
         : '<span class="price-arrow price-arrow--flat" aria-hidden="true">▲</span>';
     const priceCellContent =
-      arrowHtml + '<span class="price-value">' + priceDisplay + "</span>";
+      '<div class="' +
+      priceInnerClassNames.join(" ") +
+      '">' +
+      arrowHtml +
+      '<span class="price-value">' +
+      priceDisplay +
+      "</span></div>";
     const liquidity = Utils.formatCurrencyUSD(token.liquidity_usd, {
       fallback: "—",
     });
