@@ -422,33 +422,37 @@
     color: #f1f1f5;
   }
 
-  .impact {
-    padding: 3px 8px;
+  .category-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
     border-radius: 999px;
+    border: 1px solid transparent;
     font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.6px;
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.8);
   }
 
-  .impact.critical {
-    background: #f5576c;
-    color: white;
+  .category-badge.general {
+    background: rgba(59, 130, 246, 0.18);
+    border-color: rgba(59, 130, 246, 0.5);
+    color: #bfdbfe;
   }
 
-  .impact.high {
-    background: #ffaa00;
-    color: white;
+  .category-badge.advanced {
+    background: rgba(249, 115, 22, 0.18);
+    border-color: rgba(249, 115, 22, 0.45);
+    color: #fdba74;
   }
 
-  .impact.medium {
-    background: #4facfe;
-    color: white;
-  }
-
-  .impact.low {
-    background: #888;
-    color: white;
+  .category-badge.developer {
+    background: rgba(139, 92, 246, 0.18);
+    border-color: rgba(139, 92, 246, 0.45);
+    color: #ddd6fe;
   }
 
   .field input,
@@ -1418,7 +1422,6 @@
     const fieldId = `${sectionName}_${field.key}`;
     const requiresInteger = isIntegerField(sectionName, field.key);
     const labelText = field.label || formatFieldLabel(field.key);
-    const impactValue = field.impact || "medium";
     const categoryLabel = field.category || "General";
     const categoryValue = categoryLabel.toLowerCase();
     const hintText = field.hint || "";
@@ -1465,14 +1468,14 @@
     return `
         <div class="${fieldClasses.join(
           " "
-        )}" data-impact="${impactValue}" data-category="${categoryValue}" data-category-label="${categoryLabel}" data-field-key="${
+        )}" data-category="${categoryValue}" data-category-label="${categoryLabel}" data-field-key="${
       field.key
     }">
             <div class="field-header">
                 <label>${labelText}${
       field.unit ? ` (${field.unit})` : ""
     }</label>
-                <span class="impact ${impactValue}">${impactValue}</span>
+                <span class="category-badge ${categoryValue}">${categoryLabel}</span>
             </div>
             ${inputHTML}
             <div class="field-hint">${hintText}</div>
