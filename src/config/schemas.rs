@@ -99,7 +99,7 @@ config_struct! {
             max: 720,
             step: 1,
             unit: "hours",
-            impact: "medium",
+            impact: "critical",
             category: "Time Overrides",
         })]
         time_override_duration_hours: f64 = 168.0,
@@ -173,7 +173,7 @@ config_struct! {
             max: 300,
             step: 5,
             unit: "seconds",
-            impact: "high",
+            impact: "critical",
             category: "Debug",
         })]
         debug_force_sell_timeout_secs: f64 = 45.0,
@@ -204,7 +204,7 @@ config_struct! {
             max: 1440,
             step: 5,
             unit: "minutes",
-            impact: "medium",
+            impact: "critical",
             category: "Timing",
         })]
         position_close_cooldown_minutes: i64 = 15,
@@ -217,7 +217,7 @@ config_struct! {
             max: 60,
             step: 1,
             unit: "seconds",
-            impact: "medium",
+            impact: "critical",
             category: "Timing",
         })]
         entry_monitor_interval_secs: u64 = 3,
@@ -228,7 +228,7 @@ config_struct! {
             max: 60,
             step: 1,
             unit: "seconds",
-            impact: "medium",
+            impact: "critical",
             category: "Timing",
         })]
         position_monitor_interval_secs: u64 = 2,
@@ -241,7 +241,7 @@ config_struct! {
             max: 300,
             step: 5,
             unit: "seconds",
-            impact: "low",
+            impact: "critical",
             category: "Timeouts",
         })]
         semaphore_acquire_timeout_secs: u64 = 60,
@@ -252,7 +252,7 @@ config_struct! {
             max: 120,
             step: 5,
             unit: "seconds",
-            impact: "low",
+            impact: "critical",
             category: "Timeouts",
         })]
         token_check_task_timeout_secs: u64 = 20,
@@ -263,7 +263,7 @@ config_struct! {
             max: 180,
             step: 5,
             unit: "seconds",
-            impact: "low",
+            impact: "critical",
             category: "Timeouts",
         })]
         token_check_collection_timeout_secs: u64 = 30,
@@ -274,7 +274,7 @@ config_struct! {
             max: 150,
             step: 5,
             unit: "seconds",
-            impact: "low",
+            impact: "critical",
             category: "Timeouts",
         })]
         token_check_handle_timeout_secs: u64 = 25,
@@ -285,7 +285,7 @@ config_struct! {
             max: 600,
             step: 10,
             unit: "seconds",
-            impact: "low",
+            impact: "critical",
             category: "Timeouts",
         })]
         sell_operations_collection_timeout_secs: u64 = 240,
@@ -296,7 +296,7 @@ config_struct! {
             max: 1200,
             step: 30,
             unit: "seconds",
-            impact: "low",
+            impact: "critical",
             category: "Timeouts",
         })]
         sell_operation_smart_timeout_secs: u64 = 600,
@@ -307,7 +307,7 @@ config_struct! {
             max: 300,
             step: 5,
             unit: "seconds",
-            impact: "low",
+            impact: "critical",
             category: "Timeouts",
         })]
         sell_semaphore_acquire_timeout_secs: u64 = 30,
@@ -318,7 +318,7 @@ config_struct! {
             max: 600,
             step: 10,
             unit: "seconds",
-            impact: "low",
+            impact: "critical",
             category: "Timeouts",
         })]
         sell_task_handle_timeout_secs: u64 = 200,
@@ -329,7 +329,7 @@ config_struct! {
             max: 5000,
             step: 10,
             unit: "ms",
-            impact: "low",
+            impact: "critical",
             category: "Timeouts",
         })]
         entry_cycle_min_wait_ms: u64 = 100,
@@ -340,7 +340,7 @@ config_struct! {
             max: 1000,
             step: 10,
             unit: "ms",
-            impact: "low",
+            impact: "critical",
             category: "Timeouts",
         })]
         token_processing_shutdown_check_ms: u64 = 10,
@@ -351,7 +351,7 @@ config_struct! {
             max: 1000,
             step: 10,
             unit: "ms",
-            impact: "low",
+            impact: "critical",
             category: "Timeouts",
         })]
         task_shutdown_check_ms: u64 = 10,
@@ -362,7 +362,7 @@ config_struct! {
             max: 1000,
             step: 10,
             unit: "ms",
-            impact: "low",
+            impact: "critical",
             category: "Timeouts",
         })]
         sell_operation_shutdown_check_ms: u64 = 10,
@@ -373,7 +373,7 @@ config_struct! {
             max: 1000,
             step: 10,
             unit: "ms",
-            impact: "low",
+            impact: "critical",
             category: "Timeouts",
         })]
         collection_shutdown_check_ms: u64 = 50,
@@ -406,7 +406,7 @@ config_struct! {
             max: 300,
             step: 1,
             unit: "seconds",
-            impact: "medium",
+            impact: "critical",
             category: "Timing",
         })]
         position_open_cooldown_secs: i64 = 5,
@@ -419,7 +419,7 @@ config_struct! {
             max: 600,
             step: 10,
             unit: "seconds",
-            impact: "medium",
+            impact: "critical",
             category: "Timing",
         })]
         pending_open_ttl_secs: i64 = 120,
@@ -454,7 +454,7 @@ config_struct! {
             max: 300,
             step: 5,
             unit: "seconds",
-            impact: "medium",
+            impact: "critical",
             category: "Performance",
         })]
         filter_cache_ttl_secs: u64 = 15,
@@ -512,7 +512,7 @@ config_struct! {
             max: 10080,
             step: 10,
             unit: "minutes",
-            impact: "high",
+            impact: "critical",
             category: "Age",
         })]
         min_token_age_minutes: i64 = 60,
@@ -697,7 +697,7 @@ config_struct! {
             max: 60,
             step: 1,
             unit: "seconds",
-            impact: "medium",
+            impact: "critical",
             category: "Timeouts",
         })]
         quote_timeout_secs: u64 = 15,
@@ -708,7 +708,7 @@ config_struct! {
             max: 120,
             step: 5,
             unit: "seconds",
-            impact: "medium",
+            impact: "critical",
             category: "Timeouts",
         })]
         api_timeout_secs: u64 = 30,
@@ -732,7 +732,7 @@ config_struct! {
             max: 600,
             step: 30,
             unit: "seconds",
-            impact: "high",
+            impact: "critical",
             category: "Confirmation",
         })]
         transaction_confirmation_timeout_secs: u64 = 300,
@@ -743,7 +743,7 @@ config_struct! {
             max: 300,
             step: 5,
             unit: "seconds",
-            impact: "medium",
+            impact: "critical",
             category: "Confirmation",
         })]
         priority_confirmation_timeout_secs: u64 = 30,
@@ -776,7 +776,7 @@ config_struct! {
             max: 10000,
             step: 500,
             unit: "ms",
-            impact: "low",
+            impact: "critical",
             category: "Confirmation",
         })]
         transaction_confirmation_retry_delay_ms: u64 = 3000,
@@ -787,7 +787,7 @@ config_struct! {
             max: 5000,
             step: 500,
             unit: "ms",
-            impact: "low",
+            impact: "critical",
             category: "Confirmation",
         })]
         priority_confirmation_retry_delay_ms: u64 = 1000,
@@ -811,7 +811,7 @@ config_struct! {
             max: 10000,
             step: 500,
             unit: "ms",
-            impact: "low",
+            impact: "critical",
             category: "Delays",
         })]
         initial_confirmation_delay_ms: u64 = 5000,
@@ -822,7 +822,7 @@ config_struct! {
             max: 60,
             step: 1,
             unit: "seconds",
-            impact: "low",
+            impact: "critical",
             category: "Delays",
         })]
         max_confirmation_delay_secs: u64 = 8,
@@ -833,7 +833,7 @@ config_struct! {
             max: 5,
             step: 0.1,
             unit: "x",
-            impact: "low",
+            impact: "critical",
             category: "Delays",
         })]
         confirmation_backoff_multiplier: f64 = 1.5,
@@ -844,7 +844,7 @@ config_struct! {
             max: 300,
             step: 10,
             unit: "seconds",
-            impact: "medium",
+            impact: "critical",
             category: "Delays",
         })]
         confirmation_timeout_secs: u64 = 60,
@@ -855,7 +855,7 @@ config_struct! {
             max: 30,
             step: 1,
             unit: "seconds",
-            impact: "low",
+            impact: "critical",
             category: "Delays",
         })]
         priority_confirmation_timeout_secs_mod: u64 = 5,
@@ -868,7 +868,7 @@ config_struct! {
             max: 60,
             step: 1,
             unit: "seconds",
-            impact: "low",
+            impact: "critical",
             category: "Rate Limit",
         })]
         rate_limit_base_delay_secs: u64 = 5,
@@ -879,7 +879,7 @@ config_struct! {
             max: 30,
             step: 1,
             unit: "seconds",
-            impact: "low",
+            impact: "critical",
             category: "Rate Limit",
         })]
         rate_limit_increment_secs: u64 = 2,
@@ -892,7 +892,7 @@ config_struct! {
             max: 5000,
             step: 500,
             unit: "ms",
-            impact: "low",
+            impact: "critical",
             category: "Delays",
         })]
         early_attempt_delay_ms: u64 = 1000,
@@ -1166,7 +1166,7 @@ config_struct! {
             max: 168,
             step: 1,
             unit: "hours",
-            impact: "medium",
+            impact: "critical",
             category: "Blacklist",
         })]
         min_age_hours: i64 = 2,
@@ -1199,7 +1199,7 @@ config_struct! {
             max: 60,
             step: 5,
             unit: "minutes",
-            impact: "low",
+            impact: "critical",
             category: "Blacklist",
         })]
         cache_refresh_interval_minutes: i64 = 5,
@@ -1212,7 +1212,7 @@ config_struct! {
             max: 720,
             step: 24,
             unit: "hours",
-            impact: "low",
+            impact: "critical",
             category: "OHLCV",
         })]
         max_ohlcv_age_hours: i64 = 168,
@@ -1258,7 +1258,7 @@ config_struct! {
             max: 24,
             step: 1,
             unit: "hours",
-            impact: "medium",
+            impact: "critical",
             category: "Monitoring",
         })]
         max_update_interval_hours: i64 = 2,
@@ -1269,7 +1269,7 @@ config_struct! {
             max: 240,
             step: 10,
             unit: "minutes",
-            impact: "low",
+            impact: "critical",
             category: "Monitoring",
         })]
         new_token_boost_max_age_minutes: i64 = 60,
@@ -1304,7 +1304,7 @@ config_struct! {
             max: 300,
             step: 10,
             unit: "seconds",
-            impact: "medium",
+            impact: "critical",
             category: "Timing",
         })]
         price_refresh_interval_secs: u64 = 30,
@@ -1326,7 +1326,7 @@ config_struct! {
             max: 300,
             step: 5,
             unit: "seconds",
-            impact: "low",
+            impact: "critical",
             category: "Display",
         })]
         summary_display_interval_secs: u64 = 15,
@@ -1361,7 +1361,7 @@ config_struct! {
             max: 1000,
             step: 10,
             unit: "ms",
-            impact: "low",
+            impact: "critical",
             category: "Performance",
         })]
         batch_timeout_ms: u64 = 100,
@@ -1416,12 +1416,42 @@ config_struct! {
     pub struct WebSocketConfig {
         enabled: bool = true,
         max_connections: usize = 100,
+        #[metadata(field_metadata! {
+            label: "Heartbeat Interval",
+            hint: "Seconds between WebSocket heartbeat messages",
+            min: 5,
+            max: 300,
+            step: 5,
+            unit: "seconds",
+            impact: "critical",
+            category: "WebSocket",
+        })]
         heartbeat_interval_secs: u64 = 30,
 
         // Central hub configuration
         central_hub_enabled: bool = false,
         per_client_buffer: usize = 256,
+        #[metadata(field_metadata! {
+            label: "Hub Heartbeat",
+            hint: "Seconds between central hub heartbeat signals",
+            min: 5,
+            max: 300,
+            step: 5,
+            unit: "seconds",
+            impact: "critical",
+            category: "WebSocket",
+        })]
         heartbeat_secs: u64 = 30,
+        #[metadata(field_metadata! {
+            label: "Client Idle Timeout",
+            hint: "Seconds before disconnecting idle WebSocket clients",
+            min: 10,
+            max: 600,
+            step: 10,
+            unit: "seconds",
+            impact: "critical",
+            category: "WebSocket",
+        })]
         client_idle_timeout_secs: u64 = 90,
         snapshot_limits: WsSnapshotLimitsConfig = WsSnapshotLimitsConfig::default(),
     }
@@ -1435,28 +1465,108 @@ config_struct! {
         /// Maximum number of tokens to monitor simultaneously
         max_monitored_tokens: usize = 100,
         /// Data retention period in days
+        #[metadata(field_metadata! {
+            label: "Retention Days",
+            hint: "Days to retain historical OHLCV data",
+            min: 1,
+            max: 30,
+            step: 1,
+            unit: "days",
+            impact: "critical",
+            category: "Retention",
+        })]
         retention_days: i64 = 7,
         /// GeckoTerminal API rate limit (calls per minute)
         api_rate_limit: usize = 30,
         /// Default fetch interval for low priority tokens (seconds)
+        #[metadata(field_metadata! {
+            label: "Default Fetch Interval",
+            hint: "Seconds between fetches for low priority tokens",
+            min: 30,
+            max: 7200,
+            step: 30,
+            unit: "seconds",
+            impact: "critical",
+            category: "Intervals",
+        })]
         default_fetch_interval_secs: u64 = 900,
         /// Critical token fetch interval (seconds, for open positions)
+        #[metadata(field_metadata! {
+            label: "Critical Fetch Interval",
+            hint: "Seconds between fetches for critical tokens",
+            min: 5,
+            max: 600,
+            step: 5,
+            unit: "seconds",
+            impact: "critical",
+            category: "Intervals",
+        })]
         critical_fetch_interval_secs: u64 = 30,
         /// High priority fetch interval (seconds)
+        #[metadata(field_metadata! {
+            label: "High Priority Interval",
+            hint: "Seconds between fetches for high priority tokens",
+            min: 10,
+            max: 1200,
+            step: 10,
+            unit: "seconds",
+            impact: "critical",
+            category: "Intervals",
+        })]
         high_fetch_interval_secs: u64 = 60,
         /// Medium priority fetch interval (seconds)
+        #[metadata(field_metadata! {
+            label: "Medium Priority Interval",
+            hint: "Seconds between fetches for medium priority tokens",
+            min: 30,
+            max: 3600,
+            step: 30,
+            unit: "seconds",
+            impact: "critical",
+            category: "Intervals",
+        })]
         medium_fetch_interval_secs: u64 = 300,
         /// Maximum consecutive empty fetches before throttling
         max_empty_fetches: u32 = 10,
         /// Enable automatic gap filling
         auto_fill_gaps: bool = true,
         /// Gap fill check interval (seconds)
+        #[metadata(field_metadata! {
+            label: "Gap Fill Interval",
+            hint: "Seconds between gap fill checks",
+            min: 30,
+            max: 3600,
+            step: 30,
+            unit: "seconds",
+            impact: "critical",
+            category: "Intervals",
+        })]
         gap_fill_interval_secs: u64 = 300,
         /// Cache size (maximum number of tokens in hot cache)
         cache_size: usize = 100,
         /// Cache retention hours (for hot cache)
+        #[metadata(field_metadata! {
+            label: "Cache Retention",
+            hint: "Hours to keep tokens in hot cache",
+            min: 1,
+            max: 168,
+            step: 1,
+            unit: "hours",
+            impact: "critical",
+            category: "Cache",
+        })]
         cache_retention_hours: i64 = 24,
         /// Database cleanup interval (seconds)
+        #[metadata(field_metadata! {
+            label: "Cleanup Interval",
+            hint: "Seconds between database cleanup passes",
+            min: 60,
+            max: 86400,
+            step: 60,
+            unit: "seconds",
+            impact: "critical",
+            category: "Maintenance",
+        })]
         cleanup_interval_secs: u64 = 3600,
         /// Enable pool failover
         pool_failover_enabled: bool = true,
@@ -1475,15 +1585,45 @@ config_struct! {
         max_page_size: usize = 200,
 
         /// Auto-refresh interval (milliseconds)
+        #[metadata(field_metadata! {
+            label: "Auto Refresh Interval",
+            hint: "Milliseconds between token table refreshes",
+            min: 500,
+            max: 10000,
+            step: 100,
+            unit: "ms",
+            impact: "critical",
+            category: "Tokens Tab",
+        })]
         auto_refresh_interval_ms: u64 = 2000,
 
         /// Price staleness warning threshold (seconds)
+        #[metadata(field_metadata! {
+            label: "Price Staleness Threshold",
+            hint: "Seconds before highlighting stale price data",
+            min: 10,
+            max: 600,
+            step: 5,
+            unit: "seconds",
+            impact: "critical",
+            category: "Tokens Tab",
+        })]
         price_staleness_threshold_seconds: u64 = 60,
 
         /// Security score threshold for "secure" view
         secure_token_score_threshold: i32 = 500,
 
         /// Recent token lookback period (hours)
+        #[metadata(field_metadata! {
+            label: "Recent Token Window",
+            hint: "Hours considered for recent token filtering",
+            min: 1,
+            max: 72,
+            step: 1,
+            unit: "hours",
+            impact: "critical",
+            category: "Tokens Tab",
+        })]
         recent_token_hours: i64 = 24,
 
         /// Enable OHLCV charts
@@ -1506,6 +1646,16 @@ config_struct! {
         websocket: WebSocketConfig = WebSocketConfig::default(),
         tokens_tab: TokensTabConfig = TokensTabConfig::default(),
         transactions_page_default_limit: usize = 50,
+        #[metadata(field_metadata! {
+            label: "Transactions Poll Interval",
+            hint: "Milliseconds between transaction list refreshes",
+            min: 500,
+            max: 10000,
+            step: 100,
+            unit: "ms",
+            impact: "critical",
+            category: "Transactions",
+        })]
         transactions_poll_interval_ms: u64 = 2000,
     }
 }
@@ -1541,7 +1691,27 @@ config_struct! {
 config_struct! {
     /// System monitoring configuration
     pub struct MonitoringConfig {
+        #[metadata(field_metadata! {
+            label: "Metrics Interval",
+            hint: "Seconds between metrics sampling",
+            min: 5,
+            max: 300,
+            step: 5,
+            unit: "seconds",
+            impact: "critical",
+            category: "Monitoring",
+        })]
         metrics_interval_secs: u64 = 30,
+        #[metadata(field_metadata! {
+            label: "Health Check Interval",
+            hint: "Seconds between service health checks",
+            min: 5,
+            max: 600,
+            step: 5,
+            unit: "seconds",
+            impact: "critical",
+            category: "Monitoring",
+        })]
         health_check_interval_secs: u64 = 60,
     }
 }
