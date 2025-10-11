@@ -15,11 +15,11 @@ impl Service for PoolCalculatorService {
     }
 
     fn priority(&self) -> i32 {
-        33
+        102
     }
 
     fn dependencies(&self) -> Vec<&'static str> {
-        vec!["pool_helpers", "pool_fetcher"]
+        vec!["pool_helpers", "pool_fetcher", "filtering"]
     }
 
     async fn initialize(&mut self) -> Result<(), String> {

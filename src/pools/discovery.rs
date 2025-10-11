@@ -232,7 +232,7 @@ impl PoolDiscovery {
         let mut tokens: Vec<String> = if let Some(override_tokens) = get_debug_token_override() {
             override_tokens
         } else {
-            match filtering::get_filtered_tokens().await {
+            match filtering::get_filtered_token_mints().await {
                 Ok(v) => v,
                 Err(e) => {
                     if is_debug_pool_discovery_enabled() {

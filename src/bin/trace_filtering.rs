@@ -1,5 +1,5 @@
 /// Simple test tool for new filtering system
-use screenerbot::filtering::get_filtered_tokens;
+use screenerbot::filtering::get_filtered_token_mints;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -7,7 +7,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     screenerbot::logger::init_file_logging();
 
-    let filtered_tokens = get_filtered_tokens().await?;
+    let filtered_tokens = get_filtered_token_mints().await?;
 
     println!(
         "✅ Filtering complete: {} tokens returned",

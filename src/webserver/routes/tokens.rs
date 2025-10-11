@@ -5,18 +5,15 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 
 use crate::{
+    config::with_config,
+    filtering::{self, FilteringQuery, FilteringView, SortDirection, TokenSortKey},
     global::is_debug_webserver_enabled,
     logger::{log, LogTag},
     pools, positions,
-    tokens::{
-        blacklist,
-        cache::TokenDatabase,
-        summary::{token_to_summary, TokenSummary, TokenSummaryContext},
-        SecurityDatabase,
-    },
+    tokens::{blacklist, cache::TokenDatabase, summary::TokenSummary, SecurityDatabase},
     webserver::{
         state::AppState,
         utils::{error_response, success_response},
@@ -163,6 +160,8 @@ fn default_ohlcv_limit() -> u32 {
 /// Filter request body
 #[derive(Debug, Deserialize)]
 pub struct FilterRequest {
+    #[serde(default = "default_view")]
+    pub view: String,
     #[serde(default)]
     pub search: String,
     pub min_liquidity: Option<f64>,
@@ -183,6 +182,53 @@ pub struct FilterRequest {
     pub page: usize,
     #[serde(default = "default_page_size")]
     pub page_size: usize,
+}
+
+fn normalize_search(value: String) -> Option<String> {
+    let trimmed = value.trim().to_string();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    }
+}
+
+impl TokenListQuery {
+    fn into_filtering_query(self, max_page_size: usize) -> FilteringQuery {
+        let mut query = FilteringQuery::default();
+        query.view = FilteringView::from_str(&self.view);
+        query.search = normalize_search(self.search);
+        query.sort_key = TokenSortKey::from_str(&self.sort_by);
+        query.sort_direction = SortDirection::from_str(&self.sort_dir);
+        query.page = self.page.max(1);
+        query.page_size = self.page_size.max(1);
+        query.clamp_page_size(max_page_size);
+        query
+    }
+}
+
+impl FilterRequest {
+    fn into_filtering_query(self, max_page_size: usize) -> FilteringQuery {
+        let mut query = FilteringQuery::default();
+        query.view = FilteringView::from_str(&self.view);
+        query.search = normalize_search(self.search);
+        query.sort_key = TokenSortKey::from_str(&self.sort_by);
+        query.sort_direction = SortDirection::from_str(&self.sort_dir);
+        query.page = self.page.max(1);
+        query.page_size = self.page_size.max(1);
+        query.min_liquidity = self.min_liquidity;
+        query.max_liquidity = self.max_liquidity;
+        query.min_volume_24h = self.min_volume_24h;
+        query.max_volume_24h = self.max_volume_24h;
+        query.min_security_score = self.min_security_score;
+        query.max_security_score = self.max_security_score;
+        query.has_pool_price = self.has_pool_price;
+        query.has_open_position = self.has_open_position;
+        query.blacklisted = self.blacklisted;
+        query.has_ohlcv = self.has_ohlcv;
+        query.clamp_page_size(max_page_size);
+        query
+    }
 }
 
 // =============================================================================
@@ -208,160 +254,53 @@ pub fn routes() -> Router<Arc<AppState>> {
 pub(crate) async fn get_tokens_list(
     Query(query): Query<TokenListQuery>,
 ) -> Json<TokenListResponse> {
-    use crate::config::with_config;
-
-    // Config-driven limits
     let max_page_size = with_config(|cfg| cfg.webserver.tokens_tab.max_page_size);
-    let page_size = query.page_size.min(max_page_size).max(1);
-    let page = query.page.max(1);
+    let request_view = query.view.clone();
+    let filtering_query = query.into_filtering_query(max_page_size);
 
-    // Optimized path for view=all when sorting on inexpensive fields
-    let cheap_sort = matches!(
-        query.sort_by.as_str(),
-        "symbol"
-            | "liquidity_usd"
-            | "volume_24h"
-            | "fdv"
-            | "market_cap"
-            | "price_change_h1"
-            | "price_change_h24"
-    );
-
-    if query.view == "all" && cheap_sort {
-        let db = match TokenDatabase::new() {
-            Ok(db) => db,
-            Err(_) => {
-                return Json(TokenListResponse {
-                    items: vec![],
-                    page,
-                    page_size,
-                    total: 0,
-                    total_pages: 0,
-                    timestamp: chrono::Utc::now().to_rfc3339(),
-                });
+    match filtering::query_tokens(filtering_query).await {
+        Ok(result) => {
+            if is_debug_webserver_enabled() {
+                log(
+                    LogTag::Webserver,
+                    "TOKENS_LIST",
+                    &format!(
+                        "view={} page={}/{} items={}/{}",
+                        request_view,
+                        result.page,
+                        result.total_pages,
+                        result.items.len(),
+                        result.total
+                    ),
+                );
             }
-        };
 
-        match db
-            .get_all_tokens_page(
-                &query.sort_by,
-                &query.sort_dir,
-                page,
-                page_size,
-                &query.search,
-            )
-            .await
-        {
-            Ok((page_tokens, total)) => {
-                let total_pages = (total + page_size - 1) / page_size;
-                let mints: Vec<String> = page_tokens.iter().map(|t| t.mint.clone()).collect();
-                let caches = TokenSummaryContext::build(&mints).await;
-                let items: Vec<TokenSummary> = page_tokens
-                    .iter()
-                    .map(|t| token_to_summary(t, &caches))
-                    .collect();
+            Json(TokenListResponse {
+                items: result.items,
+                page: result.page,
+                page_size: result.page_size,
+                total: result.total,
+                total_pages: result.total_pages,
+                timestamp: result.timestamp.to_rfc3339(),
+            })
+        }
+        Err(err) => {
+            log(
+                LogTag::Webserver,
+                "WARN",
+                &format!("Failed to load tokens list via filtering service: {}", err),
+            );
 
-                if is_debug_webserver_enabled() {
-                    log(
-                        LogTag::Webserver,
-                        "TOKENS_LIST_OPTIMIZED",
-                        &format!(
-                            "view=all search='{}' sort_by={} sort_dir={} page={}/{} items={}/{}",
-                            query.search,
-                            query.sort_by,
-                            query.sort_dir,
-                            page,
-                            total_pages,
-                            items.len(),
-                            total
-                        ),
-                    );
-                }
-
-                return Json(TokenListResponse {
-                    items,
-                    page,
-                    page_size,
-                    total,
-                    total_pages,
-                    timestamp: chrono::Utc::now().to_rfc3339(),
-                });
-            }
-            Err(err) => {
-                if is_debug_webserver_enabled() {
-                    log(
-                        LogTag::Webserver,
-                        "WARN",
-                        &format!(
-                            "Paginated tokens query failed (fallback to generic path): {}",
-                            err
-                        ),
-                    );
-                }
-            }
+            Json(TokenListResponse {
+                items: vec![],
+                page: 1,
+                page_size: max_page_size,
+                total: 0,
+                total_pages: 0,
+                timestamp: chrono::Utc::now().to_rfc3339(),
+            })
         }
     }
-
-    // Default generic path (handles pool/secure/positions/blacklisted/recent and expensive sorts)
-    let tokens = get_tokens_for_view(&query.view).await.unwrap_or_default();
-
-    // Search filter (sync)
-    let filtered: Vec<TokenSummary> = if query.search.is_empty() {
-        tokens
-    } else {
-        let search_lower = query.search.to_lowercase();
-        tokens
-            .into_iter()
-            .filter(|t| {
-                t.symbol.to_lowercase().contains(&search_lower)
-                    || t.mint.to_lowercase().contains(&search_lower)
-                    || t.name
-                        .as_ref()
-                        .map(|n| n.to_lowercase().contains(&search_lower))
-                        .unwrap_or(false)
-            })
-            .collect()
-    };
-
-    // Sort (sync)
-    let mut sorted = filtered;
-    sort_tokens(&mut sorted, &query.sort_by, &query.sort_dir);
-
-    // Pagination (sync)
-    let total = sorted.len();
-    let total_pages = (total + page_size - 1) / page_size;
-    let start_idx = (page - 1) * page_size;
-    let end_idx = (start_idx + page_size).min(total);
-    let items = if start_idx < total {
-        sorted[start_idx..end_idx].to_vec()
-    } else {
-        vec![]
-    };
-
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "TOKENS_LIST",
-            &format!(
-                "view={} search='{}' page={}/{} items={}/{}",
-                query.view,
-                query.search,
-                page,
-                total_pages,
-                items.len(),
-                total
-            ),
-        );
-    }
-
-    Json(TokenListResponse {
-        items,
-        page,
-        page_size,
-        total,
-        total_pages,
-        timestamp: chrono::Utc::now().to_rfc3339(),
-    })
 }
 
 /// Get token detail
@@ -784,64 +723,42 @@ async fn get_token_ohlcv(
 
 /// Get token statistics
 async fn get_tokens_stats() -> Result<Json<TokenStatsResponse>, StatusCode> {
-    if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "TOKENS_STATS", "Calculating statistics");
-    }
+    match filtering::fetch_stats().await {
+        Ok(snapshot) => {
+            if is_debug_webserver_enabled() {
+                log(
+                    LogTag::Webserver,
+                    "TOKENS_STATS",
+                    &format!(
+                        "total={} pool={} open={} blacklist={} secure={}",
+                        snapshot.total_tokens,
+                        snapshot.with_pool_price,
+                        snapshot.open_positions,
+                        snapshot.blacklisted,
+                        snapshot.secure_tokens
+                    ),
+                );
+            }
 
-    let db = TokenDatabase::new().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let all_tokens = db
-        .get_all_tokens()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let total_tokens = all_tokens.len();
-    let with_pool_price = pools::get_available_tokens().len();
-
-    // Count open positions
-    let mut open_positions = 0;
-    for token in &all_tokens {
-        if positions::is_open_position(&token.mint).await {
-            open_positions += 1;
+            Ok(Json(TokenStatsResponse {
+                total_tokens: snapshot.total_tokens,
+                with_pool_price: snapshot.with_pool_price,
+                open_positions: snapshot.open_positions,
+                blacklisted: snapshot.blacklisted,
+                secure_tokens: snapshot.secure_tokens,
+                with_ohlcv: snapshot.with_ohlcv,
+                timestamp: snapshot.updated_at.to_rfc3339(),
+            }))
+        }
+        Err(err) => {
+            log(
+                LogTag::Webserver,
+                "WARN",
+                &format!("Failed to load token stats via filtering service: {}", err),
+            );
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
-
-    // Count blacklisted
-    let blacklisted = all_tokens
-        .iter()
-        .filter(|t| blacklist::is_token_blacklisted_db(&t.mint))
-        .count();
-
-    // Count secure tokens (score > 500 as example threshold)
-    let security_db = SecurityDatabase::new("data/security.db").ok();
-    let secure_tokens = if let Some(sec_db) = security_db {
-        all_tokens
-            .iter()
-            .filter(|t| {
-                sec_db
-                    .get_security_info(&t.mint)
-                    .ok()
-                    .flatten()
-                    .map(|s| s.score > 500 && !s.rugged)
-                    .unwrap_or(false)
-            })
-            .count()
-    } else {
-        0
-    };
-
-    // Count with OHLCV
-    let ohlcv_metrics = crate::ohlcvs::get_metrics().await;
-    let with_ohlcv = ohlcv_metrics.tokens_monitored;
-
-    Ok(Json(TokenStatsResponse {
-        total_tokens,
-        with_pool_price,
-        open_positions,
-        blacklisted,
-        secure_tokens,
-        with_ohlcv,
-        timestamp: chrono::Utc::now().to_rfc3339(),
-    }))
 }
 
 /// Filter tokens with advanced criteria
@@ -852,417 +769,29 @@ async fn filter_tokens(
         log(
             LogTag::Webserver,
             "TOKENS_FILTER",
-            &format!(
-                "Applying filters: search='{}' liquidity={:?}-{:?}",
-                filter.search, filter.min_liquidity, filter.max_liquidity
-            ),
+            &format!("view={} search='{}'", filter.view, filter.search),
         );
     }
 
-    // Get all tokens
-    let db = TokenDatabase::new().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let all_tokens = db
-        .get_all_tokens()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let max_page_size = with_config(|cfg| cfg.webserver.tokens_tab.max_page_size);
+    let filtering_query = filter.into_filtering_query(max_page_size);
 
-    let mints: Vec<String> = all_tokens.iter().map(|token| token.mint.clone()).collect();
-    let caches = TokenSummaryContext::build(&mints).await;
-
-    // Convert to TokenSummary and apply filters
-    let mut tokens = Vec::new();
-    for token in &all_tokens {
-        let mut summary = token_to_summary(token, &caches);
-
-        // Apply filters
-        if !filter.search.is_empty() {
-            let search_lower = filter.search.to_lowercase();
-            if !summary.symbol.to_lowercase().contains(&search_lower)
-                && !summary.mint.to_lowercase().contains(&search_lower)
-                && !summary
-                    .name
-                    .as_ref()
-                    .map(|n| n.to_lowercase().contains(&search_lower))
-                    .unwrap_or(false)
-            {
-                continue;
-            }
-        }
-
-        if let Some(min) = filter.min_liquidity {
-            if summary.liquidity_usd.unwrap_or(0.0) < min {
-                continue;
-            }
-        }
-        if let Some(max) = filter.max_liquidity {
-            if summary.liquidity_usd.unwrap_or(f64::MAX) > max {
-                continue;
-            }
-        }
-        if let Some(min) = filter.min_volume_24h {
-            if summary.volume_24h.unwrap_or(0.0) < min {
-                continue;
-            }
-        }
-        if let Some(max) = filter.max_volume_24h {
-            if summary.volume_24h.unwrap_or(f64::MAX) > max {
-                continue;
-            }
-        }
-        if let Some(min) = filter.min_security_score {
-            if summary.security_score.unwrap_or(0) < min {
-                continue;
-            }
-        }
-        if let Some(max) = filter.max_security_score {
-            if summary.security_score.unwrap_or(i32::MAX) > max {
-                continue;
-            }
-        }
-        if let Some(flag) = filter.has_pool_price {
-            if summary.has_pool_price != flag {
-                continue;
-            }
-        }
-        if let Some(flag) = filter.has_open_position {
-            if summary.has_open_position != flag {
-                continue;
-            }
-        }
-        if let Some(flag) = filter.blacklisted {
-            if summary.blacklisted != flag {
-                continue;
-            }
-        }
-        if let Some(flag) = filter.has_ohlcv {
-            if summary.has_ohlcv != flag {
-                continue;
-            }
-        }
-
-        tokens.push(summary);
-    }
-
-    // Sort
-    sort_tokens(&mut tokens, &filter.sort_by, &filter.sort_dir);
-
-    // Paginate
-    let page_size = filter.page_size.min(200).max(1);
-    let page = filter.page.max(1);
-    let total = tokens.len();
-    let total_pages = (total + page_size - 1) / page_size;
-    let start_idx = (page - 1) * page_size;
-    let end_idx = (start_idx + page_size).min(total);
-
-    let items = if start_idx < total {
-        tokens[start_idx..end_idx].to_vec()
-    } else {
-        vec![]
-    };
-
-    Ok(Json(TokenListResponse {
-        items,
-        page,
-        page_size,
-        total,
-        total_pages,
-        timestamp: chrono::Utc::now().to_rfc3339(),
-    }))
-}
-
-// =============================================================================
-// HELPER FUNCTIONS
-// =============================================================================
-
-/// Get tokens for a specific view
-async fn get_tokens_for_view(view: &str) -> Result<Vec<TokenSummary>, String> {
-    match view {
-        "pool" => get_pool_tokens().await,
-        "all" => get_all_tokens_from_db().await,
-        "passed" => get_passed_tokens().await,
-        "rejected" => get_rejected_tokens().await,
-        "blacklisted" => get_blacklisted_tokens().await,
-        "positions" => get_position_tokens().await,
-        "secure" => get_secure_tokens().await,
-        "recent" => get_recent_tokens().await,
-        _ => get_pool_tokens().await, // default to pool view
-    }
-}
-
-/// Get tokens with pool prices
-async fn get_pool_tokens() -> Result<Vec<TokenSummary>, String> {
-    let available_mints = pools::get_available_tokens();
-    if available_mints.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let db = TokenDatabase::new().map_err(|e| e.to_string())?;
-    let raw_tokens = db
-        .get_tokens_by_mints(&available_mints)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let mints: Vec<String> = raw_tokens.iter().map(|token| token.mint.clone()).collect();
-    let caches = TokenSummaryContext::build(&mints).await;
-
-    Ok(raw_tokens
-        .iter()
-        .map(|token| token_to_summary(token, &caches))
-        .collect())
-}
-
-/// Get all tokens from database
-async fn get_all_tokens_from_db() -> Result<Vec<TokenSummary>, String> {
-    let db = TokenDatabase::new().map_err(|e| e.to_string())?;
-    let tokens = db.get_all_tokens().await?;
-    let mints: Vec<String> = tokens.iter().map(|token| token.mint.clone()).collect();
-    let caches = TokenSummaryContext::build(&mints).await;
-
-    Ok(tokens
-        .iter()
-        .map(|token| token_to_summary(token, &caches))
-        .collect())
-}
-
-/// Get blacklisted tokens
-async fn get_blacklisted_tokens() -> Result<Vec<TokenSummary>, String> {
-    // Fetch blacklist first, then fetch only those tokens from DB for speed
-    let blacklisted_mints: Vec<String> = blacklist::get_blacklisted_mints();
-    if blacklisted_mints.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let db = TokenDatabase::new().map_err(|e| e.to_string())?;
-    let tokens = db
-        .get_tokens_by_mints(&blacklisted_mints)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // Build caches scoped to this page's mints only
-    let caches = TokenSummaryContext::build(&blacklisted_mints).await;
-
-    Ok(tokens
-        .iter()
-        .map(|token| token_to_summary(token, &caches))
-        .collect())
-}
-
-/// Get rejected tokens from filtering
-async fn get_rejected_tokens() -> Result<Vec<TokenSummary>, String> {
-    use crate::filtering::get_rejected_tokens as get_rejected_from_filter;
-
-    let rejected = get_rejected_from_filter();
-    if rejected.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    // Deduplicate by mint while preserving most recent rejection
-    let mut seen = HashSet::new();
-    let mut rejected_mints: Vec<String> = Vec::new();
-    for entry in rejected.iter().rev() {
-        let mint = &entry.mint;
-        if !seen.contains(mint) {
-            seen.insert(mint.clone());
-            rejected_mints.push(mint.clone());
+    match filtering::query_tokens(filtering_query).await {
+        Ok(result) => Ok(Json(TokenListResponse {
+            items: result.items,
+            page: result.page,
+            page_size: result.page_size,
+            total: result.total,
+            total_pages: result.total_pages,
+            timestamp: result.timestamp.to_rfc3339(),
+        })),
+        Err(err) => {
+            log(
+                LogTag::Webserver,
+                "WARN",
+                &format!("Filtering query failed: {}", err),
+            );
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
-    rejected_mints.reverse();
-
-    if rejected_mints.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let db = TokenDatabase::new().map_err(|e| e.to_string())?;
-    let tokens = db
-        .get_tokens_by_mints(&rejected_mints)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // Build caches scoped to this page's mints only
-    let caches = TokenSummaryContext::build(&rejected_mints).await;
-
-    Ok(tokens
-        .iter()
-        .map(|token| token_to_summary(token, &caches))
-        .collect())
-}
-
-/// Get passed tokens from filtering
-async fn get_passed_tokens() -> Result<Vec<TokenSummary>, String> {
-    use crate::filtering::get_passed_tokens as get_passed_from_filter;
-
-    let passed = get_passed_from_filter();
-    if passed.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    // Deduplicate by mint while preserving most recent pass result
-    let mut seen = HashSet::new();
-    let mut passed_mints: Vec<String> = Vec::new();
-    for entry in passed.iter().rev() {
-        let mint = &entry.mint;
-        if !seen.contains(mint) {
-            seen.insert(mint.clone());
-            passed_mints.push(mint.clone());
-        }
-    }
-    passed_mints.reverse();
-
-    if passed_mints.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let db = TokenDatabase::new().map_err(|e| e.to_string())?;
-    let tokens = db
-        .get_tokens_by_mints(&passed_mints)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // Build caches scoped to this page's mints only
-    let caches = TokenSummaryContext::build(&passed_mints).await;
-
-    Ok(tokens
-        .iter()
-        .map(|token| token_to_summary(token, &caches))
-        .collect())
-}
-
-/// Get tokens with open positions
-async fn get_position_tokens() -> Result<Vec<TokenSummary>, String> {
-    let db = TokenDatabase::new().map_err(|e| e.to_string())?;
-    let open_positions = positions::get_open_positions().await;
-    let mints: Vec<String> = open_positions.into_iter().map(|pos| pos.mint).collect();
-    if mints.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let raw_tokens = db
-        .get_tokens_by_mints(&mints)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let caches = TokenSummaryContext::build(&mints).await;
-
-    Ok(raw_tokens
-        .iter()
-        .map(|token| token_to_summary(token, &caches))
-        .collect())
-}
-
-/// Get secure tokens (high security score, not rugged)
-async fn get_secure_tokens() -> Result<Vec<TokenSummary>, String> {
-    use crate::config::with_config;
-
-    let threshold = with_config(|cfg| cfg.webserver.tokens_tab.secure_token_score_threshold);
-    let db = TokenDatabase::new().map_err(|e| e.to_string())?;
-    let all_tokens = db.get_all_tokens().await?;
-    let mints: Vec<String> = all_tokens.iter().map(|token| token.mint.clone()).collect();
-    let caches = TokenSummaryContext::build(&mints).await;
-
-    Ok(all_tokens
-        .iter()
-        .filter(|token| {
-            caches
-                .security_snapshot(&token.mint)
-                .map(|snapshot| snapshot.score > threshold && !snapshot.rugged)
-                .unwrap_or(false)
-        })
-        .map(|token| token_to_summary(token, &caches))
-        .collect())
-}
-
-/// Get recently created tokens (configurable lookback period)
-async fn get_recent_tokens() -> Result<Vec<TokenSummary>, String> {
-    use crate::config::with_config;
-
-    let hours = with_config(|cfg| cfg.webserver.tokens_tab.recent_token_hours);
-    let db = TokenDatabase::new().map_err(|e| e.to_string())?;
-    let all_tokens = db.get_all_tokens().await?;
-
-    let cutoff = chrono::Utc::now() - chrono::Duration::hours(hours);
-    let mut recent_tokens = Vec::new();
-
-    for token in all_tokens {
-        // Use pair_created_at if available
-        if let Some(created_at) = token.pair_created_at {
-            let created_time = chrono::DateTime::from_timestamp(created_at, 0);
-            if let Some(ct) = created_time {
-                if ct > cutoff {
-                    recent_tokens.push(token);
-                }
-            }
-        }
-    }
-
-    let mints: Vec<String> = recent_tokens
-        .iter()
-        .map(|token| token.mint.clone())
-        .collect();
-    let caches = TokenSummaryContext::build(&mints).await;
-
-    Ok(recent_tokens
-        .iter()
-        .map(|token| token_to_summary(token, &caches))
-        .collect())
-}
-
-/// Sort tokens by specified field and direction
-fn sort_tokens(tokens: &mut [TokenSummary], sort_by: &str, sort_dir: &str) {
-    let ascending = sort_dir == "asc";
-
-    tokens.sort_by(|a, b| {
-        let cmp = match sort_by {
-            "symbol" => a.symbol.cmp(&b.symbol),
-            "liquidity_usd" => a
-                .liquidity_usd
-                .unwrap_or(0.0)
-                .partial_cmp(&b.liquidity_usd.unwrap_or(0.0))
-                .unwrap(),
-            "volume_24h" => a
-                .volume_24h
-                .unwrap_or(0.0)
-                .partial_cmp(&b.volume_24h.unwrap_or(0.0))
-                .unwrap(),
-            "price_sol" => a
-                .price_sol
-                .unwrap_or(0.0)
-                .partial_cmp(&b.price_sol.unwrap_or(0.0))
-                .unwrap(),
-            "market_cap" => a
-                .market_cap
-                .unwrap_or(0.0)
-                .partial_cmp(&b.market_cap.unwrap_or(0.0))
-                .unwrap(),
-            "fdv" => a
-                .fdv
-                .unwrap_or(0.0)
-                .partial_cmp(&b.fdv.unwrap_or(0.0))
-                .unwrap(),
-            "security_score" => a
-                .security_score
-                .unwrap_or(0)
-                .cmp(&b.security_score.unwrap_or(0)),
-            "price_change_h1" => a
-                .price_change_h1
-                .unwrap_or(0.0)
-                .partial_cmp(&b.price_change_h1.unwrap_or(0.0))
-                .unwrap(),
-            "price_change_h24" => a
-                .price_change_h24
-                .unwrap_or(0.0)
-                .partial_cmp(&b.price_change_h24.unwrap_or(0.0))
-                .unwrap(),
-            "updated_at" => a
-                .price_updated_at
-                .unwrap_or(0)
-                .cmp(&b.price_updated_at.unwrap_or(0)),
-            _ => a.mint.cmp(&b.mint), // fallback to mint as tie-breaker
-        };
-
-        if ascending {
-            cmp
-        } else {
-            cmp.reverse()
-        }
-    });
 }

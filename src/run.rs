@@ -105,10 +105,10 @@ fn register_all_services(manager: &mut ServiceManager) {
     manager.register(Box::new(SolPriceService));
 
     // Pool services (4 sub-services + 1 helper coordinator)
-    manager.register(Box::new(PoolDiscoveryService)); // 31
-    manager.register(Box::new(PoolFetcherService)); // 32
-    manager.register(Box::new(PoolCalculatorService)); // 33
-    manager.register(Box::new(PoolAnalyzerService)); // 34
+    manager.register(Box::new(PoolDiscoveryService)); // 100
+    manager.register(Box::new(PoolFetcherService)); // 101
+    manager.register(Box::new(PoolCalculatorService)); // 102
+    manager.register(Box::new(PoolAnalyzerService)); // 103
     manager.register(Box::new(PoolsService)); // 35 - helper tasks (health, cleanup)
 
     // Token services (2 sub-services, no empty coordinator)
@@ -117,6 +117,7 @@ fn register_all_services(manager: &mut ServiceManager) {
 
     // Other application services
     manager.register(Box::new(SecurityService));
+    manager.register(Box::new(FilteringService::new()));
     manager.register(Box::new(OhlcvService));
     manager.register(Box::new(PositionsService));
     manager.register(Box::new(WalletService));
@@ -130,7 +131,7 @@ fn register_all_services(manager: &mut ServiceManager) {
     log(
         LogTag::System,
         "INFO",
-        "All services registered (22 total - removed empty TokensService)",
+        "All services registered (23 total - removed empty TokensService)",
     );
 }
 

@@ -18,7 +18,7 @@ impl Service for WebserverService {
     }
 
     fn dependencies(&self) -> Vec<&'static str> {
-        vec![]
+        vec!["filtering"]
     }
 
     fn is_enabled(&self) -> bool {
