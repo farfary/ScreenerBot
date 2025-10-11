@@ -256,6 +256,10 @@ pub fn collect_config_metadata() -> ConfigMetadata {
 }
 
 fn normalize_category(category: &str) -> &'static str {
+    if category.contains("Timeout") {
+        return "Developer";
+    }
+
     match category {
         "Activity" | "Age" | "Blacklist" | "Community" | "Confirmation" | "Core Trading"
         | "Display" | "Liquidity" | "Maintenance" | "Market Cap" | "Performance" | "Profit"
