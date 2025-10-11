@@ -187,6 +187,9 @@ window.Router = {
       return;
     }
 
+    // Remove any unresolved loading placeholders from prior attempts
+    mainContent.querySelectorAll(".page-loading").forEach((el) => el.remove());
+
     // Check if page is already cached
     let pageEl = this.pageCache[pageName];
 
@@ -292,6 +295,9 @@ window.Router = {
                             </button>
                         </div>
                     `;
+
+      // Ensure shared tab/toolbar chrome matches current (failed) page state
+      cleanupTabContainers();
     } finally {
       mainContent.removeAttribute("data-loading");
     }
