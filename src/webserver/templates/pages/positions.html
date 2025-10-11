@@ -111,8 +111,9 @@
 </div>
 
 <script>
-  var positionsStore = window.positionsStore || new Map();
-  var positionsInitialized = false;
+  var positionsStore =
+    window.positionsStore instanceof Map ? window.positionsStore : new Map();
+  window.positionsStore = positionsStore;
 
   // Truncate address
   function truncateAddress(address) {
@@ -305,10 +306,6 @@
     );
   }
 
-  function shouldIncludeInCurrentFilter(position) {
-    return matchesStatusFilter(position, getCurrentStatusFilter());
-  }
-
   function renderPositionRow(pos) {
     const isOpen = !pos.transaction_exit_verified;
     const statusBadge = pos.synthetic_exit
@@ -428,8 +425,21 @@
     const tbody = document.getElementById("positionsTableBody");
     if (!tbody) return;
 
-    if (!positionsInitialized && positionsStore.size === 0) {
+    const controller = window.positionsController;
+    const hasSnapshot = controller ? controller.hasInitialSnapshot : false;
+
+    if (!hasSnapshot && positionsStore.size === 0) {
       renderEmptyState("Loading positions...");
+      return;
+    }
+
+    if (
+      positionsStore.size === 0 &&
+      controller &&
+      controller.lastErrorMessage
+    ) {
+      renderEmptyState(controller.lastErrorMessage, "#ef4444");
+      updatePositionCount(0);
       return;
     }
 
@@ -455,37 +465,260 @@
     updatePositionCount(rows.length);
   }
 
+  const positionsController =
+    window.positionsController ||
+    (function () {
+      let searchBound = false;
+
+      const controller = {
+        hasInitialSnapshot: positionsStore.size > 0,
+        POLL_INTERVAL_MS: 15000,
+        fetchLimit: 500,
+        pollTimer: null,
+        abortController: null,
+        isFetching: false,
+        isActive: false,
+        lastErrorMessage: null,
+
+        activate() {
+          if (this.isActive) {
+            console.log(
+              "[Positions] Controller already active; rendering cache"
+            );
+            renderPositionsTable();
+            return;
+          }
+
+          this.isActive = true;
+          this.bindSearchInput();
+          this.lastErrorMessage = null;
+
+          if (!this.hasInitialSnapshot || positionsStore.size === 0) {
+            renderEmptyState("Loading positions...");
+            updatePositionCount(0);
+          } else {
+            renderPositionsTable();
+          }
+
+          this.fetchPositions({
+            reason: this.hasInitialSnapshot ? "resume" : "initial",
+            showSpinner: !this.hasInitialSnapshot || positionsStore.size === 0,
+          });
+          this.startPolling();
+        },
+
+        teardown() {
+          if (!this.isActive) {
+            return;
+          }
+          console.log("[Positions] Tearing down controller");
+          this.isActive = false;
+          this.stopPolling();
+          this.abortInFlight();
+        },
+
+        bindSearchInput() {
+          if (searchBound) return;
+          const searchInput = document.getElementById("searchInput");
+          if (searchInput) {
+            searchInput.addEventListener("input", () => {
+              renderPositionsTable();
+            });
+            searchBound = true;
+          }
+        },
+
+        startPolling() {
+          if (!this.isActive) {
+            return;
+          }
+          this.stopPolling();
+          const intervalId = setInterval(() => {
+            this.fetchPositions({ reason: "poll" });
+          }, this.POLL_INTERVAL_MS);
+          this.pollTimer = intervalId;
+          if (window.Router && typeof Router.trackInterval === "function") {
+            Router.trackInterval(intervalId);
+          }
+          console.log(
+            "[Positions] Started polling every",
+            this.POLL_INTERVAL_MS,
+            "ms"
+          );
+        },
+
+        stopPolling() {
+          if (this.pollTimer) {
+            clearInterval(this.pollTimer);
+            this.pollTimer = null;
+            console.log("[Positions] Stopped polling");
+          }
+        },
+
+        abortInFlight() {
+          if (this.abortController) {
+            this.abortController.abort();
+            this.abortController = null;
+            console.log("[Positions] Aborted in-flight request");
+          }
+        },
+
+        handleStatusChange() {
+          console.log(
+            "[Positions] Status changed to",
+            getCurrentStatusFilter()
+          );
+          this.stopPolling();
+          this.abortInFlight();
+          this.hasInitialSnapshot = false;
+          this.lastErrorMessage = null;
+          positionsStore.clear();
+          renderEmptyState("Loading positions...");
+          updatePositionCount(0);
+          this.fetchPositions({ reason: "filter", showSpinner: false }).finally(
+            () => {
+              if (this.isActive) {
+                this.startPolling();
+              }
+            }
+          );
+        },
+
+        handleManualRefresh() {
+          console.log("[Positions] Manual refresh requested");
+          this.stopPolling();
+          this.abortInFlight();
+          this.hasInitialSnapshot = false;
+          this.lastErrorMessage = null;
+          positionsStore.clear();
+          renderEmptyState("Refreshing positions...");
+          updatePositionCount(0);
+          this.fetchPositions({ reason: "manual", showSpinner: false }).finally(
+            () => {
+              if (this.isActive) {
+                this.startPolling();
+              }
+            }
+          );
+        },
+
+        async fetchPositions({ reason = "load", showSpinner = false } = {}) {
+          if (!this.isActive && reason !== "initial") {
+            return;
+          }
+
+          if (this.isFetching) {
+            if (reason === "poll") {
+              console.log(
+                "[Positions] Skipping poll; request already in flight"
+              );
+              return;
+            }
+            this.abortInFlight();
+          }
+
+          const status = getCurrentStatusFilter();
+          const params = new URLSearchParams();
+          if (status && status !== "all") {
+            params.set("status", status);
+          }
+          if (this.fetchLimit > 0) {
+            params.set("limit", String(this.fetchLimit));
+          }
+          const query = params.toString();
+          const url = `/api/positions${query ? `?${query}` : ""}`;
+
+          if (showSpinner) {
+            renderEmptyState("Loading positions...");
+            updatePositionCount(0);
+          }
+
+          try {
+            this.isFetching = true;
+            this.abortController = new AbortController();
+            console.log(`[Positions] Fetching positions (${reason}) via`, url);
+
+            const response = await fetch(url, {
+              signal: this.abortController.signal,
+              headers: { "X-Requested-With": "fetch" },
+            });
+            if (!response.ok) {
+              throw new Error(
+                `HTTP ${response.status}: ${response.statusText}`
+              );
+            }
+
+            const payload = await response.json();
+            const nextStore = new Map();
+            if (Array.isArray(payload)) {
+              payload.forEach((raw) => {
+                const normalized = normalizePositionFromApi(raw);
+                const key = getPositionKey(normalized);
+                if (key) {
+                  nextStore.set(key, normalized);
+                }
+              });
+            }
+
+            this.lastErrorMessage = null;
+            positionsStore.clear();
+            nextStore.forEach((value, key) => {
+              positionsStore.set(key, value);
+            });
+
+            this.hasInitialSnapshot = true;
+            renderPositionsTable();
+            console.log(
+              `[Positions] Loaded ${positionsStore.size} positions (${reason})`
+            );
+          } catch (error) {
+            if (error.name === "AbortError") {
+              console.log("[Positions] Fetch aborted");
+              return;
+            }
+            console.error("[Positions] Failed to fetch positions:", error);
+            if (!this.hasInitialSnapshot || positionsStore.size === 0) {
+              this.hasInitialSnapshot = true;
+              this.lastErrorMessage = `Failed to load positions: ${error.message}`;
+              renderEmptyState(this.lastErrorMessage, "#ef4444");
+              updatePositionCount(0);
+            }
+          } finally {
+            this.isFetching = false;
+            this.abortController = null;
+          }
+        },
+      };
+
+      return controller;
+    })();
+
+  window.positionsController = positionsController;
+
   window.onPositionsStatusChanged = function () {
-    positionsStore.clear();
-    positionsInitialized = false;
-    renderEmptyState("Loading positions...");
-    updatePositionCount(0);
+    if (window.positionsController) {
+      window.positionsController.handleStatusChange();
+    }
   };
 
   window.refreshPositions = function () {
-    console.log("[Positions] Manual refresh requested");
-    positionsInitialized = false;
-    renderEmptyState("Refreshing positions...");
-    updatePositionCount(0);
+    if (window.positionsController) {
+      window.positionsController.handleManualRefresh();
+    }
   };
 
   // Global init function for Router to call during SPA navigation
   window.initPositionsPage = function () {
     console.log("[Positions] Initializing page");
-
-    const searchInput = document.getElementById("searchInput");
-    if (searchInput && !searchInput.__positionsBound) {
-      searchInput.addEventListener("input", () => {
-        renderPositionsTable();
-      });
-      searchInput.__positionsBound = true;
+    if (!window.positionsController) {
+      console.error("[Positions] Controller unavailable");
+      return;
     }
 
-    if (!positionsInitialized && positionsStore.size === 0) {
-      renderEmptyState("Loading positions...");
-      updatePositionCount(0);
-    } else {
-      renderPositionsTable();
+    window.positionsController.activate();
+
+    if (window.Router && typeof Router.registerCleanup === "function") {
+      Router.registerCleanup(() => window.positionsController.teardown());
     }
   };
 
