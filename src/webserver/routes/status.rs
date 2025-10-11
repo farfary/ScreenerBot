@@ -7,10 +7,10 @@ use crate::{
     arguments::is_debug_webserver_enabled,
     logger::{log, LogTag},
     webserver::{
-        state::AppState,
-        status_snapshot::{
+        snapshot::{
             gather_status_snapshot, ServiceStatusSnapshot, StatusSnapshot, SystemMetricsSnapshot,
         },
+        state::AppState,
         utils::success_response,
     },
 };

@@ -1,7 +1,8 @@
+mod server;
+
 pub mod routes;
-pub mod server;
+pub mod snapshot;
 pub mod state;
-pub mod status_snapshot;
 pub mod templates;
 pub mod utils;
 
