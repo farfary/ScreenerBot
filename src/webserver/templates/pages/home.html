@@ -154,6 +154,7 @@
         config: null,
         status: null,
         cleanupRegistered: false,
+        intervalChangeListener: null,
         elements: new Map(),
       };
 
@@ -221,9 +222,9 @@
           state.status = null;
           this.setRealtimePending();
           this.fetchOverview();
-          this.scheduleOverview(10000);
+          this.scheduleOverview();
           this.fetchConfig();
-          this.scheduleConfig(60000);
+          this.scheduleConfig();
           this.ensureCleanupHook();
         },
 
@@ -236,6 +237,30 @@
               this.teardown();
             });
             state.cleanupRegistered = true;
+          }
+
+          // Register interval change listener
+          if (window.PollingManager && !state.intervalChangeListener) {
+            state.intervalChangeListener = window.PollingManager.onChange(
+              () => {
+                console.log(
+                  "[Home] Polling interval changed, restarting polling"
+                );
+                this.scheduleOverview();
+              }
+            );
+
+            // Cleanup listener on teardown
+            const originalTeardown = this.teardown.bind(this);
+            this.teardown = function () {
+              originalTeardown();
+              if (state.intervalChangeListener && window.PollingManager) {
+                window.PollingManager.removeListener(
+                  state.intervalChangeListener
+                );
+                state.intervalChangeListener = null;
+              }
+            };
           }
         },
 
@@ -250,22 +275,27 @@
           }
         },
 
-        scheduleOverview(intervalMs) {
+        scheduleOverview() {
           if (state.overviewTimer) {
             clearInterval(state.overviewTimer);
           }
+          const interval = window.PollingManager.getInterval();
           state.overviewTimer = setInterval(() => {
             this.fetchOverview();
-          }, intervalMs);
+          }, interval);
+          console.log("[Home] Overview polling every", interval, "ms");
         },
 
-        scheduleConfig(intervalMs) {
+        scheduleConfig() {
           if (state.configTimer) {
             clearInterval(state.configTimer);
           }
+          // Config uses 60x the main interval
+          const interval = window.PollingManager.getInterval() * 60;
           state.configTimer = setInterval(() => {
             this.fetchConfig();
-          }, intervalMs);
+          }, interval);
+          console.log("[Home] Config polling every", interval, "ms");
         },
 
         async fetchOverview() {

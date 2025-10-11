@@ -69,6 +69,42 @@
   background: rgba(239, 68, 68, 0.3);
 }
 
+/* Refresh Interval Control */
+.refresh-interval-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.refresh-interval-dropdown {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: var(--header-text);
+  padding: 4px 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.refresh-interval-dropdown:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.refresh-interval-dropdown:focus {
+  background: rgba(255, 255, 255, 0.35);
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+}
+
+.refresh-interval-dropdown option {
+  background: var(--card-bg);
+  color: var(--text-primary);
+}
+
 /* Theme Toggle Button */
 .theme-toggle {
   background: rgba(255, 255, 255, 0.2);

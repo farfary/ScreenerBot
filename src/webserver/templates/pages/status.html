@@ -209,8 +209,8 @@
 
   window.statusState = statusState;
 
-  var STATUS_POLL_INTERVAL_MS = 5000;
   var statusPollTimer = null;
+  var statusIntervalChangeListener = null;
 
   function setStatusMessage(message) {
     statusState.message = message;
@@ -268,12 +268,14 @@
 
   function startStatusPolling() {
     if (statusPollTimer) {
-      return;
+      clearInterval(statusPollTimer);
     }
+    const interval = window.PollingManager.getInterval();
     statusPollTimer = setInterval(
       () => fetchStatusSnapshotOnce(false),
-      STATUS_POLL_INTERVAL_MS
+      interval
     );
+    console.log("[Status] Started polling every", interval, "ms");
   }
 
   function stopStatusPolling() {
@@ -282,6 +284,7 @@
     }
     clearInterval(statusPollTimer);
     statusPollTimer = null;
+    console.log("[Status] Stopped polling");
   }
 
   // Global init function for Router to call during SPA navigation
@@ -293,12 +296,25 @@
     fetchStatusSnapshotOnce(true);
     startStatusPolling();
 
+    // Register interval change listener
+    if (window.PollingManager && !statusIntervalChangeListener) {
+      statusIntervalChangeListener = window.PollingManager.onChange(() => {
+        console.log("[Status] Polling interval changed, restarting polling");
+        startStatusPolling();
+      });
+    }
+
     if (window.Router && typeof Router.registerCleanup === "function") {
       Router.registerCleanup(() => {
         stopStatusPolling();
         if (statusPollTimer) {
           clearInterval(statusPollTimer);
           statusPollTimer = null;
+        }
+        // Remove interval change listener
+        if (statusIntervalChangeListener && window.PollingManager) {
+          window.PollingManager.removeListener(statusIntervalChangeListener);
+          statusIntervalChangeListener = null;
         }
       });
     }

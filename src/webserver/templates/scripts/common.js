@@ -36,6 +36,69 @@ window.AppState = {
     }
   },
 };
+
+// Global Polling Interval Manager
+window.PollingManager = {
+  _interval: null,
+  _listeners: [],
+
+  init() {
+    // Load saved interval or default to 1000ms
+    this._interval = AppState.load("pollingInterval", 1000);
+    console.log(
+      "[PollingManager] Initialized with interval:",
+      this._interval,
+      "ms"
+    );
+  },
+
+  getInterval() {
+    if (this._interval === null) {
+      this.init();
+    }
+    return this._interval;
+  },
+
+  setInterval(ms) {
+    const oldInterval = this._interval;
+    this._interval = ms;
+    AppState.save("pollingInterval", ms);
+    console.log(
+      "[PollingManager] Interval changed from",
+      oldInterval,
+      "ms to",
+      ms,
+      "ms"
+    );
+
+    // Notify all listeners
+    this._listeners.forEach((callback) => {
+      try {
+        callback(ms, oldInterval);
+      } catch (err) {
+        console.error("[PollingManager] Listener callback failed:", err);
+      }
+    });
+  },
+
+  onChange(callback) {
+    if (typeof callback === "function") {
+      this._listeners.push(callback);
+    }
+    return callback;
+  },
+
+  removeListener(callback) {
+    const index = this._listeners.indexOf(callback);
+    if (index > -1) {
+      this._listeners.splice(index, 1);
+    }
+  },
+};
+
+// Initialize on load
+PollingManager.init();
+
 // Client-Side Router - SPA Architecture
 window.Router = {
   currentPage: null,
@@ -982,9 +1045,51 @@ function showNotification(message, type = "info") {
   Utils.showToast(message, type);
 }
 
+// Initialize refresh interval dropdown
+function initializeRefreshInterval() {
+  const dropdown = document.getElementById("refreshInterval");
+  if (!dropdown) {
+    console.warn("[PollingManager] Refresh interval dropdown not found");
+    return;
+  }
+
+  // Set current value
+  const currentInterval = PollingManager.getInterval();
+  dropdown.value = currentInterval.toString();
+
+  // Handle changes
+  dropdown.addEventListener("change", (e) => {
+    const newInterval = parseInt(e.target.value, 10);
+    if (!isNaN(newInterval) && newInterval > 0) {
+      PollingManager.setInterval(newInterval);
+      Utils.showToast(
+        `⏱️ Refresh interval set to ${formatInterval(newInterval)}`,
+        "success"
+      );
+    }
+  });
+
+  console.log(
+    "[PollingManager] Dropdown initialized with:",
+    currentInterval,
+    "ms"
+  );
+}
+
+// Format interval for display
+function formatInterval(ms) {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${ms / 1000}s`;
+  return `${ms / 60000}m`;
+}
+
 // Initialize trader controls when DOM is ready
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initializeTraderControls);
+  document.addEventListener("DOMContentLoaded", () => {
+    initializeTraderControls();
+    initializeRefreshInterval();
+  });
 } else {
   initializeTraderControls();
+  initializeRefreshInterval();
 }

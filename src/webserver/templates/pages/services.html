@@ -260,9 +260,9 @@
       lastErrorMessage: null,
       isActive: false,
       cleanupRegistered: false,
+      intervalChangeListener: null,
 
       pollTimer: null,
-      POLL_INTERVAL_MS: 5000,
 
       initialize() {
         console.log("[Services] Initializing controller");
@@ -290,6 +290,17 @@
           Router.registerCleanup(() => this.reset());
           this.cleanupRegistered = true;
         }
+
+        // Register interval change listener
+        this.intervalChangeListener = window.PollingManager.onChange(() => {
+          if (this.isActive) {
+            console.log(
+              "[Services] Polling interval changed, restarting polling"
+            );
+            this.startPolling();
+          }
+        });
+
         this.fetchServices({ reason: "initial" });
         this.startPolling();
       },
@@ -303,6 +314,12 @@
         this.hasInitialSnapshot = false;
         this.lastErrorMessage = null;
         this.cleanupRegistered = false;
+
+        // Remove interval change listener
+        if (this.intervalChangeListener && window.PollingManager) {
+          window.PollingManager.removeListener(this.intervalChangeListener);
+          this.intervalChangeListener = null;
+        }
       },
 
       startPolling() {
@@ -310,18 +327,15 @@
           return;
         }
         this.stopPolling();
+        const interval = window.PollingManager.getInterval();
         const intervalId = setInterval(() => {
           this.fetchServices({ reason: "poll" });
-        }, this.POLL_INTERVAL_MS);
+        }, interval);
         this.pollTimer = intervalId;
         if (window.Router && typeof Router.trackInterval === "function") {
           Router.trackInterval(intervalId);
         }
-        console.log(
-          "[Services] Started polling every",
-          this.POLL_INTERVAL_MS,
-          "ms"
-        );
+        console.log("[Services] Started polling every", interval, "ms");
       },
 
       stopPolling() {
