@@ -27,6 +27,7 @@ use database::OhlcvDatabase;
 use fetcher::OhlcvFetcher;
 use manager::PoolManager;
 use monitor::OhlcvMonitor;
+use std::collections::HashSet;
 
 // Public API for accessing OHLCV data
 pub async fn get_ohlcv_data(
@@ -70,6 +71,10 @@ pub async fn get_monitor_stats() -> Option<MonitorStats> {
 
 pub async fn has_data(mint: &str) -> OhlcvResult<bool> {
     service::has_data(mint).await
+}
+
+pub async fn get_mints_with_data(mints: &[String]) -> OhlcvResult<HashSet<String>> {
+    service::get_mints_with_data(mints).await
 }
 
 pub async fn add_token_monitoring(mint: &str, priority: Priority) -> OhlcvResult<()> {

@@ -4,7 +4,8 @@ use crate::ohlcvs::types::{
     OhlcvDataPoint, OhlcvError, OhlcvResult, PoolConfig, Priority, Timeframe, TokenOhlcvConfig,
 };
 use chrono::{DateTime, Duration, Utc};
-use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
+use rusqlite::{params, params_from_iter, Connection, OptionalExtension, Result as SqliteResult};
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -735,6 +736,51 @@ impl OhlcvDatabase {
             .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {}", e)))?;
 
         Ok(exists != 0)
+    }
+
+    pub fn get_mints_with_data(&self, mints: &[String]) -> OhlcvResult<HashSet<String>> {
+        if mints.is_empty() {
+            return Ok(HashSet::new());
+        }
+
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
+
+        const CHUNK_SIZE: usize = 512;
+        let mut result = HashSet::with_capacity(mints.len());
+
+        for chunk in mints.chunks(CHUNK_SIZE) {
+            let placeholders = chunk.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+            let query = format!(
+                "SELECT DISTINCT mint FROM ohlcv_1m WHERE mint IN ({})",
+                placeholders
+            );
+
+            let mut stmt = conn
+                .prepare(&query)
+                .map_err(|e| OhlcvError::DatabaseError(format!("Query prep failed: {}", e)))?;
+
+            let params: Vec<&dyn rusqlite::ToSql> = chunk
+                .iter()
+                .map(|mint| mint as &dyn rusqlite::ToSql)
+                .collect();
+
+            let rows = stmt
+                .query_map(params_from_iter(params.iter().copied()), |row| {
+                    row.get::<_, String>(0)
+                })
+                .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {}", e)))?;
+
+            for row in rows {
+                let mint =
+                    row.map_err(|e| OhlcvError::DatabaseError(format!("Row parse failed: {}", e)))?;
+                result.insert(mint);
+            }
+        }
+
+        Ok(result)
     }
 
     pub fn get_pool_count(&self) -> OhlcvResult<usize> {

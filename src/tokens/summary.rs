@@ -4,6 +4,7 @@ use futures::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    logger::{log, LogTag},
     pools, positions,
     tokens::{blacklist, security_db::SecurityDatabase, types::ApiToken},
 };
@@ -191,6 +192,22 @@ async fn load_ohlcv_flags(mints: &HashSet<String>) -> HashSet<String> {
         return HashSet::new();
     }
 
+    let mint_list: Vec<String> = mints.iter().cloned().collect();
+
+    match crate::ohlcvs::get_mints_with_data(&mint_list).await {
+        Ok(set) => set,
+        Err(err) => {
+            log(
+                LogTag::Ohlcv,
+                "BULK_HAS_DATA_FALLBACK",
+                &format!("Failed bulk OHLCV presence check: {}", err),
+            );
+            fallback_load_ohlcv_flags(mints).await
+        }
+    }
+}
+
+async fn fallback_load_ohlcv_flags(mints: &HashSet<String>) -> HashSet<String> {
     stream::iter(mints.iter().cloned())
         .map(|mint| async move {
             let has_data = crate::ohlcvs::has_data(&mint).await.unwrap_or(false);

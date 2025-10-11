@@ -14,6 +14,7 @@ use crate::ohlcvs::types::{
     OhlcvDataPoint, OhlcvError, OhlcvMetrics, OhlcvResult, PoolMetadata, Priority, Timeframe,
 };
 use chrono::Utc;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{Notify, OnceCell};
@@ -163,6 +164,10 @@ impl OhlcvServiceImpl {
 
     fn has_data(&self, mint: &str) -> OhlcvResult<bool> {
         self.db.has_data_for_mint(mint)
+    }
+
+    fn get_mints_with_data(&self, mints: &[String]) -> OhlcvResult<HashSet<String>> {
+        self.db.get_mints_with_data(mints)
     }
 }
 
@@ -332,6 +337,20 @@ pub async fn has_data(mint: &str) -> OhlcvResult<bool> {
 
     // Wrap sync DB call in spawn_blocking to prevent blocking async runtime
     tokio::task::spawn_blocking(move || service_clone.has_data(&mint_owned))
+        .await
+        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {}", e)))?
+}
+
+pub async fn get_mints_with_data(mints: &[String]) -> OhlcvResult<HashSet<String>> {
+    if mints.is_empty() {
+        return Ok(HashSet::new());
+    }
+
+    let service = get_or_init_service().await?;
+    let service_clone = service.clone();
+    let owned = mints.to_vec();
+
+    tokio::task::spawn_blocking(move || service_clone.get_mints_with_data(&owned))
         .await
         .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {}", e)))?
 }
