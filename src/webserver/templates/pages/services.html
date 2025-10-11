@@ -175,6 +175,9 @@
       <div class="chip" title="Process-wide Memory">
         Mem <span id="processMemory">-</span>
       </div>
+      <button id="servicesExportBtn" class="btn btn-secondary" type="button">
+        📥 Export Debug
+      </button>
       <button class="btn btn-primary" onclick="refreshServices()">
         🔄 Refresh
       </button>
@@ -719,6 +722,11 @@
             self.renderServicesTable()
           );
         }
+        const exportBtn = document.getElementById("servicesExportBtn");
+        if (exportBtn && !exportBtn.dataset.bound) {
+          exportBtn.dataset.bound = "true";
+          exportBtn.addEventListener("click", () => self.exportDebugReport());
+        }
         this.toolbarBound = true;
       },
 
@@ -747,6 +755,247 @@
             });
           });
         this.sortBound = true;
+      },
+
+      safeFormatDuration(value) {
+        if (window.Utils && typeof Utils.formatDuration === "function") {
+          return Utils.formatDuration(value || 0);
+        }
+        const nanos = Number(value) || 0;
+        return `${nanos}ns`;
+      },
+
+      safeFormatUptime(value) {
+        if (window.Utils && typeof Utils.formatUptime === "function") {
+          return Utils.formatUptime(value || 0, { style: "detailed" });
+        }
+        const seconds = Math.max(0, Math.floor(Number(value) || 0));
+        return `${seconds}s`;
+      },
+
+      safeFormatBytes(value) {
+        if (window.Utils && typeof Utils.formatBytes === "function") {
+          return Utils.formatBytes(value || 0);
+        }
+        const bytes = Math.max(0, Number(value) || 0);
+        return `${bytes} B`;
+      },
+
+      sanitizeNumber(value, precision = null) {
+        const num = Number(value);
+        if (!Number.isFinite(num)) {
+          return null;
+        }
+        if (precision == null) {
+          return num;
+        }
+        return Number(num.toFixed(precision));
+      },
+
+      getActivityInfo(metrics = {}) {
+        const poll = Number(metrics.total_poll_duration_ns) || 0;
+        const idle = Number(metrics.total_idle_duration_ns) || 0;
+        const total = poll + idle;
+        const percent = total > 0 ? (poll / total) * 100 : 0;
+        let status = "Idle";
+        if (percent > 80) {
+          status = "Very Active";
+        } else if (percent > 50) {
+          status = "Active";
+        } else if (percent > 20) {
+          status = "Moderate";
+        } else if (percent > 5) {
+          status = "Light";
+        }
+        return { percent, status };
+      },
+
+      extractProcessSnapshot() {
+        if (
+          !this.servicesData ||
+          !Array.isArray(this.servicesData.services) ||
+          this.servicesData.services.length === 0
+        ) {
+          return null;
+        }
+        const metrics = this.servicesData.services[0]?.metrics || {};
+        return {
+          cpu_percent: this.sanitizeNumber(metrics.process_cpu_percent, 2),
+          memory_bytes:
+            metrics.process_memory_bytes != null
+              ? Number(metrics.process_memory_bytes)
+              : null,
+          memory_human: this.safeFormatBytes(metrics.process_memory_bytes),
+        };
+      },
+
+      async exportDebugReport() {
+        const exportBtn = document.getElementById("servicesExportBtn");
+        if (exportBtn) {
+          exportBtn.disabled = true;
+          exportBtn.textContent = "Exporting…";
+        }
+
+        try {
+          if (!this.servicesData) {
+            await this.fetchServices({ reason: "export", showSpinner: true });
+          }
+
+          if (
+            !this.servicesData ||
+            !Array.isArray(this.servicesData.services) ||
+            this.servicesData.services.length === 0
+          ) {
+            throw new Error("Services snapshot unavailable. Refresh first.");
+          }
+
+          const filters = this.currentFilters();
+          const visibleSet = new Set(
+            this.filteredAndSortedServices().map((svc) => svc.name)
+          );
+
+          const servicesPayload = this.servicesData.services.map((service) => {
+            const baseMetrics = service.metrics || {};
+            const metrics = {
+              ...baseMetrics,
+              custom_metrics: {
+                ...(baseMetrics.custom_metrics || {}),
+              },
+            };
+            const activity = this.getActivityInfo(metrics);
+            const uptimeSeconds =
+              Number(metrics.uptime_seconds) ||
+              Number(service.uptime_seconds) ||
+              0;
+            const pollsPerSecond =
+              uptimeSeconds > 0
+                ? (Number(metrics.total_polls) || 0) / uptimeSeconds
+                : 0;
+
+            const detailedMetrics = {
+              process_cpu_percent: this.sanitizeNumber(
+                metrics.process_cpu_percent,
+                2
+              ),
+              process_memory_bytes:
+                metrics.process_memory_bytes != null
+                  ? Number(metrics.process_memory_bytes)
+                  : null,
+              process_memory_human: this.safeFormatBytes(
+                metrics.process_memory_bytes
+              ),
+              task_count: metrics.task_count ?? 0,
+              total_polls: metrics.total_polls ?? 0,
+              total_poll_duration_ns: metrics.total_poll_duration_ns ?? 0,
+              mean_poll_duration_ns: metrics.mean_poll_duration_ns ?? 0,
+              mean_poll_duration_human: this.safeFormatDuration(
+                metrics.mean_poll_duration_ns
+              ),
+              total_idle_duration_ns: metrics.total_idle_duration_ns ?? 0,
+              mean_idle_duration_ns: metrics.mean_idle_duration_ns ?? 0,
+              mean_idle_duration_human: this.safeFormatDuration(
+                metrics.mean_idle_duration_ns
+              ),
+              last_cycle_duration_ns: metrics.last_cycle_duration_ns ?? 0,
+              last_cycle_duration_human: this.safeFormatDuration(
+                metrics.last_cycle_duration_ns
+              ),
+              avg_cycle_duration_ns: metrics.avg_cycle_duration_ns ?? 0,
+              avg_cycle_duration_human: this.safeFormatDuration(
+                metrics.avg_cycle_duration_ns
+              ),
+              cycles_per_second: this.sanitizeNumber(
+                metrics.cycles_per_second,
+                4
+              ),
+              activity_percent: this.sanitizeNumber(activity.percent, 2),
+              activity_status: activity.status,
+              uptime_seconds: uptimeSeconds || null,
+              uptime_human: this.safeFormatUptime(uptimeSeconds),
+              operations_total: metrics.operations_total ?? 0,
+              operations_per_second: this.sanitizeNumber(
+                metrics.operations_per_second,
+                4
+              ),
+              errors_total: metrics.errors_total ?? 0,
+              polls_per_second: this.sanitizeNumber(pollsPerSecond, 4),
+              custom_metrics: metrics.custom_metrics,
+            };
+
+            return {
+              name: service.name,
+              priority: service.priority,
+              enabled: !!service.enabled,
+              health: service.health || null,
+              health_message:
+                service.health && typeof service.health === "object"
+                  ? service.health.message || null
+                  : null,
+              uptime_seconds:
+                service.uptime_seconds != null
+                  ? Number(service.uptime_seconds)
+                  : null,
+              uptime_human: this.safeFormatUptime(service.uptime_seconds),
+              dependencies: Array.isArray(service.dependencies)
+                ? service.dependencies.slice()
+                : [],
+              visible_in_current_view: visibleSet.has(service.name),
+              metrics: detailedMetrics,
+            };
+          });
+
+          const nowIso = new Date().toISOString();
+          const payload = {
+            generated_at: nowIso,
+            overview_timestamp: this.servicesData.timestamp,
+            source: "services_tab_export",
+            filters_applied: filters,
+            summary: this.servicesData.summary || null,
+            process_snapshot: this.extractProcessSnapshot(),
+            totals: {
+              services_total: servicesPayload.length,
+              visible_services: servicesPayload.filter(
+                (svc) => svc.visible_in_current_view
+              ).length,
+            },
+            services: servicesPayload,
+            dependency_graph: this.servicesData.dependency_graph || [],
+            last_error: this.lastErrorMessage || null,
+          };
+
+          const blob = new Blob([JSON.stringify(payload, null, 2)], {
+            type: "application/json;charset=utf-8",
+          });
+          const url = URL.createObjectURL(blob);
+          const filename = `services_debug_${nowIso.replace(
+            /[:.]/g,
+            "-"
+          )}.json`;
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+
+          if (window.Utils && typeof Utils.showToast === "function") {
+            Utils.showToast("Services debug export ready", "success");
+          }
+        } catch (error) {
+          console.error("[Services] Debug export failed", error);
+          if (window.Utils && typeof Utils.showToast === "function") {
+            Utils.showToast(
+              error?.message || "Failed to export services debug snapshot",
+              "error"
+            );
+          }
+        } finally {
+          if (exportBtn) {
+            exportBtn.disabled = false;
+            exportBtn.textContent = "📥 Export Debug";
+          }
+        }
       },
 
       healthRank(status) {
