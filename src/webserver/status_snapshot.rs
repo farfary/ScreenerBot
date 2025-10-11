@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use sysinfo::System;
-use tokio::time::{interval, Duration, MissedTickBehavior};
 
 use crate::{
     arguments::is_debug_webserver_enabled,
@@ -19,7 +18,6 @@ use crate::{
     webserver::{
         state::{get_app_state, AppState},
         utils::format_duration,
-        ws::{hub::WsHub, topics},
     },
 };
 
@@ -338,7 +336,7 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
     let rpc_stats_raw = get_global_rpc_stats();
 
     let services = collect_service_status_snapshot();
-    let metrics = collect_system_metrics_snapshot(app_state.as_ref(), rpc_stats_raw.as_ref()).await;
+    let metrics = collect_system_metrics_snapshot(rpc_stats_raw.as_ref()).await;
 
     let rpc_stats = rpc_stats_raw.as_ref().map(|stats| RpcStatsSnapshot {
         total_calls: stats.total_calls(),
@@ -400,73 +398,6 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
     }
 }
 
-pub fn start(hub: Arc<WsHub>) {
-    tokio::spawn(run(hub));
-    if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "INFO", "ws.sources.status started");
-    }
-}
-
-async fn run(hub: Arc<WsHub>) {
-    const TOPIC: &str = "system.status";
-
-    loop {
-        hub.wait_for_subscribers(TOPIC).await;
-
-        let active = hub.topic_subscriber_count(TOPIC).await;
-        log(
-            LogTag::Webserver,
-            "INFO",
-            &format!(
-                "ws.sources.status streaming activated (subscribers={})",
-                active
-            ),
-        );
-
-        publish_snapshot(&hub).await;
-
-        let mut ticker = interval(Duration::from_secs(10));
-        ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
-
-        loop {
-            ticker.tick().await;
-
-            if !hub.has_subscribers(TOPIC).await {
-                let remaining = hub.topic_subscriber_count(TOPIC).await;
-                log(
-                    LogTag::Webserver,
-                    "INFO",
-                    &format!(
-                        "ws.sources.status streaming paused (subscribers={})",
-                        remaining
-                    ),
-                );
-                break;
-            }
-
-            publish_snapshot(&hub).await;
-        }
-    }
-}
-
-async fn publish_snapshot(hub: &Arc<WsHub>) {
-    let snapshot = gather_status_snapshot().await;
-    let seq = hub.next_seq("system.status").await;
-    let envelope = topics::status::status_to_envelope(&snapshot, seq);
-    hub.broadcast(envelope).await;
-
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "DEBUG",
-            &format!(
-                "ws.sources.status snapshot: positions={}, ws_connections={}",
-                snapshot.open_positions, snapshot.metrics.ws_connections
-            ),
-        );
-    }
-}
-
 fn collect_service_status_snapshot() -> ServiceStatusSnapshot {
     let now = Utc::now();
     let all_ready = are_core_services_ready();
@@ -507,7 +438,6 @@ impl ServiceStateSnapshot {
 }
 
 async fn collect_system_metrics_snapshot(
-    app_state: Option<&Arc<AppState>>,
     rpc_stats: Option<&crate::rpc::RpcStats>,
 ) -> SystemMetricsSnapshot {
     let mut sys = System::new_all();
@@ -529,11 +459,7 @@ async fn collect_system_metrics_snapshot(
         .map(|n| n.get())
         .unwrap_or(1);
 
-    let ws_connections = if let Some(state) = app_state {
-        state.ws_connection_count().await
-    } else {
-        0
-    };
+    let ws_connections = 0;
 
     let (rpc_calls_total, rpc_calls_failed, rpc_success_rate) = if let Some(stats) = rpc_stats {
         (
@@ -618,7 +544,7 @@ fn collect_pool_service_snapshot() -> Option<PoolServiceStatusSnapshot> {
 
     let cache_stats = crate::pools::get_cache_stats();
     let monitored_tokens_count = crate::pools::get_available_tokens().len();
-    let price_subscribers = crate::pools::get_prices_subscriber_count();
+    let price_subscribers = 0;
 
     let analyzer_snapshot = crate::pools::get_pool_analyzer().and_then(|analyzer| {
         let directory = analyzer.get_pool_directory();

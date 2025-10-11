@@ -436,34 +436,6 @@ function cleanupTabContainers() {
 
 let statusPollInterval = null;
 
-function setWsBadge(state, message) {
-  const badge = document.getElementById("wsBadge");
-  if (!badge) return;
-
-  switch (state) {
-    case "connected":
-      badge.className = "badge online";
-      badge.innerHTML = message || "🔌 Connected";
-      badge.title = "WebSocket: Connected";
-      break;
-    case "disconnected":
-      badge.className = "badge error";
-      badge.innerHTML = message || "🔌 Offline";
-      badge.title = "WebSocket: Disconnected";
-      break;
-    case "connecting":
-      badge.className = "badge loading";
-      badge.innerHTML = message || "🔌 Connecting";
-      badge.title = "WebSocket: Connecting...";
-      break;
-    default:
-      badge.className = "badge loading";
-      badge.innerHTML = message || "🔌 WS";
-      badge.title = "WebSocket: Unknown";
-      break;
-  }
-}
-
 function setBotBadge(state, message) {
   const badge = document.getElementById("botBadge");
   if (!badge) return;

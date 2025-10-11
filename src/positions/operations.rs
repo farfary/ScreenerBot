@@ -303,11 +303,6 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
         *last = Some(Utc::now());
     }
 
-    // Broadcast position opened via WebSocket
-    if let Some(position) = super::state::get_position_by_mint(&token.mint).await {
-        super::emit_position_opened(position);
-    }
-
     Ok(transaction_signature)
 }
 

@@ -202,122 +202,107 @@
   var statusState = window.statusState || {
     view: "system",
     currentData: null,
-    hasSnapshot: false,
-    pendingMessage: "Waiting for realtime snapshot...",
+    message: "Loading status...",
+    error: null,
     lastSnapshotAt: null,
   };
 
   window.statusState = statusState;
 
-  var STATUS_REALTIME_ALIAS = "status";
+  var STATUS_POLL_INTERVAL_MS = 5000;
+  var statusPollTimer = null;
 
-  var statusController = {
-    cleanupRegistered: false,
-
-    initialize() {
-      console.log("[Status] Initializing page");
-      hydrateStatusState();
-      initStatusSubTabs();
-      statusState.currentData = null;
-      statusState.hasSnapshot = false;
-      statusState.lastSnapshotAt = null;
-      this.ensureCleanupHook();
-      this.setPending("Waiting for realtime snapshot...");
-      this.requestSnapshot("page-init");
-    },
-
-    ensureCleanupHook() {
-      if (this.cleanupRegistered) {
-        return;
-      }
-      if (window.Router && typeof Router.registerCleanup === "function") {
-        Router.registerCleanup(() => {
-          this.onExit();
-        });
-        this.cleanupRegistered = true;
-      }
-    },
-
-    requestSnapshot(reason = "manual") {
-      if (
-        window.Realtime &&
-        typeof window.Realtime.requestSnapshotForAliases === "function"
-      ) {
-        window.Realtime.requestSnapshotForAliases([STATUS_REALTIME_ALIAS]);
-        console.log("[Status] Requested snapshot", { reason });
-      } else if (
-        window.Realtime &&
-        typeof window.Realtime.updateFilters === "function"
-      ) {
-        window.Realtime.updateFilters({
-          snapshotTopics: [STATUS_REALTIME_ALIAS],
-        });
-        console.log("[Status] Requested snapshot via filter update", {
-          reason,
-        });
-      } else {
-        console.warn(
-          "[Status] Realtime helper unavailable; cannot request snapshot"
-        );
-      }
-    },
-
-    handleSnapshot(snapshot) {
-      statusState.pendingMessage = null;
-      statusState.hasSnapshot = true;
-      statusState.lastSnapshotAt = Date.now();
-      statusState.currentData = snapshot;
-      ensureStatusSubTabsVisible();
+  function setStatusMessage(message) {
+    statusState.message = message;
+    statusState.error = null;
+    if (!statusState.currentData) {
       renderStatusContent();
-    },
+    }
+  }
 
-    setPending(message = "Waiting for realtime snapshot...") {
-      statusState.pendingMessage = message;
+  function setStatusError(message) {
+    statusState.error = message;
+    if (!statusState.currentData) {
+      renderStatusContent();
+    }
+  }
+
+  function applyStatusSnapshot(snapshot) {
+    statusState.currentData = snapshot;
+    statusState.message = null;
+    statusState.error = null;
+    statusState.lastSnapshotAt = Date.now();
+    ensureStatusSubTabsVisible();
+    renderStatusContent();
+
+    if (typeof renderStatusBadgesFromSnapshot === "function") {
+      try {
+        renderStatusBadgesFromSnapshot(snapshot);
+      } catch (err) {
+        console.warn("[Status] Failed to render status badges", err);
+      }
+    }
+  }
+
+  async function fetchStatusSnapshotOnce(showLoading) {
+    if (showLoading) {
+      setStatusMessage("Loading status...");
+    }
+
+    try {
+      const response = await fetch("/api/status");
+      if (!response.ok) {
+        throw new Error("HTTP " + response.status);
+      }
+      const snapshot = await response.json();
+      applyStatusSnapshot(snapshot);
+    } catch (error) {
+      console.error("[Status] Failed to load snapshot", error);
       if (!statusState.currentData) {
-        renderStatusContent();
+        setStatusError("Unable to load status snapshot");
+      } else if (window.Utils && typeof Utils.showToast === "function") {
+        Utils.showToast("⚠️ Failed to refresh status data", "warning");
       }
-    },
+    }
+  }
 
-    handleRealtimeConnected() {
-      this.requestSnapshot("ws-connected");
-    },
+  function startStatusPolling() {
+    if (statusPollTimer) {
+      return;
+    }
+    statusPollTimer = setInterval(
+      () => fetchStatusSnapshotOnce(false),
+      STATUS_POLL_INTERVAL_MS
+    );
+  }
 
-    handleRealtimeDisconnect() {
-      if (!statusState.hasSnapshot) {
-        this.setPending("Waiting for realtime snapshot...");
-      }
-    },
-
-    handleRealtimeWarning(payload) {
-      console.warn("[Status] Realtime warning", {
-        alias: payload?.alias || payload?.channel,
-        code: payload?.code,
-        text: payload?.message,
-      });
-    },
-
-    handleRealtimeUnavailable() {
-      if (!statusState.hasSnapshot) {
-        this.setPending("Realtime unavailable");
-      }
-    },
-
-    onEnter() {
-      if (!statusState.hasSnapshot) {
-        this.setPending("Waiting for realtime snapshot...");
-      }
-      this.requestSnapshot("page-enter");
-    },
-
-    onExit() {
-      statusState.pendingMessage = "Waiting for realtime snapshot...";
-    },
-  };
+  function stopStatusPolling() {
+    if (!statusPollTimer) {
+      return;
+    }
+    clearInterval(statusPollTimer);
+    statusPollTimer = null;
+  }
 
   // Global init function for Router to call during SPA navigation
   window.initStatusPage = function () {
-    statusController.initialize();
+    hydrateStatusState();
+    initStatusSubTabs();
+    ensureStatusSubTabsVisible();
+    renderStatusContent();
+    fetchStatusSnapshotOnce(true);
+    startStatusPolling();
+
+    if (window.Router && typeof Router.registerCleanup === "function") {
+      Router.registerCleanup(() => {
+        stopStatusPolling();
+      });
+    }
   };
+
+  if (!window.Router) {
+    window.initStatusPage();
+  }
 
   function hydrateStatusState() {
     const savedView = window.sessionStorage.getItem("status.view");
@@ -407,17 +392,14 @@
     renderStatusContent();
   }
 
-  function handleStatusUpdate(data) {
-    statusController.handleSnapshot(data);
-  }
-
   function renderStatusContent() {
     const contentContainer = document.getElementById("statusContent");
     if (!contentContainer) return;
 
     const data = statusState.currentData;
     if (!data) {
-      const message = statusState.pendingMessage || "Loading status...";
+      const message =
+        statusState.error || statusState.message || "Loading status...";
       contentContainer.innerHTML = `
                     <div class="page-section">
                         <div style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
@@ -2499,43 +2481,6 @@
                 </div>
             `;
   }
-
-  window.PageRealtime = window.PageRealtime || {};
-  window.PageRealtime.status = {
-    topics: [STATUS_REALTIME_ALIAS],
-    getFilters() {
-      return { status: {} };
-    },
-    channels: {
-      status: handleStatusUpdate,
-      _connected() {
-        statusController.handleRealtimeConnected();
-      },
-      _disconnected() {
-        statusController.handleRealtimeDisconnect();
-      },
-      _failed() {
-        statusController.handleRealtimeDisconnect();
-      },
-      _warning(payload) {
-        statusController.handleRealtimeWarning(payload);
-      },
-    },
-    onInitial(connectionStatus) {
-      if (connectionStatus !== "connected") {
-        statusController.setPending("Waiting for realtime snapshot...");
-      }
-    },
-    onEnter() {
-      statusController.onEnter();
-    },
-    onUnavailable() {
-      statusController.handleRealtimeUnavailable();
-    },
-    onExit() {
-      statusController.onExit();
-    },
-  };
 
   // Execute initialization immediately (works for both initial load and SPA navigation)
   initStatusPage();

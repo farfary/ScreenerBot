@@ -4,7 +4,6 @@
 /// that need to be accessed by route handlers.
 use crate::config::WebserverConfig;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 /// Shared application state passed to all route handlers
 #[derive(Clone)]
@@ -14,29 +13,15 @@ pub struct AppState {
 
     /// Server startup time
     pub startup_time: chrono::DateTime<chrono::Utc>,
-
-    /// Central WebSocket hub
-    pub ws_hub: Arc<crate::webserver::ws::WsHub>,
 }
 
 impl AppState {
-    /// Create new application state with WsHub
-    pub fn new(config: WebserverConfig, ws_hub: Arc<crate::webserver::ws::WsHub>) -> Self {
+    /// Create new application state
+    pub fn new(config: WebserverConfig) -> Self {
         Self {
             config: Arc::new(config),
             startup_time: chrono::Utc::now(),
-            ws_hub,
         }
-    }
-
-    /// Get WsHub reference
-    pub fn ws_hub(&self) -> &Arc<crate::webserver::ws::WsHub> {
-        &self.ws_hub
-    }
-
-    /// Get current WebSocket connection count (from hub)
-    pub async fn ws_connection_count(&self) -> usize {
-        self.ws_hub.active_connections().await
     }
 
     /// Get server uptime in seconds

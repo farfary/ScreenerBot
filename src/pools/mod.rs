@@ -12,7 +12,6 @@ use std::sync::Arc;
 use tokio::sync::Notify;
 
 mod api;
-pub mod broadcast; // Broadcast system for WebSocket price updates
 mod cache;
 mod db; // Database module for price history persistence
 mod service;
@@ -24,10 +23,6 @@ pub use api::{
     check_price_history_quality, get_available_tokens, get_cache_stats, get_extended_price_history,
     get_pool_price, get_price_history, get_price_history_stats, load_token_history_into_cache,
     PriceHistoryStats,
-};
-pub use broadcast::{
-    emit_price_update, get_subscriber_count as get_prices_subscriber_count,
-    initialize_prices_broadcaster,
 };
 pub use discovery::{
     get_canonical_pool_address, PoolDiscovery, ENABLE_DEXSCREENER_DISCOVERY,

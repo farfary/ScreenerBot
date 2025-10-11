@@ -1,6 +1,5 @@
 // Position management module - clean modular design
 pub mod apply;
-pub mod broadcast;
 pub mod db;
 pub mod lib;
 pub mod loss_detection;
@@ -16,12 +15,6 @@ pub mod worker;
 
 // Public API exports
 pub use operations::{close_position_direct, open_position_direct};
-
-pub use broadcast::{
-    emit_balance_changed, emit_position_closed, emit_position_opened, emit_position_updated,
-    get_subscriber_count as get_positions_subscriber_count, initialize_positions_broadcaster,
-    subscribe as subscribe_positions, PositionUpdate,
-};
 
 pub use state::{
     acquire_position_lock, get_active_frozen_cooldowns, get_closed_positions, get_open_mints,

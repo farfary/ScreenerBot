@@ -36,39 +36,8 @@ pub async fn start_server(config: WebserverConfig) -> Result<(), String> {
         );
     }
 
-    // Initialize WebSocket hub
-    if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "INFO", "Initializing WebSocket hub...");
-    }
-
-    let buffer_size = config.websocket.per_client_buffer;
-    let ws_hub = crate::webserver::ws::WsHub::new(buffer_size);
-
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "INFO",
-            &format!("✅ WebSocket hub initialized (buffer_size={})", buffer_size),
-        );
-    }
-
-    // Initialize broadcast systems that still use broadcasts
-    crate::positions::initialize_positions_broadcaster();
-    crate::pools::initialize_prices_broadcaster();
-
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "INFO",
-            "✅ Internal broadcast systems initialized",
-        );
-    }
-
-    // Start WebSocket data sources
-    crate::webserver::ws::sources::start_all(ws_hub.clone());
-
-    // Create application state with WsHub
-    let state = Arc::new(AppState::new(config.clone(), ws_hub));
+    // Create application state
+    let state = Arc::new(AppState::new(config.clone()));
 
     // Set global app state
     crate::webserver::state::set_global_app_state(Arc::clone(&state));

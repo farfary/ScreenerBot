@@ -13,47 +13,12 @@ use crate::events::{record_safe, Event, EventCategory, Severity};
 use crate::global::is_debug_pool_calculator_enabled;
 use crate::logger::{log, LogTag};
 use crate::tokens::{decimals::SOL_DECIMALS, get_token_decimals_sync};
-use once_cell::sync::Lazy;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex, RwLock};
-use std::time::{Duration, Instant};
+use std::sync::{Arc, RwLock};
+use std::time::Instant;
 use tokio::sync::{mpsc, Notify};
-
-/// WebSocket price emission throttle (max 1 emit per token per 5 seconds)
-static PRICE_EMIT_THROTTLE: Lazy<Mutex<HashMap<String, Instant>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
-
-/// Emit price update via WebSocket with throttling
-fn emit_price_throttled(mint: &str, price_result: &PriceResult) {
-    const THROTTLE_DURATION: Duration = Duration::from_secs(1);
-
-    let mut throttle_map = match PRICE_EMIT_THROTTLE.lock() {
-        Ok(map) => map,
-        Err(e) => {
-            log(
-                LogTag::PoolCalculator,
-                "ERROR",
-                &format!("Failed to lock price emit throttle: {}", e),
-            );
-            return;
-        }
-    };
-
-    let now = Instant::now();
-    let should_emit = throttle_map
-        .get(mint)
-        .map(|last_emit| now.duration_since(*last_emit) >= THROTTLE_DURATION)
-        .unwrap_or(true);
-
-    if should_emit {
-        throttle_map.insert(mint.to_string(), now);
-        drop(throttle_map); // Release lock before emitting
-
-        super::emit_price_update(mint.to_string(), price_result.clone());
-    }
-}
 
 /// Message types for calculator communication
 #[derive(Debug, Clone)]
@@ -182,9 +147,6 @@ impl PriceCalculator {
                                 if let Some(price_result) = result.price_result {
                                     // Update cache with calculated price
                                     cache::update_price(price_result.clone());
-
-                                    // Emit price update via WebSocket (throttled)
-                                    emit_price_throttled(&token_mint, &price_result);
 
                                     record_safe(Event::info(
                                         EventCategory::Pool,

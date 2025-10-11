@@ -66,9 +66,6 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 None,
                             )
                             .await;
-
-                            // Broadcast position updated via WebSocket
-                            super::emit_position_updated(position.clone());
                         }
                         Err(e) => {
                             return Err(format!("Failed to update database: {}", e));
@@ -203,9 +200,6 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                     position_id
                                 ),
                             );
-
-                            // Broadcast position closed via WebSocket
-                            super::emit_position_closed(position.clone());
                         }
                         Err(e) => {
                             return Err(format!("Failed to update database: {}", e));
