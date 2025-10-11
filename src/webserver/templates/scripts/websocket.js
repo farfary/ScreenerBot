@@ -361,6 +361,10 @@
       if (!this.listeners[channel]) {
         this.listeners[channel] = [];
       }
+      // Prevent duplicate subscriptions - check if callback already exists
+      if (this.listeners[channel].includes(callback)) {
+        return;
+      }
       this.listeners[channel].push(callback);
     },
 

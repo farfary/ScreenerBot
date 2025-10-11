@@ -143,9 +143,6 @@
         "tokens.update": handleTokensRealtime,
         "snapshot_begin:tokens.update": handleTokensSnapshotBegin,
         "snapshot_end:tokens.update": handleTokensSnapshotEnd,
-        // Support alias-based snapshot lifecycle events as well
-        "snapshot_begin:tokens": handleTokensSnapshotBegin,
-        "snapshot_end:tokens": handleTokensSnapshotEnd,
         _warning: handleTokensWarning,
         _disconnected: handleTokensDisconnect,
         _failed: handleTokensDisconnect,
@@ -1913,11 +1910,13 @@
     }
 
     const contextPageSize = Number(tokensSnapshotState.context?.page_size);
+
+    // Use backend's authoritative count (already set in handleTokensSnapshotEnd)
+    // Fall back to local counts only if backend didn't provide total_available
     const total =
       tokensSnapshotState.totalAvailable ||
       tokensTableState.items.length ||
       deduped.length;
-    tokensSnapshotState.totalAvailable = total;
     tokensSnapshotState.message = "";
 
     tokensTableState.pageSize = clampTokensPageSize(
@@ -1937,7 +1936,7 @@
     tokensTableState.loading = false;
     tokensTableState.pendingReload = false;
 
-    updateTokenCount(knownTotal);
+    updateTokenCount(total);
 
     const viewLabel = VIEW_LABELS[tokensState.view] || "";
     const status = viewLabel
@@ -2025,31 +2024,15 @@
     tokensSnapshotState.inProgress = false;
     tokensSnapshotState.began = false;
     tokensSnapshotState.currentView = null;
-    const sent = Number(
-      context.total_selected ?? context.total ?? payload?.sent
-    );
-    if (Number.isFinite(sent)) {
-      const availableFromContext = Number(
-        typeof context.total_available === "number"
-          ? context.total_available
-          : tokensSnapshotState.totalAvailable
-      );
-      const normalizedAvailable = Number.isFinite(availableFromContext)
-        ? availableFromContext
-        : tokensSnapshotState.totalAvailable;
-      tokensSnapshotState.totalAvailable = Math.max(
-        tokensSnapshotState.totalAvailable,
-        normalizedAvailable,
-        sent
-      );
+
+    // Trust backend's total_available directly - it's authoritative from database query
+    if (
+      typeof context.total_available === "number" &&
+      context.total_available >= 0
+    ) {
+      tokensSnapshotState.totalAvailable = context.total_available;
     }
-    const contextAvailable = Number(context.total_available);
-    if (Number.isFinite(contextAvailable)) {
-      tokensSnapshotState.totalAvailable = Math.max(
-        tokensSnapshotState.totalAvailable,
-        contextAvailable
-      );
-    }
+
     clearTokensSnapshotTimer();
     finalizeTokensSnapshot();
   }
@@ -2060,11 +2043,9 @@
     const isSnapshot = meta.snapshot === true;
     const updateType = meta?.update;
 
-    if (typeof meta.total === "number") {
-      tokensSnapshotState.totalAvailable = Math.max(
-        tokensSnapshotState.totalAvailable,
-        Number(meta.total)
-      );
+    // Only update totalAvailable if explicitly provided by backend
+    if (typeof meta.total === "number" && meta.total > 0) {
+      tokensSnapshotState.totalAvailable = meta.total;
     }
 
     if (isSnapshot) {
@@ -2193,15 +2174,9 @@
         return;
       }
     }
-    const total = allTokensData.length;
-    const knownTotal = Math.max(
-      total,
-      tokensSnapshotState.totalAvailable || 0,
-      tokensTableState.totalCount || 0
-    );
-    tokensSnapshotState.totalAvailable = knownTotal;
-    tokensTableState.totalCount = Math.max(knownTotal, total);
-    updateTokenCount(total);
+
+    // For realtime updates: preserve backend's authoritative count
+    // Local array length may differ from database total due to view filters/pagination
     const sortKey = tokensState.sortBy;
     const curr = existingIndex >= 0 ? allTokensData[existingIndex] : summary;
     const sortChanged =
@@ -2211,10 +2186,15 @@
     } else {
       updateTokenRow(summary.mint, curr);
     }
+
+    // Use authoritative total from backend, fall back to loaded length
+    const knownTotal =
+      tokensSnapshotState.totalAvailable || allTokensData.length;
+    updateTokenCount(knownTotal);
     const viewLabel = VIEW_LABELS[tokensState.view] || "";
     const status = viewLabel
-      ? `Realtime • ${total} tokens ${viewLabel}`
-      : `Realtime • ${total} tokens`;
+      ? `Realtime • ${knownTotal} tokens ${viewLabel}`
+      : `Realtime • ${knownTotal} tokens`;
     setTokenCountStatus(status);
   }
 
@@ -2302,15 +2282,12 @@
     if (index === -1) return;
 
     allTokensData.splice(index, 1);
-    const total = allTokensData.length;
-    const previousKnownTotal = Math.max(
-      tokensSnapshotState.totalAvailable || 0,
-      tokensTableState.totalCount || 0,
-      total + 1
-    );
-    const knownTotal = Math.max(total, previousKnownTotal - 1);
-    tokensSnapshotState.totalAvailable = knownTotal;
-    tokensTableState.totalCount = knownTotal;
+
+    // Decrement backend's authoritative count for this removal
+    if (tokensSnapshotState.totalAvailable > 0) {
+      tokensSnapshotState.totalAvailable -= 1;
+    }
+    tokensTableState.totalCount = tokensSnapshotState.totalAvailable;
     tokensTableState.totalPages = tokensTableState.pageSize
       ? Math.ceil(tokensTableState.totalCount / tokensTableState.pageSize)
       : tokensTableState.totalPages;
@@ -2318,12 +2295,14 @@
       tokensTableState.currentPage = tokensTableState.totalPages;
     }
     if (tokensTableState.totalPages <= 1) {
-      setTokensScrollGuardState(total > 0 ? "end" : "hidden");
+      setTokensScrollGuardState(allTokensData.length > 0 ? "end" : "hidden");
       teardownTokensScrollObserver();
     }
-    updateTokenCount(knownTotal);
+    updateTokenCount(tokensSnapshotState.totalAvailable);
     applySearchFilter();
     const viewLabel = VIEW_LABELS[tokensState.view] || "";
+    const knownTotal =
+      tokensSnapshotState.totalAvailable || allTokensData.length;
     const status = viewLabel
       ? `Realtime • ${knownTotal} tokens ${viewLabel}`
       : `Realtime • ${knownTotal} tokens`;
