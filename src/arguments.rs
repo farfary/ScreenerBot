@@ -198,6 +198,34 @@ pub fn is_debug_websocket_enabled() -> bool {
     has_arg("--debug-websocket")
 }
 
+// ============================================================================
+// CPU PROFILING FLAGS
+// ============================================================================
+
+/// Enable tokio-console for async task profiling
+/// Requires console-subscriber feature: cargo run --features console --bin screenerbot -- --run --profile-tokio-console
+pub fn is_profile_tokio_console_enabled() -> bool {
+    has_arg("--profile-tokio-console")
+}
+
+/// Enable detailed tracing for performance analysis
+pub fn is_profile_tracing_enabled() -> bool {
+    has_arg("--profile-tracing")
+}
+
+/// Enable CPU profiling with pprof and flamegraph generation
+/// Requires flamegraph feature: cargo run --features flamegraph --bin screenerbot -- --run --profile-cpu
+pub fn is_profile_cpu_enabled() -> bool {
+    has_arg("--profile-cpu")
+}
+
+/// Get profiling duration in seconds (default: 60)
+pub fn get_profile_duration() -> u64 {
+    get_arg_value("--profile-duration")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(60)
+}
+
 // =============================================================================
 // Transactions cache flags
 // =============================================================================

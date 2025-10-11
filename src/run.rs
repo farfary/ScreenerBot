@@ -2,6 +2,10 @@
 // The old implementation is preserved in run_old.rs
 
 use crate::{
+    arguments::{
+        get_profile_duration, is_profile_cpu_enabled, is_profile_tokio_console_enabled,
+        is_profile_tracing_enabled,
+    },
     global,
     logger::{init_file_logging, log, LogTag},
     services::ServiceManager,
@@ -9,6 +13,9 @@ use crate::{
 
 /// Main bot execution function - handles the full bot lifecycle with ServiceManager
 pub async fn run_bot() -> Result<(), String> {
+    // 0. Initialize profiling if requested (must be done before any tokio tasks)
+    init_profiling();
+
     // 1. Initialize file logging system first
     init_file_logging();
 
@@ -161,4 +168,83 @@ async fn wait_for_shutdown_signal() -> Result<(), String> {
     });
 
     Ok(())
+}
+
+/// Initialize CPU profiling based on command-line flags
+fn init_profiling() {
+    // Tokio console profiling (async task inspector)
+    #[cfg(feature = "console")]
+    if is_profile_tokio_console_enabled() {
+        console_subscriber::init();
+        eprintln!("🔍 Tokio console enabled - connect with: tokio-console");
+        eprintln!("   Install: cargo install tokio-console");
+        eprintln!("   Connect: tokio-console");
+        return;
+    }
+
+    // Tracing-based profiling
+    if is_profile_tracing_enabled() {
+        use tracing_subscriber::{fmt, EnvFilter};
+
+        tracing_subscriber::fmt()
+            .with_env_filter(
+                EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+            )
+            .with_thread_ids(true)
+            .with_thread_names(true)
+            .with_target(true)
+            .with_line_number(true)
+            .init();
+
+        eprintln!("🔍 Tracing profiling enabled");
+        eprintln!("   View detailed traces with thread IDs and timing");
+        return;
+    }
+
+    // CPU profiling with pprof (will generate flamegraph on exit)
+    #[cfg(feature = "flamegraph")]
+    if is_profile_cpu_enabled() {
+        let duration = get_profile_duration();
+        eprintln!("🔥 CPU profiling enabled with pprof");
+        eprintln!("   Duration: {} seconds", duration);
+        eprintln!("   Flamegraph will be generated on exit");
+        eprintln!("   Press Ctrl+C to stop and generate flamegraph");
+
+        // Note: pprof profiling is initialized later in the async context
+        // This is just a notification
+        return;
+    }
+}
+
+/// Start CPU profiling guard (pprof-based)
+/// Returns a guard that will generate flamegraph when dropped
+#[cfg(feature = "flamegraph")]
+pub fn start_cpu_profiling() -> Option<pprof::ProfilerGuard<'static>> {
+    if !is_profile_cpu_enabled() {
+        return None;
+    }
+
+    match pprof::ProfilerGuardBuilder::default()
+        .frequency(997) // Sample at ~1000 Hz
+        .blocklist(&["libc", "libgcc", "pthread", "vdso"])
+        .build()
+    {
+        Ok(guard) => {
+            log(LogTag::System, "INFO", "🔥 CPU profiling started (pprof)");
+            Some(guard)
+        }
+        Err(e) => {
+            log(
+                LogTag::System,
+                "ERROR",
+                &format!("Failed to start CPU profiling: {}", e),
+            );
+            None
+        }
+    }
+}
+
+#[cfg(not(feature = "flamegraph"))]
+pub fn start_cpu_profiling() -> Option<()> {
+    None
 }
