@@ -213,6 +213,26 @@
   var statusIntervalChangeListener = null;
   var statusIsFetching = false;
   var statusFetchAbortController = null;
+  var statusPageInitialized = false;
+  var statusCleanupRegistered = false;
+  var statusInitRetryTimer = null;
+  var statusInitAttempts = 0;
+  var statusInitWarned = false;
+  var STATUS_INIT_MAX_ATTEMPTS = 200;
+  var STATUS_INIT_RETRY_BASE_DELAY = 50;
+
+  function areStatusDependenciesReady() {
+    const hasUtils =
+      typeof window !== "undefined" &&
+      typeof window.Utils !== "undefined" &&
+      typeof window.Utils.formatNumber === "function";
+    const hasPollingManager =
+      typeof window !== "undefined" &&
+      window.PollingManager &&
+      typeof window.PollingManager.getInterval === "function";
+
+    return hasUtils && hasPollingManager;
+  }
 
   function setStatusMessage(message) {
     statusState.message = message;
@@ -285,9 +305,27 @@
     }
   }
 
+  function resolveStatusPollingInterval() {
+    if (
+      window.PollingManager &&
+      typeof window.PollingManager.getInterval === "function"
+    ) {
+      try {
+        return window.PollingManager.getInterval();
+      } catch (err) {
+        console.warn("[Status] Failed to read polling interval", err);
+      }
+    }
+
+    console.warn(
+      "[Status] PollingManager unavailable, using fallback polling interval"
+    );
+    return 1000;
+  }
+
   function startStatusTabPolling() {
     stopStatusTabPolling();
-    const interval = window.PollingManager.getInterval();
+    const interval = resolveStatusPollingInterval();
     statusPollTimer = setInterval(
       () => fetchStatusSnapshotOnce(false),
       interval
@@ -309,36 +347,129 @@
   }
 
   // Global init function for Router to call during SPA navigation
-  window.initStatusPage = function () {
-    hydrateStatusState();
-    initStatusSubTabs();
-    ensureStatusSubTabsVisible();
-    renderStatusContent();
-    fetchStatusSnapshotOnce(true);
-    startStatusTabPolling();
+  window.initStatusPage = function (options) {
+    const opts = options || {};
+    const force = opts.force === true;
 
-    // Register interval change listener
-    if (window.PollingManager && !statusIntervalChangeListener) {
+    if (!areStatusDependenciesReady()) {
+      if (!force) {
+        scheduleStatusPageInit({ force: false });
+      }
+      return;
+    }
+
+    if (statusInitRetryTimer) {
+      clearTimeout(statusInitRetryTimer);
+      statusInitRetryTimer = null;
+    }
+    statusInitAttempts = 0;
+    statusInitWarned = false;
+
+    if (statusPageInitialized && !force) {
+      ensureStatusSubTabsVisible();
+      renderStatusContent();
+      if (!statusState.currentData) {
+        fetchStatusSnapshotOnce(true);
+      }
+      if (!statusPollTimer) {
+        startStatusTabPolling();
+      }
+    } else {
+      statusPageInitialized = true;
+      hydrateStatusState();
+      initStatusSubTabs();
+      ensureStatusSubTabsVisible();
+      renderStatusContent();
+      fetchStatusSnapshotOnce(true);
+      startStatusTabPolling();
+    }
+
+    if (
+      window.PollingManager &&
+      typeof window.PollingManager.onChange === "function" &&
+      !statusIntervalChangeListener
+    ) {
       statusIntervalChangeListener = window.PollingManager.onChange(() => {
         console.log("[Status] Polling interval changed, restarting polling");
         startStatusTabPolling();
       });
     }
 
-    if (window.Router && typeof Router.registerCleanup === "function") {
+    if (
+      !statusCleanupRegistered &&
+      window.Router &&
+      typeof Router.registerCleanup === "function"
+    ) {
+      statusCleanupRegistered = true;
       Router.registerCleanup(() => {
         stopStatusTabPolling();
-        // Remove interval change listener
-        if (statusIntervalChangeListener && window.PollingManager) {
+
+        if (
+          statusIntervalChangeListener &&
+          window.PollingManager &&
+          typeof window.PollingManager.removeListener === "function"
+        ) {
           window.PollingManager.removeListener(statusIntervalChangeListener);
-          statusIntervalChangeListener = null;
         }
+
+        statusIntervalChangeListener = null;
+        statusPageInitialized = false;
+        statusCleanupRegistered = false;
+        statusInitAttempts = 0;
+        statusInitWarned = false;
       });
     }
   };
 
+  function scheduleStatusPageInit(options) {
+    const opts = options || {};
+    const force = opts.force === true;
+
+    if (
+      typeof window.initStatusPage === "function" &&
+      areStatusDependenciesReady()
+    ) {
+      window.initStatusPage({ force });
+      return;
+    }
+
+    if (statusInitAttempts >= STATUS_INIT_MAX_ATTEMPTS) {
+      if (!statusInitWarned) {
+        console.warn(
+          "[Status] Dependencies unavailable after retries; waiting for shared scripts"
+        );
+        statusInitWarned = true;
+      }
+
+      const retryDelay = Math.max(1000, STATUS_INIT_RETRY_BASE_DELAY * 4);
+      clearTimeout(statusInitRetryTimer);
+      statusInitRetryTimer = setTimeout(() => {
+        statusInitRetryTimer = null;
+        scheduleStatusPageInit({ force: true });
+      }, retryDelay);
+      return;
+    }
+
+    statusInitAttempts += 1;
+
+    const delay =
+      typeof opts.delay === "number" && opts.delay >= 0
+        ? opts.delay
+        : Math.min(300, STATUS_INIT_RETRY_BASE_DELAY + statusInitAttempts * 10);
+
+    clearTimeout(statusInitRetryTimer);
+    statusInitRetryTimer = setTimeout(() => {
+      statusInitRetryTimer = null;
+      scheduleStatusPageInit(options);
+    }, delay);
+  }
+
+  window.scheduleStatusPageInit = function (options) {
+    scheduleStatusPageInit(options || {});
+  };
+
   if (!window.Router) {
-    window.initStatusPage();
+    window.scheduleStatusPageInit();
   }
 
   if (!window.StatusPage) {
@@ -2518,7 +2649,7 @@
   }
 
   // Execute initialization immediately (works for both initial load and SPA navigation)
-  initStatusPage();
+  scheduleStatusPageInit();
 </script>
 
 <div class="page-table status-page">

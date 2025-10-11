@@ -359,6 +359,11 @@ window.Router = {
 
       switch (pageName) {
         case "status":
+          if (typeof scheduleStatusPageInit === "function") {
+            scheduleStatusPageInit();
+          } else if (typeof initStatusPage === "function") {
+            initStatusPage();
+          }
           if (typeof ensureStatusSubTabsVisible === "function") {
             ensureStatusSubTabsVisible();
           }
@@ -386,9 +391,15 @@ window.Router = {
         if (typeof initHomePage === "function") initHomePage();
         break;
       case "status":
-        if (typeof initStatusSubTabs === "function") initStatusSubTabs();
-        if (typeof ensureStatusSubTabsVisible === "function")
-          ensureStatusSubTabsVisible();
+        if (typeof scheduleStatusPageInit === "function") {
+          scheduleStatusPageInit();
+        } else if (typeof initStatusPage === "function") {
+          initStatusPage();
+        } else {
+          if (typeof initStatusSubTabs === "function") initStatusSubTabs();
+          if (typeof ensureStatusSubTabsVisible === "function")
+            ensureStatusSubTabsVisible();
+        }
         break;
       case "tokens":
         if (typeof initTokensPage === "function") initTokensPage();
