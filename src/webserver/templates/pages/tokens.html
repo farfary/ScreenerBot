@@ -33,6 +33,7 @@
     sortDir: "asc",
     searchTerm: "",
   };
+  window.tokensState = tokensState;
   var TOKENS_SCROLL_GUARD_HTML =
     '<tr id="tokens-scroll-guard" class="scroll-guard-row"><td colspan="12" class="scroll-guard-cell"></td></tr>';
 
@@ -51,27 +52,16 @@
   window.tokensTableState = tokensTableState;
 
   var allTokensData = tokensTableState.items;
-  // Per-view cache to preserve last loaded snapshot per tab
-  // Entry shape: { items: TokenSummary[], total: number, sortBy, sortDir, searchTerm, ts, loadedPages, pageSize }
   var currentModalMint = null;
   var tokenModalData = null;
   var searchDebounceHandle = null;
-  var tokensSnapshotState = {
+  var tokensFetchState = window.tokensFetchState || {
     inProgress: false,
-    pending: [],
-    expected: 0,
-    totalAvailable: 0,
     message: "",
-    timeoutHandle: null,
-    retryCount: 0,
-    began: false,
-    currentView: null,
-    searchAutoCleared: false,
-    requestId: null,
-    context: null,
+    abortController: null,
   };
-  var TOKENS_SNAPSHOT_LIMIT = TOKENS_DEFAULT_PAGE_SIZE;
-  var TOKENS_SNAPSHOT_TIMEOUT_MS = 12000;
+  window.tokensFetchState = tokensFetchState;
+  var TOKENS_PAGE_LIMIT = TOKENS_DEFAULT_PAGE_SIZE;
 
   function replaceAllTokensData(next) {
     tokensTableState.items = Array.isArray(next) ? next : [];
@@ -90,7 +80,7 @@
   function clampTokensPageSize(size) {
     const numeric = Number(size);
     if (!Number.isFinite(numeric) || numeric <= 0) {
-      return TOKENS_SNAPSHOT_LIMIT;
+      return TOKENS_PAGE_LIMIT;
     }
     return Math.min(Math.max(1, Math.floor(numeric)), TOKENS_MAX_PAGE_SIZE);
   }
@@ -100,7 +90,7 @@
     if (!preserveItems) {
       replaceAllTokensData([]);
     }
-    tokensTableState.pageSize = TOKENS_SNAPSHOT_LIMIT;
+    tokensTableState.pageSize = TOKENS_PAGE_LIMIT;
     tokensTableState.currentPage = 0;
     tokensTableState.totalPages = 0;
     tokensTableState.totalCount = preserveItems
@@ -118,7 +108,7 @@
     ensureTokensPageReady({ updateStatus: false });
     setupSortableHeaders();
     attachGlobalListeners();
-    setTokenCountStatus("⏳ Waiting for realtime snapshot...");
+    reloadTokensList("Loading tokens...");
   };
 
   function hydrateTokensState() {
@@ -134,98 +124,6 @@
       tokensState.view = DEFAULT_TOKENS_VIEW;
       window.sessionStorage.setItem("tokens.view", tokensState.view);
     }
-    window.PageRealtime = window.PageRealtime || {};
-    // Tokens list is served exclusively over realtime snapshots (no HTTP fallback)
-    window.PageRealtime.tokens = {
-      topics: ["tokens", "tokens.update"],
-      channels: {
-        tokens: handleTokensRealtime,
-        "tokens.update": handleTokensRealtime,
-        "snapshot_begin:tokens.update": handleTokensSnapshotBegin,
-        "snapshot_end:tokens.update": handleTokensSnapshotEnd,
-        _warning: handleTokensWarning,
-        _disconnected: handleTokensDisconnect,
-        _failed: handleTokensDisconnect,
-        _connected: handleTokensReconnect,
-      },
-      getFilters() {
-        const topic = "tokens.update";
-        const limit = TOKENS_SNAPSHOT_LIMIT;
-        if (!TOKENS_VIEWS.includes(tokensState.view)) {
-          tokensState.view = DEFAULT_TOKENS_VIEW;
-          window.sessionStorage.setItem("tokens.view", tokensState.view);
-        }
-        const filter = {
-          view: tokensState.view,
-          sort_by: tokensState.sortBy,
-          sort_dir: tokensState.sortDir,
-          page: 1,
-          page_size: limit,
-          limit,
-        };
-        if (tokensState.searchTerm) {
-          filter.search = tokensState.searchTerm;
-        }
-        const out = { [topic]: filter };
-        if (window.__DEBUG_REALTIME) {
-          console.log("[TokensDBG] getFilters", out);
-        }
-        return out;
-      },
-      onInitial(status) {
-        if (window.__DEBUG_REALTIME) {
-          console.log("[TokensDBG] onInitial", status);
-        }
-        if (status === "connected") {
-          setTokenCountStatus("🔌 Realtime connected • Loading tokens...");
-        } else if (status === "connecting") {
-          setTokenCountStatus("🔄 Connecting to realtime...");
-        } else {
-          setTokenCountStatus(
-            "⚠️ Realtime unavailable – waiting for connection"
-          );
-        }
-      },
-      onUnavailable() {
-        console.warn("[Tokens] Realtime unavailable – retrying snapshot");
-        if (window.__DEBUG_REALTIME) {
-          console.log("[TokensDBG] onUnavailable");
-        }
-        setTokenCountStatus("⚠️ Realtime unavailable – retrying...");
-        requestTokensSnapshot("Retrying after realtime unavailable...");
-      },
-      onEnter(status) {
-        if (window.__DEBUG_REALTIME) {
-          console.log("[TokensDBG] onEnter", status, {
-            view: tokensState.view,
-          });
-        }
-        if (status === "connected") {
-          requestTokensSnapshot("Loading tokens...");
-        } else if (status === "connecting") {
-          setTokenCountStatus("🔄 Connecting to realtime...");
-          requestTokensSnapshot("Connecting to realtime...");
-        } else {
-          setTokenCountStatus("⚠️ Waiting for realtime connection...");
-          requestTokensSnapshot("Waiting for realtime connection...");
-        }
-      },
-      onExit() {
-        clearTokensSnapshotTimer();
-        tokensSnapshotState.inProgress = false;
-        tokensSnapshotState.pending = [];
-        if (window.__DEBUG_REALTIME) {
-          console.log("[TokensDBG] onExit");
-        }
-        if (window.__tokensVisibilityHandler) {
-          document.removeEventListener(
-            "visibilitychange",
-            window.__tokensVisibilityHandler
-          );
-          window.__tokensVisibilityHandler = null;
-        }
-      },
-    };
 
     const savedSearch = window.sessionStorage.getItem("tokens.search");
     if (typeof savedSearch === "string") {
@@ -735,7 +633,9 @@
 
   function handleVisibilityChange() {
     if (document.visibilityState === "visible") {
-      requestTokensSnapshot("Refreshing after returning...");
+      reloadTokensList("Refreshing after returning...", {
+        preserveItems: true,
+      });
     }
   }
 
@@ -818,16 +718,12 @@
       tab.classList.toggle("active", tab.dataset.view === tokensState.view);
     });
 
-    resetTokensPagination();
-    setTokensScrollGuardState("loading");
     const viewLabel = VIEW_LABELS[tokensState.view] || "";
     const loadMessage = viewLabel
       ? `Loading tokens ${viewLabel}...`
       : "Loading tokens...";
-    showTokensLoading(loadMessage);
 
-    // Always request a fresh snapshot for the active view
-    requestTokensSnapshot(`Switching to ${tokensState.view} view...`);
+    reloadTokensList(loadMessage);
   }
 
   function ensureTokensToolbarVisible(options = {}) {
@@ -862,13 +758,10 @@
     }
 
     let statusMessage = null;
-    if (tokensSnapshotState.inProgress && tokensSnapshotState.message) {
-      statusMessage = tokensSnapshotState.message;
+    if (tokensFetchState.inProgress && tokensFetchState.message) {
+      statusMessage = tokensFetchState.message;
     } else {
-      const totalAvailable =
-        Number(tokensTableState.totalCount) ||
-        Number(tokensSnapshotState.totalAvailable) ||
-        0;
+      const totalAvailable = Number(tokensTableState.totalCount) || 0;
       const loaded = Array.isArray(tokensTableState.items)
         ? tokensTableState.items.length
         : allTokensData.length;
@@ -930,7 +823,7 @@
     const refreshBtn = toolbarContainer.querySelector("#tokensRefreshBtn");
     if (refreshBtn) {
       refreshBtn.addEventListener("click", () =>
-        requestTokensSnapshot("Refreshing tokens...")
+        reloadTokensList("Refreshing tokens...")
       );
     }
 
@@ -944,35 +837,22 @@
     tokensState.searchTerm = event.target.value.trim();
     window.sessionStorage.setItem("tokens.search", tokensState.searchTerm);
 
-    resetTokensPagination();
-    tokensSnapshotState.totalAvailable = 0;
-    tokensSnapshotState.message = tokensState.searchTerm
+    const message = tokensState.searchTerm
       ? "Applying search filter..."
       : "Refreshing tokens...";
 
-    if (
-      Array.isArray(tokensTableState.items) &&
-      tokensTableState.items.length
-    ) {
-      setTokenCountStatus(tokensSnapshotState.message);
-      setTokensScrollGuardState("loading");
-    } else {
-      showTokensLoading(tokensSnapshotState.message);
-    }
+    setTokenCountStatus(message);
 
     if (searchDebounceHandle) {
       clearTimeout(searchDebounceHandle);
     }
+
     searchDebounceHandle = setTimeout(() => {
-      requestTokensSnapshot(tokensSnapshotState.message);
+      reloadTokensList(message, { preserveItems: true });
     }, 350);
   }
 
   async function exportTokens() {
-    if (window.__DEBUG_REALTIME) {
-      console.log("[TokensDBG] exportTokens triggered");
-    }
-
     const exportButton = document.getElementById("tokensExportBtn");
     if (exportButton) {
       exportButton.disabled = true;
@@ -986,7 +866,7 @@
       const maxPages = 50; // safeguard to prevent unbounded loops
       let page = 1;
       const pageSize = clampTokensPageSize(
-        tokensTableState.pageSize || TOKENS_SNAPSHOT_LIMIT
+        tokensTableState.pageSize || TOKENS_PAGE_LIMIT
       );
       const rows = [];
       let totalPages = 1;
@@ -1073,9 +953,7 @@
       if (statusBefore) {
         setTokenCountStatus(statusBefore);
       } else {
-        updateTokenCount(
-          tokensTableState.totalCount || tokensSnapshotState.totalAvailable
-        );
+        updateTokenCount(tokensTableState.totalCount || allTokensData.length);
       }
       if (exportButton) {
         exportButton.disabled = false;
@@ -1124,61 +1002,6 @@
     return deduped;
   }
 
-  function getTokenSortValue(token, key) {
-    if (!token || typeof token !== "object") return null;
-    switch (key) {
-      case "symbol":
-        return (token.symbol || "").toUpperCase();
-      case "liquidity_usd":
-      case "volume_24h":
-      case "price_sol":
-      case "market_cap":
-      case "fdv":
-      case "price_change_h1":
-      case "price_change_h24":
-        return Number(token[key]);
-      case "security_score":
-        return Number(token.security_score);
-      case "updated_at":
-        return Number(token.price_updated_at);
-      default:
-        return token[key] !== undefined ? token[key] : token.mint;
-    }
-  }
-
-  function compareTokensForCurrentSort(a, b) {
-    const key = tokensState.sortBy || "symbol";
-    const dir = tokensState.sortDir === "asc" ? 1 : -1;
-    const valA = getTokenSortValue(a, key);
-    const valB = getTokenSortValue(b, key);
-
-    if (typeof valA === "string" || typeof valB === "string") {
-      const strA = (valA || "").toString();
-      const strB = (valB || "").toString();
-      const cmp = strA.localeCompare(strB);
-      if (cmp !== 0) return cmp * dir;
-    } else {
-      const numA = Number.isFinite(valA) ? valA : Number(valA);
-      const numB = Number.isFinite(valB) ? valB : Number(valB);
-      const safeA = Number.isFinite(numA) ? numA : 0;
-      const safeB = Number.isFinite(numB) ? numB : 0;
-      if (safeA < safeB) return -1 * dir;
-      if (safeA > safeB) return 1 * dir;
-    }
-
-    const symbolCmp = (a.symbol || "").localeCompare(b.symbol || "");
-    if (symbolCmp !== 0) {
-      return symbolCmp * dir;
-    }
-    return (a.mint || "").localeCompare(b.mint || "") * dir;
-  }
-
-  function sortTokensTableStateItems() {
-    if (!Array.isArray(tokensTableState.items)) return;
-    if (tokensTableState.items.length <= 1) return;
-    tokensTableState.items.sort(compareTokensForCurrentSort);
-  }
-
   function showTokensError(message) {
     const tbody = document.getElementById("tokensTableBody");
     if (!tbody) return;
@@ -1193,7 +1016,7 @@
     const parsedTotal = Number(total);
     let totalValue = Number.isFinite(parsedTotal)
       ? parsedTotal
-      : tokensSnapshotState.totalAvailable || tokensTableState.totalCount;
+      : tokensTableState.totalCount;
     if (!Number.isFinite(totalValue) || totalValue < 0) {
       totalValue = allTokensData.length;
     }
@@ -1229,48 +1052,6 @@
       : `${totalValue} tokens`;
   }
 
-  function applySearchFilter() {
-    sortTokensTableStateItems();
-    const items = Array.isArray(tokensTableState.items)
-      ? tokensTableState.items
-      : allTokensData;
-    renderTokens(items, { mode: "replace" });
-    setupTokensScrollObserver();
-  }
-
-  function clearTokensSearch(reason) {
-    if (!tokensState.searchTerm) {
-      return false;
-    }
-
-    if (window.__DEBUG_REALTIME) {
-      console.log("[TokensDBG] clearing search filter", {
-        reason,
-        previous: tokensState.searchTerm,
-      });
-    }
-
-    tokensState.searchTerm = "";
-    try {
-      window.sessionStorage.removeItem("tokens.search");
-    } catch (_) {}
-
-    const searchInput = document.querySelector("#searchInput");
-    if (searchInput) {
-      searchInput.value = "";
-    }
-
-    if (
-      reason &&
-      typeof Utils !== "undefined" &&
-      typeof Utils.showToast === "function"
-    ) {
-      Utils.showToast(reason, "info");
-    }
-
-    return true;
-  }
-
   function renderTokens(tokens, options) {
     const tbody = document.getElementById("tokensTableBody");
     if (!tbody) return;
@@ -1283,7 +1064,7 @@
         return;
       }
 
-      if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
+      if (window.__DEBUG_TOKENS_VERBOSE) {
         console.warn("[TokensDBG] renderTokens: empty data", {
           view: tokensState.view,
           search: tokensState.searchTerm,
@@ -1292,10 +1073,8 @@
           allTokensDataLen: Array.isArray(allTokensData)
             ? allTokensData.length
             : 0,
-          totalAvailable: tokensSnapshotState.totalAvailable,
-          expected: tokensSnapshotState.expected,
-          inProgress: tokensSnapshotState.inProgress,
-          began: tokensSnapshotState.began,
+          totalCount: tokensTableState.totalCount,
+          loading: tokensFetchState.inProgress,
         });
       }
 
@@ -1325,7 +1104,7 @@
       return;
     }
 
-    if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
+    if (window.__DEBUG_TOKENS_VERBOSE) {
       console.log("[TokensDBG] renderTokens: rendering rows", {
         count: tokens.length,
         view: tokensState.view,
@@ -1467,92 +1246,6 @@
     setTokenCountStatus(message);
   }
 
-  function clearTokensSnapshotTimer() {
-    if (tokensSnapshotState.timeoutHandle) {
-      if (window.__DEBUG_REALTIME) {
-        console.log("[TokensDBG] clearSnapshotTimer");
-      }
-      clearTimeout(tokensSnapshotState.timeoutHandle);
-      tokensSnapshotState.timeoutHandle = null;
-    }
-  }
-
-  function scheduleTokensSnapshotTimer(reason) {
-    clearTokensSnapshotTimer();
-
-    if (
-      !Number.isFinite(TOKENS_SNAPSHOT_TIMEOUT_MS) ||
-      TOKENS_SNAPSHOT_TIMEOUT_MS <= 0
-    ) {
-      return;
-    }
-
-    if (window.__DEBUG_REALTIME) {
-      console.log("[TokensDBG] scheduleSnapshotTimer", {
-        reason,
-        timeoutMs: TOKENS_SNAPSHOT_TIMEOUT_MS,
-      });
-    }
-
-    tokensSnapshotState.timeoutHandle = setTimeout(() => {
-      tokensSnapshotState.timeoutHandle = null;
-      if (!tokensSnapshotState.inProgress) {
-        if (window.__DEBUG_REALTIME) {
-          console.log("[TokensDBG] snapshot timer fired but not inProgress");
-        }
-        return;
-      }
-
-      console.warn(
-        `[Tokens] Snapshot timeout (${reason || "unknown"}) — checking state`
-      );
-      if (window.__DEBUG_REALTIME) {
-        console.log("[TokensDBG] snapshot timeout", {
-          pending: tokensSnapshotState.pending.length,
-          expected: tokensSnapshotState.expected,
-          totalAvailable: tokensSnapshotState.totalAvailable,
-          wsConnected: window.Realtime?.isConnected?.() || false,
-        });
-      }
-
-      if (tokensSnapshotState.pending.length > 0) {
-        finalizeTokensSnapshot();
-        return;
-      }
-
-      tokensSnapshotState.inProgress = false;
-      tokensSnapshotState.message = "";
-      tokensSnapshotState.retryCount =
-        (tokensSnapshotState.retryCount || 0) + 1;
-
-      // Check if WebSocket is connected before retrying
-      const isConnected = window.Realtime?.isConnected?.() || false;
-      if (!isConnected) {
-        if (window.__DEBUG_REALTIME) {
-          console.log(
-            "[TokensDBG] WS disconnected, skipping retry → will retry on reconnect"
-          );
-        }
-        setTokenCountStatus("⚠️ Disconnected – waiting for connection...");
-        // Don't retry - let reconnect handler trigger refresh
-        return;
-      }
-
-      setTokenCountStatus("⚠️ Snapshot delayed – retrying...");
-
-      // After 2 consecutive timeouts, fall back to HTTP list to avoid blank UI
-      if (tokensSnapshotState.retryCount >= 2) {
-        if (window.__DEBUG_REALTIME) {
-          console.log("[TokensDBG] timeout fallback → HTTP list");
-        }
-        fetchTokensListForCurrentFilters();
-        return;
-      }
-
-      requestTokensSnapshot("Retrying snapshot after timeout...");
-    }, TOKENS_SNAPSHOT_TIMEOUT_MS);
-  }
-
   function buildTokensListQuery(page, pageSize) {
     const params = new URLSearchParams();
     params.set("view", tokensState.view);
@@ -1563,7 +1256,7 @@
     params.set("sort_dir", tokensState.sortDir);
     params.set("page", String(page));
     const requestedSize =
-      pageSize || tokensTableState.pageSize || TOKENS_SNAPSHOT_LIMIT;
+      pageSize || tokensTableState.pageSize || TOKENS_PAGE_LIMIT;
     const safeSize = clampTokensPageSize(requestedSize);
     params.set("page_size", String(safeSize));
     return params;
@@ -1572,11 +1265,11 @@
   async function fetchTokensListPage(page, options) {
     const opts = options || {};
     const requestedSize =
-      opts.pageSize || tokensTableState.pageSize || TOKENS_SNAPSHOT_LIMIT;
+      opts.pageSize || tokensTableState.pageSize || TOKENS_PAGE_LIMIT;
     const pageSize = clampTokensPageSize(requestedSize);
     const params = buildTokensListQuery(page, pageSize);
     const url = `/api/tokens/list?${params.toString()}`;
-    if (window.__DEBUG_REALTIME) {
+    if (window.__DEBUG_TOKENS_VERBOSE) {
       console.log("[TokensDBG] HTTP page fetch", { page, pageSize, url });
     }
     const res = await fetch(url, {
@@ -1623,7 +1316,10 @@
     setTokensScrollGuardState("loading");
 
     try {
-      const result = await fetchTokensListPage(nextPage, opts.fetchOptions);
+      const result = await fetchTokensListPage(nextPage, {
+        pageSize: opts.pageSize,
+        signal: opts.signal,
+      });
       tokensTableState.pageSize = clampTokensPageSize(
         result.pageSize || tokensTableState.pageSize
       );
@@ -1675,661 +1371,99 @@
     }
   }
 
-  function requestTokensSnapshot(message) {
-    if (window.__DEBUG_REALTIME) {
-      console.log("[TokensDBG] requestSnapshot", {
-        message,
-        view: tokensState.view,
-        sortBy: tokensState.sortBy,
-        sortDir: tokensState.sortDir,
-        search: tokensState.searchTerm,
-      });
-    }
-    tokensSnapshotState.inProgress = true;
-    tokensSnapshotState.pending = [];
-    tokensSnapshotState.expected = 0;
-    tokensSnapshotState.totalAvailable = 0;
-    tokensSnapshotState.message = message || "Loading tokens...";
-    tokensSnapshotState.retryCount = 0;
-    tokensSnapshotState.began = false;
-    tokensSnapshotState.currentView = null;
-    tokensSnapshotState.searchAutoCleared = false;
-    tokensSnapshotState.requestId = null;
-    tokensSnapshotState.context = null;
-    tokensTableState.pendingReload = true;
-    tokensTableState.loading = true;
-    teardownTokensScrollObserver();
-    setTokensScrollGuardState("loading");
-    // If we already have something rendered, keep it visible and just update the status
-    if (Array.isArray(allTokensData) && allTokensData.length > 0) {
-      setTokenCountStatus(tokensSnapshotState.message);
-    } else {
-      showTokensLoading(tokensSnapshotState.message);
-    }
-    if (window.Realtime && typeof Realtime.updateFilters === "function") {
-      scheduleTokensSnapshotTimer("request");
-      const result =
-        Realtime.updateFilters({
-          snapshotTopics: ["tokens.update", "tokens"],
-        }) || {};
-      const requestId = result["tokens.update"] || result["tokens"] || null;
-      if (requestId) {
-        tokensSnapshotState.requestId = requestId;
+  async function reloadTokensList(message, options) {
+    const opts = options || {};
+    const statusMessage = message || "Loading tokens...";
+    const preserveItems = opts.preserveItems === true;
+    const resetPagination = opts.resetPagination !== false;
+
+    if (tokensFetchState.abortController) {
+      try {
+        tokensFetchState.abortController.abort();
+      } catch (_) {
+        /* no-op */
       }
-      return;
     }
 
-    // Realtime unavailable - cancel timer and fallback to HTTP immediately
-    if (tokensSnapshotState.timeoutHandle) {
-      clearTimeout(tokensSnapshotState.timeoutHandle);
-      tokensSnapshotState.timeoutHandle = null;
+    if (resetPagination) {
+      resetTokensPagination({ preserveItems });
+    } else {
+      tokensTableState.loading = true;
+      tokensTableState.pendingReload = true;
     }
-    tokensSnapshotState.inProgress = false;
 
-    console.warn(
-      "[Tokens] Realtime controller unavailable; falling back to HTTP"
-    );
-    setTokenCountStatus("⚠️ Loading via HTTP...");
-    fetchTokensListForCurrentFilters();
-  }
+    tokensFetchState.inProgress = true;
+    tokensFetchState.message = statusMessage;
+    tokensTableState.loading = true;
+    tokensTableState.pendingReload = true;
 
-  async function fetchTokensListForCurrentFilters() {
+    const hasExistingRows =
+      Array.isArray(allTokensData) && allTokensData.length > 0;
+    if (!preserveItems || !hasExistingRows) {
+      showTokensLoading(statusMessage);
+    } else {
+      setTokenCountStatus(statusMessage);
+    }
+
+    setTokensScrollGuardState("loading");
+
+    const controller = new AbortController();
+    tokensFetchState.abortController = controller;
+
     try {
-      const result = await fetchTokensListPage(1);
+      const result = await fetchTokensListPage(1, {
+        pageSize: opts.pageSize,
+        signal: controller.signal,
+      });
       replaceAllTokensData(result.items);
-      tokensSnapshotState.inProgress = false;
-      tokensSnapshotState.pending = [];
-      tokensSnapshotState.expected = 0;
-      tokensSnapshotState.totalAvailable =
-        Number(result.total) || tokensTableState.items.length;
-      tokensSnapshotState.message = "";
 
       tokensTableState.pageSize = clampTokensPageSize(
-        result.pageSize || TOKENS_SNAPSHOT_LIMIT
+        result.pageSize || TOKENS_PAGE_LIMIT
       );
       tokensTableState.currentPage = tokensTableState.items.length > 0 ? 1 : 0;
-      tokensTableState.totalPages = result.totalPages || 1;
-      tokensTableState.totalCount = tokensSnapshotState.totalAvailable;
-      tokensTableState.loading = false;
-      tokensTableState.pendingReload = false;
+      tokensTableState.totalPages =
+        result.totalPages || (tokensTableState.currentPage > 0 ? 1 : 0);
+      tokensTableState.totalCount =
+        Number(result.total) || tokensTableState.items.length;
 
-      updateTokenCount(tokensSnapshotState.totalAvailable);
-      const viewLabel = VIEW_LABELS[tokensState.view] || "";
-      const status = viewLabel
-        ? `HTTP • ${tokensSnapshotState.totalAvailable} tokens ${viewLabel}`
-        : `HTTP • ${tokensSnapshotState.totalAvailable} tokens`;
-      setTokenCountStatus(status);
-      applySearchFilter();
-      if (tokensTableState.currentPage < tokensTableState.totalPages) {
-        setupTokensScrollObserver();
+      if (tokensTableState.items.length === 0) {
+        renderTokens(tokensTableState.items, { mode: "replace" });
+        updateTokenCount(tokensTableState.totalCount);
+        setTokensScrollGuardState("hidden");
+        teardownTokensScrollObserver();
       } else {
-        setTokensScrollGuardState("end");
+        renderTokens(tokensTableState.items, { mode: "replace" });
+        updateTokenCount(tokensTableState.totalCount);
+
+        if (tokensTableState.currentPage < tokensTableState.totalPages) {
+          setTokensScrollGuardState("idle");
+          setupTokensScrollObserver();
+        } else {
+          setTokensScrollGuardState("end");
+          teardownTokensScrollObserver();
+        }
+
+        const viewLabel = VIEW_LABELS[tokensState.view] || "";
+        const status = viewLabel
+          ? `${tokensTableState.totalCount} tokens ${viewLabel}`
+          : `${tokensTableState.totalCount} tokens`;
+        setTokenCountStatus(status);
       }
     } catch (err) {
-      console.warn("[Tokens] HTTP fallback failed", err);
-      showTokensError("❌ Snapshot failed and fallback unavailable");
-    }
-  }
-
-  function handleTokensSnapshotBegin(payload) {
-    if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
-      console.log("[TokensDBG] snapshot_begin", {
-        payload,
-        view: tokensState.view,
-        search: tokensState.searchTerm,
-        sortBy: tokensState.sortBy,
-        sortDir: tokensState.sortDir,
-      });
-    }
-    const context = (payload && payload.context) || {};
-    const requestId =
-      context.request_id ||
-      context.requestId ||
-      payload?.request_id ||
-      payload?.requestId ||
-      null;
-    const realtime = window.Realtime;
-    const latestRequestId =
-      realtime && realtime.lastSnapshotRequestIds
-        ? realtime.lastSnapshotRequestIds["tokens.update"] ||
-          realtime.lastSnapshotRequestIds["tokens"] ||
-          null
-        : null;
-
-    if (
-      requestId &&
-      latestRequestId &&
-      requestId !== latestRequestId &&
-      tokensSnapshotState.requestId !== requestId
-    ) {
-      if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
-        console.warn("[TokensDBG] Ignoring stale snapshot_begin", {
-          requestId,
-          latestRequestId,
-          stateRequestId: tokensSnapshotState.requestId,
-        });
-      }
-      return;
-    }
-
-    if (requestId) {
-      tokensSnapshotState.requestId = requestId;
-    }
-    tokensSnapshotState.context = context || null;
-    tokensSnapshotState.inProgress = true;
-    tokensSnapshotState.began = true;
-    tokensSnapshotState.pending = [];
-    const totalSelected =
-      Number(context.total_selected ?? context.total ?? payload?.total) || 0;
-    const totalAvailable =
-      Number(context.total_available ?? totalSelected) || 0;
-    tokensSnapshotState.expected = totalSelected;
-    tokensSnapshotState.totalAvailable = totalAvailable;
-    const reportedView =
-      typeof context.view === "string" && context.view.length > 0
-        ? context.view
-        : null;
-    tokensSnapshotState.currentView = reportedView;
-    const message =
-      tokensSnapshotState.message ||
-      `Receiving snapshot (${tokensSnapshotState.expected} tokens)...`;
-    showTokensLoading(message);
-    scheduleTokensSnapshotTimer("begin");
-  }
-
-  function finalizeTokensSnapshot() {
-    clearTokensSnapshotTimer();
-    tokensSnapshotState.inProgress = false;
-    tokensSnapshotState.began = false;
-    const deduped = dedupeTokensByMint(tokensSnapshotState.pending);
-    if (
-      !tokensSnapshotState.searchAutoCleared &&
-      tokensState.searchTerm &&
-      tokensState.searchTerm.trim() !== "" &&
-      deduped.length === 0
-    ) {
-      const cleared = clearTokensSearch(
-        "Search filter cleared automatically — no tokens matched this view."
-      );
-      if (cleared) {
-        tokensSnapshotState.searchAutoCleared = true;
-        tokensSnapshotState.pending = [];
-        tokensSnapshotState.expected = 0;
-        tokensSnapshotState.totalAvailable = 0;
-        requestTokensSnapshot("Reloading after clearing search filter...");
+      if (err && err.name === "AbortError") {
         return;
       }
-    }
-    const contextTotals = tokensSnapshotState.context || {};
-    const contextSelected = Number(
-      contextTotals.total_selected ?? contextTotals.total
-    );
-    const contextAvailable = Number(contextTotals.total_available);
-    const snapshotReportedEmpty =
-      deduped.length === 0 &&
-      (tokensSnapshotState.expected === 0 ||
-        (Number.isFinite(contextSelected) && contextSelected === 0) ||
-        (Number.isFinite(contextAvailable) && contextAvailable === 0));
-
-    if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
-      console.log("[TokensDBG] finalizeSnapshot", {
-        pendingBefore: tokensSnapshotState.pending.length,
-        dedupedCount: deduped.length,
-        expected: tokensSnapshotState.expected,
-        snapshotReportedEmpty,
-      });
-    }
-
-    // Don't clear existing data if we got no new data (race condition/stale snapshot)
-    if (
-      deduped.length === 0 &&
-      allTokensData.length > 0 &&
-      !snapshotReportedEmpty
-    ) {
-      if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
-        console.warn(
-          "[TokensDBG] Ignoring empty finalize - keeping existing data",
-          {
-            existingCount: allTokensData.length,
-          }
-        );
+      console.error("[Tokens] Failed to load tokens list", err);
+      showTokensError("❌ Failed to load tokens");
+    } finally {
+      if (tokensFetchState.abortController === controller) {
+        tokensFetchState.abortController = null;
       }
-      tokensSnapshotState.pending = [];
-      tokensSnapshotState.expected = 0;
-      tokensSnapshotState.currentView = null;
-      return;
+      tokensFetchState.inProgress = false;
+      tokensFetchState.message = "";
+      tokensTableState.loading = false;
+      tokensTableState.pendingReload = false;
     }
-
-    tokensSnapshotState.pending = [];
-    tokensSnapshotState.expected = 0;
-    tokensSnapshotState.currentView = null;
-    replaceAllTokensData(deduped);
-
-    if (snapshotReportedEmpty) {
-      tokensSnapshotState.totalAvailable = 0;
-    }
-
-    const contextPageSize = Number(tokensSnapshotState.context?.page_size);
-
-    // Use backend's authoritative count (already set in handleTokensSnapshotEnd)
-    // Fall back to local counts only if backend didn't provide total_available
-    const total =
-      tokensSnapshotState.totalAvailable ||
-      tokensTableState.items.length ||
-      deduped.length;
-    tokensSnapshotState.message = "";
-
-    tokensTableState.pageSize = clampTokensPageSize(
-      Number.isFinite(contextPageSize) ? contextPageSize : TOKENS_SNAPSHOT_LIMIT
-    );
-    if (total === 0) {
-      tokensTableState.currentPage = 0;
-      tokensTableState.totalPages = 0;
-    } else {
-      tokensTableState.currentPage = 1;
-      tokensTableState.totalPages = Math.max(
-        1,
-        Math.ceil(total / tokensTableState.pageSize)
-      );
-    }
-    tokensTableState.totalCount = total;
-    tokensTableState.loading = false;
-    tokensTableState.pendingReload = false;
-
-    updateTokenCount(total);
-
-    const viewLabel = VIEW_LABELS[tokensState.view] || "";
-    const status = viewLabel
-      ? `Realtime • ${total} tokens ${viewLabel}`
-      : `Realtime • ${total} tokens`;
-    setTokenCountStatus(status);
-
-    if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
-      console.log("[TokensDBG] snapshot_applied", {
-        totalApplied: total,
-        tableRendered: allTokensData.length,
-        view: tokensState.view,
-      });
-    }
-
-    applySearchFilter();
-    if (tokensTableState.currentPage < tokensTableState.totalPages) {
-      setTokensScrollGuardState("idle");
-      setupTokensScrollObserver();
-    } else {
-      setTokensScrollGuardState(total > 0 ? "end" : "hidden");
-      teardownTokensScrollObserver();
-    }
-  }
-
-  function handleTokensSnapshotEnd(payload) {
-    if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
-      console.log("[TokensDBG] snapshot_end", {
-        payload,
-        expected: tokensSnapshotState.expected,
-        pending: tokensSnapshotState.pending.length,
-      });
-    }
-    const context = (payload && payload.context) || {};
-    const requestId =
-      context.request_id ||
-      context.requestId ||
-      payload?.request_id ||
-      payload?.requestId ||
-      null;
-    const realtime = window.Realtime;
-    const latestRequestId =
-      realtime && realtime.lastSnapshotRequestIds
-        ? realtime.lastSnapshotRequestIds["tokens.update"] ||
-          realtime.lastSnapshotRequestIds["tokens"] ||
-          null
-        : null;
-
-    if (
-      requestId &&
-      latestRequestId &&
-      requestId !== latestRequestId &&
-      tokensSnapshotState.requestId !== requestId
-    ) {
-      if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
-        console.warn("[TokensDBG] Ignoring stale snapshot_end", {
-          requestId,
-          latestRequestId,
-          stateRequestId: tokensSnapshotState.requestId,
-        });
-      }
-      return;
-    }
-
-    if (
-      requestId &&
-      tokensSnapshotState.requestId &&
-      requestId !== tokensSnapshotState.requestId
-    ) {
-      if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
-        console.warn("[TokensDBG] snapshot_end request mismatch", {
-          requestId,
-          stateRequestId: tokensSnapshotState.requestId,
-        });
-      }
-      return;
-    }
-
-    if (requestId) {
-      tokensSnapshotState.requestId = requestId;
-    }
-    if (context && Object.keys(context).length > 0) {
-      tokensSnapshotState.context = context;
-    }
-    tokensSnapshotState.inProgress = false;
-    tokensSnapshotState.began = false;
-    tokensSnapshotState.currentView = null;
-
-    // Trust backend's total_available directly - it's authoritative from database query
-    if (
-      typeof context.total_available === "number" &&
-      context.total_available >= 0
-    ) {
-      tokensSnapshotState.totalAvailable = context.total_available;
-    }
-
-    clearTokensSnapshotTimer();
-    finalizeTokensSnapshot();
-  }
-
-  function handleTokensRealtime(data, envelope) {
-    if (!data || typeof data !== "object") return;
-    const meta = envelope?.meta || {};
-    const isSnapshot = meta.snapshot === true;
-    const updateType = meta?.update;
-
-    // Only update totalAvailable if explicitly provided by backend
-    if (typeof meta.total === "number" && meta.total > 0) {
-      tokensSnapshotState.totalAvailable = meta.total;
-    }
-
-    if (isSnapshot) {
-      const chunkRequestId =
-        meta?.extra?.request_id ||
-        meta?.extra?.requestId ||
-        meta?.request_id ||
-        meta?.requestId ||
-        null;
-      if (
-        tokensSnapshotState.requestId &&
-        chunkRequestId &&
-        chunkRequestId !== tokensSnapshotState.requestId
-      ) {
-        if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
-          console.warn(
-            "[TokensDBG] Ignoring snapshot chunk for stale request",
-            {
-              chunkRequestId,
-              stateRequestId: tokensSnapshotState.requestId,
-            }
-          );
-        }
-        return;
-      }
-      if (!tokensSnapshotState.began) {
-        if (window.__DEBUG_REALTIME) {
-          console.warn("[TokensDBG] Ignoring snapshot chunk before begin", {
-            meta,
-          });
-        }
-        return;
-      }
-      // Optional: if server includes the view in meta, ensure it matches current UI view
-      const snapshotView =
-        envelope?.meta?.view || envelope?.meta?.extra?.view || envelope?.view;
-      if (snapshotView && !tokensSnapshotState.currentView) {
-        tokensSnapshotState.currentView = snapshotView;
-      }
-      const effectiveView = tokensSnapshotState.currentView || snapshotView;
-      if (effectiveView && effectiveView !== tokensState.view) {
-        console.warn(
-          "[Tokens] Dropping snapshot chunk for different view",
-          effectiveView,
-          "!=",
-          tokensState.view
-        );
-        return;
-      }
-      const normalized = normalizeTokenFromApi({ ...data });
-      tokensSnapshotState.pending.push(normalized);
-      scheduleTokensSnapshotTimer("chunk");
-      return;
-    }
-
-    if (
-      tokensSnapshotState.inProgress &&
-      tokensSnapshotState.pending.length > 0
-    ) {
-      console.debug(
-        "[Tokens] Completing snapshot from realtime delta (missing snapshot_end)"
-      );
-      if (window.__DEBUG_REALTIME || window.__DEBUG_TOKENS_VERBOSE) {
-        console.log("[TokensDBG] complete_from_delta", {
-          pending: tokensSnapshotState.pending.length,
-          expected: tokensSnapshotState.expected,
-        });
-      }
-      finalizeTokensSnapshot();
-    }
-
-    if (updateType === "removed" || data.removed === true) {
-      if (typeof data.mint === "string") {
-        handleTokenRemoval(data.mint);
-      }
-      return;
-    }
-
-    if (
-      updateType === "summary" ||
-      (typeof data.mint === "string" &&
-        (typeof data.symbol === "string" || typeof data.name === "string"))
-    ) {
-      const normalized = normalizeTokenFromApi({ ...data });
-      handleTokenSummaryDelta(normalized);
-      return;
-    }
-
-    if (data.price_result) {
-      handlePriceUpdate(data);
-    }
-  }
-
-  function handleTokenSummaryDelta(summary) {
-    if (!summary || typeof summary !== "object" || !summary.mint) return;
-
-    const existingIndex = allTokensData.findIndex(
-      (token) => token.mint === summary.mint
-    );
-    const prev =
-      existingIndex >= 0 ? { ...allTokensData[existingIndex] } : null;
-
-    if (existingIndex >= 0) {
-      allTokensData[existingIndex] = {
-        ...allTokensData[existingIndex],
-        ...summary,
-      };
-    } else {
-      // Avoid cross-tab pollution: only auto-insert unknown tokens in 'all' view
-      // For other views, wait for next snapshot/refresh unless we can strongly infer membership
-      const v = tokensState.view;
-      let shouldInsert = false;
-      if (v === "all") shouldInsert = true;
-      else if (v === "pool" && summary.has_pool_price === true)
-        shouldInsert = true;
-      else if (v === "blacklisted" && summary.blacklisted === true)
-        shouldInsert = true;
-      else if (v === "positions" && summary.has_open_position === true)
-        shouldInsert = true;
-      // conservative for other views (passed/rejected/secure/recent): skip insert to prevent wrong-tab entries
-
-      if (shouldInsert) {
-        allTokensData.unshift(summary);
-      } else {
-        // Ignore for now; will appear on next snapshot for this view
-        return;
-      }
-    }
-
-    // For realtime updates: preserve backend's authoritative count
-    // Local array length may differ from database total due to view filters/pagination
-    const sortKey = tokensState.sortBy;
-    const curr = existingIndex >= 0 ? allTokensData[existingIndex] : summary;
-    const sortChanged =
-      prev && sortKey in curr && prev[sortKey] !== curr[sortKey];
-    if (!prev || sortChanged) {
-      applySearchFilter();
-    } else {
-      updateTokenRow(summary.mint, curr);
-    }
-
-    // Use authoritative total from backend, fall back to loaded length
-    const knownTotal =
-      tokensSnapshotState.totalAvailable || allTokensData.length;
-    updateTokenCount(knownTotal);
-    const viewLabel = VIEW_LABELS[tokensState.view] || "";
-    const status = viewLabel
-      ? `Realtime • ${knownTotal} tokens ${viewLabel}`
-      : `Realtime • ${knownTotal} tokens`;
-    setTokenCountStatus(status);
-  }
-
-  function updateTokenRow(mint, token) {
-    const row = document.querySelector(`tr[data-mint="${mint}"]`);
-    if (!row) return;
-    try {
-      const priceCell = row.cells?.[1];
-      const liqCell = row.cells?.[2];
-      const vol24hCell = row.cells?.[3];
-      const fdvCell = row.cells?.[4];
-      const mcapCell = row.cells?.[5];
-      const ch1hCell = row.cells?.[6];
-      const ch24hCell = row.cells?.[7];
-      const secCell = row.cells?.[8];
-      const statusCell = row.cells?.[9];
-      const timeCell = row.cells?.[10];
-
-      if (priceCell) {
-        const val = Utils.formatPriceSol(token.price_sol, { fallback: "N/A" });
-        if (priceCell.innerHTML !== val) {
-          priceCell.innerHTML = val;
-          priceCell.style.animation = "highlight 0.6s ease-out";
-          setTimeout(() => (priceCell.style.animation = ""), 600);
-        }
-      }
-      if (liqCell) {
-        const val = Utils.formatCurrencyUSD(token.liquidity_usd, {
-          fallback: "—",
-        });
-        if (liqCell.innerHTML !== val) liqCell.innerHTML = val;
-      }
-      if (vol24hCell) {
-        const val = Utils.formatCurrencyUSD(token.volume_24h, {
-          fallback: "—",
-        });
-        if (vol24hCell.innerHTML !== val) vol24hCell.innerHTML = val;
-      }
-      if (fdvCell) {
-        const val = Utils.formatCurrencyUSD(token.fdv, { fallback: "—" });
-        if (fdvCell.innerHTML !== val) fdvCell.innerHTML = val;
-      }
-      if (mcapCell) {
-        const val = Utils.formatCurrencyUSD(token.market_cap, {
-          fallback: "—",
-        });
-        if (mcapCell.innerHTML !== val) mcapCell.innerHTML = val;
-      }
-      if (ch1hCell) {
-        const val = Utils.formatPercent(token.price_change_h1, {
-          style: "token",
-          fallback: "—",
-        });
-        if (ch1hCell.innerHTML !== val) ch1hCell.innerHTML = val;
-      }
-      if (ch24hCell) {
-        const val = Utils.formatPercent(token.price_change_h24, {
-          style: "token",
-          fallback: "—",
-        });
-        if (ch24hCell.innerHTML !== val) ch24hCell.innerHTML = val;
-      }
-      if (secCell) {
-        const val = renderSecurity(token.security_score, token.rugged);
-        if (secCell.innerHTML !== val) secCell.innerHTML = val;
-      }
-      if (statusCell) {
-        const val = renderStatusBadges(token);
-        if (statusCell.innerHTML !== val) statusCell.innerHTML = val;
-      }
-      if (timeCell) {
-        const ts = token.price_updated_at;
-        const val = ts ? Utils.formatTimeAgo(ts, { fallback: "-" }) : "N/A";
-        if (timeCell.textContent !== val) timeCell.textContent = val;
-      }
-    } catch (e) {
-      console.debug("[Tokens] Row patch failed; re-rendering list", e);
-      applySearchFilter();
-    }
-  }
-
-  function handleTokenRemoval(mint) {
-    if (!mint) return;
-    const index = allTokensData.findIndex((token) => token.mint === mint);
-    if (index === -1) return;
-
-    allTokensData.splice(index, 1);
-
-    // Decrement backend's authoritative count for this removal
-    if (tokensSnapshotState.totalAvailable > 0) {
-      tokensSnapshotState.totalAvailable -= 1;
-    }
-    tokensTableState.totalCount = tokensSnapshotState.totalAvailable;
-    tokensTableState.totalPages = tokensTableState.pageSize
-      ? Math.ceil(tokensTableState.totalCount / tokensTableState.pageSize)
-      : tokensTableState.totalPages;
-    if (tokensTableState.currentPage > tokensTableState.totalPages) {
-      tokensTableState.currentPage = tokensTableState.totalPages;
-    }
-    if (tokensTableState.totalPages <= 1) {
-      setTokensScrollGuardState(allTokensData.length > 0 ? "end" : "hidden");
-      teardownTokensScrollObserver();
-    }
-    updateTokenCount(tokensSnapshotState.totalAvailable);
-    applySearchFilter();
-    const viewLabel = VIEW_LABELS[tokensState.view] || "";
-    const knownTotal =
-      tokensSnapshotState.totalAvailable || allTokensData.length;
-    const status = viewLabel
-      ? `Realtime • ${knownTotal} tokens ${viewLabel}`
-      : `Realtime • ${knownTotal} tokens`;
-    setTokenCountStatus(status);
-  }
-
-  function handleTokensWarning(payload) {
-    if (!payload) return;
-    clearTokensSnapshotTimer();
-    const topic = payload.topic || payload.alias;
-    if (topic !== "tokens.update" && topic !== "tokens") return;
-
-    const recommendation = payload.recommendation || payload.action;
-    setTokenCountStatus("⚠️ Realtime warning – resyncing...");
-
-    requestTokensSnapshot("Resyncing after warning...");
-  }
-
-  function handleTokensDisconnect() {
-    clearTokensSnapshotTimer();
-    setTokenCountStatus("⚠️ Realtime disconnected – waiting for reconnection");
-  }
-
-  function handleTokensReconnect() {
-    clearTokensSnapshotTimer();
-    setTokenCountStatus("🔌 Reconnected – refreshing tokens...");
-    requestTokensSnapshot("Resyncing after reconnect...");
   }
 
   function createTokenRowHtml(token) {
@@ -2448,9 +1582,7 @@
         tokensState.sortDir = key === "symbol" ? "asc" : "desc";
       }
       updateSortIndicators();
-      resetTokensPagination();
-      setTokensScrollGuardState("loading");
-      requestTokensSnapshot("Sorting tokens...");
+      reloadTokensList("Sorting tokens...");
     });
     updateSortIndicators();
     window.__tokensSortHeadersSetup = true;
