@@ -512,6 +512,11 @@ window.Router = {
             ensureStatusSubTabsVisible();
           }
           break;
+        case "filtering":
+          if (typeof ensureFilteringPageReady === "function") {
+            ensureFilteringPageReady();
+          }
+          break;
         case "tokens":
           if (typeof ensureTokensPageReady === "function") {
             ensureTokensPageReady();
@@ -544,6 +549,9 @@ window.Router = {
           if (typeof ensureStatusSubTabsVisible === "function")
             ensureStatusSubTabsVisible();
         }
+        break;
+      case "filtering":
+        if (typeof initFilteringPage === "function") initFilteringPage();
         break;
       case "tokens":
         if (typeof initTokensPage === "function") initTokensPage();

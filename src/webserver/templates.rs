@@ -19,6 +19,7 @@ const CHART_SCRIPTS: &str = include_str!("templates/scripts/chart.js");
 const HOME_PAGE: &str = include_str!("templates/pages/home.html");
 const STATUS_PAGE: &str = include_str!("templates/pages/status.html");
 const POSITIONS_PAGE: &str = include_str!("templates/pages/positions.html");
+const FILTERING_PAGE: &str = include_str!("templates/pages/filtering.html");
 const TOKENS_PAGE: &str = include_str!("templates/pages/tokens.html");
 const EVENTS_PAGE: &str = include_str!("templates/pages/events.html");
 const SERVICES_PAGE: &str = include_str!("templates/pages/services.html");
@@ -62,6 +63,7 @@ fn nav_tabs(active: &str) -> String {
         ("status", "📊 Status"),
         ("services", "🔧 Services"),
         ("positions", "💰 Positions"),
+        ("filtering", "🔍 Filtering"),
         ("tokens", "🪙 Tokens"),
         ("transactions", "💱 Transactions"),
         ("events", "📡 Events"),
@@ -95,6 +97,10 @@ pub fn status_content() -> String {
 
 pub fn positions_content() -> String {
     render_page(POSITIONS_PAGE)
+}
+
+pub fn filtering_content() -> String {
+    render_page(FILTERING_PAGE)
 }
 
 pub fn tokens_content() -> String {

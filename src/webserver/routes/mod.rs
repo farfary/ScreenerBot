@@ -23,6 +23,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/home", axum::routing::get(home_page))
         .route("/status", axum::routing::get(status_page))
         .route("/positions", axum::routing::get(positions_page))
+        .route("/filtering", axum::routing::get(filtering_page))
         .route("/tokens", axum::routing::get(tokens_page))
         .route("/events", axum::routing::get(events_page))
         .route("/services", axum::routing::get(services_page))
@@ -48,6 +49,12 @@ async fn status_page() -> Html<String> {
 async fn positions_page() -> Html<String> {
     let content = templates::positions_content();
     Html(templates::base_template("Positions", "positions", &content))
+}
+
+/// Filtering page handler
+async fn filtering_page() -> Html<String> {
+    let content = templates::filtering_content();
+    Html(templates::base_template("Filtering", "filtering", &content))
 }
 
 /// Tokens page handler
@@ -113,6 +120,7 @@ async fn get_page_content(axum::extract::Path(page): axum::extract::Path<String>
         "home" => templates::home_content(),
         "status" => templates::status_content(),
         "positions" => templates::positions_content(),
+        "filtering" => templates::filtering_content(),
         "tokens" => templates::tokens_content(),
         "events" => templates::events_content(),
         "services" => templates::services_content(),

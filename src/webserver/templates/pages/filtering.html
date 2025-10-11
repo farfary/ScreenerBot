@@ -1,0 +1,1252 @@
+<style>
+  .filtering-page {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 20px 24px 28px;
+    min-height: 0;
+    height: 100%;
+    box-sizing: border-box;
+  }
+
+  .filtering-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 18px 20px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(17, 19, 32, 0.9);
+    box-shadow: 0 18px 38px rgba(7, 9, 24, 0.4);
+  }
+
+  .filtering-toolbar h2 {
+    margin: 0;
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .filtering-toolbar p {
+    margin: 6px 0 0;
+    color: var(--text-secondary);
+    max-width: 520px;
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+
+  .filtering-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .filtering-actions .ghost-btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: all 0.18s ease;
+  }
+
+  .filtering-actions .ghost-btn:hover:not(:disabled) {
+    color: var(--text-primary);
+    border-color: rgba(255, 255, 255, 0.32);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .filtering-actions .ghost-btn:disabled,
+  .filtering-actions .primary-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .filtering-actions .primary-btn {
+    padding: 8px 18px;
+    border-radius: 8px;
+    border: none;
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    color: #ffffff;
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+  }
+
+  .filtering-actions .primary-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 24px rgba(29, 78, 216, 0.35);
+  }
+
+  .filtering-status {
+    min-height: 24px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    padding: 6px 10px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .filtering-status.hidden {
+    display: none;
+  }
+
+  .filtering-status.info {
+    background: rgba(59, 130, 246, 0.12);
+    color: rgba(59, 130, 246, 0.9);
+  }
+
+  .filtering-status.success {
+    background: rgba(34, 197, 94, 0.12);
+    color: rgba(34, 197, 94, 0.9);
+  }
+
+  .filtering-status.error {
+    background: rgba(248, 113, 113, 0.12);
+    color: rgba(248, 113, 113, 0.92);
+  }
+
+  .filtering-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px;
+  }
+
+  .filtering-summary-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 16px 18px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(16, 18, 32, 0.85);
+    box-shadow: 0 16px 34px rgba(6, 9, 24, 0.32);
+  }
+
+  .filtering-summary-card .summary-icon {
+    font-size: 1.4rem;
+  }
+
+  .filtering-summary-card .summary-value {
+    font-size: 1.45rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .filtering-summary-card .summary-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary);
+  }
+
+  .filtering-grid {
+    display: grid;
+    gap: 18px;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  }
+
+  .filtering-card {
+    display: flex;
+    flex-direction: column;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(14, 16, 30, 0.82);
+    box-shadow: 0 18px 36px rgba(6, 8, 22, 0.35);
+    overflow: hidden;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .filtering-card[data-dirty="true"] {
+    border-color: rgba(56, 239, 125, 0.5);
+    box-shadow: 0 20px 40px rgba(20, 92, 52, 0.45);
+  }
+
+  .filtering-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    background: rgba(19, 21, 36, 0.9);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .filtering-card-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--text-primary);
+  }
+
+  .filtering-card-badge {
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.65);
+    background: rgba(255, 255, 255, 0.12);
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+
+  .filtering-card[data-dirty="true"] .filtering-card-badge {
+    background: rgba(56, 239, 125, 0.18);
+    color: rgba(56, 239, 125, 0.92);
+  }
+
+  .filtering-card-body {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px;
+    padding: 18px 20px 20px;
+    background: rgba(12, 14, 28, 0.78);
+  }
+
+  .field-control {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(15, 17, 32, 0.9);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease,
+      background 0.2s ease;
+  }
+
+  .field-control:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 12px 28px rgba(6, 8, 24, 0.3);
+  }
+
+  .field-control[data-dirty="true"] {
+    border-color: rgba(56, 239, 125, 0.55);
+  }
+
+  .field-control[data-invalid="true"] {
+    border-color: rgba(248, 113, 113, 0.7);
+    box-shadow: 0 12px 28px rgba(127, 29, 29, 0.35);
+  }
+
+  .field-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .field-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .field-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .field-unit {
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+  }
+
+  .dirty-pill {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(56, 239, 125, 0.16);
+    color: rgba(56, 239, 125, 0.92);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+  }
+
+  .field-input {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .field-input input[type="number"] {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(9, 11, 24, 0.85);
+    color: var(--text-primary);
+    font-size: 0.92rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .field-input input[type="number"]:focus {
+    outline: none;
+    border-color: rgba(56, 189, 248, 0.8);
+    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25);
+  }
+
+  .field-hint {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+  }
+
+  .field-control.toggle {
+    padding: 14px 16px 12px;
+  }
+
+  .field-control.toggle .field-header {
+    align-items: center;
+  }
+
+  .toggle-control {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+  }
+
+  .toggle-control input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .toggle-switch {
+    width: 46px;
+    height: 24px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+    transition: background 0.2s ease;
+    position: relative;
+  }
+
+  .toggle-switch::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+    transition: transform 0.2s ease;
+  }
+
+  .toggle-control input:checked + .toggle-switch {
+    background: rgba(34, 197, 94, 0.75);
+  }
+
+  .toggle-control input:checked + .toggle-switch::after {
+    transform: translateX(20px);
+  }
+
+  .filtering-empty {
+    padding: 26px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(14, 16, 28, 0.66);
+  }
+
+  .filtering-empty.error {
+    color: rgba(248, 113, 113, 0.9);
+    border-color: rgba(248, 113, 113, 0.4);
+    background: rgba(127, 29, 29, 0.22);
+  }
+
+  @media (max-width: 960px) {
+    .filtering-page {
+      padding: 18px 18px 24px;
+    }
+
+    .filtering-card-body {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .filtering-toolbar {
+      padding: 16px;
+    }
+
+    .filtering-actions {
+      width: 100%;
+      justify-content: flex-start;
+    }
+
+    .filtering-summary {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+</style>
+
+<div class="filtering-page page-content" data-section="filtering">
+  <div class="filtering-toolbar">
+    <div>
+      <h2>Filtering Controls</h2>
+      <p>
+        Fine-tune token discovery rules without touching config files. These
+        thresholds feed the live filtering pipeline that guards the trader.
+      </p>
+    </div>
+    <div class="filtering-actions">
+      <button id="filteringReloadBtn" class="ghost-btn" type="button">
+        Reload
+      </button>
+      <button id="filteringResetBtn" class="ghost-btn" type="button" disabled>
+        Reset
+      </button>
+      <button id="filteringSaveBtn" class="primary-btn" type="button" disabled>
+        Save Changes
+      </button>
+    </div>
+  </div>
+
+  <div id="filteringStatus" class="filtering-status hidden"></div>
+
+  <div id="filteringSummary" class="filtering-summary">
+    <div class="filtering-empty">Loading filtering metrics…</div>
+  </div>
+
+  <div id="filteringGrid" class="filtering-grid">
+    <div class="filtering-empty">Preparing filtering configuration…</div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const FilteringPage = (() => {
+      const state = {
+        metadata: null,
+        base: null,
+        draft: null,
+        dirty: new Set(),
+        invalid: new Set(),
+        fieldNodes: new Map(),
+        categoryFieldKeys: new Map(),
+        categoryNodes: new Map(),
+        fetchController: null,
+        initialized: false,
+        cleanupRegistered: false,
+        dom: {},
+        loading: false,
+      };
+
+      const CATEGORY_ORDER = [
+        "Performance",
+        "Requirements",
+        "Age",
+        "Activity",
+        "Liquidity",
+        "Market Cap",
+        "Security",
+        "Community",
+      ];
+
+      const CATEGORY_ICONS = {
+        Performance: "⚡",
+        Requirements: "✅",
+        Age: "⏳",
+        Activity: "📈",
+        Liquidity: "💧",
+        "Market Cap": "🏦",
+        Security: "🛡️",
+        Community: "👥",
+      };
+
+      function ensureDom() {
+        state.dom.root = document.querySelector(".filtering-page");
+        state.dom.grid = document.getElementById("filteringGrid");
+        state.dom.summary = document.getElementById("filteringSummary");
+        state.dom.status = document.getElementById("filteringStatus");
+        state.dom.saveButton = document.getElementById("filteringSaveBtn");
+        state.dom.resetButton = document.getElementById("filteringResetBtn");
+        state.dom.reloadButton = document.getElementById("filteringReloadBtn");
+      }
+
+      function registerEventHandlers() {
+        if (state.dom.saveButton && !state.dom.saveButton.dataset.bound) {
+          state.dom.saveButton.dataset.bound = "true";
+          state.dom.saveButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            saveChanges();
+          });
+        }
+
+        if (state.dom.resetButton && !state.dom.resetButton.dataset.bound) {
+          state.dom.resetButton.dataset.bound = "true";
+          state.dom.resetButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            resetChanges();
+          });
+        }
+
+        if (state.dom.reloadButton && !state.dom.reloadButton.dataset.bound) {
+          state.dom.reloadButton.dataset.bound = "true";
+          state.dom.reloadButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            reloadFromBackend();
+          });
+        }
+      }
+
+      function registerCleanup() {
+        if (state.cleanupRegistered) {
+          return;
+        }
+        if (window.Router && typeof Router.registerCleanup === "function") {
+          Router.registerCleanup(() => {
+            teardown();
+          });
+          state.cleanupRegistered = true;
+        }
+      }
+
+      function teardown() {
+        if (state.fetchController) {
+          try {
+            state.fetchController.abort();
+          } catch (_) {}
+          state.fetchController = null;
+        }
+        state.cleanupRegistered = false;
+      }
+
+      function formatLabel(fieldKey) {
+        return fieldKey
+          .split("_")
+          .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+          .join(" ");
+      }
+
+      function setStatus(type, message) {
+        const el = state.dom.status;
+        if (!el) return;
+        if (!message) {
+          el.className = "filtering-status hidden";
+          el.textContent = "";
+          return;
+        }
+        el.className = `filtering-status ${type}`;
+        el.textContent = message;
+      }
+
+      function setLoading(loading) {
+        state.loading = loading;
+        if (state.dom.root) {
+          state.dom.root.dataset.loading = loading ? "true" : "false";
+        }
+        updateButtons();
+      }
+
+      function updateButtons() {
+        const dirtyCount = state.dirty.size;
+        const hasInvalid = state.invalid.size > 0;
+
+        if (state.dom.saveButton) {
+          state.dom.saveButton.disabled =
+            state.loading || dirtyCount === 0 || hasInvalid;
+          state.dom.saveButton.textContent =
+            dirtyCount > 0
+              ? `Save ${dirtyCount} ${dirtyCount === 1 ? "Change" : "Changes"}`
+              : "Save Changes";
+        }
+
+        if (state.dom.resetButton) {
+          state.dom.resetButton.disabled = state.loading || dirtyCount === 0;
+        }
+
+        if (state.dom.reloadButton) {
+          state.dom.reloadButton.disabled = state.loading;
+        }
+      }
+
+      function formatNumber(value, decimals = 0) {
+        const num = Number(value);
+        if (!Number.isFinite(num)) {
+          return "—";
+        }
+        try {
+          if (window.Utils && typeof Utils.formatNumber === "function") {
+            return Utils.formatNumber(num, {
+              decimals,
+              fallback: "—",
+              useGrouping: true,
+            });
+          }
+        } catch (_) {}
+        return num.toLocaleString("en-US", {
+          minimumFractionDigits: decimals,
+          maximumFractionDigits: decimals,
+        });
+      }
+
+      function formatCurrency(value) {
+        const num = Number(value);
+        if (!Number.isFinite(num)) {
+          return "—";
+        }
+        try {
+          if (window.Utils && typeof Utils.formatCurrencyUSD === "function") {
+            return Utils.formatCurrencyUSD(num, { fallback: "—" });
+          }
+        } catch (_) {}
+        if (Math.abs(num) >= 1_000_000_000) {
+          return `$${(num / 1_000_000_000).toFixed(2)}B`;
+        }
+        if (Math.abs(num) >= 1_000_000) {
+          return `$${(num / 1_000_000).toFixed(2)}M`;
+        }
+        if (Math.abs(num) >= 1_000) {
+          return `$${(num / 1_000).toFixed(2)}K`;
+        }
+        return `$${num.toFixed(2)}`;
+      }
+
+      function formatSeconds(seconds) {
+        const num = Number(seconds);
+        if (!Number.isFinite(num)) {
+          return "—";
+        }
+        if (num < 60) {
+          return `${num}s`;
+        }
+        const minutes = num / 60;
+        if (Number.isInteger(minutes)) {
+          return `${minutes}m`;
+        }
+        if (minutes < 120) {
+          return `${minutes.toFixed(1)}m`;
+        }
+        const hours = minutes / 60;
+        if (Number.isInteger(hours)) {
+          return `${hours}h`;
+        }
+        return `${hours.toFixed(1)}h`;
+      }
+
+      function renderSummary() {
+        const el = state.dom.summary;
+        if (!el) return;
+        if (!state.draft) {
+          el.innerHTML =
+            '<div class="filtering-empty">Loading filtering metrics…</div>';
+          return;
+        }
+
+        const items = [
+          {
+            key: "target_filtered_tokens",
+            label: "Target Tokens",
+            icon: "🎯",
+            value: formatNumber(state.draft.target_filtered_tokens, 0),
+          },
+          {
+            key: "max_tokens_to_process",
+            label: "Scan Ceiling",
+            icon: "🧮",
+            value: formatNumber(state.draft.max_tokens_to_process, 0),
+          },
+          {
+            key: "filter_cache_ttl_secs",
+            label: "Cache TTL",
+            icon: "⏱️",
+            value: formatSeconds(state.draft.filter_cache_ttl_secs),
+          },
+          {
+            key: "min_liquidity_usd",
+            label: "Min Liquidity",
+            icon: "💧",
+            value: formatCurrency(state.draft.min_liquidity_usd),
+          },
+          {
+            key: "min_security_score",
+            label: "Security Floor",
+            icon: "🛡️",
+            value: formatNumber(state.draft.min_security_score, 0),
+          },
+          {
+            key: "min_unique_holders",
+            label: "Min Holders",
+            icon: "👥",
+            value: formatNumber(state.draft.min_unique_holders, 0),
+          },
+        ];
+
+        el.innerHTML = items
+          .map(
+            (item) => `
+              <div class="filtering-summary-card" data-key="${item.key}">
+                <div class="summary-icon">${item.icon}</div>
+                <div class="summary-value">${item.value}</div>
+                <div class="summary-label">${item.label}</div>
+              </div>
+            `
+          )
+          .join("");
+      }
+
+      function setGridError(message) {
+        if (state.dom.grid) {
+          state.dom.grid.innerHTML = `
+            <div class="filtering-empty error">${message}</div>
+          `;
+        }
+        if (state.dom.summary) {
+          state.dom.summary.innerHTML = `
+            <div class="filtering-empty error">Unable to compute summary.</div>
+          `;
+        }
+      }
+
+      function buildCategoryEntries() {
+        const fallback = "General";
+        const buckets = new Map();
+
+        Object.entries(state.metadata || {}).forEach(([fieldKey, meta]) => {
+          const category = meta.category || fallback;
+          if (!buckets.has(category)) {
+            buckets.set(category, []);
+          }
+          buckets.get(category).push(fieldKey);
+        });
+
+        buckets.forEach((keys, category) => {
+          keys.sort((a, b) => {
+            const labelA = (
+              state.metadata[a].label || formatLabel(a)
+            ).toLowerCase();
+            const labelB = (
+              state.metadata[b].label || formatLabel(b)
+            ).toLowerCase();
+            return labelA.localeCompare(labelB);
+          });
+        });
+
+        const ordered = [];
+        CATEGORY_ORDER.forEach((category) => {
+          if (buckets.has(category)) {
+            ordered.push([category, buckets.get(category)]);
+            buckets.delete(category);
+          }
+        });
+
+        const remaining = Array.from(buckets.entries()).sort((a, b) =>
+          a[0].localeCompare(b[0])
+        );
+
+        return ordered.concat(remaining);
+      }
+
+      function handleNumberInput(fieldKey, meta, rawValue) {
+        const field = state.fieldNodes.get(fieldKey);
+        if (!field) return;
+
+        const parsed = rawValue === "" ? Number.NaN : Number(rawValue);
+        if (!Number.isFinite(parsed)) {
+          field.container.setAttribute("data-invalid", "true");
+          state.invalid.add(fieldKey);
+          updateButtons();
+          return;
+        }
+
+        if (meta.min != null && parsed < meta.min) {
+          field.container.setAttribute("data-invalid", "true");
+          state.invalid.add(fieldKey);
+          updateButtons();
+          return;
+        }
+
+        if (meta.max != null && parsed > meta.max) {
+          field.container.setAttribute("data-invalid", "true");
+          state.invalid.add(fieldKey);
+          updateButtons();
+          return;
+        }
+
+        state.invalid.delete(fieldKey);
+        field.container.removeAttribute("data-invalid");
+
+        const value = meta.type === "integer" ? Math.round(parsed) : parsed;
+        state.draft[fieldKey] = value;
+        updateDirtyState(fieldKey);
+        renderSummary();
+      }
+
+      function handleToggleChange(fieldKey, meta, checked) {
+        state.draft[fieldKey] = Boolean(checked);
+        updateDirtyState(fieldKey);
+      }
+
+      function valuesEqual(baseValue, currentValue, meta) {
+        if (meta.type === "boolean") {
+          return Boolean(baseValue) === Boolean(currentValue);
+        }
+        if (!Number.isFinite(baseValue) || !Number.isFinite(currentValue)) {
+          return false;
+        }
+        if (meta.type === "integer") {
+          return Number(baseValue) === Number(currentValue);
+        }
+        return Math.abs(Number(baseValue) - Number(currentValue)) < 1e-9;
+      }
+
+      function updateDirtyState(fieldKey) {
+        const field = state.fieldNodes.get(fieldKey);
+        if (!field) return;
+        const baseValue = state.base ? state.base[fieldKey] : undefined;
+        const draftValue = state.draft ? state.draft[fieldKey] : undefined;
+
+        const isEqual =
+          state.base == null ||
+          valuesEqual(baseValue, draftValue, field.meta || {});
+
+        if (isEqual) {
+          state.dirty.delete(fieldKey);
+          field.container.removeAttribute("data-dirty");
+        } else {
+          state.dirty.add(fieldKey);
+          field.container.setAttribute("data-dirty", "true");
+        }
+
+        updateCategoryBadges();
+        updateButtons();
+      }
+
+      function updateCategoryBadges() {
+        state.categoryNodes.forEach((entry, category) => {
+          const fields = state.categoryFieldKeys.get(category) || [];
+          const dirtyCount = fields.filter((fieldKey) =>
+            state.dirty.has(fieldKey)
+          ).length;
+          if (entry.badge) {
+            entry.badge.textContent = dirtyCount
+              ? `${dirtyCount} pending`
+              : "Clean";
+          }
+          entry.container.dataset.dirty = dirtyCount > 0 ? "true" : "false";
+        });
+      }
+
+      function createNumberField(fieldKey, meta) {
+        const container = document.createElement("div");
+        container.className = "field-control";
+        container.dataset.field = fieldKey;
+
+        const header = document.createElement("div");
+        header.className = "field-header";
+
+        const title = document.createElement("div");
+        title.className = "field-title";
+        title.textContent = meta.label || formatLabel(fieldKey);
+        header.appendChild(title);
+
+        const metaWrap = document.createElement("div");
+        metaWrap.className = "field-meta";
+        if (meta.unit) {
+          const unit = document.createElement("span");
+          unit.className = "field-unit";
+          unit.textContent = meta.unit;
+          metaWrap.appendChild(unit);
+        }
+        header.appendChild(metaWrap);
+        container.appendChild(header);
+
+        const inputWrap = document.createElement("div");
+        inputWrap.className = "field-input";
+        const input = document.createElement("input");
+        input.type = "number";
+        if (meta.step != null) {
+          input.step = String(meta.step);
+        } else if (meta.type === "integer") {
+          input.step = "1";
+        } else {
+          input.step = "0.01";
+        }
+        if (meta.min != null) {
+          input.min = String(meta.min);
+        }
+        if (meta.max != null) {
+          input.max = String(meta.max);
+        }
+        input.dataset.field = fieldKey;
+
+        input.addEventListener("input", (event) => {
+          handleNumberInput(fieldKey, meta, event.target.value);
+        });
+
+        inputWrap.appendChild(input);
+        container.appendChild(inputWrap);
+
+        if (meta.hint) {
+          const hint = document.createElement("p");
+          hint.className = "field-hint";
+          hint.textContent = meta.hint;
+          container.appendChild(hint);
+        }
+
+        state.fieldNodes.set(fieldKey, {
+          input,
+          container,
+          meta,
+          category: meta.category || "General",
+        });
+
+        return container;
+      }
+
+      function createToggleField(fieldKey, meta) {
+        const container = document.createElement("div");
+        container.className = "field-control toggle";
+        container.dataset.field = fieldKey;
+
+        const header = document.createElement("div");
+        header.className = "field-header";
+
+        const title = document.createElement("div");
+        title.className = "field-title";
+        title.textContent = meta.label || formatLabel(fieldKey);
+        header.appendChild(title);
+
+        const toggle = document.createElement("label");
+        toggle.className = "toggle-control";
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.dataset.field = fieldKey;
+        const switchEl = document.createElement("span");
+        switchEl.className = "toggle-switch";
+        toggle.appendChild(input);
+        toggle.appendChild(switchEl);
+        header.appendChild(toggle);
+        container.appendChild(header);
+
+        if (meta.hint) {
+          const hint = document.createElement("p");
+          hint.className = "field-hint";
+          hint.textContent = meta.hint;
+          container.appendChild(hint);
+        }
+
+        input.addEventListener("change", (event) => {
+          handleToggleChange(fieldKey, meta, event.target.checked);
+        });
+
+        state.fieldNodes.set(fieldKey, {
+          input,
+          container,
+          meta,
+          category: meta.category || "General",
+        });
+
+        return container;
+      }
+
+      function buildGrid() {
+        if (!state.dom.grid) return;
+        state.dom.grid.innerHTML = "";
+        state.fieldNodes.clear();
+        state.categoryNodes.clear();
+        state.categoryFieldKeys.clear();
+
+        const categoryEntries = buildCategoryEntries();
+
+        if (categoryEntries.length === 0) {
+          state.dom.grid.innerHTML =
+            '<div class="filtering-empty">No filtering fields detected.</div>';
+          return;
+        }
+
+        categoryEntries.forEach(([categoryName, fieldKeys]) => {
+          const card = document.createElement("section");
+          card.className = "filtering-card";
+          card.dataset.category = categoryName;
+
+          const header = document.createElement("div");
+          header.className = "filtering-card-header";
+          const title = document.createElement("div");
+          title.className = "filtering-card-title";
+          title.innerHTML = `
+            <span>${CATEGORY_ICONS[categoryName] || "⚙️"}</span>
+            <span>${categoryName}</span>
+          `;
+          const badge = document.createElement("span");
+          badge.className = "filtering-card-badge";
+          badge.textContent = "Clean";
+          header.appendChild(title);
+          header.appendChild(badge);
+          card.appendChild(header);
+
+          const body = document.createElement("div");
+          body.className = "filtering-card-body";
+
+          fieldKeys.forEach((fieldKey) => {
+            const meta = state.metadata[fieldKey];
+            if (!meta) {
+              return;
+            }
+            let fieldEl;
+            if (meta.type === "boolean") {
+              fieldEl = createToggleField(fieldKey, meta);
+            } else {
+              fieldEl = createNumberField(fieldKey, meta);
+            }
+            body.appendChild(fieldEl);
+          });
+
+          card.appendChild(body);
+          state.dom.grid.appendChild(card);
+
+          state.categoryNodes.set(categoryName, {
+            container: card,
+            badge,
+          });
+          state.categoryFieldKeys.set(categoryName, fieldKeys);
+        });
+      }
+
+      function syncFieldValues() {
+        state.fieldNodes.forEach((field, fieldKey) => {
+          const value = state.draft ? state.draft[fieldKey] : undefined;
+          if (field.meta.type === "boolean") {
+            field.input.checked = Boolean(value);
+          } else if (value === undefined || value === null) {
+            field.input.value = "";
+          } else {
+            field.input.value = value;
+          }
+          field.container.removeAttribute("data-invalid");
+          updateDirtyState(fieldKey);
+        });
+        renderSummary();
+      }
+
+      async function loadMetadataIfNeeded() {
+        if (state.metadata) {
+          return;
+        }
+        const response = await fetch("/api/config/metadata", {
+          headers: { "X-Requested-With": "fetch" },
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) {
+          const message =
+            (payload && payload.error && payload.error.message) ||
+            "Failed to load metadata";
+          throw new Error(message);
+        }
+        const data = payload?.data?.filtering;
+        if (!data) {
+          throw new Error("Filtering metadata missing");
+        }
+        state.metadata = data;
+      }
+
+      async function fetchFilteringConfig() {
+        if (state.fetchController) {
+          try {
+            state.fetchController.abort();
+          } catch (_) {}
+        }
+        const controller = new AbortController();
+        state.fetchController = controller;
+
+        const response = await fetch("/api/config/filtering", {
+          signal: controller.signal,
+          headers: { "X-Requested-With": "fetch" },
+        });
+
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) {
+          const message =
+            (payload && payload.error && payload.error.message) ||
+            `Failed to load filtering config (HTTP ${response.status})`;
+          throw new Error(message);
+        }
+        const data = payload?.data;
+        if (!data) {
+          throw new Error("Invalid filtering config response");
+        }
+        return data;
+      }
+
+      async function loadData({ silentSuccess = false } = {}) {
+        setLoading(true);
+        setStatus("info", "Loading filtering configuration…");
+        try {
+          await loadMetadataIfNeeded();
+          const config = await fetchFilteringConfig();
+          state.base = config;
+          state.draft = JSON.parse(JSON.stringify(config));
+          state.dirty.clear();
+          state.invalid.clear();
+
+          buildGrid();
+          syncFieldValues();
+          updateCategoryBadges();
+          setStatus(
+            "success",
+            silentSuccess
+              ? "Filtering configuration reloaded"
+              : "Filtering configuration ready"
+          );
+        } catch (error) {
+          if (error && error.name === "AbortError") {
+            return;
+          }
+          console.error("[Filtering] Failed to load config", error);
+          setStatus(
+            "error",
+            error.message || "Failed to load filtering config"
+          );
+          setGridError(error.message || "Unable to load filtering config.");
+        } finally {
+          setLoading(false);
+          state.fetchController = null;
+        }
+      }
+
+      function resetChanges() {
+        if (!state.base) {
+          return;
+        }
+        state.draft = JSON.parse(JSON.stringify(state.base));
+        state.dirty.clear();
+        state.invalid.clear();
+        syncFieldValues();
+        updateCategoryBadges();
+        setStatus("info", "Local edits cleared – reverted to saved config");
+        if (window.Utils && typeof Utils.showToast === "function") {
+          Utils.showToast("Filtering changes reverted", "info");
+        }
+      }
+
+      async function saveChanges() {
+        if (state.loading) {
+          return;
+        }
+        if (state.invalid.size > 0) {
+          setStatus("error", "Fix validation errors before saving.");
+          if (window.Utils && typeof Utils.showToast === "function") {
+            Utils.showToast("Resolve validation errors before saving", "error");
+          }
+          return;
+        }
+        if (!state.draft || !state.base || state.dirty.size === 0) {
+          setStatus("info", "No filtering changes to save.");
+          return;
+        }
+
+        const diff = {};
+        state.dirty.forEach((fieldKey) => {
+          diff[fieldKey] = state.draft[fieldKey];
+        });
+
+        setLoading(true);
+        setStatus("info", "Saving filtering configuration…");
+        try {
+          const response = await fetch("/api/config/filtering", {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Requested-With": "fetch",
+            },
+            body: JSON.stringify(diff),
+          });
+          const payload = await response.json().catch(() => null);
+          if (!response.ok) {
+            const message =
+              (payload && payload.error && payload.error.message) ||
+              `Failed to save filtering config (HTTP ${response.status})`;
+            throw new Error(message);
+          }
+
+          state.base = { ...state.base, ...diff };
+          state.draft = JSON.parse(JSON.stringify(state.base));
+          state.dirty.clear();
+          syncFieldValues();
+          updateCategoryBadges();
+          setStatus(
+            "success",
+            (payload && payload.message) || "Filtering configuration saved"
+          );
+          if (window.Utils && typeof Utils.showToast === "function") {
+            Utils.showToast("Filtering settings saved", "success");
+          }
+        } catch (error) {
+          console.error("[Filtering] Failed to save", error);
+          setStatus(
+            "error",
+            error.message || "Failed to save filtering config"
+          );
+          if (window.Utils && typeof Utils.showToast === "function") {
+            Utils.showToast(
+              error.message || "Failed to save filtering config",
+              "error"
+            );
+          }
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      function reloadFromBackend() {
+        loadData({ silentSuccess: true });
+      }
+
+      function ensureReady() {
+        updateButtons();
+        updateCategoryBadges();
+        renderSummary();
+        registerCleanup();
+      }
+
+      async function init() {
+        ensureDom();
+        registerEventHandlers();
+        registerCleanup();
+        if (!state.initialized) {
+          await loadData();
+          state.initialized = true;
+        } else {
+          ensureReady();
+        }
+      }
+
+      return {
+        init,
+        ensureReady,
+        teardown,
+      };
+    })();
+
+    window.initFilteringPage = function () {
+      FilteringPage.init();
+    };
+
+    window.ensureFilteringPageReady = function () {
+      FilteringPage.ensureReady();
+    };
+
+    FilteringPage.init();
+  })();
+</script>
