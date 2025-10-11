@@ -245,7 +245,26 @@ pub fn collect_config_metadata() -> ConfigMetadata {
     map.insert("monitoring", super::MonitoringConfig::field_metadata());
     map.insert("ohlcv", super::OhlcvConfig::field_metadata());
 
+    for section in map.values_mut() {
+        for field in section.values_mut() {
+            let normalized = field.category.map(normalize_category).unwrap_or("General");
+            field.category = Some(normalized);
+        }
+    }
+
     map
+}
+
+fn normalize_category(category: &str) -> &'static str {
+    match category {
+        "Activity" | "Age" | "Blacklist" | "Community" | "Confirmation" | "Core Trading"
+        | "Display" | "Liquidity" | "Maintenance" | "Market Cap" | "Performance" | "Profit"
+        | "Profit Management" | "Requirements" | "Security" | "Tokens Tab" | "Transactions" => {
+            "General"
+        }
+        "Debug" | "RPC" | "Validation" => "Developer",
+        _ => "Advanced",
+    }
 }
 
 /// Helper macro used within config schemas to populate metadata extras.

@@ -193,7 +193,7 @@
     color: white;
   }
 
-  .chip[data-impact="modified"] {
+  .chip[data-filter="modified"] {
     border-color: rgba(56, 239, 125, 0.6);
   }
 
@@ -741,52 +741,44 @@
     >
       ⬆️ Collapse
     </button>
-    <div class="filter-chips" id="impactChips">
+    <div class="filter-chips" id="categoryChips">
       <div
         class="chip active"
-        data-impact="all"
+        data-filter="all"
         data-label="All"
-        onclick="filterByImpact('all')"
+        onclick="filterByCategory('all')"
       >
         All
       </div>
       <div
         class="chip"
-        data-impact="critical"
-        data-label="Critical"
-        onclick="filterByImpact('critical')"
+        data-filter="general"
+        data-label="General"
+        onclick="filterByCategory('general')"
       >
-        Critical
+        General
       </div>
       <div
         class="chip"
-        data-impact="high"
-        data-label="High"
-        onclick="filterByImpact('high')"
+        data-filter="advanced"
+        data-label="Advanced"
+        onclick="filterByCategory('advanced')"
       >
-        High
+        Advanced
       </div>
       <div
         class="chip"
-        data-impact="medium"
-        data-label="Medium"
-        onclick="filterByImpact('medium')"
+        data-filter="developer"
+        data-label="Developer"
+        onclick="filterByCategory('developer')"
       >
-        Medium
+        Developer
       </div>
       <div
         class="chip"
-        data-impact="low"
-        data-label="Low"
-        onclick="filterByImpact('low')"
-      >
-        Low
-      </div>
-      <div
-        class="chip"
-        data-impact="modified"
+        data-filter="modified"
         data-label="Modified"
-        onclick="filterByImpact('modified')"
+        onclick="filterByCategory('modified')"
       >
         Modified
       </div>
@@ -895,13 +887,13 @@
   let SECTION_STATE = {};
   let SECTION_BASELINES = {};
   let TOTAL_FIELD_COUNT = 0;
-  let currentImpactFilter = "all";
+  let currentCategoryFilter = "all";
   let searchShortcutAttached = false;
   let dirtySummaryRaf = null;
 
   const STORAGE_KEYS = {
     search: "config.search",
-    impact: "config.impact",
+    category: "config.category",
     section: "config.section",
   };
 
@@ -1156,15 +1148,15 @@
     }
   }
 
-  function setImpactChipActive(level) {
-    const chips = document.querySelectorAll("#impactChips .chip");
+  function setCategoryChipActive(level) {
+    const chips = document.querySelectorAll("#categoryChips .chip");
     chips.forEach((chip) => {
-      chip.classList.toggle("active", chip.dataset.impact === level);
+      chip.classList.toggle("active", chip.dataset.filter === level);
       if (!chip.dataset.label) {
         chip.dataset.label = chip.textContent.trim();
       }
     });
-    currentImpactFilter = level;
+    currentCategoryFilter = level;
   }
 
   function clearConfigSearch() {
@@ -1178,18 +1170,22 @@
   }
 
   function restoreToolbarState() {
-    let savedImpact =
-      window.sessionStorage.getItem(STORAGE_KEYS.impact) || "all";
-    if (
-      !document.querySelector(
-        `#impactChips .chip[data-impact="${savedImpact}"]`
-      )
-    ) {
-      window.sessionStorage.removeItem(STORAGE_KEYS.impact);
-      savedImpact = "all";
+    if (window.sessionStorage.getItem("config.impact")) {
+      window.sessionStorage.removeItem("config.impact");
     }
 
-    setImpactChipActive(savedImpact);
+    let savedCategory =
+      window.sessionStorage.getItem(STORAGE_KEYS.category) || "all";
+    if (
+      !document.querySelector(
+        `#categoryChips .chip[data-filter="${savedCategory}"]`
+      )
+    ) {
+      window.sessionStorage.removeItem(STORAGE_KEYS.category);
+      savedCategory = "all";
+    }
+
+    setCategoryChipActive(savedCategory);
 
     const searchInput = document.getElementById("searchInput");
     const savedSearch =
@@ -1219,26 +1215,24 @@
     }
   }
 
-  function updateImpactChipCounts() {
-    const chipsContainer = document.getElementById("impactChips");
+  function updateCategoryChipCounts() {
+    const chipsContainer = document.getElementById("categoryChips");
     if (!chipsContainer) return;
 
     const counts = {
       all: 0,
-      critical: 0,
-      high: 0,
-      medium: 0,
-      low: 0,
+      general: 0,
+      advanced: 0,
+      developer: 0,
       modified: 0,
     };
 
     const fields = document.querySelectorAll(".field");
     fields.forEach((field) => {
-      const impact = field.dataset.impact || "medium";
+      const category = (field.dataset.category || "general").toLowerCase();
       counts.all += 1;
-      if (counts[impact] !== undefined) {
-        counts[impact] += 1;
-      }
+      const bucket = counts[category] !== undefined ? category : "general";
+      counts[bucket] += 1;
       if (field.dataset.modified === "true") {
         counts.modified += 1;
       }
@@ -1247,10 +1241,10 @@
     TOTAL_FIELD_COUNT = counts.all;
 
     chipsContainer.querySelectorAll(".chip").forEach((chip) => {
-      const impact = chip.dataset.impact;
-      if (!impact) return;
+      const filterKey = chip.dataset.filter;
+      if (!filterKey) return;
       const baseLabel = chip.dataset.label || chip.textContent.trim();
-      const total = counts[impact] ?? 0;
+      const total = counts[filterKey] ?? 0;
       chip.dataset.label = baseLabel;
       chip.textContent = `${baseLabel} (${total})`;
     });
@@ -1271,7 +1265,7 @@
     dirtySummaryRaf = window.requestAnimationFrame(() => {
       dirtySummaryRaf = null;
       updateDirtySummary();
-      updateImpactChipCounts();
+      updateCategoryChipCounts();
     });
   }
 
@@ -1394,11 +1388,8 @@
   }
 
   function renderCategory(sectionName, catName, fields) {
-    const isAdvanced =
-      catName.includes("Timeout") ||
-      catName.includes("Delay") ||
-      catName.includes("Advanced");
-    const collapsedClass = isAdvanced ? " collapsed" : "";
+    const shouldCollapse = catName === "Advanced" || catName === "Developer";
+    const collapsedClass = shouldCollapse ? " collapsed" : "";
     const toggleSymbol = collapsedClass ? "▶" : "▼";
 
     let html = `
@@ -1428,6 +1419,8 @@
     const requiresInteger = isIntegerField(sectionName, field.key);
     const labelText = field.label || formatFieldLabel(field.key);
     const impactValue = field.impact || "medium";
+    const categoryLabel = field.category || "General";
+    const categoryValue = categoryLabel.toLowerCase();
     const hintText = field.hint || "";
     let inputHTML = "";
 
@@ -1472,7 +1465,9 @@
     return `
         <div class="${fieldClasses.join(
           " "
-        )}" data-impact="${impactValue}" data-field-key="${field.key}">
+        )}" data-impact="${impactValue}" data-category="${categoryValue}" data-category-label="${categoryLabel}" data-field-key="${
+      field.key
+    }">
             <div class="field-header">
                 <label>${labelText}${
       field.unit ? ` (${field.unit})` : ""
@@ -1847,7 +1842,7 @@
     const rawQuery = (query || "").trim();
     const normalizedQuery = rawQuery.toLowerCase();
     const queryActive = normalizedQuery.length > 0;
-    const highlightMode = queryActive || currentImpactFilter === "modified";
+    const highlightMode = queryActive || currentCategoryFilter === "modified";
 
     if (rawQuery) {
       window.sessionStorage.setItem(STORAGE_KEYS.search, rawQuery);
@@ -1862,22 +1857,22 @@
         field.querySelector("label")?.textContent.toLowerCase() || "";
       const hint =
         field.querySelector(".field-hint")?.textContent.toLowerCase() || "";
-      const impact = field.dataset.impact || "medium";
+      const category = (field.dataset.category || "general").toLowerCase();
       const isModified = field.dataset.modified === "true";
 
-      const impactMatch =
-        currentImpactFilter === "all"
+      const categoryMatch =
+        currentCategoryFilter === "all"
           ? true
-          : currentImpactFilter === "modified"
+          : currentCategoryFilter === "modified"
           ? isModified
-          : impact === currentImpactFilter;
+          : category === currentCategoryFilter;
 
       const textMatch =
         !queryActive ||
         label.includes(normalizedQuery) ||
         hint.includes(normalizedQuery);
 
-      const shouldShow = impactMatch && textMatch;
+      const shouldShow = categoryMatch && textMatch;
       field.classList.toggle("hidden", !shouldShow);
       field.classList.toggle("search-match", shouldShow && queryActive);
 
@@ -1971,23 +1966,23 @@
     scheduleDirtySummaryUpdate();
   }
 
-  function filterByImpact(level) {
-    let impactLevel = level || "all";
+  function filterByCategory(filterKey) {
+    let categoryKey = filterKey || "all";
     if (
       !document.querySelector(
-        `#impactChips .chip[data-impact="${impactLevel}"]`
+        `#categoryChips .chip[data-filter="${categoryKey}"]`
       )
     ) {
-      impactLevel = "all";
+      categoryKey = "all";
     }
 
-    if (impactLevel === "all") {
-      window.sessionStorage.removeItem(STORAGE_KEYS.impact);
+    if (categoryKey === "all") {
+      window.sessionStorage.removeItem(STORAGE_KEYS.category);
     } else {
-      window.sessionStorage.setItem(STORAGE_KEYS.impact, impactLevel);
+      window.sessionStorage.setItem(STORAGE_KEYS.category, categoryKey);
     }
 
-    setImpactChipActive(impactLevel);
+    setCategoryChipActive(categoryKey);
 
     const searchInput = document.getElementById("searchInput");
     const currentQuery = searchInput ? searchInput.value : "";
@@ -2324,7 +2319,7 @@
     renderAllSections();
     populateSectionJump();
     initializeToolbarEnhancements();
-    updateImpactChipCounts();
+    updateCategoryChipCounts();
     restoreToolbarState();
     updateDirtySummary();
 
