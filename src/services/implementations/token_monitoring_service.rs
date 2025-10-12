@@ -21,31 +21,7 @@ impl Service for TokenMonitoringService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
-        use crate::logger::{log, LogTag};
-        use crate::tokens::prewarm_summary_cache;
-
-        let start = std::time::Instant::now();
-        match prewarm_summary_cache().await {
-            Ok(count) => {
-                log(
-                    LogTag::Monitor,
-                    "CACHE_PREWARM",
-                    &format!(
-                        "✅ Pre-warmed cache with {} tokens in {:?}",
-                        count,
-                        start.elapsed()
-                    ),
-                );
-            }
-            Err(e) => {
-                log(
-                    LogTag::Monitor,
-                    "WARN",
-                    &format!("Cache pre-warm failed (will rely on monitor): {}", e),
-                );
-            }
-        }
-
+        // Don't block startup - cache pre-warming will happen in background task
         Ok(())
     }
 
@@ -54,12 +30,51 @@ impl Service for TokenMonitoringService {
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
+        use crate::logger::{log, LogTag};
+        use crate::tokens::prewarm_summary_cache;
+
+        let mut handles = Vec::new();
+
+        // Start cache pre-warming in background (non-blocking)
+        let prewarm_monitor = monitor.clone();
+        let prewarm_handle = tokio::spawn(prewarm_monitor.instrument(async move {
+            log(
+                LogTag::Monitor,
+                "CACHE_PREWARM",
+                "Starting token cache pre-warming...",
+            );
+            let start = std::time::Instant::now();
+
+            match prewarm_summary_cache().await {
+                Ok(count) => {
+                    log(
+                        LogTag::Monitor,
+                        "CACHE_PREWARM",
+                        &format!(
+                            "✅ Pre-warmed cache with {} tokens in {:?}",
+                            count,
+                            start.elapsed()
+                        ),
+                    );
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Monitor,
+                        "WARN",
+                        &format!("Cache pre-warm failed (will rely on monitor): {}", e),
+                    );
+                }
+            }
+        }));
+        handles.push(prewarm_handle);
+
         // Start token monitoring task
-        let handle = crate::tokens::monitor::start_token_monitoring(shutdown, monitor)
+        let monitoring_handle = crate::tokens::monitor::start_token_monitoring(shutdown, monitor)
             .await
             .map_err(|e| format!("Failed to start token monitoring: {}", e))?;
+        handles.push(monitoring_handle);
 
-        Ok(vec![handle])
+        Ok(handles)
     }
 
     async fn stop(&mut self) -> Result<(), String> {
