@@ -41,7 +41,7 @@
 /// Set to false to hide date in logs
 const LOG_SHOW_DATE: bool = false;
 /// Set to false to hide time in logs
-const LOG_SHOW_TIME: bool = false;
+const LOG_SHOW_TIME: bool = true;
 
 /// File logging configuration
 const ENABLE_FILE_LOGGING: bool = true;

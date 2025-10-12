@@ -243,15 +243,30 @@ impl ServiceManager {
         }
 
         let startup_timer = Instant::now();
+        let mut last_service_time = startup_timer;
 
         // Initialize and start each service
         for &service_name in ordered.iter() {
+            // Log gap between services if > 100ms
+            let gap = last_service_time.elapsed().as_millis();
+            if gap > 100 {
+                log(
+                    LogTag::System,
+                    "PERF",
+                    &format!("Gap before '{}': {}ms", service_name, gap),
+                );
+            }
+
+            let service_timer = Instant::now();
+
             // Get TaskMonitor FIRST (before any mutable borrow)
             let monitor = self.get_task_monitor(service_name);
 
             if let Some(service) = self.services.get_mut(service_name) {
                 log_service_event(service_name, ServiceLogEvent::InitializeStart, None, false);
+                let init_start = Instant::now();
                 service.initialize().await?;
+                let init_elapsed = init_start.elapsed().as_millis();
 
                 log_service_event(
                     service_name,
@@ -259,11 +274,32 @@ impl ServiceManager {
                     None,
                     false,
                 );
+
                 log_service_event(service_name, ServiceLogEvent::StartStart, None, false);
+                let start_timer = Instant::now();
                 let handles = service
                     .start(self.shutdown.clone(), monitor.clone())
                     .await?;
+                let start_elapsed = start_timer.elapsed().as_millis();
                 let handle_count = handles.len();
+
+                // Always log timing for services that take > 100ms
+                let total_service_time = service_timer.elapsed().as_millis();
+                if total_service_time > 100 {
+                    log(
+                        LogTag::System,
+                        "PERF",
+                        &format!(
+                            "Service '{}' took {}ms (init: {}ms, start: {}ms, handles: {})",
+                            service_name,
+                            total_service_time,
+                            init_elapsed,
+                            start_elapsed,
+                            handle_count
+                        ),
+                    );
+                }
+
                 let handle_detail = if is_debug_system_enabled() {
                     Some(format!("handles={}", handle_count))
                 } else {
@@ -277,6 +313,9 @@ impl ServiceManager {
                 );
                 self.handles.insert(service_name, handles);
             }
+
+            // Update last service time for gap detection
+            last_service_time = Instant::now();
 
             // Register monitor with metrics collector and start intervals() background task
             self.metrics_collector

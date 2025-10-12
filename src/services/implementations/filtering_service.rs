@@ -52,7 +52,9 @@ impl Service for FilteringService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
-        filtering::refresh().await
+        // Don't refresh during init - it blocks startup for 20+ seconds with 11k tokens
+        // The background task will do the first refresh immediately after start
+        Ok(())
     }
 
     async fn start(
@@ -64,6 +66,32 @@ impl Service for FilteringService {
         let errors = Arc::clone(&self.errors);
 
         let handle = tokio::spawn(monitor.instrument(async move {
+            // Do first refresh immediately on start (async, doesn't block other services)
+            log(
+                LogTag::Filtering,
+                "REFRESH_START",
+                "Starting initial filtering refresh...",
+            );
+            match filtering::refresh().await {
+                Ok(_) => {
+                    operations.fetch_add(1, Ordering::Relaxed);
+                    log(
+                        LogTag::Filtering,
+                        "REFRESH_COMPLETE",
+                        "Initial filtering refresh complete",
+                    );
+                }
+                Err(err) => {
+                    errors.fetch_add(1, Ordering::Relaxed);
+                    log(
+                        LogTag::Filtering,
+                        "REFRESH_ERROR",
+                        &format!("Initial refresh failed: {}", err),
+                    );
+                }
+            }
+
+            // Then continue with periodic refresh loop
             loop {
                 let interval_secs = FilteringService::refresh_interval_secs();
                 let sleep_duration = Duration::from_secs(interval_secs);
