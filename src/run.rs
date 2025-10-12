@@ -100,6 +100,7 @@ fn register_all_services(manager: &mut ServiceManager) {
 
     // Core infrastructure services
     manager.register(Box::new(EventsService));
+    manager.register(Box::new(TokenStoreService::new()));
     manager.register(Box::new(TransactionsService));
     manager.register(Box::new(BlacklistService));
     manager.register(Box::new(SolPriceService));
@@ -131,7 +132,7 @@ fn register_all_services(manager: &mut ServiceManager) {
     log(
         LogTag::System,
         "INFO",
-        "All services registered (23 total - removed empty TokensService)",
+        "All services registered (24 total - includes TokenStoreService)",
     );
 }
 

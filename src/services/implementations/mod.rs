@@ -1,6 +1,7 @@
 pub mod blacklist_service;
 pub mod events_service;
 pub mod filtering_service;
+pub mod token_store_service;
 pub mod webserver_service;
 // REMOVED: tokens_service - empty/useless service (initialization moved to token_discovery_service)
 pub mod ata_cleanup_service;
@@ -29,6 +30,7 @@ pub mod token_monitoring_service;
 pub use blacklist_service::BlacklistService;
 pub use events_service::EventsService;
 pub use filtering_service::FilteringService;
+pub use token_store_service::TokenStoreService;
 pub use webserver_service::WebserverService;
 // REMOVED: TokensService - empty/useless
 pub use ata_cleanup_service::AtaCleanupService;
