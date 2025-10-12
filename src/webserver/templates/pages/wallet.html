@@ -3,10 +3,11 @@
     .wallet-page {
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 18px;
       height: 100%;
-      padding: 12px;
+      padding: 16px 20px 28px;
       box-sizing: border-box;
+      overflow-y: auto;
     }
 
     .wallet-summary-grid {
@@ -115,6 +116,10 @@
       position: sticky;
       top: 0;
       z-index: 5;
+      backdrop-filter: blur(6px);
+      background: var(--bg-card);
+      background: color-mix(in srgb, var(--bg-card) 92%, transparent);
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
     }
 
     .wallet-toolbar-rows {
@@ -219,13 +224,14 @@
       overflow: hidden;
       display: flex;
       flex-direction: column;
-      min-height: 200px;
-      max-height: calc(100vh - 420px);
+      min-height: 220px;
+      flex: 1 1 auto;
     }
 
     .wallet-table-body-scroll {
       overflow: auto;
       flex: 1;
+      max-height: 70vh;
     }
 
     .wallet-token-table {
