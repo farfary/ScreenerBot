@@ -1643,7 +1643,6 @@ config_struct! {
         cors: CorsConfig = CorsConfig::default(),
         rate_limit: RateLimitConfig = RateLimitConfig::default(),
         auth: AuthConfig = AuthConfig::default(),
-        websocket: WebSocketConfig = WebSocketConfig::default(),
         tokens_tab: TokensTabConfig = TokensTabConfig::default(),
         transactions_page_default_limit: usize = 50,
         #[metadata(field_metadata! {
@@ -1784,15 +1783,6 @@ impl WebserverConfig {
 
         if self.rate_limit.enabled && self.rate_limit.requests_per_minute == 0 {
             return Err("Rate limit requests_per_minute must be > 0 when enabled".to_string());
-        }
-
-        if self.websocket.enabled {
-            if self.websocket.max_connections == 0 {
-                return Err("WebSocket max_connections must be > 0 when enabled".to_string());
-            }
-            if self.websocket.heartbeat_interval_secs == 0 {
-                return Err("WebSocket heartbeat_interval_secs must be > 0".to_string());
-            }
         }
 
         Ok(())
