@@ -48,7 +48,12 @@ impl Service for FilteringService {
     }
 
     fn dependencies(&self) -> Vec<&'static str> {
-        vec!["pool_helpers", "token_discovery", "security"]
+        vec![
+            "tokens_store",
+            "pool_helpers",
+            "token_discovery",
+            "security",
+        ]
     }
 
     async fn initialize(&mut self) -> Result<(), String> {

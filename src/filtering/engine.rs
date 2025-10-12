@@ -7,11 +7,11 @@ use crate::config::FilteringConfig;
 use crate::global::is_debug_filtering_enabled;
 use crate::logger::{log, LogTag};
 use crate::positions;
-use crate::tokens::database::TokenDatabase;
 use crate::tokens::decimals::get_cached_decimals;
 use crate::tokens::security::{
     get_security_analyzer, initialize_security_analyzer, RiskLevel, SecurityAnalyzer,
 };
+use crate::tokens::store::get_global_token_store;
 use crate::tokens::summary::{token_to_summary, TokenSummaryContext};
 use crate::tokens::types::Token;
 
@@ -23,22 +23,23 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
     let debug_enabled = is_debug_filtering_enabled();
     let start = StdInstant::now();
 
-    let db = TokenDatabase::new().map_err(|e| format!("Failed to open token database: {}", e))?;
-    let all_tokens = db
-        .get_all_tokens()
-        .await
-        .map_err(|e| format!("Failed to load tokens: {}", e))?;
+    // Use token store cache instead of direct database access
+    let store = get_global_token_store();
+    let snapshots = store.all();
 
-    if all_tokens.is_empty() {
+    if snapshots.is_empty() {
         if debug_enabled {
             log(
                 LogTag::Filtering,
                 "EMPTY",
-                "Token database empty - snapshot will be empty",
+                "Token store empty - snapshot will be empty (cache may still be warming up)",
             );
         }
         return Ok(FilteringSnapshot::empty());
     }
+
+    // Convert TokenSnapshots to ApiTokens for filtering
+    let all_tokens: Vec<_> = snapshots.iter().map(|s| s.data.clone()).collect();
 
     ensure_security_analyzer_initialized(debug_enabled);
 
