@@ -1,4 +1,287 @@
 <div class="page-table">
+  <style>
+    .transactions-toolbar {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding: 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      background: var(--bg-card);
+    }
+
+    .transactions-toolbar .toolbar-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 16px;
+      align-items: center;
+    }
+
+    .transactions-toolbar .toolbar-row-head {
+      justify-content: space-between;
+    }
+
+    .transactions-toolbar .toolbar-title-block {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 200px;
+    }
+
+    .transactions-toolbar .toolbar-title {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .transactions-toolbar .toolbar-meta {
+      color: var(--text-muted);
+      font-size: 0.85em;
+    }
+
+    .transactions-toolbar .toolbar-actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-left: auto;
+    }
+
+    .transactions-toolbar .filter-row {
+      align-items: flex-start;
+    }
+
+    .transactions-toolbar .filter-section {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 160px;
+    }
+
+    .transactions-toolbar .filter-section.stretch {
+      flex: 1 1 240px;
+    }
+
+    .transactions-toolbar .filter-label {
+      font-size: 0.75em;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+    }
+
+    .transactions-toolbar .filter-chip-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .transactions-toolbar .filter-chip {
+      padding: 4px 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 999px;
+      background: var(--bg-primary);
+      color: var(--text-secondary);
+      font-size: 0.75em;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .transactions-toolbar .filter-chip.active {
+      background: var(--link-color);
+      border-color: var(--link-color);
+      color: #fff;
+    }
+
+    .transactions-toolbar .filter-chip:not(.active):hover,
+    .transactions-toolbar .filter-chip:not(.active):focus {
+      border-color: var(--link-color);
+      color: var(--link-color);
+      outline: none;
+    }
+
+    .transactions-toolbar .filter-input {
+      display: flex;
+      align-items: center;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .transactions-toolbar .filter-input input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      padding: 6px 10px;
+      color: var(--text-primary);
+    }
+
+    .transactions-toolbar .filter-input .input-clear {
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      padding: 0 10px;
+      cursor: pointer;
+      font-size: 0.9em;
+    }
+
+    .transactions-toolbar .filter-input .input-clear:hover,
+    .transactions-toolbar .filter-input .input-clear:focus {
+      color: var(--text-primary);
+    }
+
+    .transactions-toolbar .advanced-toggle {
+      justify-content: flex-start;
+    }
+
+    .transactions-toolbar .btn-ghost {
+      background: transparent;
+      color: var(--text-secondary);
+    }
+
+    .transactions-toolbar .advanced-panel[data-expanded="false"] {
+      display: none;
+    }
+
+    .transactions-toolbar .advanced-panel {
+      border-top: 1px dashed var(--border-color);
+      padding-top: 12px;
+    }
+
+    .transactions-toolbar .date-range-inputs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .transactions-toolbar .date-range-inputs input {
+      width: 180px;
+    }
+
+    .transactions-toolbar .range-separator {
+      color: var(--text-muted);
+      font-size: 0.85em;
+    }
+
+    .transactions-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .transactions-summary-card {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      background: var(--bg-card);
+    }
+
+    .transactions-summary-card .summary-label {
+      font-size: 0.75em;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 2px;
+    }
+
+    .transactions-summary-card .summary-value {
+      font-family: var(
+        --font-mono,
+        "SFMono-Regular",
+        Menlo,
+        Monaco,
+        Consolas,
+        "Liberation Mono",
+        "Courier New",
+        monospace
+      );
+      font-size: 1.2em;
+      color: var(--text-primary);
+    }
+
+    .transactions-summary-card .summary-subvalue {
+      color: var(--text-secondary);
+      font-size: 0.85em;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .transactions-summary-card .summary-subvalue code {
+      font-size: 0.95em;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--border-color);
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 0.7em;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-secondary);
+      background: var(--bg-primary);
+    }
+
+    .pill-status-confirmed,
+    .pill-status-finalized {
+      border-color: var(--badge-online);
+      color: var(--badge-online);
+    }
+
+    .pill-status-pending {
+      border-color: var(--badge-loading);
+      color: var(--badge-loading);
+    }
+
+    .pill-status-failed {
+      border-color: var(--badge-error);
+      color: var(--badge-error);
+    }
+
+    .pill-direction-incoming {
+      border-color: var(--badge-online);
+      color: var(--badge-online);
+    }
+
+    .pill-direction-outgoing {
+      border-color: var(--badge-error);
+      color: var(--badge-error);
+    }
+
+    .pill-direction-internal {
+      border-color: var(--text-secondary);
+      color: var(--text-secondary);
+    }
+
+    .value-positive {
+      color: var(--badge-online);
+      font-weight: 600;
+    }
+
+    .value-negative {
+      color: var(--badge-error);
+      font-weight: 600;
+    }
+
+    .scroll-guard-cell {
+      color: var(--text-secondary);
+      font-size: 0.9em;
+      padding: 18px;
+    }
+
+    .scroll-guard-cell.loading {
+      color: var(--text-muted);
+    }
+  </style>
   <div class="toolbar transactions-toolbar">
     <div class="toolbar-row toolbar-row-head">
       <div class="toolbar-title-block">
@@ -6,6 +289,7 @@
         <span id="tx-summary" class="toolbar-meta"></span>
       </div>
       <div class="toolbar-actions">
+        <span id="tx-last-updated" class="toolbar-meta">Last update —</span>
         <button id="tx-apply-filters" class="btn btn-primary" type="button">
           Apply Filters
         </button>
@@ -170,6 +454,56 @@
       </div>
     </div>
   </div>
+  <div class="transactions-summary-grid" id="tx-summary-cards">
+    <div class="transactions-summary-card">
+      <div class="summary-label">Processed</div>
+      <div class="summary-value" id="tx-stat-total">—</div>
+      <div class="summary-subvalue">
+        <span><span id="tx-stat-success">—</span> success</span>
+        <span>•</span>
+        <span><span id="tx-stat-failed">—</span> failed</span>
+      </div>
+      <div class="summary-subvalue" id="tx-stat-success-rate">
+        Success — • Fail —
+      </div>
+    </div>
+    <div class="transactions-summary-card">
+      <div class="summary-label">Queues</div>
+      <div class="summary-value" id="tx-stat-pending-global">—</div>
+      <div class="summary-subvalue">
+        <span>Local</span>
+        <span id="tx-stat-pending-local">—</span>
+      </div>
+      <div class="summary-subvalue">
+        <span>Deferred</span>
+        <span id="tx-stat-deferred">—</span>
+      </div>
+    </div>
+    <div class="transactions-summary-card">
+      <div class="summary-label">Database</div>
+      <div class="summary-value" id="tx-stat-db-size">—</div>
+      <div class="summary-subvalue">
+        <span>Schema</span>
+        <span id="tx-stat-schema">—</span>
+      </div>
+      <div class="summary-subvalue">
+        <span>Loaded</span>
+        <span id="tx-stat-loaded">—</span>
+      </div>
+    </div>
+    <div class="transactions-summary-card">
+      <div class="summary-label">Known Signatures</div>
+      <div class="summary-value" id="tx-stat-newest-sig">—</div>
+      <div class="summary-subvalue">
+        <span>Oldest</span>
+        <span id="tx-stat-oldest-sig">—</span>
+      </div>
+      <div class="summary-subvalue">
+        <span id="tx-stat-bootstrap-status">Bootstrap —</span>
+        <span id="tx-stat-bootstrap-cursor"></span>
+      </div>
+    </div>
+  </div>
   <div class="table-wrap">
     <table class="table" id="tx-table">
       <thead>
@@ -245,35 +579,379 @@
         second: "2-digit",
       });
 
+      function escapeHtml(value) {
+        if (value === null || value === undefined) return "";
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function toSlug(value) {
+        if (!value) return "";
+        return String(value)
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "");
+      }
+
+      function formatSignatureCompact(signature, options) {
+        if (!signature) return "—";
+        const start = options?.start ?? 6;
+        const end = options?.end ?? 6;
+        if (signature.length <= start + end + 1) {
+          return signature;
+        }
+        return `${signature.slice(0, start)}…${signature.slice(-end)}`;
+      }
+
+      function formatNumber(value, decimals = 0, fallback = "0") {
+        const num = Number(value);
+        if (!Number.isFinite(num)) {
+          return fallback;
+        }
+        if (window.Utils && typeof Utils.formatNumber === "function") {
+          return Utils.formatNumber(num, decimals, { fallback });
+        }
+        try {
+          return num.toLocaleString(undefined, {
+            minimumFractionDigits: decimals,
+            maximumFractionDigits: decimals,
+          });
+        } catch (_) {
+          return fallback;
+        }
+      }
+
+      function formatRate(value) {
+        const num = Number(value);
+        if (!Number.isFinite(num)) return "—";
+        return `${num.toFixed(1)}%`;
+      }
+
+      function formatSol(value) {
+        const num = Number(value);
+        if (!Number.isFinite(num)) return "0.0000";
+        const magnitude = Math.abs(num);
+        const decimals = magnitude >= 1 ? 4 : 6;
+        const formatted = magnitude.toLocaleString(undefined, {
+          minimumFractionDigits: decimals,
+          maximumFractionDigits: decimals,
+        });
+        if (num > 0) return `+${formatted}`;
+        if (num < 0) return `-${formatted}`;
+        return formatted;
+      }
+
+      function renderPill(label, prefix) {
+        if (!label || label === "—") return "—";
+        const slug = toSlug(label);
+        const className = slug ? `${prefix}-${slug}` : "";
+        return `<span class="pill ${className}">${escapeHtml(label)}</span>`;
+      }
+
+      function formatRelativeTime(date) {
+        if (!date) return null;
+        if (window.Utils && typeof Utils.formatTimeAgo === "function") {
+          return Utils.formatTimeAgo(date, { fallback: "just now" });
+        }
+        const diffMs = Date.now() - date.getTime();
+        if (!Number.isFinite(diffMs)) return null;
+        const seconds = Math.max(0, Math.round(diffMs / 1000));
+        if (seconds < 60) return "just now";
+        if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+        if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+        return `${Math.floor(seconds / 86400)}d ago`;
+      }
+
+      function formatTimestampDisplay(date) {
+        if (!date) return "";
+        if (window.Utils && typeof Utils.formatTimestamp === "function") {
+          return Utils.formatTimestamp(date, { includeSeconds: true });
+        }
+        try {
+          return date.toLocaleString();
+        } catch (_) {
+          return date.toISOString();
+        }
+      }
+
+      function updateLastUpdatedLabel() {
+        const label = el("tx-last-updated");
+        if (!label) return;
+        if (!State.lastUpdatedAt) {
+          label.textContent = "Last update —";
+          label.title = "";
+          return;
+        }
+        const date = new Date(State.lastUpdatedAt);
+        const relative = formatRelativeTime(date) || "just now";
+        label.textContent = `Last update ${relative}`;
+        label.title = formatTimestampDisplay(date);
+      }
+
+      function ensureLastUpdatedTicker() {
+        if (Lifecycle.statusIntervalId) return;
+        const intervalId = setInterval(updateLastUpdatedLabel, 30_000);
+        Lifecycle.statusIntervalId = intervalId;
+        if (window.Router && typeof Router.trackInterval === "function") {
+          Router.trackInterval(intervalId);
+        }
+      }
+
+      function clearLastUpdatedTicker() {
+        if (!Lifecycle.statusIntervalId) return;
+        clearInterval(Lifecycle.statusIntervalId);
+        Lifecycle.statusIntervalId = null;
+      }
+
+      function markLastUpdated() {
+        State.lastUpdatedAt = Date.now();
+        updateLastUpdatedLabel();
+        ensureLastUpdatedTicker();
+      }
+
+      function updateSummaryCards(summary) {
+        const totalEl = el("tx-stat-total");
+        if (!totalEl) return;
+
+        if (!summary) {
+          totalEl.textContent = "—";
+          const successEl = el("tx-stat-success");
+          const failedEl = el("tx-stat-failed");
+          const rateEl = el("tx-stat-success-rate");
+          const pendingGlobalEl = el("tx-stat-pending-global");
+          const pendingLocalEl = el("tx-stat-pending-local");
+          const deferredEl = el("tx-stat-deferred");
+          const sizeEl = el("tx-stat-db-size");
+          const schemaEl = el("tx-stat-schema");
+          const loadedEl = el("tx-stat-loaded");
+          const newestEl = el("tx-stat-newest-sig");
+          const oldestEl = el("tx-stat-oldest-sig");
+          const bootstrapStatusEl = el("tx-stat-bootstrap-status");
+          const bootstrapCursorEl = el("tx-stat-bootstrap-cursor");
+          if (successEl) successEl.textContent = "—";
+          if (failedEl) failedEl.textContent = "—";
+          if (rateEl) rateEl.textContent = "Success — • Fail —";
+          if (pendingGlobalEl) pendingGlobalEl.textContent = "—";
+          if (pendingLocalEl) pendingLocalEl.textContent = "—";
+          if (deferredEl) deferredEl.textContent = "—";
+          if (sizeEl) sizeEl.textContent = "—";
+          if (schemaEl) schemaEl.textContent = "—";
+          if (loadedEl)
+            loadedEl.textContent = formatNumber(State.items.length, 0, "0");
+          if (newestEl) newestEl.innerHTML = "—";
+          if (oldestEl) oldestEl.innerHTML = "—";
+          if (bootstrapStatusEl) bootstrapStatusEl.textContent = "Bootstrap —";
+          if (bootstrapCursorEl) bootstrapCursorEl.innerHTML = "";
+          return;
+        }
+
+        const successEl = el("tx-stat-success");
+        const failedEl = el("tx-stat-failed");
+        const rateEl = el("tx-stat-success-rate");
+        const pendingGlobalEl = el("tx-stat-pending-global");
+        const pendingLocalEl = el("tx-stat-pending-local");
+        const deferredEl = el("tx-stat-deferred");
+        const sizeEl = el("tx-stat-db-size");
+        const schemaEl = el("tx-stat-schema");
+        const loadedEl = el("tx-stat-loaded");
+        const newestEl = el("tx-stat-newest-sig");
+        const oldestEl = el("tx-stat-oldest-sig");
+        const bootstrapStatusEl = el("tx-stat-bootstrap-status");
+        const bootstrapCursorEl = el("tx-stat-bootstrap-cursor");
+
+        totalEl.textContent = formatNumber(summary.total || 0, 0, "0");
+        if (successEl) {
+          successEl.textContent = formatNumber(
+            summary.success_count || 0,
+            0,
+            "0"
+          );
+        }
+        if (failedEl) {
+          failedEl.textContent = formatNumber(
+            summary.failed_count || 0,
+            0,
+            "0"
+          );
+        }
+        if (rateEl) {
+          rateEl.textContent = `Success ${formatRate(
+            summary.success_rate
+          )} • Fail ${formatRate(summary.failure_rate)}`;
+        }
+        if (pendingGlobalEl) {
+          pendingGlobalEl.textContent = formatNumber(
+            summary.pending_global || 0,
+            0,
+            "0"
+          );
+        }
+        if (pendingLocalEl) {
+          pendingLocalEl.textContent = formatNumber(
+            summary.pending_local || 0,
+            0,
+            "0"
+          );
+        }
+        if (deferredEl) {
+          deferredEl.textContent = formatNumber(
+            summary.deferred_count || 0,
+            0,
+            "0"
+          );
+        }
+        if (sizeEl) {
+          sizeEl.textContent = `${formatNumber(
+            summary.db_size_mb || 0,
+            2,
+            "0.00"
+          )} MB`;
+        }
+        if (schemaEl) {
+          schemaEl.textContent = summary.db_schema_version
+            ? `v${summary.db_schema_version}`
+            : "—";
+        }
+        if (loadedEl) {
+          loadedEl.textContent = formatNumber(State.items.length, 0, "0");
+        }
+        if (newestEl) {
+          if (summary.newest_known_signature) {
+            const sig = summary.newest_known_signature;
+            newestEl.innerHTML = `<code title="${escapeHtml(sig)}">${escapeHtml(
+              formatSignatureCompact(sig, { start: 6, end: 6 })
+            )}</code>`;
+          } else {
+            newestEl.innerHTML = "—";
+          }
+        }
+        if (oldestEl) {
+          if (summary.oldest_known_signature) {
+            const sig = summary.oldest_known_signature;
+            oldestEl.innerHTML = `<code title="${escapeHtml(sig)}">${escapeHtml(
+              formatSignatureCompact(sig, { start: 6, end: 6 })
+            )}</code>`;
+          } else {
+            oldestEl.innerHTML = "—";
+          }
+        }
+        if (bootstrapStatusEl) {
+          bootstrapStatusEl.textContent = summary.bootstrap_state
+            ?.full_history_completed
+            ? "Bootstrap Completed"
+            : "Bootstrap In Progress";
+        }
+        if (bootstrapCursorEl) {
+          const cursor = summary.bootstrap_state?.backfill_cursor;
+          if (cursor) {
+            bootstrapCursorEl.innerHTML = `<code title="${escapeHtml(
+              cursor
+            )}">${escapeHtml(
+              formatSignatureCompact(cursor, { start: 6, end: 6 })
+            )}</code>`;
+          } else {
+            bootstrapCursorEl.innerHTML = "";
+          }
+        }
+      }
+
+      function registerLifecycleCleanup() {
+        if (
+          !window.Router ||
+          typeof Router.registerCleanup !== "function" ||
+          Lifecycle.cleanupRegistered
+        ) {
+          return;
+        }
+        Router.registerCleanup(() => {
+          teardownTransactionsPage();
+        });
+        Lifecycle.cleanupRegistered = true;
+      }
+
+      function teardownTransactionsPage() {
+        clearLastUpdatedTicker();
+        State.lastUpdatedAt = null;
+        updateLastUpdatedLabel();
+        if (State.scrollObserver) {
+          State.scrollObserver.disconnect();
+          State.scrollObserver = null;
+        }
+        State.scrollContainer = null;
+        Lifecycle.cleanupRegistered = false;
+      }
+
       function renderRow(row) {
         const tr = document.createElement("tr");
         const timestamp = new Date(row.timestamp);
         const dateTime = dateTimeFormatter.format(timestamp);
-        const sigShort =
-          row.signature.slice(0, 8) + "…" + row.signature.slice(-6);
+        const signature = row.signature || "";
+        const signatureDisplay = signature
+          ? formatSignatureCompact(signature, { start: 8, end: 6 })
+          : "—";
         const type = row.type || row.transaction_type || "—";
         const dir = row.direction || "—";
         const status = row.status || "—";
-        const mint = row.token_mint ? row.token_mint.slice(0, 8) + "…" : "—";
+        const mintFull = row.token_mint || "";
+        const mintDisplay = mintFull
+          ? formatSignatureCompact(mintFull, { start: 4, end: 5 })
+          : "—";
         const router = row.router || "—";
-        const sol = (row.sol_delta ?? 0).toFixed(6);
-        const fee = (row.fee_sol ?? 0).toFixed(6);
-        const ata = (row.ata_rents ?? 0).toFixed(6);
-        const instr = row.instructions_count ?? 0;
+        const solDelta = Number(row.sol_delta ?? 0);
+        const fee = Number(row.fee_sol ?? 0);
+        const ata = Number(row.ata_rents ?? 0);
+        const instr = Number.isFinite(row.instructions_count)
+          ? row.instructions_count
+          : 0;
+        const solClass =
+          solDelta > 0
+            ? "monospace value-positive"
+            : solDelta < 0
+            ? "monospace value-negative"
+            : "monospace";
+
         tr.innerHTML = `
-          <td title="${timestamp.toLocaleString()}">${dateTime}</td>
-          <td><a href="#" data-signature="${
-            row.signature
-          }" class="tx-link">${sigShort}</a></td>
-          <td>${type}</td>
-          <td>${dir}</td>
-          <td>${status}</td>
-          <td title="${row.token_mint || ""}">${mint}</td>
-          <td>${router}</td>
-          <td class="monospace">${sol}</td>
-          <td class="monospace">${fee}</td>
-          <td class="monospace">${ata}</td>
-          <td>${instr}</td>
+          <td title="${escapeHtml(timestamp.toLocaleString())}">${escapeHtml(
+          dateTime
+        )}</td>
+          <td>
+            ${
+              signature
+                ? `<a href="#" data-signature="${escapeHtml(
+                    signature
+                  )}" class="tx-link" title="${escapeHtml(
+                    signature
+                  )}">${escapeHtml(signatureDisplay)}</a>`
+                : "—"
+            }
+          </td>
+          <td>${
+            type && type !== "—"
+              ? `<span class="pill">${escapeHtml(type)}</span>`
+              : "—"
+          }</td>
+          <td>${
+            dir && dir !== "—" ? renderPill(dir, "pill-direction") : "—"
+          }</td>
+          <td>${
+            status && status !== "—" ? renderPill(status, "pill-status") : "—"
+          }</td>
+          <td title="${escapeHtml(mintFull)}">
+            ${mintFull ? `<code>${escapeHtml(mintDisplay)}</code>` : "—"}
+          </td>
+          <td>${router && router !== "—" ? escapeHtml(router) : "—"}</td>
+          <td class="${solClass}">${escapeHtml(formatSol(solDelta))}</td>
+          <td class="monospace">${escapeHtml(
+            formatNumber(fee, 6, "0.000000")
+          )}</td>
+          <td class="monospace">${escapeHtml(
+            formatNumber(ata, 6, "0.000000")
+          )}</td>
+          <td>${escapeHtml(String(instr))}</td>
         `;
         return tr;
       }
@@ -538,21 +1216,25 @@
         if (!metaEl) return;
         if (summaryOverride !== undefined) {
           State.summary = summaryOverride;
+          if (summaryOverride) {
+            markLastUpdated();
+          }
         }
         const summary = State.summary;
         const pieces = [];
         if (summary) {
           pieces.push(
-            `Total: ${summary.total}`,
-            `Success: ${summary.success_count}`,
-            `Failed: ${summary.failed_count}`,
-            `Success Rate: ${summary.success_rate.toFixed(1)}%`
+            `Total: ${formatNumber(summary.total || 0, 0, "0")}`,
+            `Success: ${formatNumber(summary.success_count || 0, 0, "0")}`,
+            `Failed: ${formatNumber(summary.failed_count || 0, 0, "0")}`,
+            `Success Rate: ${formatRate(summary.success_rate)}`
           );
         }
-        pieces.push(`Loaded: ${State.items.length}`);
+        pieces.push(`Loaded: ${formatNumber(State.items.length, 0, "0")}`);
         const baseText = pieces.join(" • ");
         metaEl.dataset.summaryText = baseText;
         updateFilterMeta();
+        updateSummaryCards(summary);
       }
 
       function wireRowClicks() {
@@ -648,6 +1330,12 @@
         summary: null,
         scrollObserver: null,
         scrollContainer: null,
+        lastUpdatedAt: null,
+      };
+
+      const Lifecycle = {
+        statusIntervalId: null,
+        cleanupRegistered: false,
       };
 
       async function loadInitial(options = {}) {
@@ -657,6 +1345,11 @@
           return;
         }
         State.loading = true;
+        State.summary = null;
+        updateSummaryCards(null);
+        State.lastUpdatedAt = null;
+        updateLastUpdatedLabel();
+        clearLastUpdatedTicker();
         if (!reuseState || !State.filters) {
           State.filters = buildFilters();
           AppState.save("tx.filters", State.filters);
@@ -690,6 +1383,7 @@
           ensureScrollGuard();
           setScrollGuardState(State.next_cursor ? "idle" : "end");
           setupScrollObserver();
+          markLastUpdated();
           updateSummaryBar();
 
           const summary = await fetchSummary();
@@ -738,6 +1432,7 @@
           State.next_cursor = data.next_cursor || null;
           ensureScrollGuard();
           setScrollGuardState(State.next_cursor ? "idle" : "end");
+          markLastUpdated();
           updateSummaryBar();
         } catch (err) {
           console.error("Failed to load additional transactions", err);
@@ -791,6 +1486,8 @@
       // Global init function for Router to call during SPA navigation
       window.initTransactionsPage = function () {
         console.log("[Transactions] Initializing page");
+        registerLifecycleCleanup();
+        updateLastUpdatedLabel();
         initChipGroups();
         applySavedFilters();
         updateFilterMeta();
