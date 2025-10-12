@@ -435,12 +435,11 @@ async fn compute_daily_flows(window_hours: i64) -> Result<Vec<DailyFlowPoint>, S
         .collect();
 
     // Apply payload cap/decimation for very long ranges to avoid huge responses
-    // Read caps from config; keep defaults conservative without hardcoding logic elsewhere
     let (max_days, decimate_threshold_days) = with_config(|cfg| {
-        // Reuse monitoring config section if wallet subfields are not present
-        // Defaults: cap 730 days (2 years), decimate when > 365 days
-        let max_days = cfg.ohlcv.retention_days.max(30) as usize; // use OHLCV retention as a reasonable baseline minimum
-        (max_days.max(730), 365usize)
+        (
+            cfg.wallet.max_daily_flow_days,
+            cfg.wallet.daily_flow_decimate_threshold_days,
+        )
     });
 
     if result.len() > max_days {

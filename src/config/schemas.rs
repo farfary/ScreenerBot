@@ -394,6 +394,30 @@ config_struct! {
             category: "Wallet",
         })]
         flow_cache_lookback_secs: u64 = 3600,
+
+        #[metadata(field_metadata! {
+            label: "Max Daily Flow Days",
+            hint: "Maximum days of daily flow data to return (hard cap)",
+            min: 30,
+            max: 1825,
+            step: 30,
+            unit: "days",
+            impact: "medium",
+            category: "Wallet",
+        })]
+        max_daily_flow_days: usize = 730,
+
+        #[metadata(field_metadata! {
+            label: "Daily Flow Decimation Threshold",
+            hint: "Days threshold beyond which older data is decimated",
+            min: 30,
+            max: 730,
+            step: 30,
+            unit: "days",
+            impact: "low",
+            category: "Wallet",
+        })]
+        daily_flow_decimate_threshold_days: usize = 365,
     }
 }
 
