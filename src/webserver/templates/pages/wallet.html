@@ -658,13 +658,19 @@
     }
 
     async function fetchDashboard() {
-      const params = new URLSearchParams();
-      params.set("window_hours", State.windowHours);
-      params.set("snapshot_limit", State.windowHours * 60 + 60);
-      params.set("max_tokens", 500);
-      const response = await fetch(
-        `/api/wallet/dashboard?${params.toString()}`
-      );
+      const requestPayload = {
+        windowHours: State.windowHours,
+        snapshotLimit: State.windowHours * 60 + 60,
+        maxTokens: 500,
+      };
+      const response = await fetch(`/api/wallet/dashboard`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(requestPayload),
+      });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }

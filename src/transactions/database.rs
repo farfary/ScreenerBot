@@ -152,6 +152,7 @@ CREATE TABLE IF NOT EXISTS processed_transactions (
     analysis_version INTEGER NOT NULL DEFAULT 2,
     -- Commonly queried scalar fields
     fee_sol REAL NOT NULL DEFAULT 0,
+    sol_delta REAL,
     
     -- Processing timestamps
     processed_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -353,7 +354,7 @@ impl TransactionDatabase {
 
     /// Initialize database schema and indexes
     async fn initialize_schema(&mut self) -> Result<(), String> {
-        let conn = self
+        let mut conn = self
             .get_connection()
             .map_err(|e| format!("Failed to get database connection: {}", e))?;
 
@@ -380,7 +381,7 @@ impl TransactionDatabase {
         }
 
         // Apply lightweight migrations for existing databases
-        self.apply_migrations(&conn)?;
+        self.apply_migrations(&mut conn)?;
 
         // Set or update schema version
         conn.execute(
@@ -393,9 +394,10 @@ impl TransactionDatabase {
     }
 
     /// Apply schema migrations when upgrading versions
-    fn apply_migrations(&self, conn: &Connection) -> Result<(), String> {
+    fn apply_migrations(&self, conn: &mut Connection) -> Result<(), String> {
         // Ensure processed_transactions has fee_sol column for MCP tools compatibility
         let mut has_fee_sol = false;
+        let mut has_sol_delta = false;
         let mut stmt = conn
             .prepare("PRAGMA table_info(processed_transactions)")
             .map_err(|e| format!("Failed to inspect processed_transactions schema: {}", e))?;
@@ -409,15 +411,27 @@ impl TransactionDatabase {
             let name = r.map_err(|e| format!("Failed to parse schema row: {}", e))?;
             if name.eq_ignore_ascii_case("fee_sol") {
                 has_fee_sol = true;
-                break;
+            } else if name.eq_ignore_ascii_case("sol_delta") {
+                has_sol_delta = true;
             }
         }
+        drop(stmt);
         if !has_fee_sol {
             conn.execute(
                 "ALTER TABLE processed_transactions ADD COLUMN fee_sol REAL NOT NULL DEFAULT 0",
                 [],
             )
             .map_err(|e| format!("Failed to add fee_sol column: {}", e))?;
+        }
+
+        if !has_sol_delta {
+            conn.execute(
+                "ALTER TABLE processed_transactions ADD COLUMN sol_delta REAL",
+                [],
+            )
+            .map_err(|e| format!("Failed to add sol_delta column: {}", e))?;
+
+            self.backfill_processed_sol_delta(conn)?;
         }
 
         // Ensure bootstrap_state table exists (idempotent)
@@ -431,6 +445,94 @@ impl TransactionDatabase {
         )
         .map_err(|e| format!("Failed to initialize bootstrap_state row: {}", e))?;
         Ok(())
+    }
+
+    fn backfill_processed_sol_delta(&self, conn: &mut Connection) -> Result<(), String> {
+        const BATCH_SIZE: i64 = 1000;
+        let mut total_updated = 0usize;
+
+        loop {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT signature, sol_balance_change FROM processed_transactions WHERE sol_delta IS NULL LIMIT ?1",
+                )
+                .map_err(|e| format!("Failed to prepare sol_delta backfill query: {}", e))?;
+
+            let rows = stmt
+                .query_map([BATCH_SIZE], |row| {
+                    let signature: String = row.get(0)?;
+                    let change_json: Option<String> = row.get(1)?;
+                    Ok((signature, change_json))
+                })
+                .map_err(|e| format!("Failed to iterate sol_delta backfill rows: {}", e))?;
+
+            let mut batch: Vec<(String, Option<String>)> = Vec::new();
+            for row in rows {
+                let (signature, change_json) =
+                    row.map_err(|e| format!("Failed to read sol_delta row: {}", e))?;
+                batch.push((signature, change_json));
+            }
+
+            if batch.is_empty() {
+                break;
+            }
+
+            drop(stmt);
+
+            let tx = conn
+                .transaction()
+                .map_err(|e| format!("Failed to start sol_delta backfill transaction: {}", e))?;
+
+            for (signature, change_json) in batch.into_iter() {
+                let delta = Self::compute_sol_delta_from_json(change_json.as_deref());
+                tx.execute(
+                    "UPDATE processed_transactions SET sol_delta = ?1 WHERE signature = ?2",
+                    params![delta, signature],
+                )
+                .map_err(|e| format!("Failed to update sol_delta: {}", e))?;
+                total_updated += 1;
+            }
+
+            tx.commit()
+                .map_err(|e| format!("Failed to commit sol_delta backfill: {}", e))?;
+        }
+
+        if total_updated > 0 {
+            log(
+                LogTag::Transactions,
+                "MIGRATION",
+                &format!(
+                    "Backfilled sol_delta for {} processed transactions",
+                    total_updated
+                ),
+            );
+        }
+
+        Ok(())
+    }
+
+    fn compute_sol_delta_from_json(payload: Option<&str>) -> f64 {
+        let Some(raw) = payload else {
+            return 0.0;
+        };
+
+        if raw.trim().is_empty() {
+            return 0.0;
+        }
+
+        match serde_json::from_str::<Vec<SolBalanceChange>>(raw) {
+            Ok(changes) => changes.iter().map(|change| change.change).sum(),
+            Err(err) => {
+                if is_debug_transactions_enabled() {
+                    log(
+                        LogTag::Transactions,
+                        "MIGRATION_WARN",
+                        &format!("Failed to parse sol_balance_change payload: {}", err),
+                    );
+                }
+                0.0
+            }
+        }
     }
 
     /// Get database connection from pool
@@ -772,14 +874,24 @@ impl TransactionDatabase {
         let tx_type = format!("{:?}", transaction.transaction_type);
         let dir = format!("{:?}", transaction.direction);
 
+        let sol_delta = if !transaction.sol_balance_changes.is_empty() {
+            transaction
+                .sol_balance_changes
+                .iter()
+                .map(|change| change.change)
+                .sum()
+        } else {
+            transaction.sol_balance_change
+        };
+
         conn
             .execute(
                 r#"INSERT OR REPLACE INTO processed_transactions
                    (signature, transaction_type, direction, sol_balance_change, token_balance_changes,
                     token_swap_info, swap_pnl_info, ata_operations, token_transfers, instruction_info,
-                    analysis_duration_ms, cached_analysis, analysis_version, fee_sol, updated_at)
+                    analysis_duration_ms, cached_analysis, analysis_version, fee_sol, sol_delta, updated_at)
                  VALUES
-                   (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, datetime('now'))"#,
+                   (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, datetime('now'))"#,
                 params![
                     transaction.signature,
                     tx_type,
@@ -794,7 +906,8 @@ impl TransactionDatabase {
                     transaction.analysis_duration_ms,
                     cached_analysis_json,
                     ANALYSIS_CACHE_VERSION as i64,
-                    transaction.fee_sol
+                    transaction.fee_sol,
+                    sol_delta
                 ]
             )
             .map_err(|e| format!("Failed to store processed transaction: {}", e))?;
@@ -1210,8 +1323,8 @@ impl TransactionDatabase {
                 r.signature, r.timestamp, r.slot, r.status, r.success, 
                 r.fee_lamports, r.instructions_count,
                 p.transaction_type, p.direction, p.token_swap_info, 
-                p.token_transfers, p.sol_balance_change, p.ata_operations,
-                p.fee_sol
+                p.token_transfers, p.ata_operations,
+                p.fee_sol, p.sol_delta
             FROM raw_transactions r
             LEFT JOIN processed_transactions p ON r.signature = p.signature
             WHERE 1=1",
@@ -1306,9 +1419,9 @@ impl TransactionDatabase {
                 let direction: Option<String> = row.get(8)?;
                 let token_swap_info_json: Option<String> = row.get(9)?;
                 let token_transfers_json: Option<String> = row.get(10)?;
-                let sol_balance_change_json: Option<String> = row.get(11)?;
-                let ata_operations_json: Option<String> = row.get(12)?;
-                let fee_sol = row.get::<_, Option<f64>>(13)?.unwrap_or(0.0);
+                let ata_operations_json: Option<String> = row.get(11)?;
+                let fee_sol = row.get::<_, Option<f64>>(12)?.unwrap_or(0.0);
+                let sol_delta = row.get::<_, Option<f64>>(13)?.unwrap_or(0.0);
 
                 let swap_info: Option<TokenSwapInfo> = token_swap_info_json
                     .as_ref()
@@ -1316,17 +1429,9 @@ impl TransactionDatabase {
                 let token_transfers: Option<Vec<TokenTransfer>> = token_transfers_json
                     .as_ref()
                     .and_then(|json| serde_json::from_str(json).ok());
-                let sol_balance_changes: Option<Vec<SolBalanceChange>> = sol_balance_change_json
-                    .as_ref()
-                    .and_then(|json| serde_json::from_str(json).ok());
                 let ata_operations: Option<Vec<AtaOperation>> = ata_operations_json
                     .as_ref()
                     .and_then(|json| serde_json::from_str(json).ok());
-
-                let sol_delta = sol_balance_changes
-                    .as_ref()
-                    .map(|changes| changes.iter().map(|change| change.change).sum())
-                    .unwrap_or(0.0);
 
                 let ata_rents = ata_operations
                     .as_ref()
@@ -1498,6 +1603,51 @@ impl TransactionDatabase {
         }
 
         true
+    }
+
+    /// Aggregate SOL inflow/outflow metrics within a time window for wallet dashboard usage
+    pub async fn aggregate_sol_flows_since(
+        &self,
+        from: DateTime<Utc>,
+        to: Option<DateTime<Utc>>,
+    ) -> Result<(f64, f64, usize), String> {
+        let conn = self.get_connection()?;
+
+        let mut query = String::from(
+            "SELECT \
+                COALESCE(SUM(CASE WHEN COALESCE(p.sol_delta, 0) > 0 THEN p.sol_delta ELSE 0 END), 0), \
+                COALESCE(SUM(CASE WHEN COALESCE(p.sol_delta, 0) < 0 THEN -p.sol_delta ELSE 0 END), 0), \
+                COUNT(r.signature) \
+             FROM raw_transactions r \
+             LEFT JOIN processed_transactions p ON r.signature = p.signature \
+             WHERE r.timestamp >= ?1 \
+               AND r.status IN ('Confirmed', 'Finalized')",
+        );
+
+        let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(from.to_rfc3339())];
+
+        if let Some(to_ts) = to {
+            query.push_str(&format!(" AND r.timestamp <= ?{}", params_vec.len() + 1));
+            params_vec.push(Box::new(to_ts.to_rfc3339()));
+        }
+
+        let params_refs: Vec<&dyn rusqlite::ToSql> =
+            params_vec.iter().map(|value| value.as_ref()).collect();
+
+        let mut stmt = conn
+            .prepare(&query)
+            .map_err(|e| format!("Failed to prepare flow aggregation query: {}", e))?;
+
+        let result = stmt
+            .query_row(params_refs.as_slice(), |row| {
+                let inflow = row.get::<_, Option<f64>>(0)?.unwrap_or(0.0);
+                let outflow = row.get::<_, Option<f64>>(1)?.unwrap_or(0.0);
+                let count = row.get::<_, i64>(2)?;
+                Ok((inflow, outflow, count))
+            })
+            .map_err(|e| format!("Failed to aggregate SOL flows: {}", e))?;
+
+        Ok((result.0, result.1, result.2.max(0) as usize))
     }
 
     /// Get estimated count of transactions matching filters (optional, for UI)
@@ -1710,6 +1860,15 @@ mod tests {
             )
             .expect("query processed fee");
         assert!((stored_fee - transaction.fee_sol).abs() < 1e-12);
+
+        let stored_delta: f64 = conn
+            .query_row(
+                "SELECT sol_delta FROM processed_transactions WHERE signature = ?1",
+                [transaction.signature.as_str()],
+                |row| Ok(row.get::<_, Option<f64>>(0)?.unwrap_or(0.0)),
+            )
+            .expect("query processed sol_delta");
+        assert!((stored_delta - transaction.sol_balance_change).abs() < 1e-9);
     }
 
     #[test]

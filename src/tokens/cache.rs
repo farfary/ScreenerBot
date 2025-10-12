@@ -486,7 +486,7 @@ impl TokenDatabase {
     }
 
     /// Get tokens by mints
-    pub async fn get_tokens_by_mints(
+    pub fn get_tokens_by_mints(
         &self,
         mints: &[String],
     ) -> Result<Vec<ApiToken>, Box<dyn std::error::Error>> {

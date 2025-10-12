@@ -333,7 +333,7 @@ impl TokenMonitor {
                 let mut skipped_for_deviation: Vec<(String, f64, f64, f64)> = Vec::new();
 
                 if deviation_limit > 0.0 {
-                    match self.database.get_tokens_by_mints(mints).await {
+                    match self.database.get_tokens_by_mints(mints) {
                         Ok(existing_tokens) => {
                             let mut existing_prices: HashMap<String, f64> =
                                 HashMap::with_capacity(existing_tokens.len());
@@ -576,7 +576,7 @@ impl TokenMonitor {
         // Compute tier breakdown for selection (fetch liquidity for selected mints)
         let mut selected_tiers = TierCounts::default();
         if !tokens_to_update.is_empty() {
-            if let Ok(tokens) = self.database.get_tokens_by_mints(&tokens_to_update).await {
+            if let Ok(tokens) = self.database.get_tokens_by_mints(&tokens_to_update) {
                 for t in tokens {
                     let liq = t.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
                     selected_tiers.add_liquidity(liq);

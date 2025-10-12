@@ -26,9 +26,7 @@ use crate::global::is_debug_wallet_enabled;
 use crate::logger::{log, LogTag};
 use crate::rpc::{get_rpc_client, TokenAccountInfo};
 use crate::tokens::cache::TokenDatabase;
-use crate::transactions::{
-    database::TransactionCursor, database::TransactionListFilters, get_transaction_database,
-};
+use crate::transactions::get_transaction_database;
 use crate::utils::get_wallet_address;
 
 // Database schema version
@@ -214,62 +212,17 @@ async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, St
 
     let window_hours = clamp_window_hours(window_hours);
     let window_start = Utc::now() - ChronoDuration::hours(window_hours);
-
-    let mut filters = TransactionListFilters::default();
-    filters.time_from = Some(window_start);
-    filters.only_confirmed = Some(true);
-
-    let mut cursor: Option<TransactionCursor> = None;
-    let mut inflow = 0.0_f64;
-    let mut outflow = 0.0_f64;
-    let mut analyzed = 0usize;
-
-    loop {
-        let result = db
-            .list_transactions(&filters, cursor.as_ref(), 200)
-            .await
-            .map_err(|e| format!("Failed to list transactions: {}", e))?;
-
-        if result.items.is_empty() {
-            break;
-        }
-
-        for row in &result.items {
-            if row.timestamp < window_start {
-                continue;
-            }
-
-            let delta = row.sol_delta;
-            if delta > 0.0 {
-                inflow += delta;
-            } else if delta < 0.0 {
-                outflow += -delta;
-            }
-            analyzed += 1;
-        }
-
-        if let Some(next_cursor) = result.next_cursor.clone() {
-            if let Some(last_row) = result.items.last() {
-                if last_row.timestamp < window_start {
-                    break;
-                }
-            }
-            cursor = Some(next_cursor);
-        } else {
-            break;
-        }
-
-        if result.items.len() < 200 {
-            break;
-        }
-    }
+    let (inflow, outflow, tx_count) = db
+        .aggregate_sol_flows_since(window_start, None)
+        .await
+        .map_err(|e| format!("Failed to aggregate SOL flows: {}", e))?;
 
     Ok(WalletFlowMetrics {
         window_hours,
         inflow_sol: inflow,
         outflow_sol: outflow,
         net_sol: inflow - outflow,
-        transactions_analyzed: analyzed,
+        transactions_analyzed: tx_count,
     })
 }
 
@@ -279,27 +232,52 @@ async fn enrich_token_overview(
 ) -> Vec<WalletTokenOverview> {
     let mut rows = Vec::with_capacity(balances.len());
 
-    for balance in balances {
-        let token_meta = match TokenDatabase::get_token_by_mint_async(&balance.mint).await {
-            Ok(meta) => meta,
+    let mut unique_mints: Vec<String> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    for balance in &balances {
+        if seen.insert(balance.mint.clone()) {
+            unique_mints.push(balance.mint.clone());
+        }
+    }
+
+    let metadata_map: HashMap<String, crate::tokens::types::ApiToken> = if unique_mints.is_empty() {
+        HashMap::new()
+    } else {
+        match TokenDatabase::new() {
+            Ok(database) => match database.get_tokens_by_mints(&unique_mints) {
+                Ok(tokens) => tokens
+                    .into_iter()
+                    .map(|token| (token.mint.clone(), token))
+                    .collect(),
+                Err(err) => {
+                    if is_debug_wallet_enabled() {
+                        log(
+                            LogTag::Wallet,
+                            "TOKEN_META_BATCH_FAIL",
+                            &format!("Batch token metadata fetch failed: {}", err),
+                        );
+                    }
+                    HashMap::new()
+                }
+            },
             Err(err) => {
                 if is_debug_wallet_enabled() {
                     log(
                         LogTag::Wallet,
-                        "TOKEN_META_FAIL",
-                        &format!(
-                            "Failed to fetch token metadata for {}: {}",
-                            &balance.mint[..8],
-                            err
-                        ),
+                        "TOKEN_DB_INIT_FAIL",
+                        &format!("Failed to open token database: {}", err),
                     );
                 }
-                None
+                HashMap::new()
             }
-        };
+        }
+    };
+
+    for balance in balances {
+        let token_meta = metadata_map.get(&balance.mint);
 
         let (symbol, name, price_sol, price_usd, liquidity_usd, volume_24h, last_updated, dex_id) =
-            if let Some(ref meta) = token_meta {
+            if let Some(meta) = token_meta {
                 let price_sol = meta.price_sol.or_else(|| {
                     if meta.price_native > 0.0 {
                         Some(meta.price_native)
@@ -321,8 +299,14 @@ async fn enrich_token_overview(
                     Some(meta.dex_id.clone())
                 };
 
+                let symbol = if meta.symbol.trim().is_empty() {
+                    short_mint_label(&balance.mint)
+                } else {
+                    meta.symbol.clone()
+                };
+
                 (
-                    meta.symbol.clone(),
+                    symbol,
                     Some(meta.name.clone()),
                     price_sol,
                     price_usd,
@@ -388,7 +372,29 @@ pub async fn get_wallet_dashboard_data(
     let window_hours = clamp_window_hours(window_hours);
     let snapshot_limit = clamp_snapshot_limit(snapshot_limit);
 
-    let mut snapshots = get_recent_wallet_snapshots(snapshot_limit).await?;
+    let mut snapshots = match get_recent_wallet_snapshots(snapshot_limit).await {
+        Ok(snaps) => snaps,
+        Err(err) => {
+            if err.contains("not initialized") {
+                if let Err(init_err) = initialize_wallet_database().await {
+                    return Err(format!("Wallet database unavailable: {}", init_err));
+                }
+
+                match get_recent_wallet_snapshots(snapshot_limit).await {
+                    Ok(snaps) => snaps,
+                    Err(retry_err) => {
+                        if retry_err.contains("not initialized") {
+                            Vec::new()
+                        } else {
+                            return Err(retry_err);
+                        }
+                    }
+                }
+            } else {
+                return Err(err);
+            }
+        }
+    };
     if snapshots.is_empty() {
         let flows = compute_flow_metrics(window_hours).await?;
         return Ok(WalletDashboardData {

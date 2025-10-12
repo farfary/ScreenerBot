@@ -1,8 +1,7 @@
 use axum::{
-    extract::{Query, State},
     response::Json,
-    routing::get,
-    Router,
+    routing::{get, post},
+    Json as AxumJson, Router,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -32,7 +31,7 @@ pub struct TokenBalanceInfo {
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/wallet/current", get(get_wallet_current))
-        .route("/wallet/dashboard", get(get_wallet_dashboard))
+        .route("/wallet/dashboard", post(get_wallet_dashboard))
 }
 
 /// Get current wallet balance
@@ -64,7 +63,8 @@ async fn get_wallet_current() -> Json<Option<WalletCurrentResponse>> {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct WalletDashboardQuery {
+#[serde(rename_all = "camelCase")]
+pub struct WalletDashboardRequest {
     #[serde(default = "default_window_hours")]
     pub window_hours: i64,
     #[serde(default = "default_snapshot_limit")]
@@ -92,10 +92,14 @@ pub struct WalletDashboardResponse {
 }
 
 async fn get_wallet_dashboard(
-    Query(query): Query<WalletDashboardQuery>,
+    AxumJson(request): AxumJson<WalletDashboardRequest>,
 ) -> Json<WalletDashboardResponse> {
-    match get_wallet_dashboard_data(query.window_hours, query.snapshot_limit, query.max_tokens)
-        .await
+    match get_wallet_dashboard_data(
+        request.window_hours,
+        request.snapshot_limit,
+        request.max_tokens,
+    )
+    .await
     {
         Ok(payload) => Json(WalletDashboardResponse {
             data: Some(payload),
