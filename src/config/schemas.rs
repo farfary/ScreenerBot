@@ -341,6 +341,63 @@ config_struct! {
 }
 
 // ============================================================================
+// WALLET CONFIGURATION
+// ============================================================================
+
+config_struct! {
+    /// Wallet monitoring and caching configuration
+    pub struct WalletConfig {
+        #[metadata(field_metadata! {
+            label: "Snapshot Interval",
+            hint: "Seconds between wallet balance snapshots",
+            min: 15,
+            max: 600,
+            step: 5,
+            unit: "seconds",
+            impact: "medium",
+            category: "Wallet",
+        })]
+        snapshot_interval_secs: u64 = 60,
+
+        #[metadata(field_metadata! {
+            label: "Flow Cache Update",
+            hint: "Seconds between SOL flow cache syncs from transactions DB",
+            min: 1,
+            max: 60,
+            step: 1,
+            unit: "seconds",
+            impact: "high",
+            category: "Wallet",
+        })]
+        flow_cache_update_secs: u64 = 5,
+
+        #[metadata(field_metadata! {
+            label: "Flow Cache Batch Size",
+            hint: "Max new transactions to process per sync",
+            min: 100,
+            max: 20000,
+            step: 100,
+            unit: "rows",
+            impact: "medium",
+            category: "Wallet",
+        })]
+        flow_cache_backfill_batch: usize = 2000,
+
+        #[metadata(field_metadata! {
+            label: "Flow Cache Lookback",
+            hint: "Safety lookback when resuming sync (seconds)",
+            min: 0,
+            max: 86400,
+            step: 60,
+            unit: "seconds",
+            impact: "medium",
+            category: "Wallet",
+        })]
+        flow_cache_lookback_secs: u64 = 3600,
+    }
+}
+
+// ============================================================================
 // POOLS CONFIGURATION
 // ============================================================================
 
@@ -1830,6 +1887,9 @@ config_struct! {
 
         /// OHLCV data configuration
         ohlcv: OhlcvConfig = OhlcvConfig::default(),
+
+        /// Wallet configuration
+        wallet: WalletConfig = WalletConfig::default(),
     }
 }
 

@@ -276,6 +276,14 @@ pub struct TransactionDatabase {
     schema_version: u32,
 }
 
+/// Minimal row for wallet flow cache export
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalletFlowExportRow {
+    pub signature: String,
+    pub timestamp: DateTime<Utc>,
+    pub sol_delta: f64,
+}
+
 impl TransactionDatabase {
     /// Create new TransactionDatabase with connection pooling
     pub async fn new() -> Result<Self, String> {
@@ -1650,6 +1658,55 @@ impl TransactionDatabase {
         Ok((result.0, result.1, result.2.max(0) as usize))
     }
 
+    /// Lightweight export of processed transactions for wallet flow cache
+    pub async fn export_processed_for_wallet_flow(
+        &self,
+        from: DateTime<Utc>,
+        limit: usize,
+    ) -> Result<Vec<WalletFlowExportRow>, String> {
+        let conn = self.get_connection()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT r.signature, r.timestamp, COALESCE(p.sol_delta, 0) as sol_delta \
+                 FROM raw_transactions r \
+                 LEFT JOIN processed_transactions p ON r.signature = p.signature \
+                 WHERE r.timestamp >= ?1 AND r.status IN ('Confirmed', 'Finalized') \
+                 ORDER BY r.timestamp ASC, r.signature ASC \
+                 LIMIT ?2",
+            )
+            .map_err(|e| format!("Failed to prepare wallet flow export: {}", e))?;
+
+        let mut rows = stmt
+            .query(params![from.to_rfc3339(), (limit as i64).max(1)])
+            .map_err(|e| format!("Failed to query wallet flow export: {}", e))?;
+
+        let mut results = Vec::new();
+        while let Some(row) = rows
+            .next()
+            .map_err(|e| format!("Failed to iterate wallet flow export: {}", e))?
+        {
+            let signature: String = row
+                .get(0)
+                .map_err(|e| format!("Failed to read signature: {}", e))?;
+            let ts_str: String = row
+                .get(1)
+                .map_err(|e| format!("Failed to read timestamp: {}", e))?;
+            let timestamp = DateTime::parse_from_rfc3339(&ts_str)
+                .map(|dt| dt.with_timezone(&Utc))
+                .map_err(|e| format!("Failed to parse timestamp: {}", e))?;
+            let sol_delta: f64 = row
+                .get::<_, Option<f64>>(2)
+                .unwrap_or(Some(0.0))
+                .unwrap_or(0.0);
+            results.push(WalletFlowExportRow {
+                signature,
+                timestamp,
+                sol_delta,
+            });
+        }
+
+        Ok(results)
+    }
     /// Get estimated count of transactions matching filters (optional, for UI)
     pub async fn count_transactions(
         &self,
