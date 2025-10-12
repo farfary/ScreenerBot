@@ -1621,6 +1621,10 @@ impl TransactionDatabase {
     ) -> Result<(f64, f64, usize), String> {
         let conn = self.get_connection()?;
 
+        // Check if this is "all time" query (from epoch = no time filter)
+        let epoch = DateTime::<Utc>::from(std::time::UNIX_EPOCH);
+        let is_all_time = from == epoch;
+
         let mut query = String::from(
             "SELECT \
                 COALESCE(SUM(CASE WHEN COALESCE(p.sol_delta, 0) > 0 THEN p.sol_delta ELSE 0 END), 0), \
@@ -1628,11 +1632,16 @@ impl TransactionDatabase {
                 COUNT(r.signature) \
              FROM raw_transactions r \
              LEFT JOIN processed_transactions p ON r.signature = p.signature \
-             WHERE r.timestamp >= ?1 \
-               AND r.status IN ('Confirmed', 'Finalized')",
+             WHERE r.status IN ('Confirmed', 'Finalized')",
         );
 
-        let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(from.to_rfc3339())];
+        let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![];
+
+        // Only add timestamp filter if NOT all-time query
+        if !is_all_time {
+            query.push_str(&format!(" AND r.timestamp >= ?{}", params_vec.len() + 1));
+            params_vec.push(Box::new(from.to_rfc3339()));
+        }
 
         if let Some(to_ts) = to {
             query.push_str(&format!(" AND r.timestamp <= ?{}", params_vec.len() + 1));
@@ -1642,20 +1651,142 @@ impl TransactionDatabase {
         let params_refs: Vec<&dyn rusqlite::ToSql> =
             params_vec.iter().map(|value| value.as_ref()).collect();
 
+        // Need to get wallet address for filtering
+        let wallet_address = crate::utils::get_wallet_address()
+            .map_err(|e| format!("Failed to get wallet address: {}", e))?;
+
+        if is_debug_transactions_enabled() {
+            log(
+                LogTag::Transactions,
+                "FLOW_AGG_START",
+                &format!(
+                    "Aggregating SOL flows for wallet {} from {}",
+                    wallet_address,
+                    from.to_rfc3339()
+                ),
+            );
+        }
+
+        // Change query to get all rows so we can parse JSON
+        let row_query = query.replace(
+            "SELECT \
+                COALESCE(SUM(CASE WHEN COALESCE(p.sol_delta, 0) > 0 THEN p.sol_delta ELSE 0 END), 0), \
+                COALESCE(SUM(CASE WHEN COALESCE(p.sol_delta, 0) < 0 THEN -p.sol_delta ELSE 0 END), 0), \
+                COUNT(r.signature)",
+            "SELECT r.signature, r.timestamp, p.sol_balance_change",
+        );
+
         let mut stmt = conn
-            .prepare(&query)
+            .prepare(&row_query)
             .map_err(|e| format!("Failed to prepare flow aggregation query: {}", e))?;
 
-        let result = stmt
-            .query_row(params_refs.as_slice(), |row| {
-                let inflow = row.get::<_, Option<f64>>(0)?.unwrap_or(0.0);
-                let outflow = row.get::<_, Option<f64>>(1)?.unwrap_or(0.0);
-                let count = row.get::<_, i64>(2)?;
-                Ok((inflow, outflow, count))
-            })
-            .map_err(|e| format!("Failed to aggregate SOL flows: {}", e))?;
+        let mut rows = stmt
+            .query(params_refs.as_slice())
+            .map_err(|e| format!("Failed to execute flow aggregation query: {}", e))?;
 
-        Ok((result.0, result.1, result.2.max(0) as usize))
+        let mut inflow = 0.0;
+        let mut outflow = 0.0;
+        let mut count = 0;
+        let mut parsed_count = 0;
+        let mut no_json_count = 0;
+        let mut parse_error_count = 0;
+        let mut no_wallet_account_count = 0;
+
+        while let Some(row) = rows
+            .next()
+            .map_err(|e| format!("Failed to read flow row: {}", e))?
+        {
+            count += 1;
+            let signature: String = row.get(0).unwrap_or_default();
+            let sol_balance_change_json: Option<String> = row.get(2).ok();
+
+            if let Some(json_str) = sol_balance_change_json {
+                // Parse JSON array of balance changes
+                match serde_json::from_str::<Vec<serde_json::Value>>(&json_str) {
+                    Ok(changes) => {
+                        let mut found_wallet = false;
+                        let changes_len = changes.len();
+                        for change_obj in &changes {
+                            if let Some(account) =
+                                change_obj.get("account").and_then(|v| v.as_str())
+                            {
+                                if account == wallet_address {
+                                    found_wallet = true;
+                                    if let Some(change) =
+                                        change_obj.get("change").and_then(|v| v.as_f64())
+                                    {
+                                        parsed_count += 1;
+                                        if is_debug_transactions_enabled() && count <= 5 {
+                                            log(
+                                                LogTag::Transactions,
+                                                "FLOW_PARSE",
+                                                &format!(
+                                                    "TX {}: wallet change={:.6} SOL",
+                                                    &signature[..8],
+                                                    change
+                                                ),
+                                            );
+                                        }
+                                        if change > 0.0 {
+                                            inflow += change;
+                                        } else if change < 0.0 {
+                                            outflow += change.abs();
+                                        }
+                                    }
+                                    break; // Found wallet, no need to check other accounts
+                                }
+                            }
+                        }
+                        if !found_wallet {
+                            no_wallet_account_count += 1;
+                            if is_debug_transactions_enabled() && no_wallet_account_count <= 3 {
+                                log(
+                                    LogTag::Transactions,
+                                    "FLOW_NO_WALLET",
+                                    &format!(
+                                        "TX {}: no wallet account in {} balance changes",
+                                        &signature[..8],
+                                        changes_len
+                                    ),
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        parse_error_count += 1;
+                        if is_debug_transactions_enabled() && parse_error_count <= 3 {
+                            log(
+                                LogTag::Transactions,
+                                "FLOW_PARSE_ERR",
+                                &format!("TX {}: JSON parse error: {}", &signature[..8], e),
+                            );
+                        }
+                    }
+                }
+            } else {
+                no_json_count += 1;
+            }
+        }
+
+        if is_debug_transactions_enabled() {
+            log(
+                LogTag::Transactions,
+                "FLOW_AGG_RESULT",
+                &format!(
+                    "Aggregated {} txs: parsed={} with wallet, no_json={}, parse_errors={}, no_wallet_account={} | inflow={:.6} SOL, outflow={:.6} SOL, net={:.6} SOL",
+                    count,
+                    parsed_count,
+                    no_json_count,
+                    parse_error_count,
+                    no_wallet_account_count,
+                    inflow,
+                    outflow,
+                    inflow - outflow
+                ),
+            );
+        }
+
+        Ok((inflow, outflow, count))
     }
 
     /// Lightweight export of processed transactions for wallet flow cache

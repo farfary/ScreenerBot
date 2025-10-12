@@ -111,6 +111,15 @@
       font-variant-numeric: tabular-nums;
     }
 
+    .wallet-flow-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
     .wallet-toolbar {
       gap: 16px;
       position: sticky;
@@ -339,7 +348,19 @@
       <div id="wallet-balance-chart"></div>
     </div>
     <div class="wallet-flow-card">
-      <span class="wallet-chart-title">💧 Flow Breakdown</span>
+      <div class="wallet-flow-header">
+        <span class="wallet-chart-title">💧 Flow Breakdown</span>
+        <div class="wallet-range-buttons" id="wallet-range-buttons">
+          <button type="button" data-range-hours="6">6h</button>
+          <button type="button" data-range-hours="24" class="active">
+            24h
+          </button>
+          <button type="button" data-range-hours="72">72h</button>
+          <button type="button" data-range-hours="168">7d</button>
+          <button type="button" data-range-hours="336">14d</button>
+          <button type="button" data-range-hours="0">All</button>
+        </div>
+      </div>
       <div class="wallet-flow-grid">
         <div class="wallet-flow-item">
           <span class="wallet-flow-label">Inflow</span>
@@ -388,15 +409,6 @@
           <input type="checkbox" id="wallet-hide-dust" />
           Hide dust (&lt; 0.01 SOL)
         </label>
-        <div class="wallet-range-buttons" id="wallet-range-buttons">
-          <button type="button" data-range-hours="0">All</button>
-          <button type="button" data-range-hours="6">6h</button>
-          <button type="button" data-range-hours="24" class="active">
-            24h
-          </button>
-          <button type="button" data-range-hours="72">72h</button>
-          <button type="button" data-range-hours="168">7d</button>
-        </div>
       </div>
     </div>
   </div>
@@ -450,7 +462,7 @@
 
     const State = {
       windowHours: 24,
-      hideDust: AppState.load("wallet.hideDust", false) || false,
+      hideDust: false,
       search: "",
       tokens: [],
       poller: null,

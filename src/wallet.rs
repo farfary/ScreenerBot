@@ -200,7 +200,13 @@ pub struct WalletFlowCacheStats {
 }
 
 fn clamp_window_hours(window_hours: i64) -> i64 {
-    window_hours.clamp(1, 24 * 14)
+    // 0 = All Time (no filter)
+    // Otherwise clamp to reasonable range (1 hour to 90 days)
+    if window_hours == 0 {
+        0
+    } else {
+        window_hours.clamp(1, 24 * 90)
+    }
 }
 
 fn clamp_snapshot_limit(limit: usize) -> usize {
@@ -228,6 +234,14 @@ fn short_mint_label(mint: &str) -> String {
 }
 
 async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, String> {
+    if is_debug_wallet_enabled() {
+        log(
+            LogTag::Wallet,
+            "FLOW_START",
+            &format!("Computing flow metrics for window: {} hours", window_hours),
+        );
+    }
+
     // All-time mode when window_hours <= 0
     if window_hours <= 0 {
         if let Some(db) = GLOBAL_WALLET_DB.lock().await.as_ref() {
@@ -236,6 +250,16 @@ async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, St
                     db.aggregate_cached_flows_sync(min_ts, None)
                 {
                     if tx_count > 0 {
+                        if is_debug_wallet_enabled() {
+                            log(
+                                LogTag::Wallet,
+                                "FLOW_CACHE_ALL",
+                                &format!(
+                                    "All-time cached: inflow={:.6}, outflow={:.6}, txs={}",
+                                    inflow, outflow, tx_count
+                                ),
+                            );
+                        }
                         return Ok(WalletFlowMetrics {
                             window_hours: 0,
                             inflow_sol: inflow,
@@ -256,6 +280,16 @@ async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, St
             .aggregate_sol_flows_since(epoch, None)
             .await
             .map_err(|e| format!("Failed to aggregate all-time SOL flows: {}", e))?;
+        if is_debug_wallet_enabled() {
+            log(
+                LogTag::Wallet,
+                "FLOW_DB_ALL",
+                &format!(
+                    "All-time DB: inflow={:.6}, outflow={:.6}, txs={}",
+                    inflow, outflow, tx_count
+                ),
+            );
+        }
         return Ok(WalletFlowMetrics {
             window_hours: 0,
             inflow_sol: inflow,
@@ -268,23 +302,59 @@ async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, St
     let window_hours = clamp_window_hours(window_hours);
     let window_start = Utc::now() - ChronoDuration::hours(window_hours);
 
+    if is_debug_wallet_enabled() {
+        log(
+            LogTag::Wallet,
+            "FLOW_WINDOW",
+            &format!("Window start: {}", window_start.to_rfc3339()),
+        );
+    }
+
     // Try cached aggregation first
     if let Some(db) = GLOBAL_WALLET_DB.lock().await.as_ref() {
-        if let Ok((inflow, outflow, tx_count)) = db.aggregate_cached_flows_sync(window_start, None)
-        {
-            if tx_count > 0 {
-                return Ok(WalletFlowMetrics {
-                    window_hours,
-                    inflow_sol: inflow,
-                    outflow_sol: outflow,
-                    net_sol: inflow - outflow,
-                    transactions_analyzed: tx_count,
-                });
+        match db.aggregate_cached_flows_sync(window_start, None) {
+            Ok((inflow, outflow, tx_count)) => {
+                if is_debug_wallet_enabled() {
+                    log(
+                        LogTag::Wallet,
+                        "FLOW_CACHE",
+                        &format!(
+                            "Cached: inflow={:.6}, outflow={:.6}, txs={}",
+                            inflow, outflow, tx_count
+                        ),
+                    );
+                }
+                if tx_count > 0 {
+                    return Ok(WalletFlowMetrics {
+                        window_hours,
+                        inflow_sol: inflow,
+                        outflow_sol: outflow,
+                        net_sol: inflow - outflow,
+                        transactions_analyzed: tx_count,
+                    });
+                }
+            }
+            Err(e) => {
+                if is_debug_wallet_enabled() {
+                    log(
+                        LogTag::Wallet,
+                        "FLOW_CACHE_ERR",
+                        &format!("Cache aggregation failed: {}", e),
+                    );
+                }
             }
         }
     }
 
     // Fallback to live aggregation from transactions DB
+    if is_debug_wallet_enabled() {
+        log(
+            LogTag::Wallet,
+            "FLOW_FALLBACK",
+            "Using live aggregation from transactions DB",
+        );
+    }
+
     let tx_db = get_transaction_database()
         .await
         .ok_or_else(|| "Transaction database not initialized".to_string())?;
@@ -292,6 +362,17 @@ async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, St
         .aggregate_sol_flows_since(window_start, None)
         .await
         .map_err(|e| format!("Failed to aggregate SOL flows: {}", e))?;
+
+    if is_debug_wallet_enabled() {
+        log(
+            LogTag::Wallet,
+            "FLOW_DB",
+            &format!(
+                "DB aggregation: inflow={:.6}, outflow={:.6}, txs={}",
+                inflow, outflow, tx_count
+            ),
+        );
+    }
 
     Ok(WalletFlowMetrics {
         window_hours,
