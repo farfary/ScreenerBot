@@ -37,10 +37,13 @@
     justify-content: flex-end;
     gap: 6px;
     font-variant-numeric: tabular-nums;
+    position: relative;
   }
 
   .price-value {
     transition: color 0.25s ease;
+    padding-left: 1.1em;
+    display: inline-block;
   }
 
   .price-cell__inner--up .price-value {
@@ -53,28 +56,23 @@
 
   .price-arrow {
     display: inline-block;
+    width: 0.9em;
     min-width: 0.9em;
+    max-width: 0.9em;
     font-size: 0.85em;
-    opacity: 0;
     transform: translateY(-1px);
-    transition: opacity 0.25s ease, transform 0.25s ease;
+    transition: opacity 0.25s ease;
+    text-align: center;
+    position: absolute;
+    left: 0;
   }
 
-  .price-cell__inner--up .price-arrow--up,
-  .price-cell__inner--down .price-arrow--down {
-    opacity: 1;
-  }
-
-  .price-cell__inner--up .price-arrow--up {
+  .price-arrow--up {
     color: #22c55e;
   }
 
-  .price-cell__inner--down .price-arrow--down {
+  .price-arrow--down {
     color: #ef4444;
-  }
-
-  .price-arrow--flat {
-    opacity: 0;
   }
 </style>
 <script>
@@ -225,6 +223,40 @@
       Router.registerCleanup(() => cleanupTokensPage());
     }
     reloadTokensList("Loading tokens...");
+  };
+
+  // Debug helper to inspect pagination state
+  window.debugTokensPagination = function () {
+    const tbody = document.getElementById("tokensTableBody");
+    const guard = document.getElementById("tokens-scroll-guard");
+    const rowCount = tbody ? tbody.querySelectorAll("tr[data-mint]").length : 0;
+
+    console.log("=== Tokens Pagination Debug ===");
+    console.log("State:", {
+      currentPage: tokensTableState.currentPage,
+      totalPages: tokensTableState.totalPages,
+      totalCount: tokensTableState.totalCount,
+      pageSize: tokensTableState.pageSize,
+      itemsInMemory: tokensTableState.items ? tokensTableState.items.length : 0,
+      allTokensDataLength: allTokensData ? allTokensData.length : 0,
+      rowsInDOM: rowCount,
+      loading: tokensTableState.loading,
+      hasObserver: !!tokensTableState.scrollObserver,
+      guardExists: !!guard,
+      guardIsLastChild:
+        guard && tbody ? tbody.lastElementChild === guard : false,
+      guardState: guard ? guard.dataset.state : "N/A",
+    });
+    console.log("View:", tokensState.view);
+    console.log("Search:", tokensState.searchTerm || "(none)");
+    console.log("Sort:", tokensState.sortBy, tokensState.sortDir);
+    console.log("===============================");
+
+    // Enable verbose logging
+    window.__DEBUG_TOKENS_VERBOSE = true;
+    console.log(
+      "Verbose logging ENABLED. Disable with: window.__DEBUG_TOKENS_VERBOSE = false"
+    );
   };
 
   function hydrateTokensState() {
@@ -1494,6 +1526,94 @@
       : `${totalValue} tokens`;
   }
 
+  function updateTokenRow(row, token) {
+    if (!row || !token) return;
+
+    const cells = row.cells;
+    if (!cells || cells.length < 12) return;
+
+    row.setAttribute("data-mint", token.mint);
+
+    const rowClassNames = ["token-row"];
+    const priceIndicator = token.__priceDirection;
+    const highlightActive = token.__priceHighlight === true;
+    const justChanged = token.__priceChanged === true;
+
+    if (
+      highlightActive &&
+      (priceIndicator === "up" || priceIndicator === "down")
+    ) {
+      rowClassNames.push(
+        priceIndicator === "down" ? "token-row--down" : "token-row--up"
+      );
+    }
+    if (justChanged && (priceIndicator === "up" || priceIndicator === "down")) {
+      rowClassNames.push("token-row--changed");
+    }
+    row.className = rowClassNames.join(" ");
+
+    const symbol = Utils.escapeHtml(token.symbol || "");
+    const name = token.name ? Utils.escapeHtml(token.name) : "";
+    const logo = safeLogoHtml(token.logo_url, token.symbol);
+    cells[0].innerHTML = `<div style="display:flex; align-items:center; gap:12px; min-width:0;">${logo}<div style="display:flex; flex-direction:column; gap:1px; min-width:0;"><div style="font-weight:600; color:var(--link-color); font-size:0.95em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 260px;">${symbol}</div><div style="font-size:0.8em; color:#94a3b8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 260px;">${name}</div></div></div>`;
+
+    const priceDisplay = Utils.formatPriceSol(token.price_sol, {
+      fallback: "N/A",
+    });
+    const rawPrice = Number(token.price_sol);
+    const priceTitle = Number.isFinite(rawPrice)
+      ? rawPrice.toFixed(12)
+      : token.price_sol ?? "";
+    const upArrowOpacity = priceIndicator === "up" ? "1" : "0";
+    const downArrowOpacity = priceIndicator === "down" ? "1" : "0";
+    const priceInnerClassNames = ["price-cell__inner"];
+    if (priceIndicator === "up") {
+      priceInnerClassNames.push("price-cell__inner--up");
+    } else if (priceIndicator === "down") {
+      priceInnerClassNames.push("price-cell__inner--down");
+    }
+    cells[1].className = "num price-cell";
+    cells[1].title = priceTitle;
+    cells[1].innerHTML = `<div class="${priceInnerClassNames.join(
+      " "
+    )}"><span class="price-arrow price-arrow--up" aria-hidden="true" style="opacity:${upArrowOpacity}">▲</span><span class="price-arrow price-arrow--down" aria-hidden="true" style="opacity:${downArrowOpacity}">▼</span><span class="price-value">${priceDisplay}</span></div>`;
+
+    cells[2].textContent = Utils.formatCurrencyUSD(token.liquidity_usd, {
+      fallback: "—",
+    });
+    cells[2].title = token.liquidity_usd ?? "";
+    cells[3].textContent = Utils.formatCurrencyUSD(token.volume_24h, {
+      fallback: "—",
+    });
+    cells[3].title = token.volume_24h ?? "";
+    cells[4].textContent = Utils.formatCurrencyUSD(token.fdv, {
+      fallback: "—",
+    });
+    cells[4].title = token.fdv ?? "";
+    cells[5].textContent = Utils.formatCurrencyUSD(token.market_cap, {
+      fallback: "—",
+    });
+    cells[5].title = token.market_cap ?? "";
+    cells[6].innerHTML = Utils.formatPercent(token.price_change_h1, {
+      style: "token",
+      fallback: "—",
+    });
+    cells[6].title = token.price_change_h1 ?? "";
+    cells[7].innerHTML = Utils.formatPercent(token.price_change_h24, {
+      style: "token",
+      fallback: "—",
+    });
+    cells[7].title = token.price_change_h24 ?? "";
+    cells[8].innerHTML = renderSecurity(token.security_score, token.rugged);
+    cells[8].title = token.security_score ?? "";
+    cells[9].innerHTML = renderStatusBadges(token);
+
+    const timeAgo = token.price_updated_at
+      ? Utils.formatTimeAgo(token.price_updated_at, { fallback: "-" })
+      : "N/A";
+    cells[10].textContent = timeAgo;
+  }
+
   function renderTokens(tokens, options) {
     const tbody = document.getElementById("tokensTableBody");
     if (!tbody) return;
@@ -1510,12 +1630,6 @@
       scrollContainer = table.parentElement;
     }
 
-    const releaseLayout =
-      table &&
-      typeof Utils !== "undefined" &&
-      typeof Utils.freezeTableLayout === "function"
-        ? Utils.freezeTableLayout(table)
-        : null;
     const previousScroll =
       scrollContainer instanceof HTMLElement
         ? {
@@ -1532,15 +1646,6 @@
         }
         if (scrollContainer.scrollLeft !== previousScroll.left) {
           scrollContainer.scrollLeft = previousScroll.left;
-        }
-      }
-
-      if (typeof releaseLayout === "function") {
-        const release = releaseLayout;
-        if (typeof requestAnimationFrame === "function") {
-          requestAnimationFrame(release);
-        } else {
-          setTimeout(release, 0);
         }
       }
     };
@@ -1599,19 +1704,140 @@
         });
       }
 
-      if (mode === "replace") {
-        const rowsHtml = tokens.map(createTokenRowHtml).join("");
-        tbody.innerHTML = rowsHtml + TOKENS_SCROLL_GUARD_HTML;
-      } else if (mode === "append") {
+      if (mode === "append") {
         const guard = ensureTokensScrollGuard();
         if (!guard) {
           renderTokens(tokens, { mode: "replace" });
         } else {
-          const rowsHtml = tokens.map(createTokenRowHtml).join("");
-          if (rowsHtml) {
-            guard.insertAdjacentHTML("beforebegin", rowsHtml);
+          // Use differential updates for append mode too
+          // This prevents layout shifts when auto-refresh runs
+          const existingMints = new Set(
+            Array.from(tbody.querySelectorAll("tr[data-mint]"))
+              .map((row) => row.getAttribute("data-mint"))
+              .filter(Boolean)
+          );
+
+          let addedCount = 0;
+          tokens.forEach((token) => {
+            if (!existingMints.has(token.mint)) {
+              const newRowHtml = createTokenRowHtml(token);
+              guard.insertAdjacentHTML("beforebegin", newRowHtml);
+              existingMints.add(token.mint);
+              addedCount++;
+
+              // Synchronize arrays with DOM
+              if (!tokensTableState.items.find((t) => t.mint === token.mint)) {
+                tokensTableState.items.push(token);
+              }
+              if (!allTokensData.find((t) => t.mint === token.mint)) {
+                allTokensData.push(token);
+              }
+            }
+          });
+
+          if (window.__DEBUG_TOKENS_VERBOSE) {
+            console.log(
+              `[TokensDBG] Append mode: added ${addedCount} rows, total in DOM: ${
+                existingMints.size + addedCount
+              }`
+            );
           }
         }
+      } else if (mode === "update") {
+        // Non-destructive update: only patch existing rows that match provided tokens
+        const tbody = document.getElementById("tokensTableBody");
+        if (tbody) {
+          const rowsByMint = new Map(
+            Array.from(tbody.querySelectorAll("tr[data-mint]")).map((row) => [
+              row.getAttribute("data-mint"),
+              row,
+            ])
+          );
+          let updatedCount = 0;
+          tokens.forEach((token) => {
+            const row = rowsByMint.get(token.mint);
+            if (row) {
+              updateTokenRow(row, token);
+              updatedCount++;
+            }
+          });
+
+          if (window.__DEBUG_TOKENS_VERBOSE) {
+            console.log(
+              `[TokensDBG] Update mode: updated ${updatedCount} rows, total in DOM: ${rowsByMint.size}`
+            );
+          }
+
+          // CRITICAL: Ensure guard element is at the bottom of tbody after update
+          const guard = document.getElementById("tokens-scroll-guard");
+          if (guard && guard.parentElement === tbody) {
+            if (tbody.lastElementChild !== guard) {
+              tbody.appendChild(guard);
+              if (window.__DEBUG_TOKENS_VERBOSE) {
+                console.log(
+                  "[TokensDBG] Guard repositioned to bottom after update"
+                );
+              }
+            }
+          }
+        }
+      } else {
+        const guard = document.getElementById("tokens-scroll-guard");
+        const existingRows = Array.from(tbody.querySelectorAll("tr")).filter(
+          (tr) => tr.id !== "tokens-scroll-guard"
+        );
+
+        const tokensMap = new Map(tokens.map((t) => [t.mint, t]));
+        const existingMintsMap = new Map();
+        existingRows.forEach((row) => {
+          const mint = row.getAttribute("data-mint");
+          if (mint) existingMintsMap.set(mint, row);
+        });
+
+        const rowsToRemove = existingRows.filter(
+          (row) => !tokensMap.has(row.getAttribute("data-mint"))
+        );
+        rowsToRemove.forEach((row) => row.remove());
+
+        tokens.forEach((token, idx) => {
+          const existingRow = existingMintsMap.get(token.mint);
+          if (existingRow) {
+            updateTokenRow(existingRow, token);
+            const currentIndex = Array.from(tbody.children).indexOf(
+              existingRow
+            );
+            const targetIndex = idx;
+            if (currentIndex !== targetIndex) {
+              if (targetIndex >= tbody.children.length - 1) {
+                if (guard) {
+                  tbody.insertBefore(existingRow, guard);
+                } else {
+                  tbody.appendChild(existingRow);
+                }
+              } else {
+                tbody.insertBefore(existingRow, tbody.children[targetIndex]);
+              }
+            }
+          } else {
+            const newRowHtml = createTokenRowHtml(token);
+            if (idx >= existingRows.length) {
+              if (guard) {
+                guard.insertAdjacentHTML("beforebegin", newRowHtml);
+              } else {
+                tbody.insertAdjacentHTML("beforeend", newRowHtml);
+              }
+            } else {
+              const refNode = tbody.children[idx];
+              if (refNode) {
+                refNode.insertAdjacentHTML("beforebegin", newRowHtml);
+              } else if (guard) {
+                guard.insertAdjacentHTML("beforebegin", newRowHtml);
+              } else {
+                tbody.insertAdjacentHTML("beforeend", newRowHtml);
+              }
+            }
+          }
+        });
       }
 
       ensureTokensScrollGuard();
@@ -1668,12 +1894,70 @@
     tokensTableState.scrollContainer = null;
   }
 
+  function ensureScrollObserverActive() {
+    const guard = document.getElementById("tokens-scroll-guard");
+    const container = document.querySelector(".table-wrap");
+    const tbody = document.getElementById("tokensTableBody");
+
+    if (!guard || !container || !tbody) {
+      if (window.__DEBUG_TOKENS_VERBOSE) {
+        console.log(
+          "[TokensDBG] ensureScrollObserverActive: missing elements",
+          {
+            guard: !!guard,
+            container: !!container,
+            tbody: !!tbody,
+          }
+        );
+      }
+      return false;
+    }
+
+    // Ensure guard is last child of tbody
+    if (guard.parentElement === tbody && tbody.lastElementChild !== guard) {
+      tbody.appendChild(guard);
+      if (window.__DEBUG_TOKENS_VERBOSE) {
+        console.log("[TokensDBG] Guard repositioned to bottom");
+      }
+    }
+
+    // Re-observe if observer exists
+    if (tokensTableState.scrollObserver) {
+      tokensTableState.scrollObserver.disconnect();
+      tokensTableState.scrollObserver.observe(guard);
+      if (window.__DEBUG_TOKENS_VERBOSE) {
+        console.log("[TokensDBG] Observer reconnected to guard");
+      }
+    } else {
+      setupTokensScrollObserver();
+    }
+
+    return true;
+  }
+
   function setupTokensScrollObserver() {
     teardownTokensScrollObserver();
     const guard = ensureTokensScrollGuard();
     const container = document.querySelector(".table-wrap");
     if (!guard || !container) {
+      if (window.__DEBUG_TOKENS_VERBOSE) {
+        console.log(
+          "[TokensDBG] setupTokensScrollObserver: missing guard or container"
+        );
+      }
       return;
+    }
+
+    // SAFEGUARD: If we have items rendered but currentPage is 0, fix to 1 so next load fetches page 2
+    if (
+      tokensTableState.currentPage === 0 &&
+      Array.isArray(tokensTableState.items) &&
+      tokensTableState.items.length > 0
+    ) {
+      tokensTableState.currentPage = 1;
+      if (window.__DEBUG_TOKENS_VERBOSE) {
+        console.log("[TokensDBG] Fixed currentPage from 0 to 1");
+      }
     }
 
     if (
@@ -1681,6 +1965,9 @@
       tokensTableState.currentPage >= tokensTableState.totalPages
     ) {
       setTokensScrollGuardState("end");
+      if (window.__DEBUG_TOKENS_VERBOSE) {
+        console.log("[TokensDBG] No more pages, setting guard to end state");
+      }
       return;
     }
 
@@ -1690,6 +1977,9 @@
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
+            if (window.__DEBUG_TOKENS_VERBOSE) {
+              console.log("[TokensDBG] Guard intersecting, loading next page");
+            }
             loadNextTokensPage({ skipObserverRefresh: true });
           }
         });
@@ -1698,6 +1988,14 @@
     );
 
     tokensTableState.scrollObserver.observe(guard);
+
+    if (window.__DEBUG_TOKENS_VERBOSE) {
+      console.log("[TokensDBG] ScrollObserver setup complete", {
+        currentPage: tokensTableState.currentPage,
+        totalPages: tokensTableState.totalPages,
+        guardExists: !!guard,
+      });
+    }
   }
 
   function captureOpenDropdownState() {
@@ -1832,14 +2130,57 @@
       });
 
       if (fresh.length > 0) {
+        const tbody = document.getElementById("tokensTableBody");
+        const rowCountBefore = tbody
+          ? tbody.querySelectorAll("tr[data-mint]").length
+          : 0;
+
         appendTokensToState(fresh);
         renderTokens(fresh, { mode: "append" });
+
+        // Verify append succeeded by checking DOM row count
+        const rowCountAfter = tbody
+          ? tbody.querySelectorAll("tr[data-mint]").length
+          : 0;
+        const actuallyAdded = rowCountAfter - rowCountBefore;
+
+        if (actuallyAdded > 0) {
+          // Success - update page counter
+          tokensTableState.currentPage = Math.min(
+            nextPage,
+            tokensTableState.totalPages
+          );
+
+          if (window.__DEBUG_TOKENS_VERBOSE) {
+            console.log(
+              `[TokensDBG] Page ${nextPage} loaded: ${actuallyAdded} rows added, total: ${rowCountAfter}`
+            );
+          }
+        } else {
+          // Failed to add rows - don't increment page counter
+          console.error(
+            `[Tokens] Failed to append rows for page ${nextPage}:`,
+            {
+              freshCount: fresh.length,
+              rowsBefore: rowCountBefore,
+              rowsAfter: rowCountAfter,
+            }
+          );
+        }
+      } else {
+        // No new items, still increment page counter to avoid retry loop
+        tokensTableState.currentPage = Math.min(
+          nextPage,
+          tokensTableState.totalPages
+        );
+
+        if (window.__DEBUG_TOKENS_VERBOSE) {
+          console.log(
+            `[TokensDBG] Page ${nextPage}: no new items (all duplicates)`
+          );
+        }
       }
 
-      tokensTableState.currentPage = Math.min(
-        nextPage,
-        tokensTableState.totalPages
-      );
       updateTokenCount(tokensTableState.totalCount);
 
       if (tokensTableState.currentPage >= tokensTableState.totalPages) {
@@ -1849,6 +2190,9 @@
         setTokensScrollGuardState("idle");
         if (!opts.skipObserverRefresh) {
           setupTokensScrollObserver();
+        } else {
+          // Even if skipping full setup, ensure guard is positioned correctly
+          ensureScrollObserverActive();
         }
       }
 
@@ -1867,7 +2211,11 @@
     const opts = options || {};
     const statusMessage = message || "Loading tokens...";
     const preserveItems = opts.preserveItems === true;
-    const resetPagination = opts.resetPagination !== false;
+    // If we're preserving items (auto-refresh/search), do NOT reset pagination by default
+    const resetPagination =
+      opts.resetPagination !== undefined
+        ? opts.resetPagination
+        : !preserveItems;
     const silent = opts.silent === true;
 
     if (tokensFetchState.abortController) {
@@ -1910,39 +2258,116 @@
         pageSize: opts.pageSize,
         signal: controller.signal,
       });
-      replaceAllTokensData(result.items);
 
-      tokensTableState.pageSize = clampTokensPageSize(
-        result.pageSize || TOKENS_PAGE_LIMIT
-      );
-      tokensTableState.currentPage = tokensTableState.items.length > 0 ? 1 : 0;
-      tokensTableState.totalPages =
-        result.totalPages || (tokensTableState.currentPage > 0 ? 1 : 0);
-      tokensTableState.totalCount =
-        Number(result.total) || tokensTableState.items.length;
+      if (preserveItems && hasExistingRows) {
+        // Auto-refresh mode: only update existing rows, don't replace all
+        // This prevents jumping when user has scrolled beyond page 1
+        const updateMap = new Map(result.items.map((t) => [t.mint, t]));
 
-      if (tokensTableState.items.length === 0) {
-        renderTokens(tokensTableState.items, { mode: "replace" });
-        updateTokenCount(tokensTableState.totalCount);
-        setTokensScrollGuardState("hidden");
-        teardownTokensScrollObserver();
-      } else {
-        renderTokens(tokensTableState.items, { mode: "replace" });
-        updateTokenCount(tokensTableState.totalCount);
+        // Update existing items in-place if they're in the fresh page 1 data
+        tokensTableState.items = tokensTableState.items.map((existingToken) => {
+          const freshData = updateMap.get(existingToken.mint);
+          return freshData || existingToken;
+        });
 
-        if (tokensTableState.currentPage < tokensTableState.totalPages) {
-          setTokensScrollGuardState("idle");
-          setupTokensScrollObserver();
-        } else {
-          setTokensScrollGuardState("end");
-          teardownTokensScrollObserver();
+        // Update allTokensData similarly
+        allTokensData = allTokensData.map((existingToken) => {
+          const freshData = updateMap.get(existingToken.mint);
+          return freshData || existingToken;
+        });
+
+        // Render only the updated tokens using non-destructive update mode
+        // This updates their cells without moving/removing other rows
+        renderTokens(result.items, { mode: "update" });
+
+        // Update metadata but preserve pagination state
+        tokensTableState.totalCount =
+          Number(result.total) || tokensTableState.totalCount;
+        tokensTableState.totalPages =
+          result.totalPages || tokensTableState.totalPages;
+        // SAFEGUARD: Ensure currentPage is at least 1 when we have items
+        if (
+          tokensTableState.currentPage === 0 &&
+          Array.isArray(tokensTableState.items) &&
+          tokensTableState.items.length > 0
+        ) {
+          tokensTableState.currentPage = 1;
         }
+
+        updateTokenCount(tokensTableState.totalCount);
 
         const viewLabel = VIEW_LABELS[tokensState.view] || "";
         const status = viewLabel
           ? `${tokensTableState.totalCount} tokens ${viewLabel}`
           : `${tokensTableState.totalCount} tokens`;
         setTokenCountStatus(status);
+
+        // Ensure scroll observer remains active if more pages are available
+        if (tokensTableState.currentPage >= tokensTableState.totalPages) {
+          setTokensScrollGuardState("end");
+          teardownTokensScrollObserver();
+        } else {
+          setTokensScrollGuardState("idle");
+          // Always ensure observer is active and guard is positioned correctly after update
+          if (
+            !tokensTableState.scrollObserver ||
+            typeof tokensTableState.scrollObserver.observe !== "function"
+          ) {
+            setupTokensScrollObserver();
+          } else {
+            // Observer exists, just ensure guard is positioned and re-observed
+            ensureScrollObserverActive();
+          }
+        }
+
+        if (window.__DEBUG_TOKENS_VERBOSE) {
+          console.log("[TokensDBG] Auto-refresh complete:", {
+            currentPage: tokensTableState.currentPage,
+            totalPages: tokensTableState.totalPages,
+            itemsInMemory: tokensTableState.items.length,
+            rowsInDOM: document.querySelectorAll(
+              "#tokensTableBody tr[data-mint]"
+            ).length,
+            observerActive: !!tokensTableState.scrollObserver,
+          });
+        }
+      } else {
+        // Full reload: replace everything
+        replaceAllTokensData(result.items);
+
+        tokensTableState.pageSize = clampTokensPageSize(
+          result.pageSize || TOKENS_PAGE_LIMIT
+        );
+        tokensTableState.currentPage =
+          tokensTableState.items.length > 0 ? 1 : 0;
+        tokensTableState.totalPages =
+          result.totalPages || (tokensTableState.currentPage > 0 ? 1 : 0);
+        tokensTableState.totalCount =
+          Number(result.total) || tokensTableState.items.length;
+
+        if (tokensTableState.items.length === 0) {
+          renderTokens(tokensTableState.items, { mode: "replace" });
+          updateTokenCount(tokensTableState.totalCount);
+          setTokensScrollGuardState("hidden");
+          teardownTokensScrollObserver();
+        } else {
+          renderTokens(tokensTableState.items, { mode: "replace" });
+          updateTokenCount(tokensTableState.totalCount);
+
+          if (tokensTableState.currentPage < tokensTableState.totalPages) {
+            setTokensScrollGuardState("idle");
+            setupTokensScrollObserver();
+          } else {
+            setTokensScrollGuardState("end");
+            teardownTokensScrollObserver();
+          }
+
+          const viewLabel = VIEW_LABELS[tokensState.view] || "";
+          const status = viewLabel
+            ? `${tokensTableState.totalCount} tokens ${viewLabel}`
+            : `${tokensTableState.totalCount} tokens`;
+          setTokenCountStatus(status);
+        }
       }
     } catch (err) {
       if (err && err.name === "AbortError") {
@@ -2034,12 +2459,15 @@
     } else if (priceIndicator === "down") {
       priceInnerClassNames.push("price-cell__inner--down");
     }
+    const upArrowOpacity = priceIndicator === "up" ? "1" : "0";
+    const downArrowOpacity = priceIndicator === "down" ? "1" : "0";
     const arrowHtml =
-      priceIndicator === "up"
-        ? '<span class="price-arrow price-arrow--up" aria-hidden="true">▲</span>'
-        : priceIndicator === "down"
-        ? '<span class="price-arrow price-arrow--down" aria-hidden="true">▼</span>'
-        : '<span class="price-arrow price-arrow--flat" aria-hidden="true">▲</span>';
+      '<span class="price-arrow price-arrow--up" aria-hidden="true" style="opacity:' +
+      upArrowOpacity +
+      '">▲</span>' +
+      '<span class="price-arrow price-arrow--down" aria-hidden="true" style="opacity:' +
+      downArrowOpacity +
+      '">▼</span>';
     const priceCellContent =
       '<div class="' +
       priceInnerClassNames.join(" ") +

@@ -2201,12 +2201,6 @@
       table && table.parentElement instanceof HTMLElement
         ? table.parentElement
         : null;
-    const releaseLayout =
-      table &&
-      typeof Utils !== "undefined" &&
-      typeof Utils.freezeTableLayout === "function"
-        ? Utils.freezeTableLayout(table)
-        : null;
     const previousScroll =
       container instanceof HTMLElement
         ? { top: container.scrollTop, left: container.scrollLeft }
@@ -2263,15 +2257,6 @@
         }
         if (container.scrollLeft !== previousScroll.left) {
           container.scrollLeft = previousScroll.left;
-        }
-      }
-
-      if (typeof releaseLayout === "function") {
-        const release = releaseLayout;
-        if (typeof requestAnimationFrame === "function") {
-          requestAnimationFrame(release);
-        } else {
-          setTimeout(release, 0);
         }
       }
     }
