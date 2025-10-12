@@ -213,11 +213,11 @@ pub struct WalletFlowCacheStats {
 
 fn clamp_window_hours(window_hours: i64) -> i64 {
     // 0 = All Time (no filter)
-    // Otherwise clamp to reasonable range (1 hour to 90 days)
+    // Otherwise clamp to reasonable range (1 hour to 2 years)
     if window_hours == 0 {
         0
     } else {
-        window_hours.clamp(1, 24 * 90)
+        window_hours.clamp(1, 24 * 365 * 2)
     }
 }
 
