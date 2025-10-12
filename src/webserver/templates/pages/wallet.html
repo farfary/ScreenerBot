@@ -328,6 +328,8 @@
       object-fit: cover;
       flex-shrink: 0;
       border: 1px solid rgba(255, 255, 255, 0.08);
+      background: color-mix(in srgb, var(--bg-card) 80%, transparent);
+      display: block;
     }
 
     .token-text {
@@ -624,6 +626,7 @@
       chartSeries: null,
       themeObserver: null,
       activeTab: "analysis",
+      logoCache: new Map(), // Cache mint -> successful logo URL
     };
 
     const el = (id) => document.getElementById(id);
@@ -833,20 +836,33 @@
         logo.alt = `${token.symbol || token.name || "Token"} logo`;
         logo.loading = "lazy";
 
-        const sources = logoSources(token.mint);
-        let sourceIndex = 0;
-        const swapSource = () => {
-          sourceIndex += 1;
-          if (sourceIndex < sources.length) {
-            logo.src = sources[sourceIndex];
-          } else {
-            logo.onerror = null;
-            logo.src = FALLBACK_LOGO;
-          }
-        };
+        // Check cache first
+        const cachedUrl = State.logoCache.get(token.mint);
+        if (cachedUrl) {
+          logo.src = cachedUrl;
+        } else {
+          // Try sources in order and cache the first success
+          const sources = logoSources(token.mint);
+          let sourceIndex = 0;
+          const swapSource = () => {
+            sourceIndex += 1;
+            if (sourceIndex < sources.length) {
+              logo.src = sources[sourceIndex];
+            } else {
+              logo.onerror = null;
+              logo.src = FALLBACK_LOGO;
+              State.logoCache.set(token.mint, FALLBACK_LOGO);
+            }
+          };
 
-        logo.onerror = swapSource;
-        logo.src = sources[sourceIndex];
+          logo.onload = () => {
+            // Cache successful load
+            State.logoCache.set(token.mint, logo.src);
+          };
+
+          logo.onerror = swapSource;
+          logo.src = sources[sourceIndex];
+        }
 
         const text = document.createElement("div");
         text.className = "token-text";
@@ -1022,12 +1038,23 @@
       const data = payload.data;
       if (!data) return;
 
-      State.tokens = data.tokens || [];
-      State.dailyFlows = data.daily_flows || [];
+      const newTokens = data.tokens || [];
+      const newDailyFlows = data.daily_flows || [];
+
+      // Only re-render tokens if data has changed
+      const tokensChanged =
+        JSON.stringify(State.tokens) !== JSON.stringify(newTokens);
+
+      State.tokens = newTokens;
+      State.dailyFlows = newDailyFlows;
 
       updateSummary(data);
       updateChart(State.dailyFlows);
-      renderTokens();
+
+      // Only re-render if tokens data changed or table is empty
+      if (tokensChanged || !el("wallet-token-table-body")?.children.length) {
+        renderTokens();
+      }
     }
 
     function startPolling() {
