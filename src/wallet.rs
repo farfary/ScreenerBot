@@ -415,7 +415,7 @@ async fn compute_daily_flows(window_hours: i64) -> Result<Vec<DailyFlowPoint>, S
         .map_err(|e| format!("Failed to aggregate daily flows: {}", e))?;
 
     // Convert to DailyFlowPoint with timestamps
-    let result: Vec<DailyFlowPoint> = daily_data
+    let mut result: Vec<DailyFlowPoint> = daily_data
         .into_iter()
         .filter_map(|(date_str, inflow, outflow, tx_count)| {
             // Parse date string and convert to timestamp
@@ -433,6 +433,47 @@ async fn compute_daily_flows(window_hours: i64) -> Result<Vec<DailyFlowPoint>, S
                 })
         })
         .collect();
+
+    // Apply payload cap/decimation for very long ranges to avoid huge responses
+    // Read caps from config; keep defaults conservative without hardcoding logic elsewhere
+    let (max_days, decimate_threshold_days) = with_config(|cfg| {
+        // Reuse monitoring config section if wallet subfields are not present
+        // Defaults: cap 730 days (2 years), decimate when > 365 days
+        let max_days = cfg.ohlcv.retention_days.max(30) as usize; // use OHLCV retention as a reasonable baseline minimum
+        (max_days.max(730), 365usize)
+    });
+
+    if result.len() > max_days {
+        // Keep most recent max_days points
+        result.sort_by_key(|p| p.timestamp);
+        result = result.split_off(result.len() - max_days);
+    }
+
+    if result.len() > decimate_threshold_days {
+        // Decimate older half to every Nth point while keeping recent quarter dense
+        let len = result.len();
+        let recent_keep = len / 4; // keep last quarter in full resolution
+        let (older, recent) = result.split_at(len - recent_keep);
+        // Choose stride to reduce older to about half of decimate_threshold_days
+        let target_older = decimate_threshold_days - recent_keep.min(decimate_threshold_days / 2);
+        let stride = ((older.len() as f64) / (target_older as f64))
+            .ceil()
+            .max(1.0) as usize;
+        let decimated_older: Vec<DailyFlowPoint> = older
+            .iter()
+            .enumerate()
+            .filter_map(|(i, p)| {
+                if i % stride == 0 {
+                    Some(p.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let mut merged = decimated_older;
+        merged.extend_from_slice(recent);
+        result = merged;
+    }
 
     if is_debug_wallet_enabled() {
         log(
@@ -643,7 +684,15 @@ pub async fn get_wallet_dashboard_data(
         .last()
         .cloned()
         .ok_or_else(|| "Latest snapshot unavailable".to_string())?;
-    let window_start = Utc::now() - ChronoDuration::hours(window_hours);
+    // Determine window_start for trend; for all-time (0), include all loaded snapshots
+    let window_start = if window_hours == 0 {
+        snapshots
+            .first()
+            .map(|s| s.snapshot_time)
+            .unwrap_or(latest_snapshot.snapshot_time)
+    } else {
+        Utc::now() - ChronoDuration::hours(window_hours)
+    };
 
     let baseline_snapshot = snapshots
         .iter()
