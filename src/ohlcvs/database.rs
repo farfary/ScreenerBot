@@ -360,6 +360,73 @@ impl OhlcvDatabase {
         Ok(data)
     }
 
+    pub fn get_1m_data_range_asc(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        from_timestamp: Option<i64>,
+        to_timestamp: Option<i64>,
+        limit: Option<usize>,
+    ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
+
+        let mut query = String::from(
+            "SELECT timestamp, open, high, low, close, volume FROM ohlcv_1m \n             WHERE mint = ?1 AND pool_address = ?2",
+        );
+
+        let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![
+            Box::new(mint.to_string()),
+            Box::new(pool_address.to_string()),
+        ];
+
+        if let Some(from) = from_timestamp {
+            let placeholder = params_vec.len() + 1;
+            query.push_str(&format!(" AND timestamp >= ?{}", placeholder));
+            params_vec.push(Box::new(from));
+        }
+
+        if let Some(to) = to_timestamp {
+            let placeholder = params_vec.len() + 1;
+            query.push_str(&format!(" AND timestamp <= ?{}", placeholder));
+            params_vec.push(Box::new(to));
+        }
+
+        query.push_str(" ORDER BY timestamp ASC");
+
+        if let Some(limit) = limit {
+            let placeholder = params_vec.len() + 1;
+            query.push_str(&format!(" LIMIT ?{}", placeholder));
+            params_vec.push(Box::new(limit as i64));
+        }
+
+        let mut stmt = conn
+            .prepare(&query)
+            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to prepare: {}", e)))?;
+
+        let params_refs: Vec<&dyn rusqlite::ToSql> =
+            params_vec.iter().map(|p| p.as_ref()).collect();
+
+        let data = stmt
+            .query_map(params_refs.as_slice(), |row| {
+                Ok(OhlcvDataPoint {
+                    timestamp: row.get(0)?,
+                    open: row.get(1)?,
+                    high: row.get(2)?,
+                    low: row.get(3)?,
+                    close: row.get(4)?,
+                    volume: row.get(5)?,
+                })
+            })
+            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {}", e)))?
+            .collect::<SqliteResult<Vec<_>>>()
+            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to collect: {}", e)))?;
+
+        Ok(data)
+    }
+
     // ==================== Aggregated Data Cache ====================
 
     pub fn cache_aggregated_data(

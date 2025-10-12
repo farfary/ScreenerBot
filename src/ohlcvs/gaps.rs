@@ -1,9 +1,11 @@
 // Gap detection and filling system
 
+use crate::config::with_config;
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::database::OhlcvDatabase;
 use crate::ohlcvs::fetcher::OhlcvFetcher;
 use crate::ohlcvs::types::{OhlcvDataPoint, OhlcvError, OhlcvResult, Priority, Timeframe};
+use chrono::Utc;
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 
@@ -24,17 +26,27 @@ impl GapManager {
         pool_address: &str,
         timeframe: Timeframe,
     ) -> OhlcvResult<Vec<(i64, i64)>> {
-        // Get existing data
-        let mut data = self
-            .db
-            .get_1m_data(mint, Some(pool_address), None, None, 10000)?;
+        let retention_days = with_config(|cfg| cfg.ohlcv.retention_days).max(1);
+        let timeframe_seconds = timeframe.to_seconds().max(1);
+        let window_seconds = (retention_days as i64).saturating_mul(86_400);
+        let lookback_start =
+            (Utc::now().timestamp() - window_seconds - timeframe_seconds * 2).max(0);
+
+        let estimated_points = ((window_seconds / 60).max(1) as usize).saturating_add(512);
+        let limit = estimated_points.min(200_000);
+
+        // Get existing data sliced to the retention window in ascending order
+        let mut data = self.db.get_1m_data_range_asc(
+            mint,
+            pool_address,
+            Some(lookback_start),
+            None,
+            Some(limit),
+        )?;
 
         if data.is_empty() {
             return Ok(Vec::new());
         }
-
-        // Sort to ASC for accurate gap detection
-        data.sort_by_key(|d| d.timestamp);
 
         // Normalize data for requested timeframe.
         let normalized = if timeframe == Timeframe::Minute1 {

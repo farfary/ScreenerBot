@@ -14,8 +14,8 @@ use crate::ohlcvs::types::{
     OhlcvDataPoint, OhlcvError, OhlcvResult, Priority, Timeframe, TokenOhlcvConfig,
 };
 use chrono::Utc;
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 use tokio::time::{interval, sleep, Duration, Instant};
 
@@ -36,6 +36,7 @@ pub struct OhlcvMonitor {
     gap_manager: Arc<GapManager>,
     active_tokens: Arc<RwLock<HashMap<String, TokenOhlcvConfig>>>,
     shutdown_signal: Arc<RwLock<bool>>,
+    backfill_in_progress: Arc<Mutex<HashSet<String>>>,
 }
 
 impl OhlcvMonitor {
@@ -54,6 +55,7 @@ impl OhlcvMonitor {
             gap_manager,
             active_tokens: Arc::new(RwLock::new(HashMap::new())),
             shutdown_signal: Arc::new(RwLock::new(false)),
+            backfill_in_progress: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
@@ -586,22 +588,80 @@ impl OhlcvMonitor {
 
         let retention_seconds = retention_days * 86_400;
         let target_start = (Utc::now().timestamp() - retention_seconds).max(0);
-
-        match self.db.get_time_bounds(mint, pool_address)? {
-            Some((oldest, _latest)) => {
-                if oldest <= target_start {
-                    return Ok(());
-                }
-
-                self.backfill_range(mint, pool_address, target_start, oldest)
-                    .await
-            }
+        let maybe_range = match self.db.get_time_bounds(mint, pool_address)? {
+            Some((oldest, _latest)) if oldest <= target_start => None,
+            Some((oldest, _latest)) => Some((target_start, oldest)),
             None => {
                 let now_ts = Utc::now().timestamp();
                 let end = now_ts.max(target_start + 60);
-                self.backfill_range(mint, pool_address, target_start, end)
-                    .await
+                Some((target_start, end))
             }
+        };
+
+        let Some((from_ts, to_ts)) = maybe_range else {
+            return Ok(());
+        };
+
+        if !self.try_start_backfill(mint) {
+            return Ok(());
+        }
+
+        let runner = self.clone();
+        let mint_owned = mint.to_string();
+        let pool_owned = pool_address.to_string();
+
+        if is_debug_ohlcv_enabled() {
+            log(
+                LogTag::Ohlcv,
+                "INFO",
+                &format!(
+                    "Scheduling retention backfill for {} via {} (target start: {}, current oldest requested: {})",
+                    mint_owned,
+                    pool_owned,
+                    from_ts,
+                    to_ts
+                ),
+            );
+        }
+
+        tokio::spawn(async move {
+            if let Err(e) = runner
+                .backfill_range(&mint_owned, &pool_owned, from_ts, to_ts)
+                .await
+            {
+                log(
+                    LogTag::Ohlcv,
+                    "WARN",
+                    &format!(
+                        "Retention backfill failed for {} via {}: {}",
+                        mint_owned, pool_owned, e
+                    ),
+                );
+            }
+
+            runner.finish_backfill(&mint_owned);
+        });
+
+        Ok(())
+    }
+
+    fn try_start_backfill(&self, mint: &str) -> bool {
+        match self.backfill_in_progress.lock() {
+            Ok(mut set) => {
+                if set.contains(mint) {
+                    false
+                } else {
+                    set.insert(mint.to_string());
+                    true
+                }
+            }
+            Err(_) => false,
+        }
+    }
+
+    fn finish_backfill(&self, mint: &str) {
+        if let Ok(mut set) = self.backfill_in_progress.lock() {
+            set.remove(mint);
         }
     }
 
@@ -640,7 +700,7 @@ impl OhlcvMonitor {
                 break;
             }
 
-            cursor_end = earliest.saturating_sub(60);
+            cursor_end = earliest.saturating_sub(Timeframe::Minute1.to_seconds());
 
             if cursor_end <= from_timestamp {
                 break;
@@ -951,6 +1011,7 @@ impl Clone for OhlcvMonitor {
             gap_manager: Arc::clone(&self.gap_manager),
             active_tokens: Arc::clone(&self.active_tokens),
             shutdown_signal: Arc::clone(&self.shutdown_signal),
+            backfill_in_progress: Arc::clone(&self.backfill_in_progress),
         }
     }
 }
