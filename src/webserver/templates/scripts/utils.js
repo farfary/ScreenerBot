@@ -392,6 +392,103 @@
     window.addEventListener(evt, closeDropdownMenus, { passive: true });
   });
 
+  function freezeTableLayout(tableElement) {
+    const table =
+      tableElement instanceof HTMLTableElement
+        ? tableElement
+        : tableElement && typeof tableElement.closest === "function"
+        ? tableElement.closest("table")
+        : null;
+
+    if (!(table instanceof HTMLTableElement)) {
+      return () => {};
+    }
+
+    const headerCells = Array.from(table.querySelectorAll("thead th"));
+    if (headerCells.length === 0) {
+      return () => {};
+    }
+
+    const tableRect = table.getBoundingClientRect();
+    if (!tableRect || tableRect.width === 0) {
+      return () => {};
+    }
+
+    const state = {
+      width: table.style.width,
+      minWidth: table.style.minWidth,
+      maxWidth: table.style.maxWidth,
+      layout: table.style.tableLayout,
+      cellStyles: headerCells.map((th) => ({
+        el: th,
+        width: th.style.width,
+        minWidth: th.style.minWidth,
+        maxWidth: th.style.maxWidth,
+      })),
+    };
+
+    const tableWidthPx = `${Math.max(tableRect.width, 1)}px`;
+    table.style.width = tableWidthPx;
+    table.style.minWidth = tableWidthPx;
+    table.style.maxWidth = tableWidthPx;
+    table.style.tableLayout = "fixed";
+    table.classList.add("table--layout-frozen");
+
+    headerCells.forEach((th) => {
+      const rect = th.getBoundingClientRect();
+      const widthPx = `${Math.max(rect.width, 1)}px`;
+      th.style.width = widthPx;
+      th.style.minWidth = widthPx;
+      th.style.maxWidth = widthPx;
+    });
+
+    let released = false;
+    return function releaseTableLayout() {
+      if (released) {
+        return;
+      }
+      released = true;
+
+      table.style.width = state.width;
+      table.style.minWidth = state.minWidth;
+      table.style.maxWidth = state.maxWidth;
+      table.style.tableLayout = state.layout || "";
+      table.classList.remove("table--layout-frozen");
+
+      state.cellStyles.forEach((entry) => {
+        entry.el.style.width = entry.width;
+        entry.el.style.minWidth = entry.minWidth;
+        entry.el.style.maxWidth = entry.maxWidth;
+      });
+    };
+  }
+
+  function preserveScrollPosition(container, callback) {
+    if (!(container instanceof HTMLElement) || typeof callback !== "function") {
+      return typeof callback === "function" ? callback() : undefined;
+    }
+
+    const top = container.scrollTop;
+    const left = container.scrollLeft;
+
+    let result;
+    try {
+      result = callback();
+    } finally {
+      container.scrollTop = top;
+      container.scrollLeft = left;
+    }
+
+    if (result && typeof result.then === "function") {
+      return result.finally(() => {
+        container.scrollTop = top;
+        container.scrollLeft = left;
+      });
+    }
+
+    return result;
+  }
+
   function ensureToastContainer() {
     let container = document.getElementById("toastContainer");
     if (!container) {
@@ -896,6 +993,8 @@
     setHtml,
     toggleDropdown,
     closeDropdownMenus,
+    freezeTableLayout,
+    preserveScrollPosition,
     showToast,
     showNotification,
     copyToClipboard,

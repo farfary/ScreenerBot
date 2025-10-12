@@ -1499,78 +1499,126 @@
     if (!tbody) return;
 
     const mode = (options && options.mode) || "replace";
+    const table = tbody.closest("table");
+    let scrollContainer = null;
+    if (
+      tokensTableState.scrollContainer instanceof HTMLElement &&
+      tokensTableState.scrollContainer.contains(tbody)
+    ) {
+      scrollContainer = tokensTableState.scrollContainer;
+    } else if (table && table.parentElement instanceof HTMLElement) {
+      scrollContainer = table.parentElement;
+    }
+
+    const releaseLayout =
+      table &&
+      typeof Utils !== "undefined" &&
+      typeof Utils.freezeTableLayout === "function"
+        ? Utils.freezeTableLayout(table)
+        : null;
+    const previousScroll =
+      scrollContainer instanceof HTMLElement
+        ? {
+            top: scrollContainer.scrollTop,
+            left: scrollContainer.scrollLeft,
+          }
+        : null;
     const openState = captureOpenDropdownState();
 
-    if (!tokens || tokens.length === 0) {
-      if (mode === "append") {
+    const finalizeRender = () => {
+      if (scrollContainer && previousScroll) {
+        if (scrollContainer.scrollTop !== previousScroll.top) {
+          scrollContainer.scrollTop = previousScroll.top;
+        }
+        if (scrollContainer.scrollLeft !== previousScroll.left) {
+          scrollContainer.scrollLeft = previousScroll.left;
+        }
+      }
+
+      if (typeof releaseLayout === "function") {
+        const release = releaseLayout;
+        if (typeof requestAnimationFrame === "function") {
+          requestAnimationFrame(release);
+        } else {
+          setTimeout(release, 0);
+        }
+      }
+    };
+
+    try {
+      if (!tokens || tokens.length === 0) {
+        if (mode === "append") {
+          return;
+        }
+
+        if (window.__DEBUG_TOKENS_VERBOSE) {
+          console.warn("[TokensDBG] renderTokens: empty data", {
+            view: tokensState.view,
+            search: tokensState.searchTerm,
+            sortBy: tokensState.sortBy,
+            sortDir: tokensState.sortDir,
+            allTokensDataLen: Array.isArray(allTokensData)
+              ? allTokensData.length
+              : 0,
+            totalCount: tokensTableState.totalCount,
+            loading: tokensFetchState.inProgress,
+          });
+        }
+
+        let statusMessage = "No tokens available.";
+        if (
+          tokensState &&
+          typeof tokensState.searchTerm === "string" &&
+          tokensState.searchTerm.trim() !== ""
+        ) {
+          statusMessage = `No tokens match “${tokensState.searchTerm.trim()}” in this view.`;
+        } else if (tokensState.view === "pool") {
+          statusMessage =
+            "Pool service is warming up — waiting for price-enabled tokens.";
+        } else {
+          const viewLabel = VIEW_LABELS[tokensState.view];
+          if (viewLabel) {
+            statusMessage = `No tokens ${viewLabel}.`;
+          } else if (tokensState.view) {
+            statusMessage = `No tokens available for view: ${tokensState.view}.`;
+          }
+        }
+
+        setTokenCountStatus(statusMessage);
+        const safeMessage = Utils.escapeHtml(statusMessage);
+        tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 20px; color: #94a3b8;">${safeMessage}</td></tr>`;
+        teardownTokensScrollObserver();
         return;
       }
 
       if (window.__DEBUG_TOKENS_VERBOSE) {
-        console.warn("[TokensDBG] renderTokens: empty data", {
+        console.log("[TokensDBG] renderTokens: rendering rows", {
+          count: tokens.length,
           view: tokensState.view,
-          search: tokensState.searchTerm,
-          sortBy: tokensState.sortBy,
-          sortDir: tokensState.sortDir,
-          allTokensDataLen: Array.isArray(allTokensData)
-            ? allTokensData.length
-            : 0,
-          totalCount: tokensTableState.totalCount,
-          loading: tokensFetchState.inProgress,
+          mode,
         });
       }
 
-      let statusMessage = "No tokens available.";
-      if (
-        tokensState &&
-        typeof tokensState.searchTerm === "string" &&
-        tokensState.searchTerm.trim() !== ""
-      ) {
-        statusMessage = `No tokens match “${tokensState.searchTerm.trim()}” in this view.`;
-      } else if (tokensState.view === "pool") {
-        statusMessage =
-          "Pool service is warming up — waiting for price-enabled tokens.";
-      } else {
-        const viewLabel = VIEW_LABELS[tokensState.view];
-        if (viewLabel) {
-          statusMessage = `No tokens ${viewLabel}.`;
-        } else if (tokensState.view) {
-          statusMessage = `No tokens available for view: ${tokensState.view}.`;
-        }
-      }
-
-      setTokenCountStatus(statusMessage);
-      const safeMessage = Utils.escapeHtml(statusMessage);
-      tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 20px; color: #94a3b8;">${safeMessage}</td></tr>`;
-      teardownTokensScrollObserver();
-      return;
-    }
-
-    if (window.__DEBUG_TOKENS_VERBOSE) {
-      console.log("[TokensDBG] renderTokens: rendering rows", {
-        count: tokens.length,
-        view: tokensState.view,
-        mode,
-      });
-    }
-
-    if (mode === "replace") {
-      const rowsHtml = tokens.map(createTokenRowHtml).join("");
-      tbody.innerHTML = rowsHtml + TOKENS_SCROLL_GUARD_HTML;
-    } else if (mode === "append") {
-      const guard = ensureTokensScrollGuard();
-      if (!guard) {
-        renderTokens(tokens, { mode: "replace" });
-      } else {
+      if (mode === "replace") {
         const rowsHtml = tokens.map(createTokenRowHtml).join("");
-        if (rowsHtml) {
-          guard.insertAdjacentHTML("beforebegin", rowsHtml);
+        tbody.innerHTML = rowsHtml + TOKENS_SCROLL_GUARD_HTML;
+      } else if (mode === "append") {
+        const guard = ensureTokensScrollGuard();
+        if (!guard) {
+          renderTokens(tokens, { mode: "replace" });
+        } else {
+          const rowsHtml = tokens.map(createTokenRowHtml).join("");
+          if (rowsHtml) {
+            guard.insertAdjacentHTML("beforebegin", rowsHtml);
+          }
         }
       }
-    }
 
-    ensureTokensScrollGuard();
-    restoreDropdownState(openState);
+      ensureTokensScrollGuard();
+      restoreDropdownState(openState);
+    } finally {
+      finalizeRender();
+    }
   }
 
   function ensureTokensScrollGuard() {
