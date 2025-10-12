@@ -383,6 +383,7 @@
           Hide dust (&lt; 0.01 SOL)
         </label>
         <div class="wallet-range-buttons" id="wallet-range-buttons">
+          <button type="button" data-range-hours="0">All</button>
           <button type="button" data-range-hours="6">6h</button>
           <button type="button" data-range-hours="24" class="active">
             24h
@@ -653,7 +654,12 @@
       }
 
       if (flows) {
-        setText("wallet-summary-window", `${flows.window_hours}h window`);
+        setText(
+          "wallet-summary-window",
+          flows.window_hours === 0
+            ? "All-time window"
+            : `${flows.window_hours}h window`
+        );
         setText("wallet-summary-net", formatSol(flows.net_sol));
         setText("wallet-summary-tx-count", `${flows.transactions_analyzed} tx`);
         setText("wallet-flow-in", formatSol(flows.inflow_sol));
@@ -665,7 +671,12 @@
           netNode.classList.toggle("value-negative", flows.net_sol < 0);
         }
         setText("wallet-flow-count", `${flows.transactions_analyzed}`);
-        setText("wallet-flow-window", `${flows.window_hours}h window`);
+        setText(
+          "wallet-flow-window",
+          flows.window_hours === 0
+            ? "All-time window"
+            : `${flows.window_hours}h window`
+        );
       }
 
       if (payload.last_updated) {

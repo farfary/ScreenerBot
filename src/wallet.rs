@@ -228,6 +228,43 @@ fn short_mint_label(mint: &str) -> String {
 }
 
 async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, String> {
+    // All-time mode when window_hours <= 0
+    if window_hours <= 0 {
+        if let Some(db) = GLOBAL_WALLET_DB.lock().await.as_ref() {
+            if let Ok(Some(min_ts)) = db.get_flow_cache_min_ts_sync() {
+                if let Ok((inflow, outflow, tx_count)) =
+                    db.aggregate_cached_flows_sync(min_ts, None)
+                {
+                    if tx_count > 0 {
+                        return Ok(WalletFlowMetrics {
+                            window_hours: 0,
+                            inflow_sol: inflow,
+                            outflow_sol: outflow,
+                            net_sol: inflow - outflow,
+                            transactions_analyzed: tx_count,
+                        });
+                    }
+                }
+            }
+        }
+        // Fallback to full aggregation from transactions DB (from epoch)
+        let tx_db = get_transaction_database()
+            .await
+            .ok_or_else(|| "Transaction database not initialized".to_string())?;
+        let epoch = DateTime::<Utc>::from(std::time::UNIX_EPOCH);
+        let (inflow, outflow, tx_count) = tx_db
+            .aggregate_sol_flows_since(epoch, None)
+            .await
+            .map_err(|e| format!("Failed to aggregate all-time SOL flows: {}", e))?;
+        return Ok(WalletFlowMetrics {
+            window_hours: 0,
+            inflow_sol: inflow,
+            outflow_sol: outflow,
+            net_sol: inflow - outflow,
+            transactions_analyzed: tx_count,
+        });
+    }
+
     let window_hours = clamp_window_hours(window_hours);
     let window_start = Utc::now() - ChronoDuration::hours(window_hours);
 
@@ -718,6 +755,27 @@ impl WalletDatabase {
             let parsed = DateTime::parse_from_rfc3339(&ts)
                 .map(|dt| dt.with_timezone(&Utc))
                 .map_err(|e| format!("Failed to parse cached max timestamp: {}", e))?;
+            Ok(Some(parsed))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Get the minimum timestamp present in the flow cache (earliest record)
+    pub fn get_flow_cache_min_ts_sync(&self) -> Result<Option<DateTime<Utc>>, String> {
+        let conn = self.get_connection()?;
+        let mut stmt = conn
+            .prepare("SELECT MIN(timestamp) FROM sol_flow_cache")
+            .map_err(|e| format!("Failed to prepare min timestamp query: {}", e))?;
+        let ts: Option<String> = stmt
+            .query_row([], |row| row.get(0))
+            .optional()
+            .map_err(|e| format!("Failed to query min timestamp: {}", e))?
+            .flatten();
+        if let Some(ts) = ts {
+            let parsed = DateTime::parse_from_rfc3339(&ts)
+                .map(|dt| dt.with_timezone(&Utc))
+                .map_err(|e| format!("Failed to parse cached min timestamp: {}", e))?;
             Ok(Some(parsed))
         } else {
             Ok(None)
