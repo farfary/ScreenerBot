@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use crate::logger::{log, LogTag};
 use crate::positions;
-use crate::tokens::cache::TokenDatabase;
+use crate::tokens::database::TokenDatabase;
 use crate::tokens::security_db::SecurityDatabase;
 use crate::transactions::{
     get_transaction, TokenTransfer, Transaction, TransactionDirection, TransactionStatus,

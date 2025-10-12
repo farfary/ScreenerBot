@@ -25,7 +25,7 @@ use screenerbot::pools::fetcher::AccountData;
 use screenerbot::pools::types::{ProgramKind, SOL_MINT};
 use screenerbot::pools::utils::is_stablecoin_mint;
 use screenerbot::rpc::{get_rpc_client, parse_pubkey};
-use screenerbot::tokens::cache::TokenDatabase;
+use screenerbot::tokens::database::TokenDatabase;
 use screenerbot::tokens::dexscreener::{get_global_dexscreener_api, init_dexscreener_api};
 use screenerbot::tokens::types::ApiToken;
 use solana_sdk::pubkey::Pubkey;

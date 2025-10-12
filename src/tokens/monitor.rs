@@ -3,7 +3,7 @@ use crate::global::is_debug_monitor_enabled;
 /// Updates existing tokens based on liquidity priority and time constraints
 use crate::logger::{log, LogTag};
 use crate::tokens::{
-    cache::TokenDatabase, config::with_tokens_config, dexscreener::get_global_dexscreener_api,
+    config::with_tokens_config, database::TokenDatabase, dexscreener::get_global_dexscreener_api,
     emit_token_removed, emit_token_summary, summarize_tokens,
 };
 use chrono::{DateTime, Utc};

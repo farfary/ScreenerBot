@@ -5,7 +5,7 @@
 use crate::config::{with_config, FilteringConfig};
 use crate::global::is_debug_filtering_enabled;
 use crate::logger::{log, LogTag};
-use crate::tokens::cache::TokenDatabase;
+use crate::tokens::database::TokenDatabase;
 use crate::tokens::decimals::get_cached_decimals;
 use crate::tokens::security::{
     get_security_analyzer, initialize_security_analyzer, RiskLevel, SecurityAnalysis,

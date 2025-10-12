@@ -8,7 +8,7 @@
 /// The system dynamically identifies patterns without hardcoding, providing insights
 /// into token creation platforms and ecosystem relationships.
 use crate::logger::{log, LogTag};
-use crate::tokens::cache::TokenDatabase;
+use crate::tokens::database::TokenDatabase;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

@@ -6,8 +6,8 @@ use std::sync::Mutex;
 use tokio::sync::Notify;
 
 pub mod blacklist;
-pub mod cache;
 pub mod config;
+pub mod database;
 pub mod decimals;
 pub mod dexscreener;
 pub mod discovery;
@@ -28,7 +28,7 @@ pub use blacklist::{
     is_system_or_stable_token, is_token_blacklisted, is_token_excluded_from_trading,
     track_liquidity_db,
 };
-pub use cache::{DatabaseStats, TokenDatabase};
+pub use database::{DatabaseStats, TokenDatabase};
 pub use decimals::{batch_fetch_token_decimals, get_token_decimals_from_chain};
 pub use dexscreener::{
     get_global_dexscreener_api, get_token_pairs_from_api, init_dexscreener_api, DexScreenerApi,

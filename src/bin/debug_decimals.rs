@@ -10,7 +10,7 @@ use screenerbot::logger::{init_file_logging, log, LogTag};
 use screenerbot::rpc::get_rpc_client;
 use screenerbot::rpc::init_rpc_client;
 use screenerbot::tokens::blacklist;
-use screenerbot::tokens::cache::TokenDatabase;
+use screenerbot::tokens::database::TokenDatabase;
 use screenerbot::tokens::decimals::{
     batch_fetch_token_decimals, cleanup_retryable_failed_cache, get_database_stats,
     get_failed_cache_stats, get_token_decimals_from_chain, migrate_failed_tokens_to_blacklist,

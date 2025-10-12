@@ -97,7 +97,7 @@ fn current_unix_ts() -> u64 {
 /// connections, eliminating cold-start cache misses and fallback paths.
 pub async fn prewarm_from_database() -> Result<usize, String> {
     use crate::tokens::{
-        cache::TokenDatabase,
+        database::TokenDatabase,
         summary::{token_to_summary, TokenSummaryContext},
     };
 

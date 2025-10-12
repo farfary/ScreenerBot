@@ -1,7 +1,7 @@
 use crate::global::is_debug_discovery_enabled;
 /// Base token discovery system structure
 use crate::logger::{log, LogTag};
-use crate::tokens::cache::TokenDatabase;
+use crate::tokens::database::TokenDatabase;
 use crate::tokens::dexscreener::{get_global_dexscreener_api, wait_for_discovery_rate_limit};
 use crate::tokens::geckoterminal::try_acquire_gecko_api_permit;
 use crate::tokens::is_token_excluded_from_trading;

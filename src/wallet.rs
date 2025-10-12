@@ -26,7 +26,7 @@ use crate::config::with_config;
 use crate::global::is_debug_wallet_enabled;
 use crate::logger::{log, LogTag};
 use crate::rpc::{get_rpc_client, TokenAccountInfo};
-use crate::tokens::cache::TokenDatabase;
+use crate::tokens::database::TokenDatabase;
 use crate::transactions::get_transaction_database;
 use crate::utils::get_wallet_address;
 
