@@ -212,17 +212,21 @@ impl OhlcvFetcher {
         from_timestamp: i64,
         to_timestamp: i64,
     ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
+        if from_timestamp >= to_timestamp {
+            return Ok(Vec::new());
+        }
+
         let mut all_data = Vec::new();
-        let mut before = Some(to_timestamp);
         let timeframe_seconds = timeframe.to_seconds();
+        let mut before = Some(to_timestamp);
+        let mut last_oldest = None;
+        let mut attempts = 0u32;
+        const MAX_ATTEMPTS: u32 = 500;
 
-        // Calculate expected candles
-        let expected_candles = ((to_timestamp - from_timestamp) / timeframe_seconds) as usize;
-        let max_requests = expected_candles / MAX_CANDLES_PER_REQUEST + 1;
+        while attempts < MAX_ATTEMPTS {
+            attempts += 1;
 
-        for _ in 0..max_requests.min(10) {
-            // Limit to 10 requests per call
-            let data = self
+            let mut data = self
                 .fetch_immediate(pool_address, timeframe, before, MAX_CANDLES_PER_REQUEST)
                 .await?;
 
@@ -230,23 +234,40 @@ impl OhlcvFetcher {
                 break;
             }
 
-            // Check if we've reached the start
-            let oldest_timestamp = data.iter().map(|d| d.timestamp).min().unwrap_or(0);
-            if oldest_timestamp <= from_timestamp {
-                // Filter and add only data within range
-                all_data.extend(data.into_iter().filter(|d| d.timestamp >= from_timestamp));
+            data.retain(|point| {
+                point.timestamp >= from_timestamp && point.timestamp <= to_timestamp
+            });
+
+            if data.is_empty() {
                 break;
             }
 
-            before = Some(oldest_timestamp - 1);
+            let oldest_timestamp = data.iter().map(|d| d.timestamp).min().unwrap();
+
+            if let Some(prev_oldest) = last_oldest {
+                if prev_oldest <= oldest_timestamp {
+                    break;
+                }
+            }
+            last_oldest = Some(oldest_timestamp);
+
             all_data.extend(data);
 
-            // Small delay between requests
+            if oldest_timestamp <= from_timestamp {
+                break;
+            }
+
+            before = Some(oldest_timestamp.saturating_sub(timeframe_seconds));
+
+            if before == Some(to_timestamp) {
+                break;
+            }
+
             sleep(Duration::from_millis(500)).await;
         }
 
-        // Sort by timestamp ascending
         all_data.sort_by_key(|d| d.timestamp);
+        all_data.dedup_by_key(|d| d.timestamp);
 
         Ok(all_data)
     }

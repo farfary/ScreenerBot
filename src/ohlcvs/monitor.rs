@@ -10,12 +10,23 @@ use crate::ohlcvs::fetcher::OhlcvFetcher;
 use crate::ohlcvs::gaps::GapManager;
 use crate::ohlcvs::manager::PoolManager;
 use crate::ohlcvs::priorities::{ActivityType, PriorityManager};
-use crate::ohlcvs::types::{OhlcvError, OhlcvResult, Priority, Timeframe, TokenOhlcvConfig};
+use crate::ohlcvs::types::{
+    OhlcvDataPoint, OhlcvError, OhlcvResult, Priority, Timeframe, TokenOhlcvConfig,
+};
 use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::{interval, sleep, Duration, Instant};
+
+const AGGREGATED_TIMEFRAMES: [Timeframe; 6] = [
+    Timeframe::Minute5,
+    Timeframe::Minute15,
+    Timeframe::Hour1,
+    Timeframe::Hour4,
+    Timeframe::Hour12,
+    Timeframe::Day1,
+];
 
 pub struct OhlcvMonitor {
     db: Arc<OhlcvDatabase>,
@@ -455,42 +466,7 @@ impl OhlcvMonitor {
                         self.db.upsert_monitor_config(&config)?;
                     }
                 } else {
-                    // Ensure ascending timestamp order for consistency
-                    let mut data_points = data_points;
-                    data_points.sort_by_key(|p| p.timestamp);
-
-                    // Store data
-                    self.db.insert_1m_data(mint, &pool_address, &data_points)?;
-
-                    // Update cache
-                    self.cache.put(
-                        mint,
-                        Some(&pool_address),
-                        Timeframe::Minute1,
-                        data_points.clone(),
-                    )?;
-
-                    // Generate aggregated timeframes and cache them
-                    for timeframe in &[
-                        Timeframe::Minute5,
-                        Timeframe::Minute15,
-                        Timeframe::Hour1,
-                        Timeframe::Hour4,
-                        Timeframe::Hour12,
-                        Timeframe::Day1,
-                    ] {
-                        if let Ok(aggregated) = OhlcvAggregator::aggregate(&data_points, *timeframe)
-                        {
-                            self.db.cache_aggregated_data(
-                                mint,
-                                &pool_address,
-                                *timeframe,
-                                &aggregated,
-                            )?;
-                            self.cache
-                                .put(mint, Some(&pool_address), *timeframe, aggregated)?;
-                        }
-                    }
+                    let stored_points = self.persist_chunk(mint, &pool_address, data_points)?;
 
                     // Mark success
                     self.pool_manager.mark_success(mint, &pool_address).await?;
@@ -506,6 +482,36 @@ impl OhlcvMonitor {
 
                     if let Some(config) = updated_config {
                         self.db.upsert_monitor_config(&config)?;
+                    }
+
+                    // Ensure retention window remains populated (best-effort for gap coverage)
+                    if let Err(e) = self.ensure_retention_window(mint, &pool_address).await {
+                        log(
+                            LogTag::Ohlcv,
+                            "WARN",
+                            &format!(
+                                "Retention backfill failed for {} via {}: {}",
+                                mint, pool_address, e
+                            ),
+                        );
+                    }
+
+                    // Detect and register gaps for recent data (best-effort)
+                    if !stored_points.is_empty() {
+                        if let Err(e) = self
+                            .gap_manager
+                            .detect_gaps(mint, &pool_address, Timeframe::Minute1)
+                            .await
+                        {
+                            log(
+                                LogTag::Ohlcv,
+                                "WARN",
+                                &format!(
+                                    "Gap detection failed for {} via {}: {}",
+                                    mint, pool_address, e
+                                ),
+                            );
+                        }
                     }
                 }
             }
@@ -530,6 +536,121 @@ impl OhlcvMonitor {
                     ),
                 );
             }
+        }
+
+        Ok(())
+    }
+
+    fn persist_chunk(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        mut data_points: Vec<OhlcvDataPoint>,
+    ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
+        if data_points.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        data_points.sort_by_key(|p| p.timestamp);
+        data_points.dedup_by_key(|p| p.timestamp);
+
+        self.db.insert_1m_data(mint, pool_address, &data_points)?;
+
+        self.cache.put(
+            mint,
+            Some(pool_address),
+            Timeframe::Minute1,
+            data_points.clone(),
+        )?;
+
+        for timeframe in AGGREGATED_TIMEFRAMES.iter().copied() {
+            let aggregated = OhlcvAggregator::aggregate(&data_points, timeframe)?;
+            if aggregated.is_empty() {
+                continue;
+            }
+
+            self.db
+                .cache_aggregated_data(mint, pool_address, timeframe, &aggregated)?;
+            self.cache
+                .put(mint, Some(pool_address), timeframe, aggregated)?;
+        }
+
+        Ok(data_points)
+    }
+
+    async fn ensure_retention_window(&self, mint: &str, pool_address: &str) -> OhlcvResult<()> {
+        let retention_days = with_config(|cfg| cfg.ohlcv.retention_days);
+        if retention_days <= 0 {
+            return Ok(());
+        }
+
+        let retention_seconds = retention_days * 86_400;
+        let target_start = (Utc::now().timestamp() - retention_seconds).max(0);
+
+        match self.db.get_time_bounds(mint, pool_address)? {
+            Some((oldest, _latest)) => {
+                if oldest <= target_start {
+                    return Ok(());
+                }
+
+                self.backfill_range(mint, pool_address, target_start, oldest)
+                    .await
+            }
+            None => {
+                let now_ts = Utc::now().timestamp();
+                let end = now_ts.max(target_start + 60);
+                self.backfill_range(mint, pool_address, target_start, end)
+                    .await
+            }
+        }
+    }
+
+    async fn backfill_range(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        from_timestamp: i64,
+        to_timestamp: i64,
+    ) -> OhlcvResult<()> {
+        if from_timestamp >= to_timestamp {
+            return Ok(());
+        }
+
+        let mut cursor_end = to_timestamp;
+        let mut total_inserted = 0usize;
+
+        loop {
+            let chunk = self
+                .fetcher
+                .fetch_historical(pool_address, Timeframe::Minute1, from_timestamp, cursor_end)
+                .await?;
+
+            if chunk.is_empty() {
+                break;
+            }
+
+            let earliest = chunk.first().map(|p| p.timestamp).unwrap_or(cursor_end);
+
+            let stored = self.persist_chunk(mint, pool_address, chunk)?;
+            if !stored.is_empty() {
+                total_inserted += stored.len();
+            }
+
+            if earliest <= from_timestamp {
+                break;
+            }
+
+            cursor_end = earliest.saturating_sub(60);
+
+            if cursor_end <= from_timestamp {
+                break;
+            }
+        }
+
+        if total_inserted > 0 {
+            self.gap_manager
+                .detect_gaps(mint, pool_address, Timeframe::Minute1)
+                .await?;
         }
 
         Ok(())
@@ -788,9 +909,12 @@ impl OhlcvMonitor {
                 break;
             }
 
-            // Clean up old data (7 days retention)
-            if let Err(e) = self.db.cleanup_old_data(7) {
-                log(LogTag::Ohlcv, "ERROR", &format!("Cleanup error: {}", e));
+            let retention_days = with_config(|cfg| cfg.ohlcv.retention_days);
+
+            if retention_days > 0 {
+                if let Err(e) = self.db.cleanup_old_data(retention_days) {
+                    log(LogTag::Ohlcv, "ERROR", &format!("Cleanup error: {}", e));
+                }
             }
         }
     }

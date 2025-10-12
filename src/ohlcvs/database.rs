@@ -474,6 +474,37 @@ impl OhlcvDatabase {
         Ok(data)
     }
 
+    pub fn get_time_bounds(
+        &self,
+        mint: &str,
+        pool_address: &str,
+    ) -> OhlcvResult<Option<(i64, i64)>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT MIN(timestamp), MAX(timestamp) FROM ohlcv_1m WHERE mint = ?1 AND pool_address = ?2",
+            )
+            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to prepare: {}", e)))?;
+
+        let bounds = stmt
+            .query_row(params![mint, pool_address], |row| {
+                let min_ts: Option<i64> = row.get(0)?;
+                let max_ts: Option<i64> = row.get(1)?;
+                Ok((min_ts, max_ts))
+            })
+            .optional()
+            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {}", e)))?;
+
+        Ok(bounds.and_then(|(min_ts, max_ts)| match (min_ts, max_ts) {
+            (Some(min_val), Some(max_val)) => Some((min_val, max_val)),
+            _ => None,
+        }))
+    }
+
     // ==================== Gap Management ====================
 
     pub fn insert_gap(

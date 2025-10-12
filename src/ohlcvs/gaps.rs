@@ -36,8 +36,15 @@ impl GapManager {
         // Sort to ASC for accurate gap detection
         data.sort_by_key(|d| d.timestamp);
 
+        // Normalize data for requested timeframe.
+        let normalized = if timeframe == Timeframe::Minute1 {
+            data
+        } else {
+            OhlcvAggregator::aggregate(&data, timeframe)?
+        };
+
         // Detect gaps using aggregator
-        let gaps = OhlcvAggregator::detect_gaps(&data, timeframe);
+        let gaps = OhlcvAggregator::detect_gaps(&normalized, timeframe);
 
         // Store detected gaps in database
         for (start, end) in &gaps {

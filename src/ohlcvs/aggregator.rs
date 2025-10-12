@@ -88,6 +88,10 @@ impl OhlcvAggregator {
 
     /// Calculate expected candle count for a time range
     pub fn expected_candles(from_timestamp: i64, to_timestamp: i64, timeframe: Timeframe) -> usize {
+        if to_timestamp < from_timestamp {
+            return 0;
+        }
+
         let duration = to_timestamp - from_timestamp;
         let candle_duration = timeframe.to_seconds();
 
@@ -95,7 +99,7 @@ impl OhlcvAggregator {
             return 0;
         }
 
-        (duration / candle_duration) as usize
+        ((duration / candle_duration) as usize).saturating_add(1)
     }
 
     /// Check if data has gaps
