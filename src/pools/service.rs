@@ -1,10 +1,11 @@
 use super::analyzer::PoolAnalyzer;
 use super::calculator::PriceCalculator;
-use super::discovery::{PoolDiscovery, ENABLE_DEXSCREENER_DISCOVERY};
+use super::discovery::{is_dexscreener_discovery_enabled, PoolDiscovery};
 use super::fetcher::AccountFetcher;
-use super::types::{ProgramKind, MAX_WATCHED_TOKENS, POOL_REFRESH_INTERVAL_SECONDS};
+use super::types::max_watched_tokens;
 use super::{cache, db, PoolError};
 use crate::arguments::is_debug_pool_cache_enabled;
+use crate::config::with_config;
 use crate::events::{record_safe, Event, EventCategory, Severity};
 use crate::global::{is_debug_pool_cleanup_enabled, is_debug_pool_service_enabled};
 /// Pool service supervisor - manages the lifecycle of all pool-related tasks
@@ -28,11 +29,6 @@ static mut GLOBAL_SHUTDOWN_HANDLE: Option<Arc<Notify>> = None;
 // =============================================================================
 // POOL MONITORING CONFIGURATION
 // =============================================================================
-
-/// Enable single pool mode - only monitor the highest liquidity pool per token
-/// When true: Only the biggest pool by liquidity is monitored (optimized performance)
-/// When false: All pools are monitored (comprehensive coverage - current behavior)
-pub const ENABLE_SINGLE_POOL_MODE: bool = true;
 
 // Debug override for token monitoring (used by debug tools)
 static mut DEBUG_TOKEN_OVERRIDE: Option<Vec<String>> = None;
@@ -67,6 +63,16 @@ pub fn get_pool_analyzer() -> Option<Arc<PoolAnalyzer>> {
 ///
 /// Returns an error if already initialized or if initialization fails.
 pub async fn initialize_pool_components() -> Result<(), PoolError> {
+    let (single_pool_mode, dexscreener_enabled, fetch_interval_ms) = with_config(|cfg| {
+        (
+            cfg.pools.enable_single_pool_mode,
+            cfg.pools.enable_dexscreener_discovery,
+            cfg.pools.fetch_interval_ms,
+        )
+    });
+    let max_tokens = max_watched_tokens();
+    let refresh_interval_seconds = (fetch_interval_ms as f64) / 1000.0;
+
     // Record service start attempt
     record_safe(Event::info(
         EventCategory::System,
@@ -74,10 +80,11 @@ pub async fn initialize_pool_components() -> Result<(), PoolError> {
         None,
         None,
         serde_json::json!({
-            "single_pool_mode": ENABLE_SINGLE_POOL_MODE,
-            "max_watched_tokens": MAX_WATCHED_TOKENS,
-            "refresh_interval_seconds": POOL_REFRESH_INTERVAL_SECONDS,
-            "dexscreener_enabled": ENABLE_DEXSCREENER_DISCOVERY
+            "single_pool_mode": single_pool_mode,
+            "max_watched_tokens": max_tokens,
+            "refresh_interval_seconds": refresh_interval_seconds,
+            "fetch_interval_ms": fetch_interval_ms,
+            "dexscreener_enabled": dexscreener_enabled
         }),
     ))
     .await;
@@ -188,7 +195,7 @@ pub async fn initialize_pool_components() -> Result<(), PoolError> {
     }
 
     // Log pool monitoring mode configuration
-    if ENABLE_SINGLE_POOL_MODE {
+    if single_pool_mode {
         if is_debug_pool_service_enabled() {
             log(
                 LogTag::PoolService,
@@ -221,7 +228,7 @@ pub async fn initialize_pool_components() -> Result<(), PoolError> {
         None,
         serde_json::json!({
             "status": "initialized",
-            "single_pool_mode": ENABLE_SINGLE_POOL_MODE,
+            "single_pool_mode": single_pool_mode,
             "components_ready": true
         }),
     ))
@@ -358,7 +365,7 @@ pub fn is_pool_service_running() -> bool {
 
 /// Check if single pool mode is enabled
 pub fn is_single_pool_mode_enabled() -> bool {
-    ENABLE_SINGLE_POOL_MODE
+    with_config(|cfg| cfg.pools.enable_single_pool_mode)
 }
 
 /// Set debug token override for monitoring only specific tokens (debug use only)
@@ -423,6 +430,7 @@ pub async fn start_helper_tasks(
 
 /// Initialize all service components
 async fn initialize_service_components() -> Result<(), String> {
+    let dexscreener_enabled = is_dexscreener_discovery_enabled();
     if is_debug_pool_service_enabled() {
         log(
             LogTag::PoolService,
@@ -437,14 +445,14 @@ async fn initialize_service_components() -> Result<(), String> {
         None,
         None,
         serde_json::json!({
-            "dexscreener_enabled": ENABLE_DEXSCREENER_DISCOVERY,
+            "dexscreener_enabled": dexscreener_enabled,
             "action": "component_initialization"
         }),
     ))
     .await;
 
     // Initialize external APIs required by discovery before starting background tasks
-    if ENABLE_DEXSCREENER_DISCOVERY {
+    if dexscreener_enabled {
         if let Err(e) = crate::tokens::init_dexscreener_api().await {
             // Fail fast because discovery depends on this API when enabled
 

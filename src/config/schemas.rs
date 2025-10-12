@@ -99,121 +99,6 @@ config_struct! {
             max: 0,
             step: 1,
             unit: "%",
-
-    // ============================================================================
-    // POOLS CONFIGURATION
-    // ============================================================================
-
-    config_struct! {
-        /// Pool service configuration
-        pub struct PoolsConfig {
-            #[metadata(field_metadata! {
-                label: "Single Pool Mode",
-                hint: "Monitor only the highest-liquidity pool per token",
-                impact: "high",
-                category: "Monitoring",
-            })]
-            enable_single_pool_mode: bool = true,
-            #[metadata(field_metadata! {
-                label: "DexScreener Discovery",
-                hint: "Enable DexScreener API for pool discovery",
-                impact: "critical",
-                category: "Discovery",
-            })]
-            enable_dexscreener_discovery: bool = true,
-            #[metadata(field_metadata! {
-                label: "GeckoTerminal Discovery",
-                hint: "Enable GeckoTerminal API for pool discovery",
-                impact: "medium",
-                category: "Discovery",
-            })]
-            enable_geckoterminal_discovery: bool = false,
-            #[metadata(field_metadata! {
-                label: "Raydium Discovery",
-                hint: "Enable Raydium API for pool discovery",
-                impact: "medium",
-                category: "Discovery",
-            })]
-            enable_raydium_discovery: bool = false,
-            #[metadata(field_metadata! {
-                label: "Discovery Tick Interval",
-                hint: "Seconds between discovery sweeps",
-                min: 1,
-                max: 120,
-                step: 1,
-                unit: "seconds",
-                impact: "high",
-                category: "Discovery",
-            })]
-            discovery_tick_interval_secs: u64 = 5,
-            #[metadata(field_metadata! {
-                label: "Max Watched Tokens",
-                hint: "Upper bound on tokens tracked simultaneously",
-                min: 100,
-                max: 5000,
-                step: 50,
-                unit: "tokens",
-                impact: "critical",
-                category: "Monitoring",
-            })]
-            max_watched_tokens: usize = 2000,
-            #[metadata(field_metadata! {
-                label: "Fetcher Batch Size",
-                hint: "Accounts per RPC batch (≤50 recommended)",
-                min: 1,
-                max: 50,
-                step: 1,
-                unit: "accounts",
-                impact: "high",
-                category: "Fetcher",
-            })]
-            account_batch_size: usize = 50,
-            #[metadata(field_metadata! {
-                label: "Fetcher Interval",
-                hint: "Milliseconds between fetcher loops",
-                min: 100,
-                max: 5000,
-                step: 50,
-                unit: "ms",
-                impact: "medium",
-                category: "Fetcher",
-            })]
-            fetch_interval_ms: u64 = 500,
-            #[metadata(field_metadata! {
-                label: "Account Stale Threshold",
-                hint: "Seconds before inactive account is refreshed",
-                min: 5,
-                max: 300,
-                step: 5,
-                unit: "seconds",
-                impact: "medium",
-                category: "Fetcher",
-            })]
-            account_stale_threshold_secs: u64 = 30,
-            #[metadata(field_metadata! {
-                label: "Open Position Stale Threshold",
-                hint: "Seconds before refreshing accounts backing open positions",
-                min: 1,
-                max: 60,
-                step: 1,
-                unit: "seconds",
-                impact: "high",
-                category: "Fetcher",
-            })]
-            open_position_stale_threshold_secs: u64 = 5,
-            #[metadata(field_metadata! {
-                label: "Price Cache TTL",
-                hint: "Seconds a cached price remains fresh",
-                min: 5,
-                max: 300,
-                step: 5,
-                unit: "seconds",
-                impact: "high",
-                category: "Cache",
-            })]
-            price_cache_ttl_secs: u64 = 30,
-        }
-    }
             impact: "medium",
             category: "Time Overrides",
         })]
@@ -452,6 +337,121 @@ config_struct! {
             category: "Performance",
         })]
         entry_check_concurrency: usize = 10,
+    }
+}
+
+// ============================================================================
+// POOLS CONFIGURATION
+// ============================================================================
+
+config_struct! {
+    /// Pool service configuration
+    pub struct PoolsConfig {
+        #[metadata(field_metadata! {
+            label: "Single Pool Mode",
+            hint: "Monitor only the highest-liquidity pool per token",
+            impact: "high",
+            category: "Monitoring",
+        })]
+        enable_single_pool_mode: bool = true,
+        #[metadata(field_metadata! {
+            label: "DexScreener Discovery",
+            hint: "Enable DexScreener API for pool discovery",
+            impact: "critical",
+            category: "Discovery",
+        })]
+        enable_dexscreener_discovery: bool = true,
+        #[metadata(field_metadata! {
+            label: "GeckoTerminal Discovery",
+            hint: "Enable GeckoTerminal API for pool discovery",
+            impact: "medium",
+            category: "Discovery",
+        })]
+        enable_geckoterminal_discovery: bool = false,
+        #[metadata(field_metadata! {
+            label: "Raydium Discovery",
+            hint: "Enable Raydium API for pool discovery",
+            impact: "medium",
+            category: "Discovery",
+        })]
+        enable_raydium_discovery: bool = false,
+        #[metadata(field_metadata! {
+            label: "Discovery Tick Interval",
+            hint: "Seconds between discovery sweeps",
+            min: 1,
+            max: 120,
+            step: 1,
+            unit: "seconds",
+            impact: "high",
+            category: "Discovery",
+        })]
+        discovery_tick_interval_secs: u64 = 5,
+        #[metadata(field_metadata! {
+            label: "Max Watched Tokens",
+            hint: "Upper bound on tokens tracked simultaneously",
+            min: 100,
+            max: 5000,
+            step: 50,
+            unit: "tokens",
+            impact: "critical",
+            category: "Monitoring",
+        })]
+        max_watched_tokens: usize = 2000,
+        #[metadata(field_metadata! {
+            label: "Fetcher Batch Size",
+            hint: "Accounts per RPC batch (≤50 recommended)",
+            min: 1,
+            max: 50,
+            step: 1,
+            unit: "accounts",
+            impact: "high",
+            category: "Fetcher",
+        })]
+        account_batch_size: usize = 50,
+        #[metadata(field_metadata! {
+            label: "Fetcher Interval",
+            hint: "Milliseconds between fetcher loops",
+            min: 100,
+            max: 5000,
+            step: 50,
+            unit: "ms",
+            impact: "medium",
+            category: "Fetcher",
+        })]
+        fetch_interval_ms: u64 = 500,
+        #[metadata(field_metadata! {
+            label: "Account Stale Threshold",
+            hint: "Seconds before inactive account is refreshed",
+            min: 5,
+            max: 300,
+            step: 5,
+            unit: "seconds",
+            impact: "medium",
+            category: "Fetcher",
+        })]
+        account_stale_threshold_secs: u64 = 30,
+        #[metadata(field_metadata! {
+            label: "Open Position Stale Threshold",
+            hint: "Seconds before refreshing accounts backing open positions",
+            min: 1,
+            max: 60,
+            step: 1,
+            unit: "seconds",
+            impact: "high",
+            category: "Fetcher",
+        })]
+        open_position_stale_threshold_secs: u64 = 5,
+        #[metadata(field_metadata! {
+            label: "Price Cache TTL",
+            hint: "Seconds a cached price remains fresh",
+            min: 5,
+            max: 300,
+            step: 5,
+            unit: "seconds",
+            impact: "high",
+            category: "Cache",
+        })]
+        price_cache_ttl_secs: u64 = 30,
     }
 }
 

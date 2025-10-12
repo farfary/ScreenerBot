@@ -1,5 +1,5 @@
 use super::db; // Database module for persistence
-use super::types::{PriceHistory, PriceResult, PRICE_CACHE_TTL_SECONDS, PRICE_HISTORY_MAX_ENTRIES};
+use super::types::{price_cache_ttl_seconds, PriceHistory, PriceResult, PRICE_HISTORY_MAX_ENTRIES};
 use crate::arguments::is_debug_pool_cache_enabled;
 /// Price cache and history management
 ///
@@ -135,11 +135,12 @@ pub fn update_price(price: PriceResult) {
 /// Get available tokens (tokens with fresh prices)
 pub fn get_available_tokens() -> Vec<String> {
     let now = Instant::now();
+    let ttl = price_cache_ttl_seconds();
     PRICE_CACHE
         .iter()
         .filter_map(|entry| {
             let price = entry.value();
-            if now.duration_since(price.timestamp).as_secs() < PRICE_CACHE_TTL_SECONDS {
+            if now.duration_since(price.timestamp).as_secs() < ttl {
                 Some(price.mint.clone())
             } else {
                 None
@@ -198,11 +199,12 @@ async fn start_cache_cleanup_task() {
 /// Remove stale price entries from cache
 fn cleanup_stale_entries() {
     let now = Instant::now();
+    let ttl = price_cache_ttl_seconds();
     let mut removed_count = 0;
 
     // Clean price cache
     PRICE_CACHE.retain(|_key, price| {
-        let is_fresh = now.duration_since(price.timestamp).as_secs() < PRICE_CACHE_TTL_SECONDS * 2;
+        let is_fresh = now.duration_since(price.timestamp).as_secs() < ttl * 2;
         if !is_fresh {
             removed_count += 1;
         }

@@ -418,7 +418,7 @@ impl PoolDiscovery {
         let mut descriptors: Vec<PoolDescriptor> = Vec::new();
 
         // Process DexScreener results only if enabled
-        if ENABLE_DEXSCREENER_DISCOVERY {
+        if is_dexscreener_discovery_enabled() {
             for (mint, pairs) in dexs_batch.pools.into_iter() {
                 let before = descriptors.len();
                 for pair in pairs {
@@ -444,7 +444,7 @@ impl PoolDiscovery {
         }
 
         // Process GeckoTerminal results only if enabled
-        if ENABLE_GECKOTERMINAL_DISCOVERY {
+        if is_geckoterminal_discovery_enabled() {
             for (mint, pools) in gecko_batch.pools.into_iter() {
                 let before = descriptors.len();
                 for pool in pools {
@@ -470,7 +470,7 @@ impl PoolDiscovery {
         }
 
         // Process Raydium results only if enabled
-        if ENABLE_RAYDIUM_DISCOVERY {
+        if is_raydium_discovery_enabled() {
             for (mint, pools) in raydium_batch.pools.into_iter() {
                 let before = descriptors.len();
                 for pool in pools {
@@ -776,7 +776,7 @@ impl PoolDiscovery {
         let mut discovered_pools = Vec::new();
 
         // Discover from DexScreener API only if enabled
-        if ENABLE_DEXSCREENER_DISCOVERY {
+        if is_dexscreener_discovery_enabled() {
             match get_token_pools_from_dexscreener(mint).await {
                 Ok(token_pairs) => {
                     let mut pools = Vec::new();
@@ -834,7 +834,7 @@ impl PoolDiscovery {
         }
 
         // Discover from GeckoTerminal API only if enabled
-        if ENABLE_GECKOTERMINAL_DISCOVERY {
+        if is_geckoterminal_discovery_enabled() {
             match self.discover_from_geckoterminal(mint).await {
                 Ok(mut pools) => {
                     if is_debug_pool_discovery_enabled() {
@@ -865,7 +865,7 @@ impl PoolDiscovery {
         }
 
         // Discover from Raydium API only if enabled
-        if ENABLE_RAYDIUM_DISCOVERY {
+        if is_raydium_discovery_enabled() {
             match self.discover_from_raydium(mint).await {
                 Ok(mut pools) => {
                     if is_debug_pool_discovery_enabled() {

@@ -636,7 +636,7 @@ fn collect_pool_service_snapshot() -> Option<PoolServiceStatusSnapshot> {
         system_ready,
         single_pool_mode: crate::pools::is_single_pool_mode_enabled(),
         monitored_tokens: monitored_tokens_count,
-        monitored_capacity: crate::pools::types::MAX_WATCHED_TOKENS,
+        monitored_capacity: crate::pools::types::max_watched_tokens(),
         price_subscribers,
         cache: PoolCacheSnapshot {
             total_prices: cache_stats.total_prices,

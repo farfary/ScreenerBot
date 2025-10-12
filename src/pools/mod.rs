@@ -25,8 +25,8 @@ pub use api::{
     PriceHistoryStats,
 };
 pub use discovery::{
-    get_canonical_pool_address, PoolDiscovery, ENABLE_DEXSCREENER_DISCOVERY,
-    ENABLE_GECKOTERMINAL_DISCOVERY, ENABLE_RAYDIUM_DISCOVERY,
+    get_canonical_pool_address, is_dexscreener_discovery_enabled,
+    is_geckoterminal_discovery_enabled, is_raydium_discovery_enabled, PoolDiscovery,
 };
 pub use service::{
     get_account_fetcher,
