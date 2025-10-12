@@ -61,14 +61,16 @@
     <button id="refreshEvents" class="btn btn-primary">🔄 Refresh</button>
   </div>
   <style>
-    .event-ref-cell {
+    .event-ref-cell,
+    .event-mint-cell {
       display: inline-flex;
       align-items: center;
       gap: 6px;
       font-family: monospace;
     }
 
-    .event-ref {
+    .event-ref,
+    .event-mint {
       color: var(--text-primary);
       max-width: 140px;
       overflow: hidden;
@@ -76,7 +78,8 @@
       white-space: nowrap;
     }
 
-    .event-ref-copy {
+    .event-ref-copy,
+    .event-mint-copy {
       background: none;
       border: none;
       color: var(--link-color);
@@ -88,7 +91,9 @@
     }
 
     .event-ref-copy:hover,
-    .event-ref-copy:focus {
+    .event-ref-copy:focus,
+    .event-mint-copy:hover,
+    .event-mint-copy:focus {
       color: var(--link-hover);
       outline: none;
     }
@@ -126,13 +131,13 @@
     }
 
     .event-detail-modal {
-      max-width: 680px;
+      max-width: 720px;
       width: calc(100% - 48px);
     }
 
     .event-detail-meta {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
       gap: 12px;
       margin-bottom: 16px;
     }
@@ -153,6 +158,106 @@
       margin-top: 2px;
     }
 
+    .meta-value-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .meta-copy-btn {
+      background: none;
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 0.75em;
+      padding: 2px 6px;
+      border-radius: 4px;
+      transition: all 0.2s ease;
+    }
+
+    .meta-copy-btn:hover,
+    .meta-copy-btn:focus {
+      color: var(--link-color);
+      border-color: var(--link-color);
+      outline: none;
+    }
+
+    .severity-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 64px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.8em;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: #fff;
+      background: #6b7280;
+    }
+
+    .event-detail-message {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .event-detail-message-text {
+      flex: 1;
+      min-width: 0;
+      font-size: 0.95em;
+      color: var(--text-primary);
+      word-break: break-word;
+    }
+
+    .event-detail-summary {
+      margin-bottom: 16px;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 8px 12px;
+    }
+
+    .summary-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .summary-key {
+      font-size: 0.7em;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+
+    .summary-value {
+      font-size: 0.9em;
+      color: var(--text-primary);
+      word-break: break-word;
+    }
+
+    .summary-empty {
+      color: var(--text-muted);
+      font-size: 0.9em;
+    }
+
+    .event-detail-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
     .event-detail-json-wrapper {
       background: var(--bg-card);
       border: 1px solid var(--border-color);
@@ -167,6 +272,7 @@
       font-size: 0.85em;
       line-height: 1.4;
       color: var(--text-primary);
+      white-space: pre;
     }
   </style>
   <div class="table-wrap">
@@ -177,6 +283,7 @@
           <th>Category</th>
           <th>Subtype</th>
           <th>Severity</th>
+          <th>Mint</th>
           <th>Message</th>
           <th>Reference</th>
         </tr>
@@ -184,7 +291,7 @@
       <tbody id="eventsTableBody">
         <tr>
           <td
-            colspan="6"
+            colspan="7"
             style="text-align: center; padding: 20px; color: var(--text-muted)"
           >
             Loading events...
@@ -209,25 +316,124 @@
       <div class="modal-body">
         <div class="event-detail-meta">
           <div>
+            <span class="meta-label">Event ID</span>
+            <span class="meta-value meta-value-inline">
+              <span id="eventDetailId">-</span>
+              <button
+                class="meta-copy-btn"
+                type="button"
+                data-copy-target="id"
+                title="Copy event ID"
+              >
+                📋
+              </button>
+            </span>
+          </div>
+          <div>
             <span class="meta-label">Category</span>
             <span class="meta-value" id="eventDetailCategory">-</span>
           </div>
           <div>
             <span class="meta-label">Severity</span>
-            <span class="meta-value" id="eventDetailSeverity">-</span>
+            <span class="meta-value">
+              <span class="severity-pill" id="eventDetailSeverity">-</span>
+            </span>
           </div>
           <div>
-            <span class="meta-label">Time</span>
+            <span class="meta-label">Subtype</span>
+            <span class="meta-value" id="eventDetailSubtype">-</span>
+          </div>
+          <div>
+            <span class="meta-label">Event Time</span>
             <span class="meta-value" id="eventDetailTime">-</span>
           </div>
           <div>
+            <span class="meta-label">Created At</span>
+            <span class="meta-value" id="eventDetailCreated">-</span>
+          </div>
+          <div>
+            <span class="meta-label">Age</span>
+            <span class="meta-value" id="eventDetailRelative">-</span>
+          </div>
+          <div>
+            <span class="meta-label">Latency</span>
+            <span class="meta-value" id="eventDetailLatency">-</span>
+          </div>
+          <div>
             <span class="meta-label">Reference</span>
-            <span class="meta-value" id="eventDetailReference">-</span>
+            <span class="meta-value meta-value-inline">
+              <span id="eventDetailReference">-</span>
+              <button
+                class="meta-copy-btn"
+                type="button"
+                data-copy-target="reference"
+                title="Copy reference"
+              >
+                📋
+              </button>
+            </span>
           </div>
           <div>
             <span class="meta-label">Mint</span>
-            <span class="meta-value" id="eventDetailMint">-</span>
+            <span class="meta-value meta-value-inline">
+              <span id="eventDetailMint">-</span>
+              <button
+                class="meta-copy-btn"
+                type="button"
+                data-copy-target="mint"
+                title="Copy mint"
+              >
+                📋
+              </button>
+            </span>
           </div>
+        </div>
+        <div class="event-detail-message">
+          <span class="meta-label">Message</span>
+          <div class="event-detail-message-text" id="eventDetailMessage">-</div>
+          <button
+            class="meta-copy-btn"
+            type="button"
+            data-copy-target="message"
+            title="Copy message"
+          >
+            📋
+          </button>
+        </div>
+        <div class="event-detail-summary" id="eventDetailSummary"></div>
+        <div class="event-detail-actions" id="eventDetailActions">
+          <button
+            class="btn btn-secondary"
+            type="button"
+            data-detail-action="copy-payload"
+          >
+            📄 Copy JSON
+          </button>
+          <button
+            class="btn btn-secondary"
+            type="button"
+            data-detail-action="toggle-payload"
+            id="eventDetailPayloadToggle"
+          >
+            ➡️ Compact JSON
+          </button>
+          <button
+            class="btn"
+            type="button"
+            data-detail-action="filter-category"
+          >
+            🔍 Filter Category
+          </button>
+          <button
+            class="btn"
+            type="button"
+            data-detail-action="filter-reference"
+          >
+            🎯 Filter Reference
+          </button>
+          <button class="btn" type="button" data-detail-action="filter-mint">
+            🧬 Filter Mint
+          </button>
         </div>
         <div class="event-detail-json-wrapper">
           <pre id="eventDetailPayload" class="event-detail-json">
@@ -290,6 +496,84 @@ Loading...</pre
     cleanupRegistered: false,
     intervalListener: null,
   };
+
+  const CATEGORY_LABELS = {
+    swap: "Swap",
+    transaction: "Transaction",
+    pool: "Pool",
+    learner: "Learner",
+    token: "Token",
+    system: "System",
+    position: "Position",
+    wallet: "Wallet",
+    entry: "Entry",
+    rpc: "RPC",
+    security: "Security",
+    ohlcv: "OHLCV",
+    other: "Other",
+  };
+
+  const categoryOptionsCache = new Set();
+
+  function formatCategoryLabel(category) {
+    if (!category) return "Unknown";
+    const normalized = String(category).toLowerCase();
+    if (CATEGORY_LABELS[normalized]) {
+      return CATEGORY_LABELS[normalized];
+    }
+    return String(category)
+      .replace(/[_-]/g, " ")
+      .replace(/\b\w/g, (ch) => ch.toUpperCase());
+  }
+
+  function hydrateCategoryOptionsCache() {
+    const select = document.getElementById("categoryFilter");
+    if (!select) return;
+    Array.from(select.options).forEach((opt) => {
+      if (typeof opt.value === "string" && opt.value.length) {
+        categoryOptionsCache.add(opt.value.toLowerCase());
+      }
+    });
+  }
+
+  function ensureCategoryOption(category, label) {
+    if (!category) return;
+    const select = document.getElementById("categoryFilter");
+    if (!select) return;
+    const normalized = String(category).toLowerCase();
+    if (categoryOptionsCache.has(normalized)) {
+      return;
+    }
+    const option = document.createElement("option");
+    option.value = normalized;
+    option.textContent = label || formatCategoryLabel(category);
+    select.appendChild(option);
+    categoryOptionsCache.add(normalized);
+  }
+
+  hydrateCategoryOptionsCache();
+
+  function parseDate(value) {
+    if (!value) return null;
+    const date = value instanceof Date ? value : new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  function formatLatencyMs(latencyMs) {
+    if (!Number.isFinite(latencyMs) || latencyMs < 0) {
+      return "—";
+    }
+    if (latencyMs < 1_000) {
+      return `${Math.round(latencyMs)} ms`;
+    }
+    const seconds = latencyMs / 1_000;
+    if (seconds < 60) {
+      return `${seconds.toFixed(seconds < 10 ? 2 : 1)} s`;
+    }
+    const minutes = Math.floor(seconds / 60);
+    const remaining = Math.floor(seconds % 60);
+    return `${minutes}m ${remaining}s`;
+  }
 
   function resetEventsRenderState() {
     eventsRenderState.renderedIds = [];
@@ -456,11 +740,7 @@ Loading...</pre
       typeof raw.severity === "string" ? raw.severity.toLowerCase() : "";
     const categoryRaw = typeof raw.category === "string" ? raw.category : "";
     const category = categoryRaw.toLowerCase();
-    const categoryLabel = categoryRaw
-      ? categoryRaw.charAt(0).toUpperCase() + categoryRaw.slice(1)
-      : category
-      ? category.charAt(0).toUpperCase() + category.slice(1)
-      : "Unknown";
+    const categoryLabel = formatCategoryLabel(categoryRaw || category);
     const payloadMessage =
       typeof payload.message === "string" && payload.message.trim() !== ""
         ? payload.message
@@ -473,13 +753,48 @@ Loading...</pre
         ? raw.message
         : null;
     const message = rawMessage || payloadMessage || "No message";
+    const mintCandidate =
+      typeof raw.mint === "string" && raw.mint.trim() !== ""
+        ? raw.mint
+        : typeof payload.mint === "string" && payload.mint.trim() !== ""
+        ? payload.mint
+        : null;
+    const referenceCandidate =
+      typeof raw.reference_id === "string" && raw.reference_id.trim() !== ""
+        ? raw.reference_id
+        : typeof payload.reference_id === "string" &&
+          payload.reference_id.trim() !== ""
+        ? payload.reference_id
+        : typeof payload.signature === "string" &&
+          payload.signature.trim() !== ""
+        ? payload.signature
+        : null;
+    const eventTimeIso =
+      typeof raw.event_time === "string" ? raw.event_time : null;
+    const createdAtIso =
+      typeof raw.created_at === "string" ? raw.created_at : null;
+    const eventTimeDate = parseDate(eventTimeIso);
+    const createdAtDate = parseDate(createdAtIso);
+    const latencyMs =
+      eventTimeDate && createdAtDate
+        ? Math.max(0, createdAtDate.getTime() - eventTimeDate.getTime())
+        : null;
+    const severityLabel = severity ? severity.toUpperCase() : "";
     return {
       ...raw,
       category,
       categoryLabel,
       severity,
+      severityLabel,
       message,
       payload,
+      mint: mintCandidate,
+      reference_id: referenceCandidate,
+      eventTimeIso,
+      createdAtIso,
+      eventTimeDate,
+      createdAtDate,
+      latencyMs,
     };
   }
 
@@ -514,6 +829,7 @@ Loading...</pre
     for (const raw of events) {
       const event = normalizeEvent(raw);
       if (!event || typeof event.id !== "number") continue;
+      ensureCategoryOption(event.category, event.categoryLabel);
       if (!matchesActiveFilters(event)) continue;
       const eventId = Number(event.id);
       const existing = eventsStore.get(eventId);
@@ -890,6 +1206,56 @@ Loading...</pre
     return `${value.slice(0, 6)}…${value.slice(-6)}`;
   }
 
+  function formatSummaryKey(key) {
+    if (!key) return "Field";
+    return String(key)
+      .replace(/[_-]/g, " ")
+      .replace(/\b\w/g, (ch) => ch.toUpperCase());
+  }
+
+  function renderEventDetailSummary(payload) {
+    const container = document.getElementById("eventDetailSummary");
+    if (!container) return;
+
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      container.innerHTML =
+        '<div class="summary-empty">Payload has nested data. Inspect JSON below.</div>';
+      return;
+    }
+
+    const entries = [];
+    Object.entries(payload).forEach(([key, value]) => {
+      if (value === null || value === undefined || typeof value === "object") {
+        return;
+      }
+
+      entries.push({
+        label: formatSummaryKey(key),
+        value: String(value),
+      });
+    });
+
+    if (!entries.length) {
+      container.innerHTML =
+        '<div class="summary-empty">Payload has nested data. Inspect JSON below.</div>';
+      return;
+    }
+
+    const limited = entries.slice(0, 12);
+    const html = limited
+      .map(
+        ({ label, value }) => `
+          <div class="summary-item">
+            <span class="summary-key">${Utils.escapeHtml(label)}</span>
+            <span class="summary-value">${Utils.escapeHtml(value)}</span>
+          </div>
+        `
+      )
+      .join("");
+
+    container.innerHTML = `<div class="summary-grid">${html}</div>`;
+  }
+
   function ensureEventsScrollGuard(hasRows) {
     const tbody = document.getElementById("eventsTableBody");
     if (!tbody) return;
@@ -907,7 +1273,7 @@ Loading...</pre
       guard.id = "events-scroll-guard";
       guard.className = "scroll-guard-row";
       const cell = document.createElement("td");
-      cell.colSpan = 6;
+      cell.colSpan = 7;
       cell.className = "scroll-guard-cell";
       guard.appendChild(cell);
     }
@@ -973,6 +1339,31 @@ Loading...</pre
     eventsScrollState.observer.observe(guard);
   }
 
+  async function refreshCategoryOptions() {
+    const select = document.getElementById("categoryFilter");
+    if (!select) return;
+
+    hydrateCategoryOptionsCache();
+
+    try {
+      const response = await fetch("/api/events/categories");
+      if (!response.ok) {
+        return;
+      }
+
+      const payload = await response.json();
+      const categories = Object.keys(payload?.categories || {})
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b));
+
+      categories.forEach((category) => {
+        ensureCategoryOption(category, formatCategoryLabel(category));
+      });
+    } catch (err) {
+      console.warn("[Events] Failed to refresh categories", err);
+    }
+  }
+
   function getOldestEventId() {
     if (!allEventsData || allEventsData.length === 0) return null;
     const last = allEventsData[allEventsData.length - 1];
@@ -1026,6 +1417,29 @@ Loading...</pre
     }
 
     setupEventsScrollObserver();
+  }
+
+  function applyCategoryFilterValue(category) {
+    const select = document.getElementById("categoryFilter");
+    if (!select) return;
+    const normalized = category ? String(category).toLowerCase() : "";
+    if (normalized) {
+      ensureCategoryOption(normalized, formatCategoryLabel(normalized));
+    }
+    select.value = normalized;
+    select.dispatchEvent(new Event("change"));
+  }
+
+  function applySearchShortcut(value) {
+    const searchInput = document.getElementById("eventSearch");
+    if (!searchInput) return;
+    const nextValue = value || "";
+    searchInput.value = nextValue;
+    AppState.save("events_search", nextValue.toLowerCase());
+    eventsScrollState.filteredEnd = false;
+    eventsScrollState.endReached = false;
+    eventsScrollState.limitReached = false;
+    searchInput.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
   async function loadOlderEvents() {
@@ -1186,10 +1600,18 @@ Loading...</pre
 
   function updateEventRow(row, event) {
     if (!row) return;
-    const time = Utils.formatTimeAgo(new Date(event.event_time), {
-      fallback: "-",
-    });
+    const eventTimeValue = event.event_time || event.eventTimeIso;
+    const timeDate = event.eventTimeDate || parseDate(eventTimeValue);
+    const timeRelative = timeDate
+      ? Utils.formatTimeAgo(timeDate, { fallback: "-" })
+      : "-";
+    const timeAbsolute = eventTimeValue
+      ? Utils.formatTimestamp(eventTimeValue, { includeSeconds: true })
+      : "-";
     const severityColor = getSeverityColor(event.severity);
+    const severityLabel =
+      event.severityLabel ||
+      (event.severity ? String(event.severity).toUpperCase() : "-");
     let referenceCell = "-";
     if (event.reference_id) {
       const snippet = Utils.escapeHtml(
@@ -1202,23 +1624,43 @@ Loading...</pre
         <button class="event-ref-copy" type="button" data-ref="${encoded}" title="Copy reference">📋</button>
       `;
     }
+    let mintCell = "—";
+    if (event.mint) {
+      const mintSnippet = Utils.escapeHtml(formatReferenceSnippet(event.mint));
+      const mintFull = Utils.escapeHtml(event.mint);
+      const encodedMint = encodeURIComponent(event.mint);
+      mintCell = `
+        <span class="event-mint" title="${mintFull}">${mintSnippet}</span>
+        <button class="event-mint-copy" type="button" data-mint="${encodedMint}" title="Copy mint">📋</button>
+      `;
+    }
     const messageText = Utils.escapeHtml(event.message);
-    const categoryLabel = event.categoryLabel || event.category || "-";
-    const severityLabel = (event.severity || "-").toString().toUpperCase();
+    const categoryLabel = Utils.escapeHtml(
+      event.categoryLabel || formatCategoryLabel(event.category) || "-"
+    );
+    const subtypeLabel = Utils.escapeHtml(event.subtype || "-");
+    const severityTitle = `${severityLabel}`;
 
     row.dataset.eventId = String(event.id);
     row.innerHTML = `
-      <td style="padding: 10px; white-space: nowrap;">${time}</td>
+      <td style="padding: 10px; white-space: nowrap;" title="${Utils.escapeHtml(
+        timeAbsolute
+      )}">${timeRelative}</td>
       <td style="padding: 10px;">
         <span style="background: var(--badge-loading); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85em;">
-          ${Utils.escapeHtml(categoryLabel)}
+          ${categoryLabel}
         </span>
       </td>
-      <td style="padding: 10px; font-size: 0.9em;">${event.subtype || "-"}</td>
+      <td style="padding: 10px; font-size: 0.9em;">${subtypeLabel}</td>
       <td style="padding: 10px;">
-        <span style="background: ${severityColor}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85em;">
+        <span class="severity-pill" style="background: ${severityColor};" title="${Utils.escapeHtml(
+      severityTitle
+    )}">
           ${severityLabel}
         </span>
+      </td>
+      <td style="padding: 10px; font-size: 0.85em;">
+        <span class="event-mint-cell">${mintCell}</span>
       </td>
       <td style="padding: 10px; max-width: 420px;">
         <div class="event-message-cell">
@@ -1254,7 +1696,7 @@ Loading...</pre
     if (!tbody) return;
     tbody.innerHTML = `
       <tr>
-        <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">
+  <td colspan="7" style="text-align: center; padding: 40px; color: var(--text-muted);">
           ${message}
         </td>
       </tr>
@@ -1488,6 +1930,21 @@ Loading...</pre
         return;
       }
 
+      const mintCopyBtn = event.target.closest(".event-mint-copy");
+      if (mintCopyBtn) {
+        const encodedMint = mintCopyBtn.getAttribute("data-mint");
+        if (!encodedMint) return;
+        const mintValue = decodeURIComponent(encodedMint);
+        try {
+          await Utils.copyToClipboard(mintValue);
+          Utils.showToast("✅ Mint copied to clipboard");
+        } catch (err) {
+          console.error("Failed to copy mint:", err);
+          Utils.showToast("❌ Failed to copy mint", "error");
+        }
+        return;
+      }
+
       const detailBtn = event.target.closest(".event-detail-btn");
       if (detailBtn) {
         const idAttr = detailBtn.getAttribute("data-event-id");
@@ -1500,6 +1957,196 @@ Loading...</pre
 
   const eventDetailModal = document.getElementById("eventDetailModal");
   const eventDetailClose = document.getElementById("eventDetailClose");
+  const eventDetailElements = {
+    title: document.getElementById("eventDetailTitle"),
+    category: document.getElementById("eventDetailCategory"),
+    severity: document.getElementById("eventDetailSeverity"),
+    subtype: document.getElementById("eventDetailSubtype"),
+    time: document.getElementById("eventDetailTime"),
+    created: document.getElementById("eventDetailCreated"),
+    relative: document.getElementById("eventDetailRelative"),
+    latency: document.getElementById("eventDetailLatency"),
+    reference: document.getElementById("eventDetailReference"),
+    mint: document.getElementById("eventDetailMint"),
+    id: document.getElementById("eventDetailId"),
+    message: document.getElementById("eventDetailMessage"),
+    payload: document.getElementById("eventDetailPayload"),
+    summary: document.getElementById("eventDetailSummary"),
+    payloadToggle: document.getElementById("eventDetailPayloadToggle"),
+  };
+
+  var eventDetailState = {
+    current: null,
+    payloadMode: "pretty",
+    payloadStrings: { pretty: "{}", compact: "{}" },
+  };
+
+  function resetEventDetailState() {
+    eventDetailState.current = null;
+    eventDetailState.payloadMode = "pretty";
+    eventDetailState.payloadStrings = {
+      pretty: "No payload data available.",
+      compact: "No payload data available.",
+    };
+    if (eventDetailElements.title) {
+      eventDetailElements.title.textContent = "Event Details";
+    }
+    if (eventDetailElements.category) {
+      eventDetailElements.category.textContent = "—";
+      eventDetailElements.category.title = "";
+    }
+    if (eventDetailElements.severity) {
+      eventDetailElements.severity.textContent = "-";
+      eventDetailElements.severity.style.background = "#6b7280";
+      eventDetailElements.severity.style.color = "#fff";
+      eventDetailElements.severity.title = "Severity";
+    }
+    if (eventDetailElements.subtype) {
+      eventDetailElements.subtype.textContent = "—";
+      eventDetailElements.subtype.title = "";
+    }
+    if (eventDetailElements.id) {
+      eventDetailElements.id.textContent = "—";
+      eventDetailElements.id.title = "";
+    }
+    if (eventDetailElements.time) {
+      eventDetailElements.time.textContent = "—";
+      eventDetailElements.time.title = "";
+    }
+    if (eventDetailElements.created) {
+      eventDetailElements.created.textContent = "—";
+      eventDetailElements.created.title = "";
+    }
+    if (eventDetailElements.relative) {
+      eventDetailElements.relative.textContent = "—";
+    }
+    if (eventDetailElements.latency) {
+      eventDetailElements.latency.textContent = "—";
+    }
+    if (eventDetailElements.reference) {
+      eventDetailElements.reference.textContent = "—";
+      eventDetailElements.reference.title = "";
+    }
+    if (eventDetailElements.mint) {
+      eventDetailElements.mint.textContent = "—";
+      eventDetailElements.mint.title = "";
+    }
+    if (eventDetailElements.message) {
+      eventDetailElements.message.textContent = "—";
+      eventDetailElements.message.title = "";
+    }
+    if (eventDetailElements.summary) {
+      eventDetailElements.summary.innerHTML =
+        '<div class="summary-empty">Open an event to view summary.</div>';
+    }
+    if (eventDetailElements.payload) {
+      eventDetailElements.payload.textContent = "No payload data available.";
+    }
+    if (eventDetailElements.payloadToggle) {
+      eventDetailElements.payloadToggle.textContent = "➡️ Compact JSON";
+    }
+  }
+
+  function updateEventDetailPayload() {
+    if (!eventDetailElements.payload) return;
+    const mode =
+      eventDetailState.payloadMode === "compact" ? "compact" : "pretty";
+    const strings = eventDetailState.payloadStrings || {};
+    const payloadText =
+      mode === "compact"
+        ? strings.compact ?? strings.pretty
+        : strings.pretty ?? strings.compact;
+    eventDetailElements.payload.textContent =
+      payloadText || "No payload data available.";
+
+    if (eventDetailElements.payloadToggle) {
+      eventDetailElements.payloadToggle.textContent =
+        mode === "compact" ? "⬅️ Pretty JSON" : "➡️ Compact JSON";
+    }
+  }
+
+  function renderEventDetail() {
+    if (!eventDetailState.current) return;
+    const data = eventDetailState.current;
+
+    const categoryLabel =
+      data.categoryLabel || formatCategoryLabel(data.category) || "Event";
+    if (eventDetailElements.title) {
+      eventDetailElements.title.textContent = `${categoryLabel.toUpperCase()} • #${
+        data.id ?? "?"
+      }`;
+    }
+    if (eventDetailElements.category) {
+      eventDetailElements.category.textContent = categoryLabel;
+      eventDetailElements.category.title = categoryLabel;
+    }
+    if (eventDetailElements.severity) {
+      const severityLabel =
+        data.severityLabel ||
+        (data.severity ? String(data.severity).toUpperCase() : "-");
+      eventDetailElements.severity.textContent = severityLabel;
+      const severityColor = getSeverityColor(data.severity);
+      eventDetailElements.severity.style.background = severityColor;
+      eventDetailElements.severity.style.color = "#fff";
+      eventDetailElements.severity.title = severityLabel || "Severity";
+    }
+    if (eventDetailElements.subtype) {
+      const subtypeText = data.subtype || "—";
+      eventDetailElements.subtype.textContent = subtypeText;
+      eventDetailElements.subtype.title =
+        subtypeText !== "—" ? subtypeText : "";
+    }
+    if (eventDetailElements.id) {
+      const idText =
+        data.id !== undefined && data.id !== null ? String(data.id) : "—";
+      eventDetailElements.id.textContent = idText;
+      eventDetailElements.id.title = idText;
+    }
+
+    const eventTimeValue = data.event_time || data.eventTimeIso;
+    const createdTimeValue = data.created_at || data.createdAtIso;
+    if (eventDetailElements.time) {
+      eventDetailElements.time.textContent = eventTimeValue
+        ? Utils.formatTimestamp(eventTimeValue, { includeSeconds: true })
+        : "—";
+      eventDetailElements.time.title = eventTimeValue || "";
+    }
+    if (eventDetailElements.created) {
+      eventDetailElements.created.textContent = createdTimeValue
+        ? Utils.formatTimestamp(createdTimeValue, { includeSeconds: true })
+        : "—";
+      eventDetailElements.created.title = createdTimeValue || "";
+    }
+    const timeDate = data.eventTimeDate || parseDate(eventTimeValue);
+    if (eventDetailElements.relative) {
+      eventDetailElements.relative.textContent = timeDate
+        ? Utils.formatTimeAgo(timeDate, { fallback: "—" })
+        : "—";
+    }
+    if (eventDetailElements.latency) {
+      eventDetailElements.latency.textContent = formatLatencyMs(data.latencyMs);
+    }
+    if (eventDetailElements.reference) {
+      const referenceText = data.reference_id || "—";
+      eventDetailElements.reference.textContent = referenceText;
+      eventDetailElements.reference.title =
+        referenceText !== "—" ? referenceText : "";
+    }
+    if (eventDetailElements.mint) {
+      const mintText = data.mint || "—";
+      eventDetailElements.mint.textContent = mintText;
+      eventDetailElements.mint.title = mintText !== "—" ? mintText : "";
+    }
+    if (eventDetailElements.message) {
+      const messageText = data.message || "—";
+      eventDetailElements.message.textContent = messageText;
+      eventDetailElements.message.title =
+        messageText !== "—" ? messageText : "";
+    }
+
+    renderEventDetailSummary(data.payload);
+    updateEventDetailPayload();
+  }
 
   function openEventDetailModal(eventId) {
     if (!eventDetailModal) return;
@@ -1509,49 +2156,167 @@ Loading...</pre
       return;
     }
 
-    const categoryLabel =
-      eventData.categoryLabel || eventData.category || "event";
-    document.getElementById(
-      "eventDetailTitle"
-    ).textContent = `${categoryLabel.toUpperCase()} • #${eventData.id}`;
-    document.getElementById("eventDetailCategory").textContent = categoryLabel;
-    document.getElementById("eventDetailSeverity").textContent = (
-      eventData.severity || "-"
-    ).toUpperCase();
-    document.getElementById("eventDetailTime").textContent =
-      eventData.event_time
-        ? new Date(eventData.event_time).toLocaleString()
-        : "-";
-    document.getElementById("eventDetailReference").textContent =
-      eventData.reference_id || "—";
-    document.getElementById("eventDetailMint").textContent =
-      eventData.mint || "—";
+    eventDetailState.current = eventData;
+    eventDetailState.payloadMode = "pretty";
 
-    const payloadEl = document.getElementById("eventDetailPayload");
     if (eventData.payload !== null && eventData.payload !== undefined) {
       try {
-        payloadEl.textContent = JSON.stringify(eventData.payload, null, 2);
+        eventDetailState.payloadStrings = {
+          pretty: JSON.stringify(eventData.payload, null, 2),
+          compact: JSON.stringify(eventData.payload),
+        };
       } catch (err) {
-        console.error("Failed to stringify payload:", err);
-        payloadEl.textContent = "Unable to render payload.";
+        console.error("[Events] Failed to stringify payload", err);
+        const fallback = "Unable to render payload.";
+        eventDetailState.payloadStrings = {
+          pretty: fallback,
+          compact: fallback,
+        };
       }
     } else {
-      payloadEl.textContent = "No payload data available.";
+      resetEventDetailState();
+      eventDetailState.current = eventData;
     }
 
+    renderEventDetail();
     eventDetailModal.classList.add("show");
   }
 
   function closeEventDetailModal() {
     if (!eventDetailModal) return;
     eventDetailModal.classList.remove("show");
+    resetEventDetailState();
   }
+
+  async function copyDetailValue(target) {
+    if (!eventDetailState.current) {
+      Utils.showToast("ℹ️ Event details unavailable", "warn");
+      return;
+    }
+
+    let value = "";
+    switch (target) {
+      case "reference":
+        value = eventDetailState.current.reference_id;
+        break;
+      case "mint":
+        value = eventDetailState.current.mint;
+        break;
+      case "message":
+        value = eventDetailState.current.message;
+        break;
+      case "id":
+        value =
+          eventDetailState.current.id !== undefined &&
+          eventDetailState.current.id !== null
+            ? String(eventDetailState.current.id)
+            : "";
+        break;
+      default:
+        value = "";
+    }
+
+    if (!value) {
+      Utils.showToast("ℹ️ Nothing to copy", "warn");
+      return;
+    }
+
+    try {
+      await Utils.copyToClipboard(value);
+      Utils.showToast("✅ Copied to clipboard");
+    } catch (err) {
+      console.error("[Events] Failed to copy detail", err);
+      Utils.showToast("❌ Copy failed", "error");
+    }
+  }
+
+  async function handleDetailAction(action) {
+    if (!eventDetailState.current) {
+      Utils.showToast("ℹ️ Event details unavailable", "warn");
+      return;
+    }
+
+    switch (action) {
+      case "copy-payload": {
+        const payloadText =
+          eventDetailState.payloadMode === "compact"
+            ? eventDetailState.payloadStrings.compact
+            : eventDetailState.payloadStrings.pretty;
+        try {
+          await Utils.copyToClipboard(payloadText || "{}");
+          Utils.showToast("✅ Payload copied");
+        } catch (err) {
+          console.error("[Events] Failed to copy payload", err);
+          Utils.showToast("❌ Copy failed", "error");
+        }
+        break;
+      }
+      case "toggle-payload": {
+        eventDetailState.payloadMode =
+          eventDetailState.payloadMode === "pretty" ? "compact" : "pretty";
+        updateEventDetailPayload();
+        break;
+      }
+      case "filter-category": {
+        ensureCategoryOption(
+          eventDetailState.current.category,
+          eventDetailState.current.categoryLabel
+        );
+        applyCategoryFilterValue(eventDetailState.current.category);
+        closeEventDetailModal();
+        Utils.showToast("✅ Applied category filter");
+        break;
+      }
+      case "filter-reference": {
+        const reference = eventDetailState.current.reference_id;
+        if (reference) {
+          applySearchShortcut(reference);
+          closeEventDetailModal();
+          Utils.showToast("✅ Filtering by reference");
+        } else {
+          Utils.showToast("ℹ️ No reference available", "warn");
+        }
+        break;
+      }
+      case "filter-mint": {
+        const mint = eventDetailState.current.mint;
+        if (mint) {
+          applySearchShortcut(mint);
+          closeEventDetailModal();
+          Utils.showToast("✅ Filtering by mint");
+        } else {
+          Utils.showToast("ℹ️ No mint available", "warn");
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  resetEventDetailState();
 
   if (eventDetailClose) {
     eventDetailClose.addEventListener("click", closeEventDetailModal);
   }
   if (eventDetailModal) {
-    eventDetailModal.addEventListener("click", (event) => {
+    eventDetailModal.addEventListener("click", async (event) => {
+      const copyBtn = event.target.closest(".meta-copy-btn");
+      if (copyBtn) {
+        event.stopPropagation();
+        const target = copyBtn.getAttribute("data-copy-target");
+        await copyDetailValue(target);
+        return;
+      }
+
+      const actionBtn = event.target.closest("[data-detail-action]");
+      if (actionBtn) {
+        event.stopPropagation();
+        const action = actionBtn.getAttribute("data-detail-action");
+        await handleDetailAction(action);
+        return;
+      }
+
       if (event.target === eventDetailModal) {
         closeEventDetailModal();
       }
@@ -1575,7 +2340,10 @@ Loading...</pre
 
     if (categoryFilter) {
       const savedCategory = AppState.load("events_category", "");
-      if (savedCategory) categoryFilter.value = savedCategory;
+      if (savedCategory) {
+        ensureCategoryOption(savedCategory, formatCategoryLabel(savedCategory));
+        categoryFilter.value = savedCategory;
+      }
     }
 
     if (severityFilter) {
@@ -1599,8 +2367,9 @@ Loading...</pre
   }
 
   // Global init function for Router to call during SPA navigation
-  window.initEventsPage = function () {
+  window.initEventsPage = async function () {
     console.log("[Events] Initializing page");
+    await refreshCategoryOptions();
     restoreSavedFilters();
     initializePauseState();
     ensureEventsLifecycle();
@@ -1608,5 +2377,8 @@ Loading...</pre
   };
 
   // Execute initialization immediately (works for both initial load and SPA navigation)
-  window.initEventsPage();
+  window.initEventsPage().catch((err) => {
+    console.error("[Events] Failed to initialize events page", err);
+    Utils.showToast("⚠️ Failed to initialize events page", "error");
+  });
 </script>

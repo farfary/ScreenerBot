@@ -40,6 +40,9 @@ pub enum EventCategory {
     /// Entry signal and trading decision events
     Entry,
 
+    /// OHLCV monitoring events (discovery, fetch, gaps, backfills)
+    Ohlcv,
+
     /// RPC and external API interaction events
     Rpc,
 
@@ -63,6 +66,7 @@ impl EventCategory {
             EventCategory::Position => "position".to_string(),
             EventCategory::Wallet => "wallet".to_string(),
             EventCategory::Entry => "entry".to_string(),
+            EventCategory::Ohlcv => "ohlcv".to_string(),
             EventCategory::Rpc => "rpc".to_string(),
             EventCategory::Security => "security".to_string(),
             EventCategory::Other(name) => name.clone(),
@@ -81,6 +85,7 @@ impl EventCategory {
             "position" => EventCategory::Position,
             "wallet" => EventCategory::Wallet,
             "entry" => EventCategory::Entry,
+            "ohlcv" => EventCategory::Ohlcv,
             "rpc" => EventCategory::Rpc,
             "security" => EventCategory::Security,
             other => EventCategory::Other(other.to_string()),

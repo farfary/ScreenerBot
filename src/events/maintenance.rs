@@ -5,8 +5,8 @@ use crate::events::db::EventsDatabase;
 /// for the events system.
 use crate::events::{Event, EventCategory, Severity};
 use crate::logger::{log, LogTag};
-use chrono::{DateTime, Utc};
-use serde_json::{json, Value};
+use chrono::Utc;
+use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use tokio::time::{interval, Duration};
 
@@ -337,6 +337,46 @@ pub async fn record_security_event(
         Some(mint.to_string()),
         None,
         payload,
+    );
+
+    crate::events::record_safe(event).await;
+}
+
+/// Record an OHLCV monitoring event with flexible payload metadata
+pub async fn record_ohlcv_event(
+    subtype: &str,
+    severity: Severity,
+    mint: Option<&str>,
+    reference_id: Option<&str>,
+    payload: Value,
+) {
+    let mut payload_obj: Map<String, Value> = match payload {
+        Value::Object(obj) => obj,
+        Value::Null => Map::new(),
+        other => {
+            let mut map = Map::new();
+            map.insert("details".to_string(), other);
+            map
+        }
+    };
+
+    payload_obj
+        .entry("subtype".to_string())
+        .or_insert_with(|| Value::String(subtype.to_string()));
+    payload_obj
+        .entry("event_time".to_string())
+        .or_insert_with(|| Value::String(Utc::now().to_rfc3339()));
+    payload_obj
+        .entry("message".to_string())
+        .or_insert_with(|| Value::String(format!("OHLCV event: {}", subtype)));
+
+    let event = Event::new(
+        EventCategory::Ohlcv,
+        Some(subtype.to_string()),
+        severity,
+        mint.map(|m| m.to_string()),
+        reference_id.map(|r| r.to_string()),
+        Value::Object(payload_obj),
     );
 
     crate::events::record_safe(event).await;

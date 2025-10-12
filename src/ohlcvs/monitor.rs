@@ -1,6 +1,7 @@
 // Background monitoring service
 
 use crate::config::with_config;
+use crate::events::{record_ohlcv_event, Severity};
 use crate::global::is_debug_ohlcv_enabled;
 use crate::logger::{log, LogTag};
 use crate::ohlcvs::aggregator::OhlcvAggregator;
@@ -15,6 +16,7 @@ use crate::ohlcvs::types::{
     Timeframe, TokenOhlcvConfig,
 };
 use chrono::{DateTime, Utc};
+use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
@@ -409,6 +411,17 @@ impl OhlcvMonitor {
                                 &format!("Token {} disappeared during processing; skipping", mint),
                             );
                         }
+                        record_ohlcv_event(
+                            "token_missing",
+                            Severity::Debug,
+                            Some(mint.as_str()),
+                            None,
+                            json!({
+                                "message": format!("Token {} was missing during processing", mint),
+                                "action": "skip_cycle",
+                            }),
+                        )
+                        .await;
                     }
                     Err(OhlcvError::PoolNotFound(_)) => {
                         if is_debug_ohlcv_enabled() {
@@ -418,9 +431,39 @@ impl OhlcvMonitor {
                                 &format!("No healthy pools available for {}; deferring", mint),
                             );
                         }
+                        record_ohlcv_event(
+                            "pool_unavailable",
+                            Severity::Warn,
+                            Some(mint.as_str()),
+                            None,
+                            json!({
+                                "message": format!(
+                                    "No healthy pools available for {}; deferring",
+                                    mint
+                                ),
+                                "reason": "pool_health",
+                            }),
+                        )
+                        .await;
                     }
                     Err(OhlcvError::RateLimitExceeded) => {
                         self.record_rate_limit_event().await;
+                        record_ohlcv_event(
+                            "rate_limit_hit",
+                            Severity::Warn,
+                            Some(mint.as_str()),
+                            None,
+                            json!({
+                                "message": format!(
+                                    "Rate limit triggered while processing {}",
+                                    mint
+                                ),
+                                "rate_limit_per_minute": rate_limit,
+                                "delay_ms": delay_ms,
+                                "tokens_in_cycle": processed_count,
+                            }),
+                        )
+                        .await;
                         log(
                             LogTag::Ohlcv,
                             "WARN",
@@ -432,6 +475,18 @@ impl OhlcvMonitor {
                         sleep(Duration::from_secs(2)).await;
                     }
                     Err(e) => {
+                        let (kind, severity) = classify_ohlcv_error(&e);
+                        record_ohlcv_event(
+                            "process_token_error",
+                            severity,
+                            Some(mint.as_str()),
+                            None,
+                            json!({
+                                "message": format!("Error processing {}: {}", mint, e),
+                                "error_kind": kind,
+                            }),
+                        )
+                        .await;
                         log(
                             LogTag::Ohlcv,
                             "ERROR",
@@ -491,17 +546,20 @@ impl OhlcvMonitor {
         if !has_pools && should_retry_discovery {
             match self.pool_manager.discover_pools(mint).await {
                 Ok(discovered) if !discovered.is_empty() => {
+                    let first_pool_address = discovered.first().map(|p| p.address.clone());
+
                     // Success! Update config with discovered pools and reset failure counter
                     let updated_config = {
                         let mut active = self.active_tokens.write().await;
                         active.get_mut(mint).map(|config| {
+                            let previous_failures = config.consecutive_pool_failures;
                             config.pools = discovered.clone();
                             config.mark_pool_discovery_success();
-                            config.clone()
+                            (previous_failures, config.clone())
                         })
                     };
 
-                    if let Some(config) = updated_config {
+                    if let Some((previous_failures, config)) = updated_config {
                         self.db.upsert_monitor_config(&config)?;
 
                         if is_debug_ohlcv_enabled() {
@@ -510,10 +568,26 @@ impl OhlcvMonitor {
                                 "INFO",
                                 &format!(
                                     "✅ Pool discovery succeeded for {} after {} failures",
-                                    mint, config.consecutive_pool_failures
+                                    mint, previous_failures
                                 ),
                             );
                         }
+
+                        record_ohlcv_event(
+                            "pool_discovery_success",
+                            Severity::Info,
+                            Some(mint),
+                            first_pool_address.as_deref(),
+                            json!({
+                                "message": format!(
+                                    "Discovered pools for {}",
+                                    mint
+                                ),
+                                "discovered_pools": discovered,
+                                "previous_failures": previous_failures,
+                            }),
+                        )
+                        .await;
                     }
                 }
                 Ok(_) | Err(_) => {
@@ -545,6 +619,24 @@ impl OhlcvMonitor {
                                     config.get_next_retry_description()
                                 ),
                             );
+                        }
+
+                        if should_log {
+                            record_ohlcv_event(
+                                "pool_discovery_failed",
+                                Severity::Warn,
+                                Some(mint),
+                                None,
+                                json!({
+                                    "message": format!(
+                                        "Pool discovery failed for {}",
+                                        mint
+                                    ),
+                                    "attempt": config.consecutive_pool_failures,
+                                    "next_retry": config.get_next_retry_description(),
+                                }),
+                            )
+                            .await;
                         }
                     }
 
@@ -601,6 +693,22 @@ impl OhlcvMonitor {
                     if let Some(config) = updated_config {
                         self.db.upsert_monitor_config(&config)?;
                     }
+
+                    record_ohlcv_event(
+                        "empty_fetch",
+                        Severity::Debug,
+                        Some(mint),
+                        Some(pool_address.as_str()),
+                        json!({
+                            "message": format!(
+                                "Empty OHLCV fetch for {} via {}",
+                                mint, pool_address
+                            ),
+                            "batch_size": batch_size,
+                            "priority": priority.to_string(),
+                        }),
+                    )
+                    .await;
                 } else {
                     let stored_points = self.persist_chunk(mint, &pool_address, data_points)?;
 
@@ -630,6 +738,44 @@ impl OhlcvMonitor {
                                 mint, pool_address, e
                             ),
                         );
+                        record_ohlcv_event(
+                            "retention_backfill_failed",
+                            Severity::Warn,
+                            Some(mint),
+                            Some(pool_address.as_str()),
+                            json!({
+                                "message": format!(
+                                    "Retention backfill failed for {} via {}",
+                                    mint, pool_address
+                                ),
+                                "error": e.to_string(),
+                            }),
+                        )
+                        .await;
+                    }
+
+                    if !stored_points.is_empty() {
+                        let earliest = stored_points.first().map(|p| p.timestamp);
+                        let latest = stored_points.last().map(|p| p.timestamp);
+
+                        record_ohlcv_event(
+                            "fetch_success",
+                            Severity::Info,
+                            Some(mint),
+                            Some(pool_address.as_str()),
+                            json!({
+                                "message": format!(
+                                    "Stored {} OHLCV points for {}",
+                                    stored_points.len(), mint
+                                ),
+                                "inserted_points": stored_points.len(),
+                                "earliest_timestamp": earliest,
+                                "latest_timestamp": latest,
+                                "priority": priority.to_string(),
+                                "batch_size": batch_size,
+                            }),
+                        )
+                        .await;
                     }
 
                     // Detect and register gaps for recent data (best-effort)
@@ -647,6 +793,20 @@ impl OhlcvMonitor {
                                     mint, pool_address, e
                                 ),
                             );
+                            record_ohlcv_event(
+                                "gap_detection_failed",
+                                Severity::Warn,
+                                Some(mint),
+                                Some(pool_address.as_str()),
+                                json!({
+                                    "message": format!(
+                                        "Gap detection failed for {} via {}",
+                                        mint, pool_address
+                                    ),
+                                    "error": e.to_string(),
+                                }),
+                            )
+                            .await;
                         }
                     }
                 }
@@ -662,6 +822,26 @@ impl OhlcvMonitor {
                 } else {
                     "ERROR"
                 };
+
+                if !matches!(e, OhlcvError::RateLimitExceeded) {
+                    let (kind, severity) = classify_ohlcv_error(&e);
+                    record_ohlcv_event(
+                        "fetch_failed",
+                        severity,
+                        Some(mint),
+                        Some(pool_address.as_str()),
+                        json!({
+                            "message": format!(
+                                "Failed to fetch OHLCV for {} via {}: {}",
+                                mint, pool_address, e
+                            ),
+                            "error_kind": kind,
+                            "batch_size": batch_size,
+                            "priority": priority.to_string(),
+                        }),
+                    )
+                    .await;
+                }
 
                 log(
                     LogTag::Ohlcv,
@@ -802,6 +982,23 @@ impl OhlcvMonitor {
 
         self.record_backfill_scheduled().await;
 
+        record_ohlcv_event(
+            "backfill_scheduled",
+            Severity::Info,
+            Some(mint),
+            Some(pool_address),
+            json!({
+                "message": format!(
+                    "Scheduled retention backfill for {} via {}",
+                    mint, pool_address
+                ),
+                "from_timestamp": from_ts,
+                "to_timestamp": to_ts,
+                "range_seconds": to_ts.saturating_sub(from_ts),
+            }),
+        )
+        .await;
+
         let runner = self.clone();
         let mint_owned = mint.to_string();
         let pool_owned = pool_address.to_string();
@@ -935,11 +1132,48 @@ impl OhlcvMonitor {
         match result {
             Ok(points) => {
                 self.record_backfill_completed(duration_ms, points).await;
+                record_ohlcv_event(
+                    "backfill_completed",
+                    Severity::Info,
+                    Some(mint),
+                    Some(pool_address),
+                    json!({
+                        "message": format!(
+                            "Backfill completed for {} via {}",
+                            mint, pool_address
+                        ),
+                        "inserted_points": points,
+                        "duration_ms": duration_ms,
+                        "from_timestamp": from_timestamp,
+                        "to_timestamp": to_timestamp,
+                        "range_seconds": to_timestamp.saturating_sub(from_timestamp),
+                    }),
+                )
+                .await;
                 Ok(points)
             }
             Err(err) => {
-                self.record_backfill_failed(duration_ms, err.to_string())
+                let error_message = err.to_string();
+                self.record_backfill_failed(duration_ms, error_message.clone())
                     .await;
+                record_ohlcv_event(
+                    "backfill_failed",
+                    Severity::Error,
+                    Some(mint),
+                    Some(pool_address),
+                    json!({
+                        "message": format!(
+                            "Backfill failed for {} via {}",
+                            mint, pool_address
+                        ),
+                        "error": error_message,
+                        "duration_ms": duration_ms,
+                        "from_timestamp": from_timestamp,
+                        "to_timestamp": to_timestamp,
+                        "range_seconds": to_timestamp.saturating_sub(from_timestamp),
+                    }),
+                )
+                .await;
                 Err(err)
             }
         }
@@ -973,6 +1207,20 @@ impl OhlcvMonitor {
                         "ERROR",
                         &format!("Gap fill error for {}: {}", mint, e),
                     );
+                    record_ohlcv_event(
+                        "gap_fill_failed",
+                        Severity::Error,
+                        Some(mint.as_str()),
+                        None,
+                        json!({
+                            "message": format!(
+                                "Gap fill error for {}",
+                                mint
+                            ),
+                            "error": e.to_string(),
+                        }),
+                    )
+                    .await;
                 }
 
                 sleep(Duration::from_secs(1)).await;
@@ -1210,6 +1458,18 @@ impl OhlcvMonitor {
             if retention_days > 0 {
                 if let Err(e) = self.db.cleanup_old_data(retention_days) {
                     log(LogTag::Ohlcv, "ERROR", &format!("Cleanup error: {}", e));
+                    record_ohlcv_event(
+                        "cleanup_failed",
+                        Severity::Error,
+                        None,
+                        None,
+                        json!({
+                            "message": "Failed to cleanup OHLCV database",
+                            "error": e.to_string(),
+                            "retention_days": retention_days,
+                        }),
+                    )
+                    .await;
                 }
             }
         }
@@ -1232,6 +1492,17 @@ impl OhlcvMonitor {
                     "ERROR",
                     &format!("Cache cleanup error: {}", e),
                 );
+                record_ohlcv_event(
+                    "cache_cleanup_failed",
+                    Severity::Error,
+                    None,
+                    None,
+                    json!({
+                        "message": "Failed to cleanup OHLCV cache",
+                        "error": e.to_string(),
+                    }),
+                )
+                .await;
             }
         }
     }
@@ -1250,6 +1521,19 @@ impl Clone for OhlcvMonitor {
             backfill_in_progress: Arc::clone(&self.backfill_in_progress),
             telemetry: Arc::clone(&self.telemetry),
         }
+    }
+}
+
+fn classify_ohlcv_error(error: &OhlcvError) -> (&'static str, Severity) {
+    match error {
+        OhlcvError::DatabaseError(_) => ("database_error", Severity::Error),
+        OhlcvError::ApiError(_) => ("api_error", Severity::Error),
+        OhlcvError::RateLimitExceeded => ("rate_limit", Severity::Warn),
+        OhlcvError::PoolNotFound(_) => ("pool_not_found", Severity::Warn),
+        OhlcvError::InvalidTimeframe(_) => ("invalid_timeframe", Severity::Error),
+        OhlcvError::DataGap { .. } => ("data_gap", Severity::Warn),
+        OhlcvError::CacheError(_) => ("cache_error", Severity::Error),
+        OhlcvError::NotFound(_) => ("not_found", Severity::Warn),
     }
 }
 
