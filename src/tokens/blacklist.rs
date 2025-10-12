@@ -1,6 +1,7 @@
 use crate::arguments::is_debug_blacklist_enabled;
 use crate::global::TOKENS_DATABASE;
 use crate::logger::{log, LogTag};
+use crate::tokens::config::with_tokens_config;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use once_cell::sync::Lazy;
 /// Token blacklist system for managing problematic tokens
@@ -26,21 +27,6 @@ macro_rules! log_blacklist_debug {
 // =============================================================================
 // CONFIGURATION CONSTANTS
 // =============================================================================
-
-/// Low liquidity threshold in USD
-pub const LOW_LIQUIDITY_THRESHOLD: f64 = 100.0;
-
-/// Minimum token age in hours before tracking for blacklist
-pub const MIN_AGE_HOURS: i64 = 2;
-
-/// Maximum low liquidity occurrences before blacklisting
-pub const MAX_LOW_LIQUIDITY_COUNT: u32 = 5;
-
-/// Maximum retry attempts before blacklisting permanently failed decimal tokens
-pub const MAX_DECIMAL_RETRY_ATTEMPTS: i32 = 3;
-
-/// Maximum no-route failures before blacklisting
-pub const MAX_NO_ROUTE_FAILURES: u32 = 5;
 
 /// System and stable tokens that should always be excluded from trading
 pub const SYSTEM_STABLE_TOKENS: &[&str] = &[
@@ -323,6 +309,15 @@ pub fn track_liquidity_db(
         }
     };
 
+    let (low_liquidity_threshold, min_age_hours, max_low_liquidity_count) =
+        with_tokens_config(|cfg| {
+            (
+                cfg.low_liquidity_threshold,
+                cfg.min_age_hours,
+                cfg.max_low_liquidity_count,
+            )
+        });
+
     // Add liquidity tracking record
     let now = Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string();
     if let Err(e) = conn.execute(
@@ -345,7 +340,7 @@ pub fn track_liquidity_db(
     }
 
     // Check if we should blacklist due to low liquidity
-    if liquidity_usd < LOW_LIQUIDITY_THRESHOLD && token_age_hours >= MIN_AGE_HOURS {
+    if liquidity_usd < low_liquidity_threshold && token_age_hours >= min_age_hours {
         // Count low liquidity occurrences
         let mut stmt = match
             conn.prepare(
@@ -365,7 +360,7 @@ pub fn track_liquidity_db(
         };
 
         let low_count: i64 = match stmt
-            .query_row([mint, &LOW_LIQUIDITY_THRESHOLD.to_string()], |row| {
+            .query_row([mint, &low_liquidity_threshold.to_string()], |row| {
                 row.get(0)
             }) {
             Ok(count) => count,
@@ -388,7 +383,7 @@ pub fn track_liquidity_db(
             low_count
         );
 
-        if low_count >= (MAX_LOW_LIQUIDITY_COUNT as i64) {
+        if low_count >= (max_low_liquidity_count as i64) {
             add_to_blacklist_db(mint, symbol, BlacklistReason::LowLiquidity);
             return false; // Don't allow processing
         }
@@ -472,7 +467,9 @@ pub fn track_route_failure_db(mint: &str, symbol: &str, error_type: &str) -> boo
         failure_count
     );
 
-    if failure_count >= (MAX_NO_ROUTE_FAILURES as i64) {
+    let max_no_route_failures = with_tokens_config(|cfg| cfg.max_no_route_failures);
+
+    if failure_count >= (max_no_route_failures as i64) {
         log_blacklist_debug!(
             "BLACKLIST",
             "Blacklisting {} ({}) after {} route failures",
@@ -746,9 +743,6 @@ static TOKEN_BLACKLIST_CACHE: Lazy<Mutex<HashSet<String>>> =
 static BLACKLIST_CACHE_LAST_REFRESH: Lazy<Mutex<Option<DateTime<Utc>>>> =
     Lazy::new(|| Mutex::new(None));
 
-/// Cache refresh interval (5 minutes)
-const CACHE_REFRESH_INTERVAL_MINUTES: i64 = 5;
-
 /// Refresh blacklist cache from database
 fn refresh_blacklist_cache() -> bool {
     let mints = get_blacklisted_mints();
@@ -793,6 +787,9 @@ fn refresh_blacklist_cache() -> bool {
 
 /// Check if cache needs refresh
 fn cache_needs_refresh() -> bool {
+    let cache_refresh_interval_minutes =
+        with_tokens_config(|cfg| cfg.cache_refresh_interval_minutes).max(1);
+
     let last_refresh = match BLACKLIST_CACHE_LAST_REFRESH.lock() {
         Ok(last) => last,
         Err(_) => {
@@ -803,7 +800,7 @@ fn cache_needs_refresh() -> bool {
     match *last_refresh {
         Some(last) => {
             let minutes_since_refresh = Utc::now().signed_duration_since(last).num_minutes();
-            minutes_since_refresh >= CACHE_REFRESH_INTERVAL_MINUTES
+            minutes_since_refresh >= cache_refresh_interval_minutes
         }
         None => true,
     }

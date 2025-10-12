@@ -2,7 +2,7 @@ use crate::global::is_debug_discovery_enabled;
 /// Base token discovery system structure
 use crate::logger::{log, LogTag};
 use crate::tokens::cache::TokenDatabase;
-use crate::tokens::dexscreener::get_global_dexscreener_api;
+use crate::tokens::dexscreener::{get_global_dexscreener_api, wait_for_discovery_rate_limit};
 use crate::tokens::geckoterminal::try_acquire_gecko_api_permit;
 use crate::tokens::is_token_excluded_from_trading;
 use chrono::{DateTime, Utc};
@@ -102,6 +102,8 @@ pub async fn fetch_dexscreener_latest_token_profiles() -> Result<Vec<String>, St
             "Making HTTP request to profiles API...",
         );
     }
+    wait_for_discovery_rate_limit("dexscreener_profiles_latest").await;
+
     let response = client
         .get("https://api.dexscreener.com/token-profiles/latest/v1")
         .header("Accept", "*/*")
@@ -157,6 +159,8 @@ pub async fn fetch_dexscreener_latest_boosted_tokens() -> Result<Vec<String>, St
     }
 
     let client = build_discovery_client()?;
+    wait_for_discovery_rate_limit("dexscreener_boosts_latest").await;
+
     let response = client
         .get("https://api.dexscreener.com/token-boosts/latest/v1")
         .header("Accept", "*/*")
@@ -212,6 +216,8 @@ pub async fn fetch_dexscreener_tokens_with_most_active_boosts() -> Result<Vec<St
     }
 
     let client = build_discovery_client()?;
+    wait_for_discovery_rate_limit("dexscreener_boosts_top").await;
+
     let response = client
         .get("https://api.dexscreener.com/token-boosts/top/v1")
         .header("Accept", "*/*")

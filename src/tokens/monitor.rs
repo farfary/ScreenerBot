@@ -3,8 +3,8 @@ use crate::global::is_debug_monitor_enabled;
 /// Updates existing tokens based on liquidity priority and time constraints
 use crate::logger::{log, LogTag};
 use crate::tokens::{
-    cache::TokenDatabase, dexscreener::get_global_dexscreener_api, emit_token_removed,
-    emit_token_summary, summarize_tokens,
+    cache::TokenDatabase, config::with_tokens_config, dexscreener::get_global_dexscreener_api,
+    emit_token_removed, emit_token_summary, summarize_tokens,
 };
 use chrono::{DateTime, Utc};
 use futures::TryFutureExt;
@@ -24,25 +24,34 @@ const MONITOR_CYCLE_SECONDS: u64 = 1;
 /// Minimum time between updates for a token (in minutes)
 const MIN_UPDATE_INTERVAL_MINUTES: i64 = 30; // lowered from 60 to 30 to keep data fresher
 
-/// Maximum time before forced update (2 hours)
-const MAX_UPDATE_INTERVAL_HOURS: i64 = 2;
-
-/// Number of tokens to update per cycle (adjust based on performance)
-const TOKENS_PER_CYCLE: usize = 30;
-
-/// Batch size for API calls (DexScreener limit)
-const API_BATCH_SIZE: usize = 30;
-
-// =============================================================================
-// NEW TOKEN BOOST (lightweight)
-// =============================================================================
-
-/// Consider tokens "new" for this many minutes from their pair creation time
-const NEW_TOKEN_BOOST_MAX_AGE_MINUTES: i64 = 60; // first hour of life
 /// Minimum staleness required to recheck a new token
 const NEW_TOKEN_BOOST_MIN_STALE_MINUTES: i64 = 12; // ~12 minutes between touches
 /// Hard cap of boosted tokens per cycle to avoid API pressure
 const NEW_TOKEN_BOOST_PER_CYCLE: usize = 2;
+
+fn tokens_per_cycle_limit() -> usize {
+    let configured = with_tokens_config(|cfg| cfg.max_tokens_per_batch);
+    configured.max(1)
+}
+
+fn api_batch_size_limit() -> usize {
+    let configured = with_tokens_config(|cfg| cfg.max_tokens_per_api_call);
+    configured.clamp(1, 30)
+}
+
+fn new_token_boost_max_age_minutes() -> i64 {
+    let configured = with_tokens_config(|cfg| cfg.new_token_boost_max_age_minutes);
+    configured.max(1)
+}
+
+fn max_update_interval_minutes() -> i64 {
+    max_update_interval_hours_setting() * 60
+}
+
+fn max_update_interval_hours_setting() -> i64 {
+    let configured = with_tokens_config(|cfg| cfg.max_update_interval_hours);
+    configured.max(1)
+}
 
 // =============================================================================
 // FAIRNESS / TIERING CONFIG
@@ -54,7 +63,7 @@ const LIQ_TIER_HIGH_MIN: f64 = 10_000.0;
 const LIQ_TIER_MID_MIN: f64 = 1_000.0;
 const LIQ_TIER_LOW_MIN: f64 = 100.0;
 
-/// Per-cycle quotas by tier (percentages of TOKENS_PER_CYCLE)
+/// Per-cycle quotas by tier (percentages of configured batch size)
 /// We allocate by default: High 40%, Mid 30%, Low 20%, Micro 10%.
 /// Any unused quota is reallocated oldest-first across all remaining tokens.
 const QUOTA_HIGH_PCT: usize = 40;
@@ -118,6 +127,11 @@ impl TokenMonitor {
             }
         }
 
+        // Config-driven limits
+        let tokens_per_cycle = tokens_per_cycle_limit();
+        let max_interval_minutes = max_update_interval_minutes();
+        let boost_age_limit = new_token_boost_max_age_minutes();
+
         // Pre-select boosted "new" tokens with a hard per-cycle cap
         let mut selected_tokens: Vec<String> = Vec::new();
         let mut selected_set: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -125,7 +139,7 @@ impl TokenMonitor {
             if let Ok(boost_mints) = self
                 .database
                 .get_new_tokens_needing_boost(
-                    NEW_TOKEN_BOOST_MAX_AGE_MINUTES,
+                    boost_age_limit,
                     NEW_TOKEN_BOOST_MIN_STALE_MINUTES,
                     NEW_TOKEN_BOOST_PER_CYCLE,
                 )
@@ -134,6 +148,9 @@ impl TokenMonitor {
                 for mint in boost_mints.into_iter() {
                     if selected_set.insert(mint.clone()) {
                         selected_tokens.push(mint);
+                        if selected_tokens.len() >= tokens_per_cycle {
+                            return Ok(selected_tokens);
+                        }
                     }
                 }
             }
@@ -142,6 +159,27 @@ impl TokenMonitor {
         // If no other tokens need update and boost is empty, we can early return
         if needing_update.is_empty() {
             return Ok(selected_tokens);
+        }
+
+        // Force include very stale tokens exceeding configured max update interval
+        if max_interval_minutes > 0 {
+            let mut forced_tokens: Vec<(String, f64, i64)> = Vec::new();
+            needing_update.retain(|token| {
+                let should_force = token.2 >= max_interval_minutes;
+                if should_force {
+                    forced_tokens.push(token.clone());
+                }
+                !should_force
+            });
+
+            for (mint, _liq, _age) in forced_tokens.into_iter() {
+                if selected_tokens.len() >= tokens_per_cycle {
+                    return Ok(selected_tokens);
+                }
+                if selected_set.insert(mint.clone()) {
+                    selected_tokens.push(mint);
+                }
+            }
         }
 
         // Bucket by liquidity tiers
@@ -173,8 +211,8 @@ impl TokenMonitor {
         low.sort_by(by_age_then_liq);
         micro.sort_by(by_age_then_liq);
 
-        // Compute quotas based on remaining capacity after boost pre-selection
-        let capacity = TOKENS_PER_CYCLE.saturating_sub(selected_tokens.len());
+        // Compute quotas based on remaining capacity after pre-selection
+        let capacity = tokens_per_cycle.saturating_sub(selected_tokens.len());
         if capacity == 0 {
             return Ok(selected_tokens);
         }
@@ -184,9 +222,9 @@ impl TokenMonitor {
         let mut q_low = quota(QUOTA_LOW_PCT).max(1);
         let mut q_micro = quota(QUOTA_MICRO_PCT).max(1);
 
-        // Ensure we don't exceed TOKENS_PER_CYCLE due to max(1)
+        // Ensure we don't exceed the configured per-cycle limit due to max(1)
         let mut total_q = q_high + q_mid + q_low + q_micro;
-        while total_q > TOKENS_PER_CYCLE {
+        while total_q > tokens_per_cycle {
             // Reduce micro first, then low, then mid, then high
             if q_micro > 1 {
                 q_micro -= 1;
@@ -219,7 +257,7 @@ impl TokenMonitor {
         take_from_bucket(&mut micro, q_micro, &mut selected_tokens);
 
         // Fill remaining capacity oldest-first across all remaining tokens
-        let mut remaining_capacity = TOKENS_PER_CYCLE.saturating_sub(selected_tokens.len());
+        let mut remaining_capacity = tokens_per_cycle.saturating_sub(selected_tokens.len());
         if remaining_capacity > 0 {
             let mut all_remaining: Vec<(String, f64, i64)> = Vec::new();
             all_remaining.extend(high.into_iter());
@@ -287,34 +325,131 @@ impl TokenMonitor {
                     .collect();
 
                 let mut total_updated = 0;
+                let mut fetched_tokens = tokens;
+
+                // Enforce configured price deviation limits before persisting updates
+                let deviation_limit =
+                    with_tokens_config(|cfg| cfg.max_price_deviation_percent).max(0.0);
+                let mut skipped_for_deviation: Vec<(String, f64, f64, f64)> = Vec::new();
+
+                if deviation_limit > 0.0 {
+                    match self.database.get_tokens_by_mints(mints).await {
+                        Ok(existing_tokens) => {
+                            let mut existing_prices: HashMap<String, f64> =
+                                HashMap::with_capacity(existing_tokens.len());
+                            for token in existing_tokens {
+                                if let Some(price) = token.price_sol {
+                                    if price > 0.0 {
+                                        existing_prices.insert(token.mint, price);
+                                    }
+                                }
+                            }
+
+                            if !existing_prices.is_empty() {
+                                const PRICE_EPSILON: f64 = 1e-9;
+                                fetched_tokens.retain(|token| {
+                                    let new_price = match token.price_sol {
+                                        Some(price) if price > 0.0 => price,
+                                        _ => return true,
+                                    };
+
+                                    let old_price = match existing_prices.get(&token.mint) {
+                                        Some(price) if price.abs() > PRICE_EPSILON => *price,
+                                        _ => return true,
+                                    };
+
+                                    let deviation =
+                                        ((new_price - old_price).abs() / old_price.abs()) * 100.0;
+                                    if deviation > deviation_limit {
+                                        skipped_for_deviation.push((
+                                            token.mint.clone(),
+                                            deviation,
+                                            old_price,
+                                            new_price,
+                                        ));
+                                        return false;
+                                    }
+
+                                    true
+                                });
+                            }
+                        }
+                        Err(e) => {
+                            log(
+                                LogTag::Monitor,
+                                "PRICE_DEVIATION_PRECHECK_FAILED",
+                                &format!(
+                                    "Failed to load existing token prices for deviation check: {}",
+                                    e
+                                ),
+                            );
+                        }
+                    }
+                }
+
+                if !skipped_for_deviation.is_empty() {
+                    let preview: Vec<String> = skipped_for_deviation
+                        .iter()
+                        .take(3)
+                        .map(|(mint, deviation, old_price, new_price)| {
+                            let short = if mint.len() > 8 {
+                                &mint[..8]
+                            } else {
+                                mint.as_str()
+                            };
+                            format!(
+                                "{} dev={:.1}% ({:.6}->{:.6})",
+                                short, deviation, old_price, new_price
+                            )
+                        })
+                        .collect();
+                    let extras = skipped_for_deviation.len().saturating_sub(preview.len());
+                    let detail = if extras > 0 {
+                        format!("{} (+{} more)", preview.join(", "), extras)
+                    } else {
+                        preview.join(", ")
+                    };
+
+                    log(
+                        LogTag::Monitor,
+                        "PRICE_DEVIATION_SKIP",
+                        &format!(
+                            "Skipped {} tokens due to price deviation > {:.2}%: {}",
+                            skipped_for_deviation.len(),
+                            deviation_limit,
+                            detail
+                        ),
+                    );
+                }
 
                 // Update tokens that were returned by the API
-                if !tokens.is_empty() {
+                if !fetched_tokens.is_empty() {
                     if is_debug_monitor_enabled() {
                         log(
                             LogTag::Monitor,
                             "API_RESULT",
                             &format!(
-                                "API returned {} tokens out of {} requested",
-                                tokens.len(),
-                                mints.len()
+                                "API returned {} tokens out of {} requested ({} accepted)",
+                                returned_mints.len(),
+                                mints.len(),
+                                fetched_tokens.len()
                             ),
                         );
                     }
 
-                    match self.database.update_tokens(&tokens).await {
+                    match self.database.update_tokens(&fetched_tokens).await {
                         Ok(()) => {
-                            total_updated += tokens.len();
+                            total_updated += fetched_tokens.len();
                             if is_debug_monitor_enabled() {
                                 log(
                                     LogTag::Monitor,
                                     "SUCCESS",
-                                    &format!("Updated {} tokens in database", tokens.len()),
+                                    &format!("Updated {} tokens in database", fetched_tokens.len()),
                                 );
                             }
 
-                            if !tokens.is_empty() {
-                                let summaries = summarize_tokens(&tokens).await;
+                            if !fetched_tokens.is_empty() {
+                                let summaries = summarize_tokens(&fetched_tokens).await;
                                 for summary in summaries {
                                     emit_token_summary(summary);
                                 }
@@ -454,8 +589,10 @@ impl TokenMonitor {
         let mut batches_ok = 0usize;
         let mut batches_failed = 0usize;
 
+        let max_batch_size = api_batch_size_limit();
+
         // Process tokens in API-compatible batches
-        for batch in tokens_to_update.chunks(API_BATCH_SIZE) {
+        for batch in tokens_to_update.chunks(max_batch_size) {
             match self.update_token_batch(batch).await {
                 Ok(result) => {
                     total_updated += result.updated;
@@ -474,7 +611,7 @@ impl TokenMonitor {
             }
 
             // Small delay between batches to respect rate limits
-            if batch.len() == API_BATCH_SIZE {
+            if batch.len() == max_batch_size {
                 tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
             }
         }

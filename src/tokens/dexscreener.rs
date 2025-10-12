@@ -7,6 +7,7 @@ use crate::global::is_debug_api_enabled;
 /// Always attempt to return cached data if still fresh; otherwise fetch,
 /// cache and return. This reduces complexity and duplicate logic.
 use crate::logger::{log, LogTag};
+use crate::tokens::config::with_tokens_config;
 use crate::tokens::types::{
     ApiStats, ApiToken, BoostInfo, DiscoverySourceType, LiquidityInfo, PriceChangeStats,
     SocialInfo, Token, TokenInfo, TxnPeriod, TxnStats, VolumeStats, WebsiteInfo,
@@ -23,20 +24,80 @@ use tokio::time::timeout;
 // (Removed internal FetchMode enum – not needed after simplification)
 
 // =============================================================================
-// DEXSCREENER API CONFIGURATION CONSTANTS
+// CONFIG HELPERS
 // =============================================================================
 
-/// DexScreener API rate limit (requests per minute)
-pub const DEXSCREENER_RATE_LIMIT_PER_MINUTE: usize = 100;
+fn dexscreener_rate_limit_per_minute() -> usize {
+    let value = with_tokens_config(|cfg| cfg.dexscreener_rate_limit_per_minute);
+    value.max(1)
+}
 
-/// DexScreener discovery API rate limit (requests per minute)
-pub const DEXSCREENER_DISCOVERY_RATE_LIMIT: usize = 60;
+fn dexscreener_discovery_rate_limit_per_minute() -> usize {
+    let value = with_tokens_config(|cfg| cfg.dexscreener_discovery_rate_limit);
+    value.max(1)
+}
 
-/// Maximum tokens per API call (DexScreener API constraint)
-pub const MAX_TOKENS_PER_API_CALL: usize = 30;
+fn max_tokens_per_api_call() -> usize {
+    let configured = with_tokens_config(|cfg| cfg.max_tokens_per_api_call);
+    configured.clamp(1, 30)
+}
 
-/// API calls per monitoring cycle (based on rate limits)
-pub const API_CALLS_PER_MONITORING_CYCLE: usize = 90;
+fn discovery_request_interval() -> Duration {
+    let per_minute = dexscreener_discovery_rate_limit_per_minute();
+    if per_minute == 0 {
+        Duration::ZERO
+    } else {
+        Duration::from_secs_f64(60.0 / per_minute as f64)
+    }
+}
+
+static DISCOVERY_RATE_LIMIT_STATE: LazyLock<Mutex<Option<Instant>>> =
+    LazyLock::new(|| Mutex::new(None));
+
+/// Throttle discovery API requests so we respect the configured rate limit.
+pub async fn wait_for_discovery_rate_limit(context: &str) {
+    let interval = discovery_request_interval();
+
+    if interval.is_zero() {
+        let mut guard = DISCOVERY_RATE_LIMIT_STATE.lock().await;
+        *guard = Some(Instant::now());
+        return;
+    }
+
+    loop {
+        let mut guard = DISCOVERY_RATE_LIMIT_STATE.lock().await;
+        match *guard {
+            Some(last) => {
+                let elapsed = last.elapsed();
+                if elapsed >= interval {
+                    *guard = Some(Instant::now());
+                    return;
+                }
+
+                let sleep_duration = interval - elapsed;
+                drop(guard);
+
+                if is_debug_api_enabled() {
+                    log(
+                        LogTag::Api,
+                        "DISCOVERY_RATE_LIMIT_WAIT",
+                        &format!(
+                            "Delaying {} for {}ms to respect DexScreener discovery rate limit",
+                            context,
+                            sleep_duration.as_millis()
+                        ),
+                    );
+                }
+
+                tokio::time::sleep(sleep_duration).await;
+            }
+            None => {
+                *guard = Some(Instant::now());
+                return;
+            }
+        }
+    }
+}
 
 // =============================================================================
 // SIMPLE CACHING SYSTEM (GLOBAL 60s TTL)
@@ -310,13 +371,15 @@ pub struct DexScreenerApi {
 impl DexScreenerApi {
     /// Create new DexScreener API client
     pub fn new() -> Self {
+        let rate_limit = dexscreener_rate_limit_per_minute();
+
         Self {
             client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(30))
                 .user_agent("ScreenerBot/1.0")
                 .build()
                 .expect("Failed to create HTTP client"),
-            rate_limiter: Arc::new(Semaphore::new(DEXSCREENER_RATE_LIMIT_PER_MINUTE)),
+            rate_limiter: Arc::new(Semaphore::new(rate_limit)),
             stats: ApiStats::new(),
             last_request_time: None,
         }
@@ -414,6 +477,8 @@ impl DexScreenerApi {
 
         // Second pass: Make API calls only for tokens without open positions
         if !api_call_mints.is_empty() {
+            let max_per_call = max_tokens_per_api_call();
+
             if is_debug_api_enabled() {
                 log(
                     LogTag::Api,
@@ -422,8 +487,8 @@ impl DexScreenerApi {
                 );
             }
 
-            // Process in chunks of MAX_TOKENS_PER_API_CALL (DexScreener API limit)
-            for (chunk_idx, chunk) in api_call_mints.chunks(MAX_TOKENS_PER_API_CALL).enumerate() {
+            // Process in chunks respecting the configured DexScreener API limit
+            for (chunk_idx, chunk) in api_call_mints.chunks(max_per_call).enumerate() {
                 if is_debug_api_enabled() {
                     log(
                         LogTag::Api,
@@ -480,8 +545,8 @@ impl DexScreenerApi {
                                 &format!(
                                     "Batch {} failed (tokens {}-{}): {}",
                                     chunk_idx + 1,
-                                    chunk_idx * 30 + 1,
-                                    chunk_idx * MAX_TOKENS_PER_API_CALL + chunk.len(),
+                                    chunk_idx * max_per_call + 1,
+                                    chunk_idx * max_per_call + chunk.len(),
                                     e
                                 ),
                             );
@@ -562,11 +627,13 @@ impl DexScreenerApi {
             return Ok(Vec::new());
         }
 
-        if mints.len() > MAX_TOKENS_PER_API_CALL {
+        let max_per_call = max_tokens_per_api_call();
+
+        if mints.len() > max_per_call {
             return Err(format!(
                 "Too many tokens requested: {}. Maximum is {}",
                 mints.len(),
-                MAX_TOKENS_PER_API_CALL
+                max_per_call
             ));
         }
 
@@ -1100,6 +1167,14 @@ impl DexScreenerApi {
             }
         };
 
+        let context = match source {
+            DiscoverySourceType::DexScreenerBoosts => "dexscreener_boosts",
+            DiscoverySourceType::DexScreenerProfiles => "dexscreener_profiles",
+            _ => "dexscreener_discovery",
+        };
+
+        wait_for_discovery_rate_limit(context).await;
+
         let response = self
             .client
             .get(url)
@@ -1140,6 +1215,8 @@ impl DexScreenerApi {
     /// Simple top tokens access for discovery.rs
     pub async fn get_top_tokens(&mut self, limit: usize) -> Result<Vec<String>, String> {
         let url = "https://api.dexscreener.com/latest/dex/pairs/solana";
+
+        wait_for_discovery_rate_limit("dexscreener_top_tokens").await;
 
         let response = self
             .client
@@ -1313,7 +1390,7 @@ impl DexScreenerApi {
         self.get_token_pairs("solana", token_address).await
     }
 
-    /// Get token pairs for multiple Solana tokens using batch endpoint (up to 30 tokens)
+    /// Get token pairs for multiple Solana tokens using the batch endpoint respecting API limits
     pub async fn get_batch_solana_token_pairs(
         &mut self,
         token_addresses: &[String],
@@ -1322,11 +1399,13 @@ impl DexScreenerApi {
             return Ok(Vec::new());
         }
 
-        if token_addresses.len() > MAX_TOKENS_PER_API_CALL {
+        let max_per_call = max_tokens_per_api_call();
+
+        if token_addresses.len() > max_per_call {
             return Err(format!(
                 "Too many tokens for batch request: {}. Maximum is {}",
                 token_addresses.len(),
-                MAX_TOKENS_PER_API_CALL
+                max_per_call
             ));
         }
 
@@ -1514,9 +1593,10 @@ pub async fn get_batch_token_pools_from_dexscreener(
     let mut errors = HashMap::new();
     let mut successful_tokens = 0;
     let mut failed_tokens = 0;
+    let max_per_call = max_tokens_per_api_call();
 
-    // Process tokens in chunks of MAX_TOKENS_PER_API_CALL (30) to use batch endpoint efficiently
-    for (chunk_idx, chunk) in token_addresses.chunks(MAX_TOKENS_PER_API_CALL).enumerate() {
+    // Process tokens in chunks that respect the configured DexScreener batch size
+    for (chunk_idx, chunk) in token_addresses.chunks(max_per_call).enumerate() {
         // Rate limiting: delay between chunks (not individual tokens)
         if chunk_idx > 0 {
             tokio::time::sleep(Duration::from_millis(200)).await;
@@ -1607,7 +1687,7 @@ pub async fn get_batch_token_pools_from_dexscreener(
                 successful_tokens,
                 token_addresses.len(),
                 elapsed.as_secs_f64(),
-                (token_addresses.len() + MAX_TOKENS_PER_API_CALL - 1) / MAX_TOKENS_PER_API_CALL
+                (token_addresses.len() + max_per_call - 1) / max_per_call
             ),
         );
     }

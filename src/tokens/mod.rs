@@ -7,6 +7,7 @@ use tokio::sync::Notify;
 
 pub mod blacklist;
 pub mod cache;
+pub mod config;
 pub mod decimals;
 pub mod dexscreener;
 pub mod discovery;
@@ -30,15 +31,7 @@ pub use blacklist::{
 pub use cache::{DatabaseStats, TokenDatabase};
 pub use decimals::{batch_fetch_token_decimals, get_token_decimals_from_chain};
 pub use dexscreener::{
-    get_global_dexscreener_api,
-    get_token_pairs_from_api,
-    init_dexscreener_api,
-    DexScreenerApi,
-    API_CALLS_PER_MONITORING_CYCLE,
-    DEXSCREENER_DISCOVERY_RATE_LIMIT,
-    // API configuration constants
-    DEXSCREENER_RATE_LIMIT_PER_MINUTE,
-    MAX_TOKENS_PER_API_CALL,
+    get_global_dexscreener_api, get_token_pairs_from_api, init_dexscreener_api, DexScreenerApi,
 };
 pub use discovery::{discover_tokens_once, start_token_discovery, TokenDiscovery};
 // Note: OhlcvDataPoint kept for legacy compatibility - new code should use crate::ohlcvs::OhlcvDataPoint

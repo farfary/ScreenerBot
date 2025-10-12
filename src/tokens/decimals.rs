@@ -1,8 +1,9 @@
-use crate::global::{is_debug_decimals_enabled, TOKENS_DATABASE};
 /// Token decimals fetching from Solana blockchain
+use crate::global::{is_debug_decimals_enabled, TOKENS_DATABASE};
 use crate::logger::{log, LogTag};
 use crate::rpc::get_rpc_client;
 use crate::tokens::blacklist::{add_to_blacklist_db, BlacklistReason};
+use crate::tokens::config::with_tokens_config;
 use crate::tokens::is_system_or_stable_token;
 use once_cell::sync::Lazy;
 use rusqlite::{Connection, Result as SqliteResult};
@@ -27,10 +28,6 @@ pub const DEFAULT_TOKEN_DECIMALS: u8 = 9;
 /// SOL token lamports per SOL constant - ALWAYS use this instead of hardcoding 1_000_000_000
 pub const LAMPORTS_PER_SOL: u64 = 1_000_000_000;
 
-// Split into chunks of 50 to avoid provider HTTP 413 (Request Entity Too Large) limits
-// Some providers enforce tighter POST body limits; 50 is safer in practice.
-const MAX_ACCOUNTS_PER_CALL: usize = 100;
-
 // In-memory cache for frequently accessed decimals to avoid database hits
 static DECIMAL_CACHE: Lazy<Arc<Mutex<HashMap<String, u8>>>> =
     Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
@@ -38,6 +35,16 @@ static DECIMAL_CACHE: Lazy<Arc<Mutex<HashMap<String, u8>>>> =
 // Cache for failed token lookups to avoid repeated failures
 static FAILED_DECIMALS_CACHE: Lazy<Arc<Mutex<HashMap<String, String>>>> =
     Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
+
+fn max_accounts_per_rpc_call() -> usize {
+    let value = with_tokens_config(|cfg| cfg.max_accounts_per_call);
+    value.max(1)
+}
+
+fn max_decimal_retry_attempts() -> i32 {
+    let value = with_tokens_config(|cfg| cfg.max_decimal_retry_attempts);
+    value.max(1)
+}
 
 /// Initialize decimals database tables
 fn init_decimals_database() -> SqliteResult<()> {
@@ -55,18 +62,22 @@ fn init_decimals_database() -> SqliteResult<()> {
     )?;
 
     // Create failed decimals table for retryable vs permanent failures
-    conn.execute(
+    let max_retries_default = max_decimal_retry_attempts();
+
+    let create_failed_decimals_sql = format!(
         "CREATE TABLE IF NOT EXISTS failed_decimals (
             mint TEXT PRIMARY KEY,
             error_message TEXT NOT NULL,
             is_permanent INTEGER NOT NULL DEFAULT 1,
             retry_count INTEGER NOT NULL DEFAULT 0,
-            max_retries INTEGER NOT NULL DEFAULT 3,
+            max_retries INTEGER NOT NULL DEFAULT {},
             updated_at TEXT NOT NULL DEFAULT (datetime('now')),
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         )",
-        [],
-    )?;
+        max_retries_default
+    );
+
+    conn.execute(&create_failed_decimals_sql, [])?;
 
     // Create indices for performance
     conn.execute(
@@ -155,7 +166,7 @@ fn get_failed_decimals_from_db(mint: &str) -> Result<Option<(String, bool, i32, 
 
 /// Save failed token to database with retry tracking
 fn save_failed_decimals_to_db(mint: &str, error: &str, is_permanent: bool) -> Result<(), String> {
-    let max_retries = 3; // Maximum retry attempts for network errors
+    let max_retries = max_decimal_retry_attempts();
 
     init_decimals_database().map_err(|e| format!("Database init error: {}", e))?;
 
@@ -497,7 +508,9 @@ async fn batch_fetch_decimals_with_fallback(
 
     let mut all_results = Vec::new();
 
-    for chunk in mint_pubkeys.chunks(MAX_ACCOUNTS_PER_CALL) {
+    let max_accounts_per_call = max_accounts_per_rpc_call();
+
+    for chunk in mint_pubkeys.chunks(max_accounts_per_call) {
         if is_debug_decimals_enabled() {
             log(
                 LogTag::Decimals,
@@ -728,7 +741,7 @@ async fn batch_fetch_decimals_with_fallback(
         }
 
         // Progressive delay between batches to avoid rate limiting
-        if mint_pubkeys.len() > MAX_ACCOUNTS_PER_CALL {
+        if mint_pubkeys.len() > max_accounts_per_call {
             let delay_ms = if all_results.len() > 200 { 300 } else { 150 }; // Longer delay for large batches
             tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
         }
