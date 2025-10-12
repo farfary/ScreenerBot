@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use once_cell::sync::Lazy;
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
@@ -25,6 +25,10 @@ use tokio::sync::{Mutex, Notify};
 use crate::global::is_debug_wallet_enabled;
 use crate::logger::{log, LogTag};
 use crate::rpc::{get_rpc_client, TokenAccountInfo};
+use crate::tokens::cache::TokenDatabase;
+use crate::transactions::{
+    database::TransactionCursor, database::TransactionListFilters, get_transaction_database,
+};
 use crate::utils::get_wallet_address;
 
 // Database schema version
@@ -115,6 +119,356 @@ pub struct WalletMonitorStats {
     pub current_tokens_count: Option<u32>,
     pub database_size_bytes: u64,
     pub schema_version: u32,
+}
+
+/// High level wallet summary for dashboard consumers
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalletSummarySnapshot {
+    pub window_hours: i64,
+    pub current_sol_balance: f64,
+    pub previous_sol_balance: Option<f64>,
+    pub sol_change: f64,
+    pub sol_change_percent: Option<f64>,
+    pub token_count: u32,
+    pub last_snapshot_time: Option<String>,
+}
+
+/// Aggregated wallet flow metrics calculated from transactions module
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalletFlowMetrics {
+    pub window_hours: i64,
+    pub inflow_sol: f64,
+    pub outflow_sol: f64,
+    pub net_sol: f64,
+    pub transactions_analyzed: usize,
+}
+
+/// Data point for SOL balance trend chart
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalletBalancePoint {
+    pub timestamp: i64,
+    pub sol_balance: f64,
+}
+
+/// Token row with enriched metadata for wallet table
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalletTokenOverview {
+    pub mint: String,
+    pub symbol: String,
+    pub name: Option<String>,
+    pub balance_ui: f64,
+    pub balance_raw: u64,
+    pub decimals: Option<u8>,
+    pub is_token_2022: bool,
+    pub price_sol: Option<f64>,
+    pub price_usd: Option<f64>,
+    pub value_sol: Option<f64>,
+    pub liquidity_usd: Option<f64>,
+    pub volume_24h: Option<f64>,
+    pub last_updated: Option<String>,
+    pub dex_id: Option<String>,
+}
+
+/// Complete dashboard payload for wallet UI
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalletDashboardData {
+    pub summary: WalletSummarySnapshot,
+    pub flows: WalletFlowMetrics,
+    pub balance_trend: Vec<WalletBalancePoint>,
+    pub tokens: Vec<WalletTokenOverview>,
+    pub last_updated: Option<String>,
+}
+
+fn clamp_window_hours(window_hours: i64) -> i64 {
+    window_hours.clamp(1, 24 * 14)
+}
+
+fn clamp_snapshot_limit(limit: usize) -> usize {
+    limit.clamp(16, 2880)
+}
+
+fn clamp_token_limit(limit: usize) -> usize {
+    limit.clamp(10, 1000)
+}
+
+fn calc_change_percent(current: f64, previous: f64) -> Option<f64> {
+    if previous.abs() < f64::EPSILON {
+        None
+    } else {
+        Some((current - previous) / previous * 100.0)
+    }
+}
+
+fn short_mint_label(mint: &str) -> String {
+    if mint.len() <= 4 {
+        mint.to_string()
+    } else {
+        format!("{}…", &mint[..4])
+    }
+}
+
+async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, String> {
+    let db = get_transaction_database()
+        .await
+        .ok_or_else(|| "Transaction database not initialized".to_string())?;
+
+    let window_hours = clamp_window_hours(window_hours);
+    let window_start = Utc::now() - ChronoDuration::hours(window_hours);
+
+    let mut filters = TransactionListFilters::default();
+    filters.time_from = Some(window_start);
+    filters.only_confirmed = Some(true);
+
+    let mut cursor: Option<TransactionCursor> = None;
+    let mut inflow = 0.0_f64;
+    let mut outflow = 0.0_f64;
+    let mut analyzed = 0usize;
+
+    loop {
+        let result = db
+            .list_transactions(&filters, cursor.as_ref(), 200)
+            .await
+            .map_err(|e| format!("Failed to list transactions: {}", e))?;
+
+        if result.items.is_empty() {
+            break;
+        }
+
+        for row in &result.items {
+            if row.timestamp < window_start {
+                continue;
+            }
+
+            let delta = row.sol_delta;
+            if delta > 0.0 {
+                inflow += delta;
+            } else if delta < 0.0 {
+                outflow += -delta;
+            }
+            analyzed += 1;
+        }
+
+        if let Some(next_cursor) = result.next_cursor.clone() {
+            if let Some(last_row) = result.items.last() {
+                if last_row.timestamp < window_start {
+                    break;
+                }
+            }
+            cursor = Some(next_cursor);
+        } else {
+            break;
+        }
+
+        if result.items.len() < 200 {
+            break;
+        }
+    }
+
+    Ok(WalletFlowMetrics {
+        window_hours,
+        inflow_sol: inflow,
+        outflow_sol: outflow,
+        net_sol: inflow - outflow,
+        transactions_analyzed: analyzed,
+    })
+}
+
+async fn enrich_token_overview(
+    balances: Vec<TokenBalance>,
+    max_tokens: usize,
+) -> Vec<WalletTokenOverview> {
+    let mut rows = Vec::with_capacity(balances.len());
+
+    for balance in balances {
+        let token_meta = match TokenDatabase::get_token_by_mint_async(&balance.mint).await {
+            Ok(meta) => meta,
+            Err(err) => {
+                if is_debug_wallet_enabled() {
+                    log(
+                        LogTag::Wallet,
+                        "TOKEN_META_FAIL",
+                        &format!(
+                            "Failed to fetch token metadata for {}: {}",
+                            &balance.mint[..8],
+                            err
+                        ),
+                    );
+                }
+                None
+            }
+        };
+
+        let (symbol, name, price_sol, price_usd, liquidity_usd, volume_24h, last_updated, dex_id) =
+            if let Some(ref meta) = token_meta {
+                let price_sol = meta.price_sol.or_else(|| {
+                    if meta.price_native > 0.0 {
+                        Some(meta.price_native)
+                    } else {
+                        None
+                    }
+                });
+                let price_usd = if meta.price_usd > 0.0 {
+                    Some(meta.price_usd)
+                } else {
+                    None
+                };
+                let liquidity_usd = meta.liquidity.as_ref().and_then(|l| l.usd);
+                let volume_24h = meta.volume.as_ref().and_then(|v| v.h24);
+                let last_updated = Some(meta.last_updated.to_rfc3339());
+                let dex_id = if meta.dex_id.is_empty() {
+                    None
+                } else {
+                    Some(meta.dex_id.clone())
+                };
+
+                (
+                    meta.symbol.clone(),
+                    Some(meta.name.clone()),
+                    price_sol,
+                    price_usd,
+                    liquidity_usd,
+                    volume_24h,
+                    last_updated,
+                    dex_id,
+                )
+            } else {
+                (
+                    short_mint_label(&balance.mint),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+            };
+
+        let value_sol = price_sol.map(|price| price * balance.balance_ui);
+
+        rows.push(WalletTokenOverview {
+            mint: balance.mint.clone(),
+            symbol,
+            name,
+            balance_ui: balance.balance_ui,
+            balance_raw: balance.balance,
+            decimals: balance.decimals,
+            is_token_2022: balance.is_token_2022,
+            price_sol,
+            price_usd,
+            value_sol,
+            liquidity_usd,
+            volume_24h,
+            last_updated,
+            dex_id,
+        });
+    }
+
+    rows.sort_by(|a, b| {
+        let a_key = a.value_sol.unwrap_or(a.balance_ui);
+        let b_key = b.value_sol.unwrap_or(b.balance_ui);
+        b_key
+            .partial_cmp(&a_key)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let max_tokens = clamp_token_limit(max_tokens);
+    if rows.len() > max_tokens {
+        rows.truncate(max_tokens);
+    }
+
+    rows
+}
+
+pub async fn get_wallet_dashboard_data(
+    window_hours: i64,
+    snapshot_limit: usize,
+    max_tokens: usize,
+) -> Result<WalletDashboardData, String> {
+    let window_hours = clamp_window_hours(window_hours);
+    let snapshot_limit = clamp_snapshot_limit(snapshot_limit);
+
+    let mut snapshots = get_recent_wallet_snapshots(snapshot_limit).await?;
+    if snapshots.is_empty() {
+        let flows = compute_flow_metrics(window_hours).await?;
+        return Ok(WalletDashboardData {
+            summary: WalletSummarySnapshot {
+                window_hours,
+                current_sol_balance: 0.0,
+                previous_sol_balance: None,
+                sol_change: 0.0,
+                sol_change_percent: None,
+                token_count: 0,
+                last_snapshot_time: None,
+            },
+            flows,
+            balance_trend: Vec::new(),
+            tokens: Vec::new(),
+            last_updated: None,
+        });
+    }
+
+    snapshots.sort_by(|a, b| a.snapshot_time.cmp(&b.snapshot_time));
+
+    let latest_snapshot = snapshots
+        .last()
+        .cloned()
+        .ok_or_else(|| "Latest snapshot unavailable".to_string())?;
+    let window_start = Utc::now() - ChronoDuration::hours(window_hours);
+
+    let baseline_snapshot = snapshots
+        .iter()
+        .find(|snap| snap.snapshot_time >= window_start)
+        .or_else(|| snapshots.first())
+        .cloned();
+
+    let previous_sol_balance = baseline_snapshot.as_ref().map(|snap| snap.sol_balance);
+    let sol_change =
+        latest_snapshot.sol_balance - previous_sol_balance.unwrap_or(latest_snapshot.sol_balance);
+    let sol_change_percent = previous_sol_balance
+        .and_then(|prev| calc_change_percent(latest_snapshot.sol_balance, prev));
+
+    let mut trend: Vec<WalletBalancePoint> = snapshots
+        .iter()
+        .filter(|snap| snap.snapshot_time >= window_start)
+        .map(|snap| WalletBalancePoint {
+            timestamp: snap.snapshot_time.timestamp(),
+            sol_balance: snap.sol_balance,
+        })
+        .collect();
+
+    if trend.is_empty() {
+        trend.push(WalletBalancePoint {
+            timestamp: latest_snapshot.snapshot_time.timestamp(),
+            sol_balance: latest_snapshot.sol_balance,
+        });
+    }
+
+    let mut tokens = Vec::new();
+    if let Some(snapshot_id) = latest_snapshot.id {
+        let balances = get_snapshot_token_balances(snapshot_id).await?;
+        tokens = enrich_token_overview(balances, max_tokens).await;
+    }
+
+    let flows = compute_flow_metrics(window_hours).await?;
+
+    let summary = WalletSummarySnapshot {
+        window_hours,
+        current_sol_balance: latest_snapshot.sol_balance,
+        previous_sol_balance,
+        sol_change,
+        sol_change_percent,
+        token_count: latest_snapshot.total_tokens_count,
+        last_snapshot_time: Some(latest_snapshot.snapshot_time.to_rfc3339()),
+    };
+
+    Ok(WalletDashboardData {
+        summary,
+        flows,
+        balance_trend: trend,
+        tokens,
+        last_updated: Some(latest_snapshot.snapshot_time.to_rfc3339()),
+    })
 }
 
 // =============================================================================

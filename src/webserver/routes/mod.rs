@@ -28,6 +28,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/tokens", axum::routing::get(tokens_page))
         .route("/events", axum::routing::get(events_page))
         .route("/services", axum::routing::get(services_page))
+        .route("/wallet", axum::routing::get(wallet_page))
         .route("/config", axum::routing::get(config_page))
         .route("/transactions", axum::routing::get(transactions_page))
         .nest("/api", api_routes())
@@ -74,6 +75,12 @@ async fn events_page() -> Html<String> {
 async fn services_page() -> Html<String> {
     let content = templates::services_content();
     Html(templates::base_template("Services", "services", &content))
+}
+
+/// Wallet page handler
+async fn wallet_page() -> Html<String> {
+    let content = templates::wallet_content();
+    Html(templates::base_template("Wallet", "wallet", &content))
 }
 
 /// Config page handler
@@ -124,6 +131,7 @@ async fn get_page_content(axum::extract::Path(page): axum::extract::Path<String>
         "positions" => templates::positions_content(),
         "filtering" => templates::filtering_content(),
         "tokens" => templates::tokens_content(),
+        "wallet" => templates::wallet_content(),
         "events" => templates::events_content(),
         "services" => templates::services_content(),
         "config" => templates::config_content(),

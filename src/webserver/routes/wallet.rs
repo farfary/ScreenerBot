@@ -1,8 +1,13 @@
-use axum::{extract::State, response::Json, routing::get, Router};
+use axum::{
+    extract::{Query, State},
+    response::Json,
+    routing::get,
+    Router,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::wallet::{get_current_wallet_status, WalletSnapshot};
+use crate::wallet::{get_current_wallet_status, get_wallet_dashboard_data, WalletDashboardData};
 use crate::webserver::state::AppState;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -25,7 +30,9 @@ pub struct TokenBalanceInfo {
 
 /// Create wallet routes
 pub fn routes() -> Router<Arc<AppState>> {
-    Router::new().route("/wallet/current", get(get_wallet_current))
+    Router::new()
+        .route("/wallet/current", get(get_wallet_current))
+        .route("/wallet/dashboard", get(get_wallet_dashboard))
 }
 
 /// Get current wallet balance
@@ -53,5 +60,50 @@ async fn get_wallet_current() -> Json<Option<WalletCurrentResponse>> {
             }))
         }
         _ => Json(None),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct WalletDashboardQuery {
+    #[serde(default = "default_window_hours")]
+    pub window_hours: i64,
+    #[serde(default = "default_snapshot_limit")]
+    pub snapshot_limit: usize,
+    #[serde(default = "default_token_limit")]
+    pub max_tokens: usize,
+}
+
+fn default_window_hours() -> i64 {
+    24
+}
+
+fn default_snapshot_limit() -> usize {
+    600
+}
+
+fn default_token_limit() -> usize {
+    250
+}
+
+#[derive(Debug, Serialize)]
+pub struct WalletDashboardResponse {
+    pub data: Option<WalletDashboardData>,
+    pub error: Option<String>,
+}
+
+async fn get_wallet_dashboard(
+    Query(query): Query<WalletDashboardQuery>,
+) -> Json<WalletDashboardResponse> {
+    match get_wallet_dashboard_data(query.window_hours, query.snapshot_limit, query.max_tokens)
+        .await
+    {
+        Ok(payload) => Json(WalletDashboardResponse {
+            data: Some(payload),
+            error: None,
+        }),
+        Err(err) => Json(WalletDashboardResponse {
+            data: None,
+            error: Some(err),
+        }),
     }
 }

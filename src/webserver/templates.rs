@@ -25,6 +25,7 @@ const EVENTS_PAGE: &str = include_str!("templates/pages/events.html");
 const SERVICES_PAGE: &str = include_str!("templates/pages/services.html");
 const CONFIG_PAGE: &str = include_str!("templates/pages/config.html");
 const TRANSACTIONS_PAGE: &str = include_str!("templates/pages/transactions.html");
+const WALLET_PAGE: &str = include_str!("templates/pages/wallet.html");
 
 /// Render the base layout with shared chrome and inject the requested content.
 pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
@@ -65,6 +66,7 @@ fn nav_tabs(active: &str) -> String {
         ("positions", "💰 Positions"),
         ("filtering", "🔍 Filtering"),
         ("tokens", "🪙 Tokens"),
+        ("wallet", "👛 Wallet"),
         ("transactions", "💱 Transactions"),
         ("events", "📡 Events"),
         ("config", "⚙️ Config"),
@@ -127,6 +129,10 @@ pub fn events_content() -> String {
 
 pub fn services_content() -> String {
     render_page(SERVICES_PAGE)
+}
+
+pub fn wallet_content() -> String {
+    render_page(WALLET_PAGE)
 }
 
 pub fn config_content() -> String {
