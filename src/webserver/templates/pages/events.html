@@ -1,66 +1,180 @@
 <div class="page-table">
   <div class="toolbar">
-    <span style="font-weight: 600">📡 Events</span>
-    <input
-      type="text"
-      id="eventSearch"
-      placeholder="🔍 Search events..."
-      style="
-        flex: 1;
-        min-width: 200px;
-        padding: 6px 8px;
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        background: var(--bg-primary);
-        color: var(--text-primary);
-      "
-    />
-    <select
-      id="categoryFilter"
-      style="
-        padding: 6px 8px;
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        background: var(--bg-primary);
-        color: var(--text-primary);
-      "
-    >
-      <option value="">All Categories</option>
-      <option value="swap">Swap</option>
-      <option value="transaction">Transaction</option>
-      <option value="pool">Pool</option>
-      <option value="token">Token</option>
-      <option value="position">Position</option>
-      <option value="security">Security</option>
-      <option value="entry">Entry</option>
-      <option value="system">System</option>
-    </select>
-    <select
-      id="severityFilter"
-      style="
-        padding: 6px 8px;
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        background: var(--bg-primary);
-        color: var(--text-primary);
-      "
-    >
-      <option value="">All Severity</option>
-      <option value="info">Info</option>
-      <option value="warn">Warning</option>
-      <option value="error">Error</option>
-      <option value="debug">Debug</option>
-    </select>
-    <div class="spacer"></div>
-    <span
-      id="eventsCountText"
-      style="color: var(--text-secondary); font-size: 0.9em"
-      >Loading...</span
-    >
-    <button id="toggleEventsPause" class="btn">⏸️ Pause</button>
-    <button id="refreshEvents" class="btn btn-primary">🔄 Refresh</button>
+    <div class="toolbar-row toolbar-primary">
+      <span class="toolbar-title">📡 Events</span>
+      <div class="toolbar-field">
+        <input
+          type="text"
+          id="eventSearch"
+          placeholder="🔍 Search events..."
+          class="toolbar-input"
+        />
+      </div>
+      <div class="toolbar-field">
+        <select id="categoryFilter" class="toolbar-select">
+          <option value="">All Categories</option>
+          <option value="swap">Swap</option>
+          <option value="transaction">Transaction</option>
+          <option value="pool">Pool</option>
+          <option value="token">Token</option>
+          <option value="position">Position</option>
+          <option value="security">Security</option>
+          <option value="entry">Entry</option>
+          <option value="system">System</option>
+        </select>
+      </div>
+      <div class="toolbar-field">
+        <select id="severityFilter" class="toolbar-select">
+          <option value="">All Severity</option>
+          <option value="info">Info</option>
+          <option value="warn">Warning</option>
+          <option value="error">Error</option>
+          <option value="debug">Debug</option>
+        </select>
+      </div>
+      <div class="toolbar-actions">
+        <span id="eventsCountText" class="events-count">Loading...</span>
+        <span id="eventsLastUpdated" class="events-last-updated"
+          >Last update —</span
+        >
+        <button id="toggleEventsPause" class="btn">⏸️ Pause</button>
+        <button id="clearFilters" class="btn btn-secondary">🧹 Clear</button>
+        <button id="refreshEvents" class="btn btn-primary">🔄 Refresh</button>
+      </div>
+    </div>
+    <div class="toolbar-row toolbar-secondary">
+      <div class="quick-group">
+        <span class="quick-label">Severity:</span>
+        <button class="filter-chip active" data-severity-chip="">All</button>
+        <button class="filter-chip" data-severity-chip="error">Errors</button>
+        <button class="filter-chip" data-severity-chip="warn">Warnings</button>
+        <button class="filter-chip" data-severity-chip="info">Info</button>
+      </div>
+      <div class="quick-group">
+        <span class="quick-label">Category:</span>
+        <button class="filter-chip active" data-category-chip="">All</button>
+        <button class="filter-chip" data-category-chip="ohlcv">OHLCV</button>
+        <button class="filter-chip" data-category-chip="security">
+          Security
+        </button>
+        <button class="filter-chip" data-category-chip="pool">Pool</button>
+      </div>
+      <div class="quick-group">
+        <span class="quick-label">Time:</span>
+        <button class="filter-chip active" data-time-window="">All</button>
+        <button class="filter-chip" data-time-window="5">Last 5m</button>
+        <button class="filter-chip" data-time-window="30">30m</button>
+        <button class="filter-chip" data-time-window="120">2h</button>
+      </div>
+    </div>
   </div>
   <style>
+    .toolbar {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding: 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      background: var(--bg-card);
+    }
+
+    .toolbar-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 16px;
+      align-items: center;
+    }
+
+    .toolbar-primary {
+      justify-content: flex-start;
+      gap: 12px 16px;
+    }
+
+    .toolbar-secondary {
+      justify-content: flex-start;
+      gap: 16px;
+    }
+
+    .toolbar-title {
+      font-weight: 600;
+      color: var(--text-primary);
+      min-width: 100px;
+    }
+
+    .toolbar-field {
+      display: flex;
+      flex: 1 1 180px;
+      min-width: 160px;
+    }
+
+    .toolbar-input,
+    .toolbar-select {
+      width: 100%;
+      padding: 6px 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+    }
+
+    .toolbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-left: auto;
+    }
+
+    .events-count {
+      color: var(--text-secondary);
+      font-size: 0.9em;
+    }
+
+    .events-last-updated {
+      color: var(--text-muted);
+      font-size: 0.85em;
+    }
+
+    .quick-group {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .quick-label {
+      font-size: 0.75em;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+    }
+
+    .filter-chip {
+      border: 1px solid var(--border-color);
+      background: var(--bg-primary);
+      color: var(--text-secondary);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 0.75em;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .filter-chip:hover,
+    .filter-chip:focus {
+      border-color: var(--link-color);
+      color: var(--link-color);
+      outline: none;
+    }
+
+    .filter-chip.active {
+      background: var(--link-color);
+      border-color: var(--link-color);
+      color: #fff;
+    }
+
     .event-ref-cell,
     .event-mint-cell {
       display: inline-flex;
@@ -495,6 +609,11 @@ Loading...</pre
   var eventsLifecycleState = {
     cleanupRegistered: false,
     intervalListener: null,
+    statusIntervalId: null,
+  };
+
+  const eventsActiveFilters = {
+    timeWindowMinutes: null,
   };
 
   const CATEGORY_LABELS = {
@@ -573,6 +692,84 @@ Loading...</pre
     const minutes = Math.floor(seconds / 60);
     const remaining = Math.floor(seconds % 60);
     return `${minutes}m ${remaining}s`;
+  }
+
+  function hasActiveTimeWindow() {
+    return eventsActiveFilters.timeWindowMinutes !== null;
+  }
+
+  function updateEventsLastUpdatedLabel() {
+    const label = document.getElementById("eventsLastUpdated");
+    if (!label) return;
+    const timestamp = eventsSnapshotState.lastUpdatedAt;
+    if (!timestamp) {
+      label.textContent = "Last update —";
+      label.title = "";
+      return;
+    }
+    const date = new Date(timestamp);
+    const relative = Utils.formatTimeAgo(date, { fallback: "just now" });
+    label.textContent = `Last update ${relative}`;
+    label.title = Utils.formatTimestamp(date, { includeSeconds: true });
+  }
+
+  function updateTimeWindowChips() {
+    const active = eventsActiveFilters.timeWindowMinutes;
+    document.querySelectorAll("[data-time-window]").forEach((chip) => {
+      const valueAttr = chip.getAttribute("data-time-window") || "";
+      const numeric = valueAttr === "" ? null : Number(valueAttr);
+      const isActive = numeric === null ? active === null : active === numeric;
+      chip.classList.toggle("active", isActive);
+    });
+  }
+
+  function syncSeverityChips() {
+    const severity = document.getElementById("severityFilter")?.value || "";
+    document.querySelectorAll("[data-severity-chip]").forEach((chip) => {
+      const value = chip.getAttribute("data-severity-chip") || "";
+      chip.classList.toggle("active", value === severity);
+    });
+  }
+
+  function syncCategoryChips() {
+    const category = document.getElementById("categoryFilter")?.value || "";
+    document.querySelectorAll("[data-category-chip]").forEach((chip) => {
+      const value = chip.getAttribute("data-category-chip") || "";
+      chip.classList.toggle("active", value === category);
+    });
+  }
+
+  function setTimeWindow(windowValue, options) {
+    const opts = Object.assign({ save: true, silent: false }, options || {});
+    let minutes = null;
+    if (windowValue !== null && windowValue !== "") {
+      const parsed = Number(windowValue);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        minutes = parsed;
+      }
+    }
+
+    if (eventsActiveFilters.timeWindowMinutes === minutes) {
+      updateTimeWindowChips();
+      return;
+    }
+
+    eventsActiveFilters.timeWindowMinutes = minutes;
+    if (opts.save) {
+      AppState.save(
+        "events_time_window",
+        minutes === null ? "" : String(minutes)
+      );
+    }
+
+    eventsScrollState.filteredEnd = false;
+    eventsScrollState.endReached = false;
+    eventsScrollState.limitReached = false;
+    updateTimeWindowChips();
+
+    if (!opts.silent) {
+      scheduleEventsRender({ forceFull: true });
+    }
   }
 
   function resetEventsRenderState() {
@@ -727,6 +924,7 @@ Loading...</pre
     eventsSnapshotState.totalAvailable = 0;
     eventsSnapshotState.received = 0;
     eventsSnapshotState.lastUpdatedAt = null;
+    updateEventsLastUpdatedLabel();
     updateEventsScrollControls(false);
     eventsScrollState.filteredEnd = false;
     scheduleEventsRender({ forceFull: true, immediate: true });
@@ -817,6 +1015,13 @@ Loading...</pre
     const severity = document.getElementById("severityFilter")?.value || "";
     if (category && event.category !== category) return false;
     if (severity && event.severity !== severity) return false;
+    if (eventsActiveFilters.timeWindowMinutes !== null) {
+      const eventDate = event.eventTimeDate;
+      if (!eventDate) return false;
+      const cutoff =
+        Date.now() - eventsActiveFilters.timeWindowMinutes * 60 * 1000;
+      if (eventDate.getTime() < cutoff) return false;
+    }
     return true;
   }
 
@@ -932,6 +1137,14 @@ Loading...</pre
         }
       );
     }
+
+    if (!eventsLifecycleState.statusIntervalId) {
+      const intervalId = setInterval(updateEventsLastUpdatedLabel, 30_000);
+      eventsLifecycleState.statusIntervalId = intervalId;
+      if (window.Router && typeof Router.trackInterval === "function") {
+        Router.trackInterval(intervalId);
+      }
+    }
   }
 
   function teardownEventsPage() {
@@ -957,6 +1170,11 @@ Loading...</pre
       eventsLifecycleState.intervalListener = null;
     }
     eventsLifecycleState.cleanupRegistered = false;
+
+    if (eventsLifecycleState.statusIntervalId) {
+      clearInterval(eventsLifecycleState.statusIntervalId);
+      eventsLifecycleState.statusIntervalId = null;
+    }
   }
 
   async function fetchEventsHead(options) {
@@ -998,6 +1216,7 @@ Loading...</pre
         eventsSnapshotState.totalAvailable = Number(payload?.count) || 0;
         eventsSnapshotState.received = 0;
         eventsSnapshotState.lastUpdatedAt = Date.now();
+        updateEventsLastUpdatedLabel();
         updateConnectionStatus(
           isEventsPaused() ? "paused" : "connected",
           rows.length
@@ -1028,6 +1247,7 @@ Loading...</pre
         );
         eventsSnapshotState.received = allEventsData.length;
         eventsSnapshotState.lastUpdatedAt = Date.now();
+        updateEventsLastUpdatedLabel();
 
         const activeStatus = isEventsPaused() ? "paused" : "connected";
         updateConnectionStatus(
@@ -1117,6 +1337,7 @@ Loading...</pre
       );
       eventsSnapshotState.received = allEventsData.length;
       eventsSnapshotState.lastUpdatedAt = Date.now();
+      updateEventsLastUpdatedLabel();
 
       updateConnectionStatus(
         "connected",
@@ -1442,6 +1663,42 @@ Loading...</pre
     searchInput.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
+  function clearAllFilters() {
+    const searchInput = document.getElementById("eventSearch");
+    if (searchInput) {
+      if (searchInput.value !== "") {
+        searchInput.value = "";
+        AppState.save("events_search", "");
+        searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    }
+
+    const categoryFilter = document.getElementById("categoryFilter");
+    if (categoryFilter) {
+      if (categoryFilter.value) {
+        applyCategoryFilterValue("");
+      } else {
+        syncCategoryChips();
+      }
+    }
+
+    const severityFilter = document.getElementById("severityFilter");
+    if (severityFilter) {
+      if (severityFilter.value) {
+        severityFilter.value = "";
+        severityFilter.dispatchEvent(new Event("change"));
+      } else {
+        syncSeverityChips();
+      }
+    }
+
+    setTimeWindow(null);
+
+    if (window.Utils && typeof Utils.showToast === "function") {
+      Utils.showToast("✅ Filters cleared");
+    }
+  }
+
   async function loadOlderEvents() {
     if (
       eventsScrollState.loading ||
@@ -1453,6 +1710,13 @@ Loading...</pre
 
     const searchTerm = getSearchTerm();
     if (searchTerm) {
+      eventsScrollState.filteredEnd = true;
+      eventsScrollState.endReached = true;
+      updateEventsScrollControls(allEventsData.length > 0);
+      return;
+    }
+
+    if (hasActiveTimeWindow()) {
       eventsScrollState.filteredEnd = true;
       eventsScrollState.endReached = true;
       updateEventsScrollControls(allEventsData.length > 0);
@@ -1567,6 +1831,7 @@ Loading...</pre
       );
       eventsSnapshotState.received = allEventsData.length;
       eventsSnapshotState.lastUpdatedAt = Date.now();
+      updateEventsLastUpdatedLabel();
 
       scheduleEventsRender({ forceFull: true });
     } catch (err) {
@@ -1882,6 +2147,7 @@ Loading...</pre
       "events_category",
       document.getElementById("categoryFilter").value
     );
+    syncCategoryChips();
   });
 
   // Filter by severity
@@ -1893,6 +2159,7 @@ Loading...</pre
       "events_severity",
       document.getElementById("severityFilter").value
     );
+    syncSeverityChips();
   });
 
   // Refresh button
@@ -1901,6 +2168,59 @@ Loading...</pre
     .addEventListener("click", () =>
       requestEventsSnapshot("Refreshing events...")
     );
+
+  const clearFiltersButton = document.getElementById("clearFilters");
+  if (clearFiltersButton) {
+    clearFiltersButton.addEventListener("click", clearAllFilters);
+  }
+
+  document.querySelectorAll("[data-severity-chip]").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const severitySelect = document.getElementById("severityFilter");
+      if (!severitySelect) return;
+      const value = chip.getAttribute("data-severity-chip") || "";
+      const current = severitySelect.value || "";
+      const nextValue = current === value ? "" : value;
+      if (current === nextValue) {
+        syncSeverityChips();
+        return;
+      }
+      severitySelect.value = nextValue;
+      severitySelect.dispatchEvent(new Event("change"));
+    });
+  });
+
+  document.querySelectorAll("[data-category-chip]").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const value = (
+        chip.getAttribute("data-category-chip") || ""
+      ).toLowerCase();
+      const select = document.getElementById("categoryFilter");
+      if (!select) return;
+      const current = select.value || "";
+      const nextValue = current === value ? "" : value;
+      if (current === nextValue) {
+        syncCategoryChips();
+        return;
+      }
+      applyCategoryFilterValue(nextValue);
+    });
+  });
+
+  document.querySelectorAll("[data-time-window]").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const valueAttr = chip.getAttribute("data-time-window") || "";
+      const numeric = valueAttr === "" ? null : Number(valueAttr);
+      const activeValue = eventsActiveFilters.timeWindowMinutes;
+      const isActive =
+        numeric === null ? activeValue === null : activeValue === numeric;
+      if (numeric === null || isActive) {
+        setTimeWindow(null);
+        return;
+      }
+      setTimeWindow(valueAttr);
+    });
+  });
 
   document.getElementById("toggleEventsPause").addEventListener("click", () => {
     const nextPaused = !isEventsPaused();
@@ -2355,6 +2675,17 @@ Loading...</pre
       const savedSearch = AppState.load("events_search", "");
       if (savedSearch) searchInput.value = savedSearch;
     }
+
+    const savedWindow = AppState.load("events_time_window", "");
+    if (savedWindow) {
+      setTimeWindow(savedWindow, { silent: true, save: false });
+    } else {
+      setTimeWindow(null, { silent: true, save: false });
+    }
+
+    syncCategoryChips();
+    syncSeverityChips();
+    updateTimeWindowChips();
   }
 
   function initializePauseState() {
@@ -2373,6 +2704,7 @@ Loading...</pre
     restoreSavedFilters();
     initializePauseState();
     ensureEventsLifecycle();
+    updateEventsLastUpdatedLabel();
     requestEventsSnapshot("Loading latest events...");
   };
 
