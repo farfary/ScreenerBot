@@ -2,6 +2,7 @@
 ///
 /// This file contains all the essential data structures used throughout the pools system.
 /// These types are designed to be minimal, efficient, and focused on the core functionality.
+use crate::config::with_config;
 use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
 use std::collections::VecDeque;
@@ -395,12 +396,17 @@ impl PriceHistory {
 }
 
 /// Configuration constants
-pub const PRICE_CACHE_TTL_SECONDS: u64 = 30;
 pub const PRICE_HISTORY_MAX_ENTRIES: usize = 1000;
-pub const MAX_WATCHED_TOKENS: usize = 2000;
-/// Pool monitoring refresh interval (seconds)
-/// Set to 600 seconds (10 minutes) to allow proper token re-filtering
-pub const POOL_REFRESH_INTERVAL_SECONDS: u64 = 10;
+
+/// Price cache TTL sourced from configuration
+pub fn price_cache_ttl_seconds() -> u64 {
+    with_config(|cfg| cfg.pools.price_cache_ttl_secs.max(1))
+}
+
+/// Maximum number of tokens the pool service monitors concurrently
+pub fn max_watched_tokens() -> usize {
+    with_config(|cfg| cfg.pools.max_watched_tokens.max(1))
+}
 
 /// Maximum allowable gap between consecutive price updates (1 minute)
 /// If gap is larger, older data becomes invalid and should be removed

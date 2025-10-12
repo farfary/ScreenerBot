@@ -7,28 +7,12 @@
 /// - Database cache of known pools
 ///
 /// The discovery module feeds raw pool information to the analyzer for classification and program kind detection.
-
 // =============================================================================
 // POOL DISCOVERY SOURCE CONFIGURATION
 // =============================================================================
-
-/// Enable DexScreener API pool discovery
-/// When true: Include DexScreener pools in discovery
-/// When false: Skip DexScreener API entirely
-pub const ENABLE_DEXSCREENER_DISCOVERY: bool = true;
-
-/// Enable GeckoTerminal API pool discovery
-/// When true: Include GeckoTerminal pools in discovery
-/// When false: Skip GeckoTerminal API entirely
-pub const ENABLE_GECKOTERMINAL_DISCOVERY: bool = false;
-
-/// Enable Raydium API pool discovery
-/// When true: Include Raydium pools in discovery
-/// When false: Skip Raydium API entirely
-pub const ENABLE_RAYDIUM_DISCOVERY: bool = false;
-
-use super::types::{PoolDescriptor, ProgramKind, MAX_WATCHED_TOKENS, SOL_MINT};
+use super::types::{max_watched_tokens, PoolDescriptor, ProgramKind, SOL_MINT};
 use super::utils::is_stablecoin_mint;
+use crate::config::with_config;
 use crate::events::{record_safe, Event, EventCategory, Severity};
 use crate::filtering;
 use crate::global::is_debug_pool_discovery_enabled;
@@ -53,6 +37,21 @@ use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 use tokio::sync::Notify;
 
+/// Returns whether DexScreener discovery is enabled via configuration
+pub fn is_dexscreener_discovery_enabled() -> bool {
+    with_config(|cfg| cfg.pools.enable_dexscreener_discovery)
+}
+
+/// Returns whether GeckoTerminal discovery is enabled via configuration
+pub fn is_geckoterminal_discovery_enabled() -> bool {
+    with_config(|cfg| cfg.pools.enable_geckoterminal_discovery)
+}
+
+/// Returns whether Raydium discovery is enabled via configuration
+pub fn is_raydium_discovery_enabled() -> bool {
+    with_config(|cfg| cfg.pools.enable_raydium_discovery)
+}
+
 /// Pool discovery service state
 pub struct PoolDiscovery {
     known_pools: HashMap<Pubkey, PoolDescriptor>,
@@ -71,26 +70,27 @@ impl PoolDiscovery {
     /// Get current discovery source configuration
     pub fn get_source_config() -> (bool, bool, bool) {
         (
-            ENABLE_DEXSCREENER_DISCOVERY,
-            ENABLE_GECKOTERMINAL_DISCOVERY,
-            ENABLE_RAYDIUM_DISCOVERY,
+            is_dexscreener_discovery_enabled(),
+            is_geckoterminal_discovery_enabled(),
+            is_raydium_discovery_enabled(),
         )
     }
 
     /// Log the current discovery source configuration
     pub fn log_source_config() {
+        let (dex_enabled, gecko_enabled, raydium_enabled) = Self::get_source_config();
         let enabled_sources: Vec<&str> = [
-            if ENABLE_DEXSCREENER_DISCOVERY {
+            if dex_enabled {
                 Some("DexScreener")
             } else {
                 None
             },
-            if ENABLE_GECKOTERMINAL_DISCOVERY {
+            if gecko_enabled {
                 Some("GeckoTerminal")
             } else {
                 None
             },
-            if ENABLE_RAYDIUM_DISCOVERY {
+            if raydium_enabled {
                 Some("Raydium")
             } else {
                 None
@@ -119,17 +119,17 @@ impl PoolDiscovery {
 
         // Log disabled sources for clarity
         let disabled_sources: Vec<&str> = [
-            if !ENABLE_DEXSCREENER_DISCOVERY {
+            if !dex_enabled {
                 Some("DexScreener")
             } else {
                 None
             },
-            if !ENABLE_GECKOTERMINAL_DISCOVERY {
+            if !gecko_enabled {
                 Some("GeckoTerminal")
             } else {
                 None
             },
-            if !ENABLE_RAYDIUM_DISCOVERY {
+            if !raydium_enabled {
                 Some("Raydium")
             } else {
                 None
@@ -164,8 +164,12 @@ impl PoolDiscovery {
         // Log the current source configuration
         Self::log_source_config();
 
+        let interval_seed = with_config(|cfg| cfg.pools.discovery_tick_interval_secs.max(1));
+
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
+            let mut current_interval = interval_seed;
+            let mut interval =
+                tokio::time::interval(tokio::time::Duration::from_secs(current_interval));
 
             loop {
                 tokio::select! {
@@ -177,6 +181,12 @@ impl PoolDiscovery {
                     }
                     _ = interval.tick() => {
                         Self::batched_discovery_tick().await;
+
+                        let updated_interval = with_config(|cfg| cfg.pools.discovery_tick_interval_secs.max(1));
+                        if updated_interval != current_interval {
+                            current_interval = updated_interval;
+                            interval = tokio::time::interval(tokio::time::Duration::from_secs(current_interval));
+                        }
                     }
                 }
             }
@@ -187,24 +197,30 @@ impl PoolDiscovery {
     async fn batched_discovery_tick() {
         let tick_start = Instant::now();
 
+        // Check if any sources are enabled (hot-reload aware)
+        let (dex_enabled, gecko_enabled, raydium_enabled) = with_config(|cfg| {
+            (
+                cfg.pools.enable_dexscreener_discovery,
+                cfg.pools.enable_geckoterminal_discovery,
+                cfg.pools.enable_raydium_discovery,
+            )
+        });
+        let max_watched = max_watched_tokens();
+
         record_safe(Event::info(
             EventCategory::Pool,
             Some("discovery_tick_started".to_string()),
             None,
             None,
             serde_json::json!({
-                "dexscreener_enabled": ENABLE_DEXSCREENER_DISCOVERY,
-                "geckoterminal_enabled": ENABLE_GECKOTERMINAL_DISCOVERY,
-                "raydium_enabled": ENABLE_RAYDIUM_DISCOVERY
+                "dexscreener_enabled": dex_enabled,
+                "geckoterminal_enabled": gecko_enabled,
+                "raydium_enabled": raydium_enabled
             }),
         ))
         .await;
 
-        // Check if any sources are enabled
-        if !ENABLE_DEXSCREENER_DISCOVERY
-            && !ENABLE_GECKOTERMINAL_DISCOVERY
-            && !ENABLE_RAYDIUM_DISCOVERY
-        {
+        if !dex_enabled && !gecko_enabled && !raydium_enabled {
             if is_debug_pool_discovery_enabled() {
                 log(
                     LogTag::PoolDiscovery,
@@ -302,8 +318,8 @@ impl PoolDiscovery {
         // Early stablecoin filtering - position tokens already filtered above
         tokens.retain(|m| !is_stablecoin_mint(m));
 
-        // Cap to MAX_WATCHED_TOKENS but prioritize position tokens
-        if tokens.len() > MAX_WATCHED_TOKENS {
+        // Cap to configured max_watched but prioritize position tokens
+        if tokens.len() > max_watched {
             // Ensure position tokens are preserved when truncating — reuse the set we already fetched
             let open_position_mints_set: std::collections::HashSet<String> =
                 open_position_mints.iter().cloned().collect();
@@ -314,7 +330,7 @@ impl PoolDiscovery {
                 .partition(|mint| open_position_mints_set.contains(mint));
 
             // Always include all position tokens, then fill remaining slots with other tokens
-            let remaining_slots = MAX_WATCHED_TOKENS.saturating_sub(position_tokens.len());
+            let remaining_slots = max_watched.saturating_sub(position_tokens.len());
             other_tokens.truncate(remaining_slots);
 
             // Combine back: position tokens first, then others
@@ -351,7 +367,7 @@ impl PoolDiscovery {
                 "token_count": tokens.len(),
                 "position_tokens": open_position_mints.len(),
                 "initial_filtered": initial_count,
-                "max_watched": MAX_WATCHED_TOKENS
+                "max_watched": max_watched
             }),
         ))
         .await;
@@ -361,7 +377,7 @@ impl PoolDiscovery {
         // Only fetch from enabled sources
         let (dexs_batch, gecko_batch, raydium_batch) = tokio::join!(
             async {
-                if ENABLE_DEXSCREENER_DISCOVERY {
+                if dex_enabled {
                     get_batch_token_pools_from_dexscreener(&tokens).await
                 } else {
                     crate::tokens::dexscreener::DexScreenerBatchResult {
@@ -373,7 +389,7 @@ impl PoolDiscovery {
                 }
             },
             async {
-                if ENABLE_GECKOTERMINAL_DISCOVERY {
+                if gecko_enabled {
                     get_batch_token_pools_from_geckoterminal(&tokens).await
                 } else {
                     crate::tokens::geckoterminal::GeckoTerminalBatchResult {
@@ -385,7 +401,7 @@ impl PoolDiscovery {
                 }
             },
             async {
-                if ENABLE_RAYDIUM_DISCOVERY {
+                if raydium_enabled {
                     get_batch_token_pools_from_raydium(&tokens).await
                 } else {
                     crate::tokens::raydium::RaydiumBatchResult {
