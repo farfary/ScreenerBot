@@ -163,6 +163,17 @@ pub struct WalletBalancePoint {
     pub sol_balance: f64,
 }
 
+/// Daily flow data point for time-series chart
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DailyFlowPoint {
+    pub date: String,    // YYYY-MM-DD
+    pub timestamp: i64,  // Unix timestamp for charting
+    pub inflow: f64,     // SOL inflow that day
+    pub outflow: f64,    // SOL outflow that day
+    pub net: f64,        // inflow - outflow
+    pub tx_count: usize, // Number of transactions
+}
+
 /// Token row with enriched metadata for wallet table
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WalletTokenOverview {
@@ -188,6 +199,7 @@ pub struct WalletDashboardData {
     pub summary: WalletSummarySnapshot,
     pub flows: WalletFlowMetrics,
     pub balance_trend: Vec<WalletBalancePoint>,
+    pub daily_flows: Vec<DailyFlowPoint>, // NEW: Time-series flow data
     pub tokens: Vec<WalletTokenOverview>,
     pub last_updated: Option<String>,
 }
@@ -383,6 +395,56 @@ async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, St
     })
 }
 
+async fn compute_daily_flows(window_hours: i64) -> Result<Vec<DailyFlowPoint>, String> {
+    use chrono::NaiveDate;
+
+    let window_hours = clamp_window_hours(window_hours);
+    let (window_start, is_all_time) = if window_hours == 0 {
+        (DateTime::<Utc>::from(std::time::UNIX_EPOCH), true)
+    } else {
+        (Utc::now() - ChronoDuration::hours(window_hours), false)
+    };
+
+    let tx_db = get_transaction_database()
+        .await
+        .ok_or_else(|| "Transaction database not initialized".to_string())?;
+
+    let daily_data = tx_db
+        .aggregate_daily_flows(window_start, None)
+        .await
+        .map_err(|e| format!("Failed to aggregate daily flows: {}", e))?;
+
+    // Convert to DailyFlowPoint with timestamps
+    let result: Vec<DailyFlowPoint> = daily_data
+        .into_iter()
+        .filter_map(|(date_str, inflow, outflow, tx_count)| {
+            // Parse date string and convert to timestamp
+            NaiveDate::parse_from_str(&date_str, "%Y-%m-%d")
+                .ok()
+                .and_then(|date| date.and_hms_opt(0, 0, 0))
+                .map(|naive_dt| DateTime::<Utc>::from_naive_utc_and_offset(naive_dt, Utc))
+                .map(|dt| DailyFlowPoint {
+                    date: date_str,
+                    timestamp: dt.timestamp(),
+                    inflow,
+                    outflow,
+                    net: inflow - outflow,
+                    tx_count,
+                })
+        })
+        .collect();
+
+    if is_debug_wallet_enabled() {
+        log(
+            LogTag::Wallet,
+            "DAILY_FLOW",
+            &format!("Computed {} daily flow points", result.len()),
+        );
+    }
+
+    Ok(result)
+}
+
 async fn enrich_token_overview(
     balances: Vec<TokenBalance>,
     max_tokens: usize,
@@ -554,6 +616,9 @@ pub async fn get_wallet_dashboard_data(
     };
     if snapshots.is_empty() {
         let flows = compute_flow_metrics(window_hours).await?;
+        let daily_flows = compute_daily_flows(window_hours)
+            .await
+            .unwrap_or_else(|_| Vec::new());
         return Ok(WalletDashboardData {
             summary: WalletSummarySnapshot {
                 window_hours,
@@ -566,6 +631,7 @@ pub async fn get_wallet_dashboard_data(
             },
             flows,
             balance_trend: Vec::new(),
+            daily_flows,
             tokens: Vec::new(),
             last_updated: None,
         });
@@ -615,6 +681,16 @@ pub async fn get_wallet_dashboard_data(
 
     let flows = compute_flow_metrics(window_hours).await?;
 
+    // Compute daily flows for chart
+    let daily_flows = compute_daily_flows(window_hours).await.unwrap_or_else(|e| {
+        log(
+            LogTag::Wallet,
+            "DAILY_FLOW_ERR",
+            &format!("Failed to compute daily flows: {}", e),
+        );
+        Vec::new()
+    });
+
     let summary = WalletSummarySnapshot {
         window_hours,
         current_sol_balance: latest_snapshot.sol_balance,
@@ -629,6 +705,7 @@ pub async fn get_wallet_dashboard_data(
         summary,
         flows,
         balance_trend: trend,
+        daily_flows,
         tokens,
         last_updated: Some(latest_snapshot.snapshot_time.to_rfc3339()),
     })

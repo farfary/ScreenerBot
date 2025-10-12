@@ -1789,6 +1789,104 @@ impl TransactionDatabase {
         Ok((inflow, outflow, count))
     }
 
+    /// Get daily flow aggregation for time-series chart
+    pub async fn aggregate_daily_flows(
+        &self,
+        from: DateTime<Utc>,
+        to: Option<DateTime<Utc>>,
+    ) -> Result<Vec<(String, f64, f64, usize)>, String> {
+        let conn = self.get_connection()?;
+
+        // Check if this is "all time" query
+        let epoch = DateTime::<Utc>::from(std::time::UNIX_EPOCH);
+        let is_all_time = from == epoch;
+
+        // Get wallet address for filtering
+        let wallet_address = crate::utils::get_wallet_address()
+            .map_err(|e| format!("Failed to get wallet address: {}", e))?;
+
+        // Query to get daily aggregated flows
+        let mut query = String::from(
+            "SELECT \
+                DATE(r.timestamp) as day, \
+                r.signature, \
+                p.sol_balance_change \
+             FROM raw_transactions r \
+             LEFT JOIN processed_transactions p ON r.signature = p.signature \
+             WHERE r.status IN ('Confirmed', 'Finalized')",
+        );
+
+        let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![];
+
+        if !is_all_time {
+            query.push_str(&format!(" AND r.timestamp >= ?{}", params_vec.len() + 1));
+            params_vec.push(Box::new(from.to_rfc3339()));
+        }
+
+        if let Some(to_ts) = to {
+            query.push_str(&format!(" AND r.timestamp <= ?{}", params_vec.len() + 1));
+            params_vec.push(Box::new(to_ts.to_rfc3339()));
+        }
+
+        query.push_str(" ORDER BY day ASC, r.timestamp ASC");
+
+        let params_refs: Vec<&dyn rusqlite::ToSql> =
+            params_vec.iter().map(|value| value.as_ref()).collect();
+
+        let mut stmt = conn
+            .prepare(&query)
+            .map_err(|e| format!("Failed to prepare daily flows query: {}", e))?;
+
+        let mut rows = stmt
+            .query(params_refs.as_slice())
+            .map_err(|e| format!("Failed to execute daily flows query: {}", e))?;
+
+        // Group by day manually
+        use std::collections::HashMap;
+        let mut daily_data: HashMap<String, (f64, f64, usize)> = HashMap::new();
+
+        while let Some(row) = rows
+            .next()
+            .map_err(|e| format!("Failed to read daily flow row: {}", e))?
+        {
+            let day: String = row.get(0).unwrap_or_default();
+            let sol_balance_change_json: Option<String> = row.get(2).ok();
+
+            if let Some(json_str) = sol_balance_change_json {
+                if let Ok(changes) = serde_json::from_str::<Vec<serde_json::Value>>(&json_str) {
+                    for change_obj in &changes {
+                        if let Some(account) = change_obj.get("account").and_then(|v| v.as_str()) {
+                            if account == wallet_address {
+                                if let Some(change) =
+                                    change_obj.get("change").and_then(|v| v.as_f64())
+                                {
+                                    let entry =
+                                        daily_data.entry(day.clone()).or_insert((0.0, 0.0, 0));
+                                    if change > 0.0 {
+                                        entry.0 += change; // inflow
+                                    } else if change < 0.0 {
+                                        entry.1 += change.abs(); // outflow
+                                    }
+                                    entry.2 += 1; // tx count
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Convert to sorted vec
+        let mut result: Vec<(String, f64, f64, usize)> = daily_data
+            .into_iter()
+            .map(|(day, (inflow, outflow, count))| (day, inflow, outflow, count))
+            .collect();
+        result.sort_by(|a, b| a.0.cmp(&b.0));
+
+        Ok(result)
+    }
+
     /// Lightweight export of processed transactions for wallet flow cache
     pub async fn export_processed_for_wallet_flow(
         &self,
