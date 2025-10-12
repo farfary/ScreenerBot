@@ -1257,6 +1257,143 @@
     const high = ohlcvStats.high_tokens || 0;
     const medium = ohlcvStats.medium_tokens || 0;
     const low = ohlcvStats.low_tokens || 0;
+    const telemetry = ohlcvStats.telemetry || {};
+    const topOpenGaps = Array.isArray(ohlcvStats.top_open_gaps)
+      ? ohlcvStats.top_open_gaps
+      : [];
+    const backfillsInProgress = Number(ohlcvStats.backfills_in_progress || 0);
+    const openGapTokens = Number(ohlcvStats.open_gap_tokens || 0);
+    const openGapTotal = Number(ohlcvStats.open_gap_total || 0);
+
+    const formatCount = (value) =>
+      Utils.formatNumber(Number(value || 0), 0, { fallback: "0" });
+
+    const formatMs = (value) => {
+      const num = Number(value);
+      if (!Number.isFinite(num) || num <= 0) {
+        return "—";
+      }
+      if (num < 1000) {
+        return `${Math.round(num)} ms`;
+      }
+      const seconds = num / 1000;
+      if (seconds < 60) {
+        return `${seconds < 10 ? seconds.toFixed(1) : seconds.toFixed(0)} s`;
+      }
+      const minutes = Math.floor(seconds / 60);
+      const remainingSeconds = Math.floor(seconds % 60);
+      if (minutes < 60) {
+        return `${minutes}m ${remainingSeconds}s`;
+      }
+      const hours = Math.floor(minutes / 60);
+      const remainingMinutes = minutes % 60;
+      return `${hours}h ${remainingMinutes}m`;
+    };
+
+    const formatTimestampWithAgo = (value) => {
+      if (!value) {
+        return "—";
+      }
+      const timestamp = Utils.escapeHtml(
+        Utils.formatTimestamp(value, { includeSeconds: true })
+      );
+      const relative = Utils.formatTimeAgo(value, { fallback: "" });
+      if (!relative || relative === "-") {
+        return timestamp;
+      }
+      return `${timestamp} <span class="status-metric-unit">${Utils.escapeHtml(
+        relative
+      )}</span>`;
+    };
+
+    const monitorCycleStartedLabel = formatTimestampWithAgo(
+      telemetry.monitor_cycle_started_at
+    );
+    const monitorCycleCompletedLabel = formatTimestampWithAgo(
+      telemetry.monitor_cycle_completed_at
+    );
+    const monitorCycleDurationLabel = formatMs(
+      telemetry.monitor_cycle_duration_ms
+    );
+    const monitorCycleTokens = formatCount(
+      telemetry.monitor_cycle_tokens_processed
+    );
+    const monitorCycleTotal = formatCount(telemetry.monitor_cycle_total);
+
+    const gapCycleStartedLabel = formatTimestampWithAgo(
+      telemetry.gap_cycle_started_at
+    );
+    const gapCycleCompletedLabel = formatTimestampWithAgo(
+      telemetry.gap_cycle_completed_at
+    );
+    const gapCycleDurationLabel = formatMs(telemetry.gap_cycle_duration_ms);
+    const gapCycleTokens = formatCount(telemetry.gap_cycle_tokens_processed);
+    const gapCycleTotal = formatCount(telemetry.gap_cycle_total);
+
+    const totalBackfillsScheduled = formatCount(
+      telemetry.total_backfills_scheduled
+    );
+    const totalBackfillsCompleted = formatCount(
+      telemetry.total_backfills_completed
+    );
+    const totalBackfillsFailed = formatCount(telemetry.total_backfills_failed);
+    const lastBackfillStartedLabel = formatTimestampWithAgo(
+      telemetry.last_backfill_started_at
+    );
+    const lastBackfillCompletedLabel = formatTimestampWithAgo(
+      telemetry.last_backfill_completed_at
+    );
+    const lastBackfillDurationLabel = formatMs(
+      telemetry.last_backfill_duration_ms
+    );
+    const lastBackfillPointsLabel =
+      telemetry.last_backfill_points !== undefined &&
+      telemetry.last_backfill_points !== null
+        ? formatCount(telemetry.last_backfill_points)
+        : "—";
+    const lastBackfillErrorLabel = telemetry.last_backfill_error
+      ? `<span style="color: var(--badge-error); font-weight: 600;">${Utils.escapeHtml(
+          telemetry.last_backfill_error
+        )}</span>`
+      : "None";
+    const rateLimitEventsLabel = formatCount(telemetry.rate_limit_events);
+    const lastRateLimitLabel = formatTimestampWithAgo(
+      telemetry.last_rate_limit_at
+    );
+
+    const gapRows = topOpenGaps.length
+      ? topOpenGaps
+          .map((gap) => {
+            const largestGap =
+              gap.largest_gap_seconds === null ||
+              gap.largest_gap_seconds === undefined
+                ? "—"
+                : Utils.escapeHtml(
+                    Utils.formatUptime(gap.largest_gap_seconds, {
+                      fallback: "—",
+                      style: "compact",
+                    })
+                  );
+            const latestGapEnd = formatTimestampWithAgo(gap.latest_gap_end);
+            return `
+              <tr>
+                <td>${Utils.escapeHtml(gap.mint || "Unknown")}</td>
+                <td style="text-align: right;">${formatCount(
+                  gap.open_gaps
+                )}</td>
+                <td style="text-align: right;">${largestGap}</td>
+                <td style="text-align: right;">${latestGapEnd}</td>
+              </tr>
+            `;
+          })
+          .join("")
+      : `
+              <tr>
+                <td colspan="4" style="text-align: center; padding: 16px; color: var(--text-secondary);">
+                  No open gaps detected
+                </td>
+              </tr>
+            `;
 
     contentContainer.innerHTML = `
                 <div class="page-section">
@@ -1311,6 +1448,33 @@
                                         ${ohlcvStats.queue_size || 0}
                                     </div>
                                 </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🛠️</span>
+                                        <span>Backfills In Flight</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${formatCount(backfillsInProgress)}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🧩</span>
+                                        <span>Tokens With Gaps</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${formatCount(openGapTokens)}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🕳️</span>
+                                        <span>Open Gap Count</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${formatCount(openGapTotal)}
+                                    </div>
+                                </div>
                             </div>
 
                             <h3 class="status-section-title">Tokens by Priority</h3>
@@ -1362,6 +1526,139 @@
                                     </div>
                                 </div>
                             </div>
+
+                            <h3 class="status-section-title">Runtime Cycles</h3>
+                            <div class="status-metrics-grid">
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🔁</span>
+                                        <span>Monitor Cycle</span>
+                                    </div>
+                                    <div class="status-trader-info" style="margin-top: 12px;">
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Last Started</span>
+                                            <span class="status-trader-value">${monitorCycleStartedLabel}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Last Completed</span>
+                                            <span class="status-trader-value">${monitorCycleCompletedLabel}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Duration</span>
+                                            <span class="status-trader-value">${monitorCycleDurationLabel}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Tokens Processed</span>
+                                            <span class="status-trader-value">${monitorCycleTokens}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Cycles Recorded</span>
+                                            <span class="status-trader-value">${monitorCycleTotal}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🧵</span>
+                                        <span>Gap Cycle</span>
+                                    </div>
+                                    <div class="status-trader-info" style="margin-top: 12px;">
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Last Started</span>
+                                            <span class="status-trader-value">${gapCycleStartedLabel}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Last Completed</span>
+                                            <span class="status-trader-value">${gapCycleCompletedLabel}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Duration</span>
+                                            <span class="status-trader-value">${gapCycleDurationLabel}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Tokens Reviewed</span>
+                                            <span class="status-trader-value">${gapCycleTokens}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Cycles Recorded</span>
+                                            <span class="status-trader-value">${gapCycleTotal}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <h3 class="status-section-title">Backfill & Rate Limits</h3>
+                            <div class="status-metrics-grid">
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🛠️</span>
+                                        <span>Backfill Activity</span>
+                                    </div>
+                                    <div class="status-trader-info" style="margin-top: 12px;">
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Backfills In Flight</span>
+                                            <span class="status-trader-value">${formatCount(
+                                              backfillsInProgress
+                                            )}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Total Scheduled</span>
+                                            <span class="status-trader-value">${totalBackfillsScheduled}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Total Completed</span>
+                                            <span class="status-trader-value">${totalBackfillsCompleted}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Total Failed</span>
+                                            <span class="status-trader-value">${totalBackfillsFailed}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Last Started</span>
+                                            <span class="status-trader-value">${lastBackfillStartedLabel}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Last Completed</span>
+                                            <span class="status-trader-value">${lastBackfillCompletedLabel}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Last Duration</span>
+                                            <span class="status-trader-value">${lastBackfillDurationLabel}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Last Points Written</span>
+                                            <span class="status-trader-value">${lastBackfillPointsLabel}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Last Error</span>
+                                            <span class="status-trader-value">${lastBackfillErrorLabel}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Rate Limit Events</span>
+                                            <span class="status-trader-value">${rateLimitEventsLabel}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Last Rate Limit</span>
+                                            <span class="status-trader-value">${lastRateLimitLabel}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <h3 class="status-section-title">Gap Overview</h3>
+                            <table class="status-services-table sticky-table">
+                                <thead>
+                                    <tr>
+                                        <th>Mint</th>
+                                        <th style="text-align: right;">Open Gaps</th>
+                                        <th style="text-align: right;">Largest Gap</th>
+                                        <th style="text-align: right;">Latest Gap End</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${gapRows}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>

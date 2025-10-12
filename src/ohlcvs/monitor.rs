@@ -11,12 +11,14 @@ use crate::ohlcvs::gaps::GapManager;
 use crate::ohlcvs::manager::PoolManager;
 use crate::ohlcvs::priorities::{ActivityType, PriorityManager};
 use crate::ohlcvs::types::{
-    OhlcvDataPoint, OhlcvError, OhlcvResult, Priority, Timeframe, TokenOhlcvConfig,
+    MintGapAggregate, OhlcvDataPoint, OhlcvError, OhlcvResult, OhlcvTokenStatus, Priority,
+    Timeframe, TokenOhlcvConfig,
 };
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
+use tokio::task::spawn_blocking;
 use tokio::time::{interval, sleep, Duration, Instant};
 
 const AGGREGATED_TIMEFRAMES: [Timeframe; 6] = [
@@ -28,6 +30,83 @@ const AGGREGATED_TIMEFRAMES: [Timeframe; 6] = [
     Timeframe::Day1,
 ];
 
+const GAP_SUMMARY_LIMIT: usize = 5;
+
+#[derive(Debug, Default, Clone)]
+struct MonitorTelemetry {
+    monitor_cycle_started_at: Option<DateTime<Utc>>,
+    monitor_cycle_completed_at: Option<DateTime<Utc>>,
+    monitor_cycle_duration_ms: Option<u64>,
+    monitor_cycle_tokens_processed: usize,
+    monitor_cycle_total: u64,
+    gap_cycle_started_at: Option<DateTime<Utc>>,
+    gap_cycle_completed_at: Option<DateTime<Utc>>,
+    gap_cycle_duration_ms: Option<u64>,
+    gap_cycle_tokens_processed: usize,
+    gap_cycle_total: u64,
+    last_rate_limit_at: Option<DateTime<Utc>>,
+    rate_limit_events: u64,
+    total_backfills_scheduled: u64,
+    total_backfills_completed: u64,
+    total_backfills_failed: u64,
+    last_backfill_started_at: Option<DateTime<Utc>>,
+    last_backfill_completed_at: Option<DateTime<Utc>>,
+    last_backfill_duration_ms: Option<u64>,
+    last_backfill_points: Option<usize>,
+    last_backfill_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct MonitorTelemetrySnapshot {
+    pub monitor_cycle_started_at: Option<DateTime<Utc>>,
+    pub monitor_cycle_completed_at: Option<DateTime<Utc>>,
+    pub monitor_cycle_duration_ms: Option<u64>,
+    pub monitor_cycle_tokens_processed: usize,
+    pub monitor_cycle_total: u64,
+    pub gap_cycle_started_at: Option<DateTime<Utc>>,
+    pub gap_cycle_completed_at: Option<DateTime<Utc>>,
+    pub gap_cycle_duration_ms: Option<u64>,
+    pub gap_cycle_tokens_processed: usize,
+    pub gap_cycle_total: u64,
+    pub last_rate_limit_at: Option<DateTime<Utc>>,
+    pub rate_limit_events: u64,
+    pub total_backfills_scheduled: u64,
+    pub total_backfills_completed: u64,
+    pub total_backfills_failed: u64,
+    pub last_backfill_started_at: Option<DateTime<Utc>>,
+    pub last_backfill_completed_at: Option<DateTime<Utc>>,
+    pub last_backfill_duration_ms: Option<u64>,
+    pub last_backfill_points: Option<usize>,
+    pub last_backfill_error: Option<String>,
+}
+
+impl From<&MonitorTelemetry> for MonitorTelemetrySnapshot {
+    fn from(value: &MonitorTelemetry) -> Self {
+        Self {
+            monitor_cycle_started_at: value.monitor_cycle_started_at.clone(),
+            monitor_cycle_completed_at: value.monitor_cycle_completed_at.clone(),
+            monitor_cycle_duration_ms: value.monitor_cycle_duration_ms,
+            monitor_cycle_tokens_processed: value.monitor_cycle_tokens_processed,
+            monitor_cycle_total: value.monitor_cycle_total,
+            gap_cycle_started_at: value.gap_cycle_started_at.clone(),
+            gap_cycle_completed_at: value.gap_cycle_completed_at.clone(),
+            gap_cycle_duration_ms: value.gap_cycle_duration_ms,
+            gap_cycle_tokens_processed: value.gap_cycle_tokens_processed,
+            gap_cycle_total: value.gap_cycle_total,
+            last_rate_limit_at: value.last_rate_limit_at.clone(),
+            rate_limit_events: value.rate_limit_events,
+            total_backfills_scheduled: value.total_backfills_scheduled,
+            total_backfills_completed: value.total_backfills_completed,
+            total_backfills_failed: value.total_backfills_failed,
+            last_backfill_started_at: value.last_backfill_started_at.clone(),
+            last_backfill_completed_at: value.last_backfill_completed_at.clone(),
+            last_backfill_duration_ms: value.last_backfill_duration_ms,
+            last_backfill_points: value.last_backfill_points,
+            last_backfill_error: value.last_backfill_error.clone(),
+        }
+    }
+}
+
 pub struct OhlcvMonitor {
     db: Arc<OhlcvDatabase>,
     fetcher: Arc<OhlcvFetcher>,
@@ -37,6 +116,7 @@ pub struct OhlcvMonitor {
     active_tokens: Arc<RwLock<HashMap<String, TokenOhlcvConfig>>>,
     shutdown_signal: Arc<RwLock<bool>>,
     backfill_in_progress: Arc<Mutex<HashSet<String>>>,
+    telemetry: Arc<RwLock<MonitorTelemetry>>,
 }
 
 impl OhlcvMonitor {
@@ -56,6 +136,7 @@ impl OhlcvMonitor {
             active_tokens: Arc::new(RwLock::new(HashMap::new())),
             shutdown_signal: Arc::new(RwLock::new(false)),
             backfill_in_progress: Arc::new(Mutex::new(HashSet::new())),
+            telemetry: Arc::new(RwLock::new(MonitorTelemetry::default())),
         }
     }
 
@@ -201,6 +282,46 @@ impl OhlcvMonitor {
         let active = self.active_tokens.read().await;
         let total_tokens = active.len();
         let by_priority = count_by_priority(&active);
+        drop(active);
+
+        let telemetry_snapshot = {
+            let telemetry = self.telemetry.read().await;
+            MonitorTelemetrySnapshot::from(&*telemetry)
+        };
+
+        let backfills_in_progress = self
+            .backfill_in_progress
+            .lock()
+            .map(|set| set.len())
+            .unwrap_or(0);
+
+        let db = Arc::clone(&self.db);
+
+        let (open_gap_tokens, open_gap_total, top_open_gaps) = match spawn_blocking(move || {
+            let (token_count, gap_count) = db.get_gap_aggregate()?;
+            let top = db.get_top_open_gaps(GAP_SUMMARY_LIMIT)?;
+            Ok::<_, OhlcvError>((token_count, gap_count, top))
+        })
+        .await
+        {
+            Ok(Ok(result)) => result,
+            Ok(Err(err)) => {
+                log(
+                    LogTag::Ohlcv,
+                    "WARN",
+                    &format!("Failed to collect gap stats: {}", err),
+                );
+                (0, 0, Vec::new())
+            }
+            Err(join_err) => {
+                log(
+                    LogTag::Ohlcv,
+                    "WARN",
+                    &format!("Gap stats join error: {}", join_err),
+                );
+                (0, 0, Vec::new())
+            }
+        };
 
         MonitorStats {
             total_tokens,
@@ -211,6 +332,11 @@ impl OhlcvMonitor {
             cache_hit_rate: self.cache.hit_rate(),
             api_calls_per_minute: self.fetcher.calls_per_minute(),
             queue_size: self.fetcher.queue_size(),
+            telemetry: telemetry_snapshot,
+            backfills_in_progress,
+            open_gap_tokens,
+            open_gap_total,
+            top_open_gaps,
         }
     }
 
@@ -268,6 +394,10 @@ impl OhlcvMonitor {
                 active.keys().cloned().collect()
             };
 
+            let processed_count = tokens.len();
+            let cycle_start = Instant::now();
+            self.record_monitor_cycle_start(processed_count).await;
+
             for mint in tokens {
                 match self.process_token(&mint).await {
                     Ok(_) => {}
@@ -290,6 +420,7 @@ impl OhlcvMonitor {
                         }
                     }
                     Err(OhlcvError::RateLimitExceeded) => {
+                        self.record_rate_limit_event().await;
                         log(
                             LogTag::Ohlcv,
                             "WARN",
@@ -312,6 +443,9 @@ impl OhlcvMonitor {
                 // Rate-limit-aware delay between tokens
                 sleep(Duration::from_millis(delay_ms)).await;
             }
+
+            self.record_monitor_cycle_end(cycle_start, processed_count)
+                .await;
         }
     }
 
@@ -543,6 +677,66 @@ impl OhlcvMonitor {
         Ok(())
     }
 
+    async fn record_monitor_cycle_start(&self, token_count: usize) {
+        let mut telemetry = self.telemetry.write().await;
+        telemetry.monitor_cycle_started_at = Some(Utc::now());
+        telemetry.monitor_cycle_tokens_processed = token_count;
+    }
+
+    async fn record_monitor_cycle_end(&self, start: Instant, token_count: usize) {
+        let duration_ms = start.elapsed().as_millis() as u64;
+        let mut telemetry = self.telemetry.write().await;
+        telemetry.monitor_cycle_completed_at = Some(Utc::now());
+        telemetry.monitor_cycle_duration_ms = Some(duration_ms);
+        telemetry.monitor_cycle_tokens_processed = token_count;
+        telemetry.monitor_cycle_total = telemetry.monitor_cycle_total.saturating_add(1);
+    }
+
+    async fn record_gap_cycle_start(&self, token_count: usize) {
+        let mut telemetry = self.telemetry.write().await;
+        telemetry.gap_cycle_started_at = Some(Utc::now());
+        telemetry.gap_cycle_tokens_processed = token_count;
+    }
+
+    async fn record_gap_cycle_end(&self, start: Instant, token_count: usize) {
+        let duration_ms = start.elapsed().as_millis() as u64;
+        let mut telemetry = self.telemetry.write().await;
+        telemetry.gap_cycle_completed_at = Some(Utc::now());
+        telemetry.gap_cycle_duration_ms = Some(duration_ms);
+        telemetry.gap_cycle_tokens_processed = token_count;
+        telemetry.gap_cycle_total = telemetry.gap_cycle_total.saturating_add(1);
+    }
+
+    async fn record_rate_limit_event(&self) {
+        let mut telemetry = self.telemetry.write().await;
+        telemetry.last_rate_limit_at = Some(Utc::now());
+        telemetry.rate_limit_events = telemetry.rate_limit_events.saturating_add(1);
+    }
+
+    async fn record_backfill_scheduled(&self) {
+        let mut telemetry = self.telemetry.write().await;
+        telemetry.total_backfills_scheduled = telemetry.total_backfills_scheduled.saturating_add(1);
+        telemetry.last_backfill_started_at = Some(Utc::now());
+        telemetry.last_backfill_error = None;
+    }
+
+    async fn record_backfill_completed(&self, duration_ms: u64, points: usize) {
+        let mut telemetry = self.telemetry.write().await;
+        telemetry.total_backfills_completed = telemetry.total_backfills_completed.saturating_add(1);
+        telemetry.last_backfill_completed_at = Some(Utc::now());
+        telemetry.last_backfill_duration_ms = Some(duration_ms);
+        telemetry.last_backfill_points = Some(points);
+        telemetry.last_backfill_error = None;
+    }
+
+    async fn record_backfill_failed(&self, duration_ms: u64, message: String) {
+        let mut telemetry = self.telemetry.write().await;
+        telemetry.total_backfills_failed = telemetry.total_backfills_failed.saturating_add(1);
+        telemetry.last_backfill_completed_at = Some(Utc::now());
+        telemetry.last_backfill_duration_ms = Some(duration_ms);
+        telemetry.last_backfill_error = Some(message);
+    }
+
     fn persist_chunk(
         &self,
         mint: &str,
@@ -606,6 +800,8 @@ impl OhlcvMonitor {
             return Ok(());
         }
 
+        self.record_backfill_scheduled().await;
+
         let runner = self.clone();
         let mint_owned = mint.to_string();
         let pool_owned = pool_address.to_string();
@@ -625,18 +821,32 @@ impl OhlcvMonitor {
         }
 
         tokio::spawn(async move {
-            if let Err(e) = runner
+            match runner
                 .backfill_range(&mint_owned, &pool_owned, from_ts, to_ts)
                 .await
             {
-                log(
-                    LogTag::Ohlcv,
-                    "WARN",
-                    &format!(
-                        "Retention backfill failed for {} via {}: {}",
-                        mint_owned, pool_owned, e
-                    ),
-                );
+                Ok(points) => {
+                    if is_debug_ohlcv_enabled() {
+                        log(
+                            LogTag::Ohlcv,
+                            "INFO",
+                            &format!(
+                                "Retention backfill for {} via {} completed (points inserted: {})",
+                                mint_owned, pool_owned, points
+                            ),
+                        );
+                    }
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Ohlcv,
+                        "WARN",
+                        &format!(
+                            "Retention backfill failed for {} via {}: {}",
+                            mint_owned, pool_owned, e
+                        ),
+                    );
+                }
             }
 
             runner.finish_backfill(&mint_owned);
@@ -671,49 +881,68 @@ impl OhlcvMonitor {
         pool_address: &str,
         from_timestamp: i64,
         to_timestamp: i64,
-    ) -> OhlcvResult<()> {
+    ) -> OhlcvResult<usize> {
         if from_timestamp >= to_timestamp {
-            return Ok(());
+            return Ok(0);
         }
 
-        let mut cursor_end = to_timestamp;
-        let mut total_inserted = 0usize;
+        let start = Instant::now();
 
-        loop {
-            let chunk = self
-                .fetcher
-                .fetch_historical(pool_address, Timeframe::Minute1, from_timestamp, cursor_end)
-                .await?;
+        let result: OhlcvResult<usize> = async {
+            let mut cursor_end = to_timestamp;
+            let mut total_inserted = 0usize;
 
-            if chunk.is_empty() {
-                break;
+            loop {
+                let chunk = self
+                    .fetcher
+                    .fetch_historical(pool_address, Timeframe::Minute1, from_timestamp, cursor_end)
+                    .await?;
+
+                if chunk.is_empty() {
+                    break;
+                }
+
+                let earliest = chunk.first().map(|p| p.timestamp).unwrap_or(cursor_end);
+
+                let stored = self.persist_chunk(mint, pool_address, chunk)?;
+                if !stored.is_empty() {
+                    total_inserted += stored.len();
+                }
+
+                if earliest <= from_timestamp {
+                    break;
+                }
+
+                cursor_end = earliest.saturating_sub(Timeframe::Minute1.to_seconds());
+
+                if cursor_end <= from_timestamp {
+                    break;
+                }
             }
 
-            let earliest = chunk.first().map(|p| p.timestamp).unwrap_or(cursor_end);
-
-            let stored = self.persist_chunk(mint, pool_address, chunk)?;
-            if !stored.is_empty() {
-                total_inserted += stored.len();
+            if total_inserted > 0 {
+                self.gap_manager
+                    .detect_gaps(mint, pool_address, Timeframe::Minute1)
+                    .await?;
             }
 
-            if earliest <= from_timestamp {
-                break;
+            Ok(total_inserted)
+        }
+        .await;
+
+        let duration_ms = start.elapsed().as_millis() as u64;
+
+        match result {
+            Ok(points) => {
+                self.record_backfill_completed(duration_ms, points).await;
+                Ok(points)
             }
-
-            cursor_end = earliest.saturating_sub(Timeframe::Minute1.to_seconds());
-
-            if cursor_end <= from_timestamp {
-                break;
+            Err(err) => {
+                self.record_backfill_failed(duration_ms, err.to_string())
+                    .await;
+                Err(err)
             }
         }
-
-        if total_inserted > 0 {
-            self.gap_manager
-                .detect_gaps(mint, pool_address, Timeframe::Minute1)
-                .await?;
-        }
-
-        Ok(())
     }
 
     async fn gap_fill_loop(self: Arc<Self>) {
@@ -732,6 +961,10 @@ impl OhlcvMonitor {
                 active.keys().cloned().collect()
             };
 
+            let processed_count = tokens.len();
+            let cycle_start = Instant::now();
+            self.record_gap_cycle_start(processed_count).await;
+
             for mint in tokens {
                 // Auto-fill recent gaps (last 24h)
                 if let Err(e) = self.gap_manager.auto_fill_recent_gaps(&mint).await {
@@ -744,6 +977,9 @@ impl OhlcvMonitor {
 
                 sleep(Duration::from_secs(1)).await;
             }
+
+            self.record_gap_cycle_end(cycle_start, processed_count)
+                .await;
         }
     }
 
@@ -1012,6 +1248,7 @@ impl Clone for OhlcvMonitor {
             active_tokens: Arc::clone(&self.active_tokens),
             shutdown_signal: Arc::clone(&self.shutdown_signal),
             backfill_in_progress: Arc::clone(&self.backfill_in_progress),
+            telemetry: Arc::clone(&self.telemetry),
         }
     }
 }
@@ -1034,6 +1271,11 @@ pub struct MonitorStats {
     pub cache_hit_rate: f64,
     pub api_calls_per_minute: f64,
     pub queue_size: usize,
+    pub telemetry: MonitorTelemetrySnapshot,
+    pub backfills_in_progress: usize,
+    pub open_gap_tokens: usize,
+    pub open_gap_total: usize,
+    pub top_open_gaps: Vec<MintGapAggregate>,
 }
 
 impl Default for MonitorStats {
@@ -1047,6 +1289,11 @@ impl Default for MonitorStats {
             cache_hit_rate: 0.0,
             api_calls_per_minute: 0.0,
             queue_size: 0,
+            telemetry: MonitorTelemetrySnapshot::default(),
+            backfills_in_progress: 0,
+            open_gap_tokens: 0,
+            open_gap_total: 0,
+            top_open_gaps: Vec::new(),
         }
     }
 }

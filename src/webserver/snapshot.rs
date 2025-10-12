@@ -126,6 +126,58 @@ pub struct OhlcvStatsSnapshot {
     pub cache_hit_rate: f64,
     pub api_calls_per_minute: f64,
     pub queue_size: usize,
+    pub telemetry: OhlcvTelemetrySnapshot,
+    pub backfills_in_progress: usize,
+    pub open_gap_tokens: usize,
+    pub open_gap_total: usize,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub top_open_gaps: Vec<OhlcvGapSummarySnapshot>,
+}
+
+#[derive(Clone, Debug, Serialize, Default)]
+pub struct OhlcvTelemetrySnapshot {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub monitor_cycle_started_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub monitor_cycle_completed_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub monitor_cycle_duration_ms: Option<u64>,
+    pub monitor_cycle_tokens_processed: usize,
+    pub monitor_cycle_total: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gap_cycle_started_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gap_cycle_completed_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gap_cycle_duration_ms: Option<u64>,
+    pub gap_cycle_tokens_processed: usize,
+    pub gap_cycle_total: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_rate_limit_at: Option<DateTime<Utc>>,
+    pub rate_limit_events: u64,
+    pub total_backfills_scheduled: u64,
+    pub total_backfills_completed: u64,
+    pub total_backfills_failed: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_backfill_started_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_backfill_completed_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_backfill_duration_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_backfill_points: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_backfill_error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct OhlcvGapSummarySnapshot {
+    pub mint: String,
+    pub open_gaps: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub largest_gap_seconds: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latest_gap_end: Option<i64>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -544,9 +596,43 @@ async fn collect_wallet_snapshot() -> Option<WalletStatusSnapshot> {
 }
 
 async fn collect_ohlcv_stats_snapshot() -> Option<OhlcvStatsSnapshot> {
-    crate::ohlcvs::get_monitor_stats()
-        .await
-        .map(|stats| OhlcvStatsSnapshot {
+    crate::ohlcvs::get_monitor_stats().await.map(|stats| {
+        let telemetry = stats.telemetry.clone();
+        let telemetry_snapshot = OhlcvTelemetrySnapshot {
+            monitor_cycle_started_at: telemetry.monitor_cycle_started_at,
+            monitor_cycle_completed_at: telemetry.monitor_cycle_completed_at,
+            monitor_cycle_duration_ms: telemetry.monitor_cycle_duration_ms,
+            monitor_cycle_tokens_processed: telemetry.monitor_cycle_tokens_processed,
+            monitor_cycle_total: telemetry.monitor_cycle_total,
+            gap_cycle_started_at: telemetry.gap_cycle_started_at,
+            gap_cycle_completed_at: telemetry.gap_cycle_completed_at,
+            gap_cycle_duration_ms: telemetry.gap_cycle_duration_ms,
+            gap_cycle_tokens_processed: telemetry.gap_cycle_tokens_processed,
+            gap_cycle_total: telemetry.gap_cycle_total,
+            last_rate_limit_at: telemetry.last_rate_limit_at,
+            rate_limit_events: telemetry.rate_limit_events,
+            total_backfills_scheduled: telemetry.total_backfills_scheduled,
+            total_backfills_completed: telemetry.total_backfills_completed,
+            total_backfills_failed: telemetry.total_backfills_failed,
+            last_backfill_started_at: telemetry.last_backfill_started_at,
+            last_backfill_completed_at: telemetry.last_backfill_completed_at,
+            last_backfill_duration_ms: telemetry.last_backfill_duration_ms,
+            last_backfill_points: telemetry.last_backfill_points,
+            last_backfill_error: telemetry.last_backfill_error.clone(),
+        };
+
+        let top_open_gaps = stats
+            .top_open_gaps
+            .iter()
+            .map(|gap| OhlcvGapSummarySnapshot {
+                mint: gap.mint.clone(),
+                open_gaps: gap.open_gaps,
+                largest_gap_seconds: gap.largest_gap_seconds,
+                latest_gap_end: gap.latest_gap_end,
+            })
+            .collect::<Vec<_>>();
+
+        OhlcvStatsSnapshot {
             total_tokens: stats.total_tokens,
             critical_tokens: stats.critical_tokens,
             high_tokens: stats.high_tokens,
@@ -555,7 +641,13 @@ async fn collect_ohlcv_stats_snapshot() -> Option<OhlcvStatsSnapshot> {
             cache_hit_rate: (stats.cache_hit_rate * 100.0).clamp(0.0, 100.0),
             api_calls_per_minute: stats.api_calls_per_minute,
             queue_size: stats.queue_size,
-        })
+            telemetry: telemetry_snapshot,
+            backfills_in_progress: stats.backfills_in_progress,
+            open_gap_tokens: stats.open_gap_tokens,
+            open_gap_total: stats.open_gap_total,
+            top_open_gaps,
+        }
+    })
 }
 
 fn collect_pool_service_snapshot() -> Option<PoolServiceStatusSnapshot> {

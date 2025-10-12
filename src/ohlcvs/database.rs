@@ -1,7 +1,8 @@
 // Database layer for OHLCV module
 
 use crate::ohlcvs::types::{
-    OhlcvDataPoint, OhlcvError, OhlcvResult, PoolConfig, Priority, Timeframe, TokenOhlcvConfig,
+    MintGapAggregate, OhlcvDataPoint, OhlcvError, OhlcvResult, PoolConfig, Priority, Timeframe,
+    TokenOhlcvConfig,
 };
 use chrono::{DateTime, Duration, Utc};
 use rusqlite::{params, params_from_iter, Connection, OptionalExtension, Result as SqliteResult};
@@ -656,6 +657,74 @@ impl OhlcvDatabase {
         Ok(())
     }
 
+    pub fn get_gap_aggregate(&self) -> OhlcvResult<(usize, usize)> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
+
+        let (gap_count, token_count): (i64, i64) = conn
+            .query_row(
+                "SELECT COUNT(*) as gap_count, COUNT(DISTINCT mint) as token_count
+                 FROM ohlcv_gaps WHERE filled = 0",
+                params![],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .map_err(|e| {
+                OhlcvError::DatabaseError(format!("Failed to read gap aggregate: {}", e))
+            })?;
+
+        Ok((token_count.max(0) as usize, gap_count.max(0) as usize))
+    }
+
+    pub fn get_top_open_gaps(&self, limit: usize) -> OhlcvResult<Vec<MintGapAggregate>> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT mint, COUNT(*) as gap_count,
+                        MAX(end_timestamp - start_timestamp) as largest_gap,
+                        MAX(end_timestamp) as latest_gap
+                 FROM ohlcv_gaps
+                 WHERE filled = 0
+                 GROUP BY mint
+                 ORDER BY largest_gap DESC, latest_gap DESC
+                 LIMIT ?1",
+            )
+            .map_err(|e| {
+                OhlcvError::DatabaseError(format!("Failed to prepare gap summary: {}", e))
+            })?;
+
+        let rows = stmt
+            .query_map(params![limit as i64], |row| {
+                let mint: String = row.get(0)?;
+                let open_gaps: i64 = row.get(1)?;
+                let largest_gap: Option<i64> = row.get(2)?;
+                let latest_gap: Option<i64> = row.get(3)?;
+
+                Ok(MintGapAggregate {
+                    mint,
+                    open_gaps: open_gaps.max(0) as usize,
+                    largest_gap_seconds: largest_gap,
+                    latest_gap_end: latest_gap,
+                })
+            })
+            .map_err(|e| OhlcvError::DatabaseError(format!("Gap summary query failed: {}", e)))?;
+
+        let aggregates = rows.collect::<SqliteResult<Vec<_>>>().map_err(|e| {
+            OhlcvError::DatabaseError(format!("Failed to collect gap summary: {}", e))
+        })?;
+
+        Ok(aggregates)
+    }
+
     // ==================== Monitor Configuration ====================
 
     pub fn upsert_monitor_config(&self, config: &TokenOhlcvConfig) -> OhlcvResult<()> {
@@ -664,13 +733,16 @@ impl OhlcvDatabase {
             .lock()
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
 
+        let last_fetch = config.last_fetch.as_ref().map(|dt| dt.to_rfc3339());
+
         conn
             .execute(
-                "INSERT INTO ohlcv_monitor_config (mint, priority, fetch_interval_seconds, last_activity, consecutive_empty_fetches, is_active, last_pool_discovery_attempt, consecutive_pool_failures)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                "INSERT INTO ohlcv_monitor_config (mint, priority, fetch_interval_seconds, last_fetch, last_activity, consecutive_empty_fetches, is_active, last_pool_discovery_attempt, consecutive_pool_failures)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
              ON CONFLICT(mint) DO UPDATE SET
                 priority = excluded.priority,
                 fetch_interval_seconds = excluded.fetch_interval_seconds,
+                last_fetch = excluded.last_fetch,
                 last_activity = excluded.last_activity,
                 consecutive_empty_fetches = excluded.consecutive_empty_fetches,
                 is_active = excluded.is_active,
@@ -680,6 +752,7 @@ impl OhlcvDatabase {
                     &config.mint,
                     config.priority.as_str(),
                     config.fetch_frequency.as_secs() as i64,
+                    last_fetch,
                     config.last_activity.to_rfc3339(),
                     config.consecutive_empty_fetches,
                     config.is_active as i32,
@@ -700,25 +773,32 @@ impl OhlcvDatabase {
 
         let config: Option<TokenOhlcvConfig> = conn
             .query_row(
-                "SELECT priority, fetch_interval_seconds, last_activity, consecutive_empty_fetches, is_active, last_pool_discovery_attempt, consecutive_pool_failures
+                "SELECT priority, fetch_interval_seconds, last_fetch, last_activity, consecutive_empty_fetches, is_active, last_pool_discovery_attempt, consecutive_pool_failures
                  FROM ohlcv_monitor_config WHERE mint = ?1",
                 params![mint],
                 |row| {
                     let priority_str: String = row.get(0)?;
                     let priority = Priority::from_str(&priority_str).unwrap_or(Priority::Low);
                     let fetch_secs: i64 = row.get(1)?;
-                    let last_activity_str: String = row.get(2)?;
+                    let last_fetch_str: Option<String> = row.get(2)?;
+                    let last_fetch = last_fetch_str.and_then(|s| {
+                        DateTime::parse_from_rfc3339(&s)
+                            .ok()
+                            .map(|dt| dt.with_timezone(&Utc))
+                    });
+                    let last_activity_str: String = row.get(3)?;
                     let last_activity = DateTime::parse_from_rfc3339(&last_activity_str)
                         .map(|dt| dt.with_timezone(&Utc))
                         .unwrap_or_else(|_| Utc::now());
-                    let consecutive_empty: u32 = row.get(3)?;
-                    let is_active: i32 = row.get(4)?;
-                    let last_pool_attempt: Option<i64> = row.get(5)?;
-                    let pool_failures: u32 = row.get(6)?;
+                    let consecutive_empty: u32 = row.get(4)?;
+                    let is_active: i32 = row.get(5)?;
+                    let last_pool_attempt: Option<i64> = row.get(6)?;
+                    let pool_failures: u32 = row.get(7)?;
 
                     let mut config = TokenOhlcvConfig::new(mint.to_string(), priority);
                     config.fetch_frequency = std::time::Duration::from_secs(fetch_secs as u64);
                     config.last_activity = last_activity;
+                    config.last_fetch = last_fetch;
                     config.consecutive_empty_fetches = consecutive_empty;
                     config.is_active = is_active != 0;
                     config.last_pool_discovery_attempt = last_pool_attempt;
@@ -741,7 +821,7 @@ impl OhlcvDatabase {
 
         let mut stmt = conn
             .prepare(
-                "SELECT mint, priority, fetch_interval_seconds, last_activity, consecutive_empty_fetches, last_pool_discovery_attempt, consecutive_pool_failures
+                "SELECT mint, priority, fetch_interval_seconds, last_fetch, last_activity, consecutive_empty_fetches, last_pool_discovery_attempt, consecutive_pool_failures
                  FROM ohlcv_monitor_config WHERE is_active = 1
                  ORDER BY priority DESC"
             )
@@ -753,16 +833,23 @@ impl OhlcvDatabase {
                 let priority_str: String = row.get(1)?;
                 let priority = Priority::from_str(&priority_str).unwrap_or(Priority::Low);
                 let fetch_secs: i64 = row.get(2)?;
-                let last_activity_str: String = row.get(3)?;
+                let last_fetch_str: Option<String> = row.get(3)?;
+                let last_fetch = last_fetch_str.and_then(|s| {
+                    DateTime::parse_from_rfc3339(&s)
+                        .ok()
+                        .map(|dt| dt.with_timezone(&Utc))
+                });
+                let last_activity_str: String = row.get(4)?;
                 let last_activity = DateTime::parse_from_rfc3339(&last_activity_str)
                     .map(|dt| dt.with_timezone(&Utc))
                     .unwrap_or_else(|_| Utc::now());
-                let consecutive_empty: u32 = row.get(4)?;
-                let last_pool_attempt: Option<i64> = row.get(5)?;
-                let pool_failures: u32 = row.get(6)?;
+                let consecutive_empty: u32 = row.get(5)?;
+                let last_pool_attempt: Option<i64> = row.get(6)?;
+                let pool_failures: u32 = row.get(7)?;
 
                 let mut config = TokenOhlcvConfig::new(mint, priority);
                 config.fetch_frequency = std::time::Duration::from_secs(fetch_secs as u64);
+                config.last_fetch = last_fetch;
                 config.last_activity = last_activity;
                 config.consecutive_empty_fetches = consecutive_empty;
                 config.last_pool_discovery_attempt = last_pool_attempt;

@@ -18,7 +18,7 @@ pub use types::{
     Timeframe, TokenOhlcvConfig,
 };
 
-pub use monitor::MonitorStats;
+pub use monitor::{MonitorStats, MonitorTelemetrySnapshot};
 pub use priorities::ActivityType;
 pub use service::OhlcvService;
 

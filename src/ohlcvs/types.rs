@@ -223,6 +223,8 @@ pub struct TokenOhlcvConfig {
     pub pools: Vec<PoolConfig>,
     pub priority: Priority,
     pub last_activity: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_fetch: Option<DateTime<Utc>>,
     pub fetch_frequency: Duration,
     pub consecutive_empty_fetches: u32,
     pub is_active: bool,
@@ -238,12 +240,17 @@ impl TokenOhlcvConfig {
             pools: Vec::new(),
             priority,
             last_activity: Utc::now(),
+            last_fetch: None,
             fetch_frequency: priority.base_interval(),
             consecutive_empty_fetches: 0,
             is_active: true,
             last_pool_discovery_attempt: None,
             consecutive_pool_failures: 0,
         }
+    }
+
+    pub fn mark_fetch(&mut self) {
+        self.last_fetch = Some(Utc::now());
     }
 
     pub fn get_default_pool(&self) -> Option<&PoolConfig> {
@@ -334,6 +341,37 @@ impl TokenOhlcvConfig {
             _ => "24 hours".to_string(),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MintGapAggregate {
+    pub mint: String,
+    pub open_gaps: usize,
+    pub largest_gap_seconds: Option<i64>,
+    pub latest_gap_end: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct OhlcvTokenStatus {
+    pub mint: String,
+    pub priority: Priority,
+    pub is_active: bool,
+    pub has_data: bool,
+    pub pools_monitored: usize,
+    pub primary_pool: Option<String>,
+    pub last_fetch_timestamp: Option<DateTime<Utc>>,
+    pub next_fetch_timestamp: Option<DateTime<Utc>>,
+    pub last_activity_timestamp: DateTime<Utc>,
+    pub fetch_interval_seconds: u64,
+    pub consecutive_empty_fetches: u32,
+    pub retention_target_timestamp: i64,
+    pub earliest_candle_timestamp: Option<i64>,
+    pub latest_candle_timestamp: Option<i64>,
+    pub coverage_percent: f64,
+    pub backfill_in_progress: bool,
+    pub open_gap_count: usize,
+    pub largest_gap_seconds: Option<i64>,
+    pub latest_gap_end: Option<i64>,
 }
 
 /// Pool metadata for API responses
