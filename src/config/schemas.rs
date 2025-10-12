@@ -79,17 +79,6 @@ config_struct! {
             category: "Profit Management",
         })]
         min_profit_threshold_percent: f64 = 2.0,
-        #[metadata(field_metadata! {
-            label: "Profit Extra Buffer",
-            hint: "Extra SOL for fees/slippage",
-            min: 0,
-            max: 0.01,
-            step: 0.00001,
-            unit: "SOL",
-            impact: "medium",
-            category: "Profit Management",
-        })]
-        profit_extra_needed_sol: f64 = 0.00005,
 
         // Time-based overrides
         #[metadata(field_metadata! {
@@ -116,47 +105,7 @@ config_struct! {
         time_override_loss_threshold_percent: f64 = -40.0,
 
         // Slippage configuration
-        #[metadata(field_metadata! {
-            label: "Default Slippage",
-            hint: "3% balanced, higher = more fills but worse price",
-            min: 0.1,
-            max: 25,
-            step: 0.1,
-            unit: "%",
-            impact: "high",
-            category: "Slippage",
-        })]
-        slippage_quote_default_pct: f64 = 3.0,
-        #[metadata(field_metadata! {
-            label: "Profit Exit Slippage",
-            hint: "Extra slippage when exiting at profit",
-            min: 0,
-            max: 50,
-            step: 1,
-            unit: "%",
-            impact: "high",
-            category: "Slippage",
-        })]
-        slippage_exit_profit_shortfall_pct: f64 = 8.0,
-        #[metadata(field_metadata! {
-            label: "Loss Exit Slippage",
-            hint: "Even higher to exit bad positions",
-            min: 0,
-            max: 50,
-            step: 1,
-            unit: "%",
-            impact: "high",
-            category: "Slippage",
-        })]
-        slippage_exit_loss_shortfall_pct: f64 = 15.0,
-        #[metadata(field_metadata! {
-            label: "Exit Retry Steps",
-            hint: "Comma-separated slippage values for retries",
-            unit: "%",
-            impact: "medium",
-            category: "Slippage",
-        })]
-        slippage_exit_retry_steps_pct: Vec<f64> = vec![3.0, 5.0, 8.0, 12.0, 15.0],
+        // Slippage configuration lives under swaps config
 
         // Debug modes
         #[metadata(field_metadata! {

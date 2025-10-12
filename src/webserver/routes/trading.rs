@@ -62,7 +62,7 @@ async fn get_trading_config() -> Response {
         profit_targets: ProfitTargets {
             base_min_profit_percent: cfg.trader.min_profit_threshold_percent,
             min_profit_threshold_enabled: cfg.trader.min_profit_threshold_enabled,
-            profit_extra_needed_sol: cfg.trader.profit_extra_needed_sol,
+            profit_extra_needed_sol: cfg.positions.profit_extra_needed_sol,
         },
         timestamp: chrono::Utc::now().to_rfc3339(),
     });
