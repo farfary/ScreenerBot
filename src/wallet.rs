@@ -192,6 +192,13 @@ pub struct WalletDashboardData {
     pub last_updated: Option<String>,
 }
 
+/// Flow cache stats for diagnostics/UI
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalletFlowCacheStats {
+    pub rows: u64,
+    pub max_timestamp: Option<String>,
+}
+
 fn clamp_window_hours(window_hours: i64) -> i64 {
     window_hours.clamp(1, 24 * 14)
 }
@@ -717,6 +724,19 @@ impl WalletDatabase {
         }
     }
 
+    /// Get flow cache stats (row count and latest timestamp)
+    pub fn get_flow_cache_stats_sync(&self) -> Result<WalletFlowCacheStats, String> {
+        let conn = self.get_connection()?;
+        let rows: i64 = conn
+            .query_row("SELECT COUNT(*) FROM sol_flow_cache", [], |row| row.get(0))
+            .unwrap_or(0);
+        let max_ts = self.get_flow_cache_max_ts_sync()?.map(|dt| dt.to_rfc3339());
+        Ok(WalletFlowCacheStats {
+            rows: rows.max(0) as u64,
+            max_timestamp: max_ts,
+        })
+    }
+
     /// Save wallet snapshot with token balances (synchronous version)
     pub fn save_wallet_snapshot_sync(&self, snapshot: &WalletSnapshot) -> Result<i64, String> {
         let conn = self.get_connection()?;
@@ -1177,7 +1197,7 @@ impl WalletDatabase {
 // =============================================================================
 
 /// Global wallet database instance
-static GLOBAL_WALLET_DB: Lazy<Arc<Mutex<Option<WalletDatabase>>>> =
+pub(crate) static GLOBAL_WALLET_DB: Lazy<Arc<Mutex<Option<WalletDatabase>>>> =
     Lazy::new(|| Arc::new(Mutex::new(None)));
 
 /// Initialize the global wallet database
@@ -1470,4 +1490,13 @@ pub async fn get_snapshot_token_balances(snapshot_id: i64) -> Result<Vec<TokenBa
 pub async fn get_current_wallet_status() -> Result<Option<WalletSnapshot>, String> {
     let snapshots = get_recent_wallet_snapshots(1).await?;
     Ok(snapshots.into_iter().next())
+}
+
+/// Public accessor for flow cache stats
+pub async fn get_flow_cache_stats() -> Result<WalletFlowCacheStats, String> {
+    let db_guard = GLOBAL_WALLET_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => db.get_flow_cache_stats_sync(),
+        None => Err("Wallet database not initialized".to_string()),
+    }
 }

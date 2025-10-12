@@ -6,7 +6,10 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::wallet::{get_current_wallet_status, get_wallet_dashboard_data, WalletDashboardData};
+use crate::wallet::{
+    get_current_wallet_status, get_flow_cache_stats, get_wallet_dashboard_data,
+    WalletDashboardData, WalletFlowCacheStats,
+};
 use crate::webserver::state::AppState;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -32,6 +35,7 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/wallet/current", get(get_wallet_current))
         .route("/wallet/dashboard", post(get_wallet_dashboard))
+        .route("/wallet/flow-cache", get(get_wallet_flow_cache_stats))
 }
 
 /// Get current wallet balance
@@ -106,6 +110,26 @@ async fn get_wallet_dashboard(
             error: None,
         }),
         Err(err) => Json(WalletDashboardResponse {
+            data: None,
+            error: Some(err),
+        }),
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct WalletFlowCacheResponse {
+    pub data: Option<WalletFlowCacheStats>,
+    pub error: Option<String>,
+}
+
+async fn get_wallet_flow_cache_stats() -> Json<WalletFlowCacheResponse> {
+    let stats = get_flow_cache_stats().await;
+    match stats {
+        Ok(data) => Json(WalletFlowCacheResponse {
+            data: Some(data),
+            error: None,
+        }),
+        Err(err) => Json(WalletFlowCacheResponse {
             data: None,
             error: Some(err),
         }),

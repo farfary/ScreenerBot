@@ -4,6 +4,9 @@
       display: flex;
       flex-direction: column;
       gap: 16px;
+      height: 100%;
+      padding: 12px;
+      box-sizing: border-box;
     }
 
     .wallet-summary-grid {
@@ -19,7 +22,7 @@
       background: var(--bg-card);
       border: 1px solid var(--border-color);
       border-radius: 12px;
-      padding: 16px;
+      padding: 16px 18px;
       display: flex;
       flex-direction: column;
       gap: 12px;
@@ -109,6 +112,9 @@
 
     .wallet-toolbar {
       gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 5;
     }
 
     .wallet-toolbar-rows {
@@ -211,6 +217,15 @@
       border: 1px solid var(--border-color);
       border-radius: 12px;
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 200px;
+      max-height: calc(100vh - 420px);
+    }
+
+    .wallet-table-body-scroll {
+      overflow: auto;
+      flex: 1;
     }
 
     .wallet-token-table {
@@ -393,8 +408,12 @@
           <th style="width: 15%">24h Volume</th>
         </tr>
       </thead>
-      <tbody id="wallet-token-table-body"></tbody>
     </table>
+    <div class="wallet-table-body-scroll">
+      <table class="wallet-token-table data-table">
+        <tbody id="wallet-token-table-body"></tbody>
+      </table>
+    </div>
   </div>
 
   <div id="wallet-empty-state" class="wallet-empty-state" data-visible="false">
