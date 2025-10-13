@@ -18,7 +18,7 @@ use crate::{
     pools::get_pool_price,
     rpc::{get_rpc_client, sol_to_lamports},
     swaps::{execute_best_swap, get_best_quote, get_best_quote_for_opening},
-    tokens::{get_token_from_db, PriceResult},
+    tokens::{store::get_global_token_store, PriceResult, Token},
     utils::{get_token_balance, get_total_token_balance, get_wallet_address},
 };
 use chrono::Utc;
@@ -28,9 +28,11 @@ const SOLANA_BLOCKHASH_VALIDITY_SLOTS: u64 = 150;
 
 /// Open a new position
 pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
-    let token = get_token_from_db(token_mint)
-        .await
+    let snapshot = get_global_token_store()
+        .get(token_mint)
         .ok_or_else(|| format!("Token not found: {}", token_mint))?;
+    let api_token = &snapshot.data;
+    let token: Token = api_token.clone().into();
 
     let price_info = get_pool_price(token_mint)
         .ok_or_else(|| format!("No price data for token: {}", token_mint))?;
@@ -52,20 +54,20 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
     let mut _global_permit = acquire_global_position_permit().await?;
 
     // Acquire per-mint lock SECOND to serialize opens for same token
-    let _lock = acquire_position_lock(&token.mint).await;
+    let _lock = acquire_position_lock(&api_token.mint).await;
 
     // Re-check no existing open position for this mint (prevents duplicate concurrent entries)
-    if super::state::is_open_position(&token.mint).await {
+    if super::state::is_open_position(&api_token.mint).await {
         // Record event for better post-mortem visibility
         crate::events::record_safe(crate::events::Event::new(
             crate::events::EventCategory::Position,
             Some("open_blocked_in_memory".to_string()),
             crate::events::Severity::Warn,
-            Some(token.mint.clone()),
+            Some(api_token.mint.clone()),
             None,
             json!({
                 "reason": "is_open_position_guard",
-                "mint": token.mint,
+                "mint": api_token.mint,
             }),
         ))
         .await;
@@ -74,7 +76,7 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
 
     // Extra safety: consult database for any existing open or unverified position for this mint.
     // This covers edge cases across restarts or rare state desyncs where in-memory guards miss.
-    if let Ok(db_pos_opt) = positions_db::get_position_by_mint(&token.mint).await {
+    if let Ok(db_pos_opt) = positions_db::get_position_by_mint(&api_token.mint).await {
         if let Some(db_pos) = db_pos_opt {
             let is_still_open = db_pos.position_type == "buy"
                 && db_pos.exit_time.is_none()
@@ -86,7 +88,7 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
                     "DB_GUARD_OPEN_BLOCKED",
                     &format!(
                         "🚫 DB guard: mint {} already has open/unverified position (id: {:?}, entry_sig: {:?}, exit_sig: {:?})",
-                        &token.mint,
+                        &api_token.mint,
                         db_pos.id,
                         db_pos.entry_transaction_signature,
                         db_pos.exit_transaction_signature
@@ -97,7 +99,7 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
                     crate::events::EventCategory::Position,
                     Some("open_blocked_db_guard".to_string()),
                     crate::events::Severity::Warn,
-                    Some(token.mint.clone()),
+                    Some(api_token.mint.clone()),
                     db_pos.entry_transaction_signature.clone(),
                     json!({
                         "db_position_id": db_pos.id,
@@ -134,7 +136,7 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
             "DRY-RUN",
             &format!(
                 "🚫 DRY-RUN: Would open position for {} at {:.6} SOL",
-                token.symbol, entry_price
+                api_token.symbol, entry_price
             ),
         );
         return Err("DRY-RUN: Position would be opened".to_string());
@@ -145,12 +147,12 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
         get_wallet_address().map_err(|e| format!("Failed to get wallet address: {}", e))?;
 
     // Mark mint as pending-open BEFORE submitting the swap to avoid duplicate attempts
-    super::state::set_pending_open(&token.mint, super::state::PENDING_OPEN_TTL_SECS).await;
+    super::state::set_pending_open(&api_token.mint, super::state::PENDING_OPEN_TTL_SECS).await;
     crate::events::record_safe(crate::events::Event::new(
         crate::events::EventCategory::Position,
         Some("pending_open_set".to_string()),
         crate::events::Severity::Debug,
-        Some(token.mint.clone()),
+        Some(api_token.mint.clone()),
         None,
         json!({
             "ttl_secs": super::state::PENDING_OPEN_TTL_SECS,
@@ -163,11 +165,11 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
 
     let quote = get_best_quote_for_opening(
         SOL_MINT,
-        &token.mint,
+        &api_token.mint,
         sol_to_lamports(trade_size_sol),
         &wallet_address,
         slippage_quote_default, // Use configured slippage for opening
-        &token.symbol,
+        &api_token.symbol,
     )
     .await
     .map_err(|e| format!("Quote failed: {}", e))?;
@@ -175,7 +177,7 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
     let swap_result = execute_best_swap(
         &token,
         SOL_MINT,
-        &token.mint,
+        &api_token.mint,
         sol_to_lamports(trade_size_sol),
         quote,
     )
@@ -189,9 +191,9 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
     // Create position
     let position = Position {
         id: None,
-        mint: token.mint.clone(),
-        symbol: token.symbol.clone(),
-        name: token.name.clone(),
+        mint: api_token.mint.clone(),
+        symbol: api_token.symbol.clone(),
+        name: api_token.name.clone(),
         entry_price,
         entry_time: Utc::now(),
         exit_price: None,
@@ -242,12 +244,12 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
     // calling forget() so the permit is NOT returned on drop. Terminal transitions will
     // explicitly release it.
     _global_permit.forget();
-    add_signature_to_index(&transaction_signature, &token.mint).await;
+    add_signature_to_index(&transaction_signature, &api_token.mint).await;
 
     // Record a position opened event for durability
     crate::events::record_position_event(
         &format!("{}", position_id),
-        &token.mint,
+        &api_token.mint,
         "opened",
         Some(&transaction_signature),
         None,
@@ -268,7 +270,7 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
     // Enqueue for verification
     let verification_item = VerificationItem::new(
         transaction_signature.clone(),
-        token.mint.clone(),
+        api_token.mint.clone(),
         Some(position_id),
         VerificationKind::Entry,
         expiry_height,
@@ -277,12 +279,12 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
     enqueue_verification(verification_item).await;
 
     // We successfully created the position; clear pending-open now
-    super::state::clear_pending_open(&token.mint).await;
+    super::state::clear_pending_open(&api_token.mint).await;
     crate::events::record_safe(crate::events::Event::new(
         crate::events::EventCategory::Position,
         Some("pending_open_cleared".to_string()),
         crate::events::Severity::Debug,
-        Some(token.mint.clone()),
+        Some(api_token.mint.clone()),
         Some(transaction_signature.clone()),
         json!({}),
     ))
@@ -311,9 +313,11 @@ pub async fn close_position_direct(
     token_mint: &str,
     exit_reason: String,
 ) -> Result<String, String> {
-    let token = get_token_from_db(token_mint)
-        .await
+    let snapshot = get_global_token_store()
+        .get(token_mint)
         .ok_or_else(|| format!("Token not found: {}", token_mint))?;
+    let api_token = &snapshot.data;
+    let token: Token = api_token.clone().into();
 
     let price_info = get_pool_price(token_mint)
         .ok_or_else(|| format!("No price data for token: {}", token_mint))?;
@@ -336,7 +340,7 @@ pub async fn close_position_direct(
                 "RACE_PREVENTION",
                 &format!(
                     "🚫 Position {} already has pending exit transaction: {}",
-                    token.symbol,
+                    api_token.symbol,
                     &pending_sig[..8]
                 ),
             );
@@ -344,7 +348,7 @@ pub async fn close_position_direct(
                 crate::events::EventCategory::Position,
                 Some("exit_blocked_pending_sig".to_string()),
                 crate::events::Severity::Warn,
-                Some(token.mint.clone()),
+                Some(api_token.mint.clone()),
                 Some(pending_sig.clone()),
                 json!({
                     "reason": "pending_exit_tx_present"
@@ -362,7 +366,7 @@ pub async fn close_position_direct(
         log(
             LogTag::Positions,
             "DRY-RUN",
-            &format!("🚫 DRY-RUN: Would close position for {}", token.symbol),
+            &format!("🚫 DRY-RUN: Would close position for {}", api_token.symbol),
         );
         return Err("DRY-RUN: Position would be closed".to_string());
     }
@@ -415,7 +419,7 @@ pub async fn close_position_direct(
         "SELL_ALL",
         &format!(
             "🔄 Selling ALL tokens for {}: {} total units across all accounts",
-            token.symbol, total_token_balance
+            api_token.symbol, total_token_balance
         ),
     );
 

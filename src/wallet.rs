@@ -26,7 +26,7 @@ use crate::config::with_config;
 use crate::global::is_debug_wallet_enabled;
 use crate::logger::{log, LogTag};
 use crate::rpc::{get_rpc_client, TokenAccountInfo};
-use crate::tokens::database::TokenDatabase;
+use crate::tokens::store::get_global_token_store;
 use crate::transactions::get_transaction_database;
 use crate::utils::get_wallet_address;
 
@@ -502,34 +502,16 @@ async fn enrich_token_overview(
     let metadata_map: HashMap<String, crate::tokens::types::ApiToken> = if unique_mints.is_empty() {
         HashMap::new()
     } else {
-        match TokenDatabase::new() {
-            Ok(database) => match database.get_tokens_by_mints(&unique_mints) {
-                Ok(tokens) => tokens
-                    .into_iter()
-                    .map(|token| (token.mint.clone(), token))
-                    .collect(),
-                Err(err) => {
-                    if is_debug_wallet_enabled() {
-                        log(
-                            LogTag::Wallet,
-                            "TOKEN_META_BATCH_FAIL",
-                            &format!("Batch token metadata fetch failed: {}", err),
-                        );
-                    }
-                    HashMap::new()
-                }
-            },
-            Err(err) => {
-                if is_debug_wallet_enabled() {
-                    log(
-                        LogTag::Wallet,
-                        "TOKEN_DB_INIT_FAIL",
-                        &format!("Failed to open token database: {}", err),
-                    );
-                }
-                HashMap::new()
-            }
-        }
+        // Fetch tokens from cache - instant memory access
+        let store = get_global_token_store();
+        unique_mints
+            .iter()
+            .filter_map(|mint| {
+                store
+                    .get(mint)
+                    .map(|snapshot| (mint.clone(), snapshot.data.clone()))
+            })
+            .collect()
     };
 
     for balance in balances {

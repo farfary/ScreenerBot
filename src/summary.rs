@@ -5,7 +5,7 @@ use crate::global::{is_debug_summary_enabled, STARTUP_TIME};
 use crate::logger::{log, LogTag};
 use crate::positions::*;
 use crate::rpc::get_global_rpc_stats;
-use crate::tokens::get_token_from_db;
+use crate::tokens::store::get_global_token_store;
 use crate::trader::*;
 use crate::transactions::{SwapPnLInfo, Transaction, TransactionType, TransactionsManager};
 use crate::utils::*;
@@ -106,46 +106,31 @@ async fn build_token_symbol_cache(
             continue;
         }
 
-        // Add timeout protection for each database query
-        match tokio::time::timeout(
-            std::time::Duration::from_millis(100), // 100ms timeout per token
-            get_token_from_db(&mint),
-        )
-        .await
-        {
-            Ok(Some(token)) => {
-                let symbol = if !token.symbol.is_empty()
-                    && token.symbol != "Unknown"
-                    && token.symbol.len() <= 20
-                {
-                    token.symbol
-                } else if !token.name.is_empty()
-                    && token.name != "Unknown"
-                    && token.name.len() <= 30
-                {
-                    // Fallback to name if symbol is empty/unknown
-                    if token.name.len() > 12 {
-                        format!("{}...", &token.name[..9])
-                    } else {
-                        token.name
-                    }
+        // Fetch token from cache (no timeout needed - instant memory access)
+        if let Some(snapshot) = get_global_token_store().get(&mint) {
+            let token = &snapshot.data;
+            let symbol = if !token.symbol.is_empty()
+                && token.symbol != "Unknown"
+                && token.symbol.len() <= 20
+            {
+                token.symbol.clone()
+            } else if !token.name.is_empty() && token.name != "Unknown" && token.name.len() <= 30 {
+                // Fallback to name if symbol is empty/unknown
+                if token.name.len() > 12 {
+                    format!("{}...", &token.name[..9])
                 } else {
-                    // Final fallback to shortened mint
-                    format!("TOKEN_{}", &mint[..8])
-                };
+                    token.name.clone()
+                }
+            } else {
+                // Final fallback to shortened mint
+                format!("TOKEN_{}", &mint[..8])
+            };
 
-                token_cache.insert(mint.clone(), symbol);
-                successful_fetches += 1;
-            }
-            Ok(None) => {
-                // Token not found in database, use fallback
-                token_cache.insert(mint.clone(), format!("TOKEN_{}", &mint[..8]));
-            }
-            Err(_) => {
-                // Timeout or error, use fallback and continue
-                token_cache.insert(mint.clone(), format!("TOKEN_{}", &mint[..8]));
-                timeout_count += 1;
-            }
+            token_cache.insert(mint.clone(), symbol);
+            successful_fetches += 1;
+        } else {
+            // Token not found in cache, use fallback
+            token_cache.insert(mint.clone(), format!("TOKEN_{}", &mint[..8]));
         }
 
         // If fetching is taking too long overall, break early to avoid blocking

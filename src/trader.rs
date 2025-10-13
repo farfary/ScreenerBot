@@ -47,7 +47,9 @@ use crate::logger::{log, LogTag};
 use crate::pools::{get_pool_price, PriceResult};
 use crate::positions::calculate_position_pnl;
 use crate::positions::is_open_position;
-use crate::tokens::{database::TokenDatabase, get_all_tokens_by_liquidity, Token};
+use crate::tokens::{
+    database::TokenDatabase, get_all_tokens_by_liquidity, store::get_global_token_store, Token,
+};
 use crate::utils::{check_shutdown_or_delay, debug_trader_log, safe_read_lock, safe_write_lock};
 
 use crate::entry::get_profit_target;
@@ -1701,10 +1703,10 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                 {
                     // Get current price for this position
                     if let Some(current_price) = price_map.get(&position.mint) {
-                        // Fetch full token from database
-                        if let Some(full_token) =
-                            crate::tokens::get_token_from_db(&position.mint).await
-                        {
+                        // Fetch token from cache
+                        if let Some(snapshot) = get_global_token_store().get(&position.mint) {
+                            let full_token: Token = snapshot.data.clone().into();
+
                             log(
                                 LogTag::Trader,
                                 "SELL_RETRY",
@@ -1902,22 +1904,21 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                         )
                         .await;
 
-                        // Fetch full token from database for immediate processing
-                        let Some(full_token) =
-                            crate::tokens::get_token_from_db(&position.mint).await
-                        else {
-                            // If token not found in DB, remove the cached decision since we can't trade it
+                        // Fetch token from cache for immediate processing
+                        let Some(snapshot) = get_global_token_store().get(&position.mint) else {
+                            // If token not found in cache, remove the cached decision since we can't trade it
                             remove_sell_decision(&position_id);
                             log(
                                 LogTag::Trader,
                                 "ERROR",
                                 &format!(
-                                    "Token not found in DB for mint {} — removing cached sell decision",
+                                    "Token not found in cache for mint {} — removing cached sell decision",
                                     position.mint
                                 )
                             );
                             continue;
                         };
+                        let full_token: Token = snapshot.data.clone().into();
 
                         log(
                             LogTag::Trader,
