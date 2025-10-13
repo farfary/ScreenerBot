@@ -105,7 +105,7 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
             token_api.mint.clone(),
             TokenEntry {
                 summary,
-                pair_created_at: token_api.pair_created_at,
+                pair_created_at: token_api.created_at.map(|dt| dt.timestamp()),
                 last_updated: token_api.last_updated,
             },
         );

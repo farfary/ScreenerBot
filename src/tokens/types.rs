@@ -2,32 +2,7 @@ use chrono::{DateTime, Utc};
 /// Data types for the centralized pricing system
 use serde::{Deserialize, Serialize};
 
-/// Token information from API sources
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ApiToken {
-    pub mint: String,
-    pub symbol: String,
-    pub name: String,
-    // decimals removed - only use decimal_cache.json
-    pub chain_id: String,
-    pub dex_id: String,
-    pub pair_address: String,
-    pub pair_url: Option<String>,
-    pub price_native: f64,
-    pub price_usd: f64,
-    pub price_sol: Option<f64>, // Calculated from price_native if base is SOL
-    pub liquidity: Option<LiquidityInfo>,
-    pub volume: Option<VolumeStats>,
-    pub txns: Option<TxnStats>,
-    pub price_change: Option<PriceChangeStats>,
-    pub fdv: Option<f64>,
-    pub market_cap: Option<f64>,
-    pub pair_created_at: Option<i64>,
-    pub boosts: Option<BoostInfo>,
-    pub info: Option<TokenInfo>,
-    pub labels: Option<Vec<String>>,
-    pub last_updated: DateTime<Utc>,
-}
+// ApiToken deleted - Token is now the only type (Phase 10: ApiToken elimination complete)
 
 /// Transaction data for different time periods
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -127,6 +102,7 @@ pub struct Token {
     pub tags: Vec<String>,
     pub is_verified: bool,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub last_updated: chrono::DateTime<chrono::Utc>,
 
     // Price data from various sources
     pub price_dexscreener_sol: Option<f64>,
@@ -190,129 +166,7 @@ pub struct TokenRecord {
     pub last_updated: DateTime<Utc>,
 }
 
-// =============================================================================
-// CONVERSION IMPLEMENTATIONS
-// =============================================================================
-
-impl From<ApiToken> for Token {
-    fn from(api_token: ApiToken) -> Self {
-        Self {
-            mint: api_token.mint,
-            symbol: api_token.symbol,
-            name: api_token.name,
-            chain: "solana".to_string(),
-
-            // Initialize cached data as None - will be populated later
-            decimals: None,
-
-            logo_url: api_token.info.as_ref().and_then(|i| i.image_url.clone()),
-            coingecko_id: None,
-            // Extract the first website URL from info.websites if available
-            website: api_token
-                .info
-                .as_ref()
-                .and_then(|i| i.websites.as_ref())
-                .and_then(|websites| websites.first())
-                .map(|w| w.url.clone()),
-            description: None, // DexScreener API doesn't provide description field
-            tags: Vec::new(),
-            is_verified: false,
-            created_at: api_token.pair_created_at.map(|ts| {
-                DateTime::from_timestamp_millis(ts)
-                    .unwrap_or_default()
-                    .with_timezone(&Utc)
-            }),
-
-            price_dexscreener_sol: api_token.price_sol,
-            price_dexscreener_usd: Some(api_token.price_usd),
-            price_pool_sol: None,
-            price_pool_usd: None,
-
-            dex_id: Some(api_token.dex_id),
-            pair_address: Some(api_token.pair_address),
-            pair_url: api_token.pair_url,
-            labels: api_token.labels.unwrap_or_default(),
-            fdv: api_token.fdv,
-            market_cap: api_token.market_cap,
-            txns: api_token.txns,
-            volume: api_token.volume,
-            price_change: api_token.price_change,
-            liquidity: api_token.liquidity,
-            info: api_token.info.map(|info| TokenInfoCompat {
-                image_url: info.image_url,
-                header: None,
-                open_graph: None,
-                websites: info
-                    .websites
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|w| WebsiteLink {
-                        label: None,
-                        url: w.url,
-                    })
-                    .collect(),
-                socials: info
-                    .socials
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|s| SocialLink {
-                        link_type: s.platform,
-                        url: s.handle,
-                    })
-                    .collect(),
-            }),
-            boosts: api_token.boosts,
-        }
-    }
-}
-
-impl From<Token> for ApiToken {
-    fn from(token: Token) -> Self {
-        Self {
-            mint: token.mint.clone(),
-            symbol: token.symbol.clone(),
-            name: token.name.clone(),
-            chain_id: token.chain,
-            dex_id: token.dex_id.unwrap_or_default(),
-            pair_address: token.pair_address.unwrap_or_default(),
-            pair_url: token.pair_url,
-            price_native: token.price_dexscreener_sol.unwrap_or(0.0),
-            price_usd: token.price_dexscreener_usd.unwrap_or(0.0),
-            price_sol: token.price_dexscreener_sol,
-            liquidity: token.liquidity,
-            volume: token.volume,
-            txns: token.txns,
-            price_change: token.price_change,
-            fdv: token.fdv,
-            market_cap: token.market_cap,
-            pair_created_at: token.created_at.map(|dt| dt.timestamp()),
-            boosts: token.boosts,
-            info: token.info.map(|info| TokenInfo {
-                address: token.mint.clone(),
-                name: token.name.clone(),
-                symbol: token.symbol.clone(),
-                image_url: info.image_url,
-                websites: Some(
-                    info.websites
-                        .into_iter()
-                        .map(|w| WebsiteInfo { url: w.url })
-                        .collect(),
-                ),
-                socials: Some(
-                    info.socials
-                        .into_iter()
-                        .map(|s| SocialInfo {
-                            platform: s.link_type,
-                            handle: s.url,
-                        })
-                        .collect(),
-                ),
-            }),
-            labels: Some(token.labels),
-            last_updated: Utc::now(),
-        }
-    }
-}
+// Conversion implementations deleted - Token is the only type, no conversions needed
 
 /// Token discovery source information
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -285,7 +285,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut api = api_arc.lock().await;
             match api.get_token_data(target_mint).await {
                 Ok(Some(api_token)) => {
-                    if let Some(api_price_sol) = api_token.price_sol {
+                    if let Some(api_price_sol) = api_token.price_dexscreener_sol {
                         let dec = res1.as_ref().or(res2.as_ref());
                         if let Some(best) = dec {
                             let decoded = best.price_sol;

@@ -599,15 +599,10 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         website: token
             .info
             .as_ref()
-            .and_then(|i| i.websites.as_ref())
-            .and_then(|w| w.first())
+            .and_then(|i| i.websites.first())
             .map(|w| w.url.clone()),
-        verified: token
-            .labels
-            .as_ref()
-            .map(|l| l.iter().any(|label| label.to_lowercase() == "verified"))
-            .unwrap_or(false),
-        tags: token.labels.clone().unwrap_or_default(),
+        verified: token.is_verified,
+        tags: token.labels.clone(),
         price_sol,
         price_confidence,
         price_updated_at,

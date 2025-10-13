@@ -27,7 +27,7 @@ use screenerbot::pools::utils::is_stablecoin_mint;
 use screenerbot::rpc::{get_rpc_client, parse_pubkey};
 use screenerbot::tokens::database::TokenDatabase;
 use screenerbot::tokens::dexscreener::{get_global_dexscreener_api, init_dexscreener_api};
-use screenerbot::tokens::types::ApiToken;
+use screenerbot::tokens::types::Token;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -145,7 +145,7 @@ impl TestPool {
 }
 
 /// Fetch pools for a token and categorize by program type and pair direction
-async fn find_pools_for_token(token: &ApiToken, args: &Args) -> Result<Vec<TestPool>, String> {
+async fn find_pools_for_token(token: &Token, args: &Args) -> Result<Vec<TestPool>, String> {
     let mut test_pools = Vec::new();
 
     // Get DexScreener API

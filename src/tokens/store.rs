@@ -25,7 +25,7 @@ use crate::tokens::database::TokenDatabase;
 use crate::tokens::decimals;
 use crate::tokens::security::RiskLevel;
 use crate::tokens::summary::TokenSummaryContext;
-use crate::tokens::types::{ApiToken, TokenInfo};
+use crate::tokens::types::{Token, TokenInfo};
 
 /// Broadcast channel capacity for token updates.
 const TOKEN_STORE_EVENT_CHANNEL_CAPACITY: usize = 2048;
@@ -129,8 +129,7 @@ pub struct TokenStatusFlags {
 /// Full runtime representation of a token.
 #[derive(Debug, Clone)]
 pub struct TokenSnapshot {
-    pub data: ApiToken,
-    pub decimals: Option<u8>,
+    pub data: Token,
     pub price: TokenPriceState,
     pub security: TokenSecurityState,
     pub activity: TokenActivityState,
@@ -392,26 +391,20 @@ impl TokenIndexes {
             self.symbols.entry(key).or_default().insert(mint.clone());
         }
 
-        if !snapshot.data.dex_id.is_empty() {
-            let key = snapshot.data.dex_id.to_ascii_lowercase();
-            self.dex_ids.entry(key).or_default().insert(mint.clone());
-        }
-
-        if let Some(labels) = snapshot.data.labels.as_ref() {
-            for label in labels {
-                let key = label.to_ascii_lowercase();
-                self.tags.entry(key).or_default().insert(mint.clone());
+        if let Some(ref dex_id) = snapshot.data.dex_id {
+            if !dex_id.is_empty() {
+                let key = dex_id.to_ascii_lowercase();
+                self.dex_ids.entry(key).or_default().insert(mint.clone());
             }
         }
 
-        if let Some(info) = snapshot.data.info.as_ref() {
-            if let Some(tags) = extract_info_tags(info) {
-                for tag in tags {
-                    let key = tag;
-                    self.tags.entry(key).or_default().insert(mint.clone());
-                }
-            }
+        for label in &snapshot.data.labels {
+            let key = label.to_ascii_lowercase();
+            self.tags.entry(key).or_default().insert(mint.clone());
         }
+
+        // Token.info is TokenInfoCompat which doesn't have extractable tags field
+        // Tags are now directly on Token.labels and Token.tags fields
     }
 
     fn remove(&mut self, snapshot: &TokenSnapshot) {
@@ -422,24 +415,16 @@ impl TokenIndexes {
             remove_from_index(&mut self.symbols, &key, mint);
         }
 
-        if !snapshot.data.dex_id.is_empty() {
-            let key = snapshot.data.dex_id.to_ascii_lowercase();
-            remove_from_index(&mut self.dex_ids, &key, mint);
-        }
-
-        if let Some(labels) = snapshot.data.labels.as_ref() {
-            for label in labels {
-                let key = label.to_ascii_lowercase();
-                remove_from_index(&mut self.tags, &key, mint);
+        if let Some(ref dex_id) = snapshot.data.dex_id {
+            if !dex_id.is_empty() {
+                let key = dex_id.to_ascii_lowercase();
+                remove_from_index(&mut self.dex_ids, &key, mint);
             }
         }
 
-        if let Some(info) = snapshot.data.info.as_ref() {
-            if let Some(tags) = extract_info_tags(info) {
-                for key in tags {
-                    remove_from_index(&mut self.tags, &key, mint);
-                }
-            }
+        for label in &snapshot.data.labels {
+            let key = label.to_ascii_lowercase();
+            remove_from_index(&mut self.tags, &key, mint);
         }
     }
 
@@ -456,11 +441,7 @@ impl TokenIndexes {
     }
 }
 
-fn extract_info_tags(_info: &TokenInfo) -> Option<HashSet<String>> {
-    // TokenInfo doesn't currently provide structured tags in this codebase.
-    // Keep placeholder for future metadata enrichment.
-    None
-}
+// TokenInfo extraction no longer needed - Token has tags and labels fields directly
 
 fn remove_from_index(index: &mut HashMap<String, HashSet<String>>, key: &str, mint: &str) {
     if let Some(set) = index.get_mut(key) {
@@ -599,10 +580,10 @@ impl TokenStore {
             .collect()
     }
 
-    /// Primary ingestion path for API tokens.
-    pub async fn ingest_api_tokens(
+    /// Primary ingestion path for tokens.
+    pub async fn ingest_tokens(
         &self,
-        tokens: Vec<ApiToken>,
+        tokens: Vec<Token>,
         source: TokenUpdateSource,
     ) -> Result<TokenStoreRefreshStats, String> {
         self.apply_snapshot(tokens, source, false).await
@@ -623,7 +604,7 @@ impl TokenStore {
 
     async fn apply_snapshot(
         &self,
-        tokens: Vec<ApiToken>,
+        tokens: Vec<Token>,
         source: TokenUpdateSource,
         remove_missing: bool,
     ) -> Result<TokenStoreRefreshStats, String> {
@@ -734,12 +715,17 @@ impl TokenStore {
 
     fn build_snapshot(
         &self,
-        token: ApiToken,
+        mut token: Token,
         context: &TokenEnrichmentContext,
         source: TokenUpdateSource,
     ) -> TokenSnapshot {
         let mint = token.mint.clone();
-        let decimals = context.decimals.get(&mint).copied();
+
+        // Enrich token with decimals if not already set
+        if token.decimals.is_none() {
+            token.decimals = context.decimals.get(&mint).copied();
+        }
+
         let price_state = TokenPriceState::from_token(&token, context.price.get(&mint));
         let security_state = context.security_state(&mint);
         let activity_state = context.activity_state(&mint);
@@ -755,7 +741,6 @@ impl TokenStore {
 
         TokenSnapshot {
             data: token,
-            decimals,
             price: price_state,
             security: security_state,
             activity: activity_state,
@@ -943,23 +928,23 @@ fn matches_filter(
     }
 
     if !filter.dex_ids.is_empty() {
-        let needle = snapshot.data.dex_id.to_ascii_lowercase();
-        if !filter.dex_ids.contains(&needle) {
+        if let Some(ref dex_id) = snapshot.data.dex_id {
+            let needle = dex_id.to_ascii_lowercase();
+            if !filter.dex_ids.contains(&needle) {
+                return false;
+            }
+        } else {
             return false;
         }
     }
 
     if !filter.tags.is_empty() {
         let mut tag_pool: HashSet<String> = HashSet::new();
-        if let Some(labels) = snapshot.data.labels.as_ref() {
-            for label in labels {
-                tag_pool.insert(label.to_ascii_lowercase());
-            }
+        for label in &snapshot.data.labels {
+            tag_pool.insert(label.to_ascii_lowercase());
         }
-        if let Some(info) = snapshot.data.info.as_ref() {
-            if let Some(tags) = extract_info_tags(info) {
-                tag_pool.extend(tags);
-            }
+        for tag in &snapshot.data.tags {
+            tag_pool.insert(tag.to_ascii_lowercase());
         }
         if !filter
             .tags
@@ -983,29 +968,20 @@ fn matches_search(snapshot: &TokenSnapshot, needle: &str) -> bool {
     if snapshot.data.name.to_ascii_lowercase().contains(needle) {
         return true;
     }
+    if let Some(ref pair_address) = snapshot.data.pair_address {
+        if pair_address.to_ascii_lowercase().contains(needle) {
+            return true;
+        }
+    }
     if snapshot
         .data
-        .pair_address
-        .to_ascii_lowercase()
-        .contains(needle)
+        .labels
+        .iter()
+        .any(|label| label.to_ascii_lowercase().contains(needle))
     {
         return true;
     }
-    if let Some(labels) = snapshot.data.labels.as_ref() {
-        if labels
-            .iter()
-            .any(|label| label.to_ascii_lowercase().contains(needle))
-        {
-            return true;
-        }
-    }
-    if let Some(info) = snapshot.data.info.as_ref() {
-        if info.name.to_ascii_lowercase().contains(needle)
-            || info.symbol.to_ascii_lowercase().contains(needle)
-        {
-            return true;
-        }
-    }
+    // Token name/symbol already checked above via snapshot.data.name and snapshot.data.symbol
     false
 }
 
@@ -1160,7 +1136,7 @@ fn risk_level_from_score(score: i32) -> RiskLevel {
 }
 
 impl TokenPriceState {
-    fn from_token(token: &ApiToken, price_result: Option<&PriceResult>) -> Self {
+    fn from_token(token: &Token, price_result: Option<&PriceResult>) -> Self {
         if let Some(result) = price_result {
             let price_updated_at_unix = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -1170,7 +1146,7 @@ impl TokenPriceState {
                 last_result: Some(result.clone()),
                 price_sol: Some(result.price_sol),
                 price_usd: Some(result.price_usd),
-                price_native: Some(token.price_native),
+                price_native: token.price_dexscreener_sol,
                 confidence: Some(result.confidence),
                 slot: Some(result.slot),
                 price_updated_at_unix,
@@ -1178,9 +1154,9 @@ impl TokenPriceState {
         } else {
             Self {
                 last_result: None,
-                price_sol: token.price_sol,
-                price_usd: Some(token.price_usd),
-                price_native: Some(token.price_native),
+                price_sol: token.price_dexscreener_sol,
+                price_usd: token.price_dexscreener_usd,
+                price_native: token.price_dexscreener_sol,
                 confidence: None,
                 slot: None,
                 price_updated_at_unix: Some(token.last_updated.timestamp()),

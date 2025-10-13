@@ -316,6 +316,7 @@ async fn burn_dust_tokens(
             liquidity: None,
             info: None,
             boosts: None,
+            last_updated: chrono::Utc::now(),
         };
 
         // Get quote using ExactOut mode for complete liquidation

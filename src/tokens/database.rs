@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 // TOKEN DATABASE (SQLite)
 // =============================================================================
 
-use crate::tokens::types::ApiToken;
+use crate::tokens::types::Token;
 use rusqlite::{params, params_from_iter, Connection, Result as SqliteResult};
 
 /// SQLite database for token storage and caching
@@ -143,7 +143,7 @@ impl TokenDatabase {
     }
 
     /// Add new tokens to database
-    pub async fn add_tokens(&self, tokens: &[ApiToken]) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn add_tokens(&self, tokens: &[Token]) -> Result<(), Box<dyn std::error::Error>> {
         for token in tokens {
             self.insert_or_update_token(token)?;
         }
@@ -160,7 +160,7 @@ impl TokenDatabase {
     }
 
     /// Update existing tokens in database
-    pub async fn update_tokens(&self, tokens: &[ApiToken]) -> Result<(), String> {
+    pub async fn update_tokens(&self, tokens: &[Token]) -> Result<(), String> {
         for token in tokens {
             self.insert_or_update_token(token)
                 .map_err(|e| format!("Failed to update token: {}", e))?;
@@ -334,7 +334,7 @@ impl TokenDatabase {
     }
 
     /// Get all tokens from database
-    pub async fn get_all_tokens(&self) -> Result<Vec<ApiToken>, String> {
+    pub async fn get_all_tokens(&self) -> Result<Vec<Token>, String> {
         let connection = self
             .connection
             .lock()
@@ -364,7 +364,7 @@ impl TokenDatabase {
         page: usize,
         page_size: usize,
         search: &str,
-    ) -> Result<(Vec<ApiToken>, usize), String> {
+    ) -> Result<(Vec<Token>, usize), String> {
         let db = self.clone();
         let sort_key = sort_by.to_lowercase();
         let direction = if sort_dir.eq_ignore_ascii_case("asc") {
@@ -489,7 +489,7 @@ impl TokenDatabase {
     pub fn get_tokens_by_mints(
         &self,
         mints: &[String],
-    ) -> Result<Vec<ApiToken>, Box<dyn std::error::Error>> {
+    ) -> Result<Vec<Token>, Box<dyn std::error::Error>> {
         if mints.is_empty() {
             return Ok(Vec::new());
         }
@@ -510,7 +510,7 @@ impl TokenDatabase {
             |row| Ok(self.row_to_token(row)?),
         )?;
 
-        let mut fetched: HashMap<String, ApiToken> = HashMap::new();
+        let mut fetched: HashMap<String, Token> = HashMap::new();
         for row in rows {
             let token = row?;
             fetched.insert(token.mint.clone(), token);
@@ -530,7 +530,7 @@ impl TokenDatabase {
     pub fn get_token_by_mint(
         &self,
         mint: &str,
-    ) -> Result<Option<ApiToken>, Box<dyn std::error::Error>> {
+    ) -> Result<Option<Token>, Box<dyn std::error::Error>> {
         let connection = self.connection.lock().map_err(|e| {
             Box::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -552,7 +552,7 @@ impl TokenDatabase {
     pub async fn get_tokens_by_liquidity_threshold(
         &self,
         threshold: f64,
-    ) -> Result<Vec<ApiToken>, Box<dyn std::error::Error>> {
+    ) -> Result<Vec<Token>, Box<dyn std::error::Error>> {
         let connection = self.connection.lock().map_err(|e| {
             Box::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -577,12 +577,12 @@ impl TokenDatabase {
     }
 
     /// Insert or update token in database
-    fn insert_or_update_token(&self, token: &ApiToken) -> Result<(), Box<dyn std::error::Error>> {
-        let labels_json = token
-            .labels
-            .as_ref()
-            .map(|labels| serde_json::to_string(labels).unwrap_or_default())
-            .unwrap_or_default();
+    fn insert_or_update_token(&self, token: &Token) -> Result<(), Box<dyn std::error::Error>> {
+        let labels_json = if token.labels.is_empty() {
+            String::new()
+        } else {
+            serde_json::to_string(&token.labels).unwrap_or_default()
+        };
 
         let connection = self.connection.lock().map_err(|e| {
             Box::new(std::io::Error::new(
@@ -609,13 +609,13 @@ impl TokenDatabase {
                 token.mint,
                 token.symbol,
                 token.name,
-                token.chain_id,
+                token.chain,
                 token.dex_id,
                 token.pair_address,
                 token.pair_url,
-                token.price_native,
-                token.price_usd,
-                token.price_sol,
+                token.price_dexscreener_sol, // price_native maps to price_dexscreener_sol
+                token.price_dexscreener_usd,
+                token.price_dexscreener_sol,
                 token.liquidity.as_ref().and_then(|l| l.usd),
                 token.liquidity.as_ref().and_then(|l| l.base),
                 token.liquidity.as_ref().and_then(|l| l.quote),
@@ -637,9 +637,9 @@ impl TokenDatabase {
                 token.price_change.as_ref().and_then(|p| p.m5),
                 token.fdv,
                 token.market_cap,
-                token.pair_created_at,
+                token.created_at.map(|dt| dt.timestamp()),
                 token.boosts.as_ref().and_then(|b| b.active),
-                token.info.as_ref().and_then(|i| i.image_url.clone()),
+                token.logo_url.clone(), // Was info.image_url, now logo_url
                 labels_json,
                 token.last_updated.to_rfc3339()
             ]
@@ -648,13 +648,13 @@ impl TokenDatabase {
         Ok(())
     }
 
-    /// Convert database row to ApiToken
-    fn row_to_token(&self, row: &rusqlite::Row) -> SqliteResult<ApiToken> {
+    /// Convert database row to Token
+    fn row_to_token(&self, row: &rusqlite::Row) -> SqliteResult<Token> {
         let labels_json: String = row.get("labels")?;
-        let labels = if labels_json.is_empty() {
-            None
+        let labels: Vec<String> = if labels_json.is_empty() {
+            Vec::new()
         } else {
-            serde_json::from_str(&labels_json).ok()
+            serde_json::from_str(&labels_json).unwrap_or_default()
         };
 
         let last_updated_str: String = row.get("last_updated")?;
@@ -668,29 +668,35 @@ impl TokenDatabase {
             })?
             .with_timezone(&chrono::Utc);
 
-        Ok(ApiToken {
+        let pair_created_at: Option<i64> = row.get("pair_created_at")?;
+        let created_at = pair_created_at.map(|ts| {
+            chrono::DateTime::from_timestamp(ts, 0).unwrap_or_else(|| chrono::Utc::now())
+        });
+
+        Ok(Token {
             mint: row.get("mint")?,
             symbol: row.get("symbol")?,
             name: row.get("name")?,
-            // decimals removed - only use decimal_cache.json
-            chain_id: row.get("chain_id")?,
+            chain: row.get("chain_id")?,
+            decimals: None, // Loaded separately from decimals cache
+            logo_url: row.get("info_image_url")?,
+            coingecko_id: None,
+            website: None,
+            description: None,
+            tags: Vec::new(),
+            is_verified: false,
+            created_at,
+            last_updated,
+            price_dexscreener_sol: row.get("price_sol")?,
+            price_dexscreener_usd: row.get("price_usd")?,
+            price_pool_sol: None,
+            price_pool_usd: None,
             dex_id: row.get("dex_id")?,
             pair_address: row.get("pair_address")?,
             pair_url: row.get("pair_url")?,
-            price_native: row.get("price_native")?,
-            price_usd: row.get("price_usd")?,
-            price_sol: row.get("price_sol")?,
-            liquidity: Some(crate::tokens::types::LiquidityInfo {
-                usd: row.get("liquidity_usd")?,
-                base: row.get("liquidity_base")?,
-                quote: row.get("liquidity_quote")?,
-            }),
-            volume: Some(crate::tokens::types::VolumeStats {
-                h24: row.get("volume_h24")?,
-                h6: row.get("volume_h6")?,
-                h1: row.get("volume_h1")?,
-                m5: row.get("volume_m5")?,
-            }),
+            labels,
+            fdv: row.get("fdv")?,
+            market_cap: row.get("market_cap")?,
             txns: Some(crate::tokens::types::TxnStats {
                 h24: Some(crate::tokens::types::TxnPeriod {
                     buys: row.get("txns_h24_buys")?,
@@ -709,28 +715,27 @@ impl TokenDatabase {
                     sells: row.get("txns_m5_sells")?,
                 }),
             }),
+            volume: Some(crate::tokens::types::VolumeStats {
+                h24: row.get("volume_h24")?,
+                h6: row.get("volume_h6")?,
+                h1: row.get("volume_h1")?,
+                m5: row.get("volume_m5")?,
+            }),
             price_change: Some(crate::tokens::types::PriceChangeStats {
                 h24: row.get("price_change_h24")?,
                 h6: row.get("price_change_h6")?,
                 h1: row.get("price_change_h1")?,
                 m5: row.get("price_change_m5")?,
             }),
-            fdv: row.get("fdv")?,
-            market_cap: row.get("market_cap")?,
-            pair_created_at: row.get("pair_created_at")?,
+            liquidity: Some(crate::tokens::types::LiquidityInfo {
+                usd: row.get("liquidity_usd")?,
+                base: row.get("liquidity_base")?,
+                quote: row.get("liquidity_quote")?,
+            }),
+            info: None, // TokenInfoCompat not fully stored in database
             boosts: Some(crate::tokens::types::BoostInfo {
                 active: row.get("boosts_active")?,
             }),
-            info: Some(crate::tokens::types::TokenInfo {
-                address: row.get::<_, String>("mint")?,
-                name: row.get::<_, String>("name")?,
-                symbol: row.get::<_, String>("symbol")?,
-                image_url: row.get("info_image_url")?,
-                websites: None, // Not stored in simplified schema
-                socials: None,  // Not stored in simplified schema
-            }),
-            labels,
-            last_updated,
         })
     }
 
@@ -943,7 +948,7 @@ impl TokenDatabase {
     /// Wraps the synchronous get_token_by_mint() in spawn_blocking.
     /// Use this in async contexts (webserver routes) instead of creating TokenDatabase
     /// and calling get_token_by_mint() directly, which would block the async runtime.
-    pub async fn get_token_by_mint_async(mint: &str) -> Result<Option<ApiToken>, String> {
+    pub async fn get_token_by_mint_async(mint: &str) -> Result<Option<Token>, String> {
         let mint = mint.to_string();
         tokio::task::spawn_blocking(move || {
             let db =

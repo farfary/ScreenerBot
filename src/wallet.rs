@@ -499,7 +499,7 @@ async fn enrich_token_overview(
         }
     }
 
-    let metadata_map: HashMap<String, crate::tokens::types::ApiToken> = if unique_mints.is_empty() {
+    let metadata_map: HashMap<String, crate::tokens::types::Token> = if unique_mints.is_empty() {
         HashMap::new()
     } else {
         // Fetch tokens from cache - instant memory access
@@ -519,26 +519,12 @@ async fn enrich_token_overview(
 
         let (symbol, name, price_sol, price_usd, liquidity_usd, volume_24h, last_updated, dex_id) =
             if let Some(meta) = token_meta {
-                let price_sol = meta.price_sol.or_else(|| {
-                    if meta.price_native > 0.0 {
-                        Some(meta.price_native)
-                    } else {
-                        None
-                    }
-                });
-                let price_usd = if meta.price_usd > 0.0 {
-                    Some(meta.price_usd)
-                } else {
-                    None
-                };
+                let price_sol = meta.price_dexscreener_sol.or(meta.price_pool_sol);
+                let price_usd = meta.price_dexscreener_usd.or(meta.price_pool_usd);
                 let liquidity_usd = meta.liquidity.as_ref().and_then(|l| l.usd);
                 let volume_24h = meta.volume.as_ref().and_then(|v| v.h24);
                 let last_updated = Some(meta.last_updated.to_rfc3339());
-                let dex_id = if meta.dex_id.is_empty() {
-                    None
-                } else {
-                    Some(meta.dex_id.clone())
-                };
+                let dex_id = meta.dex_id.clone();
 
                 let symbol = if meta.symbol.trim().is_empty() {
                     short_mint_label(&balance.mint)

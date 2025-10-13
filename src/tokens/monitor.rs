@@ -340,7 +340,7 @@ impl TokenMonitor {
                             let mut existing_prices: HashMap<String, f64> =
                                 HashMap::with_capacity(existing_tokens.len());
                             for token in existing_tokens {
-                                if let Some(price) = token.price_sol {
+                                if let Some(price) = token.price_dexscreener_sol {
                                     if price > 0.0 {
                                         existing_prices.insert(token.mint, price);
                                     }
@@ -350,7 +350,7 @@ impl TokenMonitor {
                             if !existing_prices.is_empty() {
                                 const PRICE_EPSILON: f64 = 1e-9;
                                 fetched_tokens.retain(|token| {
-                                    let new_price = match token.price_sol {
+                                    let new_price = match token.price_dexscreener_sol {
                                         Some(price) if price > 0.0 => price,
                                         _ => return true,
                                     };
@@ -454,7 +454,7 @@ impl TokenMonitor {
                             if !fetched_tokens.is_empty() {
                                 let store = get_global_token_store();
                                 match store
-                                    .ingest_api_tokens(
+                                    .ingest_tokens(
                                         fetched_tokens.clone(),
                                         TokenUpdateSource::Monitor,
                                     )

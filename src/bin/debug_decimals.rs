@@ -415,9 +415,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else {
             // Get full token info to analyze why decimals are missing
             if let Ok(Some(token)) = database.get_token_by_mint(mint) {
-                let age_hours = token.pair_created_at.map(|created| {
-                    let created_dt =
-                        DateTime::from_timestamp(created, 0).unwrap_or_else(|| Utc::now());
+                let age_hours = token.created_at.map(|created_dt| {
                     let age = now - created_dt;
                     age.num_hours()
                 });

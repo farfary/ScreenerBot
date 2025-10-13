@@ -928,15 +928,10 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
         website: token
             .info
             .as_ref()
-            .and_then(|i| i.websites.as_ref())
-            .and_then(|w| w.first())
+            .and_then(|i| i.websites.first())
             .map(|w| w.url.clone()),
-        tags: token.labels.clone().unwrap_or_default(),
-        is_verified: token
-            .labels
-            .as_ref()
-            .map(|l| l.iter().any(|label| label.to_lowercase() == "verified"))
-            .unwrap_or(false),
+        tags: token.labels.clone(),
+        is_verified: token.is_verified,
     });
 
     // 3. Get current price from pool service
@@ -1033,23 +1028,17 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
     // 7. Get social info from token database
     let social = api_token.as_ref().and_then(|token| {
         token.info.as_ref().map(|info| SocialInfo {
-            website: info
-                .websites
-                .as_ref()
-                .and_then(|w| w.first())
-                .map(|w| w.url.clone()),
-            twitter: info.socials.as_ref().and_then(|socials| {
-                socials
-                    .iter()
-                    .find(|s| s.platform.to_lowercase().contains("twitter"))
-                    .map(|s| format!("https://twitter.com/{}", s.handle))
-            }),
-            telegram: info.socials.as_ref().and_then(|socials| {
-                socials
-                    .iter()
-                    .find(|s| s.platform.to_lowercase().contains("telegram"))
-                    .map(|s| format!("https://t.me/{}", s.handle))
-            }),
+            website: info.websites.first().map(|w| w.url.clone()),
+            twitter: info
+                .socials
+                .iter()
+                .find(|s| s.link_type.to_lowercase().contains("twitter"))
+                .map(|s| format!("https://twitter.com/{}", s.url)),
+            telegram: info
+                .socials
+                .iter()
+                .find(|s| s.link_type.to_lowercase().contains("telegram"))
+                .map(|s| format!("https://t.me/{}", s.url)),
         })
     });
 

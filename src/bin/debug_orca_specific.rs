@@ -761,8 +761,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let mut guard = api.lock().await;
                     match guard.get_token_data(&target_token_mint).await {
                         Ok(Some(api_token)) => {
-                            // Prefer price_sol when available; fallback to price_native
-                            let api_price = api_token.price_sol.unwrap_or(api_token.price_native);
+                            // Get price from DexScreener or pool price
+                            let api_price = api_token
+                                .price_dexscreener_sol
+                                .or(api_token.price_pool_sol)
+                                .unwrap_or(0.0);
                             println!("DexScreener price: {:.12} SOL", api_price);
 
                             let abs_diff = (our_price - api_price).abs();

@@ -208,7 +208,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let mut api = api_arc.lock().await;
                     match api.get_token_data(target_token).await {
                         Ok(Some(api_token)) => {
-                            if let Some(api_sol_price) = api_token.price_sol {
+                            if let Some(api_sol_price) = api_token.price_dexscreener_sol {
                                 println!("✅ DexScreener SOL price: {:.12}", api_sol_price);
                                 if vault_a_valid && vault_b_valid {
                                     println!(
@@ -515,7 +515,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut api = api_arc.lock().await;
             match api.get_token_data(&token_mint).await {
                 Ok(Some(api_token)) => {
-                    if let Some(api_sol_price) = api_token.price_sol {
+                    if let Some(api_sol_price) = api_token.price_dexscreener_sol {
                         let decoder_price =
                             result1.as_ref().or(result2.as_ref()).map(|r| r.price_sol);
 

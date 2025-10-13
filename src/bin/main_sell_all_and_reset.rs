@@ -1582,6 +1582,7 @@ async fn attempt_single_sell(account: &TokenAccountInfo) -> Result<String, Strin
         info: None,
         boosts: None,
         decimals: None,
+        last_updated: chrono::Utc::now(),
     };
 
     // Get quote and execute swap

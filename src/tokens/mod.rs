@@ -319,7 +319,7 @@ pub async fn get_token_decimals_safe(mint: &str) -> Result<u8, String> {
 // =============================================================================
 
 /// Get all tokens by liquidity using database directly (for compatibility)
-pub async fn get_all_tokens_by_liquidity() -> Result<Vec<ApiToken>, String> {
+pub async fn get_all_tokens_by_liquidity() -> Result<Vec<Token>, String> {
     let db = TokenDatabase::new().map_err(|e| format!("Failed to create database: {}", e))?;
 
     match db.get_all_tokens().await {

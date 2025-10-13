@@ -9,8 +9,9 @@ use crate::global::is_debug_api_enabled;
 use crate::logger::{log, LogTag};
 use crate::tokens::config::with_tokens_config;
 use crate::tokens::types::{
-    ApiStats, ApiToken, BoostInfo, DiscoverySourceType, LiquidityInfo, PriceChangeStats,
-    SocialInfo, Token, TokenInfo, TxnPeriod, TxnStats, VolumeStats, WebsiteInfo,
+    ApiStats, BoostInfo, DiscoverySourceType, LiquidityInfo, PriceChangeStats, SocialInfo,
+    SocialLink, Token, TokenInfo, TokenInfoCompat, TxnPeriod, TxnStats, VolumeStats, WebsiteInfo,
+    WebsiteLink,
 };
 use chrono::{DateTime, Utc};
 use reqwest::StatusCode;
@@ -106,7 +107,7 @@ pub async fn wait_for_discovery_rate_limit(context: &str) {
 /// Cache entry for storing token data with timestamp
 #[derive(Debug, Clone)]
 pub struct CachedTokenData {
-    pub token: ApiToken,
+    pub token: Token,
     pub cached_at: DateTime<Utc>,
 }
 
@@ -138,7 +139,7 @@ static POOL_CACHE: LazyLock<RwLock<HashMap<String, CachedPoolData>>> =
 // (Removed has_open_position – no position-aware logic)
 
 /// Get cached token data if available and not expired
-async fn get_cached_token_data(mint: &str) -> Option<ApiToken> {
+async fn get_cached_token_data(mint: &str) -> Option<Token> {
     let cache = TOKEN_CACHE.read().await;
 
     if let Some(cached_data) = cache.get(mint) {
@@ -283,7 +284,7 @@ pub async fn cleanup_expired_pool_cache_entries() {
 }
 
 /// Store token data in cache
-async fn cache_token_data(mint: &str, token: &ApiToken) {
+async fn cache_token_data(mint: &str, token: &Token) {
     let mut cache = TOKEN_CACHE.write().await;
     cache.insert(
         mint.to_string(),
@@ -410,7 +411,7 @@ impl DexScreenerApi {
     /// Get token price for a single mint address
     pub async fn get_price(&mut self, mint: &str) -> Option<f64> {
         match self.fetch_and_cache_token(mint).await {
-            Ok(Some(t)) => t.price_sol,
+            Ok(Some(t)) => t.price_dexscreener_sol,
             _ => None,
         }
     }
@@ -445,7 +446,7 @@ impl DexScreenerApi {
             }
 
             if let Some(cached_token) = get_cached_token_data(mint).await {
-                if let Some(price) = cached_token.price_sol {
+                if let Some(price) = cached_token.price_dexscreener_sol {
                     prices.insert(mint.clone(), price);
                     cached_count += 1;
                     if is_debug_api_enabled() && cached_count <= 3 {
@@ -519,7 +520,7 @@ impl DexScreenerApi {
                             // Cache the result
                             cache_token_data(&token.mint, &token).await;
 
-                            if let Some(price) = token.price_sol {
+                            if let Some(price) = token.price_dexscreener_sol {
                                 prices.insert(token.mint.clone(), price);
                                 if is_debug_api_enabled() && prices.len() <= 3 {
                                     log(
@@ -589,19 +590,16 @@ impl DexScreenerApi {
     }
 
     /// Get detailed token data for a single mint
-    pub async fn get_token_data(&mut self, mint: &str) -> Result<Option<ApiToken>, String> {
+    pub async fn get_token_data(&mut self, mint: &str) -> Result<Option<Token>, String> {
         self.fetch_and_cache_token(mint).await
     }
 
-    /// Get Token object from mint address (converts ApiToken to Token)
+    /// Get Token object from mint address (alias for get_token_data)
     pub async fn get_token_from_mint(&mut self, mint: &str) -> Result<Option<Token>, String> {
-        match self.fetch_and_cache_token(mint).await? {
-            Some(api_token) => Ok(Some(Token::from(api_token))),
-            None => Ok(None),
-        }
+        self.get_token_data(mint).await
     }
 
-    async fn fetch_and_cache_token(&mut self, mint: &str) -> Result<Option<ApiToken>, String> {
+    async fn fetch_and_cache_token(&mut self, mint: &str) -> Result<Option<Token>, String> {
         if let Some(cached) = get_cached_token_data(mint).await {
             return Ok(Some(cached));
         }
@@ -615,7 +613,7 @@ impl DexScreenerApi {
     }
 
     /// Get token information for multiple mint addresses (main function)
-    pub async fn get_tokens_info(&mut self, mints: &[String]) -> Result<Vec<ApiToken>, String> {
+    pub async fn get_tokens_info(&mut self, mints: &[String]) -> Result<Vec<Token>, String> {
         if mints.is_empty() {
             if is_debug_api_enabled() {
                 log(
@@ -846,7 +844,7 @@ impl DexScreenerApi {
     }
 
     /// Parse token data from DexScreener pair response
-    fn parse_token_from_pair(&self, pair_data: &serde_json::Value) -> Result<ApiToken, String> {
+    fn parse_token_from_pair(&self, pair_data: &serde_json::Value) -> Result<Token, String> {
         let base_token = pair_data
             .get("baseToken")
             .ok_or("Missing baseToken field")?;
@@ -1007,29 +1005,66 @@ impl DexScreenerApi {
         let info = self.parse_info(pair_data.get("info"), &mint, &name, &symbol);
         let labels = self.parse_labels(pair_data.get("labels"));
 
-        Ok(ApiToken {
+        Ok(Token {
             mint,
             symbol,
             name,
-            // decimals removed - only use decimal_cache.json
-            chain_id,
-            dex_id,
-            pair_address,
+            chain: chain_id,
+            decimals: None, // Will be populated from decimal cache later
+            logo_url: info.as_ref().and_then(|i| i.image_url.clone()),
+            coingecko_id: None,
+            website: info
+                .as_ref()
+                .and_then(|i| i.websites.as_ref())
+                .and_then(|websites| websites.first())
+                .map(|w| w.url.clone()),
+            description: None,
+            tags: Vec::new(),
+            is_verified: false,
+            created_at: pair_created_at.map(|ts| {
+                DateTime::from_timestamp_millis(ts)
+                    .unwrap_or_default()
+                    .with_timezone(&Utc)
+            }),
+            last_updated: Utc::now(),
+            price_dexscreener_sol: price_sol,
+            price_dexscreener_usd: Some(price_usd),
+            price_pool_sol: None,
+            price_pool_usd: None,
+            dex_id: Some(dex_id),
+            pair_address: Some(pair_address),
             pair_url,
-            price_native,
-            price_usd,
-            price_sol,
-            liquidity,
-            volume,
-            txns,
-            price_change,
+            labels: labels.unwrap_or_default(),
             fdv,
             market_cap,
-            pair_created_at,
+            txns,
+            volume,
+            price_change,
+            liquidity,
+            info: info.map(|i| TokenInfoCompat {
+                image_url: i.image_url,
+                header: None,
+                open_graph: None,
+                websites: i
+                    .websites
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|w| WebsiteLink {
+                        label: None,
+                        url: w.url,
+                    })
+                    .collect(),
+                socials: i
+                    .socials
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|s| SocialLink {
+                        link_type: s.platform,
+                        url: s.handle,
+                    })
+                    .collect(),
+            }),
             boosts,
-            info,
-            labels,
-            last_updated: Utc::now(),
         })
     }
 
@@ -1145,7 +1180,7 @@ impl DexScreenerApi {
     pub async fn get_multiple_token_data(
         &mut self,
         mints: &[String],
-    ) -> Result<Vec<ApiToken>, String> {
+    ) -> Result<Vec<Token>, String> {
         self.get_tokens_info(mints).await
     }
 
@@ -1154,7 +1189,7 @@ impl DexScreenerApi {
         &mut self,
         source: DiscoverySourceType,
         limit: usize,
-    ) -> Result<Vec<ApiToken>, String> {
+    ) -> Result<Vec<Token>, String> {
         let url = match source {
             DiscoverySourceType::DexScreenerBoosts => {
                 "https://api.dexscreener.com/token-boosts/latest/v1"

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     logger::{log, LogTag},
     pools, positions,
-    tokens::{blacklist, security_db::SecurityDatabase, types::ApiToken},
+    tokens::{blacklist, security_db::SecurityDatabase, types::Token},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -89,7 +89,7 @@ impl TokenSummaryContext {
     }
 }
 
-pub fn token_to_summary(token: &ApiToken, caches: &TokenSummaryContext) -> TokenSummary {
+pub fn token_to_summary(token: &Token, caches: &TokenSummaryContext) -> TokenSummary {
     let (price_sol, price_updated_at) =
         if let Some(price_result) = pools::get_pool_price(&token.mint) {
             let age_secs = price_result.timestamp.elapsed().as_secs();
@@ -144,7 +144,7 @@ pub fn token_to_summary(token: &ApiToken, caches: &TokenSummaryContext) -> Token
     }
 }
 
-pub async fn summarize_tokens(tokens: &[ApiToken]) -> Vec<TokenSummary> {
+pub async fn summarize_tokens(tokens: &[Token]) -> Vec<TokenSummary> {
     if tokens.is_empty() {
         return Vec::new();
     }
