@@ -558,12 +558,10 @@ impl TokenStore {
     }
 
     fn emit_event(&self, event: TokenStoreEvent) {
-        if let Err(err) = self.broadcaster.send(event) {
-            log(
-                LogTag::Cache,
-                "WARN",
-                &format!("Token store event delivery failed: {}", err),
-            );
+        // Only send events if there are active subscribers
+        if self.broadcaster.receiver_count() > 0 {
+            // Silently ignore send errors - lagged receivers are acceptable
+            let _ = self.broadcaster.send(event);
         }
     }
 
