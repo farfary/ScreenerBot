@@ -125,8 +125,182 @@
     searchTerm: "",
   };
   window.tokensState = tokensState;
+  var TOKENS_COLUMN_DEFINITIONS = [
+    {
+      id: "token",
+      label: "Token",
+      sortKey: "symbol",
+      defaultVisible: true,
+      required: true,
+      minWidth: 240,
+      defaultWidth: 260,
+      align: "left",
+      headerAlign: "left",
+    },
+    {
+      id: "price_sol",
+      label: "Price (SOL)",
+      sortKey: "price_sol",
+      defaultVisible: true,
+      minWidth: 140,
+      defaultWidth: 150,
+      align: "right",
+      headerAlign: "right",
+      cellClass: "num price-cell align-right",
+    },
+    {
+      id: "liquidity_usd",
+      label: "Liquidity",
+      sortKey: "liquidity_usd",
+      defaultVisible: true,
+      minWidth: 120,
+      defaultWidth: 140,
+      align: "right",
+      headerAlign: "right",
+      cellClass: "num align-right",
+    },
+    {
+      id: "volume_24h",
+      label: "24h Vol",
+      sortKey: "volume_24h",
+      defaultVisible: true,
+      minWidth: 110,
+      defaultWidth: 140,
+      align: "right",
+      headerAlign: "right",
+      cellClass: "num align-right",
+    },
+    {
+      id: "fdv",
+      label: "FDV",
+      sortKey: "fdv",
+      defaultVisible: true,
+      minWidth: 110,
+      defaultWidth: 140,
+      align: "right",
+      headerAlign: "right",
+      cellClass: "num align-right",
+    },
+    {
+      id: "market_cap",
+      label: "Mkt Cap",
+      sortKey: "market_cap",
+      defaultVisible: true,
+      minWidth: 110,
+      defaultWidth: 140,
+      align: "right",
+      headerAlign: "right",
+      cellClass: "num align-right",
+    },
+    {
+      id: "price_change_h1",
+      label: "1h",
+      sortKey: "price_change_h1",
+      defaultVisible: true,
+      minWidth: 90,
+      defaultWidth: 100,
+      align: "right",
+      headerAlign: "right",
+      cellClass: "num align-right",
+    },
+    {
+      id: "price_change_h24",
+      label: "24h",
+      sortKey: "price_change_h24",
+      defaultVisible: true,
+      minWidth: 90,
+      defaultWidth: 100,
+      align: "right",
+      headerAlign: "right",
+      cellClass: "num align-right",
+    },
+    {
+      id: "security_score",
+      label: "Security",
+      sortKey: "security_score",
+      defaultVisible: true,
+      minWidth: 100,
+      defaultWidth: 110,
+      align: "right",
+      headerAlign: "right",
+      cellClass: "num align-right",
+    },
+    {
+      id: "status",
+      label: "Status",
+      defaultVisible: true,
+      minWidth: 120,
+      defaultWidth: 140,
+      align: "left",
+      headerAlign: "left",
+    },
+    {
+      id: "updated_at",
+      label: "Updated",
+      sortKey: "updated_at",
+      defaultVisible: true,
+      minWidth: 110,
+      defaultWidth: 130,
+      align: "left",
+      headerAlign: "left",
+      cellClass: "tokens-updated-text",
+    },
+    {
+      id: "actions",
+      label: "Actions",
+      defaultVisible: true,
+      minWidth: 80,
+      defaultWidth: 88,
+      maxWidth: 120,
+      align: "center",
+      headerAlign: "center",
+      resizable: false,
+    },
+    {
+      id: "total_holders",
+      label: "Holders",
+      sortKey: "total_holders",
+      defaultVisible: false,
+      minWidth: 110,
+      defaultWidth: 120,
+      align: "right",
+      headerAlign: "right",
+      cellClass: "num align-right",
+    },
+  ];
+
+  var TOKENS_DEFAULT_VISIBLE_COLUMN_IDS = TOKENS_COLUMN_DEFINITIONS.filter(
+    function (column) {
+      return column.required || column.defaultVisible !== false;
+    }
+  ).map(function (column) {
+    return column.id;
+  });
+
+  var tokensColumnManager = window.tokensColumnManager || null;
+  window.tokensColumnManager = tokensColumnManager;
+
+  var tokensColumnDialogState = window.tokensColumnDialogState || {
+    root: null,
+    list: null,
+    checkboxMap: new Map(),
+    tempVisibleIds: new Set(),
+    initialized: false,
+    previouslyFocused: null,
+    applyButton: null,
+    resetButton: null,
+    closeButton: null,
+  };
+  if (!(tokensColumnDialogState.checkboxMap instanceof Map)) {
+    tokensColumnDialogState.checkboxMap = new Map();
+  }
+  if (!(tokensColumnDialogState.tempVisibleIds instanceof Set)) {
+    tokensColumnDialogState.tempVisibleIds = new Set();
+  }
+  window.tokensColumnDialogState = tokensColumnDialogState;
+
   var TOKENS_SCROLL_GUARD_HTML =
-    '<tr id="tokens-scroll-guard" class="scroll-guard-row"><td colspan="12" class="scroll-guard-cell"></td></tr>';
+    '<tr id="tokens-scroll-guard" class="scroll-guard-row"><td class="scroll-guard-cell"></td></tr>';
 
   var tokensTableState = window.tokensTableState || {
     items: [],
@@ -171,6 +345,407 @@
     tokensPriceState.lastChangeAt = new Map();
   }
   window.tokensPriceState = tokensPriceState;
+
+  function getTokensColumnDefinitionById(columnId) {
+    if (!columnId) return null;
+    for (let i = 0; i < TOKENS_COLUMN_DEFINITIONS.length; i += 1) {
+      const column = TOKENS_COLUMN_DEFINITIONS[i];
+      if (column && column.id === columnId) {
+        return column;
+      }
+    }
+    return null;
+  }
+
+  function getActiveTokenColumns() {
+    if (
+      tokensColumnManager &&
+      typeof tokensColumnManager.getVisibleColumns === "function"
+    ) {
+      const columns = tokensColumnManager.getVisibleColumns();
+      if (Array.isArray(columns) && columns.length > 0) {
+        return columns;
+      }
+    }
+
+    return TOKENS_DEFAULT_VISIBLE_COLUMN_IDS.map(function (id) {
+      return getTokensColumnDefinitionById(id);
+    }).filter(Boolean);
+  }
+
+  function getCurrentVisibleTokenColumnIds() {
+    if (
+      tokensColumnManager &&
+      typeof tokensColumnManager.getVisibleColumns === "function"
+    ) {
+      const columns = tokensColumnManager.getVisibleColumns();
+      if (Array.isArray(columns) && columns.length > 0) {
+        return columns.map(function (column) {
+          return column.id;
+        });
+      }
+    }
+    return TOKENS_DEFAULT_VISIBLE_COLUMN_IDS.slice();
+  }
+
+  function getTokensTableColspan() {
+    const columns = getActiveTokenColumns();
+    if (!Array.isArray(columns) || columns.length === 0) {
+      return TOKENS_DEFAULT_VISIBLE_COLUMN_IDS.length || 1;
+    }
+    return Math.max(1, columns.length);
+  }
+
+  function updateTokensPlaceholderColspans() {
+    const colSpan = getTokensTableColspan();
+    const placeholderCells = document.querySelectorAll(
+      '#tokensTableBody td[data-tokens-colspan="true"]'
+    );
+    placeholderCells.forEach(function (cell) {
+      cell.colSpan = colSpan;
+    });
+
+    const guardCell = document.querySelector(
+      "#tokens-scroll-guard .scroll-guard-cell"
+    );
+    if (guardCell) {
+      guardCell.dataset.tokensColspan = "true";
+      guardCell.colSpan = colSpan;
+    }
+  }
+
+  function setTokensColumnManager(instance) {
+    tokensColumnManager = instance || null;
+    window.tokensColumnManager = tokensColumnManager;
+    updateTokensPlaceholderColspans();
+    renderTokensColumnDialogList();
+    updateSortIndicators();
+  }
+
+  function handleTokensColumnLayoutChange(event) {
+    updateTokensPlaceholderColspans();
+
+    if (event && event.type === "visibility") {
+      const isLoading =
+        tokensFetchState &&
+        tokensFetchState.inProgress &&
+        (!Array.isArray(tokensTableState.items) ||
+          tokensTableState.items.length === 0);
+
+      if (isLoading) {
+        showTokensLoading(tokensFetchState.message || "Loading tokens...");
+      } else {
+        const currentItems = Array.isArray(tokensTableState.items)
+          ? tokensTableState.items
+          : Array.isArray(allTokensData)
+          ? allTokensData
+          : [];
+        renderTokens(currentItems, { mode: "replace" });
+      }
+      renderTokensColumnDialogList();
+    } else {
+      renderTokensColumnDialogList();
+    }
+
+    updateSortIndicators();
+  }
+
+  function ensureTokensColumnDialogElements() {
+    const state = tokensColumnDialogState;
+    if (!state) return null;
+
+    if (!(state.root instanceof HTMLElement)) {
+      state.root = document.getElementById("tokensColumnDialog");
+    }
+    if (!state.root) {
+      return null;
+    }
+
+    if (!(state.list instanceof HTMLElement)) {
+      state.list = document.getElementById("tokensColumnList");
+    }
+    if (!state.list) {
+      return null;
+    }
+
+    if (!(state.applyButton instanceof HTMLElement)) {
+      state.applyButton = document.getElementById("tokensColumnApply");
+    }
+    if (state.applyButton && state.applyButton.dataset.bound !== "1") {
+      state.applyButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        applyTokensColumnDialogSelection();
+      });
+      state.applyButton.dataset.bound = "1";
+    }
+
+    if (!(state.resetButton instanceof HTMLElement)) {
+      state.resetButton = document.getElementById("tokensColumnReset");
+    }
+    if (state.resetButton && state.resetButton.dataset.bound !== "1") {
+      state.resetButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        if (
+          !tokensColumnManager ||
+          typeof tokensColumnManager.resetVisibility !== "function"
+        ) {
+          renderTokensColumnDialogList();
+          return;
+        }
+        const changed = tokensColumnManager.resetVisibility();
+        if (!changed) {
+          renderTokensColumnDialogList();
+        }
+      });
+      state.resetButton.dataset.bound = "1";
+    }
+
+    if (!(state.closeButton instanceof HTMLElement)) {
+      state.closeButton = document.getElementById("tokensColumnClose");
+    }
+    if (state.closeButton && state.closeButton.dataset.bound !== "1") {
+      state.closeButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        closeTokensColumnDialog();
+      });
+      state.closeButton.dataset.bound = "1";
+    }
+
+    if (!state.initialized) {
+      state.root.addEventListener("click", (event) => {
+        if (event.target === state.root) {
+          closeTokensColumnDialog();
+        }
+      });
+      state.root.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" || event.key === "Esc") {
+          event.preventDefault();
+          closeTokensColumnDialog();
+        }
+      });
+      state.initialized = true;
+    }
+
+    return state.root;
+  }
+
+  function renderTokensColumnDialogList() {
+    const state = tokensColumnDialogState;
+    if (!state) return;
+
+    const root = ensureTokensColumnDialogElements();
+    if (!root || !state.list) return;
+
+    if (
+      !tokensColumnManager ||
+      typeof tokensColumnManager.getAllColumns !== "function"
+    ) {
+      state.list.innerHTML = "";
+      state.checkboxMap.clear();
+      state.tempVisibleIds.clear();
+      return;
+    }
+
+    const columns = tokensColumnManager.getAllColumns();
+    const visibleIds = new Set(getCurrentVisibleTokenColumnIds());
+
+    state.list.innerHTML = "";
+    state.checkboxMap.clear();
+    state.tempVisibleIds = new Set(visibleIds);
+
+    columns.forEach((column) => {
+      const item = document.createElement("label");
+      item.className = "column-dialog__item";
+      item.dataset.columnId = column.id;
+      if (column.required) {
+        item.classList.add("column-dialog__item--locked");
+      }
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = column.id;
+      checkbox.checked = visibleIds.has(column.id);
+      checkbox.disabled = column.required === true;
+      checkbox.dataset.columnId = column.id;
+
+      if (!checkbox.disabled) {
+        checkbox.addEventListener(
+          "change",
+          handleTokensColumnDialogCheckboxChange
+        );
+      }
+
+      const labelSpan = document.createElement("span");
+      labelSpan.className = "column-dialog__item-label";
+      labelSpan.textContent = column.label;
+
+      item.appendChild(checkbox);
+      item.appendChild(labelSpan);
+
+      if (column.required) {
+        const hint = document.createElement("span");
+        hint.className = "column-dialog__hint";
+        hint.textContent = "Required";
+        item.appendChild(hint);
+      }
+
+      state.list.appendChild(item);
+      state.checkboxMap.set(column.id, checkbox);
+    });
+  }
+
+  function handleTokensColumnDialogCheckboxChange(event) {
+    const checkbox = event.target;
+    if (!checkbox) return;
+    const columnId = checkbox.value;
+    if (!columnId) return;
+
+    const state = tokensColumnDialogState;
+    if (!(state.tempVisibleIds instanceof Set)) {
+      state.tempVisibleIds = new Set(getCurrentVisibleTokenColumnIds());
+    }
+
+    if (checkbox.checked) {
+      state.tempVisibleIds.add(columnId);
+    } else {
+      state.tempVisibleIds.delete(columnId);
+    }
+
+    if (state.tempVisibleIds.size === 0) {
+      state.tempVisibleIds.add(columnId);
+      checkbox.checked = true;
+      if (window.Utils && typeof Utils.showToast === "function") {
+        Utils.showToast("At least one column must remain visible.", "warning");
+      }
+    }
+  }
+
+  function applyTokensColumnDialogSelection() {
+    if (
+      !tokensColumnManager ||
+      typeof tokensColumnManager.setVisibleColumns !== "function"
+    ) {
+      closeTokensColumnDialog();
+      return;
+    }
+
+    const state = tokensColumnDialogState;
+    const selection =
+      state.tempVisibleIds instanceof Set && state.tempVisibleIds.size > 0
+        ? Array.from(state.tempVisibleIds)
+        : getCurrentVisibleTokenColumnIds();
+
+    const changed = tokensColumnManager.setVisibleColumns(selection);
+    if (!changed) {
+      renderTokensColumnDialogList();
+    }
+
+    closeTokensColumnDialog();
+  }
+
+  function openTokensColumnDialog() {
+    const manager = initializeTokensColumnManager();
+    if (!manager || typeof manager.getVisibleColumns !== "function") {
+      if (window.Utils && typeof Utils.showToast === "function") {
+        Utils.showToast("⚠️ Column manager unavailable", "info");
+      }
+      return;
+    }
+
+    const root = ensureTokensColumnDialogElements();
+    if (!root) {
+      return;
+    }
+
+    renderTokensColumnDialogList();
+
+    tokensColumnDialogState.previouslyFocused =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+
+    root.setAttribute("aria-hidden", "false");
+    document.body.classList.add("column-dialog-open");
+
+    const focusTarget =
+      root.querySelector(".column-dialog__item input:not(:disabled)") ||
+      tokensColumnDialogState.closeButton ||
+      root;
+    if (focusTarget && typeof focusTarget.focus === "function") {
+      focusTarget.focus({ preventScroll: true });
+    }
+  }
+
+  function closeTokensColumnDialog() {
+    const state = tokensColumnDialogState;
+    if (!state) return;
+    const root = ensureTokensColumnDialogElements();
+    if (!root) return;
+
+    root.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("column-dialog-open");
+
+    const focusTarget = state.previouslyFocused;
+    state.previouslyFocused = null;
+    if (focusTarget && typeof focusTarget.focus === "function") {
+      try {
+        focusTarget.focus({ preventScroll: true });
+      } catch (_) {
+        /* no-op */
+      }
+    }
+  }
+
+  function initializeTokensColumnManager() {
+    if (
+      tokensColumnManager &&
+      typeof tokensColumnManager.getVisibleColumns === "function"
+    ) {
+      if (
+        typeof tokensColumnManager.setSortState === "function" &&
+        tokensState
+      ) {
+        tokensColumnManager.setSortState(
+          tokensState.sortBy,
+          tokensState.sortDir
+        );
+      }
+      setTokensColumnManager(tokensColumnManager);
+      return tokensColumnManager;
+    }
+
+    if (
+      !window.TableColumnManager ||
+      typeof window.TableColumnManager.create !== "function"
+    ) {
+      console.warn("[Tokens] TableColumnManager is unavailable");
+      return null;
+    }
+
+    const table = document.getElementById("tokensTable");
+    if (!table) {
+      console.warn("[Tokens] tokensTable element not found");
+      return null;
+    }
+
+    try {
+      const manager = window.TableColumnManager.create({
+        table,
+        columns: TOKENS_COLUMN_DEFINITIONS,
+        storageKey: "tokensTable",
+        onLayoutChange: handleTokensColumnLayoutChange,
+      });
+      setTokensColumnManager(manager);
+      if (typeof manager.setSortState === "function" && tokensState) {
+        manager.setSortState(tokensState.sortBy, tokensState.sortDir);
+      }
+      return manager;
+    } catch (err) {
+      console.error("[Tokens] Failed to initialize column manager", err);
+      return null;
+    }
+  }
+
   var TOKENS_PRICE_HIGHLIGHT_TTL_MS = 4500;
   var TOKENS_PAGE_LIMIT = TOKENS_DEFAULT_PAGE_SIZE;
 
@@ -216,6 +791,7 @@
   window.initTokensPage = function () {
     console.log("[Tokens] Initializing page");
     hydrateTokensState();
+    initializeTokensColumnManager();
     ensureTokensPageReady({ updateStatus: false });
     setupSortableHeaders();
     attachGlobalListeners();
@@ -1141,6 +1717,7 @@
   }
 
   function ensureTokensPageReady(options = {}) {
+    initializeTokensColumnManager();
     ensureTokensSubTabsVisible();
     ensureTokensToolbarVisible(options);
     attachGlobalListeners();
@@ -1162,6 +1739,9 @@
                 >
                 <div class="spacer"></div>
                 <span id="tokenCount" style="color: var(--text-secondary); font-size: 0.9em; font-weight: 500;">Loading...</span>
+        <button id="tokensColumnsBtn" class="btn btn-secondary" style="padding: 6px 12px;">
+          📐 Columns
+        </button>
                 <button id="tokensRefreshBtn" class="btn btn-primary" style="padding: 6px 12px;">
                     🔄 Refresh
                 </button>
@@ -1175,6 +1755,14 @@
     if (searchInput) {
       searchInput.value = tokensState.searchTerm;
       searchInput.addEventListener("input", handleSearchInput);
+    }
+
+    const columnsBtn = toolbarContainer.querySelector("#tokensColumnsBtn");
+    if (columnsBtn) {
+      columnsBtn.addEventListener("click", (event) => {
+        event.preventDefault();
+        openTokensColumnDialog();
+      });
     }
 
     const refreshBtn = toolbarContainer.querySelector("#tokensRefreshBtn");
@@ -1476,11 +2064,48 @@
     return tokens;
   }
 
-  function showTokensError(message) {
+  function renderTokensPlaceholder(message, options) {
     const tbody = document.getElementById("tokensTableBody");
     if (!tbody) return;
-    tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 20px; color: #ef4444;">${message}</td></tr>`;
-    setTokenCountStatus(message);
+
+    const opts = options || {};
+    const row = document.createElement("tr");
+    row.className = "tokens-placeholder-row";
+
+    const cell = document.createElement("td");
+    cell.dataset.tokensColspan = "true";
+    cell.className = "tokens-placeholder-cell";
+    if (opts.variant === "error") {
+      cell.classList.add("tokens-placeholder-cell--error");
+    } else {
+      cell.classList.add("tokens-placeholder-cell--muted");
+    }
+
+    cell.colSpan = getTokensTableColspan();
+    if (opts.allowHtml) {
+      cell.innerHTML = message;
+    } else {
+      cell.textContent = message;
+    }
+
+    row.appendChild(cell);
+    tbody.innerHTML = "";
+    tbody.appendChild(row);
+
+    if (opts.teardownObserver !== false) {
+      teardownTokensScrollObserver();
+    }
+
+    updateTokensPlaceholderColspans();
+  }
+
+  function showTokensError(message) {
+    const finalMessage =
+      typeof message === "string" && message.trim().length > 0
+        ? message
+        : "❌ Failed to load tokens";
+    renderTokensPlaceholder(finalMessage, { variant: "error" });
+    setTokenCountStatus(finalMessage);
   }
 
   function updateTokenCount(total) {
@@ -1526,99 +2151,206 @@
       : `${totalValue} tokens`;
   }
 
-  function updateTokenRow(row, token) {
-    if (!row || !token) return;
-
-    const cells = row.cells;
-    if (!cells || cells.length < 12) return;
-
-    row.setAttribute("data-mint", token.mint);
-
-    const rowClassNames = ["token-row"];
-    const priceIndicator = token.__priceDirection;
-    const highlightActive = token.__priceHighlight === true;
-    const justChanged = token.__priceChanged === true;
+  function computeTokenRowClassNames(token) {
+    const classes = ["token-row"];
+    const priceIndicator = token && token.__priceDirection;
+    const highlightActive = token && token.__priceHighlight === true;
+    const justChanged = token && token.__priceChanged === true;
 
     if (
       highlightActive &&
       (priceIndicator === "up" || priceIndicator === "down")
     ) {
-      rowClassNames.push(
+      classes.push(
         priceIndicator === "down" ? "token-row--down" : "token-row--up"
       );
     }
+
     if (justChanged && (priceIndicator === "up" || priceIndicator === "down")) {
-      rowClassNames.push("token-row--changed");
+      classes.push("token-row--changed");
     }
-    row.className = rowClassNames.join(" ");
 
-    const symbol = Utils.escapeHtml(token.symbol || "");
-    const name = token.name ? Utils.escapeHtml(token.name) : "";
-    const logo = safeLogoHtml(token.logo_url, token.symbol);
-    cells[0].innerHTML = `<div style="display:flex; align-items:center; gap:12px; min-width:0;">${logo}<div style="display:flex; flex-direction:column; gap:1px; min-width:0;"><div style="font-weight:600; color:var(--link-color); font-size:0.95em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 260px;">${symbol}</div><div style="font-size:0.8em; color:#94a3b8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 260px;">${name}</div></div></div>`;
+    return classes.join(" ");
+  }
 
-    const priceDisplay = Utils.formatPriceSol(token.price_sol, {
-      fallback: "N/A",
-    });
-    const rawPrice = Number(token.price_sol);
-    const priceTitle = Number.isFinite(rawPrice)
-      ? rawPrice.toFixed(12)
-      : token.price_sol ?? "";
-    const upArrowOpacity = priceIndicator === "up" ? "1" : "0";
-    const downArrowOpacity = priceIndicator === "down" ? "1" : "0";
-    const priceInnerClassNames = ["price-cell__inner"];
-    if (priceIndicator === "up") {
-      priceInnerClassNames.push("price-cell__inner--up");
-    } else if (priceIndicator === "down") {
-      priceInnerClassNames.push("price-cell__inner--down");
+  function createTokenRowElement(token) {
+    const row = document.createElement("tr");
+    if (token && token.mint) {
+      row.dataset.mint = token.mint;
+    } else {
+      row.dataset.mint = "";
     }
-    cells[1].className = "num price-cell";
-    cells[1].title = priceTitle;
-    cells[1].innerHTML = `<div class="${priceInnerClassNames.join(
-      " "
-    )}"><span class="price-arrow price-arrow--up" aria-hidden="true" style="opacity:${upArrowOpacity}">▲</span><span class="price-arrow price-arrow--down" aria-hidden="true" style="opacity:${downArrowOpacity}">▼</span><span class="price-value">${priceDisplay}</span></div>`;
+    row.className = computeTokenRowClassNames(token);
+    row.style.cursor = "pointer";
+    row.title = "Click to view details";
 
-    cells[2].textContent = Utils.formatCurrencyUSD(token.liquidity_usd, {
-      fallback: "—",
+    row.addEventListener("click", () => {
+      if (token && token.mint) {
+        openTokenDetail(token.mint);
+      }
     });
-    cells[2].title = token.liquidity_usd ?? "";
-    cells[3].textContent = Utils.formatCurrencyUSD(token.volume_24h, {
-      fallback: "—",
-    });
-    cells[3].title = token.volume_24h ?? "";
-    cells[4].textContent = Utils.formatCurrencyUSD(token.fdv, {
-      fallback: "—",
-    });
-    cells[4].title = token.fdv ?? "";
-    cells[5].textContent = Utils.formatCurrencyUSD(token.market_cap, {
-      fallback: "—",
-    });
-    cells[5].title = token.market_cap ?? "";
-    cells[6].innerHTML = Utils.formatPercent(token.price_change_h1, {
-      style: "token",
-      fallback: "—",
-    });
-    cells[6].title = token.price_change_h1 ?? "";
-    cells[7].innerHTML = Utils.formatPercent(token.price_change_h24, {
-      style: "token",
-      fallback: "—",
-    });
-    cells[7].title = token.price_change_h24 ?? "";
-    cells[8].innerHTML = renderSecurity(token.security_score, token.rugged);
-    cells[8].title = token.security_score ?? "";
-    cells[9].innerHTML = renderStatusBadges(token);
 
-    const timeAgo = token.price_updated_at
-      ? Utils.formatTimeAgo(token.price_updated_at, { fallback: "-" })
-      : "N/A";
-    cells[10].textContent = timeAgo;
+    const columns = getActiveTokenColumns();
+    columns.forEach((column) => {
+      const cell = document.createElement("td");
+      cell.dataset.columnId = column.id;
+      applyTokenCell(cell, column, token);
+      row.appendChild(cell);
+    });
+
+    return row;
+  }
+
+  function applyTokenCell(cell, column, token) {
+    if (!cell || !column) return;
+
+    const classNames = [];
+    if (column.cellClass && typeof column.cellClass === "string") {
+      column.cellClass
+        .split(/\s+/)
+        .filter(Boolean)
+        .forEach((cls) => classNames.push(cls));
+    }
+    if (column.align === "right") {
+      classNames.push("align-right");
+    } else if (column.align === "center") {
+      classNames.push("align-center");
+    }
+
+    cell.className = "";
+    classNames.forEach((cls) => cell.classList.add(cls));
+
+    switch (column.id) {
+      case "token": {
+        const symbol = Utils.escapeHtml(token?.symbol || "");
+        const name = token?.name ? Utils.escapeHtml(token.name) : "";
+        const logo = safeLogoHtml(token?.logo_url, token?.symbol);
+        cell.innerHTML = `<div style="display:flex; align-items:center; gap:12px; min-width:0;">${logo}<div style="display:flex; flex-direction:column; gap:1px; min-width:0;"><div style="font-weight:600; color:var(--link-color); font-size:0.95em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 260px;">${symbol}</div><div style="font-size:0.8em; color:#94a3b8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 260px;">${name}</div></div></div>`;
+        break;
+      }
+      case "price_sol": {
+        const priceDisplay = Utils.formatPriceSol(token?.price_sol, {
+          fallback: "N/A",
+        });
+        const rawPrice = Number(token?.price_sol);
+        const priceTitle = Number.isFinite(rawPrice)
+          ? rawPrice.toFixed(12)
+          : token?.price_sol ?? "";
+        const priceIndicator = token?.__priceDirection;
+        const upArrowOpacity = priceIndicator === "up" ? "1" : "0";
+        const downArrowOpacity = priceIndicator === "down" ? "1" : "0";
+        const priceInnerClassNames = ["price-cell__inner"];
+        if (priceIndicator === "up") {
+          priceInnerClassNames.push("price-cell__inner--up");
+        } else if (priceIndicator === "down") {
+          priceInnerClassNames.push("price-cell__inner--down");
+        }
+        cell.title = priceTitle;
+        cell.innerHTML = `<div class="${priceInnerClassNames.join(
+          " "
+        )}"><span class="price-arrow price-arrow--up" aria-hidden="true" style="opacity:${upArrowOpacity}">▲</span><span class="price-arrow price-arrow--down" aria-hidden="true" style="opacity:${downArrowOpacity}">▼</span><span class="price-value">${priceDisplay}</span></div>`;
+        break;
+      }
+      case "liquidity_usd": {
+        cell.textContent = Utils.formatCurrencyUSD(token?.liquidity_usd, {
+          fallback: "—",
+        });
+        cell.title = token?.liquidity_usd ?? "";
+        break;
+      }
+      case "volume_24h": {
+        cell.textContent = Utils.formatCurrencyUSD(token?.volume_24h, {
+          fallback: "—",
+        });
+        cell.title = token?.volume_24h ?? "";
+        break;
+      }
+      case "fdv": {
+        cell.textContent = Utils.formatCurrencyUSD(token?.fdv, {
+          fallback: "—",
+        });
+        cell.title = token?.fdv ?? "";
+        break;
+      }
+      case "market_cap": {
+        cell.textContent = Utils.formatCurrencyUSD(token?.market_cap, {
+          fallback: "—",
+        });
+        cell.title = token?.market_cap ?? "";
+        break;
+      }
+      case "price_change_h1": {
+        cell.innerHTML = Utils.formatPercent(token?.price_change_h1, {
+          style: "token",
+          fallback: "—",
+        });
+        cell.title = token?.price_change_h1 ?? "";
+        break;
+      }
+      case "price_change_h24": {
+        cell.innerHTML = Utils.formatPercent(token?.price_change_h24, {
+          style: "token",
+          fallback: "—",
+        });
+        cell.title = token?.price_change_h24 ?? "";
+        break;
+      }
+      case "security_score": {
+        cell.innerHTML = renderSecurity(token?.security_score, token?.rugged);
+        cell.title = token?.security_score ?? "";
+        break;
+      }
+      case "status": {
+        cell.innerHTML = renderStatusBadges(token);
+        break;
+      }
+      case "updated_at": {
+        const timeAgo = token?.price_updated_at
+          ? Utils.formatTimeAgo(token.price_updated_at, { fallback: "-" })
+          : "N/A";
+        cell.textContent = timeAgo;
+        break;
+      }
+      case "actions": {
+        const mintRaw = token?.mint || "";
+        const mintEscaped = Utils.escapeHtml(mintRaw);
+        cell.classList.add("align-center");
+        cell.innerHTML = `<div class="dropdown-container" data-mint="${mintEscaped}"><button class="dropdown-btn" type="button" onclick="Utils.toggleDropdown(event)" aria-label="Actions">⋮</button><div class="dropdown-menu"><button onclick="Utils.copyMint('${mintRaw}')" class="dropdown-item">📋 Copy Mint</button><button onclick="Utils.openGMGN('${mintRaw}')" class="dropdown-item">🔗 Open GMGN</button><button onclick="Utils.openDexScreener('${mintRaw}')" class="dropdown-item">📊 Open DexScreener</button><button onclick="Utils.openSolscan('${mintRaw}')" class="dropdown-item">🔍 Open Solscan</button><button onclick="openTokenDetail('${mintRaw}')" class="dropdown-item">🔎 View Details</button></div></div>`;
+        cell.addEventListener("click", (event) => {
+          event.stopPropagation();
+        });
+        break;
+      }
+      case "total_holders": {
+        cell.textContent = Utils.formatNumber(token?.total_holders, {
+          decimals: 0,
+          fallback: "—",
+        });
+        cell.title = token?.total_holders ?? "";
+        break;
+      }
+      default: {
+        const value =
+          token && Object.prototype.hasOwnProperty.call(token, column.id)
+            ? token[column.id]
+            : null;
+        if (value === null || value === undefined || value === "") {
+          cell.textContent = "—";
+        } else {
+          cell.textContent = String(value);
+        }
+      }
+    }
   }
 
   function renderTokens(tokens, options) {
     const tbody = document.getElementById("tokensTableBody");
     if (!tbody) return;
 
-    const mode = (options && options.mode) || "replace";
+    let mode = (options && options.mode) || "replace";
+    if (mode === "update") {
+      mode = "replace";
+    }
     const table = tbody.closest("table");
     let scrollContainer = null;
     if (
@@ -1651,7 +2383,7 @@
     };
 
     try {
-      if (!tokens || tokens.length === 0) {
+      if (!Array.isArray(tokens) || tokens.length === 0) {
         if (mode === "append") {
           return;
         }
@@ -1690,9 +2422,7 @@
         }
 
         setTokenCountStatus(statusMessage);
-        const safeMessage = Utils.escapeHtml(statusMessage);
-        tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 20px; color: #94a3b8;">${safeMessage}</td></tr>`;
-        teardownTokensScrollObserver();
+        renderTokensPlaceholder(statusMessage, { variant: "muted" });
         return;
       }
 
@@ -1706,178 +2436,52 @@
 
       if (mode === "append") {
         const guard = ensureTokensScrollGuard();
-        if (!guard) {
-          renderTokens(tokens, { mode: "replace" });
-        } else {
-          // Use differential updates for append mode too
-          // This prevents layout shifts when auto-refresh runs
-          const existingMints = new Set(
-            Array.from(tbody.querySelectorAll("tr[data-mint]"))
-              .map((row) => row.getAttribute("data-mint"))
-              .filter(Boolean)
-          );
-
-          let addedCount = 0;
-          tokens.forEach((token) => {
-            if (!existingMints.has(token.mint)) {
-              const newRowHtml = createTokenRowHtml(token);
-              guard.insertAdjacentHTML("beforebegin", newRowHtml);
-              existingMints.add(token.mint);
-              addedCount++;
-
-              // Synchronize arrays with DOM
-              if (!tokensTableState.items.find((t) => t.mint === token.mint)) {
-                tokensTableState.items.push(token);
-              }
-              if (!allTokensData.find((t) => t.mint === token.mint)) {
-                allTokensData.push(token);
-              }
-            }
-          });
-
-          if (window.__DEBUG_TOKENS_VERBOSE) {
-            console.log(
-              `[TokensDBG] Append mode: added ${addedCount} rows, total in DOM: ${
-                existingMints.size + addedCount
-              }`
-            );
-          }
-        }
-      } else if (mode === "update") {
-        // Non-destructive update: re-order existing rows to match freshly sorted data
-        const tbody = document.getElementById("tokensTableBody");
-        if (tbody) {
-          const guard = document.getElementById("tokens-scroll-guard");
-          const rowsByMint = new Map(
-            Array.from(tbody.querySelectorAll("tr[data-mint]")).map((row) => [
-              row.getAttribute("data-mint"),
-              row,
-            ])
-          );
-
-          const fragment = document.createDocumentFragment();
-          let updatedCount = 0;
-          let insertedCount = 0;
-
-          tokens.forEach((token) => {
-            if (!token || !token.mint) {
-              return;
-            }
-
-            const existingRow = rowsByMint.get(token.mint);
-            let row = existingRow;
-            if (existingRow) {
-              updateTokenRow(existingRow, token);
-              updatedCount++;
-            } else {
-              const template = document.createElement("template");
-              template.innerHTML = createTokenRowHtml(token).trim();
-              row = template.content.firstElementChild;
-              if (row) {
-                insertedCount++;
-              }
-            }
-
-            if (row) {
-              fragment.appendChild(row);
-              rowsByMint.set(token.mint, row);
-            }
-          });
-
-          if (fragment.childNodes.length > 0) {
-            const firstDataRow = Array.from(tbody.children).find(
-              (child) => child.id !== "tokens-scroll-guard"
-            );
-            if (firstDataRow) {
-              tbody.insertBefore(fragment, firstDataRow);
-            } else if (guard) {
-              tbody.insertBefore(fragment, guard);
-            } else {
-              tbody.appendChild(fragment);
-            }
-          }
-
-          if (window.__DEBUG_TOKENS_VERBOSE) {
-            const rowsInDom = tbody.querySelectorAll("tr[data-mint]").length;
-            console.log(
-              `[TokensDBG] Update mode: reordered ${tokens.length} rows (updated=${updatedCount}, inserted=${insertedCount}) total=${rowsInDom}`
-            );
-          }
-
-          if (guard && guard.parentElement === tbody) {
-            if (tbody.lastElementChild !== guard) {
-              tbody.appendChild(guard);
-              if (window.__DEBUG_TOKENS_VERBOSE) {
-                console.log(
-                  "[TokensDBG] Guard repositioned to bottom after update"
-                );
-              }
-            }
-          }
-        }
-      } else {
-        const guard = document.getElementById("tokens-scroll-guard");
-        const existingRows = Array.from(tbody.querySelectorAll("tr")).filter(
-          (tr) => tr.id !== "tokens-scroll-guard"
+        const targetParent =
+          guard && guard.parentElement ? guard.parentElement : tbody;
+        const existingMints = new Set(
+          Array.from(tbody.querySelectorAll("tr[data-mint]"))
+            .map((row) => row.getAttribute("data-mint"))
+            .filter(Boolean)
         );
+        const fragment = document.createDocumentFragment();
 
-        const tokensMap = new Map(tokens.map((t) => [t.mint, t]));
-        const existingMintsMap = new Map();
-        existingRows.forEach((row) => {
-          const mint = row.getAttribute("data-mint");
-          if (mint) existingMintsMap.set(mint, row);
+        tokens.forEach((token) => {
+          if (!token || !token.mint || existingMints.has(token.mint)) {
+            return;
+          }
+          existingMints.add(token.mint);
+          fragment.appendChild(createTokenRowElement(token));
         });
 
-        const rowsToRemove = existingRows.filter(
-          (row) => !tokensMap.has(row.getAttribute("data-mint"))
-        );
-        rowsToRemove.forEach((row) => row.remove());
-
-        tokens.forEach((token, idx) => {
-          const existingRow = existingMintsMap.get(token.mint);
-          if (existingRow) {
-            updateTokenRow(existingRow, token);
-            const currentIndex = Array.from(tbody.children).indexOf(
-              existingRow
-            );
-            const targetIndex = idx;
-            if (currentIndex !== targetIndex) {
-              if (targetIndex >= tbody.children.length - 1) {
-                if (guard) {
-                  tbody.insertBefore(existingRow, guard);
-                } else {
-                  tbody.appendChild(existingRow);
-                }
-              } else {
-                tbody.insertBefore(existingRow, tbody.children[targetIndex]);
-              }
-            }
+        if (fragment.childNodes.length > 0) {
+          if (guard && guard.parentElement === targetParent) {
+            targetParent.insertBefore(fragment, guard);
           } else {
-            const newRowHtml = createTokenRowHtml(token);
-            if (idx >= existingRows.length) {
-              if (guard) {
-                guard.insertAdjacentHTML("beforebegin", newRowHtml);
-              } else {
-                tbody.insertAdjacentHTML("beforeend", newRowHtml);
-              }
-            } else {
-              const refNode = tbody.children[idx];
-              if (refNode) {
-                refNode.insertAdjacentHTML("beforebegin", newRowHtml);
-              } else if (guard) {
-                guard.insertAdjacentHTML("beforebegin", newRowHtml);
-              } else {
-                tbody.insertAdjacentHTML("beforeend", newRowHtml);
-              }
-            }
+            targetParent.appendChild(fragment);
           }
+        }
+
+        ensureTokensScrollGuard();
+      } else {
+        const fragment = document.createDocumentFragment();
+        tokens.forEach((token) => {
+          fragment.appendChild(createTokenRowElement(token));
         });
+
+        const guard = document.getElementById("tokens-scroll-guard");
+        if (guard && guard.parentElement === tbody) {
+          guard.parentElement.removeChild(guard);
+        }
+
+        tbody.innerHTML = "";
+        tbody.appendChild(fragment);
+        ensureTokensScrollGuard();
       }
 
-      ensureTokensScrollGuard();
-      restoreDropdownState(openState);
+      updateTokensPlaceholderColspans();
     } finally {
       finalizeRender();
+      restoreDropdownState(openState);
     }
   }
 
@@ -2061,11 +2665,15 @@
   }
 
   function showTokensLoading(message) {
-    const tbody = document.getElementById("tokensTableBody");
-    if (tbody) {
-      tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 20px; color: #94a3b8;">${message}</td></tr>`;
-    }
-    setTokenCountStatus(message);
+    const finalMessage =
+      typeof message === "string" && message.trim().length > 0
+        ? message
+        : "Loading tokens...";
+    renderTokensPlaceholder(finalMessage, {
+      variant: "muted",
+      teardownObserver: true,
+    });
+    setTokenCountStatus(finalMessage);
   }
 
   function buildTokensListQuery(page, pageSize) {
@@ -2468,132 +3076,7 @@
     }
 
     stopTokensAutoRefresh();
-  }
-
-  function createTokenRowHtml(token) {
-    const mint = token.mint;
-    const symbol = Utils.escapeHtml(token.symbol || "");
-    const name = token.name ? Utils.escapeHtml(token.name) : "";
-    const timeAgo = token.price_updated_at
-      ? Utils.formatTimeAgo(token.price_updated_at, { fallback: "-" })
-      : "N/A";
-    const priceDisplay = Utils.formatPriceSol(token.price_sol, {
-      fallback: "N/A",
-    });
-    const rawPrice = Number(token.price_sol);
-    const priceTitle = Number.isFinite(rawPrice)
-      ? rawPrice.toFixed(12)
-      : token.price_sol ?? "";
-    const priceIndicator = token.__priceDirection;
-    const highlightActive = token.__priceHighlight === true;
-    const justChanged = token.__priceChanged === true;
-    const rowClassNames = ["token-row"];
-    if (
-      highlightActive &&
-      (priceIndicator === "up" || priceIndicator === "down")
-    ) {
-      rowClassNames.push(
-        priceIndicator === "down" ? "token-row--down" : "token-row--up"
-      );
-    }
-    if (justChanged && (priceIndicator === "up" || priceIndicator === "down")) {
-      rowClassNames.push("token-row--changed");
-    }
-    const priceCellClassNames = ["num", "price-cell"];
-    const priceInnerClassNames = ["price-cell__inner"];
-    if (priceIndicator === "up") {
-      priceInnerClassNames.push("price-cell__inner--up");
-    } else if (priceIndicator === "down") {
-      priceInnerClassNames.push("price-cell__inner--down");
-    }
-    const upArrowOpacity = priceIndicator === "up" ? "1" : "0";
-    const downArrowOpacity = priceIndicator === "down" ? "1" : "0";
-    const arrowHtml =
-      '<span class="price-arrow price-arrow--up" aria-hidden="true" style="opacity:' +
-      upArrowOpacity +
-      '">▲</span>' +
-      '<span class="price-arrow price-arrow--down" aria-hidden="true" style="opacity:' +
-      downArrowOpacity +
-      '">▼</span>';
-    const priceCellContent =
-      '<div class="' +
-      priceInnerClassNames.join(" ") +
-      '">' +
-      arrowHtml +
-      '<span class="price-value">' +
-      priceDisplay +
-      "</span></div>";
-    const liquidity = Utils.formatCurrencyUSD(token.liquidity_usd, {
-      fallback: "—",
-    });
-    const vol24h = Utils.formatCurrencyUSD(token.volume_24h, { fallback: "—" });
-    const fdv = Utils.formatCurrencyUSD(token.fdv, { fallback: "—" });
-    const marketCap = Utils.formatCurrencyUSD(token.market_cap, {
-      fallback: "—",
-    });
-    const ch1h = Utils.formatPercent(token.price_change_h1, {
-      style: "token",
-      fallback: "—",
-    });
-    const ch24h = Utils.formatPercent(token.price_change_h24, {
-      style: "token",
-      fallback: "—",
-    });
-    const security = renderSecurity(token.security_score, token.rugged);
-    const status = renderStatusBadges(token);
-    const logo = safeLogoHtml(token.logo_url, token.symbol);
-
-    return `
-                <tr class="${rowClassNames.join(
-                  " "
-                )}" data-mint="${mint}" onclick="openTokenDetail('${mint}')" style="cursor:pointer;" title="Click to view details">
-                    <td>
-                        <div style="display:flex; align-items:center; gap:12px; min-width:0;">
-                            ${logo}
-                            <div style="display:flex; flex-direction:column; gap:1px; min-width:0;">
-                                <div style="font-weight:600; color:var(--link-color); font-size:0.95em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 260px;">${symbol}</div>
-                                <div style="font-size:0.8em; color:#94a3b8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 260px;">${name}</div>
-                            </div>
-                        </div>
-                    </td>
-                    <td class="${priceCellClassNames.join(
-                      " "
-                    )}" style="font-weight:600;" title="${priceTitle}">${priceCellContent}</td>
-                    <td class="num" title="${
-                      token.liquidity_usd ?? ""
-                    }">${liquidity}</td>
-                    <td class="num" title="${
-                      token.volume_24h ?? ""
-                    }">${vol24h}</td>
-                    <td class="num" title="${token.fdv ?? ""}">${fdv}</td>
-                    <td class="num" title="${
-                      token.market_cap ?? ""
-                    }">${marketCap}</td>
-                    <td class="num" title="${
-                      token.price_change_h1 ?? ""
-                    }">${ch1h}</td>
-                    <td class="num" title="${
-                      token.price_change_h24 ?? ""
-                    }">${ch24h}</td>
-                    <td class="num" title="${
-                      token.security_score ?? ""
-                    }">${security}</td>
-                    <td>${status}</td>
-                    <td style="font-size: 0.85em; color: #64748b;">${timeAgo}</td>
-                    <td onclick="event.stopPropagation();">
-                        <div class="dropdown-container" data-mint="${mint}">
-                            <button class="dropdown-btn" type="button" onclick="Utils.toggleDropdown(event)" aria-label="Actions">⋮</button>
-                            <div class="dropdown-menu">
-                                <button onclick="Utils.copyMint('${mint}')" class="dropdown-item">📋 Copy Mint</button>
-                                <button onclick="Utils.openGMGN('${mint}')" class="dropdown-item">🔗 Open GMGN</button>
-                                <button onclick="Utils.openDexScreener('${mint}')" class="dropdown-item">📊 Open DexScreener</button>
-                                <button onclick="Utils.openSolscan('${mint}')" class="dropdown-item">🔍 Open Solscan</button>
-                                <button onclick="openTokenDetail('${mint}')" class="dropdown-item">🔎 View Details</button>
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-            `;
+    closeTokensColumnDialog();
   }
 
   function openDropdownMenu(btn, menu) {
@@ -2620,6 +3103,9 @@
     if (!thead) return;
     if (window.__tokensSortHeadersSetup) return;
     thead.addEventListener("click", (e) => {
+      if (e.target.closest(".column-resize-handle")) {
+        return;
+      }
       const th = e.target.closest("th.sortable");
       if (!th) return;
       const key = th.getAttribute("data-sort-key");
@@ -2643,11 +3129,20 @@
       "#tokensTable .sort-indicator"
     );
     indicators.forEach((el) => {
-      el.textContent = "";
+      const sortKey = el.getAttribute("data-sort-key");
+      if (sortKey === tokensState.sortBy) {
+        el.textContent = tokensState.sortDir === "asc" ? "▲" : "▼";
+      } else {
+        el.textContent = "";
+      }
     });
-    const id = `sort-indicator-${tokensState.sortBy}`;
-    const el = document.getElementById(id);
-    if (el) el.textContent = tokensState.sortDir === "asc" ? "▲" : "▼";
+
+    if (
+      tokensColumnManager &&
+      typeof tokensColumnManager.setSortState === "function"
+    ) {
+      tokensColumnManager.setSortState(tokensState.sortBy, tokensState.sortDir);
+    }
   }
 
   function safeLogoHtml(url, symbol) {
@@ -2746,93 +3241,58 @@
   <div class="table-wrap">
     <table class="table" id="tokensTable">
       <thead>
-        <tr>
-          <th class="sortable" data-sort-key="symbol">
-            <span class="sort-label"
-              >Token
-              <span class="sort-indicator" id="sort-indicator-symbol"></span
-            ></span>
-          </th>
-          <th class="sortable" data-sort-key="price_sol">
-            <span class="sort-label"
-              >Price (SOL)
-              <span class="sort-indicator" id="sort-indicator-price_sol"></span
-            ></span>
-          </th>
-          <th class="sortable" data-sort-key="liquidity_usd">
-            <span class="sort-label"
-              >Liquidity
-              <span
-                class="sort-indicator"
-                id="sort-indicator-liquidity_usd"
-              ></span
-            ></span>
-          </th>
-          <th class="sortable" data-sort-key="volume_24h">
-            <span class="sort-label"
-              >24h Vol
-              <span class="sort-indicator" id="sort-indicator-volume_24h"></span
-            ></span>
-          </th>
-          <th class="sortable" data-sort-key="fdv">
-            <span class="sort-label"
-              >FDV <span class="sort-indicator" id="sort-indicator-fdv"></span
-            ></span>
-          </th>
-          <th class="sortable" data-sort-key="market_cap">
-            <span class="sort-label"
-              >Mkt Cap
-              <span class="sort-indicator" id="sort-indicator-market_cap"></span
-            ></span>
-          </th>
-          <th class="sortable" data-sort-key="price_change_h1">
-            <span class="sort-label"
-              >1h
-              <span
-                class="sort-indicator"
-                id="sort-indicator-price_change_h1"
-              ></span
-            ></span>
-          </th>
-          <th class="sortable" data-sort-key="price_change_h24">
-            <span class="sort-label"
-              >24h
-              <span
-                class="sort-indicator"
-                id="sort-indicator-price_change_h24"
-              ></span
-            ></span>
-          </th>
-          <th class="sortable" data-sort-key="security_score">
-            <span class="sort-label"
-              >Security
-              <span
-                class="sort-indicator"
-                id="sort-indicator-security_score"
-              ></span
-            ></span>
-          </th>
-          <th>Status</th>
-          <th class="sortable" data-sort-key="updated_at">
-            <span class="sort-label"
-              >Updated
-              <span class="sort-indicator" id="sort-indicator-updated_at"></span
-            ></span>
-          </th>
-          <th>Actions</th>
-        </tr>
+        <tr></tr>
       </thead>
       <tbody id="tokensTableBody">
-        <tr>
+        <tr class="tokens-placeholder-row">
           <td
+            data-tokens-colspan="true"
+            class="tokens-placeholder-cell tokens-placeholder-cell--muted"
             colspan="12"
-            style="text-align: center; padding: 20px; color: #94a3b8"
           >
             <div class="loading-text">Loading tokens...</div>
           </td>
         </tr>
       </tbody>
     </table>
+  </div>
+</div>
+
+<div class="column-dialog" id="tokensColumnDialog" aria-hidden="true">
+  <div
+    class="column-dialog__panel"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="tokensColumnDialogTitle"
+  >
+    <header class="column-dialog__header">
+      <h2 class="column-dialog__title" id="tokensColumnDialogTitle">
+        Table Columns
+      </h2>
+      <button
+        type="button"
+        class="column-dialog__close"
+        id="tokensColumnClose"
+        aria-label="Close"
+      >
+        ×
+      </button>
+    </header>
+    <div class="column-dialog__body">
+      <div class="column-dialog__list" id="tokensColumnList"></div>
+    </div>
+    <footer class="column-dialog__footer">
+      <div class="column-dialog__hint">
+        Toggle columns to customize the table. Drag headers to resize widths.
+      </div>
+      <div class="spacer"></div>
+      <button type="button" class="btn btn-secondary" id="tokensColumnReset">
+        Reset
+      </button>
+      <button type="button" class="btn btn-primary" id="tokensColumnApply">
+        Apply
+      </button>
+    </footer>
   </div>
 </div>
 
