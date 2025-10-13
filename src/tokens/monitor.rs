@@ -359,6 +359,19 @@ impl TokenMonitor {
                     .cloned()
                     .collect();
 
+                // Build metadata map for detailed logging before moving tokens
+                let token_metadata: HashMap<String, (String, f64)> = tokens
+                    .iter()
+                    .map(|t| {
+                        let liquidity_usd = t
+                            .liquidity
+                            .as_ref()
+                            .and_then(|l| l.usd)
+                            .unwrap_or(0.0);
+                        (t.mint.clone(), (t.symbol.clone(), liquidity_usd))
+                    })
+                    .collect();
+
                 let mut total_updated = 0;
                 let mut fetched_tokens = tokens;
 
@@ -384,18 +397,41 @@ impl TokenMonitor {
                     if !existing_prices.is_empty() {
                         const PRICE_EPSILON: f64 = 1e-9;
                         fetched_tokens.retain(|token| {
-                            let new_price = match token.price_dexscreener_sol {
-                                Some(price) if price > 0.0 => price,
-                                _ => return true,
-                            };
+                            // Get new price from API response
+                            let new_price = token.price_dexscreener_sol.unwrap_or(0.0);
+                            
+                            // Get old price from cache (0.0 if not found or too small)
+                            let old_price = existing_prices
+                                .get(&token.mint)
+                                .copied()
+                                .unwrap_or(0.0);
 
-                            let old_price = match existing_prices.get(&token.mint) {
-                                Some(price) if price.abs() > PRICE_EPSILON => *price,
-                                _ => return true,
-                            };
+                            // Handle zero-price cases (stale/missing data)
+                            if new_price.abs() < PRICE_EPSILON && old_price.abs() < PRICE_EPSILON {
+                                // Both zero - stale data, but not a deviation issue, allow through
+                                return true;
+                            }
 
+                            if new_price.abs() < PRICE_EPSILON {
+                                // New price is zero but old wasn't - likely stale API data
+                                skipped_for_deviation.push((
+                                    token.mint.clone(),
+                                    100.0, // Treat as 100% deviation for logging purposes
+                                    old_price,
+                                    new_price,
+                                ));
+                                return false;
+                            }
+
+                            if old_price.abs() < PRICE_EPSILON {
+                                // No cached price to compare against - allow through
+                                return true;
+                            }
+
+                            // Calculate deviation between valid prices
                             let deviation =
                                 ((new_price - old_price).abs() / old_price.abs()) * 100.0;
+                            
                             if deviation > deviation_limit {
                                 skipped_for_deviation.push((
                                     token.mint.clone(),
@@ -412,33 +448,77 @@ impl TokenMonitor {
                 }
 
                 if !skipped_for_deviation.is_empty() {
+                    // Log first 3 with full details
                     let preview: Vec<String> = skipped_for_deviation
                         .iter()
                         .take(3)
                         .map(|(mint, deviation, old_price, new_price)| {
-                            let short = if mint.len() > 8 {
-                                &mint[..8]
+                            let (symbol, liquidity_usd) = token_metadata
+                                .get(mint)
+                                .map(|(s, l)| (s.as_str(), *l))
+                                .unwrap_or(("?", 0.0));
+                            
+                            const EPSILON: f64 = 1e-9;
+                            let is_stale = new_price.abs() < EPSILON;
+                            
+                            if is_stale {
+                                format!(
+                                    "{} ({}) old={:.6} SOL→new=0.000000 SOL (stale API data) liquidity=${:.0}",
+                                    mint, symbol, old_price, liquidity_usd
+                                )
                             } else {
-                                mint.as_str()
-                            };
-                            format!(
-                                "{} dev={:.1}% ({:.6}->{:.6})",
-                                short, deviation, old_price, new_price
-                            )
+                                format!(
+                                    "{} ({}) dev={:.1}% ({:.6}→{:.6} SOL) liquidity=${:.0}",
+                                    mint, symbol, deviation, old_price, new_price, liquidity_usd
+                                )
+                            }
                         })
                         .collect();
-                    let extras = skipped_for_deviation.len().saturating_sub(preview.len());
-                    let detail = if extras > 0 {
-                        format!("{} (+{} more)", preview.join(", "), extras)
+
+                    // Compute summary stats for remaining tokens
+                    let extras = skipped_for_deviation.len().saturating_sub(3);
+                    let summary = if extras > 0 {
+                        const EPSILON: f64 = 1e-9;
+                        let stale_count = skipped_for_deviation
+                            .iter()
+                            .skip(3)
+                            .filter(|(_, _, _, new)| new.abs() < EPSILON)
+                            .count();
+                        
+                        let real_deviations: Vec<f64> = skipped_for_deviation
+                            .iter()
+                            .skip(3)
+                            .filter_map(|(_, dev, _, new)| {
+                                if new.abs() >= EPSILON {
+                                    Some(*dev)
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        
+                        let avg_deviation_str = if !real_deviations.is_empty() {
+                            let avg: f64 = real_deviations.iter().sum::<f64>() / real_deviations.len() as f64;
+                            format!("avg_deviation={:.1}%", avg)
+                        } else {
+                            "all_stale".to_string()
+                        };
+                        
+                        format!(
+                            " (+{} more: {}, stale_api_data={}/{}, check Pool Service health)",
+                            extras, avg_deviation_str, stale_count, extras
+                        )
                     } else {
-                        preview.join(", ")
+                        String::new()
                     };
+
+                    let detail = format!("{}{}", preview.join("; "), summary);
 
                     log(
                         LogTag::Monitor,
                         "PRICE_DEVIATION_SKIP",
                         &format!(
-                            "Skipped {} tokens due to price deviation > {:.2}%: {}",
+                            "Skipped {} tokens due to price deviation > {:.2}% threshold. Details: {}",
                             skipped_for_deviation.len(),
                             deviation_limit,
                             detail
