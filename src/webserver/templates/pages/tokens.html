@@ -1744,32 +1744,66 @@
           }
         }
       } else if (mode === "update") {
-        // Non-destructive update: only patch existing rows that match provided tokens
+        // Non-destructive update: re-order existing rows to match freshly sorted data
         const tbody = document.getElementById("tokensTableBody");
         if (tbody) {
+          const guard = document.getElementById("tokens-scroll-guard");
           const rowsByMint = new Map(
             Array.from(tbody.querySelectorAll("tr[data-mint]")).map((row) => [
               row.getAttribute("data-mint"),
               row,
             ])
           );
+
+          const fragment = document.createDocumentFragment();
           let updatedCount = 0;
+          let insertedCount = 0;
+
           tokens.forEach((token) => {
-            const row = rowsByMint.get(token.mint);
-            if (row) {
-              updateTokenRow(row, token);
+            if (!token || !token.mint) {
+              return;
+            }
+
+            const existingRow = rowsByMint.get(token.mint);
+            let row = existingRow;
+            if (existingRow) {
+              updateTokenRow(existingRow, token);
               updatedCount++;
+            } else {
+              const template = document.createElement("template");
+              template.innerHTML = createTokenRowHtml(token).trim();
+              row = template.content.firstElementChild;
+              if (row) {
+                insertedCount++;
+              }
+            }
+
+            if (row) {
+              fragment.appendChild(row);
+              rowsByMint.set(token.mint, row);
             }
           });
 
+          if (fragment.childNodes.length > 0) {
+            const firstDataRow = Array.from(tbody.children).find(
+              (child) => child.id !== "tokens-scroll-guard"
+            );
+            if (firstDataRow) {
+              tbody.insertBefore(fragment, firstDataRow);
+            } else if (guard) {
+              tbody.insertBefore(fragment, guard);
+            } else {
+              tbody.appendChild(fragment);
+            }
+          }
+
           if (window.__DEBUG_TOKENS_VERBOSE) {
+            const rowsInDom = tbody.querySelectorAll("tr[data-mint]").length;
             console.log(
-              `[TokensDBG] Update mode: updated ${updatedCount} rows, total in DOM: ${rowsByMint.size}`
+              `[TokensDBG] Update mode: reordered ${tokens.length} rows (updated=${updatedCount}, inserted=${insertedCount}) total=${rowsInDom}`
             );
           }
 
-          // CRITICAL: Ensure guard element is at the bottom of tbody after update
-          const guard = document.getElementById("tokens-scroll-guard");
           if (guard && guard.parentElement === tbody) {
             if (tbody.lastElementChild !== guard) {
               tbody.appendChild(guard);
@@ -2260,24 +2294,37 @@
       });
 
       if (preserveItems && hasExistingRows) {
-        // Auto-refresh mode: only update existing rows, don't replace all
-        // This prevents jumping when user has scrolled beyond page 1
+        // Auto-refresh mode: refresh top rows while preserving scroll position
         const updateMap = new Map(result.items.map((t) => [t.mint, t]));
+        const existingItems = Array.isArray(tokensTableState.items)
+          ? tokensTableState.items
+          : [];
 
-        // Update existing items in-place if they're in the fresh page 1 data
-        tokensTableState.items = tokensTableState.items.map((existingToken) => {
-          const freshData = updateMap.get(existingToken.mint);
-          return freshData || existingToken;
+        const seenMints = new Set();
+        const reorderedItems = [];
+
+        // Start with freshly sorted page 1 results
+        result.items.forEach((token) => {
+          if (!token || !token.mint || seenMints.has(token.mint)) {
+            return;
+          }
+          reorderedItems.push(token);
+          seenMints.add(token.mint);
         });
 
-        // Update allTokensData similarly
-        allTokensData = allTokensData.map((existingToken) => {
+        // Append any previously loaded tokens that were not in the fresh page
+        existingItems.forEach((existingToken) => {
+          if (!existingToken || !existingToken.mint) return;
+          if (seenMints.has(existingToken.mint)) return;
           const freshData = updateMap.get(existingToken.mint);
-          return freshData || existingToken;
+          reorderedItems.push(freshData || existingToken);
+          seenMints.add(existingToken.mint);
         });
 
-        // Render only the updated tokens using non-destructive update mode
-        // This updates their cells without moving/removing other rows
+        tokensTableState.items = reorderedItems;
+        allTokensData = tokensTableState.items;
+
+        // Patch only the visible rows to avoid scroll jumps while keeping order
         renderTokens(result.items, { mode: "update" });
 
         // Update metadata but preserve pagination state
