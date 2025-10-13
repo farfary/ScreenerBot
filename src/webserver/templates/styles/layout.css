@@ -1,5 +1,105 @@
 /* CLEAN LAYOUT - Fixed chrome + single viewport scroll --------- */
 
+/* Fixed top chrome */
+.header {
+  background: var(--header-bg);
+  color: var(--header-text);
+  padding: 8px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 10px var(--shadow-md);
+  flex: 0 0 auto;
+}
+
+.header h1 {
+  font-size: 1.1em;
+  font-weight: 600;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Control Buttons */
+.control-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: var(--header-text);
+  padding: 4px 10px;
+  border-radius: 14px;
+  cursor: pointer;
+  font-size: 0.9em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.3s ease, opacity 0.3s ease;
+}
+
+.control-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.control-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.control-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.trader-btn.running {
+  background: rgba(16, 185, 129, 0.3);
+}
+
+.trader-btn.stopped {
+  background: rgba(239, 68, 68, 0.3);
+}
+
+.reboot-btn:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.3);
+}
+
+/* Refresh Interval Control */
+.refresh-interval-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.refresh-interval-dropdown {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: var(--header-text);
+  padding: 4px 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.refresh-interval-dropdown:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.refresh-interval-dropdown:focus {
+  background: rgba(255, 255, 255, 0.35);
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+}
+
 .refresh-interval-dropdown option {
   background: var(--card-bg);
   color: var(--text-primary);
