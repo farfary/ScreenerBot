@@ -363,11 +363,7 @@ impl TokenMonitor {
                 let token_metadata: HashMap<String, (String, f64)> = tokens
                     .iter()
                     .map(|t| {
-                        let liquidity_usd = t
-                            .liquidity
-                            .as_ref()
-                            .and_then(|l| l.usd)
-                            .unwrap_or(0.0);
+                        let liquidity_usd = t.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
                         (t.mint.clone(), (t.symbol.clone(), liquidity_usd))
                     })
                     .collect();
@@ -395,28 +391,28 @@ impl TokenMonitor {
                     }
 
                     if !existing_prices.is_empty() {
-                        const PRICE_EPSILON: f64 = 1e-9;
+                        // Use f64 precision limit as epsilon (truly zero vs micro-cap prices)
+                        const PRICE_EPSILON: f64 = 1e-15;
+
                         fetched_tokens.retain(|token| {
                             // Get new price from API response
                             let new_price = token.price_dexscreener_sol.unwrap_or(0.0);
-                            
-                            // Get old price from cache (0.0 if not found or too small)
-                            let old_price = existing_prices
-                                .get(&token.mint)
-                                .copied()
-                                .unwrap_or(0.0);
 
-                            // Handle zero-price cases (stale/missing data)
+                            // Get old price from cache (0.0 if not found)
+                            let old_price =
+                                existing_prices.get(&token.mint).copied().unwrap_or(0.0);
+
+                            // Handle truly zero-price cases (stale/missing data)
                             if new_price.abs() < PRICE_EPSILON && old_price.abs() < PRICE_EPSILON {
-                                // Both zero - stale data, but not a deviation issue, allow through
+                                // Both zero - no price data available, allow through
                                 return true;
                             }
 
                             if new_price.abs() < PRICE_EPSILON {
-                                // New price is zero but old wasn't - likely stale API data
+                                // New price is zero but old wasn't - stale API data
                                 skipped_for_deviation.push((
                                     token.mint.clone(),
-                                    100.0, // Treat as 100% deviation for logging purposes
+                                    100.0, // Mark as 100% for logging
                                     old_price,
                                     new_price,
                                 ));
@@ -424,14 +420,15 @@ impl TokenMonitor {
                             }
 
                             if old_price.abs() < PRICE_EPSILON {
-                                // No cached price to compare against - allow through
+                                // No cached price to compare - this is first price, allow through
                                 return true;
                             }
 
-                            // Calculate deviation between valid prices
+                            // Calculate deviation between valid prices (including micro-cap)
+                            // Note: Micro-cap tokens (0.000000001 SOL) can have extreme volatility
                             let deviation =
                                 ((new_price - old_price).abs() / old_price.abs()) * 100.0;
-                            
+
                             if deviation > deviation_limit {
                                 skipped_for_deviation.push((
                                     token.mint.clone(),
@@ -448,43 +445,79 @@ impl TokenMonitor {
                 }
 
                 if !skipped_for_deviation.is_empty() {
+                    // Helper function to format price with appropriate precision
+                    let format_price = |price: f64| -> String {
+                        if price.abs() < 1e-15 {
+                            // Truly zero (below f64 precision)
+                            "0".to_string()
+                        } else if price.abs() < 1e-6 {
+                            // Micro-cap: use scientific notation for clarity
+                            format!("{:.2e}", price)
+                        } else if price.abs() < 0.01 {
+                            // Small price: use 9 decimals
+                            format!("{:.9}", price)
+                        } else {
+                            // Normal price: use 6 decimals
+                            format!("{:.6}", price)
+                        }
+                    };
+
                     // Log first 3 with full details
-                    let preview: Vec<String> = skipped_for_deviation
-                        .iter()
-                        .take(3)
-                        .map(|(mint, deviation, old_price, new_price)| {
-                            let (symbol, liquidity_usd) = token_metadata
-                                .get(mint)
-                                .map(|(s, l)| (s.as_str(), *l))
-                                .unwrap_or(("?", 0.0));
-                            
-                            const EPSILON: f64 = 1e-9;
-                            let is_stale = new_price.abs() < EPSILON;
-                            
-                            if is_stale {
-                                format!(
-                                    "{} ({}) old={:.6} SOL→new=0.000000 SOL (stale API data) liquidity=${:.0}",
-                                    mint, symbol, old_price, liquidity_usd
+                    let preview: Vec<String> =
+                        skipped_for_deviation
+                            .iter()
+                            .take(3)
+                            .map(|(mint, deviation, old_price, new_price)| {
+                                let (symbol, liquidity_usd) = token_metadata
+                                    .get(mint)
+                                    .map(|(s, l)| (s.as_str(), *l))
+                                    .unwrap_or(("?", 0.0));
+
+                                const EPSILON: f64 = 1e-15; // Below this is truly zero
+                                let is_stale = new_price.abs() < EPSILON;
+
+                                if is_stale {
+                                    format!(
+                                    "{} ({}) old={}→new=0 SOL (stale API data) liquidity=${:.0}",
+                                    mint, symbol, format_price(*old_price), liquidity_usd
                                 )
-                            } else {
-                                format!(
-                                    "{} ({}) dev={:.1}% ({:.6}→{:.6} SOL) liquidity=${:.0}",
-                                    mint, symbol, deviation, old_price, new_price, liquidity_usd
-                                )
-                            }
-                        })
-                        .collect();
+                                } else {
+                                    format!(
+                                        "{} ({}) dev={:.1}% ({}→{} SOL) liquidity=${:.0}",
+                                        mint,
+                                        symbol,
+                                        deviation,
+                                        format_price(*old_price),
+                                        format_price(*new_price),
+                                        liquidity_usd
+                                    )
+                                }
+                            })
+                            .collect();
 
                     // Compute summary stats for remaining tokens
                     let extras = skipped_for_deviation.len().saturating_sub(3);
                     let summary = if extras > 0 {
-                        const EPSILON: f64 = 1e-9;
+                        const EPSILON: f64 = 1e-15; // Truly zero threshold
+                        const MICROCAP_THRESHOLD: f64 = 1e-6; // Below 0.000001 SOL
+
                         let stale_count = skipped_for_deviation
                             .iter()
                             .skip(3)
                             .filter(|(_, _, _, new)| new.abs() < EPSILON)
                             .count();
-                        
+
+                        let microcap_count = skipped_for_deviation
+                            .iter()
+                            .skip(3)
+                            .filter(|(_, _, old, new)| {
+                                new.abs() >= EPSILON
+                                    && (old.abs() < MICROCAP_THRESHOLD
+                                        || new.abs() < MICROCAP_THRESHOLD)
+                            })
+                            .count();
+
+                        // Calculate average for all non-stale tokens
                         let real_deviations: Vec<f64> = skipped_for_deviation
                             .iter()
                             .skip(3)
@@ -496,17 +529,18 @@ impl TokenMonitor {
                                 }
                             })
                             .collect();
-                        
+
                         let avg_deviation_str = if !real_deviations.is_empty() {
-                            let avg: f64 = real_deviations.iter().sum::<f64>() / real_deviations.len() as f64;
+                            let avg: f64 =
+                                real_deviations.iter().sum::<f64>() / real_deviations.len() as f64;
                             format!("avg_deviation={:.1}%", avg)
                         } else {
                             "all_stale".to_string()
                         };
-                        
+
                         format!(
-                            " (+{} more: {}, stale_api_data={}/{}, check Pool Service health)",
-                            extras, avg_deviation_str, stale_count, extras
+                            " (+{} more: {}, stale={}, microcap={}/{}, check Pool Service health)",
+                            extras, avg_deviation_str, stale_count, microcap_count, extras
                         )
                     } else {
                         String::new()
