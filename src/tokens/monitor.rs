@@ -1,16 +1,14 @@
 use crate::global::is_debug_monitor_enabled;
-/// Token monitoring system for periodic updates of database tokens
+/// Token monitoring system for periodic updates of cached tokens
 /// Updates existing tokens based on liquidity priority and time constraints
 use crate::logger::{log, LogTag};
 use crate::tokens::{
     config::with_tokens_config,
-    database::TokenDatabase,
     dexscreener::get_global_dexscreener_api,
     store::{get_global_token_store, TokenUpdateSource},
 };
 use chrono::{DateTime, Utc};
 use futures::TryFutureExt;
-use rand::seq::SliceRandom;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, OnceLock};
 use tokio::sync::RwLock;
@@ -83,50 +81,58 @@ struct BatchUpdateResult {
     deleted: usize,
 }
 
+#[derive(Clone)]
+struct UpdateCandidate {
+    mint: String,
+    liquidity: f64,
+    age_minutes: i64,
+    created_at: Option<DateTime<Utc>>,
+}
+
 // =============================================================================
 // TOKEN MONITOR
 // =============================================================================
 
 pub struct TokenMonitor {
-    database: TokenDatabase,
     cycle_counter: u64,
 }
 
 impl TokenMonitor {
     /// Create new token monitor instance
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let database = TokenDatabase::new()?;
-
-        Ok(Self {
-            database,
-            cycle_counter: 0,
-        })
+        Ok(Self { cycle_counter: 0 })
     }
 
     /// Get tokens that need updating with fairness across liquidity tiers and age-first priority
     async fn get_tokens_for_update(&self) -> Result<Vec<String>, String> {
         let now = Utc::now();
+        let store = get_global_token_store();
+        let snapshots = store.all();
 
-        // Get all tokens from database
-        let all_tokens = self
-            .database
-            .get_all_tokens_with_update_time()
-            .await
-            .map_err(|e| format!("Failed to get tokens from database: {}", e))?;
-
-        if all_tokens.is_empty() {
+        if snapshots.is_empty() {
             return Ok(Vec::new());
         }
 
-        // Filter tokens that need updating (at least MIN_UPDATE_INTERVAL_MINUTES stale)
-        // Collect as (mint, liquidity, age_minutes)
-        let mut needing_update: Vec<(String, f64, i64)> = Vec::new();
-        for (mint, _symbol, last_updated, liquidity) in all_tokens {
-            let age_minutes = now.signed_duration_since(last_updated).num_minutes();
-            if age_minutes >= MIN_UPDATE_INTERVAL_MINUTES {
-                let liq = liquidity;
-                needing_update.push((mint, liq, age_minutes));
+        let mut candidates: Vec<UpdateCandidate> = Vec::new();
+        for snapshot in snapshots.into_iter() {
+            let age_minutes = now
+                .signed_duration_since(snapshot.data.last_updated)
+                .num_minutes();
+            if age_minutes < MIN_UPDATE_INTERVAL_MINUTES {
+                continue;
             }
+
+            let liquidity = snapshot.liquidity_usd().unwrap_or(0.0);
+            candidates.push(UpdateCandidate {
+                mint: snapshot.data.mint.clone(),
+                liquidity,
+                age_minutes,
+                created_at: snapshot.data.created_at,
+            });
+        }
+
+        if candidates.is_empty() {
+            return Ok(Vec::new());
         }
 
         // Config-driven limits
@@ -134,100 +140,124 @@ impl TokenMonitor {
         let max_interval_minutes = max_update_interval_minutes();
         let boost_age_limit = new_token_boost_max_age_minutes();
 
-        // Pre-select boosted "new" tokens with a hard per-cycle cap
         let mut selected_tokens: Vec<String> = Vec::new();
-        let mut selected_set: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut selected_set: HashSet<String> = HashSet::new();
+
+        // Prefer very new tokens with stale data
         if NEW_TOKEN_BOOST_PER_CYCLE > 0 {
-            if let Ok(boost_mints) = self
-                .database
-                .get_new_tokens_needing_boost(
-                    boost_age_limit,
-                    NEW_TOKEN_BOOST_MIN_STALE_MINUTES,
-                    NEW_TOKEN_BOOST_PER_CYCLE,
-                )
-                .await
+            let mut boost_candidates: Vec<&UpdateCandidate> = candidates
+                .iter()
+                .filter(|candidate| {
+                    candidate
+                        .created_at
+                        .map(|created| {
+                            let age_since_creation =
+                                now.signed_duration_since(created).num_minutes();
+                            age_since_creation <= boost_age_limit
+                                && candidate.age_minutes >= NEW_TOKEN_BOOST_MIN_STALE_MINUTES
+                        })
+                        .unwrap_or(false)
+                })
+                .collect();
+
+            boost_candidates.sort_by(|a, b| {
+                let a_created = a.created_at.unwrap();
+                let b_created = b.created_at.unwrap();
+                b_created.cmp(&a_created)
+            });
+
+            for candidate in boost_candidates
+                .into_iter()
+                .take(NEW_TOKEN_BOOST_PER_CYCLE.min(tokens_per_cycle))
             {
-                for mint in boost_mints.into_iter() {
-                    if selected_set.insert(mint.clone()) {
-                        selected_tokens.push(mint);
-                        if selected_tokens.len() >= tokens_per_cycle {
-                            return Ok(selected_tokens);
-                        }
+                if selected_set.insert(candidate.mint.clone()) {
+                    selected_tokens.push(candidate.mint.clone());
+                    if selected_tokens.len() >= tokens_per_cycle {
+                        return Ok(selected_tokens);
                     }
                 }
             }
         }
 
-        // If no other tokens need update and boost is empty, we can early return
-        if needing_update.is_empty() {
-            return Ok(selected_tokens);
-        }
+        let mut remaining: Vec<UpdateCandidate> = candidates
+            .into_iter()
+            .filter(|candidate| !selected_set.contains(&candidate.mint))
+            .collect();
 
-        // Force include very stale tokens exceeding configured max update interval
+        // Force include tokens that are far beyond the maximum allowed interval
         if max_interval_minutes > 0 {
-            let mut forced_tokens: Vec<(String, f64, i64)> = Vec::new();
-            needing_update.retain(|token| {
-                let should_force = token.2 >= max_interval_minutes;
-                if should_force {
-                    forced_tokens.push(token.clone());
+            let mut forced: Vec<UpdateCandidate> = Vec::new();
+            remaining.retain(|candidate| {
+                if candidate.age_minutes >= max_interval_minutes {
+                    forced.push(candidate.clone());
+                    false
+                } else {
+                    true
                 }
-                !should_force
             });
 
-            for (mint, _liq, _age) in forced_tokens.into_iter() {
+            forced.sort_by(|a, b| match b.age_minutes.cmp(&a.age_minutes) {
+                std::cmp::Ordering::Equal => b
+                    .liquidity
+                    .partial_cmp(&a.liquidity)
+                    .unwrap_or(std::cmp::Ordering::Equal),
+                other => other,
+            });
+
+            for candidate in forced {
                 if selected_tokens.len() >= tokens_per_cycle {
                     return Ok(selected_tokens);
                 }
-                if selected_set.insert(mint.clone()) {
-                    selected_tokens.push(mint);
+                if selected_set.insert(candidate.mint.clone()) {
+                    selected_tokens.push(candidate.mint);
                 }
             }
         }
 
-        // Bucket by liquidity tiers
-        let mut high: Vec<(String, f64, i64)> = Vec::new();
-        let mut mid: Vec<(String, f64, i64)> = Vec::new();
-        let mut low: Vec<(String, f64, i64)> = Vec::new();
-        let mut micro: Vec<(String, f64, i64)> = Vec::new();
+        let mut high: Vec<UpdateCandidate> = Vec::new();
+        let mut mid: Vec<UpdateCandidate> = Vec::new();
+        let mut low: Vec<UpdateCandidate> = Vec::new();
+        let mut micro: Vec<UpdateCandidate> = Vec::new();
 
-        for t in needing_update.into_iter() {
-            let liq = t.1;
-            if liq >= LIQ_TIER_HIGH_MIN {
-                high.push(t);
-            } else if liq >= LIQ_TIER_MID_MIN {
-                mid.push(t);
-            } else if liq >= LIQ_TIER_LOW_MIN {
-                low.push(t);
+        for candidate in remaining.into_iter() {
+            if candidate.liquidity >= LIQ_TIER_HIGH_MIN {
+                high.push(candidate);
+            } else if candidate.liquidity >= LIQ_TIER_MID_MIN {
+                mid.push(candidate);
+            } else if candidate.liquidity >= LIQ_TIER_LOW_MIN {
+                low.push(candidate);
             } else {
-                micro.push(t);
+                micro.push(candidate);
             }
         }
 
-        // Sort each bucket by age descending (oldest first); tie-breaker by liquidity desc
-        let by_age_then_liq = |a: &(String, f64, i64), b: &(String, f64, i64)| match b.2.cmp(&a.2) {
-            std::cmp::Ordering::Equal => b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal),
-            other => other,
-        };
+        let by_age_then_liq =
+            |a: &UpdateCandidate, b: &UpdateCandidate| match b.age_minutes.cmp(&a.age_minutes) {
+                std::cmp::Ordering::Equal => b
+                    .liquidity
+                    .partial_cmp(&a.liquidity)
+                    .unwrap_or(std::cmp::Ordering::Equal),
+                other => other,
+            };
+
         high.sort_by(by_age_then_liq);
         mid.sort_by(by_age_then_liq);
         low.sort_by(by_age_then_liq);
         micro.sort_by(by_age_then_liq);
 
-        // Compute quotas based on remaining capacity after pre-selection
         let capacity = tokens_per_cycle.saturating_sub(selected_tokens.len());
         if capacity == 0 {
             return Ok(selected_tokens);
         }
+
         let quota = |pct: usize| -> usize { (capacity * pct) / 100 };
         let mut q_high = quota(QUOTA_HIGH_PCT).max(1);
         let mut q_mid = quota(QUOTA_MID_PCT).max(1);
         let mut q_low = quota(QUOTA_LOW_PCT).max(1);
         let mut q_micro = quota(QUOTA_MICRO_PCT).max(1);
 
-        // Ensure we don't exceed the configured per-cycle limit due to max(1)
         let mut total_q = q_high + q_mid + q_low + q_micro;
         while total_q > tokens_per_cycle {
-            // Reduce micro first, then low, then mid, then high
             if q_micro > 1 {
                 q_micro -= 1;
             } else if q_low > 1 {
@@ -240,38 +270,41 @@ impl TokenMonitor {
             total_q = q_high + q_mid + q_low + q_micro;
         }
 
-        // Helper to drain up to n mints from a bucket
-        let mut take_from_bucket =
-            |bucket: &mut Vec<(String, f64, i64)>, n: usize, out: &mut Vec<String>| -> usize {
-                let take_n = std::cmp::min(n, bucket.len());
-                for (mint, _liq, _age) in bucket.drain(..take_n) {
-                    if selected_set.insert(mint.clone()) {
-                        out.push(mint);
-                    }
+        let mut take_from_bucket = |bucket: &mut Vec<UpdateCandidate>, max_take: usize| {
+            if selected_tokens.len() >= tokens_per_cycle {
+                return;
+            }
+            let remaining_capacity = tokens_per_cycle.saturating_sub(selected_tokens.len());
+            if remaining_capacity == 0 {
+                return;
+            }
+            let take_n = max_take.min(bucket.len()).min(remaining_capacity);
+            for candidate in bucket.drain(..take_n) {
+                if selected_set.insert(candidate.mint.clone()) {
+                    selected_tokens.push(candidate.mint);
                 }
-                take_n
-            };
+            }
+        };
 
-        // Take per-bucket quotas
-        take_from_bucket(&mut high, q_high, &mut selected_tokens);
-        take_from_bucket(&mut mid, q_mid, &mut selected_tokens);
-        take_from_bucket(&mut low, q_low, &mut selected_tokens);
-        take_from_bucket(&mut micro, q_micro, &mut selected_tokens);
+        take_from_bucket(&mut high, q_high);
+        take_from_bucket(&mut mid, q_mid);
+        take_from_bucket(&mut low, q_low);
+        take_from_bucket(&mut micro, q_micro);
 
-        // Fill remaining capacity oldest-first across all remaining tokens
-        let mut remaining_capacity = tokens_per_cycle.saturating_sub(selected_tokens.len());
-        if remaining_capacity > 0 {
-            let mut all_remaining: Vec<(String, f64, i64)> = Vec::new();
-            all_remaining.extend(high.into_iter());
-            all_remaining.extend(mid.into_iter());
-            all_remaining.extend(low.into_iter());
-            all_remaining.extend(micro.into_iter());
-            // Sort oldest-first globally, tie-break by liquidity desc
-            all_remaining.sort_by(by_age_then_liq);
+        if selected_tokens.len() < tokens_per_cycle {
+            let mut fallback: Vec<UpdateCandidate> = Vec::new();
+            fallback.extend(high.into_iter());
+            fallback.extend(mid.into_iter());
+            fallback.extend(low.into_iter());
+            fallback.extend(micro.into_iter());
+            fallback.sort_by(by_age_then_liq);
 
-            for (mint, _liq, _age) in all_remaining.into_iter().take(remaining_capacity) {
-                if selected_set.insert(mint.clone()) {
-                    selected_tokens.push(mint);
+            for candidate in fallback {
+                if selected_tokens.len() >= tokens_per_cycle {
+                    break;
+                }
+                if selected_set.insert(candidate.mint.clone()) {
+                    selected_tokens.push(candidate.mint);
                 }
             }
         }
@@ -335,57 +368,46 @@ impl TokenMonitor {
                 let mut skipped_for_deviation: Vec<(String, f64, f64, f64)> = Vec::new();
 
                 if deviation_limit > 0.0 {
-                    match self.database.get_tokens_by_mints(mints) {
-                        Ok(existing_tokens) => {
-                            let mut existing_prices: HashMap<String, f64> =
-                                HashMap::with_capacity(existing_tokens.len());
-                            for token in existing_tokens {
-                                if let Some(price) = token.price_dexscreener_sol {
-                                    if price > 0.0 {
-                                        existing_prices.insert(token.mint, price);
-                                    }
-                                }
-                            }
+                    let store = get_global_token_store();
+                    let existing_snapshots = store.get_many(mints);
+                    let mut existing_prices: HashMap<String, f64> =
+                        HashMap::with_capacity(existing_snapshots.len());
 
-                            if !existing_prices.is_empty() {
-                                const PRICE_EPSILON: f64 = 1e-9;
-                                fetched_tokens.retain(|token| {
-                                    let new_price = match token.price_dexscreener_sol {
-                                        Some(price) if price > 0.0 => price,
-                                        _ => return true,
-                                    };
-
-                                    let old_price = match existing_prices.get(&token.mint) {
-                                        Some(price) if price.abs() > PRICE_EPSILON => *price,
-                                        _ => return true,
-                                    };
-
-                                    let deviation =
-                                        ((new_price - old_price).abs() / old_price.abs()) * 100.0;
-                                    if deviation > deviation_limit {
-                                        skipped_for_deviation.push((
-                                            token.mint.clone(),
-                                            deviation,
-                                            old_price,
-                                            new_price,
-                                        ));
-                                        return false;
-                                    }
-
-                                    true
-                                });
+                    for snapshot in existing_snapshots {
+                        if let Some(price) = snapshot.data.price_dexscreener_sol {
+                            if price > 0.0 {
+                                existing_prices.insert(snapshot.data.mint.clone(), price);
                             }
                         }
-                        Err(e) => {
-                            log(
-                                LogTag::Monitor,
-                                "PRICE_DEVIATION_PRECHECK_FAILED",
-                                &format!(
-                                    "Failed to load existing token prices for deviation check: {}",
-                                    e
-                                ),
-                            );
-                        }
+                    }
+
+                    if !existing_prices.is_empty() {
+                        const PRICE_EPSILON: f64 = 1e-9;
+                        fetched_tokens.retain(|token| {
+                            let new_price = match token.price_dexscreener_sol {
+                                Some(price) if price > 0.0 => price,
+                                _ => return true,
+                            };
+
+                            let old_price = match existing_prices.get(&token.mint) {
+                                Some(price) if price.abs() > PRICE_EPSILON => *price,
+                                _ => return true,
+                            };
+
+                            let deviation =
+                                ((new_price - old_price).abs() / old_price.abs()) * 100.0;
+                            if deviation > deviation_limit {
+                                skipped_for_deviation.push((
+                                    token.mint.clone(),
+                                    deviation,
+                                    old_price,
+                                    new_price,
+                                ));
+                                return false;
+                            }
+
+                            true
+                        });
                     }
                 }
 
@@ -439,54 +461,34 @@ impl TokenMonitor {
                         );
                     }
 
-                    match self.database.update_tokens(&fetched_tokens).await {
-                        Ok(()) => {
-                            total_updated += fetched_tokens.len();
+                    let store = get_global_token_store();
+                    match store
+                        .ingest_tokens(fetched_tokens.clone(), TokenUpdateSource::Monitor)
+                        .await
+                    {
+                        Ok(stats) => {
+                            total_updated += stats.total_processed;
                             if is_debug_monitor_enabled() {
                                 log(
                                     LogTag::Monitor,
-                                    "SUCCESS",
-                                    &format!("Updated {} tokens in database", fetched_tokens.len()),
+                                    "TOKEN_STORE_INGEST",
+                                    &format!(
+                                        "Ingested {} tokens (inserted={}, updated={}, removed={})",
+                                        stats.total_processed,
+                                        stats.inserted,
+                                        stats.updated,
+                                        stats.removed
+                                    ),
                                 );
-                            }
-
-                            // Ingest into token store - automatically emits events
-                            if !fetched_tokens.is_empty() {
-                                let store = get_global_token_store();
-                                match store
-                                    .ingest_tokens(
-                                        fetched_tokens.clone(),
-                                        TokenUpdateSource::Monitor,
-                                    )
-                                    .await
-                                {
-                                    Ok(stats) => {
-                                        if is_debug_monitor_enabled() {
-                                            log(
-                                                LogTag::Monitor,
-                                                "TOKEN_STORE_INGEST",
-                                                &format!("Ingested {} tokens (inserted={}, updated={}, removed={})",
-                                                    stats.total_processed, stats.inserted, stats.updated, stats.removed),
-                                            );
-                                        }
-                                    }
-                                    Err(e) => {
-                                        log(
-                                            LogTag::Monitor,
-                                            "ERROR",
-                                            &format!("Failed to ingest tokens into store: {}", e),
-                                        );
-                                    }
-                                }
                             }
                         }
                         Err(e) => {
                             log(
                                 LogTag::Monitor,
                                 "ERROR",
-                                &format!("Failed to update tokens in database: {}", e),
+                                &format!("Failed to ingest tokens into store: {}", e),
                             );
-                            return Err(format!("Database update failed: {}", e));
+                            return Err(format!("Token store ingest failed: {}", e));
                         }
                     }
                 }
@@ -534,33 +536,38 @@ impl TokenMonitor {
                             );
                         }
 
-                        match self.database.delete_tokens(&safe_to_delete).await {
-                            Ok(actual_deleted) => {
-                                deleted_count = actual_deleted;
-                                if is_debug_monitor_enabled() {
+                        let store = get_global_token_store();
+                        let mut removed_this_batch = 0;
+
+                        for mint in &safe_to_delete {
+                            match store.remove_token(mint, TokenUpdateSource::Monitor).await {
+                                Ok(Some(_)) => {
+                                    removed_this_batch += 1;
+                                }
+                                Ok(None) => {
+                                    // Token already absent; nothing to do
+                                }
+                                Err(e) => {
                                     log(
                                         LogTag::Monitor,
-                                        "CLEANUP_SUCCESS",
-                                        &format!(
-                                            "Deleted {} stale tokens from database",
-                                            deleted_count
-                                        ),
+                                        "ERROR",
+                                        &format!("Failed to remove stale token {}: {}", mint, e),
                                     );
                                 }
-
-                                // Remove from token store - automatically emits removal events
-                                let store = get_global_token_store();
-                                for mint in &safe_to_delete {
-                                    store.remove(mint, TokenUpdateSource::Monitor);
-                                }
                             }
-                            Err(e) => {
+                        }
+
+                        if removed_this_batch > 0 {
+                            deleted_count += removed_this_batch;
+                            if is_debug_monitor_enabled() {
                                 log(
                                     LogTag::Monitor,
-                                    "ERROR",
-                                    &format!("Failed to delete stale tokens: {}", e),
+                                    "CLEANUP_SUCCESS",
+                                    &format!(
+                                        "Deleted {} stale tokens from store/database",
+                                        removed_this_batch
+                                    ),
                                 );
-                                // Don't fail the entire operation if cleanup fails
                             }
                         }
                     }
@@ -603,11 +610,11 @@ impl TokenMonitor {
         // Compute tier breakdown for selection (fetch liquidity for selected mints)
         let mut selected_tiers = TierCounts::default();
         if !tokens_to_update.is_empty() {
-            if let Ok(tokens) = self.database.get_tokens_by_mints(&tokens_to_update) {
-                for t in tokens {
-                    let liq = t.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
-                    selected_tiers.add_liquidity(liq);
-                }
+            let store = get_global_token_store();
+            let snapshots = store.get_many(&tokens_to_update);
+            for snapshot in snapshots {
+                let liq = snapshot.liquidity_usd().unwrap_or(0.0);
+                selected_tiers.add_liquidity(liq);
             }
         }
 
@@ -687,28 +694,31 @@ impl TokenMonitor {
         if should_print {
             // Compute backlog snapshot once per summary to keep overhead low
             let (over1h, over2h, over7d) = if is_debug_monitor_enabled() {
-                let a = self
-                    .database
-                    .get_tokens_needing_update(1)
-                    .await
-                    .ok()
-                    .map(|v| v.len())
-                    .unwrap_or(0);
-                let b = self
-                    .database
-                    .get_tokens_needing_update(2)
-                    .await
-                    .ok()
-                    .map(|v| v.len())
-                    .unwrap_or(0);
-                let c = self
-                    .database
-                    .get_tokens_needing_update(168)
-                    .await // 7 days = 168 hours
-                    .ok()
-                    .map(|v| v.len())
-                    .unwrap_or(0);
-                (a, b, c)
+                let now = Utc::now();
+                let cutoff_1h = now - chrono::Duration::hours(1);
+                let cutoff_2h = now - chrono::Duration::hours(2);
+                let cutoff_7d = now - chrono::Duration::hours(24 * 7);
+                let store = get_global_token_store();
+                let snapshots = store.all();
+
+                let mut count_1h = 0usize;
+                let mut count_2h = 0usize;
+                let mut count_7d = 0usize;
+
+                for snapshot in snapshots {
+                    let last_updated = snapshot.data.last_updated;
+                    if last_updated < cutoff_1h {
+                        count_1h += 1;
+                    }
+                    if last_updated < cutoff_2h {
+                        count_2h += 1;
+                    }
+                    if last_updated < cutoff_7d {
+                        count_7d += 1;
+                    }
+                }
+
+                (count_1h, count_2h, count_7d)
             } else {
                 (0, 0, 0)
             };

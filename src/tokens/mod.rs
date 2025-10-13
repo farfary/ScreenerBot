@@ -81,21 +81,16 @@ pub const MAX_PRICE_DEVIATION_PERCENT: f64 = 50.0; // Maximum deviation between 
 /// Complete tokens system manager
 pub struct TokensSystem {
     discovery: TokenDiscovery,
-    database: TokenDatabase,
 }
 
 impl TokensSystem {
     /// Create new tokens system instance
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let discovery = TokenDiscovery::new()?;
-        let database = TokenDatabase::new()?;
 
         log(LogTag::System, "INIT", "Tokens system initialized");
 
-        Ok(Self {
-            discovery,
-            database,
-        })
+        Ok(Self { discovery })
     }
 
     // REMOVED: start_background_tasks() - background tasks now managed by separate services
@@ -103,15 +98,19 @@ impl TokensSystem {
 
     /// Get system statistics
     pub async fn get_system_stats(&self) -> Result<TokensSystemStats, String> {
-        let db_stats = self
-            .database
-            .get_stats()
-            .map_err(|e| format!("Failed to get database stats: {}", e))?;
+        let store = store::get_global_token_store();
+        let snapshots = store.all();
+
+        let total_tokens = snapshots.len();
+        let tokens_with_liquidity = snapshots
+            .iter()
+            .filter(|snapshot| snapshot.liquidity_usd().unwrap_or(0.0) > 100.0)
+            .count();
         let blacklist_stats = get_blacklist_stats_db();
 
         Ok(TokensSystemStats {
-            total_tokens: db_stats.total_tokens,
-            tokens_with_liquidity: db_stats.tokens_with_liquidity,
+            total_tokens,
+            tokens_with_liquidity,
             active_tokens: 0, // No monitoring system
             blacklisted_tokens: blacklist_stats.map(|s| s.total_blacklisted).unwrap_or(0),
             last_discovery_cycle: None,
@@ -142,6 +141,13 @@ pub async fn initialize_tokens_system() -> Result<TokensSystem, Box<dyn std::err
         "INIT",
         "Initializing complete tokens system...",
     );
+
+    let store = store::get_global_token_store();
+    if !store.is_database_configured() {
+        let db = TokenDatabase::new()?;
+        store.configure_database(db);
+        log(LogTag::Tokens, "INIT", "Token store database configured");
+    }
 
     // Initialize global RPC client from configuration
     if let Err(e) = crate::rpc::init_rpc_client() {
@@ -318,37 +324,28 @@ pub async fn get_token_decimals_safe(mint: &str) -> Result<u8, String> {
 // TOKEN DISCOVERY INTEGRATION
 // =============================================================================
 
-/// Get all tokens by liquidity using database directly (for compatibility)
-pub async fn get_all_tokens_by_liquidity() -> Result<Vec<Token>, String> {
-    let db = TokenDatabase::new().map_err(|e| format!("Failed to create database: {}", e))?;
+/// Get all tokens by liquidity from the in-memory store
+pub fn get_all_tokens_by_liquidity() -> Vec<Token> {
+    let store = store::get_global_token_store();
+    let mut snapshots = store.all();
 
-    match db.get_all_tokens().await {
-        Ok(tokens) => {
-            let mut sorted_tokens = tokens;
-            sorted_tokens.sort_by(|a, b| {
-                let a_liq = a.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
-                let b_liq = b.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
-                b_liq
-                    .partial_cmp(&a_liq)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            });
-            Ok(sorted_tokens)
-        }
-        Err(e) => Err(format!("Database error: {}", e)),
-    }
+    snapshots.sort_by(|a, b| {
+        let a_liq = a.liquidity_usd().unwrap_or(0.0);
+        let b_liq = b.liquidity_usd().unwrap_or(0.0);
+        b_liq
+            .partial_cmp(&a_liq)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    snapshots
+        .into_iter()
+        .map(|snapshot| snapshot.data)
+        .collect()
 }
 
-/// Get token from database using safe system (compatibility function)
-pub async fn get_token_from_db(mint: &str) -> Option<Token> {
-    let db = match TokenDatabase::new() {
-        Ok(db) => db,
-        Err(_) => {
-            return None;
-        }
-    };
-
-    match db.get_token_by_mint(mint) {
-        Ok(Some(api_token)) => Some(api_token.into()),
-        _ => None,
-    }
+/// Get a token snapshot from the in-memory cache
+pub fn get_token_from_cache(mint: &str) -> Option<Token> {
+    store::get_global_token_store()
+        .get(mint)
+        .map(|snapshot| snapshot.data)
 }

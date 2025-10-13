@@ -8,7 +8,8 @@
 /// The system dynamically identifies patterns without hardcoding, providing insights
 /// into token creation platforms and ecosystem relationships.
 use crate::logger::{log, LogTag};
-use crate::tokens::database::TokenDatabase;
+use crate::tokens::store::get_global_token_store;
+use crate::tokens::Token;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -89,14 +90,11 @@ impl TokenPatternAnalyzer {
             "Starting dynamic token pattern analysis",
         );
 
-        // Get all tokens from database
-        let db = TokenDatabase::new().map_err(|e| format!("Failed to create database: {}", e))?;
-        let tokens = db
-            .get_all_tokens()
-            .await
-            .map_err(|e| format!("Failed to get tokens: {}", e))?;
+        // Get all tokens from the in-memory cache
+        let store = get_global_token_store();
+        let snapshots = store.all();
 
-        if tokens.is_empty() {
+        if snapshots.is_empty() {
             log(
                 LogTag::Discovery,
                 "WARN",
@@ -104,6 +102,11 @@ impl TokenPatternAnalyzer {
             );
             return Ok(());
         }
+
+        let tokens: Vec<Token> = snapshots
+            .into_iter()
+            .map(|snapshot| snapshot.data)
+            .collect();
 
         log(
             LogTag::Discovery,

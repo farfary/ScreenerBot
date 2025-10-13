@@ -510,6 +510,11 @@ impl TokenStore {
         }
     }
 
+    /// Returns true if a database handle has been configured.
+    pub fn is_database_configured(&self) -> bool {
+        self.database.get().is_some()
+    }
+
     fn database(&self) -> Option<TokenDatabase> {
         self.database.get().cloned()
     }
@@ -586,6 +591,41 @@ impl TokenStore {
         tokens: Vec<Token>,
         source: TokenUpdateSource,
     ) -> Result<TokenStoreRefreshStats, String> {
+        if tokens.is_empty() {
+            return Ok(TokenStoreRefreshStats::new(source));
+        }
+
+        if let Some(db) = self.database() {
+            let mut new_tokens = Vec::new();
+            let mut existing_tokens = Vec::new();
+
+            for token in &tokens {
+                if self.tokens.contains_key(&token.mint) {
+                    existing_tokens.push(token.clone());
+                } else {
+                    new_tokens.push(token.clone());
+                }
+            }
+
+            if !new_tokens.is_empty() {
+                if let Err(err) = db.add_tokens(&new_tokens).await {
+                    let message =
+                        format!("Failed to persist {} new tokens: {}", new_tokens.len(), err);
+                    log(LogTag::Tokens, "DB_WRITE_FAILED", &message);
+                    return Err(message);
+                }
+            }
+
+            if !existing_tokens.is_empty() {
+                if let Err(err) = db.update_tokens(&existing_tokens).await {
+                    let message =
+                        format!("Failed to update {} tokens: {}", existing_tokens.len(), err);
+                    log(LogTag::Tokens, "DB_WRITE_FAILED", &message);
+                    return Err(message);
+                }
+            }
+        }
+
         self.apply_snapshot(tokens, source, false).await
     }
 
@@ -708,9 +748,30 @@ impl TokenStore {
         }
     }
 
-    /// Remove a token by mint and emit event.
-    pub fn remove(&self, mint: &str, source: TokenUpdateSource) -> Option<TokenSnapshot> {
-        self.remove_internal(mint, source)
+    /// Remove a token from the store and database atomically.
+    pub async fn remove_token(
+        &self,
+        mint: &str,
+        source: TokenUpdateSource,
+    ) -> Result<Option<TokenSnapshot>, String> {
+        let removed = self.remove_internal(mint, source);
+
+        if removed.is_none() {
+            return Ok(None);
+        }
+
+        if let Some(db) = self.database() {
+            if let Err(err) = db.delete_tokens(&[mint.to_string()]).await {
+                if let Some(snapshot) = removed.clone() {
+                    self.upsert_snapshot(snapshot, source);
+                }
+                let message = format!("Failed to delete token {} from database: {}", mint, err);
+                log(LogTag::Tokens, "DB_DELETE_FAILED", &message);
+                return Err(message);
+            }
+        }
+
+        Ok(removed)
     }
 
     fn build_snapshot(

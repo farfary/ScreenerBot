@@ -40,10 +40,25 @@ impl Service for TokenStoreService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
-        let db = TokenDatabase::new().map_err(|e| format!("Token store DB init failed: {}", e))?;
-        get_global_token_store().configure_database(db);
+        let store = get_global_token_store();
+        if !store.is_database_configured() {
+            let db =
+                TokenDatabase::new().map_err(|e| format!("Token store DB init failed: {}", e))?;
+            store.configure_database(db);
+            log(
+                LogTag::Tokens,
+                "INIT",
+                "Token store database configured by TokenStoreService",
+            );
+        } else {
+            log(
+                LogTag::Tokens,
+                "INIT",
+                "Token store database already configured; reusing existing handle",
+            );
+        }
         self.initialized = true;
-        log(LogTag::Cache, "INIT", "Token store initialized");
+        log(LogTag::Tokens, "INIT", "Token store service initialized");
         Ok(())
     }
 

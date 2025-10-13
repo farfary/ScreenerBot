@@ -5,6 +5,7 @@ use crate::tokens::database::TokenDatabase;
 use crate::tokens::dexscreener::{get_global_dexscreener_api, wait_for_discovery_rate_limit};
 use crate::tokens::geckoterminal::try_acquire_gecko_api_permit;
 use crate::tokens::is_token_excluded_from_trading;
+use crate::tokens::store::{get_global_token_store, TokenUpdateSource};
 use chrono::{DateTime, Utc};
 use futures::FutureExt;
 use reqwest::Client;
@@ -1164,16 +1165,23 @@ fn get_discovery_stats_handle() -> Arc<RwLock<DiscoveryStats>> {
         .clone()
 }
 
-pub struct TokenDiscovery {
-    database: TokenDatabase,
-}
+pub struct TokenDiscovery;
 
 impl TokenDiscovery {
     /// Create new token discovery instance
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let database = TokenDatabase::new()?;
+        let store = get_global_token_store();
+        if !store.is_database_configured() {
+            let db = TokenDatabase::new()?;
+            store.configure_database(db);
+            log(
+                LogTag::Tokens,
+                "INIT",
+                "Token store database configured for discovery",
+            );
+        }
 
-        Ok(Self { database })
+        Ok(Self)
     }
 
     /// Main discovery function - calls all APIs, combines mints, fetches decimals and token info
@@ -1871,18 +1879,17 @@ impl TokenDiscovery {
                             continue;
                         }
 
-                        // Check for new tokens before adding to database
+                        // Check for new tokens before adding to store/database
                         let original_count = tokens.len();
                         let mut new_tokens = Vec::new();
                         let mut existing_count = 0;
 
+                        let store = get_global_token_store();
                         for token in &tokens {
-                            match self.database.get_token_by_mint(&token.mint) {
-                                Ok(Some(_)) => {
-                                    existing_count += 1;
-                                }
-                                Ok(None) => new_tokens.push(token.clone()),
-                                Err(_) => new_tokens.push(token.clone()), // Assume new if check fails
+                            if store.get(&token.mint).is_some() {
+                                existing_count += 1;
+                            } else {
+                                new_tokens.push(token.clone());
                             }
                         }
 
@@ -1892,7 +1899,7 @@ impl TokenDiscovery {
                                     LogTag::Discovery,
                                     "SKIP",
                                     &format!(
-                                        "All {} tokens already exist in database - skipping batch",
+                                        "All {} tokens already exist in cache - skipping batch",
                                         original_count
                                     ),
                                 );
@@ -1900,19 +1907,20 @@ impl TokenDiscovery {
                             continue;
                         }
 
-                        // Only add truly NEW tokens to database - let monitor handle updates
-                        match self.database.add_tokens(&new_tokens).await {
-                            Ok(_) => {
-                                total_added += new_tokens.len();
+                        match store
+                            .ingest_tokens(new_tokens.clone(), TokenUpdateSource::Api)
+                            .await
+                        {
+                            Ok(stats) => {
+                                total_added += stats.inserted;
 
                                 if is_debug_discovery_enabled() {
                                     log(
                                         LogTag::Discovery,
                                         "DATABASE",
                                         &format!(
-                                            "Added {} NEW tokens to database (skipped {} existing)",
-                                            new_tokens.len(),
-                                            existing_count
+                                            "Added {} NEW tokens (skipped {} existing)",
+                                            stats.inserted, existing_count
                                         ),
                                     );
 
@@ -1939,7 +1947,7 @@ impl TokenDiscovery {
                                 log(
                                     LogTag::Discovery,
                                     "ERROR",
-                                    &format!("Failed to add tokens to database: {}", e),
+                                    &format!("Failed to ingest tokens into store: {}", e),
                                 );
                             }
                         }
