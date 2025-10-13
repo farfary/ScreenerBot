@@ -21,12 +21,13 @@ use crate::config::with_config;
 use crate::global::is_debug_api_enabled;
 use crate::logger::{log, LogTag};
 use chrono::{DateTime, Utc};
+use once_cell::sync::Lazy;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use tokio::time::{sleep, timeout};
 
 // =============================================================================
@@ -40,7 +41,18 @@ const GECKOTERMINAL_BASE_URL: &str = "https://api.geckoterminal.com/api/v2";
 const DEFAULT_GECKOTERMINAL_RATE_LIMIT_PER_MINUTE: usize = 30;
 
 /// Rate limiting delay between requests (2000ms to ensure no concurrent calls)
-const RATE_LIMIT_DELAY_MS: u64 = 2000;
+const RATE_LIMIT_DELAY_MS: u64 = 100;
+/// Cache TTL for GeckoTerminal pool data (seconds)
+const GECKO_POOL_CACHE_TTL_SECS: i64 = 900; // 15 minutes
+
+#[derive(Clone)]
+struct CachedGeckoPoolData {
+    pools: Vec<GeckoTerminalPool>,
+    cached_at: DateTime<Utc>,
+}
+
+static GECKO_POOL_CACHE: Lazy<RwLock<HashMap<String, CachedGeckoPoolData>>> =
+    Lazy::new(|| RwLock::new(HashMap::new()));
 
 /// Default maximum tokens per batch request (configurable)
 const DEFAULT_MAX_TOKENS_PER_BATCH: usize = 30;
@@ -450,10 +462,47 @@ async fn apply_rate_limit_and_concurrency_control(
 // CORE FUNCTIONS
 // =============================================================================
 
+async fn get_cached_gecko_pools(token_address: &str) -> Option<Vec<GeckoTerminalPool>> {
+    let cache = GECKO_POOL_CACHE.read().await;
+    if let Some(entry) = cache.get(token_address) {
+        let age_secs = (Utc::now() - entry.cached_at).num_seconds();
+        if age_secs <= GECKO_POOL_CACHE_TTL_SECS {
+            return Some(entry.pools.clone());
+        }
+    }
+    None
+}
+
+async fn cache_gecko_pools(token_address: &str, pools: &[GeckoTerminalPool]) {
+    let mut cache = GECKO_POOL_CACHE.write().await;
+    cache.insert(
+        token_address.to_string(),
+        CachedGeckoPoolData {
+            pools: pools.to_vec(),
+            cached_at: Utc::now(),
+        },
+    );
+}
+
 /// Fetch pools for a single token from GeckoTerminal
 pub async fn get_token_pools_from_geckoterminal(
     token_address: &str,
 ) -> Result<Vec<GeckoTerminalPool>, String> {
+    if let Some(cached) = get_cached_gecko_pools(token_address).await {
+        if is_debug_api_enabled() {
+            log(
+                LogTag::Api,
+                "GECKO_CACHE_HIT",
+                &format!(
+                    "🦎 Cache hit for {} ({} pools)",
+                    &token_address[..token_address.len().min(8)],
+                    cached.len()
+                ),
+            );
+        }
+        return Ok(cached);
+    }
+
     if is_debug_api_enabled() {
         log(
             LogTag::Api,
@@ -583,6 +632,8 @@ pub async fn get_token_pools_from_geckoterminal(
         );
     }
 
+    cache_gecko_pools(token_address, &pools).await;
+
     Ok(pools)
 }
 
@@ -614,14 +665,48 @@ pub async fn get_batch_token_pools_from_geckoterminal(
         );
     }
 
-    // Process tokens one by one to ensure no concurrent calls
-    // This is required by GeckoTerminal's strict rate limiting
     let max_batch = max_tokens_per_batch_config();
+    let mut uncached: Vec<&String> = Vec::new();
+
     for token_address in token_addresses.iter().take(max_batch) {
+        if let Some(cached) = get_cached_gecko_pools(token_address).await {
+            if !cached.is_empty() {
+                result.pools.insert(token_address.clone(), cached.clone());
+                result.successful_tokens += 1;
+
+                if is_debug_api_enabled() {
+                    log(
+                        LogTag::Api,
+                        "GECKO_BATCH_CACHE_HIT",
+                        &format!(
+                            "🦎 Cache hit for {} ({} pools)",
+                            &token_address[..token_address.len().min(8)],
+                            cached.len()
+                        ),
+                    );
+                }
+            } else if is_debug_api_enabled() {
+                log(
+                    LogTag::Api,
+                    "GECKO_BATCH_NO_POOLS",
+                    &format!(
+                        "🦎 No pools found for {} (cached)",
+                        &token_address[..token_address.len().min(8)]
+                    ),
+                );
+            }
+        } else {
+            uncached.push(token_address);
+        }
+    }
+
+    // Process uncached tokens one by one to ensure no concurrent calls
+    // This is required by GeckoTerminal's strict rate limiting
+    for token_address in uncached {
         match get_token_pools_from_geckoterminal(token_address).await {
             Ok(pools) => {
                 if !pools.is_empty() {
-                    result.pools.insert(token_address.clone(), pools);
+                    result.pools.insert(token_address.clone(), pools.clone());
                     result.successful_tokens += 1;
 
                     if is_debug_api_enabled() {
@@ -630,8 +715,8 @@ pub async fn get_batch_token_pools_from_geckoterminal(
                             "GECKO_BATCH_SUCCESS",
                             &format!(
                                 "🦎 Success for {}: {} pools found",
-                                &token_address[..8],
-                                result.pools.get(token_address).unwrap().len()
+                                &token_address[..token_address.len().min(8)],
+                                pools.len()
                             ),
                         );
                     }

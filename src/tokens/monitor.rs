@@ -2,6 +2,7 @@ use crate::global::is_debug_monitor_enabled;
 /// Token monitoring system for periodic updates of cached tokens
 /// Updates existing tokens based on liquidity priority and time constraints
 use crate::logger::{log, LogTag};
+use crate::tokens::sources::{MultiSourceAggregator, ValidationIssue};
 use crate::tokens::{
     config::with_tokens_config,
     dexscreener::get_global_dexscreener_api,
@@ -369,199 +370,142 @@ impl TokenMonitor {
                     .collect();
 
                 let mut total_updated = 0;
-                let mut fetched_tokens = tokens;
+                // Multi-source validation and consensus price application
+                let aggregator = MultiSourceAggregator::new();
+                if !aggregator.config.enable_multi_source {
+                    log(
+                        LogTag::Monitor,
+                        "MULTISOURCE_DISABLED",
+                        "Multi-source validation is disabled via config → skipping update batch",
+                    );
+                    return Ok(BatchUpdateResult::default());
+                }
 
-                // Enforce configured price deviation limits before persisting updates
-                let deviation_limit =
-                    with_tokens_config(|cfg| cfg.max_price_deviation_percent).max(0.0);
-                let mut skipped_for_deviation: Vec<(String, f64, f64, f64)> = Vec::new();
+                // Helper to format price with appropriate precision
+                let format_price = |price: f64| -> String {
+                    if price.abs() < 1e-15 {
+                        "0".to_string()
+                    } else if price.abs() < 1e-6 {
+                        format!("{:.2e}", price)
+                    } else if price.abs() < 0.01 {
+                        format!("{:.9}", price)
+                    } else {
+                        format!("{:.6}", price)
+                    }
+                };
 
-                if deviation_limit > 0.0 {
-                    let store = get_global_token_store();
-                    let existing_snapshots = store.get_many(mints);
-                    let mut existing_prices: HashMap<String, f64> =
-                        HashMap::with_capacity(existing_snapshots.len());
+                let mut accepted_tokens: Vec<crate::tokens::types::Token> = Vec::new();
+                struct SkipDetail {
+                    mint: String,
+                    issues: Vec<ValidationIssue>,
+                    sources: Vec<String>,
+                    consensus: Option<f64>,
+                    error: Option<String>,
+                }
+                let mut skipped_for_validation: Vec<SkipDetail> = Vec::new();
 
-                    for snapshot in existing_snapshots {
-                        if let Some(price) = snapshot.data.price_dexscreener_sol {
-                            if price > 0.0 {
-                                existing_prices.insert(snapshot.data.mint.clone(), price);
+                for mut token in tokens.into_iter() {
+                    match aggregator.validate_prefetched(&token).await {
+                        Ok(result) => {
+                            if result.is_valid {
+                                if let Some(cp) = result.consensus_price {
+                                    token.price_dexscreener_sol = Some(cp);
+                                }
+                                accepted_tokens.push(token);
+                            } else {
+                                skipped_for_validation.push(SkipDetail {
+                                    mint: token.mint.clone(),
+                                    issues: result.issues.clone(),
+                                    sources: result
+                                        .used_sources
+                                        .iter()
+                                        .map(|s| s.to_string())
+                                        .collect(),
+                                    consensus: result.consensus_price,
+                                    error: None,
+                                });
                             }
                         }
-                    }
-
-                    if !existing_prices.is_empty() {
-                        // Use f64 precision limit as epsilon (truly zero vs micro-cap prices)
-                        const PRICE_EPSILON: f64 = 1e-15;
-
-                        fetched_tokens.retain(|token| {
-                            // Get new price from API response
-                            let new_price = token.price_dexscreener_sol.unwrap_or(0.0);
-
-                            // Get old price from cache (0.0 if not found)
-                            let old_price =
-                                existing_prices.get(&token.mint).copied().unwrap_or(0.0);
-
-                            // Handle truly zero-price cases (stale/missing data)
-                            if new_price.abs() < PRICE_EPSILON && old_price.abs() < PRICE_EPSILON {
-                                // Both zero - no price data available, allow through
-                                return true;
-                            }
-
-                            if new_price.abs() < PRICE_EPSILON {
-                                // New price is zero but old wasn't - stale API data
-                                skipped_for_deviation.push((
-                                    token.mint.clone(),
-                                    100.0, // Mark as 100% for logging
-                                    old_price,
-                                    new_price,
-                                ));
-                                return false;
-                            }
-
-                            if old_price.abs() < PRICE_EPSILON {
-                                // No cached price to compare - this is first price, allow through
-                                return true;
-                            }
-
-                            // Calculate deviation between valid prices (including micro-cap)
-                            // Note: Micro-cap tokens (0.000000001 SOL) can have extreme volatility
-                            let deviation =
-                                ((new_price - old_price).abs() / old_price.abs()) * 100.0;
-
-                            if deviation > deviation_limit {
-                                skipped_for_deviation.push((
-                                    token.mint.clone(),
-                                    deviation,
-                                    old_price,
-                                    new_price,
-                                ));
-                                return false;
-                            }
-
-                            true
-                        });
+                        Err(e) => {
+                            log(
+                                LogTag::Monitor,
+                                "VALIDATION_ERROR",
+                                &format!("{}: validation failed: {}", token.mint, e),
+                            );
+                            skipped_for_validation.push(SkipDetail {
+                                mint: token.mint.clone(),
+                                issues: Vec::new(),
+                                sources: vec![],
+                                consensus: None,
+                                error: Some(e),
+                            });
+                        }
                     }
                 }
 
-                if !skipped_for_deviation.is_empty() {
-                    // Helper function to format price with appropriate precision
-                    let format_price = |price: f64| -> String {
-                        if price.abs() < 1e-15 {
-                            // Truly zero (below f64 precision)
-                            "0".to_string()
-                        } else if price.abs() < 1e-6 {
-                            // Micro-cap: use scientific notation for clarity
-                            format!("{:.2e}", price)
-                        } else if price.abs() < 0.01 {
-                            // Small price: use 9 decimals
-                            format!("{:.9}", price)
-                        } else {
-                            // Normal price: use 6 decimals
-                            format!("{:.6}", price)
-                        }
-                    };
+                if !skipped_for_validation.is_empty() {
+                    // Log first 3 with full details, then summary
+                    let preview: Vec<String> = skipped_for_validation
+                        .iter()
+                        .take(3)
+                        .map(|d| {
+                            let (symbol, liquidity_usd) = token_metadata
+                                .get(&d.mint)
+                                .map(|(s, l)| (s.as_str(), *l))
+                                .unwrap_or(("?", 0.0));
+                            let mut issue_parts: Vec<String> = d
+                                .issues
+                                .iter()
+                                .map(|i| match i {
+                                    ValidationIssue::NotEnoughSources { available, required } => format!("not_enough_sources available={} required={}", available, required),
+                                    ValidationIssue::SourcesDisagree { max_deviation_pct } => format!("sources_disagree threshold={:.2}%", max_deviation_pct),
+                                    ValidationIssue::NoConsensusPrice => "no_consensus_price".to_string(),
+                                    ValidationIssue::NoSourcesEnabled => "no_sources_enabled".to_string(),
+                                })
+                                .collect::<Vec<_>>();
 
-                    // Log first 3 with full details
-                    let preview: Vec<String> =
-                        skipped_for_deviation
-                            .iter()
-                            .take(3)
-                            .map(|(mint, deviation, old_price, new_price)| {
-                                let (symbol, liquidity_usd) = token_metadata
-                                    .get(mint)
-                                    .map(|(s, l)| (s.as_str(), *l))
-                                    .unwrap_or(("?", 0.0));
+                            if let Some(err) = &d.error {
+                                issue_parts.push(format!("error={}", err));
+                            }
 
-                                const EPSILON: f64 = 1e-15; // Below this is truly zero
-                                let is_stale = new_price.abs() < EPSILON;
+                            if issue_parts.is_empty() {
+                                issue_parts.push("none".to_string());
+                            }
 
-                                if is_stale {
-                                    format!(
-                                    "{} ({}) old={}→new=0 SOL (stale API data) liquidity=${:.0}",
-                                    mint, symbol, format_price(*old_price), liquidity_usd
-                                )
-                                } else {
-                                    format!(
-                                        "{} ({}) dev={:.1}% ({}→{} SOL) liquidity=${:.0}",
-                                        mint,
-                                        symbol,
-                                        deviation,
-                                        format_price(*old_price),
-                                        format_price(*new_price),
-                                        liquidity_usd
-                                    )
-                                }
-                            })
-                            .collect();
+                            let issues_str = issue_parts.join(";");
+                            let sources_str = if d.sources.is_empty() { "none".to_string() } else { d.sources.join(",") };
+                            let consensus_str = d
+                                .consensus
+                                .map(|p| format_price(p))
+                                .unwrap_or_else(|| "n/a".to_string());
+                            format!(
+                                "{} ({}) issues=[{}] sources=[{}] consensus={} SOL liquidity=${:.0}",
+                                d.mint, symbol, issues_str, sources_str, consensus_str, liquidity_usd
+                            )
+                        })
+                        .collect();
 
-                    // Compute summary stats for remaining tokens
-                    let extras = skipped_for_deviation.len().saturating_sub(3);
+                    let extras = skipped_for_validation.len().saturating_sub(3);
                     let summary = if extras > 0 {
-                        const EPSILON: f64 = 1e-15; // Truly zero threshold
-                        const MICROCAP_THRESHOLD: f64 = 1e-6; // Below 0.000001 SOL
-
-                        let stale_count = skipped_for_deviation
-                            .iter()
-                            .skip(3)
-                            .filter(|(_, _, _, new)| new.abs() < EPSILON)
-                            .count();
-
-                        let microcap_count = skipped_for_deviation
-                            .iter()
-                            .skip(3)
-                            .filter(|(_, _, old, new)| {
-                                new.abs() >= EPSILON
-                                    && (old.abs() < MICROCAP_THRESHOLD
-                                        || new.abs() < MICROCAP_THRESHOLD)
-                            })
-                            .count();
-
-                        // Calculate average for all non-stale tokens
-                        let real_deviations: Vec<f64> = skipped_for_deviation
-                            .iter()
-                            .skip(3)
-                            .filter_map(|(_, dev, _, new)| {
-                                if new.abs() >= EPSILON {
-                                    Some(*dev)
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect();
-
-                        let avg_deviation_str = if !real_deviations.is_empty() {
-                            let avg: f64 =
-                                real_deviations.iter().sum::<f64>() / real_deviations.len() as f64;
-                            format!("avg_deviation={:.1}%", avg)
-                        } else {
-                            "all_stale".to_string()
-                        };
-
-                        format!(
-                            " (+{} more: {}, stale={}, microcap={}/{}, check Pool Service health)",
-                            extras, avg_deviation_str, stale_count, microcap_count, extras
-                        )
+                        format!(" (+{} more)", extras)
                     } else {
                         String::new()
                     };
 
-                    let detail = format!("{}{}", preview.join("; "), summary);
-
                     log(
                         LogTag::Monitor,
-                        "PRICE_DEVIATION_SKIP",
+                        "MULTISOURCE_VALIDATION_SKIP",
                         &format!(
-                            "Skipped {} tokens due to price deviation > {:.2}% threshold. Details: {}",
-                            skipped_for_deviation.len(),
-                            deviation_limit,
-                            detail
+                            "Skipped {} tokens after multi-source validation. Details: {}{}",
+                            skipped_for_validation.len(),
+                            preview.join("; "),
+                            summary
                         ),
                     );
                 }
 
                 // Update tokens that were returned by the API
-                if !fetched_tokens.is_empty() {
+                if !accepted_tokens.is_empty() {
                     if is_debug_monitor_enabled() {
                         log(
                             LogTag::Monitor,
@@ -570,14 +514,14 @@ impl TokenMonitor {
                                 "API returned {} tokens out of {} requested ({} accepted)",
                                 returned_mints.len(),
                                 mints.len(),
-                                fetched_tokens.len()
+                                accepted_tokens.len()
                             ),
                         );
                     }
 
                     let store = get_global_token_store();
                     match store
-                        .ingest_tokens(fetched_tokens.clone(), TokenUpdateSource::Monitor)
+                        .ingest_tokens(accepted_tokens.clone(), TokenUpdateSource::Monitor)
                         .await
                     {
                         Ok(stats) => {

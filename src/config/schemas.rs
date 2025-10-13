@@ -1431,6 +1431,80 @@ config_struct! {
             category: "Patterns",
         })]
         max_pattern_length: usize = 8,
+
+        // Multi-source validation configuration
+        #[metadata(field_metadata! {
+            label: "Token Sources",
+            hint: "Multi-source validation and per-source toggles",
+            impact: "critical",
+            category: "Sources",
+        })]
+        sources: TokenSourcesConfig = TokenSourcesConfig::default(),
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TOKEN SOURCES CONFIGURATION (nested under TokensConfig)
+// ----------------------------------------------------------------------------
+
+config_struct! {
+    /// Enable/priority toggle for a specific source
+    pub struct SourceToggleConfig {
+        enabled: bool = true,
+        priority: i32 = 1,
+    }
+}
+
+config_struct! {
+    /// Multi-source validation settings
+    pub struct TokenSourcesConfig {
+        #[metadata(field_metadata! {
+            label: "Enable Multi-Source",
+            hint: "Route validation through multi-source consensus",
+            impact: "critical",
+            category: "Sources",
+        })]
+        enable_multi_source: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "Min Sources",
+            hint: "Minimum agreeing sources required",
+            min: 1,
+            max: 5,
+            step: 1,
+            unit: "sources",
+            impact: "high",
+            category: "Sources",
+        })]
+        min_sources: usize = 2,
+
+        #[metadata(field_metadata! {
+            label: "Max Inter-Source Deviation",
+            hint: "Maximum allowed deviation between sources",
+            min: 1,
+            max: 100,
+            step: 1,
+            unit: "%",
+            impact: "high",
+            category: "Sources",
+        })]
+        max_inter_source_deviation: f64 = 20.0,
+
+        #[metadata(field_metadata! {
+            label: "DexScreener Source",
+            hint: "Enable and set priority for DexScreener",
+            impact: "critical",
+            category: "Sources",
+        })]
+        dexscreener: SourceToggleConfig = SourceToggleConfig { enabled: true, priority: 1 },
+
+        #[metadata(field_metadata! {
+            label: "GeckoTerminal Source",
+            hint: "Enable and set priority for GeckoTerminal",
+            impact: "high",
+            category: "Sources",
+        })]
+        geckoterminal: SourceToggleConfig = SourceToggleConfig { enabled: true, priority: 2 },
     }
 }
 

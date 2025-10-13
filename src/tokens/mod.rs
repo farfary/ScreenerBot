@@ -17,6 +17,7 @@ pub mod patterns;
 pub mod raydium;
 pub mod security;
 pub mod security_db;
+pub mod sources;
 pub mod store;
 pub mod summary;
 pub mod types;
