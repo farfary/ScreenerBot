@@ -9,6 +9,7 @@ use crate::global::is_debug_entry_enabled;
 use crate::learner::get_learning_integration;
 use crate::logger::{log, LogTag};
 use crate::pools::{check_price_history_quality, get_pool_price, get_price_history, PriceResult};
+use crate::tokens::store::get_global_token_store;
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use std::time::{Duration, Instant};
@@ -779,8 +780,8 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
     // Dynamic activity score based on cached token txns (m5 buys)
     let activity_score: f64 = {
         let mut txns_m5_buys: f64 = 0.0;
-        if let Some(token) = crate::tokens::get_token_from_db(&price_info.mint).await {
-            if let Some(txns) = token.txns.as_ref() {
+        if let Some(snapshot) = get_global_token_store().get(&price_info.mint) {
+            if let Some(txns) = snapshot.data.txns.as_ref() {
                 if let Some(m5) = txns.m5.as_ref() {
                     txns_m5_buys = m5.buys.unwrap_or(0) as f64;
                 }
@@ -921,7 +922,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         let mut h24_change_opt: Option<f64> = None;
         let mut h1_buys: i64 = 0;
         let mut h1_sells: i64 = 0;
-        if let Some(snap) = get_token_market_snapshot(&price_info.mint).await {
+        if let Some(snap) = get_token_market_snapshot(&price_info.mint) {
             h24_change_opt = snap.price_change_h24;
             h1_buys = snap.txns_h1_buys.unwrap_or(0);
             h1_sells = snap.txns_h1_sells.unwrap_or(0);
@@ -1991,8 +1992,9 @@ struct TokenMarketSnapshot {
     txns_h1_sells: Option<i64>,
 }
 
-async fn get_token_market_snapshot(mint: &str) -> Option<TokenMarketSnapshot> {
-    let token = crate::tokens::get_token_from_db(mint).await?;
+fn get_token_market_snapshot(mint: &str) -> Option<TokenMarketSnapshot> {
+    let snapshot = get_global_token_store().get(mint)?;
+    let token = &snapshot.data;
     let price_change_h24 = token.price_change.as_ref().and_then(|pc| pc.h24);
     let (txns_h1_buys, txns_h1_sells) = token
         .txns
