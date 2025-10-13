@@ -73,8 +73,6 @@ pub const ENABLE_POOL_PRICES: bool = true;
 pub const USE_DEXSCREENER_PRIMARY: bool = true;
 
 /// Price validation thresholds
-pub const MAX_PRICE_DEVIATION_PERCENT: f64 = 50.0; // Maximum deviation between sources
-
 // =============================================================================
 // TOKENS SYSTEM MANAGER
 // =============================================================================

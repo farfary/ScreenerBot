@@ -1255,19 +1255,6 @@ config_struct! {
         })]
         max_tokens_per_batch: usize = 30,
 
-        // Price validation
-        #[metadata(field_metadata! {
-            label: "Max Price Deviation",
-            hint: "Max allowed price deviation for validation",
-            min: 1,
-            max: 100,
-            step: 1,
-            unit: "%",
-            impact: "high",
-            category: "Validation",
-        })]
-        max_price_deviation_percent: f64 = 50.0,
-
         // Decimals
         #[metadata(field_metadata! {
             label: "Max Accounts Per RPC Call",
