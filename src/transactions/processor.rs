@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use crate::global::is_debug_transactions_enabled;
 use crate::logger::{log, LogTag};
 use crate::pools::types::SOL_MINT;
-use crate::tokens::{decimals::lamports_to_sol, get_token_decimals, get_token_from_db};
+use crate::tokens::{decimals::lamports_to_sol, get_token_decimals};
 use crate::transactions::{
     analyzer::TransactionAnalyzer, fetcher::TransactionFetcher, program_ids::*, types::*, utils::*,
 };
