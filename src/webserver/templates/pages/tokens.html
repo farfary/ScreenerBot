@@ -2349,6 +2349,12 @@
 
     let mode = (options && options.mode) || "replace";
     if (mode === "update") {
+      const stateItems = Array.isArray(tokensTableState.items)
+        ? tokensTableState.items
+        : [];
+      if (stateItems.length > 0) {
+        tokens = stateItems;
+      }
       mode = "replace";
     }
     const table = tbody.closest("table");
