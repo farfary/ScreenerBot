@@ -15,12 +15,10 @@ pub mod geckoterminal;
 pub mod monitor;
 pub mod patterns;
 pub mod raydium;
-pub mod realtime;
 pub mod security;
 pub mod security_db;
 pub mod store;
 pub mod summary;
-pub mod summary_cache;
 pub mod types;
 
 // Re-export main types and functions
@@ -42,9 +40,6 @@ pub use patterns::{
     log_pattern_analysis_results, refresh_pattern_analysis, PatternAnalysisSummary, PatternType,
     PlatformCategory, TokenCategorization, TokenPattern, TokenPatternAnalyzer,
 };
-pub use realtime::{
-    emit_token_removed, emit_token_summary, subscribe_token_updates, TokenRealtimeEvent,
-};
 pub use security::{
     // Re-export helpers used by bins/tools
     get_security_analyzer,
@@ -60,10 +55,6 @@ pub use security_db::{
     parse_rugcheck_response, HolderInfo, MarketInfo, SecurityDatabase, SecurityInfo, SecurityRisk,
 };
 pub use summary::{summarize_tokens, token_to_summary, TokenSummary, TokenSummaryContext};
-pub use summary_cache::{
-    all as cached_summaries, get as get_cached_summary,
-    prewarm_from_database as prewarm_summary_cache, stats as summary_cache_stats,
-};
 pub use types::*;
 
 // Re-export from pools module for compatibility

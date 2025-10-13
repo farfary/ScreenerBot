@@ -3,8 +3,10 @@ use crate::global::is_debug_monitor_enabled;
 /// Updates existing tokens based on liquidity priority and time constraints
 use crate::logger::{log, LogTag};
 use crate::tokens::{
-    config::with_tokens_config, database::TokenDatabase, dexscreener::get_global_dexscreener_api,
-    emit_token_removed, emit_token_summary, summarize_tokens,
+    config::with_tokens_config,
+    database::TokenDatabase,
+    dexscreener::get_global_dexscreener_api,
+    store::{get_global_token_store, TokenUpdateSource},
 };
 use chrono::{DateTime, Utc};
 use futures::TryFutureExt;
@@ -448,10 +450,33 @@ impl TokenMonitor {
                                 );
                             }
 
+                            // Ingest into token store - automatically emits events
                             if !fetched_tokens.is_empty() {
-                                let summaries = summarize_tokens(&fetched_tokens).await;
-                                for summary in summaries {
-                                    emit_token_summary(summary);
+                                let store = get_global_token_store();
+                                match store
+                                    .ingest_api_tokens(
+                                        fetched_tokens.clone(),
+                                        TokenUpdateSource::Monitor,
+                                    )
+                                    .await
+                                {
+                                    Ok(stats) => {
+                                        if is_debug_monitor_enabled() {
+                                            log(
+                                                LogTag::Monitor,
+                                                "TOKEN_STORE_INGEST",
+                                                &format!("Ingested {} tokens (inserted={}, updated={}, removed={})",
+                                                    stats.total_processed, stats.inserted, stats.updated, stats.removed),
+                                            );
+                                        }
+                                    }
+                                    Err(e) => {
+                                        log(
+                                            LogTag::Monitor,
+                                            "ERROR",
+                                            &format!("Failed to ingest tokens into store: {}", e),
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -523,8 +548,10 @@ impl TokenMonitor {
                                     );
                                 }
 
+                                // Remove from token store - automatically emits removal events
+                                let store = get_global_token_store();
                                 for mint in &safe_to_delete {
-                                    emit_token_removed(mint.clone());
+                                    store.remove(mint, TokenUpdateSource::Monitor);
                                 }
                             }
                             Err(e) => {

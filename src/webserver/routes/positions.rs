@@ -11,8 +11,8 @@ use std::sync::Arc;
 
 use crate::logger::{log, LogTag};
 use crate::positions;
-use crate::tokens::database::TokenDatabase;
 use crate::tokens::security_db::SecurityDatabase;
+use crate::tokens::store::get_global_token_store;
 use crate::transactions::{
     get_transaction, TokenTransfer, Transaction, TransactionDirection, TransactionStatus,
     TransactionType,
@@ -916,12 +916,11 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
         win_rate: closed_positions.2,
     });
 
-    // 2. Get token info from database
-    let api_token = TokenDatabase::new()
-        .ok()
-        .and_then(|db| db.get_token_by_mint(&mint).ok().flatten());
+    // 2. Get token info from in-memory store (instant lookup)
+    let snapshot = get_global_token_store().get(&mint);
+    let api_token = snapshot.as_ref().map(|s| &s.data);
 
-    let token_info = api_token.as_ref().map(|token| TokenInfo {
+    let token_info = api_token.map(|token| TokenInfo {
         symbol: token.symbol.clone(),
         name: token.name.clone(),
         decimals,

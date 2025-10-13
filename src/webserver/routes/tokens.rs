@@ -13,7 +13,7 @@ use crate::{
     global::is_debug_webserver_enabled,
     logger::{log, LogTag},
     pools, positions,
-    tokens::{blacklist, database::TokenDatabase, summary::TokenSummary, SecurityDatabase},
+    tokens::{blacklist, store::get_global_token_store, summary::TokenSummary, SecurityDatabase},
     webserver::{
         state::AppState,
         utils::{error_response, success_response},
@@ -326,68 +326,39 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         );
     }
 
-    // Fetch token from database using async wrapper (prevents blocking async runtime)
-    let db_start = std::time::Instant::now();
-    let token = match TokenDatabase::get_token_by_mint_async(&mint).await {
-        Ok(Some(t)) => {
+    // Fetch token from in-memory store (instant lookup, no DB I/O)
+    let lookup_start = std::time::Instant::now();
+    let snapshot = match get_global_token_store().get(&mint) {
+        Some(snap) => {
             if is_debug_webserver_enabled() {
                 log(
                     LogTag::Webserver,
-                    "TOKEN_DETAIL_DB",
-                    &format!("mint={} elapsed={}ms", mint, db_start.elapsed().as_millis()),
+                    "TOKEN_DETAIL_CACHE",
+                    &format!(
+                        "mint={} elapsed={}μs",
+                        mint,
+                        lookup_start.elapsed().as_micros()
+                    ),
                 );
             }
-            t
+            snap
         }
-        Ok(None) => {
+        None => {
             if is_debug_webserver_enabled() {
                 log(
                     LogTag::Webserver,
                     "TOKEN_DETAIL_NOT_FOUND",
-                    &format!("mint={} elapsed={}ms", mint, db_start.elapsed().as_millis()),
+                    &format!(
+                        "mint={} elapsed={}μs",
+                        mint,
+                        lookup_start.elapsed().as_micros()
+                    ),
                 );
             }
             return Json(TokenDetailResponse {
                 mint: mint.clone(),
                 symbol: "NOT_FOUND".to_string(),
-                name: Some("Token not in database".to_string()),
-                logo_url: None,
-                website: None,
-                verified: false,
-                tags: vec![],
-                price_sol: None,
-                price_confidence: None,
-                price_updated_at: None,
-                liquidity_usd: None,
-                volume_24h: None,
-                fdv: None,
-                market_cap: None,
-                price_change_h1: None,
-                price_change_h24: None,
-                pool_address: None,
-                pool_dex: None,
-                pool_reserves_sol: None,
-                pool_reserves_token: None,
-                security_score: None,
-                security_score_normalized: None,
-                rugged: None,
-                mint_authority: None,
-                freeze_authority: None,
-                total_holders: None,
-                top_10_concentration: None,
-                security_risks: vec![],
-                has_ohlcv: false,
-                has_pool_price: false,
-                has_open_position: false,
-                blacklisted: false,
-                timestamp: chrono::Utc::now().to_rfc3339(),
-            });
-        }
-        Err(_) => {
-            return Json(TokenDetailResponse {
-                mint: mint.clone(),
-                symbol: "ERROR".to_string(),
-                name: Some("Database error".to_string()),
+                name: Some("Token not in cache".to_string()),
                 logo_url: None,
                 website: None,
                 verified: false,
@@ -421,6 +392,8 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
             });
         }
     };
+
+    let token = &snapshot.data; // ApiToken from cache
 
     // Get enrichment data (all sync or from cache)
     let pool_start = std::time::Instant::now();
@@ -619,9 +592,9 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     }
 
     Json(TokenDetailResponse {
-        mint: token.mint,
-        symbol: token.symbol,
-        name: Some(token.name),
+        mint: token.mint.clone(),
+        symbol: token.symbol.clone(),
+        name: Some(token.name.clone()),
         logo_url: token.info.as_ref().and_then(|i| i.image_url.clone()),
         website: token
             .info
@@ -634,7 +607,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
             .as_ref()
             .map(|l| l.iter().any(|label| label.to_lowercase() == "verified"))
             .unwrap_or(false),
-        tags: token.labels.unwrap_or_default(),
+        tags: token.labels.clone().unwrap_or_default(),
         price_sol,
         price_confidence,
         price_updated_at,
