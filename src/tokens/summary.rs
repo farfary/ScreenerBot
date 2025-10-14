@@ -125,7 +125,7 @@ pub fn token_to_summary(token: &Token, caches: &TokenSummaryContext) -> TokenSum
         mint: token.mint.clone(),
         symbol: token.symbol.clone(),
         name: Some(token.name.clone()),
-        logo_url: token.info.as_ref().and_then(|i| i.image_url.clone()),
+        logo_url: token.logo_url.clone(),
         price_sol,
         price_updated_at,
         liquidity_usd: token.liquidity.as_ref().and_then(|l| l.usd),
