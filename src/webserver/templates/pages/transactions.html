@@ -1,19 +1,25 @@
 <div class="page-table">
   <style>
     .transactions-toolbar {
-      margin-bottom: 16px;
+      margin-bottom: 8px;
     }
 
     .transactions-toolbar .toolbar-actions {
-      gap: 10px;
+      gap: 8px;
     }
 
     .transactions-toolbar .toolbar-row--filters {
       align-items: flex-end;
+      gap: 10px;
     }
 
     .transactions-toolbar .toolbar-row--filters .toolbar-field--grow {
-      min-width: 280px;
+      min-width: 220px;
+      flex: 1 1 220px;
+    }
+
+    .transactions-toolbar .toolbar-row--filters .toolbar-field--compact {
+      min-width: 110px;
     }
 
     .transactions-toolbar .advanced-toggle {
@@ -22,13 +28,13 @@
 
     .transactions-toolbar .advanced-panel {
       border-top: 1px dashed var(--border-color);
-      padding-top: 12px;
+      padding-top: 8px;
     }
 
     .transactions-toolbar .advanced-panel[data-expanded="true"] {
       display: flex;
       flex-wrap: wrap;
-      gap: 16px;
+      gap: 10px;
       align-items: flex-end;
     }
 
@@ -39,37 +45,37 @@
     .transactions-toolbar .date-range-inputs {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
     }
 
     .transactions-toolbar .range-separator {
       color: var(--text-muted);
-      font-size: 0.85em;
+      font-size: 0.8em;
     }
 
     .transactions-summary-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 10px;
-      margin-bottom: 14px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 8px;
+      margin-bottom: 8px;
     }
 
     .transactions-summary-card {
       display: flex;
       flex-direction: column;
-      gap: 4px;
-      padding: 10px 12px;
+      gap: 2px;
+      padding: 6px 10px;
       border: 1px solid var(--border-color);
-      border-radius: 8px;
+      border-radius: 6px;
       background: var(--bg-card);
     }
 
     .transactions-summary-card .summary-label {
-      font-size: 0.75em;
+      font-size: 0.7em;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.06em;
       color: var(--text-muted);
-      margin-bottom: 2px;
+      margin-bottom: 0;
     }
 
     .transactions-summary-card .summary-value {
@@ -83,20 +89,23 @@
         "Courier New",
         monospace
       );
-      font-size: 1.05em;
+      font-size: 0.95em;
+      font-weight: 600;
       color: var(--text-primary);
+      line-height: 1.3;
     }
 
     .transactions-summary-card .summary-subvalue {
       color: var(--text-secondary);
-      font-size: 0.85em;
+      font-size: 0.75em;
       display: flex;
-      gap: 6px;
+      gap: 4px;
       flex-wrap: wrap;
+      line-height: 1.4;
     }
 
     .transactions-summary-card .summary-subvalue code {
-      font-size: 0.95em;
+      font-size: 0.9em;
     }
 
     .pill {
@@ -1339,7 +1348,7 @@
       };
 
       // Execute initialization immediately (works for both initial load and SPA navigation)
-      initTransactionsPage();
+      window.initTransactionsPage();
     })();
   </script>
 </div>
