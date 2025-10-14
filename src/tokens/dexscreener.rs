@@ -1030,7 +1030,7 @@ impl DexScreenerApi {
         let market_cap = pair_data.get("marketCap").and_then(|v| v.as_f64());
         let pair_created_at = pair_data.get("pairCreatedAt").and_then(|v| v.as_i64());
         let boosts = self.parse_boosts(pair_data.get("boosts"));
-        let info = self.parse_info(pair_data.get("info"), &mint, &name, &symbol);
+        let info = self.parse_info(base_token.get("info"), &mint, &name, &symbol);
         let labels = self.parse_labels(pair_data.get("labels"));
 
         Ok(Token {
