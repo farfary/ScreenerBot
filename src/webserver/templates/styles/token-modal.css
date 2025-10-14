@@ -77,6 +77,75 @@
   gap: 2px;
 }
 
+.token-modal .modal-token-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.token-modal .modal-token-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.65em;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.token-modal .modal-token-badge--verified {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.token-modal .modal-token-badge--rugged {
+  background: rgba(239, 68, 68, 0.18);
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+.token-modal .modal-token-badge--blacklisted {
+  background: rgba(185, 28, 28, 0.18);
+  color: #fca5a5;
+  border-color: rgba(185, 28, 28, 0.4);
+}
+
+.token-modal .modal-token-badge--pool {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.token-modal .modal-token-badge--position {
+  background: rgba(250, 204, 21, 0.18);
+  color: #facc15;
+  border-color: rgba(234, 179, 8, 0.35);
+}
+
+.token-modal .modal-token-badge--score {
+  background: rgba(129, 140, 248, 0.15);
+  color: #a5b4fc;
+  border-color: rgba(129, 140, 248, 0.35);
+}
+
+.token-modal .modal-token-tagline {
+  display: none;
+  margin-top: 2px;
+  color: #94a3b8;
+  font-size: 0.92em;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.token-modal .modal-token-tagline.is-visible {
+  display: block;
+}
+
 .token-modal .modal-token-tags {
   display: flex;
   flex-wrap: wrap;
@@ -402,6 +471,23 @@
   color: #ef4444;
 }
 
+.token-modal .token-text-card {
+  margin-bottom: 14px;
+}
+
+.token-modal .token-description {
+  margin: 6px 0 0;
+  color: #e2e8f0;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.token-modal .token-description.is-empty {
+  color: #64748b;
+  font-style: italic;
+}
+
 @media (max-width: 1200px) {
   .token-modal .token-detail-body {
     flex-direction: column;
@@ -695,6 +781,16 @@
   background: #334155;
   border-color: #38bdf8;
   transform: translateX(4px);
+}
+
+.token-modal .quick-action-btn--disabled,
+.token-modal .quick-action-btn:disabled,
+.token-modal .quick-action-btn:disabled:hover {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+  transform: none;
+  border-color: #334155;
 }
 
 /* Security Score Badge */

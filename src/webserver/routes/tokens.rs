@@ -76,12 +76,25 @@ pub struct TokenSocialLink {
     pub url: String,
 }
 
+fn normalize_optional_text(value: Option<String>) -> Option<String> {
+    value.and_then(|raw| {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
 /// Token detail response
 #[derive(Debug, Serialize)]
 pub struct TokenDetailResponse {
     pub mint: String,
     pub symbol: String,
     pub name: Option<String>,
+    pub tagline: Option<String>,
+    pub description: Option<String>,
     pub logo_url: Option<String>,
     pub website: Option<String>,
     pub verified: bool,
@@ -422,6 +435,8 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
                 mint: mint.clone(),
                 symbol: "NOT_FOUND".to_string(),
                 name: Some("Token not in cache".to_string()),
+                tagline: None,
+                description: None,
                 logo_url: None,
                 website: None,
                 verified: false,
@@ -815,10 +830,20 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         _ => None,
     };
 
+    let info_header =
+        normalize_optional_text(token.info.as_ref().and_then(|info| info.header.clone()));
+    let info_summary =
+        normalize_optional_text(token.info.as_ref().and_then(|info| info.open_graph.clone()));
+    let tagline = info_header.clone().or_else(|| info_summary.clone());
+    let description =
+        normalize_optional_text(token.description.clone()).or_else(|| info_summary.clone());
+
     Json(TokenDetailResponse {
         mint: token.mint.clone(),
         symbol: token.symbol.clone(),
         name: Some(token.name.clone()),
+        tagline,
+        description,
         logo_url,
         website: primary_website,
         verified: token.is_verified,

@@ -391,6 +391,24 @@
         : ""
       : "";
 
+    const taglineValue = pick(detailData.tagline);
+    const descriptionText = pick(detailData.description);
+    const websiteUrl = pick(detailData.website);
+    const boostsActive = toNumber(detailData.boosts_active);
+    const securityScore = toNumber(detailData.security_score);
+    const rugged = detailData.rugged === true;
+    const isVerified = detailData.verified === true;
+    const isBlacklisted = detailData.blacklisted ?? token.blacklisted;
+
+    const statusFlags = {
+      has_pool_price: detailData.has_pool_price ?? token.has_pool_price,
+      has_ohlcv: detailData.has_ohlcv ?? token.has_ohlcv,
+      has_open_position:
+        detailData.has_open_position ?? token.has_open_position,
+      blacklisted: isBlacklisted,
+      boosts_active: boostsActive,
+    };
+
     const logoEl = document.getElementById("modalTokenLogo");
     const logoUrl = pick(detailData.logo_url, token.logo_url);
     if (logoEl) {
@@ -400,6 +418,40 @@
       } else {
         logoEl.src = "";
         logoEl.style.display = "none";
+      }
+    }
+
+    const taglineEl = document.getElementById("modalTokenTagline");
+    if (taglineEl) {
+      if (taglineValue) {
+        taglineEl.textContent = taglineValue;
+        taglineEl.classList.add("is-visible");
+      } else {
+        taglineEl.textContent = "";
+        taglineEl.classList.remove("is-visible");
+      }
+    }
+
+    const headerBadgesEl = document.getElementById("modalTokenBadges");
+    if (headerBadgesEl) {
+      headerBadgesEl.innerHTML = renderModalHeaderBadges({
+        verified: isVerified,
+        rugged,
+        blacklisted: isBlacklisted,
+        securityScore,
+        hasPoolPrice: statusFlags.has_pool_price,
+        hasOpenPosition: statusFlags.has_open_position,
+      });
+    }
+
+    const websiteBtn = document.getElementById("action-website");
+    if (websiteBtn) {
+      if (websiteUrl) {
+        websiteBtn.disabled = false;
+        websiteBtn.classList.remove("quick-action-btn--disabled");
+      } else {
+        websiteBtn.disabled = true;
+        websiteBtn.classList.add("quick-action-btn--disabled");
       }
     }
 
@@ -459,6 +511,17 @@
         ? Utils.formatCurrencyUSD(priceUsd, { fallback: "—" })
         : "—"
     );
+
+    const descriptionEl = document.getElementById("detail-description");
+    if (descriptionEl) {
+      if (descriptionText) {
+        descriptionEl.textContent = descriptionText;
+        descriptionEl.classList.remove("is-empty");
+      } else {
+        descriptionEl.textContent = "No project overview available.";
+        descriptionEl.classList.add("is-empty");
+      }
+    }
     const summaryDeltaEl = document.getElementById("summary-change-24h");
     if (summaryDeltaEl) {
       summaryDeltaEl.textContent =
@@ -633,6 +696,12 @@
         ? Utils.formatTimestamp(detailData.last_updated, { fallback: "—" })
         : "—"
     );
+    Utils.setText(
+      "detail-boosts",
+      boostsActive !== null
+        ? String(Math.max(0, Math.round(boostsActive)))
+        : "—"
+    );
 
     Utils.setText(
       "detail-liquidity",
@@ -711,8 +780,6 @@
       "No pool labels"
     );
 
-    const securityScore = toNumber(detailData.security_score);
-    const rugged = detailData.rugged === true;
     const badge = document.getElementById("security-badge");
     if (badge) {
       const statusClass = rugged
@@ -801,13 +868,6 @@
         link.platform ? link.platform.toUpperCase() : extractDomain(link.url),
     });
 
-    const statusFlags = {
-      has_pool_price: detailData.has_pool_price ?? token.has_pool_price,
-      has_ohlcv: detailData.has_ohlcv ?? token.has_ohlcv,
-      has_open_position:
-        detailData.has_open_position ?? token.has_open_position,
-      blacklisted: detailData.blacklisted ?? token.blacklisted,
-    };
     Utils.setHtml("sidebar-badges", renderSidebarBadges(statusFlags));
 
     const modal = document.getElementById("tokenModal");
@@ -1470,6 +1530,52 @@
     }
   }
 
+  function renderModalHeaderBadges(options) {
+    if (!options) return "";
+    const badges = [];
+
+    if (options.blacklisted) {
+      badges.push(
+        '<span class="modal-token-badge modal-token-badge--blacklisted">🚫 Blacklisted</span>'
+      );
+    }
+
+    if (options.rugged && !options.blacklisted) {
+      badges.push(
+        '<span class="modal-token-badge modal-token-badge--rugged">⚠️ Rug Risk</span>'
+      );
+    }
+
+    if (options.verified) {
+      badges.push(
+        '<span class="modal-token-badge modal-token-badge--verified">✅ Verified</span>'
+      );
+    }
+
+    if (Number.isFinite(options.securityScore)) {
+      const scoreText = Utils.escapeHtml(
+        String(Math.round(options.securityScore))
+      );
+      badges.push(
+        `<span class="modal-token-badge modal-token-badge--score">🛡️ Score ${scoreText}</span>`
+      );
+    }
+
+    if (options.hasPoolPrice) {
+      badges.push(
+        '<span class="modal-token-badge modal-token-badge--pool">💧 Pool Price</span>'
+      );
+    }
+
+    if (options.hasOpenPosition) {
+      badges.push(
+        '<span class="modal-token-badge modal-token-badge--position">📊 Position</span>'
+      );
+    }
+
+    return badges.join("");
+  }
+
   function renderSidebarBadges(token) {
     const badges = [];
     if (token?.has_pool_price)
@@ -1483,6 +1589,13 @@
     if (token?.has_open_position)
       badges.push(
         '<span class="badge" style="background:#fde68a;color:#92400e;border:1px solid #fcd34d;">POS</span>'
+      );
+    const boostCount = Number(token?.boosts_active ?? 0);
+    if (Number.isFinite(boostCount) && boostCount > 0)
+      badges.push(
+        `<span class="badge" style="background:#ede9fe;color:#5b21b6;border:1px solid #ddd6fe;">BOOST ×${Math.round(
+          boostCount
+        )}</span>`
       );
     if (token?.blacklisted)
       badges.push(
@@ -1725,6 +1838,23 @@
       tokenChartManager = null;
     }
 
+    const websiteBtn = document.getElementById("action-website");
+    if (websiteBtn) {
+      websiteBtn.disabled = true;
+      websiteBtn.classList.add("quick-action-btn--disabled");
+    }
+
+    const taglineEl = document.getElementById("modalTokenTagline");
+    if (taglineEl) {
+      taglineEl.textContent = "";
+      taglineEl.classList.remove("is-visible");
+    }
+
+    const headerBadgesEl = document.getElementById("modalTokenBadges");
+    if (headerBadgesEl) {
+      headerBadgesEl.innerHTML = "";
+    }
+
     currentModalMint = null;
     tokenModalData = null;
   }
@@ -1826,6 +1956,28 @@
   function copyMintFromModal() {
     if (!currentModalMint) return;
     Utils.copyMint(currentModalMint);
+  }
+
+  function openWebsiteFromModal() {
+    if (!tokenModalData || !tokenModalData.detail) {
+      Utils.showToast("ℹ️ No website available", "info");
+      return;
+    }
+    const rawUrl = tokenModalData.detail.website;
+    if (!rawUrl || typeof rawUrl !== "string" || !rawUrl.trim().length) {
+      Utils.showToast("ℹ️ No website available", "info");
+      return;
+    }
+    try {
+      let resolved = rawUrl.trim();
+      if (!/^https?:\/\//i.test(resolved)) {
+        resolved = `https://${resolved}`;
+      }
+      window.open(resolved, "_blank", "noopener");
+    } catch (error) {
+      console.error("Failed to open website", error);
+      Utils.showToast("❌ Failed to open website", "error");
+    }
   }
 
   function openDexScreenerFromModal() {
@@ -3768,6 +3920,8 @@
         <div class="modal-token-info">
           <div class="modal-token-symbol" id="modalTokenSymbol">SONIC</div>
           <div class="modal-token-name" id="modalTokenName">Sonic SVM</div>
+          <div class="modal-token-tagline" id="modalTokenTagline"></div>
+          <div class="modal-token-badges" id="modalTokenBadges"></div>
           <div class="modal-token-tags" id="modalTokenTags"></div>
         </div>
       </div>
@@ -3850,6 +4004,13 @@
               </div>
             </div>
 
+            <div class="metric-card metric-card--wide token-text-card">
+              <div class="metric-card-header">📝 Token Overview</div>
+              <div class="token-description is-empty" id="detail-description">
+                No project overview available.
+              </div>
+            </div>
+
             <div class="metrics-grid metrics-grid--responsive">
               <div class="metric-card">
                 <div class="metric-card-header">🧾 Token Profile</div>
@@ -3883,6 +4044,10 @@
                 <div class="metric-row">
                   <span class="metric-label">Last Updated</span>
                   <span class="metric-value" id="detail-last-updated">—</span>
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">Boosts Active</span>
+                  <span class="metric-value" id="detail-boosts">—</span>
                 </div>
               </div>
 
@@ -4136,6 +4301,14 @@
               onclick="copyMintFromModal()"
             >
               📋 Copy Mint Address
+            </button>
+            <button
+              class="quick-action-btn quick-action-btn--disabled"
+              id="action-website"
+              onclick="openWebsiteFromModal()"
+              disabled
+            >
+              🌐 Open Website →
             </button>
             <button
               class="quick-action-btn"
