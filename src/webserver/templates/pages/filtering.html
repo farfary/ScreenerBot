@@ -581,69 +581,7 @@
         }
       }
 
-      function formatNumber(value, decimals = 0) {
-        const num = Number(value);
-        if (!Number.isFinite(num)) {
-          return "—";
-        }
-        try {
-          if (window.Utils && typeof Utils.formatNumber === "function") {
-            return Utils.formatNumber(num, {
-              decimals,
-              fallback: "—",
-              useGrouping: true,
-            });
-          }
-        } catch (_) {}
-        return num.toLocaleString("en-US", {
-          minimumFractionDigits: decimals,
-          maximumFractionDigits: decimals,
-        });
-      }
-
-      function formatCurrency(value) {
-        const num = Number(value);
-        if (!Number.isFinite(num)) {
-          return "—";
-        }
-        try {
-          if (window.Utils && typeof Utils.formatCurrencyUSD === "function") {
-            return Utils.formatCurrencyUSD(num, { fallback: "—" });
-          }
-        } catch (_) {}
-        if (Math.abs(num) >= 1_000_000_000) {
-          return `$${(num / 1_000_000_000).toFixed(2)}B`;
-        }
-        if (Math.abs(num) >= 1_000_000) {
-          return `$${(num / 1_000_000).toFixed(2)}M`;
-        }
-        if (Math.abs(num) >= 1_000) {
-          return `$${(num / 1_000).toFixed(2)}K`;
-        }
-        return `$${num.toFixed(2)}`;
-      }
-
-      function formatSeconds(seconds) {
-        const num = Number(seconds);
-        if (!Number.isFinite(num)) {
-          return "—";
-        }
-        if (num < 60) {
-          return `${num}s`;
-        }
-        const minutes = num / 60;
-        if (Number.isInteger(minutes)) {
-          return `${minutes}m`;
-        }
-        if (minutes < 120) {
-          return `${minutes.toFixed(1)}m`;
-        }
-        const hours = minutes / 60;
-        if (Number.isInteger(hours)) {
-          return `${hours}h`;
-        }
-        return `${hours.toFixed(1)}h`;
-      }
+      // Use Utils.formatNumber, Utils.formatCurrencyUSD, Utils.formatSecondsToTime
 
       function renderSummary() {
         const el = state.dom.summary;

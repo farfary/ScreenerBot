@@ -576,35 +576,7 @@
 
     const el = (id) => document.getElementById(id);
 
-    function formatSol(value) {
-      if (value == null || Number.isNaN(value)) return "—";
-      const abs = Math.abs(value);
-      if (abs >= 1000) {
-        return `${COMPACT_FORMAT.format(value)} SOL`;
-      }
-      return `${SOL_FORMAT.format(value)} SOL`;
-    }
-
-    function formatNumber(value, fallback = "—") {
-      if (value == null || Number.isNaN(value)) return fallback;
-      if (Math.abs(value) >= 1000000) {
-        return COMPACT_FORMAT.format(value);
-      }
-      return NUMBER_FORMAT.format(value);
-    }
-
-    function setText(id, value) {
-      const node = el(id);
-      if (node) {
-        node.textContent = value;
-      }
-    }
-
-    function formatMintLabel(mint) {
-      if (!mint) return "—";
-      if (mint.length <= 10) return mint;
-      return `${mint.slice(0, 4)}…${mint.slice(-4)}`;
-    }
+    // Use Utils.formatSol, Utils.formatNumber, Utils.setText, Utils.formatAddressCompact
 
     function logoSources(mint) {
       if (!mint) {

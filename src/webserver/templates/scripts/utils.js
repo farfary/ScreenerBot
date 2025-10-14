@@ -972,6 +972,48 @@
     window.open(`https://solscan.io/token/${mint}`, "_blank");
   }
 
+  function formatSignatureCompact(signature, options = {}) {
+    if (!signature) return "—";
+    const start = options.start ?? 6;
+    const end = options.end ?? 6;
+    if (signature.length <= start + end + 1) {
+      return signature;
+    }
+    return `${signature.slice(0, start)}…${signature.slice(-end)}`;
+  }
+
+  function formatAddressCompact(address, options = {}) {
+    if (!address) return "—";
+    const start = options.start ?? 4;
+    const end = options.end ?? 4;
+    if (address.length <= start + end + 1) {
+      return address;
+    }
+    return `${address.slice(0, start)}…${address.slice(-end)}`;
+  }
+
+  function formatSecondsToTime(seconds, fallback = "—") {
+    const num = coerceNumber(seconds);
+    if (!Number.isFinite(num) || num < 0) {
+      return fallback;
+    }
+    if (num < 60) {
+      return `${num}s`;
+    }
+    const minutes = num / 60;
+    if (Number.isInteger(minutes)) {
+      return `${minutes}m`;
+    }
+    if (minutes < 120) {
+      return `${minutes.toFixed(1)}m`;
+    }
+    const hours = minutes / 60;
+    if (Number.isInteger(hours)) {
+      return `${hours}h`;
+    }
+    return `${hours.toFixed(1)}h`;
+  }
+
   const Utils = {
     formatNumber,
     formatCompactNumber,
@@ -988,6 +1030,9 @@
     formatUptime,
     formatBytes,
     formatDuration,
+    formatSignatureCompact,
+    formatAddressCompact,
+    formatSecondsToTime,
     escapeHtml,
     setText,
     setHtml,

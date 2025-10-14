@@ -460,53 +460,7 @@
           .replace(/^-+|-+$/g, "");
       }
 
-      function formatSignatureCompact(signature, options) {
-        if (!signature) return "—";
-        const start = options?.start ?? 6;
-        const end = options?.end ?? 6;
-        if (signature.length <= start + end + 1) {
-          return signature;
-        }
-        return `${signature.slice(0, start)}…${signature.slice(-end)}`;
-      }
-
-      function formatNumber(value, decimals = 0, fallback = "0") {
-        const num = Number(value);
-        if (!Number.isFinite(num)) {
-          return fallback;
-        }
-        if (window.Utils && typeof Utils.formatNumber === "function") {
-          return Utils.formatNumber(num, decimals, { fallback });
-        }
-        try {
-          return num.toLocaleString(undefined, {
-            minimumFractionDigits: decimals,
-            maximumFractionDigits: decimals,
-          });
-        } catch (_) {
-          return fallback;
-        }
-      }
-
-      function formatRate(value) {
-        const num = Number(value);
-        if (!Number.isFinite(num)) return "—";
-        return `${num.toFixed(1)}%`;
-      }
-
-      function formatSol(value) {
-        const num = Number(value);
-        if (!Number.isFinite(num)) return "0.0000";
-        const magnitude = Math.abs(num);
-        const decimals = magnitude >= 1 ? 4 : 6;
-        const formatted = magnitude.toLocaleString(undefined, {
-          minimumFractionDigits: decimals,
-          maximumFractionDigits: decimals,
-        });
-        if (num > 0) return `+${formatted}`;
-        if (num < 0) return `-${formatted}`;
-        return formatted;
-      }
+      // Use Utils.formatSignatureCompact, Utils.formatNumber, Utils.formatPercent, Utils.formatSol
 
       function renderPill(label, prefix) {
         if (!label || label === "—") return "—";
@@ -515,31 +469,7 @@
         return `<span class="pill ${className}">${escapeHtml(label)}</span>`;
       }
 
-      function formatRelativeTime(date) {
-        if (!date) return null;
-        if (window.Utils && typeof Utils.formatTimeAgo === "function") {
-          return Utils.formatTimeAgo(date, { fallback: "just now" });
-        }
-        const diffMs = Date.now() - date.getTime();
-        if (!Number.isFinite(diffMs)) return null;
-        const seconds = Math.max(0, Math.round(diffMs / 1000));
-        if (seconds < 60) return "just now";
-        if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-        if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-        return `${Math.floor(seconds / 86400)}d ago`;
-      }
-
-      function formatTimestampDisplay(date) {
-        if (!date) return "";
-        if (window.Utils && typeof Utils.formatTimestamp === "function") {
-          return Utils.formatTimestamp(date, { includeSeconds: true });
-        }
-        try {
-          return date.toLocaleString();
-        } catch (_) {
-          return date.toISOString();
-        }
-      }
+      // Use Utils.formatTimeAgo and Utils.formatTimestamp
 
       function updateLastUpdatedLabel() {
         const label = el("tx-last-updated");
