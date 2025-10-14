@@ -35,6 +35,47 @@ pub struct TokenListResponse {
     pub timestamp: String,
 }
 
+/// Period-based numeric metrics helper
+#[derive(Debug, Serialize, Clone)]
+pub struct PeriodStats<T> {
+    pub m5: Option<T>,
+    pub h1: Option<T>,
+    pub h6: Option<T>,
+    pub h24: Option<T>,
+}
+
+impl<T> PeriodStats<T> {
+    pub fn empty() -> Self {
+        Self {
+            m5: None,
+            h1: None,
+            h6: None,
+            h24: None,
+        }
+    }
+}
+
+/// Buy/sell counts for a specific timeframe
+#[derive(Debug, Serialize, Clone)]
+pub struct TxnPeriodSummary {
+    pub buys: Option<i64>,
+    pub sells: Option<i64>,
+}
+
+/// Website link metadata for presentation
+#[derive(Debug, Serialize, Clone)]
+pub struct TokenWebsiteLink {
+    pub label: Option<String>,
+    pub url: String,
+}
+
+/// Social link metadata for presentation
+#[derive(Debug, Serialize, Clone)]
+pub struct TokenSocialLink {
+    pub platform: String,
+    pub url: String,
+}
+
 /// Token detail response
 #[derive(Debug, Serialize)]
 pub struct TokenDetailResponse {
@@ -45,22 +86,40 @@ pub struct TokenDetailResponse {
     pub website: Option<String>,
     pub verified: bool,
     pub tags: Vec<String>,
+    pub pair_labels: Vec<String>,
+    pub decimals: Option<u8>,
+    pub created_at: Option<i64>,
+    pub last_updated: Option<i64>,
+    pub pair_created_at: Option<i64>,
+    pub pair_url: Option<String>,
+    pub boosts_active: Option<i64>,
     // Price info
     pub price_sol: Option<f64>,
+    pub price_usd: Option<f64>,
     pub price_confidence: Option<f32>,
     pub price_updated_at: Option<i64>,
-    // Market info
-    pub liquidity_usd: Option<f64>,
-    pub volume_24h: Option<f64>,
-    pub fdv: Option<f64>,
-    pub market_cap: Option<f64>,
     pub price_change_h1: Option<f64>,
     pub price_change_h24: Option<f64>,
+    pub price_change_periods: PeriodStats<f64>,
+    // Market info
+    pub liquidity_usd: Option<f64>,
+    pub liquidity_base: Option<f64>,
+    pub liquidity_quote: Option<f64>,
+    pub volume_24h: Option<f64>,
+    pub volume_periods: PeriodStats<f64>,
+    pub fdv: Option<f64>,
+    pub market_cap: Option<f64>,
     // Pool info
     pub pool_address: Option<String>,
     pub pool_dex: Option<String>,
     pub pool_reserves_sol: Option<f64>,
     pub pool_reserves_token: Option<f64>,
+    // Activity info
+    pub txn_periods: PeriodStats<TxnPeriodSummary>,
+    pub buys_24h: Option<i64>,
+    pub sells_24h: Option<i64>,
+    pub net_flow_24h: Option<i64>,
+    pub buy_sell_ratio_24h: Option<f64>,
     // Security info
     pub security_score: Option<i32>,
     pub security_score_normalized: Option<i32>,
@@ -70,6 +129,10 @@ pub struct TokenDetailResponse {
     pub total_holders: Option<i32>,
     pub top_10_concentration: Option<f64>,
     pub security_risks: Vec<SecurityRisk>,
+    pub security_summary: Option<String>,
+    // External references
+    pub websites: Vec<TokenWebsiteLink>,
+    pub socials: Vec<TokenSocialLink>,
     // Status flags
     pub has_ohlcv: bool,
     pub has_pool_price: bool,
@@ -363,19 +426,36 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
                 website: None,
                 verified: false,
                 tags: vec![],
+                pair_labels: vec![],
+                decimals: None,
+                created_at: None,
+                last_updated: None,
+                pair_created_at: None,
+                pair_url: None,
+                boosts_active: None,
                 price_sol: None,
+                price_usd: None,
                 price_confidence: None,
                 price_updated_at: None,
-                liquidity_usd: None,
-                volume_24h: None,
-                fdv: None,
-                market_cap: None,
                 price_change_h1: None,
                 price_change_h24: None,
+                price_change_periods: PeriodStats::empty(),
+                liquidity_usd: None,
+                liquidity_base: None,
+                liquidity_quote: None,
+                volume_24h: None,
+                volume_periods: PeriodStats::empty(),
+                fdv: None,
+                market_cap: None,
                 pool_address: None,
                 pool_dex: None,
                 pool_reserves_sol: None,
                 pool_reserves_token: None,
+                txn_periods: PeriodStats::empty(),
+                buys_24h: None,
+                sells_24h: None,
+                net_flow_24h: None,
+                buy_sell_ratio_24h: None,
                 security_score: None,
                 security_score_normalized: None,
                 rugged: None,
@@ -384,6 +464,9 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
                 total_holders: None,
                 top_10_concentration: None,
                 security_risks: vec![],
+                security_summary: None,
+                websites: vec![],
+                socials: vec![],
                 has_ohlcv: false,
                 has_pool_price: false,
                 has_open_position: false,
@@ -591,31 +674,188 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         );
     }
 
+    let created_at_ts = token.created_at.map(|dt| dt.timestamp());
+    let last_updated_ts = Some(token.last_updated.timestamp());
+    let pair_created_at = created_at_ts;
+    let price_usd = token.price_pool_usd.or(token.price_dexscreener_usd);
+    let price_change_periods = token
+        .price_change
+        .as_ref()
+        .map(|changes| PeriodStats {
+            m5: changes.m5,
+            h1: changes.h1,
+            h6: changes.h6,
+            h24: changes.h24,
+        })
+        .unwrap_or_else(PeriodStats::empty);
+    let volume_periods = token
+        .volume
+        .as_ref()
+        .map(|vol| PeriodStats {
+            m5: vol.m5,
+            h1: vol.h1,
+            h6: vol.h6,
+            h24: vol.h24,
+        })
+        .unwrap_or_else(PeriodStats::empty);
+    let txn_periods = token
+        .txns
+        .as_ref()
+        .map(|stats| PeriodStats {
+            m5: stats.m5.as_ref().map(|p| TxnPeriodSummary {
+                buys: p.buys,
+                sells: p.sells,
+            }),
+            h1: stats.h1.as_ref().map(|p| TxnPeriodSummary {
+                buys: p.buys,
+                sells: p.sells,
+            }),
+            h6: stats.h6.as_ref().map(|p| TxnPeriodSummary {
+                buys: p.buys,
+                sells: p.sells,
+            }),
+            h24: stats.h24.as_ref().map(|p| TxnPeriodSummary {
+                buys: p.buys,
+                sells: p.sells,
+            }),
+        })
+        .unwrap_or_else(PeriodStats::empty);
+
+    let (buys_24h, sells_24h) = if let Some(txn) = token.txns.as_ref() {
+        (
+            txn.h24.as_ref().and_then(|p| p.buys),
+            txn.h24.as_ref().and_then(|p| p.sells),
+        )
+    } else {
+        (None, None)
+    };
+
+    let net_flow_24h = match (buys_24h, sells_24h) {
+        (Some(buys), Some(sells)) => Some(buys - sells),
+        _ => None,
+    };
+
+    let buy_sell_ratio_24h = match (buys_24h, sells_24h) {
+        (Some(buys), Some(sells)) if sells != 0 => Some(buys as f64 / sells as f64),
+        _ => None,
+    };
+
+    let liquidity_base = token.liquidity.as_ref().and_then(|l| l.base);
+    let liquidity_quote = token.liquidity.as_ref().and_then(|l| l.quote);
+
+    let mut websites: Vec<TokenWebsiteLink> = Vec::new();
+    if let Some(primary_site) = token.website.as_ref() {
+        if !primary_site.trim().is_empty() {
+            websites.push(TokenWebsiteLink {
+                label: Some("Website".to_string()),
+                url: primary_site.clone(),
+            });
+        }
+    }
+
+    let mut socials: Vec<TokenSocialLink> = Vec::new();
+    if let Some(info) = token.info.as_ref() {
+        for site in &info.websites {
+            if site.url.trim().is_empty() {
+                continue;
+            }
+            if websites.iter().any(|existing| existing.url == site.url) {
+                continue;
+            }
+            websites.push(TokenWebsiteLink {
+                label: site.label.clone(),
+                url: site.url.clone(),
+            });
+        }
+
+        for social in &info.socials {
+            if social.url.trim().is_empty() {
+                continue;
+            }
+            socials.push(TokenSocialLink {
+                platform: social.link_type.clone(),
+                url: social.url.clone(),
+            });
+        }
+    }
+
+    let mut combined_tags = token.tags.clone();
+    for label in &token.labels {
+        if !combined_tags.contains(label) {
+            combined_tags.push(label.clone());
+        }
+    }
+
+    let logo_url = token
+        .logo_url
+        .clone()
+        .or_else(|| token.info.as_ref().and_then(|i| i.image_url.clone()));
+    let primary_website = websites.first().map(|link| link.url.clone());
+
+    let security_summary = match (rugged, security_score) {
+        (Some(true), Some(score)) => Some(format!(
+            "⚠️ Token flagged as rugged (score {}). Investigate before trading.",
+            score
+        )),
+        (Some(true), None) => {
+            Some("⚠️ Token flagged as rugged. Investigate before trading.".to_string())
+        }
+        (_, Some(score)) if score >= 700 => {
+            Some(format!("✅ Strong security posture (score {}).", score))
+        }
+        (_, Some(score)) if score >= 500 => Some(format!(
+            "🟢 Moderate security score ({}). Monitor for changes.",
+            score
+        )),
+        (_, Some(score)) if score >= 300 => Some(format!(
+            "⚠️ Security score {} indicates elevated risk.",
+            score
+        )),
+        (_, Some(score)) => Some(format!(
+            "🚨 Security score {} indicates critical risk.",
+            score
+        )),
+        _ => None,
+    };
+
     Json(TokenDetailResponse {
         mint: token.mint.clone(),
         symbol: token.symbol.clone(),
         name: Some(token.name.clone()),
-        logo_url: token.info.as_ref().and_then(|i| i.image_url.clone()),
-        website: token
-            .info
-            .as_ref()
-            .and_then(|i| i.websites.first())
-            .map(|w| w.url.clone()),
+        logo_url,
+        website: primary_website,
         verified: token.is_verified,
-        tags: token.labels.clone(),
+        tags: combined_tags,
+        pair_labels: token.labels.clone(),
+        decimals: token.decimals,
+        created_at: created_at_ts,
+        last_updated: last_updated_ts,
+        pair_created_at,
+        pair_url: token.pair_url.clone(),
+        boosts_active: token.boosts.as_ref().and_then(|b| b.active),
         price_sol,
+        price_usd,
         price_confidence,
         price_updated_at,
-        liquidity_usd: token.liquidity.as_ref().and_then(|l| l.usd),
-        volume_24h: token.volume.as_ref().and_then(|v| v.h24),
-        fdv: token.fdv,
-        market_cap: token.market_cap,
         price_change_h1: token.price_change.as_ref().and_then(|p| p.h1),
         price_change_h24: token.price_change.as_ref().and_then(|p| p.h24),
+        price_change_periods,
+        liquidity_usd: token.liquidity.as_ref().and_then(|l| l.usd),
+        liquidity_base,
+        liquidity_quote,
+        volume_24h: token.volume.as_ref().and_then(|v| v.h24),
+        volume_periods,
+        fdv: token.fdv,
+        market_cap: token.market_cap,
         pool_address,
         pool_dex,
         pool_reserves_sol,
         pool_reserves_token,
+        txn_periods,
+        buys_24h,
+        sells_24h,
+        net_flow_24h,
+        buy_sell_ratio_24h,
         security_score,
         security_score_normalized,
         rugged,
@@ -624,6 +864,9 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         total_holders,
         top_10_concentration,
         security_risks,
+        security_summary,
+        websites,
+        socials,
         has_ohlcv,
         has_pool_price,
         has_open_position,

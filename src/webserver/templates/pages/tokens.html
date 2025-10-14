@@ -1,281 +1,468 @@
-<style>
-  .token-row {
-    transition: background-color 0.45s ease;
-  }
+  function populateTokenModal(token, detail) {
+    if (!token) return;
 
-  .token-row--changed {
-    animation: token-row-flash 1.25s ease-out;
-  }
+    const detailData = detail || {};
+    const toNumber = (value) => {
+      const num = Number(value);
+      return Number.isFinite(num) ? num : null;
+    };
+    const pick = (...values) => {
+      for (let i = 0; i < values.length; i += 1) {
+        const value = values[i];
+        if (value !== undefined && value !== null && value !== "") {
+          return value;
+        }
+      }
+      return undefined;
+    };
+    const normalizeTxnPeriod = (period) => {
+      if (!period) return null;
+      const buys = toNumber(period.buys);
+      const sells = toNumber(period.sells);
+      if (!Number.isFinite(buys) && !Number.isFinite(sells)) {
+        return null;
+      }
+      return { buys, sells };
+    };
 
-  .token-row--up {
-    --token-glow-color: rgba(34, 197, 94, 0.2);
-  }
+    const priceSol = toNumber(pick(detailData.price_sol, token.price_sol));
+    const priceUsd = toNumber(detailData.price_usd);
+    const priceChange24h = toNumber(
+      pick(
+        detailData.price_change_periods?.h24,
+        detailData.price_change_h24,
+        token.price_change_h24
+      )
+    );
+    const changeClass =
+      Number.isFinite(priceChange24h)
+        ? priceChange24h > 0
+          ? "positive"
+          : priceChange24h < 0
+          ? "negative"
+          : ""
+        : "";
 
-  .token-row--down {
-    --token-glow-color: rgba(239, 68, 68, 0.2);
-  }
-
-  @keyframes token-row-flash {
-    0% {
-      background-color: var(--token-glow-color, rgba(59, 130, 246, 0.14));
+    const logoEl = document.getElementById("modalTokenLogo");
+    const logoUrl = pick(detailData.logo_url, token.logo_url);
+    if (logoEl) {
+      if (logoUrl) {
+        logoEl.src = logoUrl;
+        logoEl.style.display = "block";
+      } else {
+        logoEl.src = "";
+        logoEl.style.display = "none";
+      }
     }
-    75% {
-      background-color: rgba(15, 23, 42, 0.08);
+
+    Utils.setText(
+      "modalTokenSymbol",
+      pick(detailData.symbol, token.symbol, "—")
+    );
+    Utils.setText("modalTokenName", pick(detailData.name, token.name, "—"));
+
+    const headerTags = Array.from(
+      new Set(
+        []
+          .concat(detailData.pair_labels || [])
+          .concat(detailData.tags || [])
+          .filter(Boolean)
+      )
+    ).slice(0, 5);
+    const tagsEl = document.getElementById("modalTokenTags");
+    if (tagsEl) {
+      tagsEl.innerHTML = headerTags
+        .map(
+          (tag) => `<span class="tag-badge">${Utils.escapeHtml(tag)}</span>`
+        )
+        .join("");
     }
-    100% {
-      background-color: transparent;
+
+    Utils.setText(
+      "modalTokenPrice",
+      priceSol !== null
+        ? Utils.formatPriceSol(priceSol, { fallback: "—" })
+        : "—"
+    );
+    Utils.setText(
+      "modalTokenPriceUsd",
+      priceUsd !== null
+        ? Utils.formatCurrencyUSD(priceUsd, { fallback: "—" })
+        : "—"
+    );
+
+    const changeEl = document.getElementById("modalTokenChange");
+    if (changeEl) {
+      changeEl.textContent =
+        priceChange24h !== null
+          ? Utils.formatPercentValue(priceChange24h, { fallback: "—" })
+          : "—";
+      changeEl.classList.remove("positive", "negative");
+      if (changeClass) changeEl.classList.add(changeClass);
+    }
+
+    Utils.setText(
+      "summary-price-sol",
+      priceSol !== null
+        ? Utils.formatPriceSol(priceSol, { fallback: "—" })
+        : "—"
+    );
+    Utils.setText(
+      "summary-price-usd",
+      priceUsd !== null
+        ? Utils.formatCurrencyUSD(priceUsd, { fallback: "—" })
+        : "—"
+    );
+    const summaryDeltaEl = document.getElementById("summary-change-24h");
+    if (summaryDeltaEl) {
+      summaryDeltaEl.textContent =
+        priceChange24h !== null
+          ? Utils.formatPercentValue(priceChange24h, { fallback: "—" })
+          : "—";
+      applyDeltaClass(summaryDeltaEl, priceChange24h);
+    }
+
+    const liquidityValue = toNumber(pick(detailData.liquidity_usd, token.liquidity_usd));
+    Utils.setText(
+      "summary-liquidity",
+      liquidityValue !== null
+        ? Utils.formatCurrencyUSD(liquidityValue, { fallback: "—" })
+        : "—"
+    );
+
+    const confidence = toNumber(detailData.price_confidence);
+    Utils.setText(
+      "summary-confidence",
+      confidence !== null
+        ? `Confidence ${(Math.max(0, Math.min(1, confidence)) * 100).toFixed(
+            1
+          )}%`
+        : "Confidence —"
+    );
+
+    const priceUpdatedAt = pick(detailData.price_updated_at);
+    Utils.setText(
+      "summary-last-updated",
+      priceUpdatedAt !== undefined && priceUpdatedAt !== null
+        ? `Price updated ${Utils.formatTimeAgo(priceUpdatedAt, { fallback: "—" })}`
+        : "Price updated —"
+    );
+
+    const volumePeriods = {
+      m5: toNumber(pick(detailData.volume_periods?.m5)),
+      h1: toNumber(pick(detailData.volume_periods?.h1)),
+      h6: toNumber(pick(detailData.volume_periods?.h6)),
+      h24: toNumber(
+        pick(detailData.volume_periods?.h24, detailData.volume_24h, token.volume_24h)
+      ),
+    };
+
+    const volume24hValue = volumePeriods.h24;
+    Utils.setText(
+      "summary-volume",
+      volume24hValue !== null
+        ? Utils.formatCurrencyUSD(volume24hValue, { fallback: "—" })
+        : "—"
+    );
+    Utils.setText(
+      "summary-volume-1h",
+      volumePeriods.h1 !== null
+        ? `1h ${Utils.formatCurrencyUSD(volumePeriods.h1, { fallback: "—" })}`
+        : "1h —"
+    );
+    Utils.setText(
+      "summary-volume-5m",
+      volumePeriods.m5 !== null
+        ? `5m ${Utils.formatCurrencyUSD(volumePeriods.m5, { fallback: "—" })}`
+        : "5m —"
+    );
+
+    const txnPeriods = {
+      m5: normalizeTxnPeriod(detailData.txn_periods?.m5 || detailData.txns?.m5),
+      h1: normalizeTxnPeriod(detailData.txn_periods?.h1 || detailData.txns?.h1),
+      h6: normalizeTxnPeriod(detailData.txn_periods?.h6 || detailData.txns?.h6),
+      h24: normalizeTxnPeriod(detailData.txn_periods?.h24 || detailData.txns?.h24),
+    };
+
+    const buys24h = toNumber(pick(detailData.buys_24h, txnPeriods.h24?.buys));
+    const sells24h = toNumber(pick(detailData.sells_24h, txnPeriods.h24?.sells));
+    const netFlow24h =
+      toNumber(detailData.net_flow_24h) ??
+      (Number.isFinite(buys24h) && Number.isFinite(sells24h)
+        ? buys24h - sells24h
+        : null);
+    const ratio24h =
+      toNumber(detailData.buy_sell_ratio_24h) ??
+      (Number.isFinite(buys24h) && Number.isFinite(sells24h) && sells24h !== 0
+        ? buys24h / sells24h
+        : null);
+
+    Utils.setText(
+      "summary-netflow",
+      netFlow24h !== null
+        ? `${netFlow24h > 0 ? "+" : netFlow24h < 0 ? "-" : ""}${Math.abs(
+            Math.round(netFlow24h)
+          )}`
+        : "—"
+    );
+    Utils.setText(
+      "summary-buys-sells",
+      `Buys ${Number.isFinite(buys24h) ? Math.round(buys24h) : "—"} / Sells ${
+        Number.isFinite(sells24h) ? Math.round(sells24h) : "—"
+      }`
+    );
+    Utils.setText(
+      "summary-ratio",
+      ratio24h !== null ? `Ratio ${ratio24h.toFixed(2)}` : "Ratio —"
+    );
+
+    const priceChangePeriods = {
+      m5: toNumber(pick(detailData.price_change_periods?.m5, detailData.price_change_m5)),
+      h1: toNumber(
+        pick(
+          detailData.price_change_periods?.h1,
+          detailData.price_change_h1,
+          token.price_change_h1
+        )
+      ),
+      h6: toNumber(pick(detailData.price_change_periods?.h6, detailData.price_change_h6)),
+      h24: priceChange24h,
+    };
+
+    Utils.setHtml("detail-price-table", buildPriceTable(priceChangePeriods));
+    Utils.setHtml(
+      "detail-activity-table",
+      buildActivityTable(volumePeriods, txnPeriods)
+    );
+
+    const mintValue = pick(detailData.mint, token.mint);
+    const mintEl = document.getElementById("detail-mint");
+    if (mintEl) {
+      mintEl.textContent = mintValue || "—";
+      mintEl.title = mintValue || "";
+    }
+
+    Utils.setText(
+      "detail-decimals",
+      pick(detailData.decimals, token.decimals, "—")
+    );
+    Utils.setText(
+      "detail-verified",
+      Utils.formatBooleanFlag(detailData.verified, "—")
+    );
+    Utils.setText(
+      "detail-blacklisted",
+      Utils.formatBooleanFlag(
+        detailData.blacklisted ?? token.blacklisted,
+        "—"
+      )
+    );
+
+    const launchTimestamp = pick(
+      detailData.pair_created_at,
+      detailData.created_at
+    );
+    Utils.setText(
+      "detail-launch-date",
+      launchTimestamp !== undefined && launchTimestamp !== null
+        ? Utils.formatTimestamp(launchTimestamp, { fallback: "—" })
+        : "—"
+    );
+    Utils.setText(
+      "detail-last-updated",
+      detailData.last_updated !== undefined && detailData.last_updated !== null
+        ? Utils.formatTimestamp(detailData.last_updated, { fallback: "—" })
+        : "—"
+    );
+
+    Utils.setText(
+      "detail-liquidity",
+      liquidityValue !== null
+        ? Utils.formatCurrencyUSD(liquidityValue, { fallback: "—" })
+        : "—"
+    );
+    Utils.setText(
+      "detail-base-liquidity",
+      Utils.formatCompactNumber(detailData.liquidity_base, 2, "—")
+    );
+    Utils.setText(
+      "detail-quote-liquidity",
+      Utils.formatCompactNumber(detailData.liquidity_quote, 2, "—")
+    );
+    Utils.setText(
+      "detail-fdv",
+      Utils.formatCurrencyUSD(detailData.fdv, { fallback: "—" })
+    );
+    Utils.setText(
+      "detail-marketcap",
+      Utils.formatCurrencyUSD(detailData.market_cap, { fallback: "—" })
+    );
+
+    Utils.setText("detail-dex", pick(detailData.pool_dex, "—"));
+
+    const poolLinkEl = document.getElementById("detail-pool-link");
+    const poolAddress = pick(detailData.pool_address, detailData.pool?.address);
+    const pairUrl = detailData.pair_url;
+    if (poolLinkEl) {
+      if (pairUrl || poolAddress) {
+        poolLinkEl.textContent = poolAddress
+          ? formatAddress(poolAddress, 6)
+          : "Open Pool";
+        poolLinkEl.href = pairUrl || `https://solscan.io/account/${poolAddress}`;
+        poolLinkEl.classList.remove("metric-link--disabled");
+        poolLinkEl.title = poolAddress || poolLinkEl.textContent;
+      } else {
+        poolLinkEl.textContent = "—";
+        poolLinkEl.removeAttribute("href");
+        poolLinkEl.removeAttribute("title");
+        poolLinkEl.classList.add("metric-link--disabled");
+      }
+    }
+
+    Utils.setText(
+      "detail-sol-reserves",
+      Utils.formatCompactNumber(detailData.pool_reserves_sol, 2, "—")
+    );
+    Utils.setText(
+      "detail-token-reserves",
+      Utils.formatCompactNumber(detailData.pool_reserves_token, 2, "—")
+    );
+    Utils.setText(
+      "detail-confidence",
+      confidence !== null ? confidence.toFixed(2) : "—"
+    );
+    Utils.setText(
+      "detail-price-updated",
+      priceUpdatedAt !== undefined && priceUpdatedAt !== null
+        ? Utils.formatTimeAgo(priceUpdatedAt, { fallback: "—" })
+        : "—"
+    );
+    Utils.setText(
+      "detail-pool-age",
+      launchTimestamp !== undefined && launchTimestamp !== null
+        ? Utils.formatTimeAgo(launchTimestamp, { fallback: "—" })
+        : "—"
+    );
+
+    renderBadgeList(
+      "detail-tag-badges",
+      detailData.tags,
+      "No tags assigned"
+    );
+    renderBadgeList(
+      "detail-label-badges",
+      detailData.pair_labels,
+      "No pool labels"
+    );
+
+    const securityScore = toNumber(detailData.security_score);
+    const rugged = detailData.rugged === true;
+    const badge = document.getElementById("security-badge");
+    if (badge) {
+      const statusClass = rugged
+        ? "critical"
+        : securityScore >= 700
+        ? "excellent"
+        : securityScore >= 500
+        ? "good"
+        : securityScore >= 300
+        ? "warning"
+        : "critical";
+      badge.className = `security-badge ${statusClass}`.trim();
+    }
+
+    const progress = document.getElementById("security-progress");
+    if (progress) {
+      let pct = toNumber(detailData.security_score_normalized);
+      if (!Number.isFinite(pct)) {
+        pct = securityScore !== null ? securityScore / 10 : 0;
+      }
+      if (!Number.isFinite(pct)) pct = 0;
+      const safePct = Math.max(0, Math.min(100, pct));
+      progress.style.width = `${safePct}%`;
+    }
+
+    Utils.setHtml(
+      "security-score-value",
+      securityScore !== null ? `${securityScore}` : "—"
+    );
+    const securitySummary =
+      detailData.security_summary ||
+      (rugged
+        ? "⚠️ Token flagged as rugged. Investigate before trading."
+        : "No security summary available.");
+    Utils.setHtml("security-status", securitySummary);
+    Utils.setText("detail-mint-auth", detailData.mint_authority ?? "Unknown");
+    Utils.setText(
+      "detail-freeze-auth",
+      detailData.freeze_authority ?? "Unknown"
+    );
+    Utils.setText("detail-holders", detailData.total_holders ?? "—");
+
+    const top10Raw = toNumber(detailData.top_10_concentration);
+    if (top10Raw !== null) {
+      const display = top10Raw <= 1 ? top10Raw * 100 : top10Raw;
+      Utils.setText("detail-top10", `${display.toFixed(2)}%`);
+    } else {
+      Utils.setText("detail-top10", "—");
+    }
+
+    Utils.setHtml(
+      "risk-factors-list",
+      renderRiskFactors(detailData.security_risks)
+    );
+
+    Utils.setText(
+      "sidebar-price",
+      priceSol !== null
+        ? Utils.formatPriceSol(priceSol, { fallback: "—" })
+        : "—"
+    );
+    Utils.setText(
+      "sidebar-volume",
+      volume24hValue !== null
+        ? Utils.formatCurrencyUSD(volume24hValue, { fallback: "—" })
+        : "—"
+    );
+    Utils.setText(
+      "sidebar-liq",
+      liquidityValue !== null
+        ? Utils.formatCurrencyUSD(liquidityValue, { fallback: "—" })
+        : "—"
+    );
+    Utils.setText(
+      "sidebar-mcap",
+      Utils.formatCurrencyUSD(detailData.market_cap, { fallback: "—" })
+    );
+
+    renderLinkList("sidebar-websites", detailData.websites || [], {
+      emptyMessage: "No websites listed",
+      getLabel: (link) => link.label,
+    });
+    renderLinkList("sidebar-socials", detailData.socials || [], {
+      emptyMessage: "No social links",
+      getLabel: (link) =>
+        link.platform
+          ? link.platform.toUpperCase()
+          : extractDomain(link.url),
+    });
+
+    const statusFlags = {
+      has_pool_price: detailData.has_pool_price ?? token.has_pool_price,
+      has_ohlcv: detailData.has_ohlcv ?? token.has_ohlcv,
+      has_open_position:
+        detailData.has_open_position ?? token.has_open_position,
+      blacklisted: detailData.blacklisted ?? token.blacklisted,
+    };
+    Utils.setHtml("sidebar-badges", renderSidebarBadges(statusFlags));
+
+    const modal = document.getElementById("tokenModal");
+    if (modal) {
+      modal.classList.add("active");
+    } else {
+      console.error("Modal element not found!");
     }
   }
-
-  .price-cell {
-    text-align: right;
-  }
-
-  .price-cell__inner {
-    display: inline-flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 6px;
-    font-variant-numeric: tabular-nums;
-    position: relative;
-  }
-
-  .price-value {
-    transition: color 0.25s ease;
-    padding-left: 1.1em;
-    display: inline-block;
-  }
-
-  .price-cell__inner--up .price-value {
-    color: #22c55e;
-  }
-
-  .price-cell__inner--down .price-value {
-    color: #ef4444;
-  }
-
-  .price-arrow {
-    display: inline-block;
-    width: 0.9em;
-    min-width: 0.9em;
-    max-width: 0.9em;
-    font-size: 0.85em;
-    transform: translateY(-1px);
-    transition: opacity 0.25s ease;
-    text-align: center;
-    position: absolute;
-    left: 0;
-  }
-
-  .price-arrow--up {
-    color: #22c55e;
-  }
-
-  .price-arrow--down {
-    color: #ef4444;
-  }
-</style>
-<script>
-  var TOKENS_DEFAULT_PAGE_SIZE = Number("__TOKENS_DEFAULT_PAGE_SIZE__") || 50;
-  var TOKENS_MAX_PAGE_SIZE =
-    Number("__TOKENS_MAX_PAGE_SIZE__") || TOKENS_DEFAULT_PAGE_SIZE;
-  var DEFAULT_TOKENS_VIEW = "pool";
-  var TOKENS_VIEW_DEFS = [
-    { id: "pool", label: "💧 Pool Service" },
-    { id: "all", label: "📋 All Tokens" },
-    { id: "passed", label: "✅ Passed" },
-    { id: "rejected", label: "⛔ Rejected" },
-    { id: "blacklisted", label: "🚫 Blacklisted" },
-    { id: "positions", label: "📊 Positions" },
-    { id: "secure", label: "🛡️ Secure" },
-    { id: "recent", label: "🆕 Recent" },
-  ];
-  var TOKENS_VIEWS = TOKENS_VIEW_DEFS.map(function (view) {
-    return view.id;
-  });
-  var TOKENS_SORT_KEYS = [
-    "symbol",
-    "price_sol",
-    "liquidity_usd",
-    "volume_24h",
-    "fdv",
-    "market_cap",
-    "price_change_h1",
-    "price_change_h24",
-    "security_score",
-    "updated_at",
-  ];
-  var DEFAULT_SORT_KEY = "symbol";
-  var DEFAULT_SORT_DIR = "asc";
-  var VIEW_LABELS = {
-    pool: "with available prices",
-    all: "in database",
-    passed: "that passed filtering",
-    rejected: "rejected by filtering",
-    blacklisted: "blacklisted",
-    positions: "with open positions",
-    secure: "secure",
-    recent: "recently updated",
-  };
-
-  var tokensState = window.tokensState || {
-    view: DEFAULT_TOKENS_VIEW,
-    sortBy: DEFAULT_SORT_KEY,
-    sortDir: DEFAULT_SORT_DIR,
-    searchTerm: "",
-  };
-  window.tokensState = tokensState;
-  var TOKENS_COLUMN_DEFINITIONS = [
-    {
-      id: "token",
-      label: "Token",
-      sortKey: "symbol",
-      defaultVisible: true,
-      required: true,
-      minWidth: 240,
-      defaultWidth: 260,
-      align: "left",
-      headerAlign: "left",
-    },
-    {
-      id: "price_sol",
-      label: "Price (SOL)",
-      sortKey: "price_sol",
-      defaultVisible: true,
-      minWidth: 140,
-      defaultWidth: 150,
-      align: "right",
-      headerAlign: "right",
-      cellClass: "num price-cell align-right",
-    },
-    {
-      id: "liquidity_usd",
-      label: "Liquidity",
-      sortKey: "liquidity_usd",
-      defaultVisible: true,
-      minWidth: 120,
-      defaultWidth: 140,
-      align: "right",
-      headerAlign: "right",
-      cellClass: "num align-right",
-    },
-    {
-      id: "volume_24h",
-      label: "24h Vol",
-      sortKey: "volume_24h",
-      defaultVisible: true,
-      minWidth: 110,
-      defaultWidth: 140,
-      align: "right",
-      headerAlign: "right",
-      cellClass: "num align-right",
-    },
-    {
-      id: "fdv",
-      label: "FDV",
-      sortKey: "fdv",
-      defaultVisible: true,
-      minWidth: 110,
-      defaultWidth: 140,
-      align: "right",
-      headerAlign: "right",
-      cellClass: "num align-right",
-    },
-    {
-      id: "market_cap",
-      label: "Mkt Cap",
-      sortKey: "market_cap",
-      defaultVisible: true,
-      minWidth: 110,
-      defaultWidth: 140,
-      align: "right",
-      headerAlign: "right",
-      cellClass: "num align-right",
-    },
-    {
-      id: "price_change_h1",
-      label: "1h",
-      sortKey: "price_change_h1",
-      defaultVisible: true,
-      minWidth: 90,
-      defaultWidth: 100,
-      align: "right",
-      headerAlign: "right",
-      cellClass: "num align-right",
-    },
-    {
-      id: "price_change_h24",
-      label: "24h",
-      sortKey: "price_change_h24",
-      defaultVisible: true,
-      minWidth: 90,
-      defaultWidth: 100,
-      align: "right",
-      headerAlign: "right",
-      cellClass: "num align-right",
-    },
-    {
-      id: "security_score",
-      label: "Security",
-      sortKey: "security_score",
-      defaultVisible: true,
-      minWidth: 100,
-      defaultWidth: 110,
-      align: "right",
-      headerAlign: "right",
-      cellClass: "num align-right",
-    },
-    {
-      id: "status",
-      label: "Status",
-      defaultVisible: true,
-      minWidth: 120,
-      defaultWidth: 140,
-      align: "left",
-      headerAlign: "left",
-    },
-    {
-      id: "updated_at",
-      label: "Updated",
-      sortKey: "updated_at",
-      defaultVisible: true,
-      minWidth: 110,
-      defaultWidth: 130,
-      align: "left",
-      headerAlign: "left",
-      cellClass: "tokens-updated-text",
-    },
-    {
-      id: "actions",
-      label: "Actions",
-      defaultVisible: true,
-      minWidth: 80,
-      defaultWidth: 88,
-      maxWidth: 120,
-      align: "center",
-      headerAlign: "center",
-      resizable: false,
-    },
-    {
-      id: "total_holders",
-      label: "Holders",
-      sortKey: "total_holders",
-      defaultVisible: false,
-      minWidth: 110,
-      defaultWidth: 120,
-      align: "right",
-      headerAlign: "right",
-      cellClass: "num align-right",
-    },
-  ];
-
-  var TOKENS_DEFAULT_VISIBLE_COLUMN_IDS = TOKENS_COLUMN_DEFINITIONS.filter(
-    function (column) {
-      return column.required || column.defaultVisible !== false;
-    }
-  ).map(function (column) {
-    return column.id;
-  });
 
   var tokensColumnManager = window.tokensColumnManager || null;
   window.tokensColumnManager = tokensColumnManager;
@@ -971,283 +1158,197 @@
       .join("");
   }
 
-  function populateTokenModal(token, detail) {
-    if (!token) return;
+  const PERIOD_LABELS = {
+    m5: "5 minutes",
+    h1: "1 hour",
+    h6: "6 hours",
+    h24: "24 hours",
+  };
+  const PERIOD_KEYS = ["m5", "h1", "h6", "h24"];
 
-    const detailData = detail || {};
-    const price = Number.isFinite(detailData.price_sol)
-      ? Number(detailData.price_sol)
-      : Number(token.price_sol);
-    const change24h = Number.isFinite(detailData.price_change_h24)
-      ? Number(detailData.price_change_h24)
-      : Number(token.price_change_h24);
-    const changeCls =
-      change24h > 0 ? "positive" : change24h < 0 ? "negative" : "";
-
-    const logoEl = document.getElementById("modalTokenLogo");
-    if (logoEl) {
-      if (token.logo_url) {
-        logoEl.src = token.logo_url;
-        logoEl.style.display = "block";
-      } else {
-        logoEl.src = "";
-        logoEl.style.display = "none";
-      }
+  function extractDomain(url) {
+    if (typeof url !== "string" || url.trim() === "") {
+      return "";
     }
+    try {
+      const { hostname } = new URL(url);
+      return hostname.replace(/^www\./i, "");
+    } catch (error) {
+      return url;
+    }
+  }
 
-    Utils.setText("modalTokenSymbol", token.symbol || detailData.symbol || "—");
-    Utils.setText("modalTokenName", token.name || detailData.name || "—");
-    Utils.setText(
-      "modalTokenPrice",
-      Number.isFinite(price)
-        ? Utils.formatPriceSol(price, { fallback: "N/A" })
-        : "—"
-    );
+  function formatAddress(address, visible = 4) {
+    if (typeof address !== "string" || address.length === 0) {
+      return "—";
+    }
+    if (address.length <= visible * 2) {
+      return address;
+    }
+    return `${address.slice(0, visible)}…${address.slice(-visible)}`;
+  }
 
-    const changeEl = document.getElementById("modalTokenChange");
-    if (changeEl) {
-      changeEl.textContent = Number.isFinite(change24h)
-        ? Utils.formatPercentValue(change24h, { fallback: "—" })
+  function applyDeltaClass(element, value) {
+    if (!element) return;
+    element.classList.remove("positive", "negative");
+    if (!Number.isFinite(value)) {
+      return;
+    }
+    if (value > 0) {
+      element.classList.add("positive");
+    } else if (value < 0) {
+      element.classList.add("negative");
+    }
+  }
+
+  function buildPriceTable(periods) {
+    const rows = PERIOD_KEYS.map((key) => {
+      const value = Number(periods[key]);
+      const hasValue = Number.isFinite(value);
+      const className = value > 0 ? "positive" : value < 0 ? "negative" : "";
+      const formatted = hasValue
+        ? Utils.formatPercentValue(value, { fallback: "—" })
         : "—";
-      changeEl.classList.remove("positive", "negative");
-      if (changeCls) changeEl.classList.add(changeCls);
+      return `<tr><td>${Utils.escapeHtml(PERIOD_LABELS[key])}</td><td class="${className}">${formatted}</td></tr>`;
+    }).join("");
+
+    return `
+      <table>
+        <thead>
+          <tr>
+            <th>Period</th>
+            <th>Change</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }
+
+  function buildActivityTable(volumePeriods, txnPeriods) {
+    const rows = PERIOD_KEYS.map((key) => {
+      const volume = Number(volumePeriods[key]);
+      const volumeCell = Number.isFinite(volume)
+        ? Utils.formatCurrencyUSD(volume, { fallback: "—" })
+        : "—";
+
+      const buys = txnPeriods[key]?.buys;
+      const sells = txnPeriods[key]?.sells;
+      const hasBuys = Number.isFinite(buys);
+      const hasSells = Number.isFinite(sells);
+      const net = hasBuys && hasSells ? buys - sells : null;
+      const ratio = hasBuys && hasSells && sells !== 0 ? buys / sells : null;
+      const netClass = Number.isFinite(net)
+        ? net > 0
+          ? "positive"
+          : net < 0
+          ? "negative"
+          : ""
+        : "";
+      const netCell = Number.isFinite(net)
+        ? `${net > 0 ? "+" : net < 0 ? "-" : ""}${Math.abs(Math.round(net))}`
+        : "—";
+      const buysCell = hasBuys ? Math.round(buys) : "—";
+      const sellsCell = hasSells ? Math.round(sells) : "—";
+      const ratioCell = Number.isFinite(ratio) ? ratio.toFixed(2) : "—";
+
+      return `<tr>
+        <td>${Utils.escapeHtml(PERIOD_LABELS[key])}</td>
+        <td>${volumeCell}</td>
+        <td>${buysCell}</td>
+        <td>${sellsCell}</td>
+        <td class="${netClass}">${netCell}</td>
+        <td>${ratioCell}</td>
+      </tr>`;
+    }).join("");
+
+    return `
+      <table>
+        <thead>
+          <tr>
+            <th>Period</th>
+            <th>Volume</th>
+            <th>Buys</th>
+            <th>Sells</th>
+            <th>Net</th>
+            <th>Ratio</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }
+
+  function renderBadgeList(containerId, values, emptyMessage) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = "";
+
+    const entries = Array.isArray(values)
+      ? Array.from(new Set(values.filter(Boolean)))
+      : [];
+
+    if (entries.length === 0) {
+      if (emptyMessage) {
+        const empty = document.createElement("div");
+        empty.className = "empty-state";
+        empty.textContent = emptyMessage;
+        container.appendChild(empty);
+      }
+      return;
     }
 
-    Utils.setText("detail-mint", detailData.mint || token.mint || "—");
-    Utils.setText("detail-decimals", detailData.decimals ?? "—");
-    Utils.setText(
-      "detail-verified",
-      Utils.formatBooleanFlag(detailData.verified, "—")
-    );
-    Utils.setText(
-      "detail-blacklisted",
-      Utils.formatBooleanFlag(detailData.blacklisted ?? token.blacklisted, "—")
-    );
-    Utils.setText("detail-launch-date", detailData.launch_date || "—");
+    const fragment = document.createDocumentFragment();
+    entries.forEach((value) => {
+      const badge = document.createElement("span");
+      badge.className = "badge-item";
+      badge.textContent = value;
+      fragment.appendChild(badge);
+    });
+    container.appendChild(fragment);
+  }
 
-    const liquidityValue = detailData.liquidity_usd ?? token.liquidity_usd;
-    const volume24hValue = detailData.volume_24h ?? token.volume_24h;
-    const volume6hValue = detailData.volume_6h ?? detailData.volume_h6;
-    const volume1hValue = detailData.volume_1h ?? detailData.volume_h1;
-    const fdvValue = detailData.fdv ?? token.fdv;
-    const marketCapValue = detailData.market_cap ?? token.market_cap;
+  function renderLinkList(containerId, links, { emptyMessage = "", getLabel } = {}) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = "";
 
-    Utils.setText(
-      "detail-liquidity",
-      Utils.formatCurrencyUSD(liquidityValue, { fallback: "—" })
-    );
-    Utils.setText(
-      "detail-volume24h",
-      Utils.formatCurrencyUSD(volume24hValue, { fallback: "—" })
-    );
-    Utils.setText(
-      "detail-volume6h",
-      Utils.formatCurrencyUSD(volume6hValue, { fallback: "—" })
-    );
-    Utils.setText(
-      "detail-volume1h",
-      Utils.formatCurrencyUSD(volume1hValue, { fallback: "—" })
-    );
-    Utils.setText(
-      "detail-fdv",
-      Utils.formatCurrencyUSD(fdvValue, { fallback: "—" })
-    );
-    Utils.setText(
-      "detail-marketcap",
-      Utils.formatCurrencyUSD(marketCapValue, { fallback: "—" })
-    );
-
-    const dexLabel = detailData.pool_dex || detailData.pool?.dex;
-    const poolAddress = detailData.pool_address || detailData.pool?.address;
-    const solReserves =
-      detailData.pool_reserves_sol ?? detailData.pool?.sol_reserves;
-    const tokenReserves =
-      detailData.pool_reserves_token ?? detailData.pool?.token_reserves;
-    const confidence =
-      detailData.price_confidence ?? detailData.pool?.confidence;
-    const poolAge = detailData.pool_age || detailData.pool?.age;
-
-    Utils.setText("detail-dex", dexLabel || "—");
-    Utils.setText("detail-pool", poolAddress || "—");
-    Utils.setText(
-      "detail-sol-reserves",
-      Utils.formatCompactNumber(solReserves, 2, "—")
-    );
-    Utils.setText(
-      "detail-token-reserves",
-      Utils.formatCompactNumber(tokenReserves, 2, "—")
-    );
-    Utils.setText(
-      "detail-confidence",
-      Number.isFinite(confidence) ? Number(confidence).toFixed(2) : "—"
-    );
-    Utils.setText("detail-pool-age", poolAge || "—");
-
-    const change5m =
-      detailData.price_change_m5 ?? detailData.price_changes?.change_5m;
-    const change1h =
-      detailData.price_change_h1 ??
-      token.price_change_h1 ??
-      detailData.price_changes?.change_1h;
-    const change6h =
-      detailData.price_change_h6 ?? detailData.price_changes?.change_6h;
-    const change24hValue =
-      detailData.price_change_h24 ??
-      token.price_change_h24 ??
-      detailData.price_changes?.change_24h;
-
-    Utils.setText(
-      "detail-change5m",
-      change5m !== undefined
-        ? Utils.formatPercentValue(change5m, { fallback: "—" })
-        : "—"
-    );
-    Utils.setText(
-      "detail-change1h",
-      change1h !== undefined
-        ? Utils.formatPercentValue(change1h, { fallback: "—" })
-        : "—"
-    );
-    Utils.setText(
-      "detail-change6h",
-      change6h !== undefined
-        ? Utils.formatPercentValue(change6h, { fallback: "—" })
-        : "—"
-    );
-    Utils.setText(
-      "detail-change24h",
-      change24hValue !== undefined
-        ? Utils.formatPercentValue(change24hValue, { fallback: "—" })
-        : "—"
-    );
-
-    const buys24hRaw = detailData.txns?.h24?.buys ?? detailData.buys_24h;
-    const sells24hRaw = detailData.txns?.h24?.sells ?? detailData.sells_24h;
-    const buys24h = Number(buys24hRaw);
-    const sells24h = Number(sells24hRaw);
-    const hasBuys = Number.isFinite(buys24h);
-    const hasSells = Number.isFinite(sells24h);
-    const netFlow =
-      hasBuys && hasSells ? buys24h - sells24h : Number(detailData.net_flow);
-    const ratio =
-      hasBuys && hasSells && sells24h !== 0
-        ? buys24h / sells24h
-        : Number(detailData.buy_sell_ratio);
-
-    Utils.setText("detail-buys24h", hasBuys ? Math.round(buys24h) : "—");
-    Utils.setText("detail-sells24h", hasSells ? Math.round(sells24h) : "—");
-    Utils.setText(
-      "detail-ratio",
-      Number.isFinite(ratio) ? ratio.toFixed(2) : "—"
-    );
-    if (Number.isFinite(netFlow)) {
-      const sign = netFlow > 0 ? "+" : netFlow < 0 ? "-" : "";
-      Utils.setText(
-        "detail-netflow",
-        `${sign}${Math.abs(Math.round(netFlow))}`
-      );
-    } else {
-      Utils.setText("detail-netflow", "—");
+    if (!Array.isArray(links) || links.length === 0) {
+      if (emptyMessage) {
+        const empty = document.createElement("div");
+        empty.className = "empty-state";
+        empty.textContent = emptyMessage;
+        container.appendChild(empty);
+      }
+      return;
     }
 
-    const securityScore = Number(detailData.security_score);
-    const rugged = detailData.rugged;
-    const badge = document.getElementById("security-badge");
-    if (badge) {
-      const statusClass =
-        rugged === true
-          ? "critical"
-          : securityScore >= 700
-          ? "excellent"
-          : securityScore >= 500
-          ? "good"
-          : securityScore >= 300
-          ? "warning"
-          : "critical";
-      badge.className = `security-badge ${statusClass}`.trim();
-    }
-
-    const progress = document.getElementById("security-progress");
-    if (progress) {
-      let pct = Number(detailData.security_score_normalized);
-      if (!Number.isFinite(pct)) {
-        pct = Number(detailData.security_score);
-        if (Number.isFinite(pct)) {
-          pct = Math.max(0, Math.min(100, pct / 10.0));
+    const fragment = document.createDocumentFragment();
+    links.forEach((link) => {
+      if (!link || !link.url) {
+        return;
+      }
+      const anchor = document.createElement("a");
+      let resolvedUrl;
+      try {
+        const parsed = new URL(link.url, window.location.origin);
+        if (!/^https?:$/i.test(parsed.protocol)) {
+          return;
         }
+        resolvedUrl = parsed.href;
+      } catch (error) {
+        return;
       }
-      if (!Number.isFinite(pct)) pct = 0;
-      pct = Math.max(0, Math.min(100, pct));
-      progress.style.width = `${pct}%`;
-    }
-
-    Utils.setHtml(
-      "security-score-value",
-      Number.isFinite(securityScore) ? `${securityScore}` : "—"
-    );
-    const securitySummary =
-      detailData.security_summary ||
-      (rugged
-        ? "⚠️ Token flagged as rugged."
-        : "No security summary available.");
-    Utils.setHtml("security-status", securitySummary);
-    Utils.setText("detail-mint-auth", detailData.mint_authority ?? "Unknown");
-    Utils.setText(
-      "detail-freeze-auth",
-      detailData.freeze_authority ?? "Unknown"
-    );
-    Utils.setText("detail-holders", detailData.total_holders ?? "—");
-    const top10Raw = detailData.top_10_concentration;
-    if (top10Raw === null || top10Raw === undefined) {
-      Utils.setText("detail-top10", "—");
-    } else {
-      const top10Num = Number(top10Raw);
-      if (Number.isFinite(top10Num)) {
-        const display = top10Num <= 1 ? top10Num * 100 : top10Num;
-        Utils.setText("detail-top10", `${display.toFixed(2)}%`);
-      } else {
-        Utils.setText("detail-top10", `${top10Raw}`);
-      }
-    }
-    Utils.setHtml(
-      "risk-factors-list",
-      renderRiskFactors(detailData.security_risks)
-    );
-
-    Utils.setText(
-      "sidebar-price",
-      Number.isFinite(price)
-        ? Utils.formatPriceSol(price, { fallback: "N/A" })
-        : "—"
-    );
-    Utils.setText(
-      "sidebar-volume",
-      Utils.formatCurrencyUSD(volume24hValue, { fallback: "—" })
-    );
-    Utils.setText(
-      "sidebar-liq",
-      Utils.formatCurrencyUSD(liquidityValue, { fallback: "—" })
-    );
-    Utils.setText(
-      "sidebar-mcap",
-      Utils.formatCurrencyUSD(marketCapValue, { fallback: "—" })
-    );
-
-    const statusFlags = {
-      has_pool_price: detailData.has_pool_price ?? token.has_pool_price,
-      has_ohlcv: detailData.has_ohlcv ?? token.has_ohlcv,
-      has_open_position:
-        detailData.has_open_position ?? token.has_open_position,
-      blacklisted: detailData.blacklisted ?? token.blacklisted,
-    };
-    Utils.setHtml("sidebar-badges", renderSidebarBadges(statusFlags));
-
-    const modal = document.getElementById("tokenModal");
-    if (modal) {
-      modal.classList.add("active");
-    } else {
-      console.error("Modal element not found!");
-    }
+      anchor.href = resolvedUrl;
+      anchor.target = "_blank";
+      anchor.rel = "noopener";
+      const rawLabel = getLabel ? getLabel(link) : link.label;
+      anchor.textContent = rawLabel && String(rawLabel).trim().length
+        ? rawLabel
+        : extractDomain(link.url);
+      fragment.appendChild(anchor);
+    });
+    container.appendChild(fragment);
   }
 
   function resetTokenModal() {
@@ -2237,8 +2338,6 @@
           ? rawPrice.toFixed(12)
           : token?.price_sol ?? "";
         const priceIndicator = token?.__priceDirection;
-        const upArrowOpacity = priceIndicator === "up" ? "1" : "0";
-        const downArrowOpacity = priceIndicator === "down" ? "1" : "0";
         const priceInnerClassNames = ["price-cell__inner"];
         if (priceIndicator === "up") {
           priceInnerClassNames.push("price-cell__inner--up");
@@ -2248,7 +2347,7 @@
         cell.title = priceTitle;
         cell.innerHTML = `<div class="${priceInnerClassNames.join(
           " "
-        )}"><span class="price-arrow price-arrow--up" aria-hidden="true" style="opacity:${upArrowOpacity}">▲</span><span class="price-arrow price-arrow--down" aria-hidden="true" style="opacity:${downArrowOpacity}">▼</span><span class="price-value">${priceDisplay}</span></div>`;
+        )}"><span class="price-arrow price-arrow--up" aria-hidden="true">▲</span><span class="price-arrow price-arrow--down" aria-hidden="true">▼</span><span class="price-value">${priceDisplay}</span></div>`;
         break;
       }
       case "liquidity_usd": {
@@ -3202,35 +3301,27 @@
 
   function renderSecurity(score, rugged) {
     if (rugged === true) {
-      return `<span class="badge" style="background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;">RUG</span>`;
+      return '<span class="badge error">RUG</span>';
     }
     if (score === null || score === undefined) return "—";
-    let color = "#64748b";
-    if (score >= 700) color = "#16a34a";
-    else if (score >= 500) color = "#22c55e";
-    else if (score >= 300) color = "#f59e0b";
-    else color = "#ef4444";
-    return `<span style="font-weight:600;color:${color}">${score}</span>`;
+    let tier = "baseline";
+    if (score >= 700) tier = "elite";
+    else if (score >= 500) tier = "high";
+    else if (score >= 300) tier = "medium";
+    else if (score >= 0) tier = "low";
+    return `<span class="security-score security-score--${tier}">${score}</span>`;
   }
 
   function renderStatusBadges(token) {
     const badges = [];
     if (token.has_pool_price)
-      badges.push(
-        '<span class="badge" style="background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;">POOL</span>'
-      );
+      badges.push('<span class="badge badge--pool">POOL</span>');
     if (token.has_ohlcv)
-      badges.push(
-        '<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;">OHLCV</span>'
-      );
+      badges.push('<span class="badge badge--ohlcv">OHLCV</span>');
     if (token.has_open_position)
-      badges.push(
-        '<span class="badge" style="background:#fde68a;color:#92400e;border:1px solid #fcd34d;">POS</span>'
-      );
+      badges.push('<span class="badge badge--position">POS</span>');
     if (token.blacklisted)
-      badges.push(
-        '<span class="badge" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;">BL</span>'
-      );
+      badges.push('<span class="badge badge--blacklisted">BL</span>');
     return badges.join(" ");
   }
 
@@ -3316,13 +3407,15 @@
         <div class="modal-token-info">
           <div class="modal-token-symbol" id="modalTokenSymbol">SONIC</div>
           <div class="modal-token-name" id="modalTokenName">Sonic SVM</div>
+          <div class="modal-token-tags" id="modalTokenTags"></div>
         </div>
       </div>
       <div class="modal-price-info">
-        <div class="modal-price" id="modalTokenPrice">0.00077622</div>
-        <div class="modal-price-change positive" id="modalTokenChange">
-          +2.12%
+        <div class="modal-price-stack">
+          <div class="modal-price" id="modalTokenPrice">0.00077622</div>
+          <div class="modal-price-sub" id="modalTokenPriceUsd">$0.00</div>
         </div>
+        <div class="modal-price-change positive" id="modalTokenChange">+2.12%</div>
       </div>
       <button
         class="modal-close-btn"
@@ -3357,23 +3450,39 @@
         <div class="modal-content">
           <!-- Overview Tab -->
           <div class="tab-pane active" id="tab-overview">
-            <div class="metrics-grid">
+            <div class="overview-summary">
+              <div class="summary-card">
+                <div class="summary-card__label">Price</div>
+                <div class="summary-card__value" id="summary-price-sol">—</div>
+                <div class="summary-card__meta" id="summary-price-usd">—</div>
+                <div class="summary-card__delta" id="summary-change-24h">—</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-card__label">Liquidity</div>
+                <div class="summary-card__value" id="summary-liquidity">—</div>
+                <div class="summary-card__meta" id="summary-confidence">Confidence —</div>
+                <div class="summary-card__meta" id="summary-last-updated">Price updated —</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-card__label">Volume 24h</div>
+                <div class="summary-card__value" id="summary-volume">—</div>
+                <div class="summary-card__meta" id="summary-volume-1h">1h —</div>
+                <div class="summary-card__meta" id="summary-volume-5m">5m —</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-card__label">Net Flow 24h</div>
+                <div class="summary-card__value" id="summary-netflow">—</div>
+                <div class="summary-card__meta" id="summary-buys-sells">Buys — / Sells —</div>
+                <div class="summary-card__meta" id="summary-ratio">Ratio —</div>
+              </div>
+            </div>
+
+            <div class="metrics-grid metrics-grid--responsive">
               <div class="metric-card">
                 <div class="metric-card-header">🧾 Token Profile</div>
-                <div class="metric-row" title="Full mint address">
+                <div class="metric-row metric-row--wrap" title="Full mint address">
                   <span class="metric-label">Mint</span>
-                  <span
-                    class="metric-value"
-                    id="detail-mint"
-                    style="
-                      font-size: 0.75em;
-                      letter-spacing: 0.3px;
-                      overflow: hidden;
-                      text-overflow: ellipsis;
-                      max-width: 160px;
-                    "
-                    >—</span
-                  >
+                  <span class="metric-value metric-value--muted" id="detail-mint">—</span>
                 </div>
                 <div class="metric-row">
                   <span class="metric-label">Decimals</span>
@@ -3391,116 +3500,89 @@
                   <span class="metric-label">Launch</span>
                   <span class="metric-value" id="detail-launch-date">—</span>
                 </div>
-              </div>
-              <div class="metric-card">
-                <div class="metric-card-header">💰 Market Data</div>
                 <div class="metric-row">
-                  <span class="metric-label">Liquidity</span>
-                  <span class="metric-value" id="detail-liquidity"
-                    >$628.66K</span
-                  >
-                </div>
-                <div class="metric-row">
-                  <span class="metric-label">Volume 24h</span>
-                  <span class="metric-value" id="detail-volume24h"
-                    >$124.32K</span
-                  >
-                </div>
-                <div class="metric-row">
-                  <span class="metric-label">Volume 6h</span>
-                  <span class="metric-value" id="detail-volume6h">$45.67K</span>
-                </div>
-                <div class="metric-row">
-                  <span class="metric-label">Volume 1h</span>
-                  <span class="metric-value" id="detail-volume1h">$12.45K</span>
-                </div>
-                <div class="metric-row">
-                  <span class="metric-label">FDV</span>
-                  <span class="metric-value" id="detail-fdv">$432.41M</span>
-                </div>
-                <div class="metric-row">
-                  <span class="metric-label">Market Cap</span>
-                  <span class="metric-value" id="detail-marketcap"
-                    >$64.86M</span
-                  >
+                  <span class="metric-label">Last Updated</span>
+                  <span class="metric-value" id="detail-last-updated">—</span>
                 </div>
               </div>
 
               <div class="metric-card">
-                <div class="metric-card-header">🏊 Pool Metrics</div>
+                <div class="metric-card-header">💰 Market Metrics</div>
                 <div class="metric-row">
-                  <span class="metric-label">DEX</span>
-                  <span class="metric-value" id="detail-dex">Raydium CPMM</span>
+                  <span class="metric-label">Liquidity (USD)</span>
+                  <span class="metric-value" id="detail-liquidity">—</span>
                 </div>
                 <div class="metric-row">
+                  <span class="metric-label">Base Reserves</span>
+                  <span class="metric-value" id="detail-base-liquidity">—</span>
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">Quote Reserves</span>
+                  <span class="metric-value" id="detail-quote-liquidity">—</span>
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">FDV</span>
+                  <span class="metric-value" id="detail-fdv">—</span>
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">Market Cap</span>
+                  <span class="metric-value" id="detail-marketcap">—</span>
+                </div>
+              </div>
+
+              <div class="metric-card">
+                <div class="metric-card-header">🏊 Pool</div>
+                <div class="metric-row">
+                  <span class="metric-label">DEX</span>
+                  <span class="metric-value" id="detail-dex">—</span>
+                </div>
+                <div class="metric-row metric-row--wrap">
                   <span class="metric-label">Pool Address</span>
-                  <span
-                    class="metric-value"
-                    id="detail-pool"
-                    style="font-size: 0.75em"
-                    >—</span
+                  <a
+                    class="metric-value metric-link"
+                    id="detail-pool-link"
+                    href="#"
+                    target="_blank"
+                    rel="noopener"
+                    >—</a
                   >
                 </div>
                 <div class="metric-row">
                   <span class="metric-label">SOL Reserves</span>
-                  <span class="metric-value" id="detail-sol-reserves"
-                    >3,241.5</span
-                  >
+                  <span class="metric-value" id="detail-sol-reserves">—</span>
                 </div>
                 <div class="metric-row">
                   <span class="metric-label">Token Reserves</span>
-                  <span class="metric-value" id="detail-token-reserves"
-                    >84.2M</span
-                  >
+                  <span class="metric-value" id="detail-token-reserves">—</span>
                 </div>
                 <div class="metric-row">
                   <span class="metric-label">Confidence</span>
-                  <span class="metric-value" id="detail-confidence">0.95</span>
+                  <span class="metric-value" id="detail-confidence">—</span>
+                </div>
+                <div class="metric-row">
+                  <span class="metric-label">Price Updated</span>
+                  <span class="metric-value" id="detail-price-updated">—</span>
                 </div>
                 <div class="metric-row">
                   <span class="metric-label">Pool Age</span>
-                  <span class="metric-value" id="detail-pool-age">2h 15m</span>
+                  <span class="metric-value" id="detail-pool-age">—</span>
                 </div>
               </div>
 
-              <div class="metric-card">
-                <div class="metric-card-header">📊 Price Changes</div>
-                <div class="metric-row">
-                  <span class="metric-label">5 minutes</span>
-                  <span class="metric-value" id="detail-change5m">+2.5%</span>
-                </div>
-                <div class="metric-row">
-                  <span class="metric-label">1 hour</span>
-                  <span class="metric-value" id="detail-change1h">-1.2%</span>
-                </div>
-                <div class="metric-row">
-                  <span class="metric-label">6 hours</span>
-                  <span class="metric-value" id="detail-change6h">+5.8%</span>
-                </div>
-                <div class="metric-row">
-                  <span class="metric-label">24 hours</span>
-                  <span class="metric-value" id="detail-change24h">+15.3%</span>
-                </div>
+              <div class="metric-card metric-card--wide">
+                <div class="metric-card-header">📊 Price Movement</div>
+                <div class="metric-table" id="detail-price-table"></div>
               </div>
 
-              <div class="metric-card">
-                <div class="metric-card-header">💱 Transaction Flow</div>
-                <div class="metric-row">
-                  <span class="metric-label">Buys 24h</span>
-                  <span class="metric-value" id="detail-buys24h">432</span>
-                </div>
-                <div class="metric-row">
-                  <span class="metric-label">Sells 24h</span>
-                  <span class="metric-value" id="detail-sells24h">389</span>
-                </div>
-                <div class="metric-row">
-                  <span class="metric-label">Buy/Sell Ratio</span>
-                  <span class="metric-value" id="detail-ratio">1.11</span>
-                </div>
-                <div class="metric-row">
-                  <span class="metric-label">Net Flow</span>
-                  <span class="metric-value" id="detail-netflow">+43 Buys</span>
-                </div>
+              <div class="metric-card metric-card--wide">
+                <div class="metric-card-header">💱 Volume &amp; Transactions</div>
+                <div class="metric-table" id="detail-activity-table"></div>
+              </div>
+
+              <div class="metric-card metric-card--wide">
+                <div class="metric-card-header">🏷️ Tags &amp; Labels</div>
+                <div class="badge-grid" id="detail-tag-badges"></div>
+                <div class="badge-grid" id="detail-label-badges"></div>
               </div>
             </div>
           </div>
@@ -3696,13 +3778,14 @@
         </div>
 
         <div class="sidebar-section">
+          <div class="sidebar-section-title">🌐 External Links</div>
+          <div class="sidebar-link-list" id="sidebar-websites"></div>
+          <div class="sidebar-link-list" id="sidebar-socials"></div>
+        </div>
+
+        <div class="sidebar-section">
           <div class="sidebar-section-title">🏷️ Status Flags</div>
-          <div
-            id="sidebar-badges"
-            style="display: flex; flex-wrap: wrap; gap: 6px"
-          >
-            <!-- Badges will be populated here -->
-          </div>
+          <div id="sidebar-badges" class="badge-grid"></div>
         </div>
       </div>
     </div>

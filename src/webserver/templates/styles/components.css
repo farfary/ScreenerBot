@@ -10,6 +10,30 @@
   font-weight: 600;
 }
 
+.badge--pool {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+
+.badge--ohlcv {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.badge--position {
+  background: #fde68a;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+}
+
+.badge--blacklisted {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
 .badge.online,
 .badge.success {
   background: var(--badge-online);
@@ -35,6 +59,31 @@
 .badge.secondary {
   background: var(--bg-secondary);
   color: var(--text-primary);
+}
+
+.security-score {
+  font-weight: 600;
+  color: #64748b;
+}
+
+.security-score--elite {
+  color: #16a34a;
+}
+
+.security-score--high {
+  color: #22c55e;
+}
+
+.security-score--medium {
+  color: #f59e0b;
+}
+
+.security-score--low {
+  color: #ef4444;
+}
+
+.security-score--baseline {
+  color: #64748b;
 }
 
 @keyframes badgePulse {

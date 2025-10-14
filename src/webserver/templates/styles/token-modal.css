@@ -77,6 +77,24 @@
   gap: 2px;
 }
 
+.token-modal .modal-token-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.token-modal .modal-token-tags .tag-badge {
+  background: #1e293b;
+  border: 1px solid #2f3a4f;
+  color: #cbd5f5;
+  font-size: 0.65em;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  border-radius: 999px;
+  padding: 2px 8px;
+  text-transform: uppercase;
+}
+
 .token-modal .modal-token-symbol {
   font-size: 1em;
   font-weight: 700;
@@ -96,10 +114,24 @@
   margin-right: 16px;
 }
 
+.token-modal .modal-price-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
 .token-modal .modal-price {
   font-size: 1.1em;
   font-weight: 700;
   color: #e2e8f0;
+  font-family: "Courier New", monospace;
+}
+
+.token-modal .modal-price-sub {
+  font-size: 0.75em;
+  font-weight: 500;
+  color: #94a3b8;
   font-family: "Courier New", monospace;
 }
 
@@ -307,6 +339,69 @@
   width: 100%;
 }
 
+.token-modal .metrics-grid--responsive {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.token-modal .metric-card--wide {
+  grid-column: span 2;
+}
+
+@media (max-width: 1200px) {
+  .token-modal .metric-card--wide {
+    grid-column: span 1;
+  }
+}
+
+.token-modal .overview-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.token-modal .summary-card {
+  background: #1a1f2e;
+  border: 1px solid #243047;
+  border-radius: 6px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.token-modal .summary-card__label {
+  font-size: 0.75em;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.token-modal .summary-card__value {
+  font-size: 1.1em;
+  font-weight: 700;
+  color: #e2e8f0;
+  font-family: "Courier New", monospace;
+}
+
+.token-modal .summary-card__meta {
+  font-size: 0.78em;
+  color: #94a3b8;
+}
+
+.token-modal .summary-card__delta {
+  font-size: 0.85em;
+  font-weight: 600;
+}
+
+.token-modal .summary-card__delta.positive {
+  color: #10b981;
+}
+
+.token-modal .summary-card__delta.negative {
+  color: #ef4444;
+}
+
 @media (max-width: 1200px) {
   .token-modal .token-detail-body {
     flex-direction: column;
@@ -372,6 +467,11 @@
   border-bottom: 1px solid #2d3748;
 }
 
+.token-modal .metric-row--wrap {
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
 .token-modal .metric-row:last-child {
   border-bottom: none;
 }
@@ -385,6 +485,120 @@
   color: #e2e8f0;
   font-weight: 600;
   font-family: "Courier New", monospace;
+}
+
+.token-modal .metric-value--muted {
+  color: #9aa6bf;
+  font-size: 0.8em;
+  max-width: 100%;
+  word-break: break-all;
+}
+
+.token-modal .metric-link {
+  color: #38bdf8;
+  text-decoration: none;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.token-modal .metric-link:hover {
+  text-decoration: underline;
+}
+
+.token-modal .metric-link--disabled {
+  color: #64748b;
+  cursor: default;
+  pointer-events: none;
+  text-decoration: none;
+}
+
+.token-modal .metric-table {
+  width: 100%;
+  border: 1px solid #1f2735;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #0f1419;
+}
+
+.token-modal .metric-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.token-modal .metric-table th,
+.token-modal .metric-table td {
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 0.84em;
+  border-bottom: 1px solid #1f2735;
+}
+
+.token-modal .metric-table th {
+  color: #94a3b8;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.token-modal .metric-table td {
+  color: #e2e8f0;
+  font-family: "Courier New", monospace;
+}
+
+.token-modal .metric-table tr:last-child td {
+  border-bottom: none;
+}
+
+.token-modal .metric-table .positive {
+  color: #22c55e;
+}
+
+.token-modal .metric-table .negative {
+  color: #ef4444;
+}
+
+.token-modal .badge-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.token-modal .badge-grid .badge-item,
+.token-modal .modal-token-tags .tag-badge,
+.token-modal .badge-grid .status-badge {
+  background: #1e293b;
+  border: 1px solid #2d3748;
+  border-radius: 999px;
+  color: #cbd5f5;
+  font-size: 0.7em;
+  font-weight: 600;
+  padding: 3px 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.token-modal .sidebar-link-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.token-modal .sidebar-link-list a {
+  color: #38bdf8;
+  font-size: 0.85em;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.token-modal .sidebar-link-list a:hover {
+  text-decoration: underline;
+}
+
+.token-modal .empty-state {
+  color: #64748b;
+  font-size: 0.8em;
 }
 
 /* Ensure all tab-pane children expand to full width */

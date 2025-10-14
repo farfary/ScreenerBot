@@ -351,6 +351,34 @@
   vertical-align: middle;
 }
 
+#tokensTable .price-cell__inner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  width: 100%;
+}
+
+#tokensTable .price-value {
+  font-variant-numeric: tabular-nums;
+}
+
+#tokensTable .price-arrow {
+  font-size: 0.7em;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+#tokensTable .price-cell__inner--up .price-arrow--up {
+  opacity: 1;
+  color: #10b981;
+}
+
+#tokensTable .price-cell__inner--down .price-arrow--down {
+  opacity: 1;
+  color: #ef4444;
+}
+
 #tokensTable th.align-right,
 #tokensTable td.align-right {
   text-align: right;
