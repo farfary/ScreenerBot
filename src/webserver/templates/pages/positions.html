@@ -1495,39 +1495,44 @@
 
   // ===== PageRegistry Lifecycle Integration =====
   (function () {
-    const lifecycle = {
-      init(context) {
-        console.log("[Positions] Lifecycle init");
-        // Store context for future use if needed
-        if (context && context.data) {
-          context.data.controller = positionsController;
-        }
-      },
-      activate(context) {
-        console.log("[Positions] Lifecycle activate");
-        positionsController.activate();
-      },
-      deactivate() {
-        console.log("[Positions] Lifecycle deactivate");
-        positionsController.stopPolling();
-        positionsController.abortInFlight();
-        closePositionModal();
-      },
-      dispose() {
-        console.log("[Positions] Lifecycle dispose");
-        positionsController.teardown();
-      },
-    };
+    function createPositionsPageLifecycle() {
+      return {
+        init(context) {
+          console.log("[Positions] Lifecycle init");
+          // Store context for future use if needed
+          if (context && context.data) {
+            context.data.controller = positionsController;
+          }
+        },
+        activate(context) {
+          console.log("[Positions] Lifecycle activate");
+          positionsController.activate();
+        },
+        deactivate() {
+          console.log("[Positions] Lifecycle deactivate");
+          positionsController.stopPolling();
+          positionsController.abortInFlight();
+          closePositionModal();
+        },
+        dispose() {
+          console.log("[Positions] Lifecycle dispose");
+          positionsController.teardown();
+        },
+      };
+    }
 
     if (window.PageLifecycleRegistry) {
-      window.PageLifecycleRegistry.register("positions", lifecycle);
+      window.PageLifecycleRegistry.register(
+        "positions",
+        createPositionsPageLifecycle()
+      );
     } else {
       if (!window.__pendingPageRegistrations) {
         window.__pendingPageRegistrations = [];
       }
       window.__pendingPageRegistrations.push({
         pageId: "positions",
-        lifecycle: lifecycle,
+        lifecycle: createPositionsPageLifecycle(),
       });
     }
   })();

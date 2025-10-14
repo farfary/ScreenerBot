@@ -925,73 +925,78 @@
     };
 
     // Lifecycle implementation
-    const lifecycle = {
-      init(context) {
-        console.log("[Services] Lifecycle init");
-        controller.context = context;
-        controller.bindToolbarEventsOnce();
-        controller.bindSortHandlersOnce();
-      },
+    function createServicesPageLifecycle() {
+      return {
+        init(context) {
+          console.log("[Services] Lifecycle init");
+          controller.context = context;
+          controller.bindToolbarEventsOnce();
+          controller.bindSortHandlersOnce();
+        },
 
-      activate(context) {
-        console.log("[Services] Lifecycle activate");
-        controller.context = context;
-        controller.isActive = true;
+        activate(context) {
+          console.log("[Services] Lifecycle activate");
+          controller.context = context;
+          controller.isActive = true;
 
-        if (!controller.hasInitialSnapshot) {
-          controller.setLoading("Loading services...");
-        }
-
-        if (!controller.poller) {
-          const poller = PagePoller.create({
-            label: "Services",
-            onPoll: () => controller.fetchServices({ reason: "poll" }),
-          });
-          controller.poller = context.managePoller(poller);
-        }
-
-        controller.poller.start();
-
-        if (!controller.hasInitialSnapshot) {
-          controller.fetchServices({ reason: "initial" });
-        } else if (controller.servicesData) {
-          controller.renderServicesTable();
-        }
-      },
-
-      deactivate(context) {
-        console.log("[Services] Lifecycle deactivate");
-        controller.isActive = false;
-        if (controller.poller && typeof controller.poller.stop === "function") {
-          controller.poller.stop();
-        }
-        if (controller.abortController) {
-          try {
-            controller.abortController.abort();
-          } catch (error) {
-            console.warn("[Services] Failed to abort on deactivate", error);
+          if (!controller.hasInitialSnapshot) {
+            controller.setLoading("Loading services...");
           }
-          controller.abortController = null;
-        }
-      },
 
-      dispose(context) {
-        console.log("[Services] Lifecycle dispose");
-        controller.isActive = false;
-        if (controller.abortController) {
-          try {
-            controller.abortController.abort();
-          } catch (error) {
-            console.warn("[Services] Failed to abort on dispose", error);
+          if (!controller.poller) {
+            const poller = PagePoller.create({
+              label: "Services",
+              onPoll: () => controller.fetchServices({ reason: "poll" }),
+            });
+            controller.poller = context.managePoller(poller);
           }
-          controller.abortController = null;
-        }
-        controller.poller = null;
-        controller.servicesData = null;
-        controller.hasInitialSnapshot = false;
-        controller.lastErrorMessage = null;
-      },
-    };
+
+          controller.poller.start();
+
+          if (!controller.hasInitialSnapshot) {
+            controller.fetchServices({ reason: "initial" });
+          } else if (controller.servicesData) {
+            controller.renderServicesTable();
+          }
+        },
+
+        deactivate(context) {
+          console.log("[Services] Lifecycle deactivate");
+          controller.isActive = false;
+          if (
+            controller.poller &&
+            typeof controller.poller.stop === "function"
+          ) {
+            controller.poller.stop();
+          }
+          if (controller.abortController) {
+            try {
+              controller.abortController.abort();
+            } catch (error) {
+              console.warn("[Services] Failed to abort on deactivate", error);
+            }
+            controller.abortController = null;
+          }
+        },
+
+        dispose(context) {
+          console.log("[Services] Lifecycle dispose");
+          controller.isActive = false;
+          if (controller.abortController) {
+            try {
+              controller.abortController.abort();
+            } catch (error) {
+              console.warn("[Services] Failed to abort on dispose", error);
+            }
+            controller.abortController = null;
+          }
+          controller.poller = null;
+          controller.servicesData = null;
+          controller.hasInitialSnapshot = false;
+          controller.lastErrorMessage = null;
+        },
+      };
+    }
 
     // Manual refresh function for inline onclick
     window.refreshServices = function () {
@@ -1001,14 +1006,17 @@
     };
 
     if (window.PageLifecycleRegistry) {
-      window.PageLifecycleRegistry.register("services", lifecycle);
+      window.PageLifecycleRegistry.register(
+        "services",
+        createServicesPageLifecycle()
+      );
     } else {
       if (!window.__pendingPageRegistrations) {
         window.__pendingPageRegistrations = [];
       }
       window.__pendingPageRegistrations.push({
         pageId: "services",
-        lifecycle: lifecycle,
+        lifecycle: createServicesPageLifecycle(),
       });
     }
   })();

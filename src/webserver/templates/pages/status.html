@@ -555,44 +555,49 @@
       }
     }
 
-    const lifecycle = {
-      init(context) {
-        state.context = context;
-        context.data.state = state;
-        restoreViewFromStorage();
-      },
-      activate(context) {
-        state.context = context;
-        mountSubTabs(context);
-        highlightActiveSubTab();
-        ensurePoller(context);
-        renderStatusContent();
-        fetchStatusSnapshot({ showLoading: !state.data });
-        startPoller();
-      },
-      deactivate() {
-        stopPoller();
-      },
-      dispose() {
-        stopPoller();
-        cleanupPoller();
-        teardownSubTabs();
-        state.context = null;
-        state.data = null;
-        state.message = "Loading status...";
-        state.error = null;
-      },
-    };
+    function createStatusPageLifecycle() {
+      return {
+        init(context) {
+          state.context = context;
+          context.data.state = state;
+          restoreViewFromStorage();
+        },
+        activate(context) {
+          state.context = context;
+          mountSubTabs(context);
+          highlightActiveSubTab();
+          ensurePoller(context);
+          renderStatusContent();
+          fetchStatusSnapshot({ showLoading: !state.data });
+          startPoller();
+        },
+        deactivate() {
+          stopPoller();
+        },
+        dispose() {
+          stopPoller();
+          cleanupPoller();
+          teardownSubTabs();
+          state.context = null;
+          state.data = null;
+          state.message = "Loading status...";
+          state.error = null;
+        },
+      };
+    }
 
     if (window.PageLifecycleRegistry) {
-      window.PageLifecycleRegistry.register("status", lifecycle);
+      window.PageLifecycleRegistry.register(
+        "status",
+        createStatusPageLifecycle()
+      );
     } else {
       if (!window.__pendingPageRegistrations) {
         window.__pendingPageRegistrations = [];
       }
       window.__pendingPageRegistrations.push({
         pageId: "status",
-        lifecycle: lifecycle,
+        lifecycle: createStatusPageLifecycle(),
       });
     }
 

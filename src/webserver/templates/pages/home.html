@@ -1130,42 +1130,47 @@
         });
       }
 
-      const lifecycle = {
-        init(context) {
-          state.context = context;
-          context.data.state = state;
-          subscribeToStatus(context);
-        },
-        activate(context) {
-          ensurePollers(context);
-          startPollers();
-          fetchOverview();
-          fetchConfig();
-          fetchRecentEvents();
-        },
-        deactivate() {
-          stopPollers();
-        },
-        dispose() {
-          cleanupPollers();
-          if (state.statusCleanup) {
-            state.statusCleanup();
-            state.statusCleanup = null;
-          }
-          state.context = null;
-          state.status = null;
-        },
-      };
+      function createHomePageLifecycle() {
+        return {
+          init(context) {
+            state.context = context;
+            context.data.state = state;
+            subscribeToStatus(context);
+          },
+          activate(context) {
+            ensurePollers(context);
+            startPollers();
+            fetchOverview();
+            fetchConfig();
+            fetchRecentEvents();
+          },
+          deactivate() {
+            stopPollers();
+          },
+          dispose() {
+            cleanupPollers();
+            if (state.statusCleanup) {
+              state.statusCleanup();
+              state.statusCleanup = null;
+            }
+            state.context = null;
+            state.status = null;
+          },
+        };
+      }
 
       if (window.PageLifecycleRegistry) {
-        window.PageLifecycleRegistry.register("home", lifecycle);
+        window.PageLifecycleRegistry.register(
+          "home",
+          createHomePageLifecycle()
+        );
       } else {
         if (!window.__pendingPageRegistrations) {
           window.__pendingPageRegistrations = [];
         }
         window.__pendingPageRegistrations.push({
           pageId: "home",
-          lifecycle: lifecycle,
+          lifecycle: createHomePageLifecycle(),
         });
       }
     })();
