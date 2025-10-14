@@ -16,6 +16,7 @@ const UTIL_SCRIPTS: &str = include_str!("templates/scripts/utils.js");
 const COMMON_SCRIPTS: &str = include_str!("templates/scripts/common.js");
 const THEME_SCRIPTS: &str = include_str!("templates/scripts/theme.js");
 const CHART_SCRIPTS: &str = include_str!("templates/scripts/chart.js");
+const POSITION_MODAL_SCRIPTS: &str = include_str!("templates/modals/position_modal.js");
 
 const HOME_PAGE: &str = include_str!("templates/pages/home.html");
 const STATUS_PAGE: &str = include_str!("templates/pages/status.html");
@@ -57,6 +58,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     html = html.replace("/*__COMMON_SCRIPTS__*/", COMMON_SCRIPTS);
     html = html.replace("/*__THEME_SCRIPTS__*/", THEME_SCRIPTS);
     html = html.replace("/*__CHART_SCRIPTS__*/", CHART_SCRIPTS);
+    html = html.replace("/*__POSITION_MODAL_SCRIPTS__*/", POSITION_MODAL_SCRIPTS);
     html
 }
 

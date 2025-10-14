@@ -775,1060 +775,72 @@
 </div>
 
 <script>
+  // ===== Position Store =====
   var positionsStore =
     window.positionsStore instanceof Map ? window.positionsStore : new Map();
   window.positionsStore = positionsStore;
 
-  var POSITION_MODAL_REFETCH_INTERVAL_MS = 15000;
+  // ===== Modal Integration =====
+  // Position modal is now in separate module: src/webserver/templates/modals/position_modal.js
+  // Access via window.PositionModal API
 
-  var positionModalState = window.positionModalState || {
-    currentKey: null,
-    keydownHandler: null,
-    detail: null,
-    detailKey: null,
-    abortController: null,
-    lastFetchedAt: 0,
-  };
-  window.positionModalState = positionModalState;
-
-  var POSITION_MODAL_FIELD_IDS = [
-    "positionMint",
-    "positionId",
-    "positionState",
-    "positionPositionType",
-    "positionLiquidityTier",
-    "positionProfitTargets",
-    "positionPhantom",
-    "positionPhantomFirstSeen",
-    "positionSynthetic",
-    "positionEntryPrice",
-    "positionEffectiveEntryPrice",
-    "positionEntrySize",
-    "positionTotalSize",
-    "positionPriceHigh",
-    "positionPriceLow",
-    "positionCurrentPrice",
-    "positionCurrentUpdated",
-    "positionEntryTime",
-    "positionEntrySig",
-    "positionEntryVerified",
-    "positionEntryFee",
-    "positionTokenAmount",
-    "positionExitPrice",
-    "positionEffectiveExitPrice",
-    "positionSolReceived",
-    "positionExitTime",
-    "positionExitSig",
-    "positionExitVerified",
-    "positionExitFee",
-    "positionClosedReason",
-    "positionModalSymbol",
-    "positionModalName",
-  ];
-
-  function getPositionFromStore(key) {
-    if (!key) {
-      return null;
-    }
-    try {
-      return positionsStore.get(key) || null;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  function setPositionModalText(id, value) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    if (value === undefined || value === null) {
-      el.textContent = "—";
-      return;
-    }
-    el.textContent = String(value);
-  }
-
-  // Use Utils.escapeHtml
-
-  function formatPositionTimestamp(value) {
-    if (typeof Utils !== "undefined" && Utils?.formatTimeFromSeconds) {
-      return Utils.formatTimeFromSeconds(value, { fallback: "—" });
-    }
-    if (!Number.isFinite(value)) return "—";
-    const date = new Date(value * 1000);
-    if (Number.isNaN(date.getTime())) {
-      return "—";
-    }
-    return date.toLocaleString();
-  }
-
-  function formatPositionPrice(value) {
-    if (value === null || value === undefined) {
-      return "—";
-    }
-    if (typeof Utils !== "undefined" && Utils?.formatPriceSol) {
-      return Utils.formatPriceSol(value, { fallback: "—" });
-    }
-    const num = Number(value);
-    if (!Number.isFinite(num)) return "—";
-    return num.toFixed(12);
-  }
-
-  function formatPositionSol(value, { decimals = 4, fallback = "—" } = {}) {
-    if (value === null || value === undefined) {
-      return fallback;
-    }
-    if (typeof Utils !== "undefined" && Utils?.formatSol) {
-      return Utils.formatSol(value, { decimals, fallback });
-    }
-    const num = Number(value);
-    if (!Number.isFinite(num)) return fallback;
-    return `${num.toFixed(decimals)} SOL`;
-  }
-
-  function formatPositionSolDelta(value) {
-    if (value === null || value === undefined) return "—";
-    const num = Number(value);
-    if (!Number.isFinite(num)) return "—";
-    const formatted = formatPositionSol(Math.abs(num));
-    if (formatted === "—") return formatted;
-    if (num > 0) return `+${formatted}`;
-    if (num < 0) return `-${formatted}`;
-    return formatted;
-  }
-
-  function formatPercentPlain(value) {
-    const num = Number(value);
-    if (!Number.isFinite(num)) return "—";
-    const magnitude = Math.abs(num).toFixed(2);
-    if (num > 0) return `+${magnitude}%`;
-    if (num < 0) return `-${magnitude}%`;
-    return `${magnitude}%`;
-  }
-
-  function formatBooleanFlag(value) {
-    if (typeof Utils !== "undefined" && Utils?.formatBooleanFlag) {
-      return Utils.formatBooleanFlag(value, "—");
-    }
-    if (value === true) return "Yes";
-    if (value === false) return "No";
-    return "—";
-  }
-
-  function formatTokenAmount(value) {
-    if (value === null || value === undefined) return "—";
-    const num = Number(value);
-    if (!Number.isFinite(num)) return String(value);
-    if (typeof Utils !== "undefined" && Utils?.formatNumber) {
-      return Utils.formatNumber(num, {
-        decimals: 0,
-        fallback: "—",
-        useGrouping: true,
-      });
-    }
-    return num.toLocaleString();
-  }
-
-  function lamportsToSolNumber(value) {
-    const num = Number(value);
-    if (!Number.isFinite(num)) return null;
-    return num / 1_000_000_000;
-  }
-
-  function formatLamportsToSol(value) {
-    const sol = lamportsToSolNumber(value);
-    if (sol === null) return "—";
-    return formatPositionSol(sol, { decimals: 6, fallback: "—" });
-  }
-
-  function formatProfitTargets(min, max) {
-    const hasMin = Number.isFinite(Number(min));
-    const hasMax = Number.isFinite(Number(max));
-    if (!hasMin && !hasMax) {
-      return "—";
-    }
-    const minText = hasMin ? formatPercentPlain(min) : "—";
-    const maxText = hasMax ? formatPercentPlain(max) : "—";
-    return `${minText} / ${maxText}`;
-  }
-
-  function setPositionModalPnl(id, value, { decimals = 4 } = {}) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.classList.remove("pnl-positive", "pnl-negative", "pnl-neutral");
-    if (value === null || value === undefined) {
-      el.textContent = "—";
-      el.classList.add("pnl-neutral");
-      return;
-    }
-
-    const num = Number(value);
-    if (!Number.isFinite(num)) {
-      el.textContent = "—";
-      el.classList.add("pnl-neutral");
-      return;
-    }
-
-    const sign = num > 0 ? "+" : num < 0 ? "-" : "";
-    const magnitude = Math.abs(num).toFixed(decimals);
-    el.textContent = `${sign}${magnitude} SOL`;
-
-    if (num > 0) {
-      el.classList.add("pnl-positive");
-    } else if (num < 0) {
-      el.classList.add("pnl-negative");
+  // Wrapper functions for compatibility
+  function openPositionDetail(key) {
+    if (
+      window.PositionModal &&
+      typeof window.PositionModal.open === "function"
+    ) {
+      window.PositionModal.open(key);
     } else {
-      el.classList.add("pnl-neutral");
+      console.error("[Positions] PositionModal not loaded");
     }
-  }
-
-  function setPositionModalPercent(id, value, { decimals = 2 } = {}) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.classList.remove("pnl-positive", "pnl-negative", "pnl-neutral");
-    if (value === null || value === undefined) {
-      el.textContent = "—";
-      el.classList.add("pnl-neutral");
-      return;
-    }
-
-    const num = Number(value);
-    if (!Number.isFinite(num)) {
-      el.textContent = "—";
-      el.classList.add("pnl-neutral");
-      return;
-    }
-
-    const sign = num > 0 ? "+" : num < 0 ? "-" : "";
-    const magnitude = Math.abs(num).toFixed(decimals);
-    el.textContent = `${sign}${magnitude}%`;
-
-    if (num > 0) {
-      el.classList.add("pnl-positive");
-    } else if (num < 0) {
-      el.classList.add("pnl-negative");
-    } else {
-      el.classList.add("pnl-neutral");
-    }
-  }
-
-  function getPositionStatusInfo(position) {
-    if (!position) {
-      return {
-        label: "Unknown",
-        className: "status-closed",
-        state: "Unknown",
-      };
-    }
-    if (position.synthetic_exit) {
-      return {
-        label: "Synthetic",
-        className: "status-synthetic",
-        state: "Synthetic Exit",
-      };
-    }
-    if (position.transaction_exit_verified) {
-      return {
-        label: "Closed",
-        className: "status-closed",
-        state: "Closed",
-      };
-    }
-    return {
-      label: "Open",
-      className: "status-open",
-      state: "Open",
-    };
-  }
-
-  function applyStatusBadge(element, info) {
-    if (!element || !info) return;
-    element.classList.remove(
-      "status-open",
-      "status-closed",
-      "status-synthetic"
-    );
-    element.classList.add(info.className);
-    element.textContent = info.label.toUpperCase();
-  }
-
-  function setPositionModalLoading(text) {
-    const loading = document.getElementById("positionModalLoading");
-    const content = document.getElementById("positionModalContent");
-    const error = document.getElementById("positionModalError");
-    if (loading) {
-      loading.classList.add("active");
-      const textEl = document.getElementById("positionModalLoadingText");
-      if (textEl) {
-        textEl.textContent = text || "Loading position details...";
-      }
-    }
-    if (content) {
-      content.classList.add("hidden");
-    }
-    if (error) {
-      error.classList.remove("active");
-      error.textContent = "";
-    }
-  }
-
-  function clearPositionModalError() {
-    const error = document.getElementById("positionModalError");
-    if (error) {
-      error.classList.remove("active");
-      error.textContent = "";
-    }
-  }
-
-  function setPositionModalError(message) {
-    const loading = document.getElementById("positionModalLoading");
-    const content = document.getElementById("positionModalContent");
-    const error = document.getElementById("positionModalError");
-    if (loading) {
-      loading.classList.remove("active");
-    }
-    if (content) {
-      content.classList.add("hidden");
-    }
-    if (error) {
-      error.textContent = message || "Failed to load position details";
-      error.classList.add("active");
-    }
-  }
-
-  function showPositionModalContent() {
-    const loading = document.getElementById("positionModalLoading");
-    const content = document.getElementById("positionModalContent");
-    if (loading) {
-      loading.classList.remove("active");
-    }
-    if (content) {
-      content.classList.remove("hidden");
-    }
-  }
-
-  function renderPositionModal(detail) {
-    if (!detail || !detail.position) {
-      setPositionModalError("Position detail unavailable");
-      return;
-    }
-
-    const position = detail.position;
-    clearPositionModalError();
-    showPositionModalContent();
-
-    setPositionModalText("positionModalSymbol", position.symbol || "—");
-    setPositionModalText("positionModalName", position.name || "—");
-    setPositionModalText("positionMint", position.mint || "—");
-    setPositionModalText(
-      "positionId",
-      position.id !== undefined && position.id !== null
-        ? String(position.id)
-        : "—"
-    );
-
-    const statusInfo = getPositionStatusInfo(position);
-    const statusEl = document.getElementById("positionModalStatus");
-    applyStatusBadge(statusEl, statusInfo);
-    setPositionModalText("positionState", statusInfo.state);
-
-    setPositionModalText(
-      "positionPositionType",
-      position.position_type ? position.position_type.toUpperCase() : "—"
-    );
-    setPositionModalText(
-      "positionLiquidityTier",
-      position.liquidity_tier || "—"
-    );
-    setPositionModalText(
-      "positionProfitTargets",
-      formatProfitTargets(
-        position.profit_target_min,
-        position.profit_target_max
-      )
-    );
-
-    const phantomLabel = position.phantom_remove ? "Remove flagged" : "No";
-    const phantomConfirmations = Number(position.phantom_confirmations) || 0;
-    setPositionModalText(
-      "positionPhantom",
-      `${phantomLabel} (${phantomConfirmations} confirmations)`
-    );
-    setPositionModalText(
-      "positionPhantomFirstSeen",
-      formatPositionTimestamp(position.phantom_first_seen)
-    );
-    setPositionModalText(
-      "positionSynthetic",
-      formatBooleanFlag(position.synthetic_exit)
-    );
-
-    setPositionModalText(
-      "positionEntryPrice",
-      formatPositionPrice(
-        position.effective_entry_price || position.entry_price
-      )
-    );
-    setPositionModalText(
-      "positionEffectiveEntryPrice",
-      formatPositionPrice(position.effective_entry_price)
-    );
-    setPositionModalText(
-      "positionEntrySize",
-      formatPositionSol(position.entry_size_sol)
-    );
-    setPositionModalText(
-      "positionTotalSize",
-      formatPositionSol(position.total_size_sol)
-    );
-    setPositionModalText(
-      "positionPriceHigh",
-      formatPositionPrice(position.price_highest)
-    );
-    setPositionModalText(
-      "positionPriceLow",
-      formatPositionPrice(position.price_lowest)
-    );
-    setPositionModalText(
-      "positionCurrentPrice",
-      formatPositionPrice(position.current_price)
-    );
-    setPositionModalText(
-      "positionCurrentUpdated",
-      formatPositionTimestamp(position.current_price_updated)
-    );
-    setPositionModalPnl("positionUnrealizedPnl", position.unrealized_pnl);
-    setPositionModalPercent(
-      "positionUnrealizedPercent",
-      position.unrealized_pnl_percent
-    );
-    setPositionModalPnl("positionRealizedPnl", position.pnl);
-    setPositionModalPercent("positionRealizedPercent", position.pnl_percent);
-
-    setPositionModalText(
-      "positionEntryTime",
-      formatPositionTimestamp(position.entry_time)
-    );
-    setPositionModalText(
-      "positionEntrySig",
-      position.entry_transaction_signature
-        ? Utils.formatAddressCompact(position.entry_transaction_signature, {
-            startChars: 8,
-            endChars: 6,
-          })
-        : "—"
-    );
-    setPositionModalText(
-      "positionEntryVerified",
-      formatBooleanFlag(position.transaction_entry_verified)
-    );
-    setPositionModalText(
-      "positionEntryFee",
-      formatLamportsToSol(position.entry_fee_lamports)
-    );
-    setPositionModalText(
-      "positionTokenAmount",
-      formatTokenAmount(position.token_amount)
-    );
-
-    setPositionModalText(
-      "positionExitPrice",
-      formatPositionPrice(position.exit_price)
-    );
-    setPositionModalText(
-      "positionEffectiveExitPrice",
-      formatPositionPrice(position.effective_exit_price)
-    );
-    setPositionModalText(
-      "positionSolReceived",
-      formatPositionSol(position.sol_received)
-    );
-    setPositionModalText(
-      "positionExitTime",
-      formatPositionTimestamp(position.exit_time)
-    );
-    setPositionModalText(
-      "positionExitSig",
-      position.exit_transaction_signature
-        ? Utils.formatAddressCompact(position.exit_transaction_signature, {
-            startChars: 8,
-            endChars: 6,
-          })
-        : "—"
-    );
-    setPositionModalText(
-      "positionExitVerified",
-      formatBooleanFlag(position.transaction_exit_verified)
-    );
-    setPositionModalText(
-      "positionExitFee",
-      formatLamportsToSol(position.exit_fee_lamports)
-    );
-    setPositionModalText("positionClosedReason", position.closed_reason || "—");
-
-    const exitSection = document.getElementById("positionExitSection");
-    if (exitSection) {
-      const shouldShowExit =
-        position.transaction_exit_verified ||
-        position.synthetic_exit ||
-        position.exit_time !== null;
-      exitSection.style.display = shouldShowExit ? "block" : "none";
-    }
-
-    renderPositionExecutions(
-      Array.isArray(detail.executions) ? detail.executions : []
-    );
-    renderPositionTransactions(
-      Array.isArray(detail.transactions) ? detail.transactions : []
-    );
-    renderPositionTimeline(
-      Array.isArray(detail.state_history) ? detail.state_history : []
-    );
-  }
-
-  function resetPositionModal() {
-    POSITION_MODAL_FIELD_IDS.forEach((id) => setPositionModalText(id, "—"));
-    setPositionModalPnl("positionUnrealizedPnl", null);
-    setPositionModalPercent("positionUnrealizedPercent", null);
-    setPositionModalPnl("positionRealizedPnl", null);
-    setPositionModalPercent("positionRealizedPercent", null);
-    renderPositionExecutions([]);
-    renderPositionTransactions([]);
-    renderPositionTimeline([]);
-    const loading = document.getElementById("positionModalLoading");
-    const content = document.getElementById("positionModalContent");
-    if (loading) loading.classList.remove("active");
-    if (content) content.classList.add("hidden");
-    clearPositionModalError();
-    const statusEl = document.getElementById("positionModalStatus");
-    if (statusEl) {
-      applyStatusBadge(statusEl, {
-        label: "Open",
-        className: "status-open",
-        state: "Open",
-      });
-    }
-  }
-
-  function handlePositionModalKeyDown(event) {
-    if (event.key === "Escape") {
-      closePositionModal();
-    }
-  }
-
-  function ensurePositionModalKeyListener() {
-    if (positionModalState.keydownHandler) {
-      return;
-    }
-    positionModalState.keydownHandler = handlePositionModalKeyDown;
-    document.addEventListener("keydown", positionModalState.keydownHandler);
-  }
-
-  function removePositionModalKeyListener() {
-    if (!positionModalState.keydownHandler) {
-      return;
-    }
-    document.removeEventListener("keydown", positionModalState.keydownHandler);
-    positionModalState.keydownHandler = null;
-  }
-
-  function getActiveDetail() {
-    return positionModalState.detail || null;
-  }
-
-  async function openPositionDetail(key) {
-    if (!key) return;
-    positionModalState.currentKey = key;
-
-    const overlay = document.getElementById("positionModal");
-    if (overlay) {
-      overlay.classList.add("active");
-    }
-    ensurePositionModalKeyListener();
-
-    const cachedDetail =
-      positionModalState.detailKey === key ? getActiveDetail() : null;
-    if (cachedDetail && cachedDetail.position) {
-      renderPositionModal(cachedDetail);
-    } else {
-      setPositionModalLoading("Loading position details...");
-    }
-
-    try {
-      await loadPositionDetail(key, { silent: !!cachedDetail });
-    } catch (err) {
-      console.error("Failed to load position detail:", err);
-      if (!cachedDetail) {
-        setPositionModalError("Failed to load position details");
-      }
-    }
-  }
-
-  function getCurrentPosition() {
-    return getPositionFromStore(positionModalState.currentKey);
   }
 
   function closePositionModal(event) {
-    if (event && event.target && event.currentTarget) {
-      if (event.target !== event.currentTarget && event.type === "click") {
-        return;
-      }
-    }
-    if (positionModalState.abortController) {
-      positionModalState.abortController.abort();
-      positionModalState.abortController = null;
-    }
-    const overlay = document.getElementById("positionModal");
-    if (overlay) {
-      overlay.classList.remove("active");
-    }
-    positionModalState.currentKey = null;
-    positionModalState.detail = null;
-    positionModalState.detailKey = null;
-    positionModalState.lastFetchedAt = 0;
-    removePositionModalKeyListener();
-    resetPositionModal();
-  }
-
-  async function loadPositionDetail(key, { silent = false } = {}) {
-    if (!key) return;
-
-    if (positionModalState.abortController) {
-      positionModalState.abortController.abort();
-    }
-
-    const controller = new AbortController();
-    positionModalState.abortController = controller;
-
-    if (!silent) {
-      setPositionModalLoading("Loading position details...");
-    }
-
-    try {
-      const response = await fetch(
-        `/api/positions/${encodeURIComponent(key)}/details`,
-        { signal: controller.signal }
-      );
-
-      if (!response.ok) {
-        throw new Error(`Request failed with status ${response.status}`);
-      }
-
-      const detail = await response.json();
-      if (controller.signal.aborted) {
-        return;
-      }
-
-      positionModalState.detail = detail;
-      positionModalState.detailKey = key;
-      positionModalState.lastFetchedAt = Date.now();
-      renderPositionModal(detail);
-    } catch (err) {
-      if (controller.signal.aborted) {
-        return;
-      }
-      if (!silent) {
-        setPositionModalError(err.message || "Failed to load position details");
-      } else {
-        console.warn("loadPositionDetail (silent) failed:", err);
-      }
-    } finally {
-      if (positionModalState.abortController === controller) {
-        positionModalState.abortController = null;
-      }
-    }
-  }
-
-  function mergeDetailWithStore(detailPosition, storePosition, detail) {
-    if (!detailPosition || !storePosition) {
-      return;
-    }
-
-    const passthroughFields = [
-      "current_price",
-      "current_price_updated",
-      "unrealized_pnl",
-      "unrealized_pnl_percent",
-      "pnl",
-      "pnl_percent",
-      "exit_price",
-      "effective_exit_price",
-      "exit_time",
-      "sol_received",
-      "transaction_exit_verified",
-      "synthetic_exit",
-      "closed_reason",
-      "price_highest",
-      "price_lowest",
-      "phantom_confirmations",
-      "phantom_remove",
-      "phantom_first_seen",
-    ];
-
-    passthroughFields.forEach((field) => {
-      if (Object.prototype.hasOwnProperty.call(storePosition, field)) {
-        detailPosition[field] = storePosition[field];
-      }
-    });
-
-    if (detail && Array.isArray(detail.executions)) {
-      detail.executions = detail.executions.map((execution) => {
-        if (!execution || typeof execution !== "object") {
-          return execution;
-        }
-
-        if ((execution.kind || "").toLowerCase() === "entry") {
-          const sizeSol =
-            detailPosition.entry_size_sol ?? execution.size_sol ?? null;
-          const feeSol =
-            detailPosition.entry_fee_lamports != null
-              ? lamportsToSolNumber(detailPosition.entry_fee_lamports)
-              : execution.fee_sol;
-
-          return {
-            ...execution,
-            timestamp: detailPosition.entry_time ?? execution.timestamp,
-            price_sol: detailPosition.entry_price ?? execution.price_sol,
-            effective_price_sol:
-              detailPosition.effective_entry_price ??
-              execution.effective_price_sol,
-            size_sol: sizeSol,
-            total_size_sol:
-              detailPosition.total_size_sol ?? execution.total_size_sol,
-            token_amount: detailPosition.token_amount ?? execution.token_amount,
-            sol_delta:
-              sizeSol != null ? -Math.abs(sizeSol) : execution.sol_delta,
-            verified:
-              detailPosition.transaction_entry_verified ?? execution.verified,
-            fee_lamports:
-              detailPosition.entry_fee_lamports ?? execution.fee_lamports,
-            fee_sol: feeSol ?? execution.fee_sol,
-          };
-        }
-
-        if ((execution.kind || "").toLowerCase() === "exit") {
-          const feeSol =
-            detailPosition.exit_fee_lamports != null
-              ? lamportsToSolNumber(detailPosition.exit_fee_lamports)
-              : execution.fee_sol;
-
-          return {
-            ...execution,
-            timestamp: detailPosition.exit_time ?? execution.timestamp,
-            price_sol: detailPosition.exit_price ?? execution.price_sol,
-            effective_price_sol:
-              detailPosition.effective_exit_price ??
-              execution.effective_price_sol,
-            sol_delta:
-              detailPosition.sol_received ?? execution.sol_delta ?? null,
-            verified:
-              detailPosition.transaction_exit_verified ?? execution.verified,
-            fee_lamports:
-              detailPosition.exit_fee_lamports ?? execution.fee_lamports,
-            fee_sol: feeSol ?? execution.fee_sol,
-          };
-        }
-
-        return execution;
-      });
+    if (
+      window.PositionModal &&
+      typeof window.PositionModal.close === "function"
+    ) {
+      window.PositionModal.close(event);
     }
   }
 
   function refreshOpenPositionModal() {
-    if (!positionModalState.currentKey) {
-      return;
-    }
-
-    const detail = getActiveDetail();
-    const storePosition = getCurrentPosition();
-
-    if (detail && detail.position && storePosition) {
-      mergeDetailWithStore(detail.position, storePosition, detail);
-      renderPositionModal(detail);
-    } else if (!storePosition) {
-      closePositionModal();
-      return;
-    }
-
-    const now = Date.now();
     if (
-      now - (positionModalState.lastFetchedAt || 0) >
-      POSITION_MODAL_REFETCH_INTERVAL_MS
+      window.PositionModal &&
+      typeof window.PositionModal.refresh === "function"
     ) {
-      loadPositionDetail(positionModalState.currentKey, { silent: true }).catch(
-        (err) => {
-          console.warn("refreshOpenPositionModal fetch failed:", err);
-        }
-      );
+      window.PositionModal.refresh();
     }
   }
 
-  function renderPositionExecutions(executions) {
-    const tbody = document.getElementById("positionExecutionsBody");
-    if (!tbody) return;
-
-    if (!Array.isArray(executions) || executions.length === 0) {
-      tbody.innerHTML =
-        '<tr><td colspan="11" class="position-empty">No execution data</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = executions
-      .map((execution) => {
-        const kind = escapeHtml((execution.kind || "—").toUpperCase());
-        const timestamp = formatPositionTimestamp(execution.timestamp);
-        const price = formatPositionPrice(execution.price_sol);
-        const effective = formatPositionPrice(execution.effective_price_sol);
-        const sizeSol = formatPositionSol(execution.size_sol);
-        const totalTokens = formatTokenAmount(execution.token_amount);
-        const solDelta = formatPositionSolDelta(execution.sol_delta);
-        const feeValue =
-          execution.fee_sol ??
-          (execution.fee_lamports != null
-            ? lamportsToSolNumber(execution.fee_lamports)
-            : null);
-        const feeSol = formatPositionSol(feeValue, {
-          decimals: 6,
-          fallback: "—",
-        });
-        const verified = execution.verified
-          ? '<span class="status-badge status-open">VERIFIED</span>'
-          : '<span class="status-badge status-closed">PENDING</span>';
-        const signatureCell = renderSignatureCell(execution.signature);
-        const notes = execution.notes ? escapeHtml(execution.notes) : "—";
-
-        return `
-          <tr>
-            <td>${kind}</td>
-            <td>${escapeHtml(timestamp)}</td>
-            <td>${escapeHtml(price)}</td>
-            <td>${escapeHtml(effective)}</td>
-            <td>${escapeHtml(sizeSol)}</td>
-            <td>${escapeHtml(solDelta)}</td>
-            <td>${escapeHtml(totalTokens)}</td>
-            <td>${escapeHtml(feeSol)}</td>
-            <td>${verified}</td>
-            <td>${signatureCell}</td>
-            <td>${notes}</td>
-          </tr>
-        `;
-      })
-      .join("");
-  }
-
-  function renderPositionTransactions(transactions) {
-    const tbody = document.getElementById("positionTransactionsBody");
-    if (!tbody) return;
-
-    if (!Array.isArray(transactions) || transactions.length === 0) {
-      tbody.innerHTML =
-        '<tr><td colspan="11" class="position-empty">No transaction data</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = transactions
-      .map((tx) => {
-        const kind = escapeHtml((tx.kind || "—").toUpperCase());
-        const status = tx.status
-          ? escapeHtml(tx.status)
-          : tx.available
-          ? "—"
-          : "Unavailable";
-        const success =
-          tx.success === true ? "✅" : tx.success === false ? "❌" : "—";
-        const timestamp = formatPositionTimestamp(tx.timestamp);
-        const slot = tx.slot !== null && tx.slot !== undefined ? tx.slot : "—";
-        const feeValue =
-          tx.fee_sol ??
-          (tx.fee_lamports != null
-            ? lamportsToSolNumber(tx.fee_lamports)
-            : null);
-        const fee = formatPositionSol(feeValue, {
-          decimals: 6,
-          fallback: "—",
-        });
-        const direction = tx.direction ? escapeHtml(tx.direction) : "—";
-        const router = tx.router ? escapeHtml(tx.router) : "—";
-        const solChange = formatPositionSolDelta(tx.sol_change);
-        const signatureCell = renderSignatureCell(tx.signature);
-        const notes = tx.notes
-          ? escapeHtml(tx.notes)
-          : tx.available
-          ? "—"
-          : "Transaction data not indexed yet";
-
-        return `
-          <tr>
-            <td>${kind}</td>
-            <td>${status}</td>
-            <td>${success}</td>
-            <td>${escapeHtml(timestamp)}</td>
-            <td>${escapeHtml(slot)}</td>
-            <td>${escapeHtml(fee)}</td>
-            <td>${direction}</td>
-            <td>${router}</td>
-            <td>${escapeHtml(solChange)}</td>
-            <td>${signatureCell}</td>
-            <td>${notes}</td>
-          </tr>
-        `;
-      })
-      .join("");
-  }
-
-  function renderPositionTimeline(entries) {
-    const list = document.getElementById("positionStateTimeline");
-    if (!list) return;
-
-    if (!Array.isArray(entries) || entries.length === 0) {
-      list.innerHTML =
-        '<li class="position-empty">No state history recorded</li>';
-      return;
-    }
-
-    list.innerHTML = entries
-      .map((entry) => {
-        const state = escapeHtml(entry.state || "—");
-        const timestamp = formatPositionTimestamp(entry.changed_at);
-        const reason = entry.reason ? escapeHtml(entry.reason) : "";
-        const reasonMarkup = reason
-          ? `<div style="font-size:0.85rem;color:var(--text-secondary);">${reason}</div>`
-          : "";
-
-        return `
-          <li class="position-timeline-item">
-            <div>
-              <strong>${state}</strong>
-              ${reasonMarkup}
-            </div>
-            <div class="position-timeline-meta">
-              <span>${escapeHtml(timestamp)}</span>
-            </div>
-          </li>
-        `;
-      })
-      .join("");
-  }
-
-  function renderSignatureCell(signature) {
-    if (!signature) {
-      return "<span>—</span>";
-    }
-    const truncated = Utils.formatAddressCompact(signature, {
-      startChars: 8,
-      endChars: 6,
-    });
-    const escapedSignature = escapeHtml(signature);
-    return `
-      <span class="position-signature-cell">
-        <span title="${escapedSignature}">${escapeHtml(truncated)}</span>
-        <button
-          class="position-signature-button"
-          type="button"
-          data-signature="${escapedSignature}"
-        >
-          Copy
-        </button>
-      </span>
-    `;
-  }
-
-  function copyPositionSignature(signature) {
-    if (!signature) return;
-
-    let copyPromise = null;
-    if (Utils?.copyToClipboard) {
-      copyPromise = Utils.copyToClipboard(signature);
-    } else if (navigator?.clipboard?.writeText) {
-      copyPromise = navigator.clipboard.writeText(signature);
-    }
-
-    if (!copyPromise || typeof copyPromise.then !== "function") {
-      console.warn("Clipboard copy function not available");
-      return;
-    }
-
-    copyPromise
-      .then(() => {
-        Utils?.showToast?.("✅ Signature copied", "success");
-      })
-      .catch((err) => {
-        console.error("copyPositionSignature failed:", err);
-        Utils?.showToast?.("❌ Failed to copy signature", "error");
-      });
-  }
-
-  function getActiveMint() {
-    const detail = getActiveDetail();
-    if (detail?.position?.mint) return detail.position.mint;
-    const storePosition = getCurrentPosition();
-    return storePosition?.mint || null;
-  }
-
+  // Action wrappers for dropdown menu
   function copyPositionMint() {
-    const mint = getActiveMint();
-    if (!mint || !Utils?.copyMint) return;
-    Utils.copyMint(mint);
+    if (window.PositionModal) window.PositionModal.copyMint();
   }
 
   function openPositionGMGN() {
-    const mint = getActiveMint();
-    if (!mint || !Utils?.openGMGN) return;
-    Utils.openGMGN(mint);
+    if (window.PositionModal) window.PositionModal.openGMGN();
   }
 
   function openPositionDexScreener() {
-    const mint = getActiveMint();
-    if (!mint || !Utils?.openDexScreener) return;
-    Utils.openDexScreener(mint);
+    if (window.PositionModal) window.PositionModal.openDexScreener();
   }
 
   function openPositionSolscan() {
-    const mint = getActiveMint();
-    if (!mint || !Utils?.openSolscan) return;
-    Utils.openSolscan(mint);
+    if (window.PositionModal) window.PositionModal.openSolscan();
   }
 
-  async function openPositionTokenDetail() {
-    const mint = getActiveMint();
-    if (!mint) {
-      Utils.showToast?.("❌ Mint not available", "error");
-      return;
-    }
-
-    try {
-      if (window.Router && typeof Router.loadPage === "function") {
-        await Router.loadPage("tokens");
-        scheduleTokenModalOpen(mint, 0);
-      } else if (typeof window.openTokenModal === "function") {
-        await window.openTokenModal(mint);
-      } else if (Utils?.openDexScreener) {
-        Utils.openDexScreener(mint);
-      }
-    } catch (err) {
-      console.error("openPositionTokenDetail failed:", err);
-      Utils.showToast?.("❌ Failed to open token details", "error");
-    }
-  }
-
-  function scheduleTokenModalOpen(mint, attempt) {
-    if (typeof window.openTokenModal === "function") {
-      window.openTokenModal(mint).catch((err) => {
-        console.error("openTokenModal error:", err);
-        Utils.showToast?.("❌ Failed to open token details", "error");
-      });
-      return;
-    }
-    if (attempt >= 20) {
-      Utils.showToast?.("❌ Token detail module unavailable", "error");
-      return;
-    }
-    setTimeout(() => scheduleTokenModalOpen(mint, attempt + 1), 120);
+  function openPositionTokenDetail() {
+    if (window.PositionModal) window.PositionModal.openTokenDetail();
   }
 
   function copyPositionDebug() {
-    const mint = getActiveMint();
-    if (!mint || !Utils?.copyDebugInfo) return;
-    Utils.copyDebugInfo(mint, "position");
+    if (window.PositionModal) window.PositionModal.copyDebug();
+  }
+
+  function copyPositionSignature(signature) {
+    if (window.PositionModal) window.PositionModal.copySignature(signature);
   }
 
   function handlePositionDropdown(event) {
@@ -1840,41 +852,7 @@
     }
   }
 
-  function bindPositionRowClicks() {
-    const rows = document.querySelectorAll(
-      "#positionsTableBody tr[data-position-key]"
-    );
-    rows.forEach((row) => {
-      if (row.dataset.clickBound === "1") {
-        return;
-      }
-      row.addEventListener("click", (event) => {
-        if (
-          event?.target?.closest &&
-          event.target.closest(".dropdown-container")
-        ) {
-          return;
-        }
-        const key = row.getAttribute("data-position-key");
-        if (key) {
-          openPositionDetail(key);
-        }
-      });
-      row.dataset.clickBound = "1";
-    });
-  }
-
-  document.addEventListener("click", (event) => {
-    const button = event?.target?.closest?.(".position-signature-button");
-    if (!button) {
-      return;
-    }
-    const signature = button.getAttribute("data-signature");
-    if (signature) {
-      copyPositionSignature(signature);
-    }
-  });
-
+  // Expose wrappers globally for HTML onclick handlers
   window.openPositionDetail = openPositionDetail;
   window.closePositionModal = closePositionModal;
   window.copyPositionMint = copyPositionMint;
@@ -1885,6 +863,8 @@
   window.handlePositionDropdown = handlePositionDropdown;
   window.copyPositionSignature = copyPositionSignature;
   window.openPositionTokenDetail = openPositionTokenDetail;
+
+  // ===== Position Filtering and Display Logic =====
 
   // Truncate address
   // Use Utils.formatAddressCompact (truncates addresses)
@@ -2518,21 +1498,53 @@
     }
   };
 
-  // Global init function for Router to call during SPA navigation
-  window.initPositionsPage = function () {
-    console.log("[Positions] Initializing page");
-    if (!window.positionsController) {
-      console.error("[Positions] Controller unavailable");
-      return;
+  // ===== PageRegistry Lifecycle Integration =====
+  (function () {
+    const lifecycle = {
+      init(context) {
+        console.log("[Positions] Lifecycle init");
+        // Store context for future use if needed
+        if (context && context.data) {
+          context.data.controller = positionsController;
+        }
+      },
+      activate(context) {
+        console.log("[Positions] Lifecycle activate");
+        positionsController.activate();
+      },
+      deactivate() {
+        console.log("[Positions] Lifecycle deactivate");
+        positionsController.stopPolling();
+        positionsController.abortInFlight();
+        closePositionModal();
+      },
+      dispose() {
+        console.log("[Positions] Lifecycle dispose");
+        positionsController.teardown();
+      },
+    };
+
+    const registerLifecycle = (registry) => {
+      try {
+        registry.register("positions", lifecycle);
+        console.log("[Positions] Registered with PageRegistry");
+      } catch (error) {
+        console.error("[Positions] Failed to register lifecycle", error);
+      }
+    };
+
+    if (
+      window.PageRegistry &&
+      typeof window.PageRegistry.register === "function"
+    ) {
+      registerLifecycle(window.PageRegistry);
+    } else {
+      if (!Array.isArray(window.__pendingPageRegistrations)) {
+        window.__pendingPageRegistrations = [];
+      }
+      window.__pendingPageRegistrations.push((registry) => {
+        registerLifecycle(registry);
+      });
     }
-
-    window.positionsController.activate();
-
-    if (window.Router && typeof Router.registerCleanup === "function") {
-      Router.registerCleanup(() => window.positionsController.teardown());
-    }
-  };
-
-  // Execute initialization immediately (works for both initial load and SPA navigation)
-  initPositionsPage();
+  })();
 </script>
