@@ -1,4 +1,352 @@
+<style>
+  .token-row {
+    transition: background-color 0.45s ease;
+  }
+
+  .token-row--changed {
+    animation: token-row-flash 1.25s ease-out;
+  }
+
+  .token-row--up {
+    --token-glow-color: rgba(34, 197, 94, 0.2);
+  }
+
+  .token-row--down {
+    --token-glow-color: rgba(239, 68, 68, 0.2);
+  }
+
+  @keyframes token-row-flash {
+    0% {
+      background-color: var(--token-glow-color, rgba(59, 130, 246, 0.14));
+    }
+    75% {
+      background-color: rgba(15, 23, 42, 0.08);
+    }
+    100% {
+      background-color: transparent;
+    }
+  }
+
+  .price-cell {
+    text-align: right;
+  }
+
+  .price-cell__inner {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    font-variant-numeric: tabular-nums;
+    position: relative;
+  }
+
+  .price-value {
+    transition: color 0.25s ease;
+    padding-left: 1.1em;
+    display: inline-block;
+  }
+
+  .price-cell__inner--up .price-value {
+    color: #22c55e;
+  }
+
+  .price-cell__inner--down .price-value {
+    color: #ef4444;
+  }
+
+  .price-arrow {
+    display: inline-block;
+    width: 0.9em;
+    min-width: 0.9em;
+    max-width: 0.9em;
+    font-size: 0.85em;
+    transform: translateY(-1px);
+    transition: opacity 0.25s ease;
+    text-align: center;
+    position: absolute;
+    left: 0;
+  }
+
+  .price-arrow--up {
+    color: #22c55e;
+  }
+
+  .price-arrow--down {
+    color: #ef4444;
+  }
+</style>
 <script>
+  var TOKENS_DEFAULT_PAGE_SIZE = Number("__TOKENS_DEFAULT_PAGE_SIZE__") || 50;
+  var TOKENS_MAX_PAGE_SIZE =
+    Number("__TOKENS_MAX_PAGE_SIZE__") || TOKENS_DEFAULT_PAGE_SIZE;
+  var DEFAULT_TOKENS_VIEW = "pool";
+  var TOKENS_VIEW_DEFS = [
+    { id: "pool", label: "💧 Pool Service" },
+    { id: "all", label: "📋 All Tokens" },
+    { id: "passed", label: "✅ Passed" },
+    { id: "rejected", label: "⛔ Rejected" },
+    { id: "blacklisted", label: "🚫 Blacklisted" },
+    { id: "positions", label: "📊 Positions" },
+    { id: "secure", label: "🛡️ Secure" },
+    { id: "recent", label: "🆕 Recent" },
+  ];
+  var TOKENS_VIEWS = TOKENS_VIEW_DEFS.map(function (view) {
+    return view.id;
+  });
+  var TOKENS_SORT_KEYS = [
+    "symbol",
+    "price_sol",
+    "liquidity_usd",
+    "volume_24h",
+    "fdv",
+    "market_cap",
+    "price_change_h1",
+    "price_change_h24",
+    "security_score",
+    "updated_at",
+  ];
+  var DEFAULT_SORT_KEY = "symbol";
+  var DEFAULT_SORT_DIR = "asc";
+  var VIEW_LABELS = {
+    pool: "with available prices",
+    all: "in database",
+    passed: "that passed filtering",
+    rejected: "rejected by filtering",
+    blacklisted: "blacklisted",
+    positions: "with open positions",
+    secure: "secure",
+    recent: "recently updated",
+  };
+
+  var tokensState = window.tokensState || {
+    view: DEFAULT_TOKENS_VIEW,
+    sortBy: DEFAULT_SORT_KEY,
+    sortDir: DEFAULT_SORT_DIR,
+    searchTerm: "",
+  };
+  window.tokensState = tokensState;
+  var TOKENS_COLUMN_DEFINITIONS = [
+    {
+      id: "token",
+      label: "Token",
+      sortKey: "symbol",
+      defaultVisible: true,
+      required: true,
+      minWidth: 240,
+      defaultWidth: 260,
+      align: "left",
+      headerAlign: "left",
+    },
+    {
+      id: "price_sol",
+      label: "Price (SOL)",
+      sortKey: "price_sol",
+      defaultVisible: true,
+      minWidth: 140,
+      defaultWidth: 150,
+      align: "right",
+      headerAlign: "right",
+      cellClass: "num price-cell align-right",
+    },
+    {
+      id: "liquidity_usd",
+      label: "Liquidity",
+      sortKey: "liquidity_usd",
+      defaultVisible: true,
+      minWidth: 120,
+      defaultWidth: 140,
+      align: "right",
+      headerAlign: "right",
+      cellClass: "num align-right",
+    },
+    {
+      id: "volume_24h",
+      label: "24h Vol",
+      sortKey: "volume_24h",
+      defaultVisible: true,
+      minWidth: 110,
+      defaultWidth: 140,
+      align: "right",
+      headerAlign: "right",
+      cellClass: "num align-right",
+    },
+    {
+      id: "fdv",
+      label: "FDV",
+      sortKey: "fdv",
+      defaultVisible: true,
+      minWidth: 110,
+      defaultWidth: 140,
+      align: "right",
+      headerAlign: "right",
+      cellClass: "num align-right",
+    },
+    {
+      id: "market_cap",
+      label: "Mkt Cap",
+      sortKey: "market_cap",
+      defaultVisible: true,
+      minWidth: 110,
+      defaultWidth: 140,
+      align: "right",
+      headerAlign: "right",
+      cellClass: "num align-right",
+    },
+    {
+      id: "price_change_h1",
+      label: "1h",
+      sortKey: "price_change_h1",
+      defaultVisible: true,
+      minWidth: 90,
+      defaultWidth: 100,
+      align: "right",
+      headerAlign: "right",
+      cellClass: "num align-right",
+    },
+    {
+      id: "price_change_h24",
+      label: "24h",
+      sortKey: "price_change_h24",
+      defaultVisible: true,
+      minWidth: 90,
+      defaultWidth: 100,
+      align: "right",
+      headerAlign: "right",
+      cellClass: "num align-right",
+    },
+    {
+      id: "security_score",
+      label: "Security",
+      sortKey: "security_score",
+      defaultVisible: true,
+      minWidth: 100,
+      defaultWidth: 110,
+      align: "right",
+      headerAlign: "right",
+      cellClass: "num align-right",
+    },
+    {
+      id: "status",
+      label: "Status",
+      defaultVisible: true,
+      minWidth: 120,
+      defaultWidth: 140,
+      align: "left",
+      headerAlign: "left",
+    },
+    {
+      id: "updated_at",
+      label: "Updated",
+      sortKey: "updated_at",
+      defaultVisible: true,
+      minWidth: 110,
+      defaultWidth: 130,
+      align: "left",
+      headerAlign: "left",
+      cellClass: "tokens-updated-text",
+    },
+    {
+      id: "actions",
+      label: "Actions",
+      defaultVisible: true,
+      minWidth: 80,
+      defaultWidth: 88,
+      maxWidth: 120,
+      align: "center",
+      headerAlign: "center",
+      resizable: false,
+    },
+    {
+      id: "total_holders",
+      label: "Holders",
+      sortKey: "total_holders",
+      defaultVisible: false,
+      minWidth: 110,
+      defaultWidth: 120,
+      align: "right",
+      headerAlign: "right",
+      cellClass: "num align-right",
+    },
+  ];
+
+  var TOKENS_DEFAULT_VISIBLE_COLUMN_IDS = TOKENS_COLUMN_DEFINITIONS.filter(
+    function (column) {
+      return column.required || column.defaultVisible !== false;
+    }
+  ).map(function (column) {
+    return column.id;
+  });
+
+  var tokensColumnManager = window.tokensColumnManager || null;
+  window.tokensColumnManager = tokensColumnManager;
+
+  var tokensColumnDialogState = window.tokensColumnDialogState || {
+    root: null,
+    list: null,
+    checkboxMap: new Map(),
+    tempVisibleIds: new Set(),
+    initialized: false,
+    previouslyFocused: null,
+    applyButton: null,
+    resetButton: null,
+    closeButton: null,
+  };
+  if (!(tokensColumnDialogState.checkboxMap instanceof Map)) {
+    tokensColumnDialogState.checkboxMap = new Map();
+  }
+  if (!(tokensColumnDialogState.tempVisibleIds instanceof Set)) {
+    tokensColumnDialogState.tempVisibleIds = new Set();
+  }
+  window.tokensColumnDialogState = tokensColumnDialogState;
+
+  var TOKENS_SCROLL_GUARD_HTML =
+    '<tr id="tokens-scroll-guard" class="scroll-guard-row"><td class="scroll-guard-cell"></td></tr>';
+
+  var tokensTableState = window.tokensTableState || {
+    items: [],
+    pageSize: 0,
+    currentPage: 0,
+    totalPages: 0,
+    totalCount: 0,
+    loading: false,
+    pendingReload: false,
+    scrollObserver: null,
+    scrollContainer: null,
+  };
+
+  window.tokensTableState = tokensTableState;
+
+  var allTokensData = tokensTableState.items;
+  var currentModalMint = null;
+  var tokenModalData = null;
+  var searchDebounceHandle = null;
+  var tokensFetchState = window.tokensFetchState || {
+    inProgress: false,
+    message: "",
+    abortController: null,
+  };
+  window.tokensFetchState = tokensFetchState;
+  var tokensAutoRefreshState = window.tokensAutoRefreshState || {
+    poller: null,
+  };
+  window.tokensAutoRefreshState = tokensAutoRefreshState;
+  var tokensPriceState = window.tokensPriceState || {
+    lastPrices: new Map(),
+    lastDirections: new Map(),
+    lastChangeAt: new Map(),
+  };
+  if (!(tokensPriceState.lastPrices instanceof Map)) {
+    tokensPriceState.lastPrices = new Map();
+  }
+  if (!(tokensPriceState.lastDirections instanceof Map)) {
+    tokensPriceState.lastDirections = new Map();
+  }
+  if (!(tokensPriceState.lastChangeAt instanceof Map)) {
+    tokensPriceState.lastChangeAt = new Map();
+  }
+  window.tokensPriceState = tokensPriceState;
+
+  // Enhanced populateTokenModal function with improvements
   function populateTokenModal(token, detail) {
     if (!token) return;
 
