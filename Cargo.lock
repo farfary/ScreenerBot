@@ -4116,6 +4116,7 @@ dependencies = [
  "csv",
  "dashmap",
  "dirs",
+ "flate2",
  "futures",
  "futures-util",
  "hyper 1.6.0",

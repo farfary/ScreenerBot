@@ -1,10 +1,12 @@
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use once_cell::sync::Lazy;
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::io::{Read, Write};
 /// Wallet Balance Monitoring Module
 ///
 /// This module provides wallet balance monitoring with historical snapshots stored in SQLite database.
@@ -20,7 +22,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::{Mutex, Notify, RwLock};
 
 use crate::config::with_config;
 use crate::global::is_debug_wallet_enabled;
@@ -81,9 +83,32 @@ CREATE TABLE IF NOT EXISTS sol_flow_cache (
 );
 "#;
 
+const SCHEMA_WALLET_DASHBOARD_METRICS: &str = r#"
+CREATE TABLE IF NOT EXISTS wallet_dashboard_metrics (
+    window_key TEXT PRIMARY KEY,
+    window_hours INTEGER NOT NULL,
+    snapshot_limit INTEGER NOT NULL,
+    token_limit INTEGER NOT NULL,
+    payload_blob BLOB NOT NULL,
+    payload_format TEXT NOT NULL DEFAULT 'json-gzip',
+    computed_at TEXT NOT NULL,
+    valid_until TEXT NOT NULL,
+    computation_duration_ms INTEGER,
+    snapshot_count INTEGER NOT NULL DEFAULT 0,
+    flow_cache_rows INTEGER NOT NULL DEFAULT 0,
+    last_processed_timestamp TEXT,
+    last_processed_signature TEXT,
+    window_start TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+"#;
+
 // Indexes for fast range aggregation on cache
 const FLOW_CACHE_INDEXES: &[&str] =
     &["CREATE INDEX IF NOT EXISTS idx_flow_cache_timestamp ON sol_flow_cache(timestamp DESC);"];
+
+const DASHBOARD_METRICS_INDEXES: &[&str] = &["CREATE INDEX IF NOT EXISTS idx_dashboard_metrics_valid_until ON wallet_dashboard_metrics(valid_until DESC);"];
 
 // Performance indexes
 const WALLET_INDEXES: &[&str] = &[
@@ -93,6 +118,12 @@ const WALLET_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_token_balances_mint ON token_balances(mint);",
     "CREATE INDEX IF NOT EXISTS idx_token_balances_snapshot_mint ON token_balances(snapshot_id, mint);",
 ];
+
+const DEFAULT_PRECOMPUTED_SNAPSHOT_LIMIT: usize = 600;
+const DEFAULT_PRECOMPUTED_TOKEN_LIMIT: usize = 250;
+const MAX_API_CACHE_ENTRIES: usize = 128;
+const CIRCUIT_BREAKER_THRESHOLD: u32 = 3;
+const CIRCUIT_BREAKER_COOLDOWN_SECS: u64 = 300;
 
 // =============================================================================
 // DATA STRUCTURES
@@ -202,6 +233,8 @@ pub struct WalletDashboardData {
     pub daily_flows: Vec<DailyFlowPoint>, // NEW: Time-series flow data
     pub tokens: Vec<WalletTokenOverview>,
     pub last_updated: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_metadata: Option<DashboardCacheMetadata>,
 }
 
 /// Flow cache stats for diagnostics/UI
@@ -209,6 +242,377 @@ pub struct WalletDashboardData {
 pub struct WalletFlowCacheStats {
     pub rows: u64,
     pub max_timestamp: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct CachedDashboardMetrics {
+    window_key: String,
+    window_hours: i64,
+    snapshot_limit: usize,
+    token_limit: usize,
+    payload: Vec<u8>,
+    payload_format: String,
+    computed_at: DateTime<Utc>,
+    valid_until: DateTime<Utc>,
+    computation_duration_ms: Option<i64>,
+    snapshot_count: usize,
+    flow_cache_rows: usize,
+    last_processed_timestamp: Option<DateTime<Utc>>,
+    last_processed_signature: Option<String>,
+    window_start: Option<DateTime<Utc>>,
+}
+
+static API_RESPONSE_CACHE: Lazy<
+    Arc<RwLock<HashMap<DashboardRequestKey, CachedDashboardResponse>>>,
+> = Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
+
+static CACHE_METRICS: Lazy<Arc<RwLock<CachePerformanceMetrics>>> =
+    Lazy::new(|| Arc::new(RwLock::new(CachePerformanceMetrics::default())));
+
+static COMPUTATION_FAILURES: Lazy<Arc<RwLock<HashMap<String, (u32, Instant)>>>> =
+    Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
+
+fn compress_bytes(raw: &[u8]) -> Result<Vec<u8>, String> {
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
+    encoder
+        .write_all(raw)
+        .map_err(|e| format!("Failed to write compressed payload: {}", e))?;
+    encoder
+        .finish()
+        .map_err(|e| format!("Failed to finalize compression: {}", e))
+}
+
+fn decompress_bytes(raw: &[u8]) -> Result<Vec<u8>, String> {
+    let mut decoder = GzDecoder::new(raw);
+    let mut buffer = Vec::new();
+    decoder
+        .read_to_end(&mut buffer)
+        .map_err(|e| format!("Failed to decompress payload: {}", e))?;
+    Ok(buffer)
+}
+
+fn serialize_dashboard_payload(payload: &WalletDashboardData) -> Result<Vec<u8>, String> {
+    let mut sanitized = payload.clone();
+    sanitized.cache_metadata = None;
+    let json = serde_json::to_vec(&sanitized)
+        .map_err(|e| format!("Failed to serialize dashboard payload: {}", e))?;
+    compress_bytes(&json)
+}
+
+fn deserialize_dashboard_payload(raw: &[u8]) -> Result<WalletDashboardData, String> {
+    let json_bytes = decompress_bytes(raw)?;
+    serde_json::from_slice::<WalletDashboardData>(&json_bytes)
+        .map_err(|e| format!("Failed to deserialize dashboard payload: {}", e))
+}
+
+fn canonical_window(window_hours: i64) -> Option<(&'static str, i64)> {
+    match window_hours {
+        24 => Some(("24h", 24)),
+        168 => Some(("7d", 168)),
+        720 => Some(("30d", 720)),
+        0 => Some(("all_time", 0)),
+        _ => None,
+    }
+}
+
+fn ttl_for_window(window_key: &str) -> u64 {
+    with_config(|cfg| match window_key {
+        "24h" => cfg.wallet.dashboard_metrics_24h_interval_secs,
+        "7d" => cfg.wallet.dashboard_metrics_7d_interval_secs,
+        "30d" => cfg.wallet.dashboard_metrics_30d_interval_secs,
+        "all_time" => cfg.wallet.dashboard_metrics_alltime_interval_secs,
+        _ => cfg.wallet.dashboard_metrics_24h_interval_secs,
+    })
+}
+
+async fn record_cache_metrics(source: DashboardDataSource, latency_ms: u128, stale: bool) {
+    let mut guard = CACHE_METRICS.write().await;
+    guard.total_requests = guard.total_requests.saturating_add(1);
+    guard.total_latency_ms = guard.total_latency_ms.saturating_add(latency_ms);
+    guard.last_source = Some(source.clone());
+
+    match source {
+        DashboardDataSource::Memory => guard.memory_hits = guard.memory_hits.saturating_add(1),
+        DashboardDataSource::Database => {
+            guard.database_hits = guard.database_hits.saturating_add(1)
+        }
+        DashboardDataSource::Realtime => {
+            guard.realtime_computations = guard.realtime_computations.saturating_add(1)
+        }
+    }
+
+    if stale {
+        guard.stale_responses = guard.stale_responses.saturating_add(1);
+    }
+}
+
+async fn circuit_should_skip(window_key: &str) -> bool {
+    let guard = COMPUTATION_FAILURES.read().await;
+    if let Some((count, last_failure)) = guard.get(window_key) {
+        if *count >= CIRCUIT_BREAKER_THRESHOLD
+            && last_failure.elapsed().as_secs() < CIRCUIT_BREAKER_COOLDOWN_SECS
+        {
+            return true;
+        }
+    }
+    false
+}
+
+async fn circuit_record_failure(window_key: &str) {
+    let mut guard = COMPUTATION_FAILURES.write().await;
+    let entry = guard
+        .entry(window_key.to_string())
+        .or_insert((0, Instant::now()));
+    entry.0 = entry.0.saturating_add(1);
+    entry.1 = Instant::now();
+}
+
+async fn circuit_reset(window_key: &str) {
+    let mut guard = COMPUTATION_FAILURES.write().await;
+    guard.remove(window_key);
+}
+
+async fn compute_and_cache_metrics_internal(window_key: &'static str, window_hours: i64) {
+    if get_transaction_database().await.is_none() {
+        if is_debug_wallet_enabled() {
+            log(
+                LogTag::Wallet,
+                "METRICS_SKIP",
+                &format!(
+                    "Skipping {} recompute → transactions database not ready",
+                    window_key
+                ),
+            );
+        }
+        return;
+    }
+
+    if circuit_should_skip(window_key).await {
+        log(
+            LogTag::Wallet,
+            "METRICS_SKIP",
+            &format!(
+                "Circuit breaker active for {} → skipping cache recomputation",
+                window_key
+            ),
+        );
+        return;
+    }
+
+    match compute_and_cache_metrics(window_key, window_hours).await {
+        Ok(_) => {
+            circuit_reset(window_key).await;
+        }
+        Err(err) => {
+            circuit_record_failure(window_key).await;
+            log(
+                LogTag::Wallet,
+                "METRICS_ERROR",
+                &format!(
+                    "Failed to compute dashboard metrics for {}: {}",
+                    window_key, err
+                ),
+            );
+        }
+    }
+}
+
+async fn compute_and_cache_metrics(
+    window_key: &'static str,
+    window_hours: i64,
+) -> Result<(), String> {
+    let start_time = Instant::now();
+
+    if is_debug_wallet_enabled() {
+        log(
+            LogTag::Wallet,
+            "METRICS_COMPUTE_START",
+            &format!(
+                "Computing dashboard metrics for {} ({}h)",
+                window_key, window_hours
+            ),
+        );
+    }
+
+    let snapshot_limit = DEFAULT_PRECOMPUTED_SNAPSHOT_LIMIT;
+    let token_limit = DEFAULT_PRECOMPUTED_TOKEN_LIMIT;
+
+    let mut payload =
+        compute_dashboard_payload_realtime(window_hours, snapshot_limit, token_limit).await?;
+
+    let computed_at = Utc::now();
+    let ttl_secs = ttl_for_window(window_key).max(5);
+    let valid_until = computed_at + ChronoDuration::seconds(ttl_secs as i64);
+    let duration_ms = start_time.elapsed().as_millis() as i64;
+
+    let payload_blob = serialize_dashboard_payload(&payload)?;
+
+    let cached_entry = CachedDashboardMetrics {
+        window_key: window_key.to_string(),
+        window_hours,
+        snapshot_limit,
+        token_limit,
+        payload: payload_blob,
+        payload_format: "json-gzip".to_string(),
+        computed_at,
+        valid_until,
+        computation_duration_ms: Some(duration_ms),
+        snapshot_count: payload.balance_trend.len(),
+        flow_cache_rows: payload.flows.transactions_analyzed,
+        last_processed_timestamp: None,
+        last_processed_signature: None,
+        window_start: if window_hours > 0 {
+            Some(computed_at - ChronoDuration::hours(window_hours))
+        } else {
+            None
+        },
+    };
+
+    {
+        let db_guard = GLOBAL_WALLET_DB.lock().await;
+        let db = db_guard
+            .as_ref()
+            .ok_or_else(|| "Wallet database not initialized".to_string())?;
+        db.upsert_dashboard_metrics(&cached_entry)?;
+    }
+
+    let metadata = DashboardCacheMetadata {
+        window_key: Some(window_key.to_string()),
+        cached_at: Some(computed_at.to_rfc3339()),
+        valid_until: Some(valid_until.to_rfc3339()),
+        age_seconds: Some(0),
+        next_update_in_seconds: Some(ttl_secs),
+        freshness: DashboardCacheFreshness::Fresh,
+        source: DashboardDataSource::Database,
+        computation_duration_ms: Some(duration_ms as u64),
+        snapshot_count: Some(cached_entry.snapshot_count),
+    };
+
+    payload.cache_metadata = Some(metadata.clone());
+
+    let request_key = DashboardRequestKey {
+        window_hours,
+        snapshot_limit,
+        max_tokens: token_limit,
+    };
+
+    {
+        let mut cache_guard = API_RESPONSE_CACHE.write().await;
+        cache_guard.insert(
+            request_key,
+            CachedDashboardResponse {
+                data: payload.clone(),
+                cached_at: Instant::now(),
+            },
+        );
+        if cache_guard.len() > MAX_API_CACHE_ENTRIES {
+            let cache_ttl_secs = with_config(|cfg| cfg.wallet.api_response_cache_ttl_secs.max(5));
+            let cutoff = Instant::now() - Duration::from_secs(cache_ttl_secs.saturating_mul(2));
+            cache_guard.retain(|_, entry| entry.cached_at > cutoff);
+        }
+    }
+
+    if is_debug_wallet_enabled() {
+        log(
+            LogTag::Wallet,
+            "METRICS_CACHED",
+            &format!(
+                "Cached {} metrics: net={:.6} SOL, txs={}, computed_in={}ms, ttl={}s",
+                window_key,
+                payload.flows.net_sol,
+                payload.flows.transactions_analyzed,
+                duration_ms,
+                ttl_secs
+            ),
+        );
+    }
+
+    Ok(())
+}
+
+async fn warmup_dashboard_metrics() {
+    log(
+        LogTag::Wallet,
+        "METRICS_WARMUP_START",
+        "Precomputing wallet dashboard metrics during startup",
+    );
+
+    if get_transaction_database().await.is_none() {
+        log(
+            LogTag::Wallet,
+            "METRICS_WARMUP_SKIP",
+            "Skipping dashboard warm-up → transactions database not ready",
+        );
+        return;
+    }
+
+    let windows = [("24h", 24_i64), ("7d", 168), ("30d", 720), ("all_time", 0)];
+    for (key, hours) in windows {
+        compute_and_cache_metrics_internal(key, hours).await;
+    }
+
+    log(
+        LogTag::Wallet,
+        "METRICS_WARMUP_DONE",
+        "Wallet dashboard metrics warm-up complete",
+    );
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DashboardCacheFreshness {
+    Fresh,
+    Aging,
+    Stale,
+    Realtime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DashboardDataSource {
+    Memory,
+    Database,
+    Realtime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DashboardCacheMetadata {
+    pub window_key: Option<String>,
+    pub cached_at: Option<String>,
+    pub valid_until: Option<String>,
+    pub age_seconds: Option<u64>,
+    pub next_update_in_seconds: Option<u64>,
+    pub freshness: DashboardCacheFreshness,
+    pub source: DashboardDataSource,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub computation_duration_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snapshot_count: Option<usize>,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+struct DashboardRequestKey {
+    window_hours: i64,
+    snapshot_limit: usize,
+    max_tokens: usize,
+}
+
+#[derive(Debug, Clone)]
+struct CachedDashboardResponse {
+    data: WalletDashboardData,
+    cached_at: Instant,
+}
+
+#[derive(Debug, Default, Clone, Serialize)]
+pub struct CachePerformanceMetrics {
+    total_requests: u64,
+    memory_hits: u64,
+    database_hits: u64,
+    realtime_computations: u64,
+    stale_responses: u64,
+    total_latency_ms: u128,
+    last_source: Option<DashboardDataSource>,
 }
 
 fn clamp_window_hours(window_hours: i64) -> i64 {
@@ -591,7 +995,7 @@ async fn enrich_token_overview(
     rows
 }
 
-pub async fn get_wallet_dashboard_data(
+async fn compute_dashboard_payload_realtime(
     window_hours: i64,
     snapshot_limit: usize,
     max_tokens: usize,
@@ -642,6 +1046,7 @@ pub async fn get_wallet_dashboard_data(
             daily_flows,
             tokens: Vec::new(),
             last_updated: None,
+            cache_metadata: None,
         });
     }
 
@@ -724,7 +1129,229 @@ pub async fn get_wallet_dashboard_data(
         daily_flows,
         tokens,
         last_updated: Some(latest_snapshot.snapshot_time.to_rfc3339()),
+        cache_metadata: None,
     })
+}
+
+pub async fn get_wallet_dashboard_data(
+    window_hours: i64,
+    snapshot_limit: usize,
+    max_tokens: usize,
+) -> Result<WalletDashboardData, String> {
+    let clamped_window = clamp_window_hours(window_hours);
+    let clamped_snapshot_limit = clamp_snapshot_limit(snapshot_limit);
+    let clamped_token_limit = clamp_token_limit(max_tokens);
+
+    let cache_ttl_secs = with_config(|cfg| cfg.wallet.api_response_cache_ttl_secs.max(5));
+    let request_key = DashboardRequestKey {
+        window_hours: clamped_window,
+        snapshot_limit: clamped_snapshot_limit,
+        max_tokens: clamped_token_limit,
+    };
+
+    let start = Instant::now();
+
+    // Memory cache layer
+    {
+        let cache_guard = API_RESPONSE_CACHE.read().await;
+        if let Some(entry) = cache_guard.get(&request_key) {
+            if entry.cached_at.elapsed().as_secs() < cache_ttl_secs {
+                let payload = entry.data.clone();
+                let stale = payload
+                    .cache_metadata
+                    .as_ref()
+                    .map(|meta| matches!(meta.freshness, DashboardCacheFreshness::Stale))
+                    .unwrap_or(false);
+                record_cache_metrics(
+                    DashboardDataSource::Memory,
+                    start.elapsed().as_millis(),
+                    stale,
+                )
+                .await;
+                return Ok(payload);
+            }
+        }
+    }
+
+    // Database cache layer
+    if let Some((window_key, _canonical_hours)) = canonical_window(clamped_window) {
+        let metrics = {
+            let db_guard = GLOBAL_WALLET_DB.lock().await;
+            match db_guard.as_ref() {
+                Some(db) => db.get_dashboard_metrics(window_key)?,
+                None => None,
+            }
+        };
+
+        if let Some(metrics) = metrics {
+            let covers_snapshots = metrics.snapshot_limit >= clamped_snapshot_limit;
+            let covers_tokens = metrics.token_limit >= clamped_token_limit;
+            let ttl_secs = ttl_for_window(window_key).max(5);
+            let now = Utc::now();
+            let valid = metrics.valid_until >= now;
+
+            if covers_snapshots && covers_tokens {
+                match deserialize_dashboard_payload(&metrics.payload) {
+                    Ok(mut payload) => {
+                        if payload.balance_trend.len() > clamped_snapshot_limit {
+                            let start_index = payload.balance_trend.len() - clamped_snapshot_limit;
+                            payload.balance_trend = payload
+                                .balance_trend
+                                .into_iter()
+                                .skip(start_index)
+                                .collect();
+                        }
+                        if payload.tokens.len() > clamped_token_limit {
+                            payload.tokens.truncate(clamped_token_limit);
+                        }
+
+                        let age_secs = now
+                            .signed_duration_since(metrics.computed_at)
+                            .num_seconds()
+                            .max(0) as u64;
+                        let next_update = if metrics.valid_until > now {
+                            Some((metrics.valid_until - now).num_seconds() as u64)
+                        } else {
+                            Some(0)
+                        };
+
+                        let freshness = if !valid {
+                            DashboardCacheFreshness::Stale
+                        } else if age_secs <= ttl_secs / 2 {
+                            DashboardCacheFreshness::Fresh
+                        } else {
+                            DashboardCacheFreshness::Aging
+                        };
+
+                        let metadata = DashboardCacheMetadata {
+                            window_key: Some(metrics.window_key.clone()),
+                            cached_at: Some(metrics.computed_at.to_rfc3339()),
+                            valid_until: Some(metrics.valid_until.to_rfc3339()),
+                            age_seconds: Some(age_secs),
+                            next_update_in_seconds: next_update,
+                            freshness: freshness.clone(),
+                            source: DashboardDataSource::Database,
+                            computation_duration_ms: metrics
+                                .computation_duration_ms
+                                .map(|value| value as u64),
+                            snapshot_count: Some(metrics.snapshot_count),
+                        };
+                        payload.cache_metadata = Some(metadata.clone());
+
+                        if valid {
+                            {
+                                let mut cache_guard = API_RESPONSE_CACHE.write().await;
+                                cache_guard.insert(
+                                    request_key.clone(),
+                                    CachedDashboardResponse {
+                                        data: payload.clone(),
+                                        cached_at: Instant::now(),
+                                    },
+                                );
+                                if cache_guard.len() > MAX_API_CACHE_ENTRIES {
+                                    let cutoff = Instant::now()
+                                        - Duration::from_secs(cache_ttl_secs.saturating_mul(2));
+                                    cache_guard.retain(|_, entry| entry.cached_at > cutoff);
+                                }
+                            }
+
+                            record_cache_metrics(
+                                DashboardDataSource::Database,
+                                start.elapsed().as_millis(),
+                                matches!(freshness, DashboardCacheFreshness::Stale),
+                            )
+                            .await;
+                            return Ok(payload);
+                        } else if is_debug_wallet_enabled() {
+                            log(
+                                LogTag::Wallet,
+                                "DASHBOARD_CACHE_STALE",
+                                &format!(
+                                    "Discarding stale dashboard cache for {} (age={}s, ttl={}s)",
+                                    window_key, age_secs, ttl_secs
+                                ),
+                            );
+                        }
+                    }
+                    Err(err) => {
+                        log(
+                            LogTag::Wallet,
+                            "DASHBOARD_CACHE_ERR",
+                            &format!(
+                                "Failed to deserialize dashboard cache for {}: {}",
+                                window_key, err
+                            ),
+                        );
+                    }
+                }
+            } else if is_debug_wallet_enabled() {
+                log(
+                    LogTag::Wallet,
+                    "DASHBOARD_CACHE_SKIP",
+                    &format!(
+                        "Cache entry {} does not cover requested limits (snapshots={} tokens={})",
+                        window_key, metrics.snapshot_limit, metrics.token_limit
+                    ),
+                );
+            }
+
+            if !valid {
+                let cached_window_key = metrics.window_key.clone();
+                let cached_window_hours = metrics.window_hours;
+                tokio::spawn(async move {
+                    if let Some((canonical_key, canonical_hours)) =
+                        canonical_window(cached_window_hours)
+                    {
+                        if canonical_key == cached_window_key {
+                            compute_and_cache_metrics_internal(canonical_key, canonical_hours)
+                                .await;
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    // Real-time computation fallback
+    let mut payload = compute_dashboard_payload_realtime(
+        clamped_window,
+        clamped_snapshot_limit,
+        clamped_token_limit,
+    )
+    .await?;
+
+    let latency = start.elapsed().as_millis();
+    let now = Utc::now();
+    payload.cache_metadata = Some(DashboardCacheMetadata {
+        window_key: canonical_window(clamped_window).map(|(key, _)| key.to_string()),
+        cached_at: Some(now.to_rfc3339()),
+        valid_until: None,
+        age_seconds: Some(0),
+        next_update_in_seconds: None,
+        freshness: DashboardCacheFreshness::Realtime,
+        source: DashboardDataSource::Realtime,
+        computation_duration_ms: Some(latency as u64),
+        snapshot_count: Some(payload.balance_trend.len()),
+    });
+
+    {
+        let mut cache_guard = API_RESPONSE_CACHE.write().await;
+        cache_guard.insert(
+            request_key,
+            CachedDashboardResponse {
+                data: payload.clone(),
+                cached_at: Instant::now(),
+            },
+        );
+        if cache_guard.len() > MAX_API_CACHE_ENTRIES {
+            let cutoff = Instant::now() - Duration::from_secs(cache_ttl_secs.saturating_mul(2));
+            cache_guard.retain(|_, entry| entry.cached_at > cutoff);
+        }
+    }
+
+    record_cache_metrics(DashboardDataSource::Realtime, latency, false).await;
+
+    Ok(payload)
 }
 
 // =============================================================================
@@ -814,6 +1441,9 @@ impl WalletDatabase {
         conn.execute(SCHEMA_SOL_FLOW_CACHE, [])
             .map_err(|e| format!("Failed to create sol_flow_cache table: {}", e))?;
 
+        conn.execute(SCHEMA_WALLET_DASHBOARD_METRICS, [])
+            .map_err(|e| format!("Failed to create wallet_dashboard_metrics table: {}", e))?;
+
         // Create all indexes
         for index_sql in WALLET_INDEXES {
             conn.execute(index_sql, [])
@@ -822,6 +1452,11 @@ impl WalletDatabase {
         for index_sql in FLOW_CACHE_INDEXES {
             conn.execute(index_sql, [])
                 .map_err(|e| format!("Failed to create flow cache index: {}", e))?;
+        }
+
+        for index_sql in DASHBOARD_METRICS_INDEXES {
+            conn.execute(index_sql, [])
+                .map_err(|e| format!("Failed to create dashboard metrics index: {}", e))?;
         }
 
         // Set schema version
@@ -967,6 +1602,131 @@ impl WalletDatabase {
             rows: rows.max(0) as u64,
             max_timestamp: max_ts,
         })
+    }
+
+    pub fn get_dashboard_metrics(
+        &self,
+        window_key: &str,
+    ) -> Result<Option<CachedDashboardMetrics>, String> {
+        let conn = self.get_connection()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT window_key, window_hours, snapshot_limit, token_limit, payload_blob, payload_format, \
+                    computed_at, valid_until, computation_duration_ms, snapshot_count, flow_cache_rows, \
+                    last_processed_timestamp, last_processed_signature, window_start \
+                 FROM wallet_dashboard_metrics WHERE window_key = ?1",
+            )
+            .map_err(|e| format!("Failed to prepare dashboard metrics query: {}", e))?;
+
+        let result = stmt
+            .query_row(params![window_key], |row| {
+                let computed_at_str: String = row.get(6)?;
+                let valid_until_str: String = row.get(7)?;
+                let computed_at = DateTime::parse_from_rfc3339(&computed_at_str)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .map_err(|_| {
+                        rusqlite::Error::InvalidColumnType(
+                            6,
+                            "computed_at".to_string(),
+                            rusqlite::types::Type::Text,
+                        )
+                    })?;
+                let valid_until = DateTime::parse_from_rfc3339(&valid_until_str)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .map_err(|_| {
+                        rusqlite::Error::InvalidColumnType(
+                            7,
+                            "valid_until".to_string(),
+                            rusqlite::types::Type::Text,
+                        )
+                    })?;
+
+                let last_processed_ts: Option<String> = row.get(11).ok();
+                let last_processed_timestamp = last_processed_ts
+                    .as_deref()
+                    .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
+                    .map(|dt| dt.with_timezone(&Utc));
+
+                let window_start_ts: Option<String> = row.get(13).ok();
+                let window_start = window_start_ts
+                    .as_deref()
+                    .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
+                    .map(|dt| dt.with_timezone(&Utc));
+
+                Ok(CachedDashboardMetrics {
+                    window_key: row.get(0)?,
+                    window_hours: row.get::<_, i64>(1)?,
+                    snapshot_limit: row.get::<_, i64>(2)? as usize,
+                    token_limit: row.get::<_, i64>(3)? as usize,
+                    payload: row.get(4)?,
+                    payload_format: row.get(5)?,
+                    computed_at,
+                    valid_until,
+                    computation_duration_ms: row.get(8).ok(),
+                    snapshot_count: row.get::<_, i64>(9)? as usize,
+                    flow_cache_rows: row.get::<_, i64>(10)? as usize,
+                    last_processed_timestamp,
+                    last_processed_signature: row.get(12).ok(),
+                    window_start,
+                })
+            })
+            .optional()
+            .map_err(|e| format!("Failed to fetch dashboard metrics: {}", e))?;
+
+        Ok(result)
+    }
+
+    pub fn upsert_dashboard_metrics(&self, metrics: &CachedDashboardMetrics) -> Result<(), String> {
+        let conn = self.get_connection()?;
+        conn.execute(
+            "INSERT OR REPLACE INTO wallet_dashboard_metrics (
+                window_key, window_hours, snapshot_limit, token_limit, payload_blob, payload_format,
+                computed_at, valid_until, computation_duration_ms, snapshot_count, flow_cache_rows,
+                last_processed_timestamp, last_processed_signature, window_start, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, datetime('now'))",
+            params![
+                metrics.window_key,
+                metrics.window_hours,
+                metrics.snapshot_limit as i64,
+                metrics.token_limit as i64,
+                metrics.payload,
+                metrics.payload_format,
+                metrics.computed_at.to_rfc3339(),
+                metrics.valid_until.to_rfc3339(),
+                metrics.computation_duration_ms,
+                metrics.snapshot_count as i64,
+                metrics.flow_cache_rows as i64,
+                metrics
+                    .last_processed_timestamp
+                    .as_ref()
+                    .map(|ts| ts.to_rfc3339()),
+                metrics.last_processed_signature,
+                metrics.window_start.as_ref().map(|ts| ts.to_rfc3339()),
+            ],
+        )
+        .map_err(|e| format!("Failed to upsert dashboard metrics: {}", e))?;
+        Ok(())
+    }
+
+    pub fn invalidate_dashboard_metrics(&self, window_key: &str) -> Result<(), String> {
+        let conn = self.get_connection()?;
+        conn.execute(
+            "DELETE FROM wallet_dashboard_metrics WHERE window_key = ?1",
+            params![window_key],
+        )
+        .map_err(|e| format!("Failed to invalidate dashboard metrics: {}", e))?;
+        Ok(())
+    }
+
+    pub fn cleanup_expired_metrics(&self) -> Result<u64, String> {
+        let conn = self.get_connection()?;
+        let deleted = conn
+            .execute(
+                "DELETE FROM wallet_dashboard_metrics WHERE valid_until < datetime('now')",
+                [],
+            )
+            .map_err(|e| format!("Failed to cleanup dashboard metrics: {}", e))?;
+        Ok(deleted.max(0) as u64)
     }
 
     /// Save wallet snapshot with token balances (synchronous version)
@@ -1563,10 +2323,29 @@ pub async fn start_wallet_monitoring_service(
                 return;
             }
 
+            warmup_dashboard_metrics().await;
+
             let snapshot_interval = with_config(|cfg| cfg.wallet.snapshot_interval_secs);
             let cache_interval_secs = with_config(|cfg| cfg.wallet.flow_cache_update_secs);
             let mut interval = tokio::time::interval(Duration::from_secs(snapshot_interval.max(10)));
             let mut flow_sync_interval = tokio::time::interval(Duration::from_secs(cache_interval_secs.max(1)));
+            let (metrics_24h_secs, metrics_7d_secs, metrics_30d_secs, metrics_all_secs) =
+                with_config(|cfg| {
+                    (
+                        cfg.wallet.dashboard_metrics_24h_interval_secs.max(30),
+                        cfg.wallet.dashboard_metrics_7d_interval_secs.max(60),
+                        cfg.wallet.dashboard_metrics_30d_interval_secs.max(300),
+                        cfg.wallet.dashboard_metrics_alltime_interval_secs.max(300),
+                    )
+                });
+            let mut metrics_24h_interval =
+                tokio::time::interval(Duration::from_secs(metrics_24h_secs));
+            let mut metrics_7d_interval =
+                tokio::time::interval(Duration::from_secs(metrics_7d_secs));
+            let mut metrics_30d_interval =
+                tokio::time::interval(Duration::from_secs(metrics_30d_secs));
+            let mut metrics_all_interval =
+                tokio::time::interval(Duration::from_secs(metrics_all_secs));
             let mut cleanup_counter = 0;
 
             loop {
@@ -1624,6 +2403,12 @@ pub async fn start_wallet_monitoring_service(
                                 if let Err(e) = db.cleanup_old_snapshots_sync() {
                                     log(LogTag::Wallet, "WARN", &format!("Failed to cleanup old snapshots: {}", e));
                                 }
+                                if let Err(e) = db.cleanup_expired_metrics() {
+                                    log(LogTag::Wallet, "WARN", &format!(
+                                        "Failed to cleanup expired dashboard metrics: {}",
+                                        e
+                                    ));
+                                }
                             }
                             None => {
                                 log(LogTag::Wallet, "WARN", "Wallet database not initialized for cleanup");
@@ -1675,6 +2460,18 @@ pub async fn start_wallet_monitoring_service(
                             log(LogTag::Wallet, "FLOW_SYNC", &format!("Upserted {} flow cache rows", mapped.len()));
                         }
                     }
+                }
+                _ = metrics_24h_interval.tick() => {
+                    compute_and_cache_metrics_internal("24h", 24).await;
+                }
+                _ = metrics_7d_interval.tick() => {
+                    compute_and_cache_metrics_internal("7d", 168).await;
+                }
+                _ = metrics_30d_interval.tick() => {
+                    compute_and_cache_metrics_internal("30d", 720).await;
+                }
+                _ = metrics_all_interval.tick() => {
+                    compute_and_cache_metrics_internal("all_time", 0).await;
                 }
             }
             }
@@ -1731,4 +2528,34 @@ pub async fn get_flow_cache_stats() -> Result<WalletFlowCacheStats, String> {
         Some(db) => db.get_flow_cache_stats_sync(),
         None => Err("Wallet database not initialized".to_string()),
     }
+}
+
+pub async fn refresh_dashboard_cache(window_hours: i64) -> Result<(), String> {
+    let window_hours = clamp_window_hours(window_hours);
+    let (window_key, canonical_hours) =
+        canonical_window(window_hours).ok_or_else(|| "Unsupported window".to_string())?;
+
+    {
+        let db_guard = GLOBAL_WALLET_DB.lock().await;
+        if let Some(db) = db_guard.as_ref() {
+            db.invalidate_dashboard_metrics(window_key)?;
+        }
+    }
+
+    if let Err(err) = compute_and_cache_metrics(window_key, canonical_hours).await {
+        circuit_record_failure(window_key).await;
+        Err(err)
+    } else {
+        circuit_reset(window_key).await;
+        Ok(())
+    }
+}
+
+pub async fn get_dashboard_cache_metrics() -> CachePerformanceMetrics {
+    CACHE_METRICS.read().await.clone()
+}
+
+pub async fn clear_dashboard_api_cache() {
+    let mut guard = API_RESPONSE_CACHE.write().await;
+    guard.clear();
 }

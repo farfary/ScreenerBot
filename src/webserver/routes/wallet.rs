@@ -7,8 +7,9 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::wallet::{
-    get_current_wallet_status, get_flow_cache_stats, get_wallet_dashboard_data,
-    WalletDashboardData, WalletFlowCacheStats,
+    clear_dashboard_api_cache, get_current_wallet_status, get_dashboard_cache_metrics,
+    get_flow_cache_stats, get_wallet_dashboard_data, refresh_dashboard_cache,
+    CachePerformanceMetrics, WalletDashboardData, WalletFlowCacheStats,
 };
 use crate::webserver::state::AppState;
 
@@ -35,7 +36,9 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/wallet/current", get(get_wallet_current))
         .route("/wallet/dashboard", post(get_wallet_dashboard))
+        .route("/wallet/dashboard/refresh", post(refresh_wallet_dashboard))
         .route("/wallet/flow-cache", get(get_wallet_flow_cache_stats))
+        .route("/wallet/cache-metrics", get(get_wallet_cache_metrics))
 }
 
 /// Get current wallet balance
@@ -116,6 +119,25 @@ async fn get_wallet_dashboard(
     }
 }
 
+async fn refresh_wallet_dashboard(
+    AxumJson(request): AxumJson<WalletDashboardRequest>,
+) -> Json<WalletDashboardResponse> {
+    match refresh_dashboard_cache(request.window_hours).await {
+        Ok(_) => {
+            clear_dashboard_api_cache().await;
+        }
+        Err(err) => {
+            log::warn!(
+                "Failed to refresh dashboard cache for {}h: {}",
+                request.window_hours,
+                err
+            );
+        }
+    }
+
+    get_wallet_dashboard(AxumJson(request)).await
+}
+
 #[derive(Debug, Serialize)]
 pub struct WalletFlowCacheResponse {
     pub data: Option<WalletFlowCacheStats>,
@@ -134,4 +156,14 @@ async fn get_wallet_flow_cache_stats() -> Json<WalletFlowCacheResponse> {
             error: Some(err),
         }),
     }
+}
+
+#[derive(Debug, Serialize)]
+pub struct WalletCacheMetricsResponse {
+    pub data: CachePerformanceMetrics,
+}
+
+async fn get_wallet_cache_metrics() -> Json<WalletCacheMetricsResponse> {
+    let data = get_dashboard_cache_metrics().await;
+    Json(WalletCacheMetricsResponse { data })
 }
