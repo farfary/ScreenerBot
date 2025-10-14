@@ -183,239 +183,26 @@
 </style>
 
 <script>
-  var STATUS_VIEWS = [
-    "system",
-    "rpc",
-    "transactions",
-    "positions",
-    "pools",
-    "dexscreener",
-    "geckoterminal",
-    "discovery",
-    "ohlcvs",
-    "events",
-    "wallet",
-    "trader",
-    "sol_price",
-    "webserver",
-    "rl_learner",
-  ];
+  (function () {
+    const STATUS_VIEWS = [
+      "system",
+      "rpc",
+      "transactions",
+      "positions",
+      "pools",
+      "dexscreener",
+      "geckoterminal",
+      "discovery",
+      "ohlcvs",
+      "events",
+      "wallet",
+      "trader",
+      "sol_price",
+      "webserver",
+      "rl_learner",
+    ];
 
-  var statusState = window.statusState || {
-    view: "system",
-    currentData: null,
-    message: "Loading status...",
-    error: null,
-    lastSnapshotAt: null,
-  };
-
-  window.statusState = statusState;
-
-  var statusPollTimer = null;
-  var statusIntervalChangeListener = null;
-  var statusIsFetching = false;
-  var statusFetchAbortController = null;
-  var statusPageInitialized = false;
-  var statusCleanupRegistered = false;
-
-  function setStatusMessage(message) {
-    statusState.message = message;
-    statusState.error = null;
-    if (!statusState.currentData) {
-      renderStatusContent();
-    }
-  }
-
-  function setStatusError(message) {
-    statusState.error = message;
-    if (!statusState.currentData) {
-      renderStatusContent();
-    }
-  }
-
-  function applyStatusSnapshot(snapshot) {
-    statusState.currentData = snapshot;
-    statusState.message = null;
-    statusState.error = null;
-    statusState.lastSnapshotAt = Date.now();
-    ensureStatusSubTabsVisible();
-    renderStatusContent();
-
-    if (typeof renderStatusBadgesFromSnapshot === "function") {
-      try {
-        renderStatusBadgesFromSnapshot(snapshot);
-      } catch (err) {
-        console.warn("[Status] Failed to render status badges", err);
-      }
-    }
-  }
-
-  async function fetchStatusSnapshotOnce(showLoading) {
-    if (showLoading) {
-      setStatusMessage("Loading status...");
-    }
-
-    if (statusIsFetching) {
-      console.log("[Status] Skipping fetch; request already in flight");
-      return;
-    }
-
-    try {
-      statusIsFetching = true;
-      statusFetchAbortController = new AbortController();
-      const response = await fetch("/api/status", {
-        signal: statusFetchAbortController.signal,
-        headers: { "X-Requested-With": "fetch" },
-      });
-      if (!response.ok) {
-        throw new Error("HTTP " + response.status);
-      }
-      const snapshot = await response.json();
-      applyStatusSnapshot(snapshot);
-    } catch (error) {
-      if (error.name === "AbortError") {
-        console.log("[Status] Fetch aborted");
-        return;
-      }
-      console.error("[Status] Failed to load snapshot", error);
-      if (!statusState.currentData) {
-        setStatusError("Unable to load status snapshot");
-      } else if (window.Utils && typeof Utils.showToast === "function") {
-        Utils.showToast("⚠️ Failed to refresh status data", "warning");
-      }
-    } finally {
-      statusIsFetching = false;
-      statusFetchAbortController = null;
-    }
-  }
-
-  function resolveStatusPollingInterval() {
-    if (
-      window.PollingManager &&
-      typeof window.PollingManager.getInterval === "function"
-    ) {
-      try {
-        return window.PollingManager.getInterval();
-      } catch (err) {
-        console.warn("[Status] Failed to read polling interval", err);
-      }
-    }
-
-    console.warn(
-      "[Status] PollingManager unavailable, using fallback polling interval"
-    );
-    return 1000;
-  }
-
-  function startStatusTabPolling() {
-    stopStatusTabPolling();
-    const interval = resolveStatusPollingInterval();
-    statusPollTimer = setInterval(
-      () => fetchStatusSnapshotOnce(false),
-      interval
-    );
-    console.log("[Status] Started polling every", interval, "ms");
-  }
-
-  function stopStatusTabPolling() {
-    if (statusPollTimer) {
-      clearInterval(statusPollTimer);
-      statusPollTimer = null;
-      console.log("[Status] Stopped polling");
-    }
-    if (statusFetchAbortController) {
-      statusFetchAbortController.abort();
-      statusFetchAbortController = null;
-    }
-    statusIsFetching = false;
-  }
-
-  // Global init function for Router to call during SPA navigation
-  window.initStatusPage = function () {
-    console.log("[Status] Page initialized");
-
-    if (statusPageInitialized) {
-      // Re-entering the page - ensure UI is visible and polling is active
-      ensureStatusSubTabsVisible();
-      renderStatusContent();
-      if (!statusState.currentData) {
-        fetchStatusSnapshotOnce(true);
-      }
-      if (!statusPollTimer) {
-        startStatusTabPolling();
-      }
-    } else {
-      // First-time initialization
-      statusPageInitialized = true;
-      hydrateStatusState();
-      initStatusSubTabs();
-      ensureStatusSubTabsVisible();
-      renderStatusContent();
-      fetchStatusSnapshotOnce(true);
-      startStatusTabPolling();
-    }
-
-    // Register interval change listener
-    if (
-      window.PollingManager &&
-      typeof window.PollingManager.onChange === "function" &&
-      !statusIntervalChangeListener
-    ) {
-      statusIntervalChangeListener = window.PollingManager.onChange(() => {
-        console.log("[Status] Polling interval changed, restarting polling");
-        startStatusTabPolling();
-      });
-    }
-
-    // Register cleanup hook for Router navigation
-    if (
-      !statusCleanupRegistered &&
-      window.Router &&
-      typeof Router.registerCleanup === "function"
-    ) {
-      statusCleanupRegistered = true;
-      Router.registerCleanup(() => {
-        stopStatusTabPolling();
-
-        if (
-          statusIntervalChangeListener &&
-          window.PollingManager &&
-          typeof window.PollingManager.removeListener === "function"
-        ) {
-          window.PollingManager.removeListener(statusIntervalChangeListener);
-        }
-
-        statusIntervalChangeListener = null;
-        statusPageInitialized = false;
-        statusCleanupRegistered = false;
-      });
-    }
-  };
-
-  // Execute initialization immediately if Router not loaded yet
-  if (!window.Router) {
-    window.initStatusPage();
-  }
-
-  if (!window.StatusPage) {
-    window.StatusPage = {};
-  }
-
-  window.StatusPage.startPolling = startStatusTabPolling;
-  window.StatusPage.stopPolling = stopStatusTabPolling;
-
-  function hydrateStatusState() {
-    const savedView = window.sessionStorage.getItem("status.view");
-    if (savedView && STATUS_VIEWS.includes(savedView)) {
-      statusState.view = savedView;
-    }
-  }
-
-  function initStatusSubTabs() {
-    const subTabsContainer = document.getElementById("subTabsContainer");
-    if (!subTabsContainer) return;
-
-    const views = [
+    const SUB_TAB_OPTIONS = [
       { id: "system", label: "💻 System" },
       { id: "rpc", label: "📡 RPC" },
       { id: "transactions", label: "💱 Transactions" },
@@ -433,132 +220,399 @@
       { id: "rl_learner", label: "🧠 RL Learner" },
     ];
 
-    subTabsContainer.innerHTML = views
-      .map(
-        (view) => `
-                    <button class="sub-tab ${
-                      view.id === statusState.view ? "active" : ""
-                    }" data-view="${view.id}">
-                        ${view.label}
-                    </button>
-                `
-      )
-      .join("");
+    const STORAGE_KEY = "status.view";
 
-    subTabsContainer.querySelectorAll(".sub-tab").forEach((button) => {
-      button.addEventListener("click", () =>
-        switchStatusSubTab(button.dataset.view)
-      );
-    });
+    const state = {
+      context: null,
+      view: "system",
+      data: null,
+      message: "Loading status...",
+      error: null,
+      lastSnapshotAt: null,
+      poller: null,
+      isFetching: false,
+      abortController: null,
+      subTabsTeardown: null,
+    };
 
-    subTabsContainer.setAttribute("data-page", "status");
-    subTabsContainer.style.display = "flex";
-  }
-
-  // Ensure sub-tabs are present and visible (defensive; handles race or prior page scripts)
-  function ensureStatusSubTabsVisible() {
-    const subTabsContainer = document.getElementById("subTabsContainer");
-    if (!subTabsContainer) return;
-
-    // If container is empty or still hidden, (re)initialize
-    const needsInit = subTabsContainer.children.length === 0;
-    const hidden =
-      getComputedStyle(subTabsContainer).display === "none" ||
-      subTabsContainer.style.display === "none";
-
-    if (needsInit) {
-      initStatusSubTabs();
+    function restoreViewFromStorage() {
+      try {
+        const saved = window.sessionStorage.getItem(STORAGE_KEY);
+        if (saved && STATUS_VIEWS.includes(saved)) {
+          state.view = saved;
+        }
+      } catch (error) {
+        console.warn("[Status] Failed to restore saved view", error);
+      }
     }
 
-    if (hidden) {
-      subTabsContainer.style.display = "flex";
+    function persistView() {
+      try {
+        window.sessionStorage.setItem(STORAGE_KEY, state.view);
+      } catch (error) {
+        console.warn("[Status] Failed to persist view", error);
+      }
     }
 
-    // Align active tab styling to current state if already mounted
-    if (!needsInit) {
-      document.querySelectorAll("#subTabsContainer .sub-tab").forEach((tab) => {
-        tab.classList.toggle("active", tab.dataset.view === statusState.view);
+    function getContentContainer() {
+      return document.getElementById("statusContent");
+    }
+
+    function setStatusMessage(message) {
+      state.message = message;
+      state.error = null;
+      if (!state.data) {
+        renderStatusContent();
+      }
+    }
+
+    function setStatusError(message) {
+      state.error = message;
+      if (!state.data) {
+        renderStatusContent();
+      }
+    }
+
+    function highlightActiveSubTab() {
+      const container = document.getElementById("subTabsContainer");
+      if (!container) {
+        return;
+      }
+      container
+        .querySelectorAll(".sub-tab")
+        .forEach((button) =>
+          button.classList.toggle("active", button.dataset.view === state.view)
+        );
+    }
+
+    function teardownSubTabs() {
+      if (typeof state.subTabsTeardown === "function") {
+        try {
+          state.subTabsTeardown();
+        } catch (error) {
+          console.error("[Status] Failed to teardown sub-tabs", error);
+        }
+        state.subTabsTeardown = null;
+      }
+    }
+
+    function mountSubTabs(context) {
+      const container = document.getElementById("subTabsContainer");
+      if (!container) {
+        return;
+      }
+
+      teardownSubTabs();
+
+      container.innerHTML = SUB_TAB_OPTIONS.map((view) => {
+        const active = view.id === state.view ? " active" : "";
+        return `<button class="sub-tab${active}" data-view="${view.id}">${view.label}</button>`;
+      }).join("");
+
+      container.setAttribute("data-page", "status");
+      container.style.display = "flex";
+
+      const handlers = [];
+      container.querySelectorAll(".sub-tab").forEach((button) => {
+        const handler = () => switchView(button.dataset.view);
+        button.addEventListener("click", handler);
+        handlers.push(() => button.removeEventListener("click", handler));
+      });
+
+      const cleanup = () => {
+        handlers.forEach((dispose) => dispose());
+        if (container.getAttribute("data-page") === "status") {
+          container.innerHTML = "";
+        }
+      };
+
+      const deactivateDispose = context.onDeactivate(() => {
+        cleanup();
+        state.subTabsTeardown = null;
+      });
+
+      context.onDispose(() => {
+        deactivateDispose();
+        cleanup();
+        if (container.getAttribute("data-page") === "status") {
+          container.style.display = "none";
+        }
+        state.subTabsTeardown = null;
+      });
+
+      state.subTabsTeardown = cleanup;
+      highlightActiveSubTab();
+    }
+
+    function applyStatusSnapshot(snapshot) {
+      state.data = snapshot;
+      state.message = null;
+      state.error = null;
+      state.lastSnapshotAt = Date.now();
+      highlightActiveSubTab();
+      renderStatusContent();
+
+      if (typeof renderStatusBadgesFromSnapshot === "function") {
+        try {
+          renderStatusBadgesFromSnapshot(snapshot);
+        } catch (error) {
+          console.warn("[Status] Failed to render status badges", error);
+        }
+      }
+    }
+
+    function createFetchController() {
+      if (
+        state.context &&
+        typeof state.context.createAbortController === "function"
+      ) {
+        return state.context.createAbortController();
+      }
+      return new AbortController();
+    }
+
+    async function fetchStatusSnapshot(options = {}) {
+      const { showLoading = false } = options;
+
+      if (showLoading) {
+        setStatusMessage("Loading status...");
+      }
+
+      if (state.isFetching) {
+        return;
+      }
+
+      const controller = createFetchController();
+
+      if (state.abortController && state.abortController !== controller) {
+        try {
+          state.abortController.abort();
+        } catch (error) {
+          console.warn("[Status] Failed to abort prior request", error);
+        }
+      }
+
+      state.abortController = controller;
+      state.isFetching = true;
+
+      try {
+        const response = await fetch("/api/status", {
+          signal: controller.signal,
+          headers: { "X-Requested-With": "fetch" },
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const snapshot = await response.json();
+        applyStatusSnapshot(snapshot);
+      } catch (error) {
+        if (error?.name === "AbortError") {
+          return;
+        }
+
+        console.error("[Status] Failed to load snapshot", error);
+
+        if (!state.data) {
+          setStatusError("Unable to load status snapshot");
+        } else if (window.Utils && typeof Utils.showToast === "function") {
+          Utils.showToast("⚠️ Failed to refresh status data", "warning");
+        }
+      } finally {
+        if (state.abortController === controller) {
+          state.abortController = null;
+        }
+        state.isFetching = false;
+      }
+    }
+
+    function ensurePoller(context) {
+      if (state.poller) {
+        return state.poller;
+      }
+
+      const poller = PagePoller.create({
+        label: "StatusSnapshot",
+        onPoll: () => fetchStatusSnapshot({ showLoading: false }),
+      });
+
+      state.poller = context.managePoller(poller);
+      return state.poller;
+    }
+
+    function startPoller() {
+      if (state.poller) {
+        state.poller.start();
+      }
+    }
+
+    function stopPoller() {
+      if (state.poller) {
+        state.poller.stop();
+      }
+      if (state.abortController) {
+        try {
+          state.abortController.abort();
+        } catch (error) {
+          console.warn("[Status] Failed to abort fetch on stop", error);
+        } finally {
+          state.abortController = null;
+        }
+      }
+    }
+
+    function cleanupPoller() {
+      if (state.poller) {
+        try {
+          state.poller.cleanup();
+        } catch (error) {
+          console.error("[Status] Poller cleanup failed", error);
+        }
+        state.poller = null;
+      }
+      if (state.abortController) {
+        try {
+          state.abortController.abort();
+        } catch (error) {
+          console.warn("[Status] Failed to abort fetch on dispose", error);
+        } finally {
+          state.abortController = null;
+        }
+      }
+    }
+
+    function switchView(nextView) {
+      if (
+        !nextView ||
+        state.view === nextView ||
+        !STATUS_VIEWS.includes(nextView)
+      ) {
+        return;
+      }
+
+      state.view = nextView;
+      persistView();
+      highlightActiveSubTab();
+      renderStatusContent();
+    }
+
+    function renderStatusContent() {
+      const contentContainer = getContentContainer();
+      if (!contentContainer) {
+        return;
+      }
+
+      const data = state.data;
+      if (!data) {
+        const message = state.error || state.message || "Loading status...";
+        contentContainer.innerHTML = `
+          <div class="page-section">
+            <div style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
+              <div class="loading-text">${message}</div>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      switch (state.view) {
+        case "system":
+          renderSystemTab(data);
+          break;
+        case "rpc":
+          renderRPCTab(data);
+          break;
+        case "wallet":
+          renderWalletTab(data);
+          break;
+        case "trader":
+          renderTraderTab(data);
+          break;
+        case "pools":
+          renderPoolsTab(data);
+          break;
+        case "dexscreener":
+          renderDexScreenerTab(data);
+          break;
+        case "geckoterminal":
+          renderGeckoTerminalTab(data);
+          break;
+        case "discovery":
+          renderDiscoveryTab(data);
+          break;
+        case "transactions":
+          renderTransactionsTab(data);
+          break;
+        case "events":
+          renderEventsTab(data);
+          break;
+        case "ohlcvs":
+          renderOHLCVSTab(data);
+          break;
+        default:
+          renderPlaceholderTab(state.view);
+      }
+    }
+
+    const lifecycle = {
+      init(context) {
+        state.context = context;
+        context.data.state = state;
+        restoreViewFromStorage();
+      },
+      activate(context) {
+        state.context = context;
+        mountSubTabs(context);
+        highlightActiveSubTab();
+        ensurePoller(context);
+        renderStatusContent();
+        fetchStatusSnapshot({ showLoading: !state.data });
+        startPoller();
+      },
+      deactivate() {
+        stopPoller();
+      },
+      dispose() {
+        stopPoller();
+        cleanupPoller();
+        teardownSubTabs();
+        state.context = null;
+        state.data = null;
+        state.message = "Loading status...";
+        state.error = null;
+      },
+    };
+
+    const registerLifecycle = (registry) => {
+      try {
+        registry.register("status", lifecycle);
+      } catch (error) {
+        console.error("[Status] Failed to register lifecycle", error);
+      }
+    };
+
+    if (
+      window.PageRegistry &&
+      typeof window.PageRegistry.register === "function"
+    ) {
+      registerLifecycle(window.PageRegistry);
+    } else {
+      if (!Array.isArray(window.__pendingPageRegistrations)) {
+        window.__pendingPageRegistrations = [];
+      }
+      window.__pendingPageRegistrations.push((registry) => {
+        registerLifecycle(registry);
       });
     }
-  }
 
-  function switchStatusSubTab(view) {
-    if (!view || statusState.view === view) return;
+    function renderSystemTab(data) {
+      const contentContainer = document.getElementById("statusContent");
 
-    statusState.view = view;
-    window.sessionStorage.setItem("status.view", view);
+      const metrics = data.metrics || {};
+      const services = data.services || {};
 
-    document.querySelectorAll("#subTabsContainer .sub-tab").forEach((tab) => {
-      tab.classList.toggle("active", tab.dataset.view === view);
-    });
-
-    renderStatusContent();
-  }
-
-  function renderStatusContent() {
-    const contentContainer = document.getElementById("statusContent");
-    if (!contentContainer) return;
-
-    const data = statusState.currentData;
-    if (!data) {
-      const message =
-        statusState.error || statusState.message || "Loading status...";
       contentContainer.innerHTML = `
-                    <div class="page-section">
-                        <div style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
-                            <div class="loading-text">${message}</div>
-                        </div>
-                    </div>
-                `;
-      return;
-    }
-
-    switch (statusState.view) {
-      case "system":
-        renderSystemTab(data);
-        break;
-      case "rpc":
-        renderRPCTab(data);
-        break;
-      case "wallet":
-        renderWalletTab(data);
-        break;
-      case "trader":
-        renderTraderTab(data);
-        break;
-      case "pools":
-        renderPoolsTab(data);
-        break;
-      case "dexscreener":
-        renderDexScreenerTab(data);
-        break;
-      case "geckoterminal":
-        renderGeckoTerminalTab(data);
-        break;
-      case "discovery":
-        renderDiscoveryTab(data);
-        break;
-      case "transactions":
-        renderTransactionsTab(data);
-        break;
-      case "events":
-        renderEventsTab(data);
-        break;
-      case "ohlcvs":
-        renderOHLCVSTab(data);
-        break;
-      default:
-        renderPlaceholderTab(statusState.view);
-    }
-  }
-
-  function renderSystemTab(data) {
-    const contentContainer = document.getElementById("statusContent");
-
-    const metrics = data.metrics || {};
-    const services = data.services || {};
-
-    contentContainer.innerHTML = `
                 <div class="page-section">
                     <div class="card">
                         <div class="card-header">
@@ -673,24 +727,24 @@
                     </div>
                 </div>
             `;
-  }
+    }
 
-  function renderServicesRows(services) {
-    const servicesList = [
-      { key: "tokens_system", label: "Tokens System" },
-      { key: "positions_system", label: "Positions System" },
-      { key: "pool_service", label: "Pool Service" },
-      { key: "security_analyzer", label: "Security Analyzer" },
-      { key: "transactions_system", label: "Transactions System" },
-    ];
+    function renderServicesRows(services) {
+      const servicesList = [
+        { key: "tokens_system", label: "Tokens System" },
+        { key: "positions_system", label: "Positions System" },
+        { key: "pool_service", label: "Pool Service" },
+        { key: "security_analyzer", label: "Security Analyzer" },
+        { key: "transactions_system", label: "Transactions System" },
+      ];
 
-    return servicesList
-      .map(({ key, label }) => {
-        const service = services[key] || {};
-        const ready = service.ready || false;
-        const lastCheck = service.last_check || "N/A";
+      return servicesList
+        .map(({ key, label }) => {
+          const service = services[key] || {};
+          const ready = service.ready || false;
+          const lastCheck = service.last_check || "N/A";
 
-        return `
+          return `
                     <tr>
                         <td><strong>${label}</strong></td>
                         <td>
@@ -705,17 +759,17 @@
                         })}</td>
                     </tr>
                 `;
-      })
-      .join("");
-  }
+        })
+        .join("");
+    }
 
-  function renderRPCTab(data) {
-    const contentContainer = document.getElementById("statusContent");
+    function renderRPCTab(data) {
+      const contentContainer = document.getElementById("statusContent");
 
-    const rpcStats = data.rpc_stats;
+      const rpcStats = data.rpc_stats;
 
-    if (!rpcStats) {
-      contentContainer.innerHTML = `
+      if (!rpcStats) {
+        contentContainer.innerHTML = `
                     <div class="page-section">
                         <div class="card">
                             <div class="card-header">
@@ -730,52 +784,52 @@
                         </div>
                     </div>
                 `;
-      return;
-    }
+        return;
+      }
 
-    // Calculate uptime formatted
-    const uptimeHours = Math.floor(rpcStats.uptime_seconds / 3600);
-    const uptimeMinutes = Math.floor((rpcStats.uptime_seconds % 3600) / 60);
-    const uptimeFormatted =
-      uptimeHours > 0
-        ? `${uptimeHours}h ${uptimeMinutes}m`
-        : `${uptimeMinutes}m`;
+      // Calculate uptime formatted
+      const uptimeHours = Math.floor(rpcStats.uptime_seconds / 3600);
+      const uptimeMinutes = Math.floor((rpcStats.uptime_seconds % 3600) / 60);
+      const uptimeFormatted =
+        uptimeHours > 0
+          ? `${uptimeHours}h ${uptimeMinutes}m`
+          : `${uptimeMinutes}m`;
 
-    // Sort URLs by call count
-    const urlsArray = Object.entries(rpcStats.calls_per_url || {})
-      .map(([url, calls]) => ({
-        url,
-        calls,
-        errors: (rpcStats.errors_per_url || {})[url] || 0,
-        successRate:
-          calls > 0
-            ? (
-                ((calls - ((rpcStats.errors_per_url || {})[url] || 0)) /
-                  calls) *
-                100
-              ).toFixed(2)
-            : "100.00",
-      }))
-      .sort((a, b) => b.calls - a.calls);
+      // Sort URLs by call count
+      const urlsArray = Object.entries(rpcStats.calls_per_url || {})
+        .map(([url, calls]) => ({
+          url,
+          calls,
+          errors: (rpcStats.errors_per_url || {})[url] || 0,
+          successRate:
+            calls > 0
+              ? (
+                  ((calls - ((rpcStats.errors_per_url || {})[url] || 0)) /
+                    calls) *
+                  100
+                ).toFixed(2)
+              : "100.00",
+        }))
+        .sort((a, b) => b.calls - a.calls);
 
-    // Sort methods by call count
-    const methodsArray = Object.entries(rpcStats.calls_per_method || {})
-      .map(([method, calls]) => ({
-        method,
-        calls,
-        errors: (rpcStats.errors_per_method || {})[method] || 0,
-        successRate:
-          calls > 0
-            ? (
-                ((calls - ((rpcStats.errors_per_method || {})[method] || 0)) /
-                  calls) *
-                100
-              ).toFixed(2)
-            : "100.00",
-      }))
-      .sort((a, b) => b.calls - a.calls);
+      // Sort methods by call count
+      const methodsArray = Object.entries(rpcStats.calls_per_method || {})
+        .map(([method, calls]) => ({
+          method,
+          calls,
+          errors: (rpcStats.errors_per_method || {})[method] || 0,
+          successRate:
+            calls > 0
+              ? (
+                  ((calls - ((rpcStats.errors_per_method || {})[method] || 0)) /
+                    calls) *
+                  100
+                ).toFixed(2)
+              : "100.00",
+        }))
+        .sort((a, b) => b.calls - a.calls);
 
-    contentContainer.innerHTML = `
+      contentContainer.innerHTML = `
                 <div class="page-section">
                     <div class="card">
                         <div class="card-header">
@@ -984,15 +1038,15 @@
                     </div>
                 </div>
             `;
-  }
+    }
 
-  function renderWalletTab(data) {
-    const contentContainer = document.getElementById("statusContent");
+    function renderWalletTab(data) {
+      const contentContainer = document.getElementById("statusContent");
 
-    const wallet = data.wallet || null;
+      const wallet = data.wallet || null;
 
-    if (!wallet) {
-      contentContainer.innerHTML = `
+      if (!wallet) {
+        contentContainer.innerHTML = `
                 <div class="page-section">
                     <div class="card">
                         <div class="card-header">
@@ -1007,28 +1061,28 @@
                     </div>
                 </div>
             `;
-      return;
-    }
+        return;
+      }
 
-    const solBalance = Number.isFinite(wallet.sol_balance)
-      ? wallet.sol_balance
-      : 0;
-    const tokenCount = Number.isFinite(wallet.total_tokens_count)
-      ? wallet.total_tokens_count
-      : (wallet.token_balances || []).length;
-    const tokenBalances = Array.isArray(wallet.token_balances)
-      ? wallet.token_balances
-      : [];
+      const solBalance = Number.isFinite(wallet.sol_balance)
+        ? wallet.sol_balance
+        : 0;
+      const tokenCount = Number.isFinite(wallet.total_tokens_count)
+        ? wallet.total_tokens_count
+        : (wallet.token_balances || []).length;
+      const tokenBalances = Array.isArray(wallet.token_balances)
+        ? wallet.token_balances
+        : [];
 
-    let snapshotTime = "Unknown";
-    if (wallet.snapshot_time) {
-      const parsed = new Date(wallet.snapshot_time);
-      snapshotTime = Number.isNaN(parsed.getTime())
-        ? "Unknown"
-        : parsed.toLocaleString();
-    }
+      let snapshotTime = "Unknown";
+      if (wallet.snapshot_time) {
+        const parsed = new Date(wallet.snapshot_time);
+        snapshotTime = Number.isNaN(parsed.getTime())
+          ? "Unknown"
+          : parsed.toLocaleString();
+      }
 
-    contentContainer.innerHTML = `
+      contentContainer.innerHTML = `
                 <div class="page-section">
                     <div class="card">
                         <div class="card-header">
@@ -1125,22 +1179,22 @@
                     </div>
                 </div>
             `;
-  }
+    }
 
-  function renderTraderTab(data) {
-    const contentContainer = document.getElementById("statusContent");
+    function renderTraderTab(data) {
+      const contentContainer = document.getElementById("statusContent");
 
-    const tradingEnabled = !!data.trading_enabled;
-    const traderMode = (data.trader_mode || "unknown").toString();
-    const openPositions = Number.isFinite(data.open_positions)
-      ? data.open_positions
-      : 0;
-    const closedToday = Number.isFinite(data.closed_positions_today)
-      ? data.closed_positions_today
-      : 0;
-    const isRunning = !!data.trader_running;
+      const tradingEnabled = !!data.trading_enabled;
+      const traderMode = (data.trader_mode || "unknown").toString();
+      const openPositions = Number.isFinite(data.open_positions)
+        ? data.open_positions
+        : 0;
+      const closedToday = Number.isFinite(data.closed_positions_today)
+        ? data.closed_positions_today
+        : 0;
+      const isRunning = !!data.trader_running;
 
-    contentContainer.innerHTML = `
+      contentContainer.innerHTML = `
                 <div class="page-section">
                     <div class="card">
                         <div class="card-header">
@@ -1237,15 +1291,15 @@
                     </div>
                 </div>
             `;
-  }
+    }
 
-  function renderOHLCVSTab(data) {
-    const contentContainer = document.getElementById("statusContent");
+    function renderOHLCVSTab(data) {
+      const contentContainer = document.getElementById("statusContent");
 
-    const ohlcvStats = data.ohlcv_stats;
+      const ohlcvStats = data.ohlcv_stats;
 
-    if (!ohlcvStats) {
-      contentContainer.innerHTML = `
+      if (!ohlcvStats) {
+        contentContainer.innerHTML = `
                     <div class="page-section">
                         <div class="card">
                             <div class="card-header">
@@ -1260,133 +1314,135 @@
                         </div>
                     </div>
                 `;
-      return;
-    }
+        return;
+      }
 
-    const totalTokens = ohlcvStats.total_tokens || 0;
-    const critical = ohlcvStats.critical_tokens || 0;
-    const high = ohlcvStats.high_tokens || 0;
-    const medium = ohlcvStats.medium_tokens || 0;
-    const low = ohlcvStats.low_tokens || 0;
-    const telemetry = ohlcvStats.telemetry || {};
-    const topOpenGaps = Array.isArray(ohlcvStats.top_open_gaps)
-      ? ohlcvStats.top_open_gaps
-      : [];
-    const backfillsInProgress = Number(ohlcvStats.backfills_in_progress || 0);
-    const openGapTokens = Number(ohlcvStats.open_gap_tokens || 0);
-    const openGapTotal = Number(ohlcvStats.open_gap_total || 0);
+      const totalTokens = ohlcvStats.total_tokens || 0;
+      const critical = ohlcvStats.critical_tokens || 0;
+      const high = ohlcvStats.high_tokens || 0;
+      const medium = ohlcvStats.medium_tokens || 0;
+      const low = ohlcvStats.low_tokens || 0;
+      const telemetry = ohlcvStats.telemetry || {};
+      const topOpenGaps = Array.isArray(ohlcvStats.top_open_gaps)
+        ? ohlcvStats.top_open_gaps
+        : [];
+      const backfillsInProgress = Number(ohlcvStats.backfills_in_progress || 0);
+      const openGapTokens = Number(ohlcvStats.open_gap_tokens || 0);
+      const openGapTotal = Number(ohlcvStats.open_gap_total || 0);
 
-    const formatCount = (value) =>
-      Utils.formatNumber(Number(value || 0), 0, { fallback: "0" });
+      const formatCount = (value) =>
+        Utils.formatNumber(Number(value || 0), 0, { fallback: "0" });
 
-    const formatMs = (value) => {
-      const num = Number(value);
-      if (!Number.isFinite(num) || num <= 0) {
-        return "—";
-      }
-      if (num < 1000) {
-        return `${Math.round(num)} ms`;
-      }
-      const seconds = num / 1000;
-      if (seconds < 60) {
-        return `${seconds < 10 ? seconds.toFixed(1) : seconds.toFixed(0)} s`;
-      }
-      const minutes = Math.floor(seconds / 60);
-      const remainingSeconds = Math.floor(seconds % 60);
-      if (minutes < 60) {
-        return `${minutes}m ${remainingSeconds}s`;
-      }
-      const hours = Math.floor(minutes / 60);
-      const remainingMinutes = minutes % 60;
-      return `${hours}h ${remainingMinutes}m`;
-    };
+      const formatMs = (value) => {
+        const num = Number(value);
+        if (!Number.isFinite(num) || num <= 0) {
+          return "—";
+        }
+        if (num < 1000) {
+          return `${Math.round(num)} ms`;
+        }
+        const seconds = num / 1000;
+        if (seconds < 60) {
+          return `${seconds < 10 ? seconds.toFixed(1) : seconds.toFixed(0)} s`;
+        }
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = Math.floor(seconds % 60);
+        if (minutes < 60) {
+          return `${minutes}m ${remainingSeconds}s`;
+        }
+        const hours = Math.floor(minutes / 60);
+        const remainingMinutes = minutes % 60;
+        return `${hours}h ${remainingMinutes}m`;
+      };
 
-    const formatTimestampWithAgo = (value) => {
-      if (!value) {
-        return "—";
-      }
-      const timestamp = Utils.escapeHtml(
-        Utils.formatTimestamp(value, { includeSeconds: true })
+      const formatTimestampWithAgo = (value) => {
+        if (!value) {
+          return "—";
+        }
+        const timestamp = Utils.escapeHtml(
+          Utils.formatTimestamp(value, { includeSeconds: true })
+        );
+        const relative = Utils.formatTimeAgo(value, { fallback: "" });
+        if (!relative || relative === "-") {
+          return timestamp;
+        }
+        return `${timestamp} <span class="status-metric-unit">${Utils.escapeHtml(
+          relative
+        )}</span>`;
+      };
+
+      const monitorCycleStartedLabel = formatTimestampWithAgo(
+        telemetry.monitor_cycle_started_at
       );
-      const relative = Utils.formatTimeAgo(value, { fallback: "" });
-      if (!relative || relative === "-") {
-        return timestamp;
-      }
-      return `${timestamp} <span class="status-metric-unit">${Utils.escapeHtml(
-        relative
-      )}</span>`;
-    };
+      const monitorCycleCompletedLabel = formatTimestampWithAgo(
+        telemetry.monitor_cycle_completed_at
+      );
+      const monitorCycleDurationLabel = formatMs(
+        telemetry.monitor_cycle_duration_ms
+      );
+      const monitorCycleTokens = formatCount(
+        telemetry.monitor_cycle_tokens_processed
+      );
+      const monitorCycleTotal = formatCount(telemetry.monitor_cycle_total);
 
-    const monitorCycleStartedLabel = formatTimestampWithAgo(
-      telemetry.monitor_cycle_started_at
-    );
-    const monitorCycleCompletedLabel = formatTimestampWithAgo(
-      telemetry.monitor_cycle_completed_at
-    );
-    const monitorCycleDurationLabel = formatMs(
-      telemetry.monitor_cycle_duration_ms
-    );
-    const monitorCycleTokens = formatCount(
-      telemetry.monitor_cycle_tokens_processed
-    );
-    const monitorCycleTotal = formatCount(telemetry.monitor_cycle_total);
+      const gapCycleStartedLabel = formatTimestampWithAgo(
+        telemetry.gap_cycle_started_at
+      );
+      const gapCycleCompletedLabel = formatTimestampWithAgo(
+        telemetry.gap_cycle_completed_at
+      );
+      const gapCycleDurationLabel = formatMs(telemetry.gap_cycle_duration_ms);
+      const gapCycleTokens = formatCount(telemetry.gap_cycle_tokens_processed);
+      const gapCycleTotal = formatCount(telemetry.gap_cycle_total);
 
-    const gapCycleStartedLabel = formatTimestampWithAgo(
-      telemetry.gap_cycle_started_at
-    );
-    const gapCycleCompletedLabel = formatTimestampWithAgo(
-      telemetry.gap_cycle_completed_at
-    );
-    const gapCycleDurationLabel = formatMs(telemetry.gap_cycle_duration_ms);
-    const gapCycleTokens = formatCount(telemetry.gap_cycle_tokens_processed);
-    const gapCycleTotal = formatCount(telemetry.gap_cycle_total);
+      const totalBackfillsScheduled = formatCount(
+        telemetry.total_backfills_scheduled
+      );
+      const totalBackfillsCompleted = formatCount(
+        telemetry.total_backfills_completed
+      );
+      const totalBackfillsFailed = formatCount(
+        telemetry.total_backfills_failed
+      );
+      const lastBackfillStartedLabel = formatTimestampWithAgo(
+        telemetry.last_backfill_started_at
+      );
+      const lastBackfillCompletedLabel = formatTimestampWithAgo(
+        telemetry.last_backfill_completed_at
+      );
+      const lastBackfillDurationLabel = formatMs(
+        telemetry.last_backfill_duration_ms
+      );
+      const lastBackfillPointsLabel =
+        telemetry.last_backfill_points !== undefined &&
+        telemetry.last_backfill_points !== null
+          ? formatCount(telemetry.last_backfill_points)
+          : "—";
+      const lastBackfillErrorLabel = telemetry.last_backfill_error
+        ? `<span style="color: var(--badge-error); font-weight: 600;">${Utils.escapeHtml(
+            telemetry.last_backfill_error
+          )}</span>`
+        : "None";
+      const rateLimitEventsLabel = formatCount(telemetry.rate_limit_events);
+      const lastRateLimitLabel = formatTimestampWithAgo(
+        telemetry.last_rate_limit_at
+      );
 
-    const totalBackfillsScheduled = formatCount(
-      telemetry.total_backfills_scheduled
-    );
-    const totalBackfillsCompleted = formatCount(
-      telemetry.total_backfills_completed
-    );
-    const totalBackfillsFailed = formatCount(telemetry.total_backfills_failed);
-    const lastBackfillStartedLabel = formatTimestampWithAgo(
-      telemetry.last_backfill_started_at
-    );
-    const lastBackfillCompletedLabel = formatTimestampWithAgo(
-      telemetry.last_backfill_completed_at
-    );
-    const lastBackfillDurationLabel = formatMs(
-      telemetry.last_backfill_duration_ms
-    );
-    const lastBackfillPointsLabel =
-      telemetry.last_backfill_points !== undefined &&
-      telemetry.last_backfill_points !== null
-        ? formatCount(telemetry.last_backfill_points)
-        : "—";
-    const lastBackfillErrorLabel = telemetry.last_backfill_error
-      ? `<span style="color: var(--badge-error); font-weight: 600;">${Utils.escapeHtml(
-          telemetry.last_backfill_error
-        )}</span>`
-      : "None";
-    const rateLimitEventsLabel = formatCount(telemetry.rate_limit_events);
-    const lastRateLimitLabel = formatTimestampWithAgo(
-      telemetry.last_rate_limit_at
-    );
-
-    const gapRows = topOpenGaps.length
-      ? topOpenGaps
-          .map((gap) => {
-            const largestGap =
-              gap.largest_gap_seconds === null ||
-              gap.largest_gap_seconds === undefined
-                ? "—"
-                : Utils.escapeHtml(
-                    Utils.formatUptime(gap.largest_gap_seconds, {
-                      fallback: "—",
-                      style: "compact",
-                    })
-                  );
-            const latestGapEnd = formatTimestampWithAgo(gap.latest_gap_end);
-            return `
+      const gapRows = topOpenGaps.length
+        ? topOpenGaps
+            .map((gap) => {
+              const largestGap =
+                gap.largest_gap_seconds === null ||
+                gap.largest_gap_seconds === undefined
+                  ? "—"
+                  : Utils.escapeHtml(
+                      Utils.formatUptime(gap.largest_gap_seconds, {
+                        fallback: "—",
+                        style: "compact",
+                      })
+                    );
+              const latestGapEnd = formatTimestampWithAgo(gap.latest_gap_end);
+              return `
               <tr>
                 <td>${Utils.escapeHtml(gap.mint || "Unknown")}</td>
                 <td style="text-align: right;">${formatCount(
@@ -1396,9 +1452,9 @@
                 <td style="text-align: right;">${latestGapEnd}</td>
               </tr>
             `;
-          })
-          .join("")
-      : `
+            })
+            .join("")
+        : `
               <tr>
                 <td colspan="4" style="text-align: center; padding: 16px; color: var(--text-secondary);">
                   No open gaps detected
@@ -1406,7 +1462,7 @@
               </tr>
             `;
 
-    contentContainer.innerHTML = `
+      contentContainer.innerHTML = `
                 <div class="page-section">
                     <div class="card">
                         <div class="card-header">
@@ -1674,16 +1730,16 @@
                     </div>
                 </div>
             `;
-  }
+    }
 
-  function renderPoolsTab(data) {
-    const contentContainer = document.getElementById("statusContent");
-    if (!contentContainer) return;
+    function renderPoolsTab(data) {
+      const contentContainer = document.getElementById("statusContent");
+      if (!contentContainer) return;
 
-    const pools = data.pools;
+      const pools = data.pools;
 
-    if (!pools) {
-      contentContainer.innerHTML = `
+      if (!pools) {
+        contentContainer.innerHTML = `
         <div class="page-section">
           <div class="card">
             <div class="card-header">
@@ -1698,70 +1754,70 @@
           </div>
         </div>
       `;
-      return;
-    }
+        return;
+      }
 
-    const serviceLabel = pools.running ? "Running" : "Stopped";
-    const readyLabel = pools.system_ready ? "Ready" : "Not Ready";
-    const modeLabel = pools.single_pool_mode ? "Single Pool" : "Multi Pool";
+      const serviceLabel = pools.running ? "Running" : "Stopped";
+      const readyLabel = pools.system_ready ? "Ready" : "Not Ready";
+      const modeLabel = pools.single_pool_mode ? "Single Pool" : "Multi Pool";
 
-    const monitoredLabel = Utils.formatNumber(
-      Number(pools.monitored_tokens || 0),
-      0,
-      {
-        fallback: "0",
-      }
-    );
-    const capacityLabel = Utils.formatNumber(
-      Number(pools.monitored_capacity || 0),
-      0,
-      {
-        fallback: "0",
-      }
-    );
-    const subscribersLabel = Utils.formatNumber(
-      Number(pools.price_subscribers || 0),
-      0,
-      {
-        fallback: "0",
-      }
-    );
-
-    const cache = pools.cache || {};
-    const totalPricesLabel = Utils.formatNumber(
-      Number(cache.total_prices || 0),
-      0,
-      {
-        fallback: "0",
-      }
-    );
-    const freshPricesLabel = Utils.formatNumber(
-      Number(cache.fresh_prices || 0),
-      0,
-      {
-        fallback: "0",
-      }
-    );
-    const historyEntriesLabel = Utils.formatNumber(
-      Number(cache.history_entries || 0),
-      0,
-      { fallback: "0" }
-    );
-
-    const analyzer = pools.analyzer || null;
-    const analyzerTotalLabel = analyzer
-      ? Utils.formatNumber(Number(analyzer.total_pools || 0), 0, {
+      const monitoredLabel = Utils.formatNumber(
+        Number(pools.monitored_tokens || 0),
+        0,
+        {
           fallback: "0",
-        })
-      : "N/A";
+        }
+      );
+      const capacityLabel = Utils.formatNumber(
+        Number(pools.monitored_capacity || 0),
+        0,
+        {
+          fallback: "0",
+        }
+      );
+      const subscribersLabel = Utils.formatNumber(
+        Number(pools.price_subscribers || 0),
+        0,
+        {
+          fallback: "0",
+        }
+      );
 
-    const programRows =
-      analyzer &&
-      Array.isArray(analyzer.program_distribution) &&
-      analyzer.program_distribution.length
-        ? analyzer.program_distribution
-            .map(
-              (item) => `
+      const cache = pools.cache || {};
+      const totalPricesLabel = Utils.formatNumber(
+        Number(cache.total_prices || 0),
+        0,
+        {
+          fallback: "0",
+        }
+      );
+      const freshPricesLabel = Utils.formatNumber(
+        Number(cache.fresh_prices || 0),
+        0,
+        {
+          fallback: "0",
+        }
+      );
+      const historyEntriesLabel = Utils.formatNumber(
+        Number(cache.history_entries || 0),
+        0,
+        { fallback: "0" }
+      );
+
+      const analyzer = pools.analyzer || null;
+      const analyzerTotalLabel = analyzer
+        ? Utils.formatNumber(Number(analyzer.total_pools || 0), 0, {
+            fallback: "0",
+          })
+        : "N/A";
+
+      const programRows =
+        analyzer &&
+        Array.isArray(analyzer.program_distribution) &&
+        analyzer.program_distribution.length
+          ? analyzer.program_distribution
+              .map(
+                (item) => `
               <tr>
                 <td>${Utils.escapeHtml(item.program || "Unknown")}</td>
                 <td style="text-align: right;">${Utils.formatNumber(
@@ -1771,9 +1827,9 @@
                 )}</td>
               </tr>
             `
-            )
-            .join("")
-        : `
+              )
+              .join("")
+          : `
               <tr>
                 <td colspan="2" style="text-align: center; padding: 16px; color: var(--text-secondary);">
                   No analyzer data available
@@ -1781,9 +1837,9 @@
               </tr>
             `;
 
-    const fetcher = pools.fetcher || null;
-    const fetcherRows = fetcher
-      ? `
+      const fetcher = pools.fetcher || null;
+      const fetcherRows = fetcher
+        ? `
               <tr>
                 <td>Total Bundles</td>
                 <td style="text-align: right;">${Utils.formatNumber(
@@ -1809,7 +1865,7 @@
                 )}</td>
               </tr>
             `
-      : `
+        : `
               <tr>
                 <td colspan="2" style="text-align: center; padding: 16px; color: var(--text-secondary);">
                   Fetcher metrics unavailable
@@ -1817,26 +1873,26 @@
               </tr>
             `;
 
-    const discovery = pools.discovery || null;
-    const sourcesText = discovery
-      ? discovery.sources_enabled && discovery.sources_enabled.length
-        ? discovery.sources_enabled
-            .map((source) => Utils.escapeHtml(source))
-            .join(", ")
-        : "None"
-      : "Unknown";
+      const discovery = pools.discovery || null;
+      const sourcesText = discovery
+        ? discovery.sources_enabled && discovery.sources_enabled.length
+          ? discovery.sources_enabled
+              .map((source) => Utils.escapeHtml(source))
+              .join(", ")
+          : "None"
+        : "Unknown";
 
-    const debugOverrideText = discovery
-      ? discovery.debug_override_active
-        ? `Active (${Utils.formatNumber(
-            Number(discovery.debug_override_count || 0),
-            0,
-            { fallback: "0" }
-          )} tokens)`
-        : "Inactive"
-      : "Unknown";
+      const debugOverrideText = discovery
+        ? discovery.debug_override_active
+          ? `Active (${Utils.formatNumber(
+              Number(discovery.debug_override_count || 0),
+              0,
+              { fallback: "0" }
+            )} tokens)`
+          : "Inactive"
+        : "Unknown";
 
-    contentContainer.innerHTML = `
+      contentContainer.innerHTML = `
         <div class="page-section">
           <div class="card">
             <div class="card-header">
@@ -1967,101 +2023,109 @@
           </div>
         </div>
       `;
-  }
-
-  function renderDexScreenerTab(data) {
-    const contentContainer = document.getElementById("statusContent");
-    if (!contentContainer) return;
-
-    const snapshot = data.dexscreener;
-    if (!snapshot) {
-      renderPlaceholderTab("dexscreener");
-      return;
     }
 
-    const totalCalls = Utils.formatNumber(snapshot.api_total_requests || 0, 0, {
-      fallback: "0",
-    });
-    const successRate = Utils.formatNumber(snapshot.api_success_rate || 0, {
-      decimals: 1,
-      fallback: "0.0",
-    });
-    const averageResponse = Utils.formatNumber(
-      snapshot.api_average_response_ms || 0,
-      {
+    function renderDexScreenerTab(data) {
+      const contentContainer = document.getElementById("statusContent");
+      if (!contentContainer) return;
+
+      const snapshot = data.dexscreener;
+      if (!snapshot) {
+        renderPlaceholderTab("dexscreener");
+        return;
+      }
+
+      const totalCalls = Utils.formatNumber(
+        snapshot.api_total_requests || 0,
+        0,
+        {
+          fallback: "0",
+        }
+      );
+      const successRate = Utils.formatNumber(snapshot.api_success_rate || 0, {
         decimals: 1,
         fallback: "0.0",
-      }
-    );
-    const cacheHitRate = Utils.formatNumber(snapshot.api_cache_hit_rate || 0, {
-      decimals: 1,
-      fallback: "0.0",
-    });
-    const tokenCacheFresh = Utils.formatNumber(
-      snapshot.token_cache_fresh || 0,
-      0,
-      { fallback: "0" }
-    );
-    const tokenCacheTotal = Utils.formatNumber(
-      snapshot.token_cache_entries || 0,
-      0,
-      { fallback: "0" }
-    );
-    const poolCacheFresh = Utils.formatNumber(
-      snapshot.pool_cache_fresh || 0,
-      0,
-      { fallback: "0" }
-    );
-    const poolCacheTotal = Utils.formatNumber(
-      snapshot.pool_cache_entries || 0,
-      0,
-      { fallback: "0" }
-    );
-    const lastRequestRelative = snapshot.last_request_time
-      ? Utils.formatTimeAgo(snapshot.last_request_time)
-      : "No requests yet";
-    const lastRequestAbsolute = snapshot.last_request_time
-      ? new Date(snapshot.last_request_time).toLocaleString()
-      : "—";
-
-    const rateLimitPerMinute = snapshot.rate_limit_per_minute ?? "—";
-    const rateLimitLabel =
-      typeof rateLimitPerMinute === "number"
-        ? `${Utils.formatNumber(rateLimitPerMinute, 0, {
-            fallback: "—",
-          })} req/min`
-        : rateLimitPerMinute;
-    const discoveryRateLimit = snapshot.discovery_rate_limit_per_minute ?? "—";
-    const discoveryRateLimitLabel =
-      typeof discoveryRateLimit === "number"
-        ? `${Utils.formatNumber(discoveryRateLimit, 0, {
-            fallback: "—",
-          })} req/min`
-        : discoveryRateLimit;
-    const maxTokensPerCall = snapshot.max_tokens_per_call ?? "—";
-    const maxTokensPerCallLabel =
-      typeof maxTokensPerCall === "number"
-        ? Utils.formatNumber(maxTokensPerCall, 0, { fallback: "—" })
-        : maxTokensPerCall;
-    const priceCacheTtl =
-      snapshot.price_cache_ttl_secs !== undefined &&
-      snapshot.price_cache_ttl_secs !== null
-        ? `${snapshot.price_cache_ttl_secs}s`
-        : "—";
-    const poolCacheTtl =
-      snapshot.pool_cache_ttl_secs !== undefined &&
-      snapshot.pool_cache_ttl_secs !== null
-        ? `${snapshot.pool_cache_ttl_secs}s`
+      });
+      const averageResponse = Utils.formatNumber(
+        snapshot.api_average_response_ms || 0,
+        {
+          decimals: 1,
+          fallback: "0.0",
+        }
+      );
+      const cacheHitRate = Utils.formatNumber(
+        snapshot.api_cache_hit_rate || 0,
+        {
+          decimals: 1,
+          fallback: "0.0",
+        }
+      );
+      const tokenCacheFresh = Utils.formatNumber(
+        snapshot.token_cache_fresh || 0,
+        0,
+        { fallback: "0" }
+      );
+      const tokenCacheTotal = Utils.formatNumber(
+        snapshot.token_cache_entries || 0,
+        0,
+        { fallback: "0" }
+      );
+      const poolCacheFresh = Utils.formatNumber(
+        snapshot.pool_cache_fresh || 0,
+        0,
+        { fallback: "0" }
+      );
+      const poolCacheTotal = Utils.formatNumber(
+        snapshot.pool_cache_entries || 0,
+        0,
+        { fallback: "0" }
+      );
+      const lastRequestRelative = snapshot.last_request_time
+        ? Utils.formatTimeAgo(snapshot.last_request_time)
+        : "No requests yet";
+      const lastRequestAbsolute = snapshot.last_request_time
+        ? new Date(snapshot.last_request_time).toLocaleString()
         : "—";
 
-    const enabledBadge = snapshot.enabled
-      ? '<span class="status-badge ready">Enabled</span>'
-      : '<span class="status-badge not-ready">Disabled</span>';
-    const initializedBadge = snapshot.initialized
-      ? '<span class="status-badge ready">Initialized</span>'
-      : '<span class="status-badge not-ready">Not Ready</span>';
+      const rateLimitPerMinute = snapshot.rate_limit_per_minute ?? "—";
+      const rateLimitLabel =
+        typeof rateLimitPerMinute === "number"
+          ? `${Utils.formatNumber(rateLimitPerMinute, 0, {
+              fallback: "—",
+            })} req/min`
+          : rateLimitPerMinute;
+      const discoveryRateLimit =
+        snapshot.discovery_rate_limit_per_minute ?? "—";
+      const discoveryRateLimitLabel =
+        typeof discoveryRateLimit === "number"
+          ? `${Utils.formatNumber(discoveryRateLimit, 0, {
+              fallback: "—",
+            })} req/min`
+          : discoveryRateLimit;
+      const maxTokensPerCall = snapshot.max_tokens_per_call ?? "—";
+      const maxTokensPerCallLabel =
+        typeof maxTokensPerCall === "number"
+          ? Utils.formatNumber(maxTokensPerCall, 0, { fallback: "—" })
+          : maxTokensPerCall;
+      const priceCacheTtl =
+        snapshot.price_cache_ttl_secs !== undefined &&
+        snapshot.price_cache_ttl_secs !== null
+          ? `${snapshot.price_cache_ttl_secs}s`
+          : "—";
+      const poolCacheTtl =
+        snapshot.pool_cache_ttl_secs !== undefined &&
+        snapshot.pool_cache_ttl_secs !== null
+          ? `${snapshot.pool_cache_ttl_secs}s`
+          : "—";
 
-    contentContainer.innerHTML = `
+      const enabledBadge = snapshot.enabled
+        ? '<span class="status-badge ready">Enabled</span>'
+        : '<span class="status-badge not-ready">Disabled</span>';
+      const initializedBadge = snapshot.initialized
+        ? '<span class="status-badge ready">Initialized</span>'
+        : '<span class="status-badge not-ready">Not Ready</span>';
+
+      contentContainer.innerHTML = `
         <div class="page-section">
           <div class="card">
             <div class="card-header">
@@ -2149,100 +2213,108 @@
           </div>
         </div>
       `;
-  }
-
-  function renderGeckoTerminalTab(data) {
-    const contentContainer = document.getElementById("statusContent");
-    if (!contentContainer) return;
-
-    const snapshot = data.geckoterminal;
-    if (!snapshot) {
-      renderPlaceholderTab("geckoterminal");
-      return;
     }
 
-    const totalCalls = Utils.formatNumber(snapshot.api_total_requests || 0, 0, {
-      fallback: "0",
-    });
-    const successRate = Utils.formatNumber(snapshot.api_success_rate || 0, {
-      decimals: 1,
-      fallback: "0.0",
-    });
-    const averageResponse = Utils.formatNumber(
-      snapshot.api_average_response_ms || 0,
-      {
+    function renderGeckoTerminalTab(data) {
+      const contentContainer = document.getElementById("statusContent");
+      if (!contentContainer) return;
+
+      const snapshot = data.geckoterminal;
+      if (!snapshot) {
+        renderPlaceholderTab("geckoterminal");
+        return;
+      }
+
+      const totalCalls = Utils.formatNumber(
+        snapshot.api_total_requests || 0,
+        0,
+        {
+          fallback: "0",
+        }
+      );
+      const successRate = Utils.formatNumber(snapshot.api_success_rate || 0, {
         decimals: 1,
         fallback: "0.0",
-      }
-    );
-    const cacheHitRate = Utils.formatNumber(snapshot.api_cache_hit_rate || 0, {
-      decimals: 1,
-      fallback: "0.0",
-    });
-    const cacheFresh = Utils.formatNumber(snapshot.cache_fresh || 0, 0, {
-      fallback: "0",
-    });
-    const cacheTotal = Utils.formatNumber(snapshot.cache_entries || 0, 0, {
-      fallback: "0",
-    });
-    const rateLimitUsage = `${Utils.formatNumber(
-      snapshot.current_rate_limit_calls || 0,
-      0,
-      { fallback: "0" }
-    )} / ${Utils.formatNumber(snapshot.current_rate_limit_max || 0, 0, {
-      fallback: "0",
-    })}`;
-    const rateLimitResetDisplay =
-      snapshot.rate_limit_resets_in_ms !== undefined &&
-      snapshot.rate_limit_resets_in_ms !== null
-        ? `${Utils.formatNumber(snapshot.rate_limit_resets_in_ms / 1000, {
-            decimals: 1,
-            fallback: "0.0",
-          })}s`
-        : "Ready";
-    const rateLimitPerMinute = snapshot.rate_limit_per_minute ?? "—";
-    const rateLimitLabel =
-      typeof rateLimitPerMinute === "number"
-        ? `${Utils.formatNumber(rateLimitPerMinute, 0, {
-            fallback: "—",
-          })} req/min`
-        : rateLimitPerMinute;
-    const maxTokensPerBatch = snapshot.max_tokens_per_batch ?? "—";
-    const maxTokensPerBatchLabel =
-      typeof maxTokensPerBatch === "number"
-        ? Utils.formatNumber(maxTokensPerBatch, 0, { fallback: "—" })
-        : maxTokensPerBatch;
-    const cacheTtl =
-      snapshot.cache_ttl_secs !== undefined && snapshot.cache_ttl_secs !== null
-        ? `${snapshot.cache_ttl_secs}s`
+      });
+      const averageResponse = Utils.formatNumber(
+        snapshot.api_average_response_ms || 0,
+        {
+          decimals: 1,
+          fallback: "0.0",
+        }
+      );
+      const cacheHitRate = Utils.formatNumber(
+        snapshot.api_cache_hit_rate || 0,
+        {
+          decimals: 1,
+          fallback: "0.0",
+        }
+      );
+      const cacheFresh = Utils.formatNumber(snapshot.cache_fresh || 0, 0, {
+        fallback: "0",
+      });
+      const cacheTotal = Utils.formatNumber(snapshot.cache_entries || 0, 0, {
+        fallback: "0",
+      });
+      const rateLimitUsage = `${Utils.formatNumber(
+        snapshot.current_rate_limit_calls || 0,
+        0,
+        { fallback: "0" }
+      )} / ${Utils.formatNumber(snapshot.current_rate_limit_max || 0, 0, {
+        fallback: "0",
+      })}`;
+      const rateLimitResetDisplay =
+        snapshot.rate_limit_resets_in_ms !== undefined &&
+        snapshot.rate_limit_resets_in_ms !== null
+          ? `${Utils.formatNumber(snapshot.rate_limit_resets_in_ms / 1000, {
+              decimals: 1,
+              fallback: "0.0",
+            })}s`
+          : "Ready";
+      const rateLimitPerMinute = snapshot.rate_limit_per_minute ?? "—";
+      const rateLimitLabel =
+        typeof rateLimitPerMinute === "number"
+          ? `${Utils.formatNumber(rateLimitPerMinute, 0, {
+              fallback: "—",
+            })} req/min`
+          : rateLimitPerMinute;
+      const maxTokensPerBatch = snapshot.max_tokens_per_batch ?? "—";
+      const maxTokensPerBatchLabel =
+        typeof maxTokensPerBatch === "number"
+          ? Utils.formatNumber(maxTokensPerBatch, 0, { fallback: "—" })
+          : maxTokensPerBatch;
+      const cacheTtl =
+        snapshot.cache_ttl_secs !== undefined &&
+        snapshot.cache_ttl_secs !== null
+          ? `${snapshot.cache_ttl_secs}s`
+          : "—";
+      const lastRequestRelative = snapshot.last_request_time
+        ? Utils.formatTimeAgo(snapshot.last_request_time)
+        : "No requests yet";
+      const lastRequestAbsolute = snapshot.last_request_time
+        ? new Date(snapshot.last_request_time).toLocaleString()
         : "—";
-    const lastRequestRelative = snapshot.last_request_time
-      ? Utils.formatTimeAgo(snapshot.last_request_time)
-      : "No requests yet";
-    const lastRequestAbsolute = snapshot.last_request_time
-      ? new Date(snapshot.last_request_time).toLocaleString()
-      : "—";
-    const lastSuccessDisplay = snapshot.last_success_time
-      ? `${Utils.formatTimeAgo(snapshot.last_success_time)} • ${new Date(
-          snapshot.last_success_time
-        ).toLocaleString()}`
-      : "None";
-    const lastErrorDisplay = snapshot.last_error_message
-      ? `${Utils.escapeHtml(snapshot.last_error_message)}${
-          snapshot.last_error_time
-            ? ` (${Utils.formatTimeAgo(snapshot.last_error_time)})`
-            : ""
-        }`
-      : "None";
+      const lastSuccessDisplay = snapshot.last_success_time
+        ? `${Utils.formatTimeAgo(snapshot.last_success_time)} • ${new Date(
+            snapshot.last_success_time
+          ).toLocaleString()}`
+        : "None";
+      const lastErrorDisplay = snapshot.last_error_message
+        ? `${Utils.escapeHtml(snapshot.last_error_message)}${
+            snapshot.last_error_time
+              ? ` (${Utils.formatTimeAgo(snapshot.last_error_time)})`
+              : ""
+          }`
+        : "None";
 
-    const enabledBadge = snapshot.enabled
-      ? '<span class="status-badge ready">Enabled</span>'
-      : '<span class="status-badge not-ready">Disabled</span>';
-    const initializedBadge = snapshot.initialized
-      ? '<span class="status-badge ready">Initialized</span>'
-      : '<span class="status-badge not-ready">Not Ready</span>';
+      const enabledBadge = snapshot.enabled
+        ? '<span class="status-badge ready">Enabled</span>'
+        : '<span class="status-badge not-ready">Disabled</span>';
+      const initializedBadge = snapshot.initialized
+        ? '<span class="status-badge ready">Initialized</span>'
+        : '<span class="status-badge not-ready">Not Ready</span>';
 
-    contentContainer.innerHTML = `
+      contentContainer.innerHTML = `
         <div class="page-section">
           <div class="card">
             <div class="card-header">
@@ -2334,16 +2406,16 @@
           </div>
         </div>
       `;
-  }
+    }
 
-  function renderDiscoveryTab(data) {
-    const contentContainer = document.getElementById("statusContent");
-    if (!contentContainer) return;
+    function renderDiscoveryTab(data) {
+      const contentContainer = document.getElementById("statusContent");
+      if (!contentContainer) return;
 
-    const discovery = data.discovery;
+      const discovery = data.discovery;
 
-    if (!discovery) {
-      contentContainer.innerHTML = `
+      if (!discovery) {
+        contentContainer.innerHTML = `
                 <div class="page-section">
                     <div class="card">
                         <div class="card-header">
@@ -2358,97 +2430,103 @@
                     </div>
                 </div>
             `;
-      return;
-    }
+        return;
+      }
 
-    const serviceLabel = discovery.running ? "Running" : "Stopped";
+      const serviceLabel = discovery.running ? "Running" : "Stopped";
 
-    const totalCyclesLabel = Utils.formatNumber(
-      Number(discovery.total_cycles || 0),
-      0,
-      {
-        fallback: "0",
-      }
-    );
-    const lastProcessedLabel = Utils.formatNumber(
-      Number(discovery.last_processed || 0),
-      0,
-      {
-        fallback: "0",
-      }
-    );
-    const lastAddedLabel = Utils.formatNumber(
-      Number(discovery.last_added || 0),
-      0,
-      {
-        fallback: "0",
-      }
-    );
-    const deduplicatedLabel = Utils.formatNumber(
-      Number(discovery.last_deduplicated_removed || 0),
-      0,
-      { fallback: "0" }
-    );
-    const blacklistLabel = Utils.formatNumber(
-      Number(discovery.last_blacklist_removed || 0),
-      0,
-      { fallback: "0" }
-    );
-    const totalProcessedLabel = Utils.formatNumber(
-      Number(discovery.total_processed || 0),
-      0,
-      { fallback: "0" }
-    );
-    const totalAddedLabel = Utils.formatNumber(
-      Number(discovery.total_added || 0),
-      0,
-      {
-        fallback: "0",
-      }
-    );
+      const totalCyclesLabel = Utils.formatNumber(
+        Number(discovery.total_cycles || 0),
+        0,
+        {
+          fallback: "0",
+        }
+      );
+      const lastProcessedLabel = Utils.formatNumber(
+        Number(discovery.last_processed || 0),
+        0,
+        {
+          fallback: "0",
+        }
+      );
+      const lastAddedLabel = Utils.formatNumber(
+        Number(discovery.last_added || 0),
+        0,
+        {
+          fallback: "0",
+        }
+      );
+      const deduplicatedLabel = Utils.formatNumber(
+        Number(discovery.last_deduplicated_removed || 0),
+        0,
+        { fallback: "0" }
+      );
+      const blacklistLabel = Utils.formatNumber(
+        Number(discovery.last_blacklist_removed || 0),
+        0,
+        { fallback: "0" }
+      );
+      const totalProcessedLabel = Utils.formatNumber(
+        Number(discovery.total_processed || 0),
+        0,
+        { fallback: "0" }
+      );
+      const totalAddedLabel = Utils.formatNumber(
+        Number(discovery.total_added || 0),
+        0,
+        {
+          fallback: "0",
+        }
+      );
 
-    const lastStarted = Utils.formatTimestamp(discovery.last_cycle_started, {
-      fallback: "Never",
-    });
-    const lastCompleted = Utils.formatTimestamp(
-      discovery.last_cycle_completed,
-      {
+      const lastStarted = Utils.formatTimestamp(discovery.last_cycle_started, {
         fallback: "Never",
-      }
-    );
+      });
+      const lastCompleted = Utils.formatTimestamp(
+        discovery.last_cycle_completed,
+        {
+          fallback: "Never",
+        }
+      );
 
-    const sources = discovery.sources || {};
-    const sourceRows = [
-      { name: "DexScreener Profiles", count: sources.profiles || 0 },
-      { name: "DexScreener Boosted", count: sources.boosted || 0 },
-      { name: "DexScreener Top Boosts", count: sources.top_boosts || 0 },
-      { name: "RugCheck New", count: sources.rug_new || 0 },
-      { name: "RugCheck Viewed", count: sources.rug_viewed || 0 },
-      { name: "RugCheck Trending", count: sources.rug_trending || 0 },
-      { name: "RugCheck Verified", count: sources.rug_verified || 0 },
-      { name: "GeckoTerminal Updated", count: sources.gecko_updated || 0 },
-      { name: "GeckoTerminal Trending", count: sources.gecko_trending || 0 },
-      { name: "Jupiter Tokens", count: sources.jupiter_tokens || 0 },
-      { name: "Jupiter Top Organic", count: sources.jupiter_top_organic || 0 },
-      { name: "Jupiter Top Traded", count: sources.jupiter_top_traded || 0 },
-      {
-        name: "Jupiter Top Trending",
-        count: sources.jupiter_top_trending || 0,
-      },
-      { name: "CoinGecko Markets", count: sources.coingecko_markets || 0 },
-      { name: "DeFiLlama Protocols", count: sources.defillama_protocols || 0 },
-    ];
+      const sources = discovery.sources || {};
+      const sourceRows = [
+        { name: "DexScreener Profiles", count: sources.profiles || 0 },
+        { name: "DexScreener Boosted", count: sources.boosted || 0 },
+        { name: "DexScreener Top Boosts", count: sources.top_boosts || 0 },
+        { name: "RugCheck New", count: sources.rug_new || 0 },
+        { name: "RugCheck Viewed", count: sources.rug_viewed || 0 },
+        { name: "RugCheck Trending", count: sources.rug_trending || 0 },
+        { name: "RugCheck Verified", count: sources.rug_verified || 0 },
+        { name: "GeckoTerminal Updated", count: sources.gecko_updated || 0 },
+        { name: "GeckoTerminal Trending", count: sources.gecko_trending || 0 },
+        { name: "Jupiter Tokens", count: sources.jupiter_tokens || 0 },
+        {
+          name: "Jupiter Top Organic",
+          count: sources.jupiter_top_organic || 0,
+        },
+        { name: "Jupiter Top Traded", count: sources.jupiter_top_traded || 0 },
+        {
+          name: "Jupiter Top Trending",
+          count: sources.jupiter_top_trending || 0,
+        },
+        { name: "CoinGecko Markets", count: sources.coingecko_markets || 0 },
+        {
+          name: "DeFiLlama Protocols",
+          count: sources.defillama_protocols || 0,
+        },
+      ];
 
-    const totalSourceCount = sourceRows.reduce(
-      (sum, row) => sum + row.count,
-      0
-    );
+      const totalSourceCount = sourceRows.reduce(
+        (sum, row) => sum + row.count,
+        0
+      );
 
-    const sourceTableRows = sourceRows
-      .filter((row) => row.count > 0)
-      .sort((a, b) => b.count - a.count)
-      .map(
-        (row) => `
+      const sourceTableRows = sourceRows
+        .filter((row) => row.count > 0)
+        .sort((a, b) => b.count - a.count)
+        .map(
+          (row) => `
                             <tr>
                                 <td>${Utils.escapeHtml(row.name)}</td>
                                 <td style="text-align: right;">${Utils.formatNumber(
@@ -2458,12 +2536,12 @@
                                 )}</td>
                             </tr>
                         `
-      )
-      .join("");
+        )
+        .join("");
 
-    const sourcesDisplay =
-      sourceTableRows ||
-      `
+      const sourcesDisplay =
+        sourceTableRows ||
+        `
                             <tr>
                                 <td colspan="2" style="text-align: center; padding: 16px; color: var(--text-secondary);">
                                     No source data for last cycle
@@ -2471,22 +2549,22 @@
                             </tr>
                         `;
 
-    const errorDisplay = discovery.last_error
-      ? `
+      const errorDisplay = discovery.last_error
+        ? `
                             <div style="margin-top: 16px; padding: 12px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; color: #ef4444;">
                                 <strong>Last Error:</strong> ${Utils.escapeHtml(
                                   discovery.last_error
                                 )}
                             </div>
                         `
-      : "";
+        : "";
 
-    // Show waiting message if no cycles have completed yet
-    const waitingDisplay =
-      discovery.running &&
-      discovery.total_cycles === 0 &&
-      !discovery.last_cycle_started
-        ? `
+      // Show waiting message if no cycles have completed yet
+      const waitingDisplay =
+        discovery.running &&
+        discovery.total_cycles === 0 &&
+        !discovery.last_cycle_started
+          ? `
                             <div style="margin-top: 16px; padding: 12px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; color: #3b82f6;">
                                 <strong>ℹ️ Waiting for first discovery cycle...</strong>
                                 <p style="margin: 8px 0 0 0; font-size: 0.9em; color: var(--text-secondary);">
@@ -2496,9 +2574,9 @@
                                 </p>
                             </div>
                         `
-        : "";
+          : "";
 
-    contentContainer.innerHTML = `
+      contentContainer.innerHTML = `
                 <div class="page-section">
                     <div class="card">
                         <div class="card-header">
@@ -2624,16 +2702,16 @@
                     </div>
                 </div>
             `;
-  }
+    }
 
-  function renderEventsTab(data) {
-    const contentContainer = document.getElementById("statusContent");
-    if (!contentContainer) return;
+    function renderEventsTab(data) {
+      const contentContainer = document.getElementById("statusContent");
+      if (!contentContainer) return;
 
-    const events = data.events;
+      const events = data.events;
 
-    if (!events) {
-      contentContainer.innerHTML = `
+      if (!events) {
+        contentContainer.innerHTML = `
                 <div class="page-section">
                     <div class="card">
                         <div class="card-header">
@@ -2648,35 +2726,35 @@
                     </div>
                 </div>
             `;
-      return;
-    }
+        return;
+      }
 
-    const serviceLabel = events.running ? "Running" : "Stopped";
-    const totalEventsLabel = Utils.formatNumber(
-      Number(events.total_events || 0),
-      0,
-      { fallback: "0" }
-    );
-    const events24hLabel = Utils.formatNumber(
-      Number(events.events_24h || 0),
-      0,
-      { fallback: "0" }
-    );
-    const dbSizeLabel = Utils.formatBytes(
-      Number(events.db_size_bytes || 0),
-      "0 B"
-    );
+      const serviceLabel = events.running ? "Running" : "Stopped";
+      const totalEventsLabel = Utils.formatNumber(
+        Number(events.total_events || 0),
+        0,
+        { fallback: "0" }
+      );
+      const events24hLabel = Utils.formatNumber(
+        Number(events.events_24h || 0),
+        0,
+        { fallback: "0" }
+      );
+      const dbSizeLabel = Utils.formatBytes(
+        Number(events.db_size_bytes || 0),
+        "0 B"
+      );
 
-    // Build category counts table
-    const categoryCountsMap = events.category_counts || {};
-    const categoryEntries = Object.entries(categoryCountsMap).sort(
-      (a, b) => b[1] - a[1]
-    );
-    const categoriesDisplay =
-      categoryEntries.length > 0
-        ? categoryEntries
-            .map(
-              ([category, count]) => `
+      // Build category counts table
+      const categoryCountsMap = events.category_counts || {};
+      const categoryEntries = Object.entries(categoryCountsMap).sort(
+        (a, b) => b[1] - a[1]
+      );
+      const categoriesDisplay =
+        categoryEntries.length > 0
+          ? categoryEntries
+              .map(
+                ([category, count]) => `
                             <tr>
                                 <td>${Utils.escapeHtml(category)}</td>
                                 <td style="text-align: right;">${Utils.formatNumber(
@@ -2686,9 +2764,9 @@
                                 )}</td>
                             </tr>
                         `
-            )
-            .join("")
-        : `
+              )
+              .join("")
+          : `
                             <tr>
                                 <td colspan="2" style="text-align: center; color: #888;">
                                     No category data for last 24 hours
@@ -2696,42 +2774,42 @@
                             </tr>
                         `;
 
-    // Build recent events table
-    const recentEventsList = events.recent_events || [];
-    const recentEventsDisplay =
-      recentEventsList.length > 0
-        ? recentEventsList
-            .map((event) => {
-              const severity = event.severity || "INFO";
-              const severityBadge =
-                severity === "ERROR"
-                  ? '<span style="padding: 2px 8px; border-radius: 4px; background: rgba(239, 68, 68, 0.2); color: #ef4444; font-size: 0.75em; font-weight: 600;">ERROR</span>'
-                  : severity === "WARN"
-                  ? '<span style="padding: 2px 8px; border-radius: 4px; background: rgba(245, 158, 11, 0.2); color: #f59e0b; font-size: 0.75em; font-weight: 600;">WARN</span>'
-                  : '<span style="padding: 2px 8px; border-radius: 4px; background: rgba(59, 130, 246, 0.2); color: #3b82f6; font-size: 0.75em; font-weight: 600;">INFO</span>';
+      // Build recent events table
+      const recentEventsList = events.recent_events || [];
+      const recentEventsDisplay =
+        recentEventsList.length > 0
+          ? recentEventsList
+              .map((event) => {
+                const severity = event.severity || "INFO";
+                const severityBadge =
+                  severity === "ERROR"
+                    ? '<span style="padding: 2px 8px; border-radius: 4px; background: rgba(239, 68, 68, 0.2); color: #ef4444; font-size: 0.75em; font-weight: 600;">ERROR</span>'
+                    : severity === "WARN"
+                    ? '<span style="padding: 2px 8px; border-radius: 4px; background: rgba(245, 158, 11, 0.2); color: #f59e0b; font-size: 0.75em; font-weight: 600;">WARN</span>'
+                    : '<span style="padding: 2px 8px; border-radius: 4px; background: rgba(59, 130, 246, 0.2); color: #3b82f6; font-size: 0.75em; font-weight: 600;">INFO</span>';
 
-              let eventTime = "Unknown";
-              if (event.event_time) {
-                const parsed = new Date(event.event_time);
-                eventTime = Number.isNaN(parsed.getTime())
-                  ? "Unknown"
-                  : parsed.toLocaleString();
-              }
+                let eventTime = "Unknown";
+                if (event.event_time) {
+                  const parsed = new Date(event.event_time);
+                  eventTime = Number.isNaN(parsed.getTime())
+                    ? "Unknown"
+                    : parsed.toLocaleString();
+                }
 
-              const mint = event.mint || "";
-              const shortMint =
-                mint.length > 14
-                  ? `${mint.slice(0, 8)}...${mint.slice(-6)}`
-                  : mint || "—";
-              const category = Utils.escapeHtml(event.category || "—");
-              const subtype = Utils.escapeHtml(event.subtype || "—");
-              const refId = event.reference_id || "";
-              const shortRefId =
-                refId.length > 14
-                  ? `${refId.slice(0, 8)}...${refId.slice(-6)}`
-                  : refId || "—";
+                const mint = event.mint || "";
+                const shortMint =
+                  mint.length > 14
+                    ? `${mint.slice(0, 8)}...${mint.slice(-6)}`
+                    : mint || "—";
+                const category = Utils.escapeHtml(event.category || "—");
+                const subtype = Utils.escapeHtml(event.subtype || "—");
+                const refId = event.reference_id || "";
+                const shortRefId =
+                  refId.length > 14
+                    ? `${refId.slice(0, 8)}...${refId.slice(-6)}`
+                    : refId || "—";
 
-              return `
+                return `
                             <tr>
                                 <td>${eventTime}</td>
                                 <td>${severityBadge}</td>
@@ -2741,9 +2819,9 @@
                                 <td style="font-family: 'SF Mono', Monaco, monospace; font-size: 0.9em;">${shortRefId}</td>
                             </tr>
                         `;
-            })
-            .join("")
-        : `
+              })
+              .join("")
+          : `
                             <tr>
                                 <td colspan="6" style="text-align: center; color: #888;">
                                     No recent events
@@ -2751,7 +2829,7 @@
                             </tr>
                         `;
 
-    contentContainer.innerHTML = `
+      contentContainer.innerHTML = `
                 <div class="page-section">
                     <div class="card">
                         <div class="card-header">
@@ -2831,16 +2909,16 @@
                     </div>
                 </div>
             `;
-  }
+    }
 
-  function renderTransactionsTab(data) {
-    const contentContainer = document.getElementById("statusContent");
-    if (!contentContainer) return;
+    function renderTransactionsTab(data) {
+      const contentContainer = document.getElementById("statusContent");
+      if (!contentContainer) return;
 
-    const tx = data.transactions;
+      const tx = data.transactions;
 
-    if (!tx) {
-      contentContainer.innerHTML = `
+      if (!tx) {
+        contentContainer.innerHTML = `
                 <div class="page-section">
                     <div class="card">
                         <div class="card-header">
@@ -2855,113 +2933,116 @@
                     </div>
                 </div>
             `;
-      return;
-    }
-
-    const stats = tx.stats || {};
-    const queue = tx.queue || {};
-    const database = tx.database || null;
-    const bootstrap = tx.bootstrap || null;
-
-    const serviceLabel = tx.running ? "Running" : "Stopped";
-    const readyLabel = tx.system_ready ? "Ready" : "Not Ready";
-
-    const totalTxLabel = Utils.formatNumber(
-      Number(stats.total_transactions || 0),
-      0,
-      { fallback: "0" }
-    );
-    const newTransactionsLabel = Utils.formatNumber(
-      Number(stats.new_transactions_count || 0),
-      0,
-      { fallback: "0" }
-    );
-    const successRateLabel = Utils.formatNumber(
-      Number(tx.success_rate || 0),
-      2,
-      {
-        fallback: "0.00",
+        return;
       }
-    );
-    const failureRateLabel = Utils.formatNumber(
-      Number(tx.failure_rate || 0),
-      2,
-      {
-        fallback: "0.00",
-      }
-    );
-    const pendingLocalLabel = Utils.formatNumber(
-      Number(queue.pending_local || 0),
-      0,
-      { fallback: "0" }
-    );
-    const pendingGlobalLabel = Utils.formatNumber(
-      Number(queue.pending_global || 0),
-      0,
-      { fallback: "0" }
-    );
-    const knownLabel = Utils.formatNumber(
-      Number(stats.known_signatures_count || 0),
-      0,
-      { fallback: "0" }
-    );
-    const deferredLabel = Utils.formatNumber(
-      Number(queue.deferred_retries || 0),
-      0,
-      { fallback: "0" }
-    );
-    const databaseSizeLabel = database
-      ? Utils.formatBytes(Number(database.size_bytes || 0), "0 B")
-      : "N/A";
-    const oldestPendingLabel = Number.isFinite(queue.oldest_age_seconds)
-      ? Utils.formatUptime(queue.oldest_age_seconds, { fallback: "0s" })
-      : "N/A";
-    const lastSignatureCheck = Utils.formatTimestamp(tx.last_signature_check, {
-      fallback: "Never",
-    });
-    const dbLastUpdated = Utils.formatTimestamp(
-      database ? database.last_updated : null,
-      { fallback: "N/A" }
-    );
 
-    const walletPubkey = tx.wallet_pubkey
-      ? Utils.escapeHtml(tx.wallet_pubkey)
-      : "N/A";
-    const schemaLabel = database
-      ? `Schema v${Utils.escapeHtml(String(database.schema_version))}`
-      : "";
+      const stats = tx.stats || {};
+      const queue = tx.queue || {};
+      const database = tx.database || null;
+      const bootstrap = tx.bootstrap || null;
 
-    const formatSignature = (sig) => {
-      if (!sig) {
-        return "N/A";
-      }
-      if (sig.length <= 12) {
-        return Utils.escapeHtml(sig);
-      }
-      const compact = `${sig.slice(0, 6)}…${sig.slice(-6)}`;
-      return Utils.escapeHtml(compact);
-    };
+      const serviceLabel = tx.running ? "Running" : "Stopped";
+      const readyLabel = tx.system_ready ? "Ready" : "Not Ready";
 
-    const pendingSample = queue.sample || [];
-    const pendingRows = pendingSample.length
-      ? pendingSample
-          .map(
-            (item) => `
+      const totalTxLabel = Utils.formatNumber(
+        Number(stats.total_transactions || 0),
+        0,
+        { fallback: "0" }
+      );
+      const newTransactionsLabel = Utils.formatNumber(
+        Number(stats.new_transactions_count || 0),
+        0,
+        { fallback: "0" }
+      );
+      const successRateLabel = Utils.formatNumber(
+        Number(tx.success_rate || 0),
+        2,
+        {
+          fallback: "0.00",
+        }
+      );
+      const failureRateLabel = Utils.formatNumber(
+        Number(tx.failure_rate || 0),
+        2,
+        {
+          fallback: "0.00",
+        }
+      );
+      const pendingLocalLabel = Utils.formatNumber(
+        Number(queue.pending_local || 0),
+        0,
+        { fallback: "0" }
+      );
+      const pendingGlobalLabel = Utils.formatNumber(
+        Number(queue.pending_global || 0),
+        0,
+        { fallback: "0" }
+      );
+      const knownLabel = Utils.formatNumber(
+        Number(stats.known_signatures_count || 0),
+        0,
+        { fallback: "0" }
+      );
+      const deferredLabel = Utils.formatNumber(
+        Number(queue.deferred_retries || 0),
+        0,
+        { fallback: "0" }
+      );
+      const databaseSizeLabel = database
+        ? Utils.formatBytes(Number(database.size_bytes || 0), "0 B")
+        : "N/A";
+      const oldestPendingLabel = Number.isFinite(queue.oldest_age_seconds)
+        ? Utils.formatUptime(queue.oldest_age_seconds, { fallback: "0s" })
+        : "N/A";
+      const lastSignatureCheck = Utils.formatTimestamp(
+        tx.last_signature_check,
+        {
+          fallback: "Never",
+        }
+      );
+      const dbLastUpdated = Utils.formatTimestamp(
+        database ? database.last_updated : null,
+        { fallback: "N/A" }
+      );
+
+      const walletPubkey = tx.wallet_pubkey
+        ? Utils.escapeHtml(tx.wallet_pubkey)
+        : "N/A";
+      const schemaLabel = database
+        ? `Schema v${Utils.escapeHtml(String(database.schema_version))}`
+        : "";
+
+      const formatSignature = (sig) => {
+        if (!sig) {
+          return "N/A";
+        }
+        if (sig.length <= 12) {
+          return Utils.escapeHtml(sig);
+        }
+        const compact = `${sig.slice(0, 6)}…${sig.slice(-6)}`;
+        return Utils.escapeHtml(compact);
+      };
+
+      const pendingSample = queue.sample || [];
+      const pendingRows = pendingSample.length
+        ? pendingSample
+            .map(
+              (item) => `
                             <tr>
                                 <td><code title="${Utils.escapeHtml(
                                   String(item.signature || "")
                                 )}">${formatSignature(
-              item.signature
-            )}</code></td>
+                item.signature
+              )}</code></td>
                                 <td style="text-align: right;">${Utils.formatUptime(
                                   item.age_seconds || 0,
                                   { fallback: "0s" }
                                 )}</td>
                             </tr>
                         `
-          )
-          .join("")
-      : `
+            )
+            .join("")
+        : `
                             <tr>
                                 <td colspan="2" style="text-align: center; padding: 16px; color: var(--text-secondary);">
                                     No pending signatures
@@ -2969,51 +3050,51 @@
                             </tr>
                         `;
 
-    const newestSignature = tx.newest_known_signature
-      ? `<code title="${Utils.escapeHtml(
-          String(tx.newest_known_signature)
-        )}">${formatSignature(tx.newest_known_signature)}</code>`
-      : "N/A";
-    const oldestSignature = tx.oldest_known_signature
-      ? `<code title="${Utils.escapeHtml(
-          String(tx.oldest_known_signature)
-        )}">${formatSignature(tx.oldest_known_signature)}</code>`
-      : "N/A";
-
-    const rawCountLabel = Utils.formatNumber(
-      Number(database ? database.raw_transactions : 0),
-      0,
-      { fallback: "0" }
-    );
-    const processedCountLabel = Utils.formatNumber(
-      Number(database ? database.processed_transactions : 0),
-      0,
-      { fallback: "0" }
-    );
-    const pendingRecordLabel = Utils.formatNumber(
-      Number(database ? database.pending_records : 0),
-      0,
-      { fallback: "0" }
-    );
-    const deferredRecordLabel = Utils.formatNumber(
-      Number(database ? database.deferred_retry_records : 0),
-      0,
-      { fallback: "0" }
-    );
-
-    const bootstrapStatusLabel = bootstrap
-      ? bootstrap.full_history_completed
-        ? "Completed"
-        : "In Progress"
-      : "Unknown";
-    const bootstrapCursorLabel =
-      bootstrap && bootstrap.backfill_cursor
+      const newestSignature = tx.newest_known_signature
         ? `<code title="${Utils.escapeHtml(
-            String(bootstrap.backfill_cursor)
-          )}">${formatSignature(bootstrap.backfill_cursor)}</code>`
-        : "None";
+            String(tx.newest_known_signature)
+          )}">${formatSignature(tx.newest_known_signature)}</code>`
+        : "N/A";
+      const oldestSignature = tx.oldest_known_signature
+        ? `<code title="${Utils.escapeHtml(
+            String(tx.oldest_known_signature)
+          )}">${formatSignature(tx.oldest_known_signature)}</code>`
+        : "N/A";
 
-    contentContainer.innerHTML = `
+      const rawCountLabel = Utils.formatNumber(
+        Number(database ? database.raw_transactions : 0),
+        0,
+        { fallback: "0" }
+      );
+      const processedCountLabel = Utils.formatNumber(
+        Number(database ? database.processed_transactions : 0),
+        0,
+        { fallback: "0" }
+      );
+      const pendingRecordLabel = Utils.formatNumber(
+        Number(database ? database.pending_records : 0),
+        0,
+        { fallback: "0" }
+      );
+      const deferredRecordLabel = Utils.formatNumber(
+        Number(database ? database.deferred_retry_records : 0),
+        0,
+        { fallback: "0" }
+      );
+
+      const bootstrapStatusLabel = bootstrap
+        ? bootstrap.full_history_completed
+          ? "Completed"
+          : "In Progress"
+        : "Unknown";
+      const bootstrapCursorLabel =
+        bootstrap && bootstrap.backfill_cursor
+          ? `<code title="${Utils.escapeHtml(
+              String(bootstrap.backfill_cursor)
+            )}">${formatSignature(bootstrap.backfill_cursor)}</code>`
+          : "None";
+
+      contentContainer.innerHTML = `
                 <div class="page-section">
                     <div class="card">
                         <div class="card-header">
@@ -3180,43 +3261,43 @@
                     </div>
                 </div>
             `;
-  }
+    }
 
-  function renderPlaceholderTab(view) {
-    const contentContainer = document.getElementById("statusContent");
+    function renderPlaceholderTab(view) {
+      const contentContainer = document.getElementById("statusContent");
 
-    const viewTitles = {
-      rpc: "RPC Statistics",
-      transactions: "Transaction Processing",
-      positions: "Position Management",
-      pools: "Pool Service",
-      dexscreener: "DexScreener API",
-      geckoterminal: "GeckoTerminal API",
-      discovery: "Token Discovery",
-      events: "Event System",
-      sol_price: "SOL Price Tracking",
-      webserver: "Webserver Metrics",
-      rl_learner: "Reinforcement Learning",
-    };
+      const viewTitles = {
+        rpc: "RPC Statistics",
+        transactions: "Transaction Processing",
+        positions: "Position Management",
+        pools: "Pool Service",
+        dexscreener: "DexScreener API",
+        geckoterminal: "GeckoTerminal API",
+        discovery: "Token Discovery",
+        events: "Event System",
+        sol_price: "SOL Price Tracking",
+        webserver: "Webserver Metrics",
+        rl_learner: "Reinforcement Learning",
+      };
 
-    const viewIcons = {
-      rpc: "📡",
-      transactions: "💱",
-      positions: "💰",
-      pools: "🏊",
-      dexscreener: "🧮",
-      geckoterminal: "🦎",
-      discovery: "🔍",
-      events: "📡",
-      sol_price: "💵",
-      webserver: "🌐",
-      rl_learner: "🧠",
-    };
+      const viewIcons = {
+        rpc: "📡",
+        transactions: "💱",
+        positions: "💰",
+        pools: "🏊",
+        dexscreener: "🧮",
+        geckoterminal: "🦎",
+        discovery: "🔍",
+        events: "📡",
+        sol_price: "💵",
+        webserver: "🌐",
+        rl_learner: "🧠",
+      };
 
-    const icon = viewIcons[view] || "📊";
-    const title = viewTitles[view] || "Status";
+      const icon = viewIcons[view] || "📊";
+      const title = viewTitles[view] || "Status";
 
-    contentContainer.innerHTML = `
+      contentContainer.innerHTML = `
                 <div class="page-section">
                     <div class="card">
                         <div class="card-header">
@@ -3231,27 +3312,8 @@
                     </div>
                 </div>
             `;
-  }
-
-  function showStatusError(message) {
-    const contentContainer = document.getElementById("statusContent");
-    if (!contentContainer) return;
-
-    contentContainer.innerHTML = `
-                <div class="page-section">
-                    <div class="card">
-                        <div class="card-body" style="text-align: center; padding: 60px 20px;">
-                            <div style="font-size: 3em; margin-bottom: 16px; opacity: 0.5;">⚠️</div>
-                            <div style="font-size: 1.1em; font-weight: 600; margin-bottom: 8px; color: var(--error-color);">Error</div>
-                            <div style="color: var(--text-secondary);">${message}</div>
-                        </div>
-                    </div>
-                </div>
-            `;
-  }
-
-  // Execute initialization immediately (works for both initial load and SPA navigation)
-  scheduleStatusPageInit();
+    }
+  })();
 </script>
 
 <div class="page-table status-page">
