@@ -1319,6 +1319,17 @@
     window.initWalletSubTabs = initWalletSubTabs;
     window.ensureWalletSubTabsVisible = ensureWalletSubTabsVisible;
 
+    // Resume function for when page is restored from cache
+    window.ensureWalletPageReady = function () {
+      console.log("[Wallet] Resuming cached page");
+      ensureWalletSubTabsVisible();
+      startPolling();
+      // Trigger chart refresh if on analysis tab
+      if (State.activeTab === "analysis") {
+        requestAnimationFrame(() => updateChart(State.dailyFlows));
+      }
+    };
+
     window.initWalletPage = function () {
       console.log("[Wallet] Initializing page");
       registerCleanup();

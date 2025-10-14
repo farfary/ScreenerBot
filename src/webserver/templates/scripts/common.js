@@ -1092,7 +1092,9 @@ window.Router = {
           }
           break;
         case "wallet":
-          if (typeof ensureWalletSubTabsVisible === "function") {
+          if (typeof ensureWalletPageReady === "function") {
+            ensureWalletPageReady();
+          } else if (typeof ensureWalletSubTabsVisible === "function") {
             ensureWalletSubTabsVisible();
           }
           break;
