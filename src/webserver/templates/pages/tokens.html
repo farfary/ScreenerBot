@@ -2328,7 +2328,6 @@
     const subTabsContainer = document.getElementById("subTabsContainer");
     if (!subTabsContainer) return;
 
-    subTabsContainer.dataset.subTabsOwner = "tokens";
     subTabsContainer.innerHTML = TOKENS_VIEW_DEFS.map(function (view) {
       var isActive = view.id === tokensState.view;
       return (
@@ -2348,6 +2347,7 @@
       );
     });
 
+    subTabsContainer.setAttribute("data-page", "tokens");
     subTabsContainer.style.display = "flex";
   }
 
@@ -2360,9 +2360,7 @@
       window.sessionStorage.setItem("tokens.view", tokensState.view);
     }
 
-    const currentOwner = subTabsContainer.dataset.subTabsOwner;
-    const needsInit =
-      subTabsContainer.children.length === 0 || currentOwner !== "tokens";
+    const needsInit = subTabsContainer.children.length === 0;
     const computed =
       typeof window.getComputedStyle === "function"
         ? window.getComputedStyle(subTabsContainer)

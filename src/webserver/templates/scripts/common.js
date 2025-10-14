@@ -907,11 +907,11 @@ window.Router = {
 
       this.displayPageElement(mainContent, pageEl);
 
+      // Clean up sub-tabs and toolbar BEFORE initializing page scripts
+      cleanupTabContainers();
+
       // Initialize page-specific scripts
       this.initPageScripts(pageName);
-
-      // Clean up sub-tabs and toolbar for pages that don't use them
-      cleanupTabContainers();
 
       // Update browser history only if path actually changed
       const targetUrl = pageName === "home" ? "/" : `/${pageName}`;
@@ -969,11 +969,11 @@ window.Router = {
       // Execute embedded scripts
       this.executeEmbeddedScripts(pageEl);
 
+      // Clean up sub-tabs and toolbar BEFORE initializing page scripts
+      cleanupTabContainers();
+
       // Initialize page-specific scripts (only once)
       this.initPageScripts(pageName);
-
-      // Clean up sub-tabs and toolbar for pages that don't use them
-      cleanupTabContainers();
 
       // Update browser history only if path actually changed
       const targetUrl = pageName === "home" ? "/" : `/${pageName}`;
@@ -1222,6 +1222,17 @@ function cleanupTabContainers() {
     if (subTabsContainer) {
       subTabsContainer.style.display = "none";
       subTabsContainer.innerHTML = "";
+      subTabsContainer.removeAttribute("data-page");
+    }
+  } else {
+    // If switching between pages that both have sub-tabs, clear if owner changed
+    if (subTabsContainer) {
+      const currentOwner = subTabsContainer.getAttribute("data-page");
+      if (currentOwner && currentOwner !== activePage) {
+        subTabsContainer.innerHTML = "";
+        subTabsContainer.style.display = "none";
+        subTabsContainer.removeAttribute("data-page");
+      }
     }
   }
 
