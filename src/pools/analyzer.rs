@@ -1024,6 +1024,13 @@ impl PoolAnalyzer {
         directory.get(pool_id).cloned()
     }
 
+    /// Get the canonical pool tracked by the price calculator for this mint (if any)
+    pub fn get_canonical_pool(&self, mint: &Pubkey) -> Option<PoolDescriptor> {
+        let calculator = super::service::get_price_calculator();
+        let calculator = calculator?;
+        calculator.get_canonical_pool(mint)
+    }
+
     /// Get all analyzed pools
     pub fn get_all_pools(&self) -> Vec<PoolDescriptor> {
         let directory = self.pool_directory.read().unwrap();

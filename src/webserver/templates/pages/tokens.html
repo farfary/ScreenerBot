@@ -773,6 +773,12 @@
         : "—"
     );
 
+    renderPoolsTab(detailData.pools || [], {
+      pricePool: poolAddress || null,
+      hasPoolPrice:
+        statusFlags.has_pool_price === true || Number.isFinite(priceSol),
+    });
+
     renderBadgeList("detail-tag-badges", detailData.tags, "No tags assigned");
     renderBadgeList(
       "detail-label-badges",
@@ -1961,6 +1967,143 @@
   function openWebsiteFromModal() {
     if (!tokenModalData || !tokenModalData.detail) {
       Utils.showToast("ℹ️ No website available", "info");
+      function renderPoolsTab(pools, options = {}) {
+        const wrapper = document.getElementById("token-pools-wrapper");
+        const table = document.getElementById("token-pools-table-container");
+        const tbody = document.getElementById("token-pools-table");
+        const emptyState = document.getElementById("token-pools-empty");
+        const summary = document.getElementById("token-pools-summary");
+
+        if (!wrapper || !table || !tbody || !emptyState || !summary) {
+          return;
+        }
+
+        const pricePool =
+          typeof options.pricePool === "string" && options.pricePool.length > 0
+            ? options.pricePool
+            : null;
+        const hasPoolPrice = options.hasPoolPrice === true;
+
+        const poolList = Array.isArray(pools) ? pools : [];
+
+        if (poolList.length === 0) {
+          tbody.innerHTML = "";
+          wrapper.classList.add("is-empty");
+          summary.textContent =
+            "No pools analyzed yet. Pool service will populate this list automatically.";
+          return;
+        }
+
+        wrapper.classList.remove("is-empty");
+
+        const rows = poolList
+          .map((pool, index) => {
+            const poolId = String(pool.pool_id || "");
+            const program = Utils.escapeHtml(pool.program || "Unknown");
+            const roleRaw =
+              typeof pool.token_role === "string" ? pool.token_role : "unknown";
+            const roleLabel = roleRaw
+              ? roleRaw.charAt(0).toUpperCase() + roleRaw.slice(1)
+              : "Unknown";
+            const role = Utils.escapeHtml(roleLabel);
+            const pairMintRaw = String(pool.paired_mint || "");
+            const pairMintShort = formatAddress(pairMintRaw, 4);
+            const pairMintTitle = Utils.escapeHtml(pairMintRaw);
+            const liquidity = Utils.formatCurrencyUSD(pool.liquidity_usd, {
+              fallback: "—",
+            });
+            const volume = Utils.formatCurrencyUSD(pool.volume_h24_usd, {
+              fallback: "—",
+            });
+            const lastUpdated = Utils.formatTimeAgo(pool.last_updated_unix, {
+              fallback: "—",
+            });
+            const reserveCount = Array.isArray(pool.reserve_accounts)
+              ? pool.reserve_accounts.length
+              : 0;
+
+            const usesPrice = pricePool && poolId === pricePool;
+
+            const badgeClasses = ["pool-badge"];
+            let badgeLabel = "Secondary";
+            if (pool.is_canonical && usesPrice) {
+              badgeClasses.push("pool-badge--primary");
+              badgeLabel = "Primary · Pricing";
+            } else if (pool.is_canonical) {
+              badgeClasses.push("pool-badge--primary");
+              badgeLabel = "Primary";
+            } else if (usesPrice) {
+              badgeClasses.push("pool-badge--pricing");
+              badgeLabel = "Pricing";
+            }
+
+            const statusBadge = `<span class="${badgeClasses.join(
+              " "
+            )}">${Utils.escapeHtml(badgeLabel)}</span>`;
+
+            const rowClasses = ["pools-row"];
+            if (pool.is_canonical) rowClasses.push("pools-row--primary");
+            if (usesPrice) rowClasses.push("pools-row--active");
+
+            const poolHref = poolId
+              ? `https://solscan.io/account/${encodeURIComponent(poolId)}`
+              : "#";
+
+            return `
+              <tr class="${rowClasses.join(" ")}">
+                <td>${index + 1}</td>
+                <td>${statusBadge}</td>
+                <td>${program}</td>
+                <td>
+                  <a href="${poolHref}" class="pools-link" target="_blank" rel="noopener">
+                    ${formatAddress(poolId, 4)}
+                  </a>
+                </td>
+                <td>${role}</td>
+                <td title="${pairMintTitle}">${pairMintShort}</td>
+                <td>${liquidity}</td>
+                <td>${volume}</td>
+                <td>${lastUpdated}</td>
+                <td>${reserveCount > 0 ? reserveCount : "—"}</td>
+              </tr>
+            `;
+          })
+          .join("");
+
+        tbody.innerHTML = rows;
+
+        const primary =
+          poolList.find((pool) => pool.is_canonical) || poolList[0];
+        const summaryParts = [];
+        summaryParts.push(
+          `${poolList.length} ${
+            poolList.length === 1 ? "pool" : "pools"
+          } analyzed`
+        );
+        if (primary) {
+          summaryParts.push(
+            `Primary: ${formatAddress(primary.pool_id, 4)} (${
+              primary.program || "Unknown"
+            })`
+          );
+        }
+        if (hasPoolPrice && pricePool) {
+          const priceSource = poolList.find(
+            (pool) => pool.pool_id === pricePool
+          );
+          if (priceSource) {
+            const label = priceSource.is_canonical
+              ? "Pricing source: Primary pool"
+              : `Pricing source: ${formatAddress(priceSource.pool_id, 4)} (${
+                  priceSource.program || "Unknown"
+                })`;
+            summaryParts.push(label);
+          } else {
+            summaryParts.push(`Pricing source: ${formatAddress(pricePool, 4)}`);
+          }
+        }
+        summary.textContent = summaryParts.join(" · ");
+      }
       return;
     }
     const rawUrl = tokenModalData.detail.website;
@@ -3952,6 +4095,9 @@
           <button class="modal-tab active" onclick="switchModalTab('overview')">
             📊 Overview
           </button>
+          <button class="modal-tab" onclick="switchModalTab('pools')">
+            🌊 Pools
+          </button>
           <button class="modal-tab" onclick="switchModalTab('security')">
             🛡️ Security
           </button>
@@ -4132,6 +4278,36 @@
                 <div class="metric-card-header">🏷️ Tags &amp; Labels</div>
                 <div class="badge-grid" id="detail-tag-badges"></div>
                 <div class="badge-grid" id="detail-label-badges"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pools Tab -->
+          <div class="tab-pane" id="tab-pools">
+            <div class="pools-summary" id="token-pools-summary">
+              Fetching pool data…
+            </div>
+            <div class="pools-table-wrapper is-empty" id="token-pools-wrapper">
+              <table class="pools-table" id="token-pools-table-container">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Status</th>
+                    <th>DEX</th>
+                    <th>Pool</th>
+                    <th>Role</th>
+                    <th>Pair Mint</th>
+                    <th>Liquidity</th>
+                    <th>24h Volume</th>
+                    <th>Updated</th>
+                    <th>Accounts</th>
+                  </tr>
+                </thead>
+                <tbody id="token-pools-table"></tbody>
+              </table>
+              <div class="pools-empty" id="token-pools-empty">
+                No pools analyzed yet. Pool service will populate this list
+                automatically.
               </div>
             </div>
           </div>

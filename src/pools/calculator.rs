@@ -12,6 +12,7 @@ use crate::events::{record_safe, Event, EventCategory, Severity};
 /// - Updates price cache and history
 use crate::global::is_debug_pool_calculator_enabled;
 use crate::logger::{log, LogTag};
+use crate::pools::discovery::PoolDiscovery;
 use crate::tokens::{decimals::SOL_DECIMALS, get_token_decimals_sync};
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
@@ -482,6 +483,32 @@ impl PriceCalculator {
                 &format!("Updated SOL reference price to ${:.2}", sol_price_usd),
             );
         }
+    }
+
+    /// Get the canonical pool used for pricing a given token mint (highest-quality pool)
+    pub fn get_canonical_pool(&self, mint: &Pubkey) -> Option<PoolDescriptor> {
+        let sol_mint = Pubkey::from_str(SOL_MINT).ok()?;
+        if mint == &sol_mint {
+            return None;
+        }
+
+        let candidates: Vec<PoolDescriptor> = {
+            let directory = self.pool_directory.read().ok()?;
+            directory
+                .values()
+                .filter(|pool| pool.base_mint == *mint || pool.quote_mint == *mint)
+                .cloned()
+                .collect()
+        };
+
+        if candidates.is_empty() {
+            return None;
+        }
+
+        let mut selected = PoolDiscovery::select_highest_liquidity_per_token(candidates);
+        selected
+            .into_iter()
+            .find(|pool| pool.base_mint == *mint || pool.quote_mint == *mint)
     }
 }
 

@@ -5,6 +5,8 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use solana_sdk::pubkey::Pubkey;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use crate::{
@@ -74,6 +76,22 @@ pub struct TokenWebsiteLink {
 pub struct TokenSocialLink {
     pub platform: String,
     pub url: String,
+}
+
+/// Pool descriptor for token detail view
+#[derive(Debug, Serialize, Clone)]
+pub struct TokenPoolInfo {
+    pub pool_id: String,
+    pub program: String,
+    pub base_mint: String,
+    pub quote_mint: String,
+    pub token_role: String,
+    pub paired_mint: String,
+    pub liquidity_usd: Option<f64>,
+    pub volume_h24_usd: Option<f64>,
+    pub reserve_accounts: Vec<String>,
+    pub is_canonical: bool,
+    pub last_updated_unix: Option<i64>,
 }
 
 fn normalize_optional_text(value: Option<String>) -> Option<String> {
@@ -146,6 +164,7 @@ pub struct TokenDetailResponse {
     // External references
     pub websites: Vec<TokenWebsiteLink>,
     pub socials: Vec<TokenSocialLink>,
+    pub pools: Vec<TokenPoolInfo>,
     // Status flags
     pub has_ohlcv: bool,
     pub has_pool_price: bool,
@@ -482,6 +501,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
                 security_summary: None,
                 websites: vec![],
                 socials: vec![],
+                pools: vec![],
                 has_ohlcv: false,
                 has_pool_price: false,
                 has_open_position: false,
@@ -492,6 +512,73 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     };
 
     let token = &snapshot.data; // ApiToken from cache
+
+    let pool_descriptors = pools::get_token_pools(&mint);
+    let canonical_pool_id = pool_descriptors.first().map(|pool| pool.pool_id);
+    let mint_pubkey = Pubkey::from_str(&mint).ok();
+    let now_unix_opt = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+        Ok(duration) => Some(duration.as_secs() as i64),
+        Err(_) => None,
+    };
+    let pool_infos: Vec<TokenPoolInfo> = pool_descriptors
+        .into_iter()
+        .map(|pool| {
+            let token_role = if let Some(mint_key) = mint_pubkey {
+                if pool.base_mint == mint_key {
+                    "base"
+                } else if pool.quote_mint == mint_key {
+                    "quote"
+                } else {
+                    "unknown"
+                }
+            } else {
+                "unknown"
+            };
+
+            let paired_mint = if token_role == "base" {
+                pool.quote_mint.to_string()
+            } else {
+                pool.base_mint.to_string()
+            };
+
+            let age_secs = pool.last_updated.elapsed().as_secs();
+            let age_i64 = if age_secs > i64::MAX as u64 {
+                i64::MAX
+            } else {
+                age_secs as i64
+            };
+
+            let last_updated_unix = now_unix_opt.map(|now| now.saturating_sub(age_i64));
+
+            TokenPoolInfo {
+                pool_id: pool.pool_id.to_string(),
+                program: pool.program_kind.display_name().to_string(),
+                base_mint: pool.base_mint.to_string(),
+                quote_mint: pool.quote_mint.to_string(),
+                token_role: token_role.to_string(),
+                paired_mint,
+                liquidity_usd: if pool.liquidity_usd.is_finite() {
+                    Some(pool.liquidity_usd)
+                } else {
+                    None
+                },
+                volume_h24_usd: if pool.volume_h24_usd.is_finite() {
+                    Some(pool.volume_h24_usd)
+                } else {
+                    None
+                },
+                reserve_accounts: pool
+                    .reserve_accounts
+                    .iter()
+                    .map(|account| account.to_string())
+                    .collect(),
+                is_canonical: canonical_pool_id
+                    .map(|canonical| canonical == pool.pool_id)
+                    .unwrap_or(false),
+                last_updated_unix,
+            }
+        })
+        .collect();
 
     // Get enrichment data (all sync or from cache)
     let pool_start = std::time::Instant::now();
@@ -889,6 +976,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         security_summary,
         websites,
         socials,
+        pools: pool_infos,
         has_ohlcv,
         has_pool_price,
         has_open_position,

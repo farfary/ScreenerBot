@@ -383,6 +383,135 @@
   animation: fadeInContent 0.3s ease;
 }
 
+.token-modal .pools-summary {
+  color: #94a3b8;
+  font-size: 0.82em;
+  letter-spacing: 0.02em;
+}
+
+.token-modal .pools-table-wrapper {
+  margin-top: 12px;
+  border: 1px solid #1f2937;
+  border-radius: 12px;
+  background: #111821;
+  overflow: hidden;
+  position: relative;
+}
+
+.token-modal .pools-table-wrapper.is-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  min-height: 140px;
+}
+
+.token-modal .pools-table-wrapper.is-empty .pools-table {
+  display: none;
+}
+
+.token-modal .pools-table-wrapper.is-empty .pools-empty {
+  display: block;
+}
+
+.token-modal .pools-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.token-modal .pools-table thead {
+  background: #1b2333;
+}
+
+.token-modal .pools-table th {
+  color: #cbd5f5;
+  text-transform: uppercase;
+  font-size: 0.7em;
+  letter-spacing: 0.08em;
+  padding: 10px 12px;
+  border-bottom: 1px solid #1f2937;
+  text-align: left;
+}
+
+.token-modal .pools-table td {
+  padding: 10px 12px;
+  font-size: 0.85em;
+  color: #e2e8f0;
+  border-bottom: 1px solid #1a2433;
+  vertical-align: middle;
+}
+
+.token-modal .pools-table tr:last-child td {
+  border-bottom: none;
+}
+
+.token-modal .pools-table td:nth-child(7),
+.token-modal .pools-table td:nth-child(8),
+.token-modal .pools-table td:nth-child(10),
+.token-modal .pools-table th:nth-child(7),
+.token-modal .pools-table th:nth-child(8),
+.token-modal .pools-table th:nth-child(10) {
+  text-align: right;
+}
+
+.token-modal .pools-table td:nth-child(9),
+.token-modal .pools-table th:nth-child(9) {
+  white-space: nowrap;
+}
+
+.token-modal .pools-table .pools-link {
+  color: #38bdf8;
+  text-decoration: none;
+}
+
+.token-modal .pools-table .pools-link:hover {
+  text-decoration: underline;
+}
+
+.token-modal .pools-empty {
+  display: none;
+  color: #64748b;
+  font-size: 0.85em;
+  text-align: center;
+}
+
+.token-modal .pool-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.65em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  background: rgba(148, 163, 184, 0.18);
+  color: #cbd5f5;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+}
+
+.token-modal .pool-badge--primary {
+  background: rgba(56, 189, 248, 0.18);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.45);
+}
+
+.token-modal .pool-badge--pricing {
+  background: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.45);
+}
+
+.token-modal .pools-row--primary {
+  background: rgba(56, 189, 248, 0.04);
+}
+
+.token-modal .pools-row--active {
+  background: rgba(16, 185, 129, 0.05);
+}
+
+.token-modal .pools-row:hover {
+  background: rgba(59, 130, 246, 0.08);
+}
+
 /* CRITICAL: Override generic modal-body height cap */
 .token-modal .token-detail-body {
   max-height: none !important;

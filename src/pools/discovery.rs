@@ -608,7 +608,9 @@ impl PoolDiscovery {
         v
     }
 
-    fn select_highest_liquidity_per_token(pools: Vec<PoolDescriptor>) -> Vec<PoolDescriptor> {
+    pub(crate) fn select_highest_liquidity_per_token(
+        pools: Vec<PoolDescriptor>,
+    ) -> Vec<PoolDescriptor> {
         // Group by non-SOL token
         let sol = match Pubkey::from_str(SOL_MINT) {
             Ok(v) => v,

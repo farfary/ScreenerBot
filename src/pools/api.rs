@@ -6,7 +6,9 @@
 use super::cache;
 use super::db;
 use super::service;
-use super::types::{PoolError, PriceResult};
+use super::types::{PoolDescriptor, PoolError, PriceResult};
+use solana_sdk::pubkey::Pubkey;
+use std::str::FromStr;
 
 /// Get current price for a token
 ///
@@ -25,6 +27,40 @@ pub fn get_pool_price(mint: &str) -> Option<PriceResult> {
     }
 
     cache::get_price(mint)
+}
+
+/// Get pools associated with a token from the analyzer's in-memory directory.
+/// Returns a single canonical pool first (if present) followed by other pools.
+pub fn get_token_pools(mint: &str) -> Vec<PoolDescriptor> {
+    if !service::is_pool_service_running() {
+        return Vec::new();
+    }
+
+    let analyzer = match service::get_pool_analyzer() {
+        Some(analyzer) => analyzer,
+        None => return Vec::new(),
+    };
+
+    let mint_pubkey = match Pubkey::from_str(mint) {
+        Ok(key) => key,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut pools = analyzer.get_pools_for_token(&mint_pubkey);
+
+    if let Some(canonical) = analyzer.get_canonical_pool(&mint_pubkey) {
+        if let Some(position) = pools
+            .iter()
+            .position(|pool| pool.pool_id == canonical.pool_id)
+        {
+            if position != 0 {
+                let canonical_pool = pools.remove(position);
+                pools.insert(0, canonical_pool);
+            }
+        }
+    }
+
+    pools
 }
 
 /// Get list of tokens with available prices

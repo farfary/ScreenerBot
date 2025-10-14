@@ -21,8 +21,8 @@ pub mod utils; // Utility functions for SOL detection and vault pairing
 // Re-export only the public API
 pub use api::{
     check_price_history_quality, get_available_tokens, get_cache_stats, get_extended_price_history,
-    get_pool_price, get_price_history, get_price_history_stats, load_token_history_into_cache,
-    PriceHistoryStats,
+    get_pool_price, get_price_history, get_price_history_stats, get_token_pools,
+    load_token_history_into_cache, PriceHistoryStats,
 };
 pub use discovery::{
     get_canonical_pool_address, is_dexscreener_discovery_enabled,
