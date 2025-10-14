@@ -1,3 +1,4 @@
+<script>
   function populateTokenModal(token, detail) {
     if (!token) return;
 
@@ -34,14 +35,13 @@
         token.price_change_h24
       )
     );
-    const changeClass =
-      Number.isFinite(priceChange24h)
-        ? priceChange24h > 0
-          ? "positive"
-          : priceChange24h < 0
-          ? "negative"
-          : ""
-        : "";
+    const changeClass = Number.isFinite(priceChange24h)
+      ? priceChange24h > 0
+        ? "positive"
+        : priceChange24h < 0
+        ? "negative"
+        : ""
+      : "";
 
     const logoEl = document.getElementById("modalTokenLogo");
     const logoUrl = pick(detailData.logo_url, token.logo_url);
@@ -72,9 +72,7 @@
     const tagsEl = document.getElementById("modalTokenTags");
     if (tagsEl) {
       tagsEl.innerHTML = headerTags
-        .map(
-          (tag) => `<span class="tag-badge">${Utils.escapeHtml(tag)}</span>`
-        )
+        .map((tag) => `<span class="tag-badge">${Utils.escapeHtml(tag)}</span>`)
         .join("");
     }
 
@@ -122,7 +120,9 @@
       applyDeltaClass(summaryDeltaEl, priceChange24h);
     }
 
-    const liquidityValue = toNumber(pick(detailData.liquidity_usd, token.liquidity_usd));
+    const liquidityValue = toNumber(
+      pick(detailData.liquidity_usd, token.liquidity_usd)
+    );
     Utils.setText(
       "summary-liquidity",
       liquidityValue !== null
@@ -144,7 +144,9 @@
     Utils.setText(
       "summary-last-updated",
       priceUpdatedAt !== undefined && priceUpdatedAt !== null
-        ? `Price updated ${Utils.formatTimeAgo(priceUpdatedAt, { fallback: "—" })}`
+        ? `Price updated ${Utils.formatTimeAgo(priceUpdatedAt, {
+            fallback: "—",
+          })}`
         : "Price updated —"
     );
 
@@ -153,7 +155,11 @@
       h1: toNumber(pick(detailData.volume_periods?.h1)),
       h6: toNumber(pick(detailData.volume_periods?.h6)),
       h24: toNumber(
-        pick(detailData.volume_periods?.h24, detailData.volume_24h, token.volume_24h)
+        pick(
+          detailData.volume_periods?.h24,
+          detailData.volume_24h,
+          token.volume_24h
+        )
       ),
     };
 
@@ -181,11 +187,15 @@
       m5: normalizeTxnPeriod(detailData.txn_periods?.m5 || detailData.txns?.m5),
       h1: normalizeTxnPeriod(detailData.txn_periods?.h1 || detailData.txns?.h1),
       h6: normalizeTxnPeriod(detailData.txn_periods?.h6 || detailData.txns?.h6),
-      h24: normalizeTxnPeriod(detailData.txn_periods?.h24 || detailData.txns?.h24),
+      h24: normalizeTxnPeriod(
+        detailData.txn_periods?.h24 || detailData.txns?.h24
+      ),
     };
 
     const buys24h = toNumber(pick(detailData.buys_24h, txnPeriods.h24?.buys));
-    const sells24h = toNumber(pick(detailData.sells_24h, txnPeriods.h24?.sells));
+    const sells24h = toNumber(
+      pick(detailData.sells_24h, txnPeriods.h24?.sells)
+    );
     const netFlow24h =
       toNumber(detailData.net_flow_24h) ??
       (Number.isFinite(buys24h) && Number.isFinite(sells24h)
@@ -217,7 +227,9 @@
     );
 
     const priceChangePeriods = {
-      m5: toNumber(pick(detailData.price_change_periods?.m5, detailData.price_change_m5)),
+      m5: toNumber(
+        pick(detailData.price_change_periods?.m5, detailData.price_change_m5)
+      ),
       h1: toNumber(
         pick(
           detailData.price_change_periods?.h1,
@@ -225,7 +237,9 @@
           token.price_change_h1
         )
       ),
-      h6: toNumber(pick(detailData.price_change_periods?.h6, detailData.price_change_h6)),
+      h6: toNumber(
+        pick(detailData.price_change_periods?.h6, detailData.price_change_h6)
+      ),
       h24: priceChange24h,
     };
 
@@ -252,10 +266,7 @@
     );
     Utils.setText(
       "detail-blacklisted",
-      Utils.formatBooleanFlag(
-        detailData.blacklisted ?? token.blacklisted,
-        "—"
-      )
+      Utils.formatBooleanFlag(detailData.blacklisted ?? token.blacklisted, "—")
     );
 
     const launchTimestamp = pick(
@@ -308,7 +319,8 @@
         poolLinkEl.textContent = poolAddress
           ? formatAddress(poolAddress, 6)
           : "Open Pool";
-        poolLinkEl.href = pairUrl || `https://solscan.io/account/${poolAddress}`;
+        poolLinkEl.href =
+          pairUrl || `https://solscan.io/account/${poolAddress}`;
         poolLinkEl.classList.remove("metric-link--disabled");
         poolLinkEl.title = poolAddress || poolLinkEl.textContent;
       } else {
@@ -344,11 +356,7 @@
         : "—"
     );
 
-    renderBadgeList(
-      "detail-tag-badges",
-      detailData.tags,
-      "No tags assigned"
-    );
+    renderBadgeList("detail-tag-badges", detailData.tags, "No tags assigned");
     renderBadgeList(
       "detail-label-badges",
       detailData.pair_labels,
@@ -442,9 +450,7 @@
     renderLinkList("sidebar-socials", detailData.socials || [], {
       emptyMessage: "No social links",
       getLabel: (link) =>
-        link.platform
-          ? link.platform.toUpperCase()
-          : extractDomain(link.url),
+        link.platform ? link.platform.toUpperCase() : extractDomain(link.url),
     });
 
     const statusFlags = {
@@ -1209,7 +1215,9 @@
       const formatted = hasValue
         ? Utils.formatPercentValue(value, { fallback: "—" })
         : "—";
-      return `<tr><td>${Utils.escapeHtml(PERIOD_LABELS[key])}</td><td class="${className}">${formatted}</td></tr>`;
+      return `<tr><td>${Utils.escapeHtml(
+        PERIOD_LABELS[key]
+      )}</td><td class="${className}">${formatted}</td></tr>`;
     }).join("");
 
     return `
@@ -1308,7 +1316,11 @@
     container.appendChild(fragment);
   }
 
-  function renderLinkList(containerId, links, { emptyMessage = "", getLabel } = {}) {
+  function renderLinkList(
+    containerId,
+    links,
+    { emptyMessage = "", getLabel } = {}
+  ) {
     const container = document.getElementById(containerId);
     if (!container) return;
     container.innerHTML = "";
@@ -1343,9 +1355,10 @@
       anchor.target = "_blank";
       anchor.rel = "noopener";
       const rawLabel = getLabel ? getLabel(link) : link.label;
-      anchor.textContent = rawLabel && String(rawLabel).trim().length
-        ? rawLabel
-        : extractDomain(link.url);
+      anchor.textContent =
+        rawLabel && String(rawLabel).trim().length
+          ? rawLabel
+          : extractDomain(link.url);
       fragment.appendChild(anchor);
     });
     container.appendChild(fragment);
@@ -3415,7 +3428,9 @@
           <div class="modal-price" id="modalTokenPrice">0.00077622</div>
           <div class="modal-price-sub" id="modalTokenPriceUsd">$0.00</div>
         </div>
-        <div class="modal-price-change positive" id="modalTokenChange">+2.12%</div>
+        <div class="modal-price-change positive" id="modalTokenChange">
+          +2.12%
+        </div>
       </div>
       <button
         class="modal-close-btn"
@@ -3460,19 +3475,29 @@
               <div class="summary-card">
                 <div class="summary-card__label">Liquidity</div>
                 <div class="summary-card__value" id="summary-liquidity">—</div>
-                <div class="summary-card__meta" id="summary-confidence">Confidence —</div>
-                <div class="summary-card__meta" id="summary-last-updated">Price updated —</div>
+                <div class="summary-card__meta" id="summary-confidence">
+                  Confidence —
+                </div>
+                <div class="summary-card__meta" id="summary-last-updated">
+                  Price updated —
+                </div>
               </div>
               <div class="summary-card">
                 <div class="summary-card__label">Volume 24h</div>
                 <div class="summary-card__value" id="summary-volume">—</div>
-                <div class="summary-card__meta" id="summary-volume-1h">1h —</div>
-                <div class="summary-card__meta" id="summary-volume-5m">5m —</div>
+                <div class="summary-card__meta" id="summary-volume-1h">
+                  1h —
+                </div>
+                <div class="summary-card__meta" id="summary-volume-5m">
+                  5m —
+                </div>
               </div>
               <div class="summary-card">
                 <div class="summary-card__label">Net Flow 24h</div>
                 <div class="summary-card__value" id="summary-netflow">—</div>
-                <div class="summary-card__meta" id="summary-buys-sells">Buys — / Sells —</div>
+                <div class="summary-card__meta" id="summary-buys-sells">
+                  Buys — / Sells —
+                </div>
                 <div class="summary-card__meta" id="summary-ratio">Ratio —</div>
               </div>
             </div>
@@ -3480,9 +3505,16 @@
             <div class="metrics-grid metrics-grid--responsive">
               <div class="metric-card">
                 <div class="metric-card-header">🧾 Token Profile</div>
-                <div class="metric-row metric-row--wrap" title="Full mint address">
+                <div
+                  class="metric-row metric-row--wrap"
+                  title="Full mint address"
+                >
                   <span class="metric-label">Mint</span>
-                  <span class="metric-value metric-value--muted" id="detail-mint">—</span>
+                  <span
+                    class="metric-value metric-value--muted"
+                    id="detail-mint"
+                    >—</span
+                  >
                 </div>
                 <div class="metric-row">
                   <span class="metric-label">Decimals</span>
@@ -3518,7 +3550,9 @@
                 </div>
                 <div class="metric-row">
                   <span class="metric-label">Quote Reserves</span>
-                  <span class="metric-value" id="detail-quote-liquidity">—</span>
+                  <span class="metric-value" id="detail-quote-liquidity"
+                    >—</span
+                  >
                 </div>
                 <div class="metric-row">
                   <span class="metric-label">FDV</span>
@@ -3575,7 +3609,9 @@
               </div>
 
               <div class="metric-card metric-card--wide">
-                <div class="metric-card-header">💱 Volume &amp; Transactions</div>
+                <div class="metric-card-header">
+                  💱 Volume &amp; Transactions
+                </div>
                 <div class="metric-table" id="detail-activity-table"></div>
               </div>
 
