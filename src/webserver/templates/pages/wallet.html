@@ -568,6 +568,9 @@
       chartSeries: null,
       themeObserver: null,
       activeTab: "analysis",
+      chartObserver: null,
+      chartInitPending: false,
+      chartInitRaf: null,
       logoCache: new Map(), // Cache mint -> successful logo URL
     };
 
@@ -621,6 +624,18 @@
         State.chart = null;
         State.chartSeries = null;
       }
+
+      if (State.chartObserver) {
+        State.chartObserver.disconnect();
+        State.chartObserver = null;
+      }
+
+      if (State.chartInitRaf) {
+        cancelAnimationFrame(State.chartInitRaf);
+        State.chartInitRaf = null;
+      }
+
+      State.chartInitPending = false;
     }
 
     function applyChartTheme() {
@@ -669,13 +684,72 @@
       }
     }
 
+    function attachChartObserver(container) {
+      if (State.chartObserver || typeof ResizeObserver === "undefined") return;
+
+      const observer = new ResizeObserver((entries) => {
+        const entry = entries && entries[0];
+        if (!entry || !State.chart) return;
+
+        const width = Math.floor(entry.contentRect.width);
+        const height = Math.max(
+          220,
+          Math.floor(
+            entry.contentRect.height ||
+              container.clientHeight ||
+              container.offsetHeight ||
+              320
+          )
+        );
+
+        if (width <= 0) return;
+
+        State.chart.resize(width, height);
+        if (State.chartSeries && State.dailyFlows.length > 0) {
+          State.chart.timeScale().fitContent();
+        }
+      });
+
+      observer.observe(container);
+      State.chartObserver = observer;
+    }
+
+    function scheduleChartInit() {
+      if (State.chartInitPending) return;
+      State.chartInitPending = true;
+      State.chartInitRaf = requestAnimationFrame(() => {
+        State.chartInitPending = false;
+        State.chartInitRaf = null;
+        ensureChart();
+      });
+    }
+
     function ensureChart() {
-      if (State.chart) return;
+      if (State.chart) return true;
       const container = el("wallet-flow-chart");
-      if (!container) return;
+      if (!container) return false;
+
+      const isHidden =
+        container.offsetParent === null ||
+        getComputedStyle(container).display === "none";
+      if (isHidden) {
+        return false;
+      }
+
+      const width = Math.floor(container.clientWidth || container.offsetWidth);
+      const height = Math.max(
+        220,
+        Math.floor(container.clientHeight || container.offsetHeight || 320)
+      );
+
+      if (width <= 0 || height <= 0) {
+        scheduleChartInit();
+        return false;
+      }
 
       State.chart = LightweightCharts.createChart(container, {
-        height: 320,
+        width,
+        height,
         layout: { background: { color: "transparent" }, textColor: "#1f2933" },
         timeScale: {
           borderVisible: false,
@@ -699,11 +773,17 @@
 
       State.chartSeries = { inflow, outflow, net };
       applyChartTheme();
+      attachChartObserver(container);
+
+      if (State.dailyFlows.length > 0) {
+        requestAnimationFrame(() => updateChart(State.dailyFlows));
+      }
+
+      return true;
     }
 
     function updateChart(dailyFlows) {
-      ensureChart();
-      if (!State.chartSeries) return;
+      if (!ensureChart() || !State.chartSeries) return;
       const flows = Array.isArray(dailyFlows) ? dailyFlows : [];
 
       const cutoff =
@@ -1201,6 +1281,10 @@
       }
       if (tokensTab) {
         tokensTab.classList.toggle("active", tabName === "tokens");
+      }
+
+      if (tabName === "analysis") {
+        requestAnimationFrame(() => updateChart(State.dailyFlows));
       }
 
       if (!options.suppressSave) {
