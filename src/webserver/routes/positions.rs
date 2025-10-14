@@ -924,7 +924,7 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
         symbol: token.symbol.clone(),
         name: token.name.clone(),
         decimals,
-        logo_url: token.info.as_ref().and_then(|i| i.image_url.clone()),
+        logo_url: token.logo_url.clone(),
         website: token
             .info
             .as_ref()

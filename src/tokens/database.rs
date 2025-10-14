@@ -16,6 +16,31 @@ use std::sync::{Arc, Mutex};
 use crate::tokens::types::Token;
 use rusqlite::{params, params_from_iter, Connection, Result as SqliteResult};
 
+fn table_exists(connection: &Connection, table: &str) -> rusqlite::Result<bool> {
+    let mut stmt =
+        connection.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ?1")?;
+    let mut rows = stmt.query([table])?;
+    let row = rows.next()?;
+    Ok(row.is_some())
+}
+
+fn table_has_column(connection: &Connection, table: &str, column: &str) -> rusqlite::Result<bool> {
+    if !table_exists(connection, table)? {
+        return Ok(false);
+    }
+
+    let pragma = format!("PRAGMA table_info({})", table);
+    let mut stmt = connection.prepare(&pragma)?;
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        let name: String = row.get(1)?;
+        if name.eq_ignore_ascii_case(column) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// SQLite database for token storage and caching
 #[derive(Clone)]
 pub struct TokenDatabase {
@@ -90,7 +115,16 @@ impl TokenDatabase {
                 market_cap REAL,
                 pair_created_at INTEGER,
                 boosts_active INTEGER,
+                description TEXT,
+                coingecko_id TEXT,
+                tags TEXT,
+                is_verified INTEGER NOT NULL DEFAULT 0,
+                website TEXT,
                 info_image_url TEXT,
+                info_websites TEXT,
+                info_socials TEXT,
+                info_header TEXT,
+                info_open_graph TEXT,
                 labels TEXT,
                 last_updated TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -579,10 +613,42 @@ impl TokenDatabase {
     /// Insert or update token in database
     fn insert_or_update_token(&self, token: &Token) -> Result<(), Box<dyn std::error::Error>> {
         let labels_json = if token.labels.is_empty() {
-            String::new()
+            None
         } else {
-            serde_json::to_string(&token.labels).unwrap_or_default()
+            serde_json::to_string(&token.labels).ok()
         };
+
+        let tags_json = if token.tags.is_empty() {
+            None
+        } else {
+            serde_json::to_string(&token.tags).ok()
+        };
+
+        let (info_image_url, info_websites_json, info_socials_json, info_header, info_open_graph) =
+            if let Some(info) = token.info.as_ref() {
+                let websites_json = if info.websites.is_empty() {
+                    None
+                } else {
+                    serde_json::to_string(&info.websites).ok()
+                };
+                let socials_json = if info.socials.is_empty() {
+                    None
+                } else {
+                    serde_json::to_string(&info.socials).ok()
+                };
+                (
+                    info.image_url.clone().or_else(|| token.logo_url.clone()),
+                    websites_json,
+                    socials_json,
+                    info.header.clone(),
+                    info.open_graph.clone(),
+                )
+            } else {
+                (token.logo_url.clone(), None, None, None, None)
+            };
+
+        let info_image_url = info_image_url.or_else(|| token.logo_url.clone());
+        let is_verified = if token.is_verified { 1 } else { 0 };
 
         let connection = self.connection.lock().map_err(|e| {
             Box::new(std::io::Error::new(
@@ -600,10 +666,13 @@ impl TokenDatabase {
                 txns_h1_buys, txns_h1_sells, txns_m5_buys, txns_m5_sells,
                 price_change_h24, price_change_h6, price_change_h1, price_change_m5,
                 fdv, market_cap, pair_created_at, boosts_active,
-                info_image_url, labels, last_updated
+                description, coingecko_id, tags, is_verified, website,
+                info_image_url, info_websites, info_socials, info_header, info_open_graph,
+                labels, last_updated
             ) VALUES (
                 ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16,
-                ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36
+                ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32,
+                ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43
             )",
             params![
                 token.mint,
@@ -623,14 +692,38 @@ impl TokenDatabase {
                 token.volume.as_ref().and_then(|v| v.h6),
                 token.volume.as_ref().and_then(|v| v.h1),
                 token.volume.as_ref().and_then(|v| v.m5),
-                token.txns.as_ref().and_then(|t| t.h24.as_ref().and_then(|h| h.buys)),
-                token.txns.as_ref().and_then(|t| t.h24.as_ref().and_then(|h| h.sells)),
-                token.txns.as_ref().and_then(|t| t.h6.as_ref().and_then(|h| h.buys)),
-                token.txns.as_ref().and_then(|t| t.h6.as_ref().and_then(|h| h.sells)),
-                token.txns.as_ref().and_then(|t| t.h1.as_ref().and_then(|h| h.buys)),
-                token.txns.as_ref().and_then(|t| t.h1.as_ref().and_then(|h| h.sells)),
-                token.txns.as_ref().and_then(|t| t.m5.as_ref().and_then(|h| h.buys)),
-                token.txns.as_ref().and_then(|t| t.m5.as_ref().and_then(|h| h.sells)),
+                token
+                    .txns
+                    .as_ref()
+                    .and_then(|t| t.h24.as_ref().and_then(|h| h.buys)),
+                token
+                    .txns
+                    .as_ref()
+                    .and_then(|t| t.h24.as_ref().and_then(|h| h.sells)),
+                token
+                    .txns
+                    .as_ref()
+                    .and_then(|t| t.h6.as_ref().and_then(|h| h.buys)),
+                token
+                    .txns
+                    .as_ref()
+                    .and_then(|t| t.h6.as_ref().and_then(|h| h.sells)),
+                token
+                    .txns
+                    .as_ref()
+                    .and_then(|t| t.h1.as_ref().and_then(|h| h.buys)),
+                token
+                    .txns
+                    .as_ref()
+                    .and_then(|t| t.h1.as_ref().and_then(|h| h.sells)),
+                token
+                    .txns
+                    .as_ref()
+                    .and_then(|t| t.m5.as_ref().and_then(|h| h.buys)),
+                token
+                    .txns
+                    .as_ref()
+                    .and_then(|t| t.m5.as_ref().and_then(|h| h.sells)),
                 token.price_change.as_ref().and_then(|p| p.h24),
                 token.price_change.as_ref().and_then(|p| p.h6),
                 token.price_change.as_ref().and_then(|p| p.h1),
@@ -639,10 +732,19 @@ impl TokenDatabase {
                 token.market_cap,
                 token.created_at.map(|dt| dt.timestamp()),
                 token.boosts.as_ref().and_then(|b| b.active),
-                token.logo_url.clone(), // Was info.image_url, now logo_url
-                labels_json,
+                token.description.as_deref(),
+                token.coingecko_id.as_deref(),
+                tags_json.as_deref(),
+                is_verified,
+                token.website.as_deref(),
+                info_image_url.as_deref(),
+                info_websites_json.as_deref(),
+                info_socials_json.as_deref(),
+                info_header.as_deref(),
+                info_open_graph.as_deref(),
+                labels_json.as_deref(),
                 token.last_updated.to_rfc3339()
-            ]
+            ],
         )?;
 
         Ok(())
@@ -650,12 +752,17 @@ impl TokenDatabase {
 
     /// Convert database row to Token
     fn row_to_token(&self, row: &rusqlite::Row) -> SqliteResult<Token> {
-        let labels_json: String = row.get("labels")?;
-        let labels: Vec<String> = if labels_json.is_empty() {
-            Vec::new()
-        } else {
-            serde_json::from_str(&labels_json).unwrap_or_default()
-        };
+        let labels_json: Option<String> = row.get("labels")?;
+        let labels: Vec<String> = labels_json
+            .as_ref()
+            .and_then(|json| serde_json::from_str(json).ok())
+            .unwrap_or_default();
+
+        let tags_json: Option<String> = row.get("tags")?;
+        let tags: Vec<String> = tags_json
+            .as_ref()
+            .and_then(|json| serde_json::from_str(json).ok())
+            .unwrap_or_default();
 
         let last_updated_str: String = row.get("last_updated")?;
         let last_updated = chrono::DateTime::parse_from_rfc3339(&last_updated_str)
@@ -673,18 +780,55 @@ impl TokenDatabase {
             chrono::DateTime::from_timestamp(ts, 0).unwrap_or_else(|| chrono::Utc::now())
         });
 
+        let info_image_url: Option<String> = row.get("info_image_url")?;
+        let info_header: Option<String> = row.get("info_header")?;
+        let info_open_graph: Option<String> = row.get("info_open_graph")?;
+        let info_websites_json: Option<String> = row.get("info_websites")?;
+        let info_socials_json: Option<String> = row.get("info_socials")?;
+
+        let websites: Vec<WebsiteLink> = info_websites_json
+            .as_ref()
+            .and_then(|json| serde_json::from_str(json).ok())
+            .unwrap_or_default();
+
+        let socials: Vec<SocialLink> = info_socials_json
+            .as_ref()
+            .and_then(|json| serde_json::from_str(json).ok())
+            .unwrap_or_default();
+
+        let info = {
+            let has_info = info_image_url.is_some()
+                || !websites.is_empty()
+                || !socials.is_empty()
+                || info_header.is_some()
+                || info_open_graph.is_some();
+            if has_info {
+                Some(TokenInfoCompat {
+                    image_url: info_image_url.clone(),
+                    header: info_header.clone(),
+                    open_graph: info_open_graph.clone(),
+                    websites,
+                    socials,
+                })
+            } else {
+                None
+            }
+        };
+
+        let is_verified: i64 = row.get("is_verified")?;
+
         Ok(Token {
             mint: row.get("mint")?,
             symbol: row.get("symbol")?,
             name: row.get("name")?,
             chain: row.get("chain_id")?,
             decimals: None, // Loaded separately from decimals cache
-            logo_url: row.get("info_image_url")?,
-            coingecko_id: None,
-            website: None,
-            description: None,
-            tags: Vec::new(),
-            is_verified: false,
+            logo_url: info_image_url,
+            coingecko_id: row.get("coingecko_id")?,
+            website: row.get("website")?,
+            description: row.get("description")?,
+            tags,
+            is_verified: is_verified != 0,
             created_at,
             last_updated,
             price_dexscreener_sol: row.get("price_sol")?,
@@ -732,7 +876,7 @@ impl TokenDatabase {
                 base: row.get("liquidity_base")?,
                 quote: row.get("liquidity_quote")?,
             }),
-            info: None, // TokenInfoCompat not fully stored in database
+            info,
             boosts: Some(crate::tokens::types::BoostInfo {
                 active: row.get("boosts_active")?,
             }),
@@ -866,70 +1010,115 @@ impl TokenDatabase {
 
     /// Ensure database schemas are up to date - run this at startup
     pub fn migrate_database_schemas(&self) -> Result<(), Box<dyn std::error::Error>> {
-        // Use a separate configured connection for migration to avoid long-held locks
         let migration_conn = create_configured_connection()?;
 
-        // Check if failed_decimals table has retry_count column
-        let has_retry_count = {
-            match migration_conn.prepare("SELECT retry_count FROM failed_decimals LIMIT 1") {
-                Ok(mut stmt) => {
-                    // Try to execute the query to see if the column exists
-                    stmt.query_map([], |_| Ok(())).is_ok()
-                }
-                Err(_) => false,
-            }
-        };
-
-        if !has_retry_count {
-            log(
-                LogTag::Cache,
-                "MIGRATION",
-                "Migrating failed_decimals table to add retry_count columns",
-            );
-
-            // Add missing columns to failed_decimals table
-            migration_conn
-                .execute(
+        if table_exists(&migration_conn, "failed_decimals")? {
+            let failed_decimal_columns = [
+                (
+                    "retry_count",
                     "ALTER TABLE failed_decimals ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0",
-                    [],
-                )
-                .unwrap_or_else(|e| {
-                    log(
-                        LogTag::Cache,
-                        "MIGRATION_WARN",
-                        &format!(
-                            "Could not add retry_count column (may already exist): {}",
-                            e
-                        ),
-                    );
-                    0
-                });
-
-            migration_conn
-                .execute(
+                ),
+                (
+                    "max_retries",
                     "ALTER TABLE failed_decimals ADD COLUMN max_retries INTEGER NOT NULL DEFAULT 3",
-                    [],
-                )
-                .unwrap_or_else(|e| {
-                    log(
-                        LogTag::Cache,
-                        "MIGRATION_WARN",
-                        &format!(
-                            "Could not add max_retries column (may already exist): {}",
-                            e
-                        ),
-                    );
-                    0
-                });
+                ),
+            ];
 
-            log(
-                LogTag::Cache,
-                "MIGRATION",
-                "Failed_decimals table migration completed",
-            );
+            for (column, statement) in failed_decimal_columns {
+                if !table_has_column(&migration_conn, "failed_decimals", column)? {
+                    if let Err(e) = migration_conn.execute(statement, []) {
+                        log(
+                            LogTag::Cache,
+                            "MIGRATION_WARN",
+                            &format!("Could not add {} column to failed_decimals: {}", column, e),
+                        );
+                    } else {
+                        log(
+                            LogTag::Cache,
+                            "MIGRATION",
+                            &format!("Added {} column to failed_decimals table", column),
+                        );
+                    }
+                }
+            }
         }
 
-        // Close migration connection explicitly
+        let token_columns = [
+            (
+                "description",
+                "ALTER TABLE tokens ADD COLUMN description TEXT",
+            ),
+            (
+                "coingecko_id",
+                "ALTER TABLE tokens ADD COLUMN coingecko_id TEXT",
+            ),
+            ("tags", "ALTER TABLE tokens ADD COLUMN tags TEXT"),
+            (
+                "is_verified",
+                "ALTER TABLE tokens ADD COLUMN is_verified INTEGER NOT NULL DEFAULT 0",
+            ),
+            ("website", "ALTER TABLE tokens ADD COLUMN website TEXT"),
+            (
+                "info_websites",
+                "ALTER TABLE tokens ADD COLUMN info_websites TEXT",
+            ),
+            (
+                "info_socials",
+                "ALTER TABLE tokens ADD COLUMN info_socials TEXT",
+            ),
+            (
+                "info_header",
+                "ALTER TABLE tokens ADD COLUMN info_header TEXT",
+            ),
+            (
+                "info_open_graph",
+                "ALTER TABLE tokens ADD COLUMN info_open_graph TEXT",
+            ),
+        ];
+
+        for (column, statement) in token_columns {
+            if !table_has_column(&migration_conn, "tokens", column)? {
+                if let Err(e) = migration_conn.execute(statement, []) {
+                    log(
+                        LogTag::Cache,
+                        "MIGRATION_WARN",
+                        &format!("Failed to add column {} to tokens table: {}", column, e),
+                    );
+                } else {
+                    log(
+                        LogTag::Cache,
+                        "MIGRATION",
+                        &format!("Added column {} to tokens table", column),
+                    );
+                }
+            }
+        }
+
+        let index_statements = [
+            (
+                "CREATE INDEX IF NOT EXISTS idx_tokens_has_logo ON tokens(info_image_url) WHERE info_image_url IS NOT NULL",
+                "idx_tokens_has_logo",
+            ),
+            (
+                "CREATE INDEX IF NOT EXISTS idx_tokens_has_website ON tokens(website) WHERE website IS NOT NULL",
+                "idx_tokens_has_website",
+            ),
+            (
+                "CREATE INDEX IF NOT EXISTS idx_tokens_is_verified ON tokens(is_verified)",
+                "idx_tokens_is_verified",
+            ),
+        ];
+
+        for (statement, index_name) in index_statements {
+            if let Err(e) = migration_conn.execute(statement, []) {
+                log(
+                    LogTag::Cache,
+                    "MIGRATION_WARN",
+                    &format!("Failed to create {}: {}", index_name, e),
+                );
+            }
+        }
+
         drop(migration_conn);
         Ok(())
     }

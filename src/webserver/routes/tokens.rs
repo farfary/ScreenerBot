@@ -786,10 +786,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         }
     }
 
-    let logo_url = token
-        .logo_url
-        .clone()
-        .or_else(|| token.info.as_ref().and_then(|i| i.image_url.clone()));
+    let logo_url = token.logo_url.clone();
     let primary_website = websites.first().map(|link| link.url.clone());
 
     let security_summary = match (rugged, security_score) {
