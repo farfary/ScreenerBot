@@ -59,6 +59,10 @@ pub struct StatusSnapshot {
     pub discovery: Option<TokenDiscoveryStatusSnapshot>,
     pub events: Option<EventsStatusSnapshot>,
     pub transactions: Option<TransactionsStatusSnapshot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dexscreener: Option<DexscreenerStatusSnapshot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geckoterminal: Option<GeckoTerminalStatusSnapshot>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -271,6 +275,62 @@ pub struct DiscoverySourceSnapshot {
 }
 
 #[derive(Clone, Debug, Serialize)]
+pub struct DexscreenerStatusSnapshot {
+    pub enabled: bool,
+    pub initialized: bool,
+    pub rate_limit_per_minute: usize,
+    pub discovery_rate_limit_per_minute: usize,
+    pub max_tokens_per_call: usize,
+    pub token_cache_entries: usize,
+    pub token_cache_fresh: usize,
+    pub pool_cache_entries: usize,
+    pub pool_cache_fresh: usize,
+    pub price_cache_ttl_secs: i64,
+    pub pool_cache_ttl_secs: i64,
+    pub api_total_requests: u64,
+    pub api_successful_requests: u64,
+    pub api_failed_requests: u64,
+    pub api_success_rate: f64,
+    pub api_cache_hits: u64,
+    pub api_cache_misses: u64,
+    pub api_cache_hit_rate: f64,
+    pub api_average_response_ms: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_request_time: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct GeckoTerminalStatusSnapshot {
+    pub enabled: bool,
+    pub initialized: bool,
+    pub rate_limit_per_minute: usize,
+    pub max_tokens_per_batch: usize,
+    pub cache_entries: usize,
+    pub cache_fresh: usize,
+    pub cache_ttl_secs: i64,
+    pub api_total_requests: u64,
+    pub api_successful_requests: u64,
+    pub api_failed_requests: u64,
+    pub api_success_rate: f64,
+    pub api_cache_hits: u64,
+    pub api_cache_misses: u64,
+    pub api_cache_hit_rate: f64,
+    pub api_average_response_ms: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_request_time: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_success_time: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_error_time: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_error_message: Option<String>,
+    pub current_rate_limit_calls: usize,
+    pub current_rate_limit_max: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rate_limit_resets_in_ms: Option<u64>,
+}
+
+#[derive(Clone, Debug, Serialize)]
 pub struct EventsStatusSnapshot {
     pub running: bool,
     pub total_events: i64,
@@ -403,7 +463,17 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
 
     let services = collect_service_status_snapshot();
 
-    let (metrics, wallet, ohlcv_stats, pools, discovery, events, transactions) = tokio::join!(
+    let (
+        metrics,
+        wallet,
+        ohlcv_stats,
+        pools,
+        discovery,
+        events,
+        transactions,
+        dexscreener,
+        geckoterminal,
+    ) = tokio::join!(
         collect_system_metrics_snapshot(rpc_metrics_summary),
         collect_wallet_snapshot(),
         collect_ohlcv_stats_snapshot(),
@@ -411,6 +481,8 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
         collect_token_discovery_snapshot(),
         collect_events_snapshot(),
         collect_transactions_snapshot(),
+        collect_dexscreener_status_snapshot(),
+        collect_gecko_terminal_status_snapshot(),
     );
 
     let rpc_stats = rpc_stats_raw.as_ref().map(|stats| RpcStatsSnapshot {
@@ -451,6 +523,8 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
         discovery,
         events,
         transactions,
+        dexscreener,
+        geckoterminal,
     }
 }
 
@@ -792,6 +866,98 @@ async fn collect_token_discovery_snapshot() -> Option<TokenDiscoveryStatusSnapsh
             defillama_protocols: stats.per_source.defillama_protocols,
         },
         last_error: stats.last_error,
+    })
+}
+
+async fn collect_dexscreener_status_snapshot() -> Option<DexscreenerStatusSnapshot> {
+    use crate::tokens::dexscreener;
+    use crate::tokens::types::ApiStats;
+
+    let enabled = config::with_config(|cfg| cfg.tokens.sources.dexscreener.enabled);
+
+    let (token_cache_stats, pool_cache_stats, stats_opt) = tokio::join!(
+        dexscreener::get_cache_stats(),
+        dexscreener::get_pool_cache_stats(),
+        dexscreener::get_dexscreener_api_stats(),
+    );
+
+    let (token_cache_entries, token_cache_fresh) = token_cache_stats;
+    let (pool_cache_entries, pool_cache_fresh) = pool_cache_stats;
+
+    let rate_limit_per_minute = dexscreener::get_dexscreener_rate_limit_per_minute();
+    let discovery_rate_limit_per_minute =
+        dexscreener::get_dexscreener_discovery_rate_limit_per_minute();
+    let max_tokens_per_call = dexscreener::get_dexscreener_max_tokens_per_api_call();
+
+    let (stats, initialized) = match stats_opt {
+        Some(s) => (s, true),
+        None => (ApiStats::new(), false),
+    };
+
+    Some(DexscreenerStatusSnapshot {
+        enabled,
+        initialized,
+        rate_limit_per_minute,
+        discovery_rate_limit_per_minute,
+        max_tokens_per_call,
+        token_cache_entries,
+        token_cache_fresh,
+        pool_cache_entries,
+        pool_cache_fresh,
+        price_cache_ttl_secs: dexscreener::PRICE_CACHE_TTL_SECONDS,
+        pool_cache_ttl_secs: dexscreener::POOL_CACHE_TTL_SECONDS,
+        api_total_requests: stats.total_requests,
+        api_successful_requests: stats.successful_requests,
+        api_failed_requests: stats.failed_requests,
+        api_success_rate: stats.get_success_rate(),
+        api_cache_hits: stats.cache_hits,
+        api_cache_misses: stats.cache_misses,
+        api_cache_hit_rate: stats.get_cache_hit_rate(),
+        api_average_response_ms: stats.average_response_time_ms,
+        last_request_time: stats.last_request_time,
+    })
+}
+
+async fn collect_gecko_terminal_status_snapshot() -> Option<GeckoTerminalStatusSnapshot> {
+    use crate::tokens::geckoterminal;
+
+    let enabled = config::with_config(|cfg| cfg.tokens.sources.geckoterminal.enabled);
+
+    let (pool_cache_stats, rate_limit_status, stats) = tokio::join!(
+        geckoterminal::get_pool_cache_stats(),
+        geckoterminal::get_current_rate_limit_status(),
+        geckoterminal::get_geckoterminal_api_stats(),
+    );
+
+    let (cache_entries, cache_fresh) = pool_cache_stats;
+    let (current_rate_limit_calls, current_rate_limit_max, rate_limit_resets_in_ms) =
+        rate_limit_status;
+
+    let initialized = stats.total_requests > 0;
+
+    Some(GeckoTerminalStatusSnapshot {
+        enabled,
+        initialized,
+        rate_limit_per_minute: geckoterminal::get_geckoterminal_rate_limit_per_minute(),
+        max_tokens_per_batch: geckoterminal::get_geckoterminal_max_tokens_per_batch(),
+        cache_entries,
+        cache_fresh,
+        cache_ttl_secs: geckoterminal::GECKO_POOL_CACHE_TTL_SECONDS,
+        api_total_requests: stats.total_requests,
+        api_successful_requests: stats.successful_requests,
+        api_failed_requests: stats.failed_requests,
+        api_success_rate: stats.success_rate(),
+        api_cache_hits: stats.cache_hits,
+        api_cache_misses: stats.cache_misses,
+        api_cache_hit_rate: stats.cache_hit_rate(),
+        api_average_response_ms: stats.average_response_time_ms,
+        last_request_time: stats.last_request_time,
+        last_success_time: stats.last_success_time,
+        last_error_time: stats.last_error_time,
+        last_error_message: stats.last_error_message.clone(),
+        current_rate_limit_calls,
+        current_rate_limit_max,
+        rate_limit_resets_in_ms,
     })
 }
 

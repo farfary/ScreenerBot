@@ -44,6 +44,7 @@ const DEFAULT_GECKOTERMINAL_RATE_LIMIT_PER_MINUTE: usize = 30;
 const RATE_LIMIT_DELAY_MS: u64 = 100;
 /// Cache TTL for GeckoTerminal pool data (seconds)
 const GECKO_POOL_CACHE_TTL_SECS: i64 = 900; // 15 minutes
+pub const GECKO_POOL_CACHE_TTL_SECONDS: i64 = GECKO_POOL_CACHE_TTL_SECS;
 
 #[derive(Clone)]
 struct CachedGeckoPoolData {
@@ -65,6 +66,101 @@ const API_VERSION: &str = "20230302";
 
 /// Solana network identifier for GeckoTerminal
 const SOLANA_NETWORK: &str = "solana";
+
+#[derive(Debug, Clone, Default)]
+pub struct GeckoApiStats {
+    pub total_requests: u64,
+    pub successful_requests: u64,
+    pub failed_requests: u64,
+    pub cache_hits: u64,
+    pub cache_misses: u64,
+    pub last_request_time: Option<DateTime<Utc>>,
+    pub last_success_time: Option<DateTime<Utc>>,
+    pub last_error_time: Option<DateTime<Utc>>,
+    pub last_error_message: Option<String>,
+    pub average_response_time_ms: f64,
+}
+
+impl GeckoApiStats {
+    pub fn record_request(&mut self, success: bool, response_time_ms: f64) {
+        let now = Utc::now();
+        self.total_requests += 1;
+        self.last_request_time = Some(now);
+
+        if success {
+            self.successful_requests += 1;
+            self.last_success_time = Some(now);
+        } else {
+            self.failed_requests += 1;
+            self.last_error_time = Some(now);
+        }
+
+        let previous_total = (self.total_requests - 1) as f64;
+        let accumulated = self.average_response_time_ms * previous_total;
+        self.average_response_time_ms =
+            (accumulated + response_time_ms).max(0.0) / (self.total_requests as f64);
+    }
+
+    pub fn record_cache_hit(&mut self) {
+        self.cache_hits += 1;
+    }
+
+    pub fn record_cache_miss(&mut self) {
+        self.cache_misses += 1;
+    }
+
+    pub fn record_failure_message(&mut self, message: &str) {
+        self.last_error_message = Some(message.to_string());
+        self.last_error_time = Some(Utc::now());
+    }
+
+    pub fn success_rate(&self) -> f64 {
+        if self.total_requests == 0 {
+            0.0
+        } else {
+            (self.successful_requests as f64 / self.total_requests as f64) * 100.0
+        }
+    }
+
+    pub fn cache_hit_rate(&self) -> f64 {
+        let total_cache = self.cache_hits + self.cache_misses;
+        if total_cache == 0 {
+            0.0
+        } else {
+            (self.cache_hits as f64 / total_cache as f64) * 100.0
+        }
+    }
+}
+
+static GECKO_API_STATS: Lazy<Mutex<GeckoApiStats>> =
+    Lazy::new(|| Mutex::new(GeckoApiStats::default()));
+
+#[inline]
+async fn record_gecko_cache_hit() {
+    let mut stats = GECKO_API_STATS.lock().await;
+    stats.record_cache_hit();
+}
+
+#[inline]
+async fn record_gecko_cache_miss() {
+    let mut stats = GECKO_API_STATS.lock().await;
+    stats.record_cache_miss();
+}
+
+#[inline]
+async fn record_gecko_request(success: bool, response_time_ms: f64, error_message: Option<&str>) {
+    let mut stats = GECKO_API_STATS.lock().await;
+    stats.record_request(success, response_time_ms);
+    if !success {
+        if let Some(message) = error_message {
+            stats.record_failure_message(message);
+        }
+    }
+}
+
+pub async fn get_geckoterminal_api_stats() -> GeckoApiStats {
+    GECKO_API_STATS.lock().await.clone()
+}
 
 // =============================================================================
 // DATA STRUCTURES
@@ -484,11 +580,29 @@ async fn cache_gecko_pools(token_address: &str, pools: &[GeckoTerminalPool]) {
     );
 }
 
+/// Return total and fresh GeckoTerminal pool cache entries.
+pub async fn get_pool_cache_stats() -> (usize, usize) {
+    let cache = GECKO_POOL_CACHE.read().await;
+    let total_entries = cache.len();
+    let now = Utc::now();
+
+    let fresh_entries = cache
+        .values()
+        .filter(|entry| {
+            let age = now.signed_duration_since(entry.cached_at).num_seconds();
+            age <= GECKO_POOL_CACHE_TTL_SECS
+        })
+        .count();
+
+    (total_entries, fresh_entries)
+}
+
 /// Fetch pools for a single token from GeckoTerminal
 pub async fn get_token_pools_from_geckoterminal(
     token_address: &str,
 ) -> Result<Vec<GeckoTerminalPool>, String> {
     if let Some(cached) = get_cached_gecko_pools(token_address).await {
+        record_gecko_cache_hit().await;
         if is_debug_api_enabled() {
             log(
                 LogTag::Api,
@@ -503,6 +617,8 @@ pub async fn get_token_pools_from_geckoterminal(
         return Ok(cached);
     }
 
+    record_gecko_cache_miss().await;
+
     if is_debug_api_enabled() {
         log(
             LogTag::Api,
@@ -514,6 +630,24 @@ pub async fn get_token_pools_from_geckoterminal(
         );
     }
 
+    let started = Instant::now();
+    let result = fetch_gecko_pools_uncached(token_address).await;
+    let elapsed_ms = started.elapsed().as_secs_f64() * 1_000.0;
+
+    match &result {
+        Ok(pools) => {
+            record_gecko_request(true, elapsed_ms, None).await;
+            cache_gecko_pools(token_address, pools).await;
+        }
+        Err(err) => {
+            record_gecko_request(false, elapsed_ms, Some(err)).await;
+        }
+    }
+
+    result
+}
+
+async fn fetch_gecko_pools_uncached(token_address: &str) -> Result<Vec<GeckoTerminalPool>, String> {
     // Apply strict rate limiting and get exclusive access
     let _permit = apply_rate_limit_and_concurrency_control().await?;
 
@@ -632,8 +766,6 @@ pub async fn get_token_pools_from_geckoterminal(
         );
     }
 
-    cache_gecko_pools(token_address, &pools).await;
-
     Ok(pools)
 }
 
@@ -670,6 +802,7 @@ pub async fn get_batch_token_pools_from_geckoterminal(
 
     for token_address in token_addresses.iter().take(max_batch) {
         if let Some(cached) = get_cached_gecko_pools(token_address).await {
+            record_gecko_cache_hit().await;
             if !cached.is_empty() {
                 result.pools.insert(token_address.clone(), cached.clone());
                 result.successful_tokens += 1;
@@ -1380,8 +1513,8 @@ pub async fn get_ohlcv_data_from_geckoterminal_range(
 /// Get rate limit information
 pub fn get_rate_limit_info() -> (usize, usize) {
     (
-        geckoterminal_rate_limit_per_minute(),
-        max_tokens_per_batch_config(),
+        get_geckoterminal_rate_limit_per_minute(),
+        get_geckoterminal_max_tokens_per_batch(),
     )
 }
 
@@ -1398,6 +1531,16 @@ pub async fn get_current_rate_limit_status() -> (usize, usize, Option<u64>) {
         .map(|d| d.as_millis() as u64);
 
     (current_calls, max_calls, reset_in_ms)
+}
+
+/// Expose the configured GeckoTerminal rate limit per minute.
+pub fn get_geckoterminal_rate_limit_per_minute() -> usize {
+    geckoterminal_rate_limit_per_minute()
+}
+
+/// Expose the configured GeckoTerminal max tokens per batch request.
+pub fn get_geckoterminal_max_tokens_per_batch() -> usize {
+    max_tokens_per_batch_config()
 }
 
 /// Acquire a GeckoTerminal API rate limit permit for external callers (e.g. OHLCV module)

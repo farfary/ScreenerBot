@@ -117,9 +117,11 @@ static TOKEN_CACHE: LazyLock<RwLock<HashMap<String, CachedTokenData>>> =
 
 /// Cache TTL in seconds (1 minute maximum for price data)
 const PRICE_CACHE_TTL_SECS: i64 = 60; // 1 minute TTL for all token data
+pub const PRICE_CACHE_TTL_SECONDS: i64 = PRICE_CACHE_TTL_SECS;
 
 /// Pool cache TTL in seconds (5 minutes for pool data)
 const POOL_CACHE_TTL_SECS: i64 = 300; // 5 minutes TTL for pool data
+pub const POOL_CACHE_TTL_SECONDS: i64 = POOL_CACHE_TTL_SECS;
 
 // =============================================================================
 // POOL CACHING SYSTEM (5 MINUTE TTL)
@@ -136,6 +138,24 @@ pub struct CachedPoolData {
 static POOL_CACHE: LazyLock<RwLock<HashMap<String, CachedPoolData>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
 
+#[inline]
+fn record_dex_cache_hit() {
+    if let Some(api) = GLOBAL_DEXSCREENER_API.get() {
+        if let Ok(mut guard) = api.try_lock() {
+            guard.stats.record_cache_hit();
+        }
+    }
+}
+
+#[inline]
+fn record_dex_cache_miss() {
+    if let Some(api) = GLOBAL_DEXSCREENER_API.get() {
+        if let Ok(mut guard) = api.try_lock() {
+            guard.stats.record_cache_miss();
+        }
+    }
+}
+
 // (Removed has_open_position – no position-aware logic)
 
 /// Get cached token data if available and not expired
@@ -150,6 +170,7 @@ async fn get_cached_token_data(mint: &str) -> Option<Token> {
         let ttl_seconds = PRICE_CACHE_TTL_SECS; // 1 minute for all price data
 
         if age_seconds < ttl_seconds {
+            record_dex_cache_hit();
             if is_debug_api_enabled() {
                 log(
                     LogTag::Api,
@@ -163,6 +184,7 @@ async fn get_cached_token_data(mint: &str) -> Option<Token> {
             return Some(cached_data.token.clone());
         } else {
             // Cache is expired, don't use it for price data
+            record_dex_cache_miss();
             if is_debug_api_enabled() {
                 log(
                     LogTag::Api,
@@ -174,6 +196,8 @@ async fn get_cached_token_data(mint: &str) -> Option<Token> {
                 );
             }
         }
+    } else {
+        record_dex_cache_miss();
     }
 
     None
@@ -190,6 +214,7 @@ async fn get_cached_pool_data(mint: &str) -> Option<Vec<TokenPair>> {
             .num_seconds();
 
         if cache_age < POOL_CACHE_TTL_SECS {
+            record_dex_cache_hit();
             if is_debug_api_enabled() {
                 log(
                     LogTag::Api,
@@ -203,19 +228,22 @@ async fn get_cached_pool_data(mint: &str) -> Option<Vec<TokenPair>> {
                 );
             }
             return Some(cached_data.pools.clone());
-        } else {
-            if is_debug_api_enabled() {
-                log(
-                    LogTag::Api,
-                    "POOL_CACHE_EXPIRED",
-                    &format!(
-                        "⏰ Pool cache expired for {} ({}s old)",
-                        &mint[..8],
-                        cache_age
-                    ),
-                );
-            }
         }
+
+        if is_debug_api_enabled() {
+            log(
+                LogTag::Api,
+                "POOL_CACHE_EXPIRED",
+                &format!(
+                    "⏰ Pool cache expired for {} ({}s old)",
+                    &mint[..8],
+                    cache_age
+                ),
+            );
+        }
+        record_dex_cache_miss();
+    } else {
+        record_dex_cache_miss();
     }
 
     None
@@ -1789,3 +1817,31 @@ pub async fn get_global_dexscreener_api() -> Result<Arc<Mutex<DexScreenerApi>>, 
 }
 
 // (global helper wrappers removed – callers must lock global API and call methods directly)
+
+/// Return the configured DexScreener rate limit (requests per minute).
+pub fn get_dexscreener_rate_limit_per_minute() -> usize {
+    dexscreener_rate_limit_per_minute()
+}
+
+/// Return the configured DexScreener discovery rate limit (requests per minute).
+pub fn get_dexscreener_discovery_rate_limit_per_minute() -> usize {
+    dexscreener_discovery_rate_limit_per_minute()
+}
+
+/// Return the configured maximum number of tokens per DexScreener batch call.
+pub fn get_dexscreener_max_tokens_per_api_call() -> usize {
+    max_tokens_per_api_call()
+}
+
+/// Snapshot the current DexScreener API statistics (best-effort).
+pub async fn get_dexscreener_api_stats() -> Option<ApiStats> {
+    let api = GLOBAL_DEXSCREENER_API.get()?;
+
+    match api.try_lock() {
+        Ok(guard) => Some(guard.get_stats()),
+        Err(_) => match timeout(Duration::from_millis(100), api.lock()).await {
+            Ok(mut guard) => Some(guard.get_stats()),
+            Err(_) => None,
+        },
+    }
+}
