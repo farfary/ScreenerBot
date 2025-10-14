@@ -584,25 +584,15 @@
       },
     };
 
-    const registerLifecycle = (registry) => {
-      try {
-        registry.register("status", lifecycle);
-      } catch (error) {
-        console.error("[Status] Failed to register lifecycle", error);
-      }
-    };
-
-    if (
-      window.PageRegistry &&
-      typeof window.PageRegistry.register === "function"
-    ) {
-      registerLifecycle(window.PageRegistry);
+    if (window.PageLifecycleRegistry) {
+      window.PageLifecycleRegistry.register("status", lifecycle);
     } else {
-      if (!Array.isArray(window.__pendingPageRegistrations)) {
+      if (!window.__pendingPageRegistrations) {
         window.__pendingPageRegistrations = [];
       }
-      window.__pendingPageRegistrations.push((registry) => {
-        registerLifecycle(registry);
+      window.__pendingPageRegistrations.push({
+        pageId: "status",
+        lifecycle: lifecycle,
       });
     }
 

@@ -4789,17 +4789,18 @@
     };
   }
 
-  function registerTokensPageLifecycle(registry) {
-    registry.register("tokens", createTokensPageLifecycle());
-  }
-
-  // Queue-based registration for PageLifecycleRegistry
-  if (window.PageRegistry) {
-    registerTokensPageLifecycle(window.PageRegistry);
-  } else {
-    window.__pendingPageRegistrations = window.__pendingPageRegistrations || [];
-    window.__pendingPageRegistrations.push((registry) =>
-      registerTokensPageLifecycle(registry)
+  if (window.PageLifecycleRegistry) {
+    window.PageLifecycleRegistry.register(
+      "tokens",
+      createTokensPageLifecycle()
     );
+  } else {
+    if (!window.__pendingPageRegistrations) {
+      window.__pendingPageRegistrations = [];
+    }
+    window.__pendingPageRegistrations.push({
+      pageId: "tokens",
+      lifecycle: createTokensPageLifecycle(),
+    });
   }
 </script>

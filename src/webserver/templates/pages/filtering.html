@@ -510,28 +510,6 @@
         }
       }
 
-      function registerCleanup() {
-        if (state.cleanupRegistered) {
-          return;
-        }
-        if (window.Router && typeof Router.registerCleanup === "function") {
-          Router.registerCleanup(() => {
-            teardown();
-          });
-          state.cleanupRegistered = true;
-        }
-      }
-
-      function teardown() {
-        if (state.fetchController) {
-          try {
-            state.fetchController.abort();
-          } catch (_) {}
-          state.fetchController = null;
-        }
-        state.cleanupRegistered = false;
-      }
-
       function formatLabel(fieldKey) {
         return fieldKey
           .split("_")
@@ -1189,13 +1167,11 @@
         updateButtons();
         updateCategoryBadges();
         renderSummary();
-        registerCleanup();
       }
 
       async function init() {
         ensureDom();
         registerEventHandlers();
-        registerCleanup();
         if (!state.initialized) {
           await loadData();
           state.initialized = true;
@@ -1207,18 +1183,99 @@
       return {
         init,
         ensureReady,
-        teardown,
       };
     })();
 
-    window.initFilteringPage = function () {
-      FilteringPage.init();
-    };
+    // ============================================================================
+    // PAGE LIFECYCLE REGISTRATION
+    // ============================================================================
 
-    window.ensureFilteringPageReady = function () {
-      FilteringPage.ensureReady();
-    };
+    function createFilteringPageLifecycle() {
+      let lifecycleContext = null;
 
-    FilteringPage.init();
+      return {
+        /**
+         * One-time initialization: bind event handlers
+         */
+        init(context) {
+          console.log("[Filtering] Lifecycle: init");
+          lifecycleContext = context;
+          FilteringPage.ensureDom();
+          FilteringPage.registerEventHandlers();
+        },
+
+        /**
+         * Activate: load data and render UI
+         */
+        async activate(context) {
+          console.log("[Filtering] Lifecycle: activate");
+          lifecycleContext = context;
+
+          if (!FilteringPage.state.initialized) {
+            await FilteringPage.loadData();
+            FilteringPage.state.initialized = true;
+          } else {
+            FilteringPage.ensureReady();
+          }
+        },
+
+        /**
+         * Deactivate: abort in-flight fetches
+         */
+        deactivate(context) {
+          console.log("[Filtering] Lifecycle: deactivate");
+
+          if (FilteringPage.state.fetchController) {
+            try {
+              FilteringPage.state.fetchController.abort();
+            } catch (_) {
+              /* no-op */
+            }
+            FilteringPage.state.fetchController = null;
+          }
+        },
+
+        /**
+         * Full cleanup: reset state
+         */
+        dispose(context) {
+          console.log("[Filtering] Lifecycle: dispose");
+
+          if (FilteringPage.state.fetchController) {
+            try {
+              FilteringPage.state.fetchController.abort();
+            } catch (_) {
+              /* no-op */
+            }
+            FilteringPage.state.fetchController = null;
+          }
+
+          FilteringPage.state.cleanupRegistered = false;
+          lifecycleContext = null;
+        },
+      };
+    }
+
+    // Expose methods for lifecycle to access
+    FilteringPage.ensureDom = ensureDom;
+    FilteringPage.registerEventHandlers = registerEventHandlers;
+    FilteringPage.loadData = loadData;
+    FilteringPage.ensureReady = ensureReady;
+    FilteringPage.state = state;
+
+    if (window.PageLifecycleRegistry) {
+      window.PageLifecycleRegistry.register(
+        "filtering",
+        createFilteringPageLifecycle()
+      );
+    } else {
+      if (!window.__pendingPageRegistrations) {
+        window.__pendingPageRegistrations = [];
+      }
+      window.__pendingPageRegistrations.push({
+        pageId: "filtering",
+        lifecycle: createFilteringPageLifecycle(),
+      });
+    }
   })();
 </script>

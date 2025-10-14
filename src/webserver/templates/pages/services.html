@@ -1000,20 +1000,16 @@
       }
     };
 
-    // Registration
-    function registerLifecycle(registry) {
-      console.log("[Services] Registering lifecycle");
-      registry.register("services", lifecycle);
-    }
-
-    if (window.PageRegistry) {
-      registerLifecycle(window.PageRegistry);
+    if (window.PageLifecycleRegistry) {
+      window.PageLifecycleRegistry.register("services", lifecycle);
     } else {
-      window.__pendingPageRegistrations =
-        window.__pendingPageRegistrations || [];
-      window.__pendingPageRegistrations.push((registry) =>
-        registerLifecycle(registry)
-      );
+      if (!window.__pendingPageRegistrations) {
+        window.__pendingPageRegistrations = [];
+      }
+      window.__pendingPageRegistrations.push({
+        pageId: "services",
+        lifecycle: lifecycle,
+      });
     }
   })();
 </script>

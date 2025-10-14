@@ -2213,8 +2213,10 @@
   // INITIALIZATION
   // =============================================================================
 
-  // Global init function for Router to call during SPA navigation
-  window.initConfigPage = async function () {
+  let configPageInitialized = false;
+  let diffModalCloseHandler = null;
+
+  async function initConfigPageInternal() {
     console.log("[Config] Initializing page");
 
     try {
@@ -2229,18 +2231,98 @@
     updateCategorySelectCounts();
     restoreToolbarState();
     updateDirtySummary();
+  }
 
-    // Close modal when clicking outside
-    if (!diffModalListenerAttached) {
-      document.addEventListener("click", (e) => {
-        if (e.target.id === "diffModal") {
-          closeDiffModal();
-        }
-      });
-      diffModalListenerAttached = true;
+  function attachDiffModalHandler() {
+    if (diffModalListenerAttached) return;
+
+    diffModalCloseHandler = (e) => {
+      if (e.target.id === "diffModal") {
+        closeDiffModal();
+      }
+    };
+    document.addEventListener("click", diffModalCloseHandler);
+    diffModalListenerAttached = true;
+  }
+
+  function removeDiffModalHandler() {
+    if (diffModalCloseHandler) {
+      document.removeEventListener("click", diffModalCloseHandler);
+      diffModalCloseHandler = null;
+      diffModalListenerAttached = false;
     }
-  };
+  }
 
-  // Execute initialization immediately (works for both initial load and SPA navigation)
-  initConfigPage();
+  // =============================================================================
+  // PAGE LIFECYCLE REGISTRATION
+  // =============================================================================
+
+  function createConfigPageLifecycle() {
+    let lifecycleContext = null;
+
+    return {
+      /**
+       * One-time initialization: attach keyboard shortcuts
+       */
+      init(context) {
+        console.log("[Config] Lifecycle: init");
+        lifecycleContext = context;
+        ensureSearchShortcut();
+      },
+
+      /**
+       * Activate: load metadata and render UI
+       */
+      async activate(context) {
+        console.log("[Config] Lifecycle: activate");
+        lifecycleContext = context;
+
+        if (!configPageInitialized) {
+          await initConfigPageInternal();
+          attachDiffModalHandler();
+          configPageInitialized = true;
+        } else {
+          // Re-render on return
+          renderAllSections();
+          updateCategorySelectCounts();
+          restoreToolbarState();
+          updateDirtySummary();
+        }
+      },
+
+      /**
+       * Deactivate: minimal cleanup (keep state)
+       */
+      deactivate(context) {
+        console.log("[Config] Lifecycle: deactivate");
+        // Keep state for quick return
+      },
+
+      /**
+       * Full cleanup: remove handlers, reset state
+       */
+      dispose(context) {
+        console.log("[Config] Lifecycle: dispose");
+
+        removeDiffModalHandler();
+        configPageInitialized = false;
+        lifecycleContext = null;
+      },
+    };
+  }
+
+  if (window.PageLifecycleRegistry) {
+    window.PageLifecycleRegistry.register(
+      "config",
+      createConfigPageLifecycle()
+    );
+  } else {
+    if (!window.__pendingPageRegistrations) {
+      window.__pendingPageRegistrations = [];
+    }
+    window.__pendingPageRegistrations.push({
+      pageId: "config",
+      lifecycle: createConfigPageLifecycle(),
+    });
+  }
 </script>

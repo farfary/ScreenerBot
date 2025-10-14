@@ -1001,71 +1001,6 @@ Loading...</pre
     console.log("[Events] Started polling every", baseInterval, "ms");
   }
 
-  function ensureEventsLifecycle() {
-    if (
-      window.Router &&
-      typeof Router.registerCleanup === "function" &&
-      !eventsLifecycleState.cleanupRegistered
-    ) {
-      Router.registerCleanup(() => {
-        teardownEventsPage();
-      });
-      eventsLifecycleState.cleanupRegistered = true;
-    }
-
-    if (
-      window.PollingManager &&
-      !eventsLifecycleState.intervalListener &&
-      typeof window.PollingManager.onChange === "function"
-    ) {
-      eventsLifecycleState.intervalListener = window.PollingManager.onChange(
-        () => {
-          if (!isEventsPaused()) {
-            startEventsPolling();
-          }
-        }
-      );
-    }
-
-    if (!eventsLifecycleState.statusIntervalId) {
-      const intervalId = setInterval(updateEventsLastUpdatedLabel, 30_000);
-      eventsLifecycleState.statusIntervalId = intervalId;
-      if (window.Router && typeof Router.trackInterval === "function") {
-        Router.trackInterval(intervalId);
-      }
-    }
-  }
-
-  function teardownEventsPage() {
-    stopEventsPolling();
-    if (eventsFetchState.headAbortController) {
-      eventsFetchState.headAbortController.abort();
-      eventsFetchState.headAbortController = null;
-    }
-    if (eventsFetchState.sinceAbortController) {
-      eventsFetchState.sinceAbortController.abort();
-      eventsFetchState.sinceAbortController = null;
-    }
-    eventsFetchState.headInFlight = false;
-    eventsFetchState.sinceInFlight = false;
-    if (
-      eventsLifecycleState.intervalListener &&
-      window.PollingManager &&
-      typeof window.PollingManager.removeListener === "function"
-    ) {
-      window.PollingManager.removeListener(
-        eventsLifecycleState.intervalListener
-      );
-      eventsLifecycleState.intervalListener = null;
-    }
-    eventsLifecycleState.cleanupRegistered = false;
-
-    if (eventsLifecycleState.statusIntervalId) {
-      clearInterval(eventsLifecycleState.statusIntervalId);
-      eventsLifecycleState.statusIntervalId = null;
-    }
-  }
-
   async function fetchEventsHead(options) {
     const opts = Object.assign(
       { message: null, limit: EVENTS_HEAD_LIMIT },
@@ -2591,20 +2526,158 @@ Loading...</pre
     }
   }
 
-  // Global init function for Router to call during SPA navigation
-  window.initEventsPage = async function () {
+  // =============================================================================
+  // PAGE LIFECYCLE REGISTRATION
+  // =============================================================================
+
+  let eventsPageInitialized = false;
+
+  async function initEventsPageInternal() {
     console.log("[Events] Initializing page");
     await refreshCategoryOptions();
     restoreSavedFilters();
     initializePauseState();
-    ensureEventsLifecycle();
     updateEventsLastUpdatedLabel();
-    requestEventsSnapshot("Loading latest events...");
-  };
+  }
 
-  // Execute initialization immediately (works for both initial load and SPA navigation)
-  window.initEventsPage().catch((err) => {
-    console.error("[Events] Failed to initialize events page", err);
-    Utils.showToast("⚠️ Failed to initialize events page", "error");
-  });
+  function createEventsPageLifecycle() {
+    let lifecycleContext = null;
+    let managedPoller = null;
+
+    return {
+      /**
+       * One-time initialization: minimal setup
+       */
+      init(context) {
+        console.log("[Events] Lifecycle: init");
+        lifecycleContext = context;
+      },
+
+      /**
+       * Activate: load data, start polling
+       */
+      async activate(context) {
+        console.log("[Events] Lifecycle: activate");
+        lifecycleContext = context;
+
+        if (!eventsPageInitialized) {
+          await initEventsPageInternal();
+          eventsPageInitialized = true;
+        } else {
+          restoreSavedFilters();
+          updateEventsLastUpdatedLabel();
+        }
+
+        // Start polling if not paused
+        if (!isEventsPaused()) {
+          startEventsPolling();
+        }
+
+        // Setup polling interval change listener
+        if (
+          window.PollingManager &&
+          !eventsLifecycleState.intervalListener &&
+          typeof window.PollingManager.onChange === "function"
+        ) {
+          eventsLifecycleState.intervalListener =
+            window.PollingManager.onChange(() => {
+              if (!isEventsPaused()) {
+                startEventsPolling();
+              }
+            });
+        }
+
+        // Setup status update interval
+        if (!eventsLifecycleState.statusIntervalId) {
+          const intervalId = setInterval(updateEventsLastUpdatedLabel, 30_000);
+          eventsLifecycleState.statusIntervalId = intervalId;
+          managedPoller = context.managePoller({
+            start: () => {},
+            stop: () => clearInterval(intervalId),
+            restart: () => {},
+          });
+        }
+
+        // Load initial data
+        requestEventsSnapshot("Loading latest events...");
+      },
+
+      /**
+       * Deactivate: stop polling, abort fetches
+       */
+      deactivate(context) {
+        console.log("[Events] Lifecycle: deactivate");
+
+        stopEventsPolling();
+
+        if (eventsFetchState.headAbortController) {
+          eventsFetchState.headAbortController.abort();
+          eventsFetchState.headAbortController = null;
+        }
+        if (eventsFetchState.sinceAbortController) {
+          eventsFetchState.sinceAbortController.abort();
+          eventsFetchState.sinceAbortController = null;
+        }
+        eventsFetchState.headInFlight = false;
+        eventsFetchState.sinceInFlight = false;
+      },
+
+      /**
+       * Full cleanup: remove listeners, clear intervals, reset state
+       */
+      dispose(context) {
+        console.log("[Events] Lifecycle: dispose");
+
+        stopEventsPolling();
+
+        if (eventsFetchState.headAbortController) {
+          eventsFetchState.headAbortController.abort();
+          eventsFetchState.headAbortController = null;
+        }
+        if (eventsFetchState.sinceAbortController) {
+          eventsFetchState.sinceAbortController.abort();
+          eventsFetchState.sinceAbortController = null;
+        }
+        eventsFetchState.headInFlight = false;
+        eventsFetchState.sinceInFlight = false;
+
+        if (
+          eventsLifecycleState.intervalListener &&
+          window.PollingManager &&
+          typeof window.PollingManager.removeListener === "function"
+        ) {
+          window.PollingManager.removeListener(
+            eventsLifecycleState.intervalListener
+          );
+          eventsLifecycleState.intervalListener = null;
+        }
+
+        eventsLifecycleState.cleanupRegistered = false;
+
+        if (eventsLifecycleState.statusIntervalId) {
+          clearInterval(eventsLifecycleState.statusIntervalId);
+          eventsLifecycleState.statusIntervalId = null;
+        }
+
+        managedPoller = null;
+        eventsPageInitialized = false;
+        lifecycleContext = null;
+      },
+    };
+  }
+
+  if (window.PageLifecycleRegistry) {
+    window.PageLifecycleRegistry.register(
+      "events",
+      createEventsPageLifecycle()
+    );
+  } else {
+    if (!window.__pendingPageRegistrations) {
+      window.__pendingPageRegistrations = [];
+    }
+    window.__pendingPageRegistrations.push({
+      pageId: "events",
+      lifecycle: createEventsPageLifecycle(),
+    });
+  }
 </script>

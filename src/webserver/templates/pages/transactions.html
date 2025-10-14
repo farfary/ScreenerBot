@@ -442,25 +442,9 @@
         label.title = Utils.formatTimestamp(date);
       }
 
-      function ensureLastUpdatedTicker() {
-        if (Lifecycle.statusIntervalId) return;
-        const intervalId = setInterval(updateLastUpdatedLabel, 30_000);
-        Lifecycle.statusIntervalId = intervalId;
-        if (window.Router && typeof Router.trackInterval === "function") {
-          Router.trackInterval(intervalId);
-        }
-      }
-
-      function clearLastUpdatedTicker() {
-        if (!Lifecycle.statusIntervalId) return;
-        clearInterval(Lifecycle.statusIntervalId);
-        Lifecycle.statusIntervalId = null;
-      }
-
       function markLastUpdated() {
         State.lastUpdatedAt = Date.now();
         updateLastUpdatedLabel();
-        ensureLastUpdatedTicker();
       }
 
       function updateSummaryCards(summary) {
@@ -611,32 +595,6 @@
             bootstrapCursorEl.innerHTML = "";
           }
         }
-      }
-
-      function registerLifecycleCleanup() {
-        if (
-          !window.Router ||
-          typeof Router.registerCleanup !== "function" ||
-          Lifecycle.cleanupRegistered
-        ) {
-          return;
-        }
-        Router.registerCleanup(() => {
-          teardownTransactionsPage();
-        });
-        Lifecycle.cleanupRegistered = true;
-      }
-
-      function teardownTransactionsPage() {
-        clearLastUpdatedTicker();
-        State.lastUpdatedAt = null;
-        updateLastUpdatedLabel();
-        if (State.scrollObserver) {
-          State.scrollObserver.disconnect();
-          State.scrollObserver = null;
-        }
-        State.scrollContainer = null;
-        Lifecycle.cleanupRegistered = false;
       }
 
       function renderRow(row) {
@@ -1016,8 +974,7 @@
       };
 
       const Lifecycle = {
-        statusIntervalId: null,
-        cleanupRegistered: false,
+        initialized: false,
       };
 
       async function loadInitial(options = {}) {
@@ -1031,7 +988,6 @@
         updateSummaryCards(null);
         State.lastUpdatedAt = null;
         updateLastUpdatedLabel();
-        clearLastUpdatedTicker();
         if (!reuseState || !State.filters) {
           State.filters = buildFilters();
           AppState.save("tx.filters", State.filters);
@@ -1167,85 +1123,127 @@
         }
       }
 
-      // Global init function for Router to call during SPA navigation
-      window.initTransactionsPage = function () {
-        console.log("[Transactions] Initializing page");
-        registerLifecycleCleanup();
-        updateLastUpdatedLabel();
-        initFilterDropdowns();
-        applySavedFilters();
-        updateFilterMeta();
-        loadInitial({ reuseState: true });
+      function createTransactionsPageLifecycle() {
+        return {
+          init() {
+            if (Lifecycle.initialized) return;
+            console.log("[Transactions] Initializing page (one-time)");
+            Lifecycle.initialized = true;
+          },
 
-        const applyBtn = document.getElementById("tx-apply-filters");
-        const resetBtn = document.getElementById("tx-reset-filters");
+          activate(context) {
+            console.log("[Transactions] Activating page");
 
-        if (applyBtn && !applyBtn.__listenerAttached) {
-          applyBtn.addEventListener("click", applyFilters);
-          applyBtn.__listenerAttached = true;
-        }
-        if (resetBtn && !resetBtn.__listenerAttached) {
-          resetBtn.addEventListener("click", resetFilters);
-          resetBtn.__listenerAttached = true;
-        }
+            updateLastUpdatedLabel();
+            initFilterDropdowns();
+            applySavedFilters();
+            updateFilterMeta();
+            loadInitial({ reuseState: true });
 
-        const toggleBtn = document.getElementById("tx-toggle-advanced");
-        if (toggleBtn && !toggleBtn.__listenerAttached) {
-          toggleBtn.addEventListener("click", toggleAdvancedPanel);
-          toggleBtn.__listenerAttached = true;
-        }
+            const applyBtn = document.getElementById("tx-apply-filters");
+            const resetBtn = document.getElementById("tx-reset-filters");
+            const toggleBtn = document.getElementById("tx-toggle-advanced");
+            const signatureInput = el("tx-filter-signature");
+            const signatureClear =
+              document.getElementById("tx-clear-signature");
 
-        const signatureInput = el("tx-filter-signature");
-        const signatureClear = document.getElementById("tx-clear-signature");
-        const updateSignatureClear = () => {
-          if (!signatureClear || !signatureInput) return;
-          if (signatureInput.value.trim().length > 0) {
-            signatureClear.removeAttribute("hidden");
-          } else {
-            signatureClear.setAttribute("hidden", "true");
-          }
+            const updateSignatureClear = () => {
+              if (!signatureClear || !signatureInput) return;
+              if (signatureInput.value.trim().length > 0) {
+                signatureClear.removeAttribute("hidden");
+              } else {
+                signatureClear.setAttribute("hidden", "true");
+              }
+            };
+
+            const signatureInputHandler = () => {
+              updateSignatureClear();
+              updateFilterMeta();
+            };
+
+            const signatureClearHandler = () => {
+              if (!signatureInput) return;
+              if (signatureInput.value === "") return;
+              signatureInput.value = "";
+              updateSignatureClear();
+              updateFilterMeta();
+              signatureInput.focus();
+            };
+
+            if (applyBtn) {
+              applyBtn.addEventListener("click", applyFilters);
+            }
+            if (resetBtn) {
+              resetBtn.addEventListener("click", resetFilters);
+            }
+            if (toggleBtn) {
+              toggleBtn.addEventListener("click", toggleAdvancedPanel);
+            }
+            if (signatureInput) {
+              signatureInput.addEventListener("input", signatureInputHandler);
+            }
+            if (signatureClear) {
+              signatureClear.addEventListener("click", signatureClearHandler);
+            }
+
+            updateSignatureClear();
+
+            [
+              "tx-filter-router",
+              "tx-filter-mint",
+              "tx-filter-min-sol",
+              "tx-filter-max-sol",
+              "tx-filter-from",
+              "tx-filter-to",
+            ].forEach((id) => {
+              const input = el(id);
+              if (input) {
+                input.addEventListener("input", updateFilterMeta);
+              }
+            });
+
+            context.managePoller(
+              "transactions-last-updated",
+              () => {
+                if (State.lastUpdatedAt) {
+                  updateLastUpdatedLabel();
+                }
+              },
+              1000
+            );
+          },
+
+          deactivate() {
+            console.log("[Transactions] Deactivating page");
+          },
+
+          dispose() {
+            console.log("[Transactions] Disposing page");
+            State.lastUpdatedAt = null;
+            updateLastUpdatedLabel();
+            if (State.scrollObserver) {
+              State.scrollObserver.disconnect();
+              State.scrollObserver = null;
+            }
+            State.scrollContainer = null;
+          },
         };
+      }
 
-        if (signatureInput && !signatureInput.__metaListenerAttached) {
-          signatureInput.addEventListener("input", () => {
-            updateSignatureClear();
-            updateFilterMeta();
-          });
-          signatureInput.__metaListenerAttached = true;
+      if (window.PageLifecycleRegistry) {
+        window.PageLifecycleRegistry.register(
+          "transactions",
+          createTransactionsPageLifecycle()
+        );
+      } else {
+        if (!window.__pendingPageRegistrations) {
+          window.__pendingPageRegistrations = [];
         }
-
-        if (signatureClear && !signatureClear.__listenerAttached) {
-          signatureClear.addEventListener("click", () => {
-            if (!signatureInput) return;
-            if (signatureInput.value === "") return;
-            signatureInput.value = "";
-            updateSignatureClear();
-            updateFilterMeta();
-            signatureInput.focus();
-          });
-          signatureClear.__listenerAttached = true;
-        }
-
-        updateSignatureClear();
-
-        [
-          "tx-filter-router",
-          "tx-filter-mint",
-          "tx-filter-min-sol",
-          "tx-filter-max-sol",
-          "tx-filter-from",
-          "tx-filter-to",
-        ].forEach((id) => {
-          const input = el(id);
-          if (input && !input.__metaListenerAttached) {
-            input.addEventListener("input", updateFilterMeta);
-            input.__metaListenerAttached = true;
-          }
+        window.__pendingPageRegistrations.push({
+          pageId: "transactions",
+          lifecycle: createTransactionsPageLifecycle(),
         });
-      };
-
-      // Execute initialization immediately (works for both initial load and SPA navigation)
-      window.initTransactionsPage();
+      }
     })();
   </script>
 </div>

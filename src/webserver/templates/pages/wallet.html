@@ -1264,20 +1264,6 @@
       }
     }
 
-    function registerCleanup() {
-      Router.registerCleanup(() => {
-        if (State.poller) {
-          State.poller.cleanup();
-          State.poller = null;
-        }
-        if (State.themeObserver) {
-          State.themeObserver.disconnect();
-          State.themeObserver = null;
-        }
-        clearChart();
-      });
-    }
-
     function observeTheme() {
       if (State.themeObserver) return;
       State.themeObserver = new MutationObserver(applyChartTheme);
@@ -1287,40 +1273,66 @@
       });
     }
 
-    // Expose sub-tabs functions to window scope for Router
     window.initWalletSubTabs = initWalletSubTabs;
     window.ensureWalletSubTabsVisible = ensureWalletSubTabsVisible;
 
-    // Resume function for when page is restored from cache
-    window.ensureWalletPageReady = function () {
-      console.log("[Wallet] Resuming cached page");
-      ensureWalletSubTabsVisible();
-      startPolling();
-      // Trigger chart refresh if on analysis tab
-      if (State.activeTab === "analysis") {
-        requestAnimationFrame(() => updateChart(State.dailyFlows));
-      }
-    };
+    function createWalletPageLifecycle() {
+      return {
+        init() {
+          console.log("[Wallet] Initializing page (one-time)");
+          observeTheme();
+          initWalletSubTabs();
+          bindRangeButtons();
+          bindSearch();
+          bindSort();
+        },
 
-    window.initWalletPage = function () {
-      console.log("[Wallet] Initializing page");
-      registerCleanup();
-      observeTheme();
-      initWalletSubTabs();
-      ensureWalletSubTabsVisible();
-      bindRangeButtons();
-      bindSearch();
-      bindSort();
-      restorePreferences();
-      renderTokens();
-      startPolling();
-    };
+        activate(context) {
+          console.log("[Wallet] Activating page");
+          ensureWalletSubTabsVisible();
+          restorePreferences();
+          renderTokens();
+          startPolling();
 
-    if (document.readyState !== "loading") {
-      window.initWalletPage();
+          if (State.activeTab === "analysis") {
+            requestAnimationFrame(() => updateChart(State.dailyFlows));
+          }
+        },
+
+        deactivate() {
+          console.log("[Wallet] Deactivating page");
+          if (State.poller) {
+            State.poller.pause();
+          }
+        },
+
+        dispose() {
+          console.log("[Wallet] Disposing page");
+          if (State.poller) {
+            State.poller.cleanup();
+            State.poller = null;
+          }
+          if (State.themeObserver) {
+            State.themeObserver.disconnect();
+            State.themeObserver = null;
+          }
+          clearChart();
+        },
+      };
+    }
+
+    if (window.PageLifecycleRegistry) {
+      window.PageLifecycleRegistry.register(
+        "wallet",
+        createWalletPageLifecycle()
+      );
     } else {
-      document.addEventListener("DOMContentLoaded", window.initWalletPage, {
-        once: true,
+      if (!window.__pendingPageRegistrations) {
+        window.__pendingPageRegistrations = [];
+      }
+      window.__pendingPageRegistrations.push({
+        pageId: "wallet",
+        lifecycle: createWalletPageLifecycle(),
       });
     }
   })();
