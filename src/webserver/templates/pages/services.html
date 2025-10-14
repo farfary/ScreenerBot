@@ -223,6 +223,7 @@
 <script>
   (function () {
     const controller = {
+      context: null,
       servicesData: null,
       sortKey: "priority",
       sortDir: "asc",
@@ -233,131 +234,29 @@
       abortController: null,
       lastErrorMessage: null,
       isActive: false,
-      cleanupRegistered: false,
       poller: null,
 
-      initialize() {
-        console.log("[Services] Initializing controller");
-        if (this.isActive) {
-          console.log(
-            "[Services] Controller already active; rendering snapshot"
-          );
-          this.renderServicesTable();
-          return;
-        }
+      // Lifecycle now handles initialization and cleanup
 
-        this.isActive = true;
-        this.servicesData = null;
-        this.hasInitialSnapshot = false;
-        this.lastErrorMessage = null;
-        this.isFetching = false;
-        this.abortInFlight();
-        this.setLoading("Loading services...");
-        this.bindToolbarEventsOnce();
-        this.bindSortHandlersOnce();
-
+      createAbortController() {
         if (
-          window.Router &&
-          typeof Router.registerCleanup === "function" &&
-          !this.cleanupRegistered
+          this.context &&
+          typeof this.context.createAbortController === "function"
         ) {
-          Router.registerCleanup(() => this.reset());
-          this.cleanupRegistered = true;
+          return this.context.createAbortController();
         }
-
-        this.fetchServices({ reason: "initial" });
-        this.ensurePoller();
-      },
-
-      reset() {
-        console.log("[Services] Resetting controller");
-        this.isActive = false;
-        if (this.poller && typeof this.poller.cleanup === "function") {
-          this.poller.cleanup();
-        }
-        this.poller = null;
-        this.abortInFlight();
-        this.servicesData = null;
-        this.hasInitialSnapshot = false;
-        this.lastErrorMessage = null;
-        this.cleanupRegistered = false;
-      },
-
-      ensurePoller() {
-        if (this.poller) {
-          if (typeof this.poller.start === "function") {
-            this.poller.start({ silent: true });
-          }
-          return;
-        }
-
-        if (
-          window.PagePoller &&
-          typeof window.PagePoller.create === "function"
-        ) {
-          this.poller = window.PagePoller.create({
-            label: "Services",
-            onPoll: () => this.fetchServices({ reason: "poll" }),
-          });
-          this.poller.start();
-          return;
-        }
-
-        console.warn(
-          "[Services] PagePoller unavailable; using fallback polling logic"
-        );
-
-        const startFallback = () => {
-          const intervalProvider =
-            window.PollingManager &&
-            typeof window.PollingManager.getInterval === "function"
-              ? window.PollingManager.getInterval.bind(window.PollingManager)
-              : () => 1000;
-
-          const interval = Number(intervalProvider()) || 1000;
-          const id = setInterval(() => {
-            this.fetchServices({ reason: "poll" });
-          }, interval);
-
-          if (window.Router && typeof Router.trackInterval === "function") {
-            Router.trackInterval(id);
-          }
-
-          console.log("[Services] (fallback) Started polling", interval, "ms");
-          return { id, intervalProvider };
-        };
-
-        let fallback = startFallback();
-
-        this.poller = {
-          start: () => {
-            if (fallback?.id) {
-              clearInterval(fallback.id);
-            }
-            fallback = startFallback();
-          },
-          stop: () => {
-            if (fallback?.id) {
-              clearInterval(fallback.id);
-              fallback.id = null;
-              console.log("[Services] (fallback) Stopped polling");
-            }
-          },
-          cleanup: () => {
-            if (fallback?.id) {
-              clearInterval(fallback.id);
-              fallback.id = null;
-            }
-          },
-        };
+        return new AbortController();
       },
 
       abortInFlight() {
         if (this.abortController) {
-          this.abortController.abort();
+          try {
+            this.abortController.abort();
+          } catch (error) {
+            console.warn("[Services] Failed to abort request", error);
+          }
           this.abortController = null;
           this.isFetching = false;
-          console.log("[Services] Aborted in-flight request");
         }
       },
 
@@ -368,7 +267,6 @@
 
         if (this.isFetching) {
           if (reason === "poll") {
-            console.log("[Services] Skipping poll; request already in flight");
             return;
           }
           this.abortInFlight();
@@ -378,62 +276,82 @@
           this.setLoading("Loading services...");
         }
 
+        const controller = this.createAbortController();
+        if (this.abortController && this.abortController !== controller) {
+          try {
+            this.abortController.abort();
+          } catch (error) {
+            console.warn("[Services] Failed to abort prior request", error);
+          }
+        }
+
+        this.abortController = controller;
+        this.isFetching = true;
+
         try {
-          this.isFetching = true;
-          this.abortController = new AbortController();
-          console.log(`[Services] Fetching overview (${reason})`);
           const response = await fetch("/api/services/overview", {
-            signal: this.abortController.signal,
+            signal: controller.signal,
             headers: { "X-Requested-With": "fetch" },
           });
+
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
           }
+
           const data = await response.json();
           this.servicesData = data;
           this.hasInitialSnapshot = true;
           this.lastErrorMessage = null;
           this.renderServicesTable();
         } catch (error) {
-          if (error.name === "AbortError") {
-            console.log("[Services] Fetch aborted");
+          if (error?.name === "AbortError") {
             return;
           }
+
           console.error("[Services] Failed to fetch services:", error);
+
           if (!this.hasInitialSnapshot) {
             this.lastErrorMessage = `Failed to load services: ${error.message}`;
             this.showError(this.lastErrorMessage);
           } else {
             this.lastErrorMessage = error.message;
+            if (window.Utils && typeof Utils.showToast === "function") {
+              Utils.showToast("⚠️ Failed to refresh services", "warning");
+            }
           }
         } finally {
+          if (this.abortController === controller) {
+            this.abortController = null;
+          }
           this.isFetching = false;
-          this.abortController = null;
         }
       },
 
       handleManualRefresh() {
         if (!this.isActive) {
-          console.log("[Services] Manual refresh ignored; controller inactive");
           return;
         }
-        console.log("[Services] Manual refresh requested");
+
         if (this.poller && typeof this.poller.stop === "function") {
           this.poller.stop();
         }
+
         this.abortInFlight();
         this.hasInitialSnapshot = false;
         this.servicesData = null;
         this.setLoading("Refreshing services...");
-        this.fetchServices({ reason: "manual" }).finally(() => {
-          if (this.isActive) {
-            if (this.poller && typeof this.poller.start === "function") {
+
+        this.fetchServices({ reason: "manual", showSpinner: true }).finally(
+          () => {
+            if (
+              this.isActive &&
+              this.poller &&
+              typeof this.poller.start === "function"
+            ) {
               this.poller.start({ silent: true });
-            } else {
-              this.ensurePoller();
             }
           }
-        });
+        );
       },
 
       setLoading(message = "Loading services...") {
@@ -757,40 +675,7 @@
         this.sortBound = true;
       },
 
-      safeFormatDuration(value) {
-        if (window.Utils && typeof Utils.formatDuration === "function") {
-          return Utils.formatDuration(value || 0);
-        }
-        const nanos = Number(value) || 0;
-        return `${nanos}ns`;
-      },
-
-      safeFormatUptime(value) {
-        if (window.Utils && typeof Utils.formatUptime === "function") {
-          return Utils.formatUptime(value || 0, { style: "detailed" });
-        }
-        const seconds = Math.max(0, Math.floor(Number(value) || 0));
-        return `${seconds}s`;
-      },
-
-      safeFormatBytes(value) {
-        if (window.Utils && typeof Utils.formatBytes === "function") {
-          return Utils.formatBytes(value || 0);
-        }
-        const bytes = Math.max(0, Number(value) || 0);
-        return `${bytes} B`;
-      },
-
-      sanitizeNumber(value, precision = null) {
-        const num = Number(value);
-        if (!Number.isFinite(num)) {
-          return null;
-        }
-        if (precision == null) {
-          return num;
-        }
-        return Number(num.toFixed(precision));
-      },
+      // Removed duplicate format wrappers - use Utils directly
 
       getActivityInfo(metrics = {}) {
         const poll = Number(metrics.total_poll_duration_ns) || 0;
@@ -820,12 +705,14 @@
         }
         const metrics = this.servicesData.services[0]?.metrics || {};
         return {
-          cpu_percent: this.sanitizeNumber(metrics.process_cpu_percent, 2),
+          cpu_percent: Number.isFinite(metrics.process_cpu_percent)
+            ? Number(metrics.process_cpu_percent.toFixed(2))
+            : null,
           memory_bytes:
             metrics.process_memory_bytes != null
               ? Number(metrics.process_memory_bytes)
               : null,
-          memory_human: this.safeFormatBytes(metrics.process_memory_bytes),
+          memory_human: Utils.formatBytes(metrics.process_memory_bytes || 0),
         };
       },
 
@@ -873,52 +760,57 @@
                 : 0;
 
             const detailedMetrics = {
-              process_cpu_percent: this.sanitizeNumber(
-                metrics.process_cpu_percent,
-                2
-              ),
+              process_cpu_percent: Number.isFinite(metrics.process_cpu_percent)
+                ? Number(metrics.process_cpu_percent.toFixed(2))
+                : null,
               process_memory_bytes:
                 metrics.process_memory_bytes != null
                   ? Number(metrics.process_memory_bytes)
                   : null,
-              process_memory_human: this.safeFormatBytes(
-                metrics.process_memory_bytes
+              process_memory_human: Utils.formatBytes(
+                metrics.process_memory_bytes || 0
               ),
               task_count: metrics.task_count ?? 0,
               total_polls: metrics.total_polls ?? 0,
               total_poll_duration_ns: metrics.total_poll_duration_ns ?? 0,
               mean_poll_duration_ns: metrics.mean_poll_duration_ns ?? 0,
-              mean_poll_duration_human: this.safeFormatDuration(
-                metrics.mean_poll_duration_ns
+              mean_poll_duration_human: Utils.formatDuration(
+                metrics.mean_poll_duration_ns || 0
               ),
               total_idle_duration_ns: metrics.total_idle_duration_ns ?? 0,
               mean_idle_duration_ns: metrics.mean_idle_duration_ns ?? 0,
-              mean_idle_duration_human: this.safeFormatDuration(
-                metrics.mean_idle_duration_ns
+              mean_idle_duration_human: Utils.formatDuration(
+                metrics.mean_idle_duration_ns || 0
               ),
               last_cycle_duration_ns: metrics.last_cycle_duration_ns ?? 0,
-              last_cycle_duration_human: this.safeFormatDuration(
-                metrics.last_cycle_duration_ns
+              last_cycle_duration_human: Utils.formatDuration(
+                metrics.last_cycle_duration_ns || 0
               ),
               avg_cycle_duration_ns: metrics.avg_cycle_duration_ns ?? 0,
-              avg_cycle_duration_human: this.safeFormatDuration(
-                metrics.avg_cycle_duration_ns
+              avg_cycle_duration_human: Utils.formatDuration(
+                metrics.avg_cycle_duration_ns || 0
               ),
-              cycles_per_second: this.sanitizeNumber(
-                metrics.cycles_per_second,
-                4
-              ),
-              activity_percent: this.sanitizeNumber(activity.percent, 2),
+              cycles_per_second: Number.isFinite(metrics.cycles_per_second)
+                ? Number(metrics.cycles_per_second.toFixed(4))
+                : null,
+              activity_percent: Number.isFinite(activity.percent)
+                ? Number(activity.percent.toFixed(2))
+                : null,
               activity_status: activity.status,
               uptime_seconds: uptimeSeconds || null,
-              uptime_human: this.safeFormatUptime(uptimeSeconds),
+              uptime_human: Utils.formatUptime(uptimeSeconds || 0, {
+                style: "detailed",
+              }),
               operations_total: metrics.operations_total ?? 0,
-              operations_per_second: this.sanitizeNumber(
-                metrics.operations_per_second,
-                4
-              ),
+              operations_per_second: Number.isFinite(
+                metrics.operations_per_second
+              )
+                ? Number(metrics.operations_per_second.toFixed(4))
+                : null,
               errors_total: metrics.errors_total ?? 0,
-              polls_per_second: this.sanitizeNumber(pollsPerSecond, 4),
+              polls_per_second: Number.isFinite(pollsPerSecond)
+                ? Number(pollsPerSecond.toFixed(4))
+                : null,
               custom_metrics: metrics.custom_metrics,
             };
 
@@ -935,7 +827,9 @@
                 service.uptime_seconds != null
                   ? Number(service.uptime_seconds)
                   : null,
-              uptime_human: this.safeFormatUptime(service.uptime_seconds),
+              uptime_human: Utils.formatUptime(service.uptime_seconds || 0, {
+                style: "detailed",
+              }),
               dependencies: Array.isArray(service.dependencies)
                 ? service.dependencies.slice()
                 : [],
@@ -1030,28 +924,96 @@
       },
     };
 
-    // Manual refresh function
+    // Lifecycle implementation
+    const lifecycle = {
+      init(context) {
+        console.log("[Services] Lifecycle init");
+        controller.context = context;
+        controller.bindToolbarEventsOnce();
+        controller.bindSortHandlersOnce();
+      },
+
+      activate(context) {
+        console.log("[Services] Lifecycle activate");
+        controller.context = context;
+        controller.isActive = true;
+
+        if (!controller.hasInitialSnapshot) {
+          controller.setLoading("Loading services...");
+        }
+
+        if (!controller.poller) {
+          const poller = PagePoller.create({
+            label: "Services",
+            onPoll: () => controller.fetchServices({ reason: "poll" }),
+          });
+          controller.poller = context.managePoller(poller);
+        }
+
+        controller.poller.start();
+
+        if (!controller.hasInitialSnapshot) {
+          controller.fetchServices({ reason: "initial" });
+        } else if (controller.servicesData) {
+          controller.renderServicesTable();
+        }
+      },
+
+      deactivate(context) {
+        console.log("[Services] Lifecycle deactivate");
+        controller.isActive = false;
+        if (controller.poller && typeof controller.poller.stop === "function") {
+          controller.poller.stop();
+        }
+        if (controller.abortController) {
+          try {
+            controller.abortController.abort();
+          } catch (error) {
+            console.warn("[Services] Failed to abort on deactivate", error);
+          }
+          controller.abortController = null;
+        }
+      },
+
+      dispose(context) {
+        console.log("[Services] Lifecycle dispose");
+        controller.isActive = false;
+        if (controller.abortController) {
+          try {
+            controller.abortController.abort();
+          } catch (error) {
+            console.warn("[Services] Failed to abort on dispose", error);
+          }
+          controller.abortController = null;
+        }
+        controller.poller = null;
+        controller.servicesData = null;
+        controller.hasInitialSnapshot = false;
+        controller.lastErrorMessage = null;
+      },
+    };
+
+    // Manual refresh function for inline onclick
     window.refreshServices = function () {
-      if (controller) {
+      if (controller && controller.isActive) {
         controller.handleManualRefresh();
       }
     };
 
-    window.ensureServicesPageReady = function () {
-      if (controller) {
-        controller.initialize();
-      }
-    };
+    // Registration
+    function registerLifecycle(registry) {
+      console.log("[Services] Registering lifecycle");
+      registry.register("services", lifecycle);
+    }
 
-    // Page initialization function called by Router
-    window.initServicesPage = function () {
-      console.log("[Services] Page initialized");
-      controller.initialize();
-    };
-
-    // Fallback for non-router usage
-    if (!window.Router) {
-      controller.initialize();
+    if (window.PageRegistry) {
+      registerLifecycle(window.PageRegistry);
+    } else {
+      window.__pendingPageRegistrations =
+        window.__pendingPageRegistrations || [];
+      window.__pendingPageRegistrations.push((registry) =>
+        registerLifecycle(registry)
+      );
     }
   })();
 </script>
