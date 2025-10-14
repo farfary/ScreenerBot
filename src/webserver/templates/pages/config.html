@@ -63,138 +63,16 @@
   }
 
   .config-toolbar {
-    display: flex;
-    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .config-toolbar .toolbar-actions {
+    gap: 8px;
     flex-wrap: wrap;
-    align-items: center;
-    padding: 14px 18px;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(15, 17, 30, 0.85);
-    box-shadow: 0 18px 40px rgba(5, 8, 20, 0.35);
   }
 
-  .search-box {
-    flex: 1;
-    min-width: 200px;
-    position: relative;
-  }
-
-  .search-box input {
-    width: 100%;
-    padding: 6px 12px 6px 32px;
-    background: rgba(20, 20, 35, 0.8);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 6px;
-    color: white;
-    font-size: 13px;
-  }
-
-  .search-box::before {
-    content: "🔍";
-    position: absolute;
-    left: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    opacity: 0.6;
-  }
-
-  .search-box .search-clear {
-    position: absolute;
-    right: 6px;
-    top: 50%;
-    transform: translateY(-50%);
-    background: none;
-    border: none;
-    color: rgba(255, 255, 255, 0.5);
-    font-size: 14px;
-    cursor: pointer;
-    padding: 2px 4px;
-    transition: color 0.15s ease;
-  }
-
-  .search-box .search-clear:hover,
-  .search-box .search-clear:focus {
-    color: rgba(255, 255, 255, 0.8);
-    outline: none;
-  }
-
-  .toolbar-btn {
-    padding: 6px 14px;
-    background: rgba(30, 30, 50, 0.8);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 6px;
-    color: white;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .toolbar-btn:hover {
-    background: rgba(40, 40, 60, 0.9);
-    border-color: rgba(255, 255, 255, 0.3);
-  }
-
-  .toolbar-btn.primary {
-    background: linear-gradient(135deg, #1565c0 0%, #0f4c81 100%);
-    border: none;
-  }
-
-  .toolbar-btn.success {
-    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-    border: none;
-  }
-
-  .toolbar-btn.danger {
-    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-    border: none;
-  }
-
-  .toolbar-select {
-    padding: 6px 32px 6px 10px;
-    background: rgba(20, 20, 35, 0.8);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 6px;
-    color: white;
-    font-size: 12px;
-    min-width: 160px;
-    cursor: pointer;
-  }
-
-  .toolbar-select:focus {
-    outline: none;
-    border-color: rgba(21, 101, 192, 0.6);
-    box-shadow: 0 0 0 2px rgba(21, 101, 192, 0.25);
-  }
-
-  .filter-chips {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-    align-items: center;
-  }
-
-  .chip {
-    padding: 4px 10px;
-    background: rgba(20, 20, 35, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    font-size: 11px;
-    cursor: pointer;
-    transition: all 0.15s;
-    line-height: 1.3;
-    color: rgba(255, 255, 255, 0.8);
-  }
-
-  .chip.active {
-    background: rgba(21, 101, 192, 0.3);
-    border-color: #1565c0;
-    color: white;
-  }
-
-  .chip[data-filter="modified"] {
-    border-color: rgba(56, 239, 125, 0.6);
+  .config-toolbar .toolbar-actions .btn {
+    white-space: nowrap;
   }
 
   .toolbar-meta {
@@ -704,115 +582,102 @@
 
 <!-- DYNAMIC CONFIG UI -->
 <div class="config-page">
-  <div class="config-toolbar">
-    <div class="search-box">
-      <input
-        type="text"
-        id="searchInput"
-        placeholder="Search configurations..."
-        title="Search configurations (/ to focus)"
-        oninput="filterConfigs(this.value)"
-      />
-      <button
-        type="button"
-        class="search-clear"
-        onclick="clearConfigSearch()"
-        aria-label="Clear search"
-      >
-        ✕
-      </button>
+  <div class="config-toolbar toolbar">
+    <div class="toolbar-row">
+      <div class="toolbar-field toolbar-field--grow">
+        <label class="toolbar-label" for="searchInput">Search</label>
+        <div class="toolbar-search">
+          <span class="toolbar-search__icon" aria-hidden="true">🔍</span>
+          <input
+            type="text"
+            id="searchInput"
+            class="toolbar-input"
+            placeholder="Search configurations..."
+            title="Search configurations (/ to focus)"
+            autocomplete="off"
+          />
+          <button
+            type="button"
+            id="configSearchClear"
+            class="toolbar-search__clear"
+            aria-label="Clear search"
+            hidden
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+      <div class="toolbar-field toolbar-field--compact">
+        <label class="toolbar-label" for="sectionJump">Jump To</label>
+        <select
+          id="sectionJump"
+          class="toolbar-select"
+          onchange="jumpToSection(this.value)"
+        >
+          <option value="">Jump to section...</option>
+        </select>
+      </div>
+      <div class="toolbar-field toolbar-field--compact">
+        <label class="toolbar-label" for="configCategory">Category</label>
+        <select
+          id="configCategory"
+          class="toolbar-select"
+          onchange="filterByCategory(this.value)"
+        >
+          <option value="all" data-label="All">All</option>
+          <option value="general" data-label="General">General</option>
+          <option value="advanced" data-label="Advanced">Advanced</option>
+          <option value="developer" data-label="Developer">Developer</option>
+          <option value="modified" data-label="Modified">Modified</option>
+        </select>
+      </div>
+      <div class="toolbar-actions">
+        <button
+          type="button"
+          class="btn"
+          onclick="toggleAllSections(true)"
+          title="Expand all sections"
+        >
+          ⬇️ Expand
+        </button>
+        <button
+          type="button"
+          class="btn"
+          onclick="toggleAllSections(false)"
+          title="Collapse all sections"
+        >
+          ⬆️ Collapse
+        </button>
+        <button
+          class="btn btn-secondary"
+          type="button"
+          onclick="exportConfig()"
+        >
+          📥 Export
+        </button>
+        <button
+          class="btn btn-secondary"
+          type="button"
+          onclick="document.getElementById('importFile').click()"
+        >
+          📤 Import
+        </button>
+        <input
+          type="file"
+          id="importFile"
+          style="display: none"
+          accept=".json"
+          onchange="importConfig(this.files[0])"
+        />
+        <button class="btn btn-primary" type="button" onclick="reloadConfig()">
+          🔄 Reload
+        </button>
+        <button class="btn btn-danger" type="button" onclick="resetConfig()">
+          ⚠️ Reset
+        </button>
+        <button class="btn" type="button" onclick="viewDiff()">📋 Diff</button>
+      </div>
     </div>
-    <select
-      id="sectionJump"
-      class="toolbar-select"
-      onchange="jumpToSection(this.value)"
-    >
-      <option value="">Jump to section...</option>
-    </select>
-    <button
-      type="button"
-      class="toolbar-btn"
-      onclick="toggleAllSections(true)"
-      title="Expand all sections"
-    >
-      ⬇️ Expand
-    </button>
-    <button
-      type="button"
-      class="toolbar-btn"
-      onclick="toggleAllSections(false)"
-      title="Collapse all sections"
-    >
-      ⬆️ Collapse
-    </button>
-    <div class="filter-chips" id="categoryChips">
-      <div
-        class="chip active"
-        data-filter="all"
-        data-label="All"
-        onclick="filterByCategory('all')"
-      >
-        All
-      </div>
-      <div
-        class="chip"
-        data-filter="general"
-        data-label="General"
-        onclick="filterByCategory('general')"
-      >
-        General
-      </div>
-      <div
-        class="chip"
-        data-filter="advanced"
-        data-label="Advanced"
-        onclick="filterByCategory('advanced')"
-      >
-        Advanced
-      </div>
-      <div
-        class="chip"
-        data-filter="developer"
-        data-label="Developer"
-        onclick="filterByCategory('developer')"
-      >
-        Developer
-      </div>
-      <div
-        class="chip"
-        data-filter="modified"
-        data-label="Modified"
-        onclick="filterByCategory('modified')"
-      >
-        Modified
-      </div>
-    </div>
-    <button class="toolbar-btn success" type="button" onclick="exportConfig()">
-      📥 Export
-    </button>
-    <button
-      class="toolbar-btn primary"
-      type="button"
-      onclick="document.getElementById('importFile').click()"
-    >
-      📤 Import
-    </button>
-    <input
-      type="file"
-      id="importFile"
-      style="display: none"
-      accept=".json"
-      onchange="importConfig(this.files[0])"
-    />
-    <button class="toolbar-btn primary" type="button" onclick="reloadConfig()">
-      🔄 Reload
-    </button>
-    <button class="toolbar-btn danger" type="button" onclick="resetConfig()">
-      ⚠️ Reset
-    </button>
-    <button class="toolbar-btn" type="button" onclick="viewDiff()">
-      📋 Diff
-    </button>
   </div>
 
   <div class="toolbar-meta">
@@ -1010,12 +875,26 @@
     const searchInput = document.getElementById("searchInput");
     if (searchInput && !searchInput.dataset.enhanced) {
       searchInput.dataset.enhanced = "true";
+      searchInput.addEventListener("input", (event) => {
+        updateConfigSearchClearVisibility();
+        filterConfigs(event.target.value);
+      });
       searchInput.addEventListener("keydown", (event) => {
         if (event.key === "Escape") {
           event.stopPropagation();
           clearConfigSearch();
           searchInput.blur();
         }
+      });
+    }
+
+    const searchClear = document.getElementById("configSearchClear");
+    if (searchClear && !searchClear.dataset.enhanced) {
+      searchClear.dataset.enhanced = "true";
+      searchClear.addEventListener("click", () => {
+        clearConfigSearch();
+        const input = document.getElementById("searchInput");
+        if (input) input.focus();
       });
     }
 
@@ -1028,6 +907,8 @@
         }
       });
     }
+
+    updateConfigSearchClearVisibility();
   }
 
   function populateSectionJump() {
@@ -1152,24 +1033,39 @@
     }
   }
 
-  function setCategoryChipActive(level) {
-    const chips = document.querySelectorAll("#categoryChips .chip");
-    chips.forEach((chip) => {
-      chip.classList.toggle("active", chip.dataset.filter === level);
-      if (!chip.dataset.label) {
-        chip.dataset.label = chip.textContent.trim();
-      }
-    });
-    currentCategoryFilter = level;
+  function setCategorySelectValue(level) {
+    const select = document.getElementById("configCategory");
+    if (!select) return;
+    const validValues = new Set(
+      Array.from(select.options).map((option) => option.value || "all")
+    );
+    const nextValue = validValues.has(level) ? level : "all";
+    select.value = nextValue;
+    currentCategoryFilter = nextValue;
+  }
+
+  function updateConfigSearchClearVisibility() {
+    const searchInput = document.getElementById("searchInput");
+    const clearBtn = document.getElementById("configSearchClear");
+    if (!clearBtn) return;
+    if (searchInput && searchInput.value.trim().length > 0) {
+      clearBtn.removeAttribute("hidden");
+    } else {
+      clearBtn.setAttribute("hidden", "true");
+    }
   }
 
   function clearConfigSearch() {
     const searchInput = document.getElementById("searchInput");
     if (!searchInput) return;
-    if (searchInput.value === "") return;
+    if (searchInput.value === "") {
+      updateConfigSearchClearVisibility();
+      return;
+    }
 
     searchInput.value = "";
     window.sessionStorage.removeItem(STORAGE_KEYS.search);
+    updateConfigSearchClearVisibility();
     filterConfigs("");
   }
 
@@ -1178,18 +1074,23 @@
       window.sessionStorage.removeItem("config.impact");
     }
 
-    let savedCategory =
-      window.sessionStorage.getItem(STORAGE_KEYS.category) || "all";
-    if (
-      !document.querySelector(
-        `#categoryChips .chip[data-filter="${savedCategory}"]`
-      )
-    ) {
-      window.sessionStorage.removeItem(STORAGE_KEYS.category);
-      savedCategory = "all";
-    }
+    const categorySelect = document.getElementById("configCategory");
+    if (categorySelect) {
+      let savedCategory =
+        window.sessionStorage.getItem(STORAGE_KEYS.category) || "all";
+      const validCategories = new Set(
+        Array.from(categorySelect.options).map(
+          (option) => option.value || "all"
+        )
+      );
 
-    setCategoryChipActive(savedCategory);
+      if (!validCategories.has(savedCategory)) {
+        window.sessionStorage.removeItem(STORAGE_KEYS.category);
+        savedCategory = "all";
+      }
+
+      setCategorySelectValue(savedCategory);
+    }
 
     const searchInput = document.getElementById("searchInput");
     const savedSearch =
@@ -1219,9 +1120,9 @@
     }
   }
 
-  function updateCategoryChipCounts() {
-    const chipsContainer = document.getElementById("categoryChips");
-    if (!chipsContainer) return;
+  function updateCategorySelectCounts() {
+    const select = document.getElementById("configCategory");
+    if (!select) return;
 
     const counts = {
       all: 0,
@@ -1244,13 +1145,12 @@
 
     TOTAL_FIELD_COUNT = counts.all;
 
-    chipsContainer.querySelectorAll(".chip").forEach((chip) => {
-      const filterKey = chip.dataset.filter;
-      if (!filterKey) return;
-      const baseLabel = chip.dataset.label || chip.textContent.trim();
-      const total = counts[filterKey] ?? 0;
-      chip.dataset.label = baseLabel;
-      chip.textContent = `${baseLabel} (${total})`;
+    Array.from(select.options).forEach((option) => {
+      const filterKey = option.value || "all";
+      if (!(filterKey in counts)) return;
+      const baseLabel = option.dataset.label || option.textContent.trim();
+      option.dataset.label = baseLabel;
+      option.textContent = `${baseLabel} (${counts[filterKey] ?? 0})`;
     });
   }
 
@@ -1269,7 +1169,7 @@
     dirtySummaryRaf = window.requestAnimationFrame(() => {
       dirtySummaryRaf = null;
       updateDirtySummary();
-      updateCategoryChipCounts();
+      updateCategorySelectCounts();
     });
   }
 
@@ -1970,12 +1870,16 @@
   }
 
   function filterByCategory(filterKey) {
+    const select = document.getElementById("configCategory");
     let categoryKey = filterKey || "all";
-    if (
-      !document.querySelector(
-        `#categoryChips .chip[data-filter="${categoryKey}"]`
-      )
-    ) {
+    if (select) {
+      const validValues = new Set(
+        Array.from(select.options).map((option) => option.value || "all")
+      );
+      if (!validValues.has(categoryKey)) {
+        categoryKey = "all";
+      }
+    } else {
       categoryKey = "all";
     }
 
@@ -1985,7 +1889,7 @@
       window.sessionStorage.setItem(STORAGE_KEYS.category, categoryKey);
     }
 
-    setCategoryChipActive(categoryKey);
+    setCategorySelectValue(categoryKey);
 
     const searchInput = document.getElementById("searchInput");
     const currentQuery = searchInput ? searchInput.value : "";
@@ -2322,7 +2226,7 @@
     renderAllSections();
     populateSectionJump();
     initializeToolbarEnhancements();
-    updateCategoryChipCounts();
+    updateCategorySelectCounts();
     restoreToolbarState();
     updateDirtySummary();
 

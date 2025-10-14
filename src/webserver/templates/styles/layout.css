@@ -193,19 +193,18 @@
 
 /* Toolbar container (third row for action buttons) */
 .toolbar-container {
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-  padding: 8px 10px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  display: none;
+  padding: 12px 20px 0;
+  background: transparent;
+  border-bottom: none;
   flex: 0 0 auto;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
 }
 
 .toolbar-container .spacer {
-  flex: 1;
-  min-width: 10px;
+  display: none;
 }
 
 /* VIEWPORT - The single scroll region for content */

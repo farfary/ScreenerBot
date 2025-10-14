@@ -1,148 +1,23 @@
 <div class="page-table">
   <style>
     .transactions-toolbar {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
       margin-bottom: 16px;
-      padding: 12px;
-      border: 1px solid var(--border-color);
-      border-radius: 10px;
-      background: var(--bg-card);
-    }
-
-    .transactions-toolbar .toolbar-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px 16px;
-      align-items: center;
-    }
-
-    .transactions-toolbar .toolbar-row-head {
-      justify-content: space-between;
-    }
-
-    .transactions-toolbar .toolbar-title-block {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      min-width: 200px;
-    }
-
-    .transactions-toolbar .toolbar-title {
-      font-weight: 600;
-      color: var(--text-primary);
-    }
-
-    .transactions-toolbar .toolbar-meta {
-      color: var(--text-muted);
-      font-size: 0.85em;
     }
 
     .transactions-toolbar .toolbar-actions {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
       gap: 10px;
-      margin-left: auto;
     }
 
-    .transactions-toolbar .filter-row {
-      align-items: flex-start;
+    .transactions-toolbar .toolbar-row--filters {
+      align-items: flex-end;
     }
 
-    .transactions-toolbar .filter-section {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      min-width: 160px;
-    }
-
-    .transactions-toolbar .filter-section.stretch {
-      flex: 1 1 240px;
-    }
-
-    .transactions-toolbar .filter-label {
-      font-size: 0.75em;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--text-muted);
-    }
-
-    .transactions-toolbar .filter-chip-group {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-
-    .transactions-toolbar .filter-chip {
-      padding: 4px 10px;
-      border: 1px solid var(--border-color);
-      border-radius: 999px;
-      background: var(--bg-primary);
-      color: var(--text-secondary);
-      font-size: 0.75em;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .transactions-toolbar .filter-chip.active {
-      background: var(--link-color);
-      border-color: var(--link-color);
-      color: #fff;
-    }
-
-    .transactions-toolbar .filter-chip:not(.active):hover,
-    .transactions-toolbar .filter-chip:not(.active):focus {
-      border-color: var(--link-color);
-      color: var(--link-color);
-      outline: none;
-    }
-
-    .transactions-toolbar .filter-input {
-      display: flex;
-      align-items: center;
-      background: var(--bg-primary);
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      overflow: hidden;
-    }
-
-    .transactions-toolbar .filter-input input {
-      flex: 1;
-      border: none;
-      background: transparent;
-      padding: 6px 10px;
-      color: var(--text-primary);
-    }
-
-    .transactions-toolbar .filter-input .input-clear {
-      border: none;
-      background: transparent;
-      color: var(--text-muted);
-      padding: 0 10px;
-      cursor: pointer;
-      font-size: 0.9em;
-    }
-
-    .transactions-toolbar .filter-input .input-clear:hover,
-    .transactions-toolbar .filter-input .input-clear:focus {
-      color: var(--text-primary);
+    .transactions-toolbar .toolbar-row--filters .toolbar-field--grow {
+      min-width: 280px;
     }
 
     .transactions-toolbar .advanced-toggle {
       justify-content: flex-start;
-    }
-
-    .transactions-toolbar .btn-ghost {
-      background: transparent;
-      color: var(--text-secondary);
-    }
-
-    .transactions-toolbar .advanced-panel[data-expanded="false"] {
-      display: none;
     }
 
     .transactions-toolbar .advanced-panel {
@@ -150,14 +25,21 @@
       padding-top: 12px;
     }
 
+    .transactions-toolbar .advanced-panel[data-expanded="true"] {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: flex-end;
+    }
+
+    .transactions-toolbar .advanced-panel[data-expanded="false"] {
+      display: none;
+    }
+
     .transactions-toolbar .date-range-inputs {
       display: flex;
       align-items: center;
       gap: 8px;
-    }
-
-    .transactions-toolbar .date-range-inputs input {
-      width: 180px;
     }
 
     .transactions-toolbar .range-separator {
@@ -167,18 +49,18 @@
 
     .transactions-summary-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 12px;
-      margin-bottom: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
     }
 
     .transactions-summary-card {
       display: flex;
       flex-direction: column;
-      gap: 6px;
-      padding: 12px;
+      gap: 4px;
+      padding: 10px 12px;
       border: 1px solid var(--border-color);
-      border-radius: 10px;
+      border-radius: 8px;
       background: var(--bg-card);
     }
 
@@ -201,7 +83,7 @@
         "Courier New",
         monospace
       );
-      font-size: 1.2em;
+      font-size: 1.05em;
       color: var(--text-primary);
     }
 
@@ -283,13 +165,13 @@
     }
   </style>
   <div class="toolbar transactions-toolbar">
-    <div class="toolbar-row toolbar-row-head">
+    <div class="toolbar-row toolbar-row--head">
       <div class="toolbar-title-block">
         <span class="toolbar-title">💱 Transactions</span>
         <span id="tx-summary" class="toolbar-meta"></span>
+        <span id="tx-last-updated" class="toolbar-meta">Last update —</span>
       </div>
       <div class="toolbar-actions">
-        <span id="tx-last-updated" class="toolbar-meta">Last update —</span>
         <button id="tx-apply-filters" class="btn btn-primary" type="button">
           Apply Filters
         </button>
@@ -297,102 +179,62 @@
       </div>
     </div>
 
-    <div class="toolbar-row filter-row">
-      <div class="filter-section">
-        <span class="filter-label">Type</span>
-        <div
-          class="filter-chip-group"
-          data-filter-group="type"
-          data-multi="true"
-        >
-          <button class="filter-chip active" data-value="all" type="button">
-            All
-          </button>
-          <button class="filter-chip" data-value="buy" type="button">
-            Buy
-          </button>
-          <button class="filter-chip" data-value="sell" type="button">
-            Sell
-          </button>
-          <button class="filter-chip" data-value="swap" type="button">
-            Swap
-          </button>
-          <button class="filter-chip" data-value="transfer" type="button">
-            Transfer
-          </button>
-          <button class="filter-chip" data-value="ata" type="button">
-            ATA
-          </button>
-          <button class="filter-chip" data-value="failed" type="button">
-            Failed
-          </button>
-          <button class="filter-chip" data-value="unknown" type="button">
-            Unknown
-          </button>
-        </div>
-      </div>
-
-      <div class="filter-section">
-        <span class="filter-label">Direction</span>
-        <div class="filter-chip-group" data-filter-group="direction">
-          <button class="filter-chip active" data-value="all" type="button">
-            All
-          </button>
-          <button class="filter-chip" data-value="Incoming" type="button">
-            Incoming
-          </button>
-          <button class="filter-chip" data-value="Outgoing" type="button">
-            Outgoing
-          </button>
-          <button class="filter-chip" data-value="Internal" type="button">
-            Internal
-          </button>
-          <button class="filter-chip" data-value="Unknown" type="button">
-            Unknown
-          </button>
-        </div>
-      </div>
-
-      <div class="filter-section">
-        <span class="filter-label">Status</span>
-        <div class="filter-chip-group" data-filter-group="status">
-          <button class="filter-chip active" data-value="all" type="button">
-            All
-          </button>
-          <button class="filter-chip" data-value="Pending" type="button">
-            Pending
-          </button>
-          <button class="filter-chip" data-value="Confirmed" type="button">
-            Confirmed
-          </button>
-          <button class="filter-chip" data-value="Finalized" type="button">
-            Finalized
-          </button>
-          <button class="filter-chip" data-value="Failed" type="button">
-            Failed
-          </button>
-        </div>
-      </div>
-
-      <div class="filter-section stretch">
-        <span class="filter-label">Signature</span>
-        <div class="filter-input">
+    <div class="toolbar-row toolbar-row--filters">
+      <div class="toolbar-field toolbar-field--grow">
+        <label class="toolbar-label" for="tx-filter-signature">Signature</label>
+        <div class="toolbar-search">
+          <span class="toolbar-search__icon" aria-hidden="true">🔍</span>
           <input
             type="text"
             id="tx-filter-signature"
+            class="toolbar-input"
             placeholder="Signature contains..."
             autocomplete="off"
           />
           <button
-            class="input-clear"
+            class="toolbar-search__clear input-clear"
             type="button"
             id="tx-clear-signature"
             title="Clear signature filter"
             aria-label="Clear signature filter"
+            hidden
           >
             ✕
           </button>
         </div>
+      </div>
+      <div class="toolbar-field toolbar-field--compact">
+        <label class="toolbar-label" for="tx-filter-type">Type</label>
+        <select id="tx-filter-type" class="toolbar-select">
+          <option value="all">All types</option>
+          <option value="buy">Buy</option>
+          <option value="sell">Sell</option>
+          <option value="swap">Swap</option>
+          <option value="transfer">Transfer</option>
+          <option value="ata">ATA</option>
+          <option value="failed">Failed</option>
+          <option value="unknown">Unknown</option>
+        </select>
+      </div>
+      <div class="toolbar-field toolbar-field--compact">
+        <label class="toolbar-label" for="tx-filter-direction">Direction</label>
+        <select id="tx-filter-direction" class="toolbar-select">
+          <option value="all">All directions</option>
+          <option value="Incoming">Incoming</option>
+          <option value="Outgoing">Outgoing</option>
+          <option value="Internal">Internal</option>
+          <option value="Unknown">Unknown</option>
+        </select>
+      </div>
+      <div class="toolbar-field toolbar-field--compact">
+        <label class="toolbar-label" for="tx-filter-status">Status</label>
+        <select id="tx-filter-status" class="toolbar-select">
+          <option value="all">All statuses</option>
+          <option value="Pending">Pending</option>
+          <option value="Confirmed">Confirmed</option>
+          <option value="Finalized">Finalized</option>
+          <option value="Failed">Failed</option>
+        </select>
       </div>
     </div>
 
@@ -408,47 +250,59 @@
       id="tx-advanced-filters"
       data-expanded="false"
     >
-      <div class="filter-section">
-        <span class="filter-label">Router</span>
+      <div class="toolbar-field toolbar-field--compact">
+        <label class="toolbar-label" for="tx-filter-router">Router</label>
         <input
           type="text"
           id="tx-filter-router"
+          class="toolbar-input"
           placeholder="Router (jupiter, raydium...)"
           autocomplete="off"
         />
       </div>
-      <div class="filter-section">
-        <span class="filter-label">Token Mint</span>
+      <div class="toolbar-field toolbar-field--compact">
+        <label class="toolbar-label" for="tx-filter-mint">Token Mint</label>
         <input
           type="text"
           id="tx-filter-mint"
+          class="toolbar-input"
           placeholder="Token mint..."
           autocomplete="off"
         />
       </div>
-      <div class="filter-section date-range">
-        <span class="filter-label">Time Range</span>
+      <div class="toolbar-field toolbar-field--compact date-range">
+        <span class="toolbar-label">Time Range</span>
         <div class="date-range-inputs">
-          <input type="datetime-local" id="tx-filter-from" />
+          <input
+            type="datetime-local"
+            id="tx-filter-from"
+            class="toolbar-input"
+          />
           <span class="range-separator">→</span>
-          <input type="datetime-local" id="tx-filter-to" />
+          <input
+            type="datetime-local"
+            id="tx-filter-to"
+            class="toolbar-input"
+          />
         </div>
       </div>
-      <div class="filter-section">
-        <span class="filter-label">Min SOL Δ</span>
+      <div class="toolbar-field toolbar-field--compact">
+        <label class="toolbar-label" for="tx-filter-min-sol">Min SOL Δ</label>
         <input
           type="number"
           step="0.0001"
           id="tx-filter-min-sol"
+          class="toolbar-input"
           placeholder="Min SOL"
         />
       </div>
-      <div class="filter-section">
-        <span class="filter-label">Max SOL Δ</span>
+      <div class="toolbar-field toolbar-field--compact">
+        <label class="toolbar-label" for="tx-filter-max-sol">Max SOL Δ</label>
         <input
           type="number"
           step="0.0001"
           id="tx-filter-max-sol"
+          class="toolbar-input"
           placeholder="Max SOL"
         />
       </div>
@@ -956,135 +810,57 @@
         return tr;
       }
 
-      function getChipGroups() {
-        return qsa(".filter-chip-group");
+      function getTypeFilterValues() {
+        const select = el("tx-filter-type");
+        if (!select) return [];
+        const value = select.value || "all";
+        return value === "all" ? [] : [value];
       }
 
-      function setChipActive(btn, active) {
-        if (!btn) return;
-        btn.classList.toggle("active", !!active);
-        btn.setAttribute("aria-pressed", !!active ? "true" : "false");
-      }
-
-      function resetGroupToAll(group) {
-        if (!group) return;
-        const buttons = qsa(".filter-chip", group);
-        buttons.forEach((btn) => {
-          const isAll = btn.dataset.value === "all";
-          setChipActive(btn, isAll);
-        });
-      }
-
-      function handleMultiChip(group, target) {
-        const value = target.dataset.value;
-        const buttons = qsa(".filter-chip", group);
-        const allButton = buttons.find((btn) => btn.dataset.value === "all");
-
-        if (value === "all") {
-          resetGroupToAll(group);
-          return;
-        }
-
-        const nowActive = !target.classList.contains("active");
-        setChipActive(target, nowActive);
-
-        if (nowActive) {
-          if (allButton) setChipActive(allButton, false);
-        } else {
-          const stillActive = buttons.some(
-            (btn) => btn !== allButton && btn.classList.contains("active")
-          );
-          if (!stillActive) {
-            resetGroupToAll(group);
-          }
-        }
-      }
-
-      function handleSingleChip(group, target) {
-        const buttons = qsa(".filter-chip", group);
-        buttons.forEach((btn) => setChipActive(btn, btn === target));
-      }
-
-      function initChipGroups() {
-        getChipGroups().forEach((group) => {
-          const isMulti = group.dataset.multi === "true";
-          qsa(".filter-chip", group).forEach((btn) => {
-            if (!btn.dataset.value) return;
-            btn.setAttribute(
-              "aria-pressed",
-              btn.classList.contains("active") ? "true" : "false"
-            );
-            if (btn.__chipListenerAttached) return;
-            btn.addEventListener("click", () => {
-              if (isMulti) {
-                handleMultiChip(group, btn);
-              } else {
-                handleSingleChip(group, btn);
-              }
-              updateFilterMeta();
-            });
-            btn.__chipListenerAttached = true;
-          });
-        });
-      }
-
-      function getGroupValues(groupName) {
-        const group = qs(
-          `.filter-chip-group[data-filter-group="${groupName}"]`
+      function setTypeFilterValues(values) {
+        const select = el("tx-filter-type");
+        if (!select) return;
+        const candidate =
+          Array.isArray(values) && values.length > 0 ? values[0] : "all";
+        const hasOption = Array.from(select.options).some(
+          (opt) => opt.value === candidate
         );
-        if (!group) return groupName === "type" ? [] : null;
-        const isMulti = group.dataset.multi === "true";
-        const activeButtons = qsa(".filter-chip.active", group).map(
-          (btn) => btn.dataset.value
-        );
-        if (isMulti) {
-          return activeButtons.includes("all") ? [] : activeButtons;
-        }
-        const value = activeButtons[0] || "all";
+        select.value = hasOption ? candidate : "all";
+      }
+
+      function getSelectValue(id) {
+        const select = el(id);
+        if (!select) return null;
+        const value = select.value || "all";
         return value === "all" ? null : value;
       }
 
-      function setGroupValues(groupName, values) {
-        const group = qs(
-          `.filter-chip-group[data-filter-group="${groupName}"]`
+      function setSelectValue(id, value) {
+        const select = el(id);
+        if (!select) return;
+        const normalized = value ?? "all";
+        const hasOption = Array.from(select.options).some(
+          (opt) => opt.value === normalized
         );
-        if (!group) return;
-        const isMulti = group.dataset.multi === "true";
-        const buttons = qsa(".filter-chip", group);
-        if (isMulti) {
-          const normalized = Array.isArray(values)
-            ? values.filter(Boolean)
-            : [];
-          const valueSet = new Set(normalized);
-          buttons.forEach((btn) => {
-            const val = btn.dataset.value;
-            if (val === "all") {
-              setChipActive(btn, valueSet.size === 0);
-            } else {
-              setChipActive(btn, valueSet.size > 0 ? valueSet.has(val) : false);
+        select.value = hasOption ? normalized : "all";
+      }
+
+      function initFilterDropdowns() {
+        ["tx-filter-type", "tx-filter-direction", "tx-filter-status"].forEach(
+          (id) => {
+            const select = el(id);
+            if (select && !select.__listenerAttached) {
+              select.addEventListener("change", updateFilterMeta);
+              select.__listenerAttached = true;
             }
-          });
-          const anyActive = buttons.some(
-            (btn) =>
-              btn.dataset.value !== "all" && btn.classList.contains("active")
-          );
-          if (!anyActive) resetGroupToAll(group);
-        } else {
-          const normalized = values || "all";
-          buttons.forEach((btn) => {
-            const shouldActive = btn.dataset.value === normalized;
-            setChipActive(btn, shouldActive);
-          });
-          if (!buttons.some((btn) => btn.classList.contains("active"))) {
-            resetGroupToAll(group);
           }
-        }
+        );
       }
 
       function buildFilters() {
-        const selectedTypes = getGroupValues("type");
-        const direction = getGroupValues("direction");
-        const status = getGroupValues("status");
+        const selectedTypes = getTypeFilterValues();
+        const direction = getSelectValue("tx-filter-direction");
+        const status = getSelectValue("tx-filter-status");
         const router = textFromInput("tx-filter-router");
         const mint = textFromInput("tx-filter-mint");
         const signature = textFromInput("tx-filter-signature");
@@ -1145,9 +921,9 @@
       function applySavedFilters() {
         const savedFilters = AppState.load("tx.filters", null);
         if (savedFilters) {
-          setGroupValues("type", savedFilters.types || []);
-          setGroupValues("direction", savedFilters.direction || null);
-          setGroupValues("status", savedFilters.status || null);
+          setTypeFilterValues(savedFilters.types || []);
+          setSelectValue("tx-filter-direction", savedFilters.direction);
+          setSelectValue("tx-filter-status", savedFilters.status);
           el("tx-filter-router").value = savedFilters.router || "";
           el("tx-filter-mint").value = savedFilters.mint || "";
           el("tx-filter-signature").value = savedFilters.signature || "";
@@ -1456,11 +1232,9 @@
       }
 
       function resetFilters() {
-        resetGroupToAll(qs('.filter-chip-group[data-filter-group="type"]'));
-        resetGroupToAll(
-          qs('.filter-chip-group[data-filter-group="direction"]')
-        );
-        resetGroupToAll(qs('.filter-chip-group[data-filter-group="status"]'));
+        setTypeFilterValues([]);
+        setSelectValue("tx-filter-direction", null);
+        setSelectValue("tx-filter-status", null);
         [
           "tx-filter-router",
           "tx-filter-mint",
@@ -1472,6 +1246,10 @@
         el("tx-filter-to").value = "";
         AppState.save("tx.filters", null);
         AppState.save("tx.ui", { advancedOpen: false });
+        const signatureClearBtn = document.getElementById("tx-clear-signature");
+        if (signatureClearBtn) {
+          signatureClearBtn.setAttribute("hidden", "true");
+        }
         setAdvancedPanel(false);
         applyFilters();
       }
@@ -1488,7 +1266,7 @@
         console.log("[Transactions] Initializing page");
         registerLifecycleCleanup();
         updateLastUpdatedLabel();
-        initChipGroups();
+        initFilterDropdowns();
         applySavedFilters();
         updateFilterMeta();
         loadInitial({ reuseState: true });
@@ -1511,19 +1289,42 @@
           toggleBtn.__listenerAttached = true;
         }
 
+        const signatureInput = el("tx-filter-signature");
         const signatureClear = document.getElementById("tx-clear-signature");
+        const updateSignatureClear = () => {
+          if (!signatureClear || !signatureInput) return;
+          if (signatureInput.value.trim().length > 0) {
+            signatureClear.removeAttribute("hidden");
+          } else {
+            signatureClear.setAttribute("hidden", "true");
+          }
+        };
+
+        if (signatureInput && !signatureInput.__metaListenerAttached) {
+          signatureInput.addEventListener("input", () => {
+            updateSignatureClear();
+            updateFilterMeta();
+          });
+          signatureInput.__metaListenerAttached = true;
+        }
+
         if (signatureClear && !signatureClear.__listenerAttached) {
           signatureClear.addEventListener("click", () => {
-            el("tx-filter-signature").value = "";
+            if (!signatureInput) return;
+            if (signatureInput.value === "") return;
+            signatureInput.value = "";
+            updateSignatureClear();
             updateFilterMeta();
+            signatureInput.focus();
           });
           signatureClear.__listenerAttached = true;
         }
 
+        updateSignatureClear();
+
         [
           "tx-filter-router",
           "tx-filter-mint",
-          "tx-filter-signature",
           "tx-filter-min-sol",
           "tx-filter-max-sol",
           "tx-filter-from",

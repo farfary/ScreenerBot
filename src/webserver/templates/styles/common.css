@@ -164,23 +164,6 @@
   min-height: 0;
 }
 
-/* Toolbar component (reusable) */
-.toolbar {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-  padding: 6px 8px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  background: var(--bg-secondary);
-}
-
-.toolbar .spacer {
-  flex: 1;
-  min-width: 10px;
-}
-
 /* LEGACY SUPPORT (to be removed after migration) */
 .page-section {
   display: flex;

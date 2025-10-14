@@ -2428,10 +2428,19 @@
 
     if (needsInit) {
       initTokensToolbar();
-    } else {
-      const searchInput = toolbarContainer.querySelector("#searchInput");
-      if (searchInput) {
-        searchInput.value = tokensState.searchTerm;
+    }
+
+    const searchInput = toolbarContainer.querySelector("#searchInput");
+    if (searchInput) {
+      searchInput.value = tokensState.searchTerm;
+    }
+
+    const clearBtn = toolbarContainer.querySelector("#tokensSearchClear");
+    if (clearBtn) {
+      if (searchInput && searchInput.value.trim().length > 0) {
+        clearBtn.removeAttribute("hidden");
+      } else {
+        clearBtn.setAttribute("hidden", "true");
       }
     }
 
@@ -2486,30 +2495,94 @@
     if (!toolbarContainer) return;
 
     toolbarContainer.innerHTML = `
-                <input
-                    type="text"
-                    id="searchInput"
-                    placeholder="Search by symbol or mint..."
-                    style="flex: 1; max-width: 300px; padding: 6px 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9em; background: var(--bg-primary); color: var(--text-primary);"
-                >
-                <div class="spacer"></div>
-                <span id="tokenCount" style="color: var(--text-secondary); font-size: 0.9em; font-weight: 500;">Loading...</span>
-        <button id="tokensColumnsBtn" class="btn btn-secondary" style="padding: 6px 12px;">
-          📐 Columns
-        </button>
-                <button id="tokensRefreshBtn" class="btn btn-primary" style="padding: 6px 12px;">
-                    🔄 Refresh
-                </button>
-                <button id="tokensExportBtn" class="btn btn-secondary" style="padding: 6px 12px;">
-                    📥 Export
-                </button>
-            `;
+      <div class="toolbar tokens-toolbar">
+        <div class="toolbar-row">
+          <div class="toolbar-field toolbar-field--grow">
+            <label class="toolbar-label" for="searchInput">Search</label>
+            <div class="toolbar-search">
+              <span class="toolbar-search__icon" aria-hidden="true">🔍</span>
+              <input
+                type="text"
+                id="searchInput"
+                class="toolbar-input"
+                placeholder="Search by symbol or mint..."
+                autocomplete="off"
+              />
+              <button
+                type="button"
+                id="tokensSearchClear"
+                class="toolbar-search__clear"
+                aria-label="Clear search"
+                hidden
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+          <div
+            id="tokenCount"
+            class="toolbar-status"
+            role="status"
+            aria-live="polite"
+          >
+            Loading...
+          </div>
+          <div class="toolbar-actions">
+            <button id="tokensColumnsBtn" class="btn btn-secondary" type="button">
+              📐 Columns
+            </button>
+            <button id="tokensRefreshBtn" class="btn btn-primary" type="button">
+              🔄 Refresh
+            </button>
+            <button id="tokensExportBtn" class="btn btn-secondary" type="button">
+              📥 Export
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
     toolbarContainer.style.display = "flex";
 
     const searchInput = toolbarContainer.querySelector("#searchInput");
+    const clearBtn = toolbarContainer.querySelector("#tokensSearchClear");
+
     if (searchInput) {
+      const updateClearVisibility = () => {
+        if (!clearBtn) return;
+        if (searchInput.value.trim().length > 0) {
+          clearBtn.removeAttribute("hidden");
+        } else {
+          clearBtn.setAttribute("hidden", "true");
+        }
+      };
+
       searchInput.value = tokensState.searchTerm;
-      searchInput.addEventListener("input", handleSearchInput);
+      updateClearVisibility();
+
+      searchInput.addEventListener("input", (event) => {
+        updateClearVisibility();
+        handleSearchInput(event);
+      });
+
+      searchInput.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        if (searchInput.value === "") return;
+        searchInput.value = "";
+        updateClearVisibility();
+        handleSearchInput({ target: searchInput });
+        searchInput.focus();
+        event.stopPropagation();
+      });
+
+      if (clearBtn) {
+        clearBtn.addEventListener("click", () => {
+          if (searchInput.value === "") return;
+          searchInput.value = "";
+          updateClearVisibility();
+          handleSearchInput({ target: searchInput });
+          searchInput.focus();
+        });
+      }
     }
 
     const columnsBtn = toolbarContainer.querySelector("#tokensColumnsBtn");

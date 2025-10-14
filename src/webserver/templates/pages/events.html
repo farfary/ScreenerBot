@@ -1,18 +1,52 @@
 <div class="page-table">
-  <div class="toolbar">
-    <div class="toolbar-row toolbar-primary">
-      <span class="toolbar-title">📡 Events</span>
-      <div class="toolbar-field">
-        <input
-          type="text"
-          id="eventSearch"
-          placeholder="🔍 Search events..."
-          class="toolbar-input"
-        />
+  <div class="toolbar events-toolbar">
+    <div class="toolbar-row toolbar-row--head">
+      <div class="toolbar-title-block">
+        <span class="toolbar-title">📡 Events</span>
+        <span id="eventsCountText" class="toolbar-meta" data-variant="accent">
+          Loading...
+        </span>
+        <span id="eventsLastUpdated" class="toolbar-meta">Last update —</span>
       </div>
-      <div class="toolbar-field">
+      <div class="toolbar-actions">
+        <button id="toggleEventsPause" class="btn" type="button">
+          ⏸️ Pause
+        </button>
+        <button id="clearFilters" class="btn btn-secondary" type="button">
+          🧹 Clear
+        </button>
+        <button id="refreshEvents" class="btn btn-primary" type="button">
+          🔄 Refresh
+        </button>
+      </div>
+    </div>
+    <div class="toolbar-row toolbar-row--filters">
+      <div class="toolbar-field toolbar-field--grow">
+        <label class="toolbar-label" for="eventSearch">Search</label>
+        <div class="toolbar-search">
+          <span class="toolbar-search__icon" aria-hidden="true">🔍</span>
+          <input
+            type="text"
+            id="eventSearch"
+            class="toolbar-input"
+            placeholder="Search events..."
+            autocomplete="off"
+          />
+          <button
+            type="button"
+            id="eventSearchClear"
+            class="toolbar-search__clear"
+            aria-label="Clear search"
+            hidden
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+      <div class="toolbar-field toolbar-field--compact">
+        <label class="toolbar-label" for="categoryFilter">Category</label>
         <select id="categoryFilter" class="toolbar-select">
-          <option value="">All Categories</option>
+          <option value="">All categories</option>
           <option value="swap">Swap</option>
           <option value="transaction">Transaction</option>
           <option value="pool">Pool</option>
@@ -23,156 +57,30 @@
           <option value="system">System</option>
         </select>
       </div>
-      <div class="toolbar-field">
+      <div class="toolbar-field toolbar-field--compact">
+        <label class="toolbar-label" for="severityFilter">Severity</label>
         <select id="severityFilter" class="toolbar-select">
-          <option value="">All Severity</option>
+          <option value="">All severities</option>
           <option value="info">Info</option>
           <option value="warn">Warning</option>
           <option value="error">Error</option>
           <option value="debug">Debug</option>
         </select>
       </div>
-      <div class="toolbar-actions">
-        <span id="eventsCountText" class="events-count">Loading...</span>
-        <span id="eventsLastUpdated" class="events-last-updated"
-          >Last update —</span
-        >
-        <button id="toggleEventsPause" class="btn">⏸️ Pause</button>
-        <button id="clearFilters" class="btn btn-secondary">🧹 Clear</button>
-        <button id="refreshEvents" class="btn btn-primary">🔄 Refresh</button>
-      </div>
-    </div>
-    <div class="toolbar-row toolbar-secondary">
-      <div class="quick-group">
-        <span class="quick-label">Severity:</span>
-        <button class="filter-chip active" data-severity-chip="">All</button>
-        <button class="filter-chip" data-severity-chip="error">Errors</button>
-        <button class="filter-chip" data-severity-chip="warn">Warnings</button>
-        <button class="filter-chip" data-severity-chip="info">Info</button>
-      </div>
-      <div class="quick-group">
-        <span class="quick-label">Category:</span>
-        <button class="filter-chip active" data-category-chip="">All</button>
-        <button class="filter-chip" data-category-chip="ohlcv">OHLCV</button>
-        <button class="filter-chip" data-category-chip="security">
-          Security
-        </button>
-        <button class="filter-chip" data-category-chip="pool">Pool</button>
-      </div>
-      <div class="quick-group">
-        <span class="quick-label">Time:</span>
-        <button class="filter-chip active" data-time-window="">All</button>
-        <button class="filter-chip" data-time-window="5">Last 5m</button>
-        <button class="filter-chip" data-time-window="30">30m</button>
-        <button class="filter-chip" data-time-window="120">2h</button>
+      <div class="toolbar-field toolbar-field--compact">
+        <label class="toolbar-label" for="timeFilter">Time</label>
+        <select id="timeFilter" class="toolbar-select">
+          <option value="">All time</option>
+          <option value="5">Last 5 minutes</option>
+          <option value="30">Last 30 minutes</option>
+          <option value="120">Last 2 hours</option>
+        </select>
       </div>
     </div>
   </div>
   <style>
-    .toolbar {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
+    .events-toolbar {
       margin-bottom: 16px;
-      padding: 12px;
-      border: 1px solid var(--border-color);
-      border-radius: 10px;
-      background: var(--bg-card);
-    }
-
-    .toolbar-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px 16px;
-      align-items: center;
-    }
-
-    .toolbar-primary {
-      justify-content: flex-start;
-      gap: 12px 16px;
-    }
-
-    .toolbar-secondary {
-      justify-content: flex-start;
-      gap: 16px;
-    }
-
-    .toolbar-title {
-      font-weight: 600;
-      color: var(--text-primary);
-      min-width: 100px;
-    }
-
-    .toolbar-field {
-      display: flex;
-      flex: 1 1 180px;
-      min-width: 160px;
-    }
-
-    .toolbar-input,
-    .toolbar-select {
-      width: 100%;
-      padding: 6px 10px;
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      background: var(--bg-primary);
-      color: var(--text-primary);
-    }
-
-    .toolbar-actions {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin-left: auto;
-    }
-
-    .events-count {
-      color: var(--text-secondary);
-      font-size: 0.9em;
-    }
-
-    .events-last-updated {
-      color: var(--text-muted);
-      font-size: 0.85em;
-    }
-
-    .quick-group {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-
-    .quick-label {
-      font-size: 0.75em;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--text-muted);
-    }
-
-    .filter-chip {
-      border: 1px solid var(--border-color);
-      background: var(--bg-primary);
-      color: var(--text-secondary);
-      border-radius: 999px;
-      padding: 4px 10px;
-      font-size: 0.75em;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .filter-chip:hover,
-    .filter-chip:focus {
-      border-color: var(--link-color);
-      color: var(--link-color);
-      outline: none;
-    }
-
-    .filter-chip.active {
-      background: var(--link-color);
-      border-color: var(--link-color);
-      color: #fff;
     }
 
     .event-ref-cell,
@@ -713,30 +621,11 @@ Loading...</pre
     label.title = Utils.formatTimestamp(date, { includeSeconds: true });
   }
 
-  function updateTimeWindowChips() {
+  function updateTimeFilterSelect() {
+    const select = document.getElementById("timeFilter");
+    if (!select) return;
     const active = eventsActiveFilters.timeWindowMinutes;
-    document.querySelectorAll("[data-time-window]").forEach((chip) => {
-      const valueAttr = chip.getAttribute("data-time-window") || "";
-      const numeric = valueAttr === "" ? null : Number(valueAttr);
-      const isActive = numeric === null ? active === null : active === numeric;
-      chip.classList.toggle("active", isActive);
-    });
-  }
-
-  function syncSeverityChips() {
-    const severity = document.getElementById("severityFilter")?.value || "";
-    document.querySelectorAll("[data-severity-chip]").forEach((chip) => {
-      const value = chip.getAttribute("data-severity-chip") || "";
-      chip.classList.toggle("active", value === severity);
-    });
-  }
-
-  function syncCategoryChips() {
-    const category = document.getElementById("categoryFilter")?.value || "";
-    document.querySelectorAll("[data-category-chip]").forEach((chip) => {
-      const value = chip.getAttribute("data-category-chip") || "";
-      chip.classList.toggle("active", value === category);
-    });
+    select.value = active === null ? "" : String(active);
   }
 
   function setTimeWindow(windowValue, options) {
@@ -750,7 +639,7 @@ Loading...</pre
     }
 
     if (eventsActiveFilters.timeWindowMinutes === minutes) {
-      updateTimeWindowChips();
+      updateTimeFilterSelect();
       return;
     }
 
@@ -765,7 +654,7 @@ Loading...</pre
     eventsScrollState.filteredEnd = false;
     eventsScrollState.endReached = false;
     eventsScrollState.limitReached = false;
-    updateTimeWindowChips();
+    updateTimeFilterSelect();
 
     if (!opts.silent) {
       scheduleEventsRender({ forceFull: true });
@@ -1651,11 +1540,23 @@ Loading...</pre
     select.dispatchEvent(new Event("change"));
   }
 
+  function updateEventSearchClearVisibility() {
+    const input = document.getElementById("eventSearch");
+    const clearBtn = document.getElementById("eventSearchClear");
+    if (!clearBtn) return;
+    if (input && input.value.trim().length > 0) {
+      clearBtn.removeAttribute("hidden");
+    } else {
+      clearBtn.setAttribute("hidden", "true");
+    }
+  }
+
   function applySearchShortcut(value) {
     const searchInput = document.getElementById("eventSearch");
     if (!searchInput) return;
     const nextValue = value || "";
     searchInput.value = nextValue;
+    updateEventSearchClearVisibility();
     AppState.save("events_search", nextValue.toLowerCase());
     eventsScrollState.filteredEnd = false;
     eventsScrollState.endReached = false;
@@ -1669,6 +1570,7 @@ Loading...</pre
       if (searchInput.value !== "") {
         searchInput.value = "";
         AppState.save("events_search", "");
+        updateEventSearchClearVisibility();
         searchInput.dispatchEvent(new Event("input", { bubbles: true }));
       }
     }
@@ -1676,9 +1578,8 @@ Loading...</pre
     const categoryFilter = document.getElementById("categoryFilter");
     if (categoryFilter) {
       if (categoryFilter.value) {
-        applyCategoryFilterValue("");
-      } else {
-        syncCategoryChips();
+        categoryFilter.value = "";
+        categoryFilter.dispatchEvent(new Event("change"));
       }
     }
 
@@ -1687,8 +1588,6 @@ Loading...</pre
       if (severityFilter.value) {
         severityFilter.value = "";
         severityFilter.dispatchEvent(new Event("change"));
-      } else {
-        syncSeverityChips();
       }
     }
 
@@ -2123,20 +2022,47 @@ Loading...</pre
     return colors[key] || "#6b7280";
   }
 
-  // Search events
-  document.getElementById("eventSearch").addEventListener("input", (e) => {
-    const searchTerm = e.target.value.toLowerCase();
-    AppState.save("events_search", searchTerm);
-    if (searchDebounceHandle) {
-      clearTimeout(searchDebounceHandle);
-    }
-    searchDebounceHandle = setTimeout(() => {
-      eventsScrollState.filteredEnd = false;
-      eventsScrollState.endReached = false;
-      eventsScrollState.limitReached = false;
-      scheduleEventsRender({ forceFull: true });
-    }, 120);
-  });
+  const eventSearchInput = document.getElementById("eventSearch");
+  const eventSearchClear = document.getElementById("eventSearchClear");
+
+  if (eventSearchInput) {
+    updateEventSearchClearVisibility();
+    eventSearchInput.addEventListener("input", (e) => {
+      updateEventSearchClearVisibility();
+      const searchTerm = e.target.value.toLowerCase();
+      AppState.save("events_search", searchTerm);
+      if (searchDebounceHandle) {
+        clearTimeout(searchDebounceHandle);
+      }
+      searchDebounceHandle = setTimeout(() => {
+        eventsScrollState.filteredEnd = false;
+        eventsScrollState.endReached = false;
+        eventsScrollState.limitReached = false;
+        scheduleEventsRender({ forceFull: true });
+      }, 120);
+    });
+
+    eventSearchInput.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      if (eventSearchInput.value === "") return;
+      event.preventDefault();
+      event.stopPropagation();
+      eventSearchInput.value = "";
+      updateEventSearchClearVisibility();
+      eventSearchInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+
+  if (eventSearchClear) {
+    eventSearchClear.addEventListener("click", () => {
+      if (!eventSearchInput) return;
+      if (eventSearchInput.value === "") return;
+      eventSearchInput.value = "";
+      updateEventSearchClearVisibility();
+      eventSearchInput.dispatchEvent(new Event("input", { bubbles: true }));
+      eventSearchInput.focus();
+    });
+  }
 
   // Filter by category
   document.getElementById("categoryFilter").addEventListener("change", () => {
@@ -2147,7 +2073,6 @@ Loading...</pre
       "events_category",
       document.getElementById("categoryFilter").value
     );
-    syncCategoryChips();
   });
 
   // Filter by severity
@@ -2159,7 +2084,25 @@ Loading...</pre
       "events_severity",
       document.getElementById("severityFilter").value
     );
-    syncSeverityChips();
+  });
+
+  document.getElementById("timeFilter").addEventListener("change", () => {
+    const select = document.getElementById("timeFilter");
+    const rawValue = select.value;
+    const parsedValue = rawValue ? Number(rawValue) : null;
+    const current = eventsActiveFilters.timeWindowMinutes;
+    const isSame =
+      (parsedValue === null && current === null) || parsedValue === current;
+    if (isSame) {
+      updateTimeFilterSelect();
+      return;
+    }
+
+    if (!rawValue) {
+      setTimeWindow(null);
+      return;
+    }
+    setTimeWindow(rawValue);
   });
 
   // Refresh button
@@ -2173,54 +2116,6 @@ Loading...</pre
   if (clearFiltersButton) {
     clearFiltersButton.addEventListener("click", clearAllFilters);
   }
-
-  document.querySelectorAll("[data-severity-chip]").forEach((chip) => {
-    chip.addEventListener("click", () => {
-      const severitySelect = document.getElementById("severityFilter");
-      if (!severitySelect) return;
-      const value = chip.getAttribute("data-severity-chip") || "";
-      const current = severitySelect.value || "";
-      const nextValue = current === value ? "" : value;
-      if (current === nextValue) {
-        syncSeverityChips();
-        return;
-      }
-      severitySelect.value = nextValue;
-      severitySelect.dispatchEvent(new Event("change"));
-    });
-  });
-
-  document.querySelectorAll("[data-category-chip]").forEach((chip) => {
-    chip.addEventListener("click", () => {
-      const value = (
-        chip.getAttribute("data-category-chip") || ""
-      ).toLowerCase();
-      const select = document.getElementById("categoryFilter");
-      if (!select) return;
-      const current = select.value || "";
-      const nextValue = current === value ? "" : value;
-      if (current === nextValue) {
-        syncCategoryChips();
-        return;
-      }
-      applyCategoryFilterValue(nextValue);
-    });
-  });
-
-  document.querySelectorAll("[data-time-window]").forEach((chip) => {
-    chip.addEventListener("click", () => {
-      const valueAttr = chip.getAttribute("data-time-window") || "";
-      const numeric = valueAttr === "" ? null : Number(valueAttr);
-      const activeValue = eventsActiveFilters.timeWindowMinutes;
-      const isActive =
-        numeric === null ? activeValue === null : activeValue === numeric;
-      if (numeric === null || isActive) {
-        setTimeWindow(null);
-        return;
-      }
-      setTimeWindow(valueAttr);
-    });
-  });
 
   document.getElementById("toggleEventsPause").addEventListener("click", () => {
     const nextPaused = !isEventsPaused();
@@ -2673,7 +2568,10 @@ Loading...</pre
 
     if (searchInput) {
       const savedSearch = AppState.load("events_search", "");
-      if (savedSearch) searchInput.value = savedSearch;
+      if (savedSearch) {
+        searchInput.value = savedSearch;
+      }
+      updateEventSearchClearVisibility();
     }
 
     const savedWindow = AppState.load("events_time_window", "");
@@ -2682,10 +2580,6 @@ Loading...</pre
     } else {
       setTimeWindow(null, { silent: true, save: false });
     }
-
-    syncCategoryChips();
-    syncSeverityChips();
-    updateTimeWindowChips();
   }
 
   function initializePauseState() {

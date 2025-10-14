@@ -9,6 +9,7 @@ const BASE_TEMPLATE: &str = include_str!("templates/base.html");
 const FOUNDATION_STYLES: &str = include_str!("templates/styles/foundation.css");
 const LAYOUT_STYLES: &str = include_str!("templates/styles/layout.css");
 const COMPONENT_STYLES: &str = include_str!("templates/styles/components.css");
+const TOOLBAR_STYLES: &str = include_str!("templates/styles/toolbar.css");
 const TOKEN_MODAL_STYLES: &str = include_str!("templates/styles/token-modal.css");
 const COMMON_STYLES: &str = include_str!("templates/styles/common.css");
 const UTIL_SCRIPTS: &str = include_str!("templates/scripts/utils.js");
@@ -36,6 +37,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         FOUNDATION_STYLES,
         LAYOUT_STYLES,
         COMPONENT_STYLES,
+        TOOLBAR_STYLES,
         TOKEN_MODAL_STYLES,
         COMMON_STYLES,
     ]
