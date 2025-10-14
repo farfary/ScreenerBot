@@ -1091,6 +1091,11 @@ window.Router = {
             ensureServicesPageReady();
           }
           break;
+        case "wallet":
+          if (typeof ensureWalletSubTabsVisible === "function") {
+            ensureWalletSubTabsVisible();
+          }
+          break;
       }
 
       return;
@@ -1134,6 +1139,9 @@ window.Router = {
         break;
       case "services":
         if (typeof initServicesPage === "function") initServicesPage();
+        break;
+      case "wallet":
+        if (typeof initWalletPage === "function") initWalletPage();
         break;
     }
 
@@ -1215,7 +1223,7 @@ function cleanupTabContainers() {
       ? "home"
       : window.location.pathname.substring(1));
 
-  const pagesWithSubTabs = ["tokens", "status"]; // Add more as needed
+  const pagesWithSubTabs = ["tokens", "status", "wallet"]; // Add more as needed
   const pagesWithToolbar = ["tokens"];
 
   if (!pagesWithSubTabs.includes(activePage)) {

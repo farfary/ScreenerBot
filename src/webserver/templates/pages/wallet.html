@@ -10,36 +10,6 @@
       overflow-y: auto;
     }
 
-    .wallet-tabs {
-      display: inline-flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    .wallet-tab {
-      border: 1px solid var(--border-color);
-      background: color-mix(in srgb, var(--bg-card) 92%, transparent);
-      color: var(--text-secondary);
-      border-radius: 999px;
-      padding: 8px 14px;
-      font-size: 0.82rem;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .wallet-tab.active {
-      background: var(--link-color);
-      border-color: var(--link-color);
-      color: #fff;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
-    }
-
-    .wallet-tab:hover:not(.active) {
-      border-color: var(--link-color);
-      color: var(--link-color);
-    }
-
     .wallet-tab-content {
       display: flex;
       flex-direction: column;
@@ -406,29 +376,6 @@
     }
   </style>
 
-  <div class="wallet-tabs" role="tablist" aria-label="Wallet sections">
-    <button
-      type="button"
-      class="wallet-tab active"
-      data-tab="analysis"
-      id="analysis-tab-button"
-      aria-controls="analysis-tab"
-      aria-selected="true"
-    >
-      📊 Analysis
-    </button>
-    <button
-      type="button"
-      class="wallet-tab"
-      data-tab="tokens"
-      id="tokens-tab-button"
-      aria-controls="tokens-tab"
-      aria-selected="false"
-    >
-      🪙 Tokens
-    </button>
-  </div>
-
   <div id="wallet-error" class="wallet-error-banner" data-visible="false"></div>
 
   <div class="wallet-tab-content">
@@ -436,7 +383,7 @@
       id="analysis-tab"
       class="tab-pane active"
       role="tabpanel"
-      aria-labelledby="analysis-tab-button"
+      aria-label="Analysis"
     >
       <div class="wallet-summary-grid">
         <div class="wallet-summary-card">
@@ -515,12 +462,7 @@
       <span id="wallet-flow-window" class="wallet-meta-text">Window —</span>
     </div>
 
-    <div
-      id="tokens-tab"
-      class="tab-pane"
-      role="tabpanel"
-      aria-labelledby="tokens-tab-button"
-    >
+    <div id="tokens-tab" class="tab-pane" role="tabpanel" aria-label="Tokens">
       <div class="wallet-token-panel">
         <div class="wallet-token-panel-header">
           <span class="toolbar-title">Wallet Tokens</span>
@@ -1163,6 +1105,87 @@
       }
     }
 
+    function initWalletSubTabs() {
+      const subTabsContainer = document.getElementById("subTabsContainer");
+      if (!subTabsContainer) return;
+
+      const views = [
+        { id: "analysis", label: "📊 Analysis" },
+        { id: "tokens", label: "🪙 Tokens" },
+      ];
+
+      subTabsContainer.innerHTML = views
+        .map(
+          (view) => `
+                    <button class="sub-tab ${
+                      view.id === State.activeTab ? "active" : ""
+                    }" data-view="${view.id}">
+                        ${view.label}
+                    </button>
+                `
+        )
+        .join("");
+
+      subTabsContainer.querySelectorAll(".sub-tab").forEach((button) => {
+        button.addEventListener("click", () =>
+          switchWalletSubTab(button.dataset.view)
+        );
+      });
+
+      subTabsContainer.setAttribute("data-page", "wallet");
+      subTabsContainer.style.display = "flex";
+    }
+
+    function ensureWalletSubTabsVisible() {
+      const subTabsContainer = document.getElementById("subTabsContainer");
+      if (!subTabsContainer) return;
+
+      const needsInit = subTabsContainer.children.length === 0;
+      const hidden =
+        getComputedStyle(subTabsContainer).display === "none" ||
+        subTabsContainer.style.display === "none";
+
+      if (needsInit) {
+        initWalletSubTabs();
+      }
+
+      if (hidden) {
+        subTabsContainer.style.display = "flex";
+      }
+
+      // Align active tab styling to current state if already mounted
+      if (!needsInit) {
+        document
+          .querySelectorAll("#subTabsContainer .sub-tab")
+          .forEach((tab) => {
+            tab.classList.toggle(
+              "active",
+              tab.dataset.view === State.activeTab
+            );
+          });
+      }
+    }
+
+    function switchWalletSubTab(view) {
+      if (view !== "analysis" && view !== "tokens") {
+        view = "analysis";
+      }
+
+      if (State.activeTab === view) {
+        ensureWalletSubTabsVisible();
+        return;
+      }
+
+      State.activeTab = view;
+      AppState.save("wallet.activeTab", view);
+
+      document.querySelectorAll("#subTabsContainer .sub-tab").forEach((tab) => {
+        tab.classList.toggle("active", tab.dataset.view === State.activeTab);
+      });
+
+      switchTab(view, { suppressSave: true });
+    }
+
     function switchTab(tabName, options = {}) {
       if (tabName !== "analysis" && tabName !== "tokens") {
         tabName = "analysis";
@@ -1172,8 +1195,6 @@
 
       const analysisTab = document.querySelector("#analysis-tab");
       const tokensTab = document.querySelector("#tokens-tab");
-      const analysisButton = document.querySelector("#analysis-tab-button");
-      const tokensButton = document.querySelector("#tokens-tab-button");
 
       if (analysisTab) {
         analysisTab.classList.toggle("active", tabName === "analysis");
@@ -1182,32 +1203,9 @@
         tokensTab.classList.toggle("active", tabName === "tokens");
       }
 
-      if (analysisButton) {
-        const isActive = tabName === "analysis";
-        analysisButton.classList.toggle("active", isActive);
-        analysisButton.setAttribute("aria-selected", String(isActive));
-      }
-      if (tokensButton) {
-        const isActive = tabName === "tokens";
-        tokensButton.classList.toggle("active", isActive);
-        tokensButton.setAttribute("aria-selected", String(isActive));
-      }
-
       if (!options.suppressSave) {
         AppState.save("wallet.activeTab", tabName);
       }
-    }
-
-    function bindTabs() {
-      const tabs = document.querySelectorAll(".wallet-tab");
-      tabs.forEach((tab) => {
-        if (tab.__walletBound) return;
-        tab.__walletBound = true;
-        tab.addEventListener("click", () => {
-          const targetTab = tab.dataset.tab || "analysis";
-          switchTab(targetTab);
-        });
-      });
     }
 
     function registerCleanup() {
@@ -1233,11 +1231,16 @@
       });
     }
 
+    // Expose sub-tabs functions to window scope for Router
+    window.initWalletSubTabs = initWalletSubTabs;
+    window.ensureWalletSubTabsVisible = ensureWalletSubTabsVisible;
+
     window.initWalletPage = function () {
       console.log("[Wallet] Initializing page");
       registerCleanup();
       observeTheme();
-      bindTabs();
+      initWalletSubTabs();
+      ensureWalletSubTabsVisible();
       bindRangeButtons();
       bindSearch();
       bindSort();
