@@ -807,6 +807,241 @@ window.PagePoller = {
   },
 };
 
+// Page lifecycle registry – centralizes init/activate/deactivate/dispose flows per page
+const PageLifecycleRegistry = (() => {
+  const lifecycles = new Map();
+  const contexts = new Map();
+
+  const noop = () => {};
+
+  const defaultLifecycle = {
+    init: noop,
+    activate: noop,
+    deactivate: noop,
+    dispose: noop,
+  };
+
+  const safeInvokeAll = (callbacks) => {
+    callbacks.forEach((callback) => {
+      try {
+        callback();
+      } catch (error) {
+        console.error("[PageLifecycle] Cleanup handler failed", error);
+      }
+    });
+  };
+
+  const createContext = (pageName) => {
+    const deactivateCleanups = new Set();
+    const disposeCleanups = new Set();
+    let active = false;
+
+    const register = (store, callback) => {
+      if (typeof callback !== "function") {
+        return () => {};
+      }
+      store.add(callback);
+      return () => store.delete(callback);
+    };
+
+    const context = {
+      pageName,
+      data: {},
+      isActive: () => active,
+      onDeactivate(callback) {
+        return register(deactivateCleanups, callback);
+      },
+      onDispose(callback) {
+        return register(disposeCleanups, callback);
+      },
+      managePoller(poller) {
+        if (!poller || typeof poller !== "object") {
+          return poller;
+        }
+        this.onDeactivate(() => {
+          if (typeof poller.stop === "function") {
+            poller.stop({ silent: true });
+          }
+        });
+        this.onDispose(() => {
+          if (typeof poller.cleanup === "function") {
+            poller.cleanup();
+          }
+        });
+        return poller;
+      },
+      createAbortController() {
+        const controller = new AbortController();
+        const abort = () => {
+          try {
+            controller.abort();
+          } catch (error) {
+            console.error(
+              "[PageLifecycle] Abort controller cleanup failed",
+              error
+            );
+          }
+        };
+        this.onDeactivate(abort);
+        this.onDispose(abort);
+        return controller;
+      },
+      __setActive(value) {
+        active = Boolean(value);
+      },
+      __runDeactivateCleanups() {
+        if (!deactivateCleanups.size) {
+          return;
+        }
+        const callbacks = Array.from(deactivateCleanups);
+        deactivateCleanups.clear();
+        safeInvokeAll(callbacks);
+      },
+      __runDisposeCleanups() {
+        if (!disposeCleanups.size) {
+          return;
+        }
+        const callbacks = Array.from(disposeCleanups);
+        disposeCleanups.clear();
+        safeInvokeAll(callbacks);
+      },
+    };
+
+    return context;
+  };
+
+  const getLifecycle = (pageName) => {
+    const lifecycle = lifecycles.get(pageName);
+    if (!lifecycle) {
+      return null;
+    }
+    return {
+      init: lifecycle.init || noop,
+      activate: lifecycle.activate || noop,
+      deactivate: lifecycle.deactivate || noop,
+      dispose: lifecycle.dispose || noop,
+    };
+  };
+
+  const getOrCreateContext = (pageName) => {
+    if (!contexts.has(pageName)) {
+      contexts.set(pageName, createContext(pageName));
+    }
+    return contexts.get(pageName);
+  };
+
+  return {
+    register(pageName, lifecycle = {}) {
+      if (typeof pageName !== "string" || !pageName.trim()) {
+        throw new Error("PageLifecycleRegistry.register requires a page id");
+      }
+      const normalized = {
+        ...defaultLifecycle,
+        ...lifecycle,
+      };
+      lifecycles.set(pageName, normalized);
+    },
+
+    has(pageName) {
+      return lifecycles.has(pageName);
+    },
+
+    getContext(pageName) {
+      return getOrCreateContext(pageName);
+    },
+
+    init(pageName) {
+      const lifecycle = getLifecycle(pageName);
+      if (!lifecycle) {
+        return;
+      }
+      const context = getOrCreateContext(pageName);
+      if (context.__initialized) {
+        return;
+      }
+      context.__initialized = true;
+      try {
+        lifecycle.init(context);
+      } catch (error) {
+        console.error(`[PageLifecycle] init failed for ${pageName}`, error);
+      }
+    },
+
+    activate(pageName) {
+      const lifecycle = getLifecycle(pageName);
+      if (!lifecycle) {
+        return;
+      }
+      const context = getOrCreateContext(pageName);
+      this.init(pageName);
+      context.__setActive(true);
+      try {
+        lifecycle.activate(context);
+      } catch (error) {
+        console.error(`[PageLifecycle] activate failed for ${pageName}`, error);
+      }
+    },
+
+    deactivate(pageName) {
+      const lifecycle = getLifecycle(pageName);
+      if (!lifecycle) {
+        return;
+      }
+      const context = getOrCreateContext(pageName);
+      if (!context.__initialized) {
+        return;
+      }
+      try {
+        lifecycle.deactivate(context);
+      } catch (error) {
+        console.error(
+          `[PageLifecycle] deactivate failed for ${pageName}`,
+          error
+        );
+      } finally {
+        context.__setActive(false);
+        context.__runDeactivateCleanups();
+      }
+    },
+
+    dispose(pageName) {
+      const lifecycle = getLifecycle(pageName);
+      if (!lifecycle) {
+        return;
+      }
+      const context = getOrCreateContext(pageName);
+      if (!context.__initialized) {
+        lifecycles.delete(pageName);
+        contexts.delete(pageName);
+        return;
+      }
+      try {
+        lifecycle.dispose(context);
+      } catch (error) {
+        console.error(`[PageLifecycle] dispose failed for ${pageName}`, error);
+      } finally {
+        context.__runDeactivateCleanups();
+        context.__runDisposeCleanups();
+        lifecycles.delete(pageName);
+        contexts.delete(pageName);
+      }
+    },
+  };
+})();
+
+window.PageRegistry = PageLifecycleRegistry;
+
+if (Array.isArray(window.__pendingPageRegistrations)) {
+  const registrations = window.__pendingPageRegistrations.splice(0);
+  registrations.forEach((pending) => {
+    try {
+      pending(window.PageRegistry);
+    } catch (error) {
+      console.error("[PageLifecycle] Pending registration failed", error);
+    }
+  });
+}
+
 // Client-Side Router - SPA Architecture
 window.Router = {
   currentPage: null,
@@ -814,6 +1049,49 @@ window.Router = {
   _timeoutMs: 10000,
   pageCache: {}, // Cache page containers
   initializedPages: {}, // Track which pages have been initialized
+
+  setActiveTab(pageName) {
+    document.querySelectorAll("nav .tab").forEach((tab) => {
+      const tabPage = tab.getAttribute("data-page");
+      if (tabPage === pageName) {
+        tab.classList.add("active");
+      } else {
+        tab.classList.remove("active");
+      }
+    });
+  },
+
+  deactivatePageLifecycle(pageName) {
+    if (!pageName || !window.PageRegistry) {
+      return;
+    }
+    try {
+      if (typeof window.PageRegistry.deactivate === "function") {
+        window.PageRegistry.deactivate(pageName);
+      }
+    } catch (error) {
+      console.error(
+        `[Router] Failed to deactivate lifecycle for ${pageName}`,
+        error
+      );
+    }
+  },
+
+  activatePageLifecycle(pageName) {
+    if (!pageName || !window.PageRegistry) {
+      return;
+    }
+    try {
+      if (typeof window.PageRegistry.activate === "function") {
+        window.PageRegistry.activate(pageName);
+      }
+    } catch (error) {
+      console.error(
+        `[Router] Failed to activate lifecycle for ${pageName}`,
+        error
+      );
+    }
+  },
 
   registerCleanup(handler) {
     if (typeof handler === "function") {
@@ -871,23 +1149,21 @@ window.Router = {
   },
 
   async loadPage(pageName) {
+    if (!pageName) {
+      return;
+    }
+
     console.log("[Router] Loading page:", pageName);
 
-    // Update current page
-    this.currentPage = pageName;
+    const previousPage = this.currentPage;
+    if (previousPage) {
+      this.deactivatePageLifecycle(previousPage);
+    }
 
-    // Run cleanup handlers for previous page
     this.runCleanupHandlers();
 
-    // Update active tab styling
-    document.querySelectorAll("nav .tab").forEach((tab) => {
-      const tabPage = tab.getAttribute("data-page");
-      if (tabPage === pageName) {
-        tab.classList.add("active");
-      } else {
-        tab.classList.remove("active");
-      }
-    });
+    this.currentPage = pageName;
+    this.setActiveTab(pageName);
 
     const mainContent = document.querySelector("main");
     if (!mainContent) {
@@ -898,113 +1174,96 @@ window.Router = {
     // Remove any unresolved loading placeholders from prior attempts
     mainContent.querySelectorAll(".page-loading").forEach((el) => el.remove());
 
-    // Check if page is already cached
-    let pageEl = this.pageCache[pageName];
-
-    if (pageEl) {
-      // Page is cached - just swap visibility
+    // Cached page path – reuse existing container
+    const cachedEl = this.pageCache[pageName];
+    if (cachedEl) {
       console.log("[Router] Using cached page:", pageName);
 
-      this.displayPageElement(mainContent, pageEl);
+      this.displayPageElement(mainContent, cachedEl);
 
-      // Clean up sub-tabs and toolbar BEFORE initializing page scripts
       cleanupTabContainers();
-
-      // Initialize page-specific scripts
       this.initPageScripts(pageName);
+      this.activatePageLifecycle(pageName);
 
-      // Update browser history only if path actually changed
       const targetUrl = pageName === "home" ? "/" : `/${pageName}`;
       if (window.location.pathname !== targetUrl) {
         window.history.pushState({ page: pageName }, "", targetUrl);
       }
 
-      // Save last visited tab
       AppState.save("lastTab", pageName);
-
       console.log("[Router] Cached page displayed:", pageName);
       return;
     }
 
-    // Page not cached - fetch and create
+    // Page not cached – show loading state and fetch content
     mainContent.setAttribute("data-loading", "true");
     this.removeCachedPageElements(mainContent);
 
-    // Show loading indicator in a temporary container
     const loadingEl = document.createElement("div");
     loadingEl.className = "page-loading";
     loadingEl.style.cssText = "padding: 2rem; text-align: center;";
     loadingEl.innerHTML = `
-                    <div style="font-size: 1.1rem; color: var(--text-secondary);">
-                        Loading ${pageName}...
-                    </div>
-                `;
+      <div style="font-size: 1.1rem; color: var(--text-secondary);">
+        Loading ${pageName}...
+      </div>
+    `;
 
-    // Hide all existing pages and show loading
     Object.values(this.pageCache).forEach((el) => {
       el.style.display = "none";
     });
     mainContent.appendChild(loadingEl);
 
-    // Fetch page content from API with timeout protection
     try {
       const html = await this.fetchPageContent(pageName, this._timeoutMs);
 
-      // Create new page container
-      pageEl = document.createElement("div");
+      const pageEl = document.createElement("div");
       pageEl.className = "page-container";
       pageEl.id = `page-${pageName}`;
       pageEl.setAttribute("data-page", pageName);
       pageEl.innerHTML = html;
 
-      // Cache the page
       this.pageCache[pageName] = pageEl;
 
-      // Remove loading indicator
       loadingEl.remove();
-
-      // Add to DOM, removing other cached pages from the container
       this.displayPageElement(mainContent, pageEl);
-
-      // Execute embedded scripts
       this.executeEmbeddedScripts(pageEl);
 
-      // Clean up sub-tabs and toolbar BEFORE initializing page scripts
       cleanupTabContainers();
-
-      // Initialize page-specific scripts (only once)
       this.initPageScripts(pageName);
+      this.activatePageLifecycle(pageName);
 
-      // Update browser history only if path actually changed
       const targetUrl = pageName === "home" ? "/" : `/${pageName}`;
       if (window.location.pathname !== targetUrl) {
         window.history.pushState({ page: pageName }, "", targetUrl);
       }
 
-      // Save last visited tab
       AppState.save("lastTab", pageName);
-
       console.log("[Router] New page loaded and cached:", pageName);
     } catch (error) {
       console.error("[Router] Failed to load page:", pageName, error);
 
-      // Show error in loading container
       loadingEl.innerHTML = `
-                        <div style="padding: 2rem; text-align: center;">
-                            <h2 style="color: #ef4444;">⚠️ Failed to Load Page</h2>
-                            <p style="color: #9ca3af; margin-top: 1rem;">
-                                ${error.message}
-                            </p>
-                            <button onclick="Router.loadPage('${pageName}')" 
-                                style="margin-top: 1rem; padding: 0.5rem 1rem; 
-                                       background: #3b82f6; color: white; border: none; 
-                                       border-radius: 0.5rem; cursor: pointer;">
-                                Retry
-                            </button>
-                        </div>
-                    `;
+        <div style="padding: 2rem; text-align: center;">
+          <h2 style="color: #ef4444;">⚠️ Failed to Load Page</h2>
+          <p style="color: #9ca3af; margin-top: 1rem;">
+            ${error.message}
+          </p>
+          <button onclick="Router.loadPage('${pageName}')"
+            style="margin-top: 1rem; padding: 0.5rem 1rem;
+                   background: #3b82f6; color: white; border: none;
+                   border-radius: 0.5rem; cursor: pointer;">
+            Retry
+          </button>
+        </div>
+      `;
 
-      // Ensure shared tab/toolbar chrome matches current (failed) page state
+      if (previousPage) {
+        this.currentPage = previousPage;
+        this.setActiveTab(previousPage);
+        this.activatePageLifecycle(previousPage);
+        AppState.save("lastTab", previousPage);
+      }
+
       cleanupTabContainers();
     } finally {
       mainContent.removeAttribute("data-loading");
@@ -1058,12 +1317,21 @@ window.Router = {
   },
 
   initPageScripts(pageName) {
+    const hasLifecycle =
+      Boolean(window.PageRegistry) &&
+      typeof window.PageRegistry.has === "function" &&
+      window.PageRegistry.has(pageName);
+
     // Only initialize each page once (on first load)
     if (this.initializedPages[pageName]) {
       console.log(
         "[Router] Page already initialized, skipping init:",
         pageName
       );
+
+      if (hasLifecycle) {
+        return;
+      }
 
       switch (pageName) {
         case "status":
@@ -1105,11 +1373,13 @@ window.Router = {
 
     console.log("[Router] Initializing page for first time:", pageName);
 
+    if (hasLifecycle) {
+      this.initializedPages[pageName] = true;
+      return;
+    }
+
     // Re-initialize page-specific functionality after dynamic load
     switch (pageName) {
-      case "home":
-        if (typeof initHomePage === "function") initHomePage();
-        break;
       case "status":
         if (typeof scheduleStatusPageInit === "function") {
           scheduleStatusPageInit();
@@ -1182,6 +1452,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (typeof Router.initPageScripts === "function") {
       Router.initPageScripts(initialPage);
     }
+
+    if (typeof Router.activatePageLifecycle === "function") {
+      Router.activatePageLifecycle(initialPage);
+    }
+  }
+
+  if (typeof Router.setActiveTab === "function") {
+    Router.setActiveTab(initialPage);
   }
 
   // Intercept all navigation link clicks
