@@ -405,33 +405,8 @@
         }
       }
 
-      function el(id) {
-        return document.getElementById(id);
-      }
-
-      function qs(selector, scope = document) {
-        return scope.querySelector(selector);
-      }
-
-      function qsa(selector, scope = document) {
-        return Array.from(scope.querySelectorAll(selector));
-      }
-
-      function textFromInput(id) {
-        const input = el(id);
-        if (!input) return null;
-        const value = input.value.trim();
-        return value ? value : null;
-      }
-
-      function numberFromInput(id) {
-        const input = el(id);
-        if (!input) return null;
-        const raw = input.value.trim();
-        if (raw === "") return null;
-        const parsed = parseFloat(raw);
-        return Number.isFinite(parsed) ? parsed : null;
-      }
+      // Use Utils.el, Utils.qs, Utils.qsa, Utils.textFromInput, Utils.numberFromInput, Utils.escapeHtml, Utils.toSlug
+      // Use Utils.formatSignatureCompact, Utils.formatNumber, Utils.formatPercent, Utils.formatSol
 
       const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
         year: "numeric",
@@ -442,37 +417,19 @@
         second: "2-digit",
       });
 
-      function escapeHtml(value) {
-        if (value === null || value === undefined) return "";
-        return String(value)
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/"/g, "&quot;")
-          .replace(/'/g, "&#39;");
-      }
-
-      function toSlug(value) {
-        if (!value) return "";
-        return String(value)
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-+|-+$/g, "");
-      }
-
-      // Use Utils.formatSignatureCompact, Utils.formatNumber, Utils.formatPercent, Utils.formatSol
-
       function renderPill(label, prefix) {
         if (!label || label === "—") return "—";
-        const slug = toSlug(label);
+        const slug = Utils.toSlug(label);
         const className = slug ? `${prefix}-${slug}` : "";
-        return `<span class="pill ${className}">${escapeHtml(label)}</span>`;
+        return `<span class="pill ${className}">${Utils.escapeHtml(
+          label
+        )}</span>`;
       }
 
       // Use Utils.formatTimeAgo and Utils.formatTimestamp
 
       function updateLastUpdatedLabel() {
-        const label = el("tx-last-updated");
+        const label = Utils.el("tx-last-updated");
         if (!label) return;
         if (!State.lastUpdatedAt) {
           label.textContent = "Last update —";
@@ -480,9 +437,9 @@
           return;
         }
         const date = new Date(State.lastUpdatedAt);
-        const relative = formatRelativeTime(date) || "just now";
+        const relative = Utils.formatTimeAgo(date) || "just now";
         label.textContent = `Last update ${relative}`;
-        label.title = formatTimestampDisplay(date);
+        label.title = Utils.formatTimestamp(date);
       }
 
       function ensureLastUpdatedTicker() {
@@ -507,7 +464,7 @@
       }
 
       function updateSummaryCards(summary) {
-        const totalEl = el("tx-stat-total");
+        const totalEl = Utils.el("tx-stat-total");
         if (!totalEl) return;
 
         if (!summary) {
@@ -534,7 +491,11 @@
           if (sizeEl) sizeEl.textContent = "—";
           if (schemaEl) schemaEl.textContent = "—";
           if (loadedEl)
-            loadedEl.textContent = formatNumber(State.items.length, 0, "0");
+            loadedEl.textContent = Utils.formatNumber(
+              State.items.length,
+              0,
+              "0"
+            );
           if (newestEl) newestEl.innerHTML = "—";
           if (oldestEl) oldestEl.innerHTML = "—";
           if (bootstrapStatusEl) bootstrapStatusEl.textContent = "Bootstrap —";
@@ -556,16 +517,16 @@
         const bootstrapStatusEl = el("tx-stat-bootstrap-status");
         const bootstrapCursorEl = el("tx-stat-bootstrap-cursor");
 
-        totalEl.textContent = formatNumber(summary.total || 0, 0, "0");
+        totalEl.textContent = Utils.formatNumber(summary.total || 0, 0, "0");
         if (successEl) {
-          successEl.textContent = formatNumber(
+          successEl.textContent = Utils.formatNumber(
             summary.success_count || 0,
             0,
             "0"
           );
         }
         if (failedEl) {
-          failedEl.textContent = formatNumber(
+          failedEl.textContent = Utils.formatNumber(
             summary.failed_count || 0,
             0,
             "0"
@@ -577,28 +538,28 @@
           )} • Fail ${formatRate(summary.failure_rate)}`;
         }
         if (pendingGlobalEl) {
-          pendingGlobalEl.textContent = formatNumber(
+          pendingGlobalEl.textContent = Utils.formatNumber(
             summary.pending_global || 0,
             0,
             "0"
           );
         }
         if (pendingLocalEl) {
-          pendingLocalEl.textContent = formatNumber(
+          pendingLocalEl.textContent = Utils.formatNumber(
             summary.pending_local || 0,
             0,
             "0"
           );
         }
         if (deferredEl) {
-          deferredEl.textContent = formatNumber(
+          deferredEl.textContent = Utils.formatNumber(
             summary.deferred_count || 0,
             0,
             "0"
           );
         }
         if (sizeEl) {
-          sizeEl.textContent = `${formatNumber(
+          sizeEl.textContent = `${Utils.formatNumber(
             summary.db_size_mb || 0,
             2,
             "0.00"
@@ -610,7 +571,7 @@
             : "—";
         }
         if (loadedEl) {
-          loadedEl.textContent = formatNumber(State.items.length, 0, "0");
+          loadedEl.textContent = Utils.formatNumber(State.items.length, 0, "0");
         }
         if (newestEl) {
           if (summary.newest_known_signature) {
@@ -739,10 +700,10 @@
           <td>${router && router !== "—" ? escapeHtml(router) : "—"}</td>
           <td class="${solClass}">${escapeHtml(formatSol(solDelta))}</td>
           <td class="monospace">${escapeHtml(
-            formatNumber(fee, 6, "0.000000")
+            Utils.formatNumber(fee, 6, "0.000000")
           )}</td>
           <td class="monospace">${escapeHtml(
-            formatNumber(ata, 6, "0.000000")
+            Utils.formatNumber(ata, 6, "0.000000")
           )}</td>
           <td>${escapeHtml(String(instr))}</td>
         `;
@@ -939,13 +900,19 @@
         const pieces = [];
         if (summary) {
           pieces.push(
-            `Total: ${formatNumber(summary.total || 0, 0, "0")}`,
-            `Success: ${formatNumber(summary.success_count || 0, 0, "0")}`,
-            `Failed: ${formatNumber(summary.failed_count || 0, 0, "0")}`,
+            `Total: ${Utils.formatNumber(summary.total || 0, 0, "0")}`,
+            `Success: ${Utils.formatNumber(
+              summary.success_count || 0,
+              0,
+              "0"
+            )}`,
+            `Failed: ${Utils.formatNumber(summary.failed_count || 0, 0, "0")}`,
             `Success Rate: ${formatRate(summary.success_rate)}`
           );
         }
-        pieces.push(`Loaded: ${formatNumber(State.items.length, 0, "0")}`);
+        pieces.push(
+          `Loaded: ${Utils.formatNumber(State.items.length, 0, "0")}`
+        );
         const baseText = pieces.join(" • ");
         metaEl.dataset.summaryText = baseText;
         updateFilterMeta();

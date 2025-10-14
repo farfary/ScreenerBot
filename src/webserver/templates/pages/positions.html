@@ -847,15 +847,7 @@
     el.textContent = String(value);
   }
 
-  function escapeHtml(value) {
-    if (value === null || value === undefined) return "";
-    return String(value)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-  }
+  // Use Utils.escapeHtml
 
   function formatPositionTimestamp(value) {
     if (typeof Utils !== "undefined" && Utils?.formatTimeFromSeconds) {
@@ -1219,7 +1211,10 @@
     setPositionModalText(
       "positionEntrySig",
       position.entry_transaction_signature
-        ? truncateAddress(position.entry_transaction_signature)
+        ? Utils.formatAddressCompact(position.entry_transaction_signature, {
+            startChars: 8,
+            endChars: 6,
+          })
         : "—"
     );
     setPositionModalText(
@@ -1254,7 +1249,10 @@
     setPositionModalText(
       "positionExitSig",
       position.exit_transaction_signature
-        ? truncateAddress(position.exit_transaction_signature)
+        ? Utils.formatAddressCompact(position.exit_transaction_signature, {
+            startChars: 8,
+            endChars: 6,
+          })
         : "—"
     );
     setPositionModalText(
@@ -1715,7 +1713,10 @@
     if (!signature) {
       return "<span>—</span>";
     }
-    const truncated = truncateAddress(signature);
+    const truncated = Utils.formatAddressCompact(signature, {
+      startChars: 8,
+      endChars: 6,
+    });
     const escapedSignature = escapeHtml(signature);
     return `
       <span class="position-signature-cell">
@@ -1886,12 +1887,7 @@
   window.openPositionTokenDetail = openPositionTokenDetail;
 
   // Truncate address
-  function truncateAddress(address) {
-    if (!address) return "-";
-    return (
-      address.substring(0, 8) + "..." + address.substring(address.length - 6)
-    );
-  }
+  // Use Utils.formatAddressCompact (truncates addresses)
 
   function getCurrentStatusFilter() {
     const select = document.getElementById("statusFilter");

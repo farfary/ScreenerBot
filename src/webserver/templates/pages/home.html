@@ -655,18 +655,7 @@
         statusCleanup: null,
       };
 
-      function el(id) {
-        return document.getElementById(id);
-      }
-
-      function setText(id, value) {
-        const element = el(id);
-        if (element) {
-          element.textContent = value;
-        }
-      }
-
-      // Use Utils.formatSol, Utils.formatPercent, Utils.formatTimeAgo
+      // Use Utils.el, Utils.setText, Utils.formatSol, Utils.formatPercent, Utils.formatTimeAgo
 
       function createFetchOptions() {
         if (

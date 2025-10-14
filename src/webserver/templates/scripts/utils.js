@@ -992,11 +992,15 @@
     return `${address.slice(0, start)}…${address.slice(-end)}`;
   }
 
-  function formatSecondsToTime(seconds, fallback = "—") {
-    const num = coerceNumber(seconds);
-    if (!Number.isFinite(num) || num < 0) {
+  function formatSecondsToTime(seconds, fallback = "-") {
+    if (
+      typeof seconds !== "number" ||
+      !Number.isFinite(seconds) ||
+      seconds < 0
+    ) {
       return fallback;
     }
+    const num = Math.round(seconds);
     if (num < 60) {
       return `${num}s`;
     }
@@ -1012,6 +1016,45 @@
       return `${hours}h`;
     }
     return `${hours.toFixed(1)}h`;
+  }
+
+  // DOM Helper Functions
+  function el(id) {
+    return document.getElementById(id);
+  }
+
+  function qs(selector, scope = document) {
+    return scope.querySelector(selector);
+  }
+
+  function qsa(selector, scope = document) {
+    return Array.from(scope.querySelectorAll(selector));
+  }
+
+  // Input Helper Functions
+  function textFromInput(id) {
+    const input = el(id);
+    if (!input) return null;
+    const value = input.value.trim();
+    return value ? value : null;
+  }
+
+  function numberFromInput(id) {
+    const input = el(id);
+    if (!input) return null;
+    const raw = input.value.trim();
+    if (raw === "") return null;
+    const parsed = parseFloat(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  // String Helper Functions
+  function toSlug(value) {
+    if (!value) return "";
+    return String(value)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
   }
 
   const Utils = {
@@ -1036,6 +1079,12 @@
     escapeHtml,
     setText,
     setHtml,
+    el,
+    qs,
+    qsa,
+    textFromInput,
+    numberFromInput,
+    toSlug,
     toggleDropdown,
     closeDropdownMenus,
     freezeTableLayout,
