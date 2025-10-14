@@ -1317,107 +1317,28 @@ window.Router = {
   },
 
   initPageScripts(pageName) {
+    // Only initialize each page once
+    if (this.initializedPages[pageName]) {
+      return;
+    }
+
+    console.log("[Router] Initializing page:", pageName);
+
     const hasLifecycle =
       Boolean(window.PageRegistry) &&
       typeof window.PageRegistry.has === "function" &&
       window.PageRegistry.has(pageName);
-
-    // Only initialize each page once (on first load)
-    if (this.initializedPages[pageName]) {
-      console.log(
-        "[Router] Page already initialized, skipping init:",
-        pageName
-      );
-
-      if (hasLifecycle) {
-        return;
-      }
-
-      switch (pageName) {
-        case "status":
-          if (typeof scheduleStatusPageInit === "function") {
-            scheduleStatusPageInit();
-          } else if (typeof initStatusPage === "function") {
-            initStatusPage();
-          }
-          if (typeof ensureStatusSubTabsVisible === "function") {
-            ensureStatusSubTabsVisible();
-          }
-          break;
-        case "filtering":
-          if (typeof ensureFilteringPageReady === "function") {
-            ensureFilteringPageReady();
-          }
-          break;
-        case "tokens":
-          if (typeof ensureTokensPageReady === "function") {
-            ensureTokensPageReady();
-          }
-          break;
-        case "services":
-          if (typeof ensureServicesPageReady === "function") {
-            ensureServicesPageReady();
-          }
-          break;
-        case "wallet":
-          if (typeof ensureWalletPageReady === "function") {
-            ensureWalletPageReady();
-          } else if (typeof ensureWalletSubTabsVisible === "function") {
-            ensureWalletSubTabsVisible();
-          }
-          break;
-      }
-
-      return;
-    }
-
-    console.log("[Router] Initializing page for first time:", pageName);
 
     if (hasLifecycle) {
       this.initializedPages[pageName] = true;
       return;
     }
 
-    // Re-initialize page-specific functionality after dynamic load
-    switch (pageName) {
-      case "status":
-        if (typeof scheduleStatusPageInit === "function") {
-          scheduleStatusPageInit();
-        } else if (typeof initStatusPage === "function") {
-          initStatusPage();
-        } else {
-          if (typeof initStatusSubTabs === "function") initStatusSubTabs();
-          if (typeof ensureStatusSubTabsVisible === "function")
-            ensureStatusSubTabsVisible();
-        }
-        break;
-      case "filtering":
-        if (typeof initFilteringPage === "function") initFilteringPage();
-        break;
-      case "tokens":
-        if (typeof initTokensPage === "function") initTokensPage();
-        break;
-      case "positions":
-        if (typeof initPositionsPage === "function") initPositionsPage();
-        break;
-      case "transactions":
-        if (typeof initTransactionsPage === "function") initTransactionsPage();
-        break;
-      case "events":
-        if (typeof initEventsPage === "function") initEventsPage();
-        break;
-      case "config":
-        if (typeof initConfigPage === "function") initConfigPage();
-        break;
-      case "services":
-        if (typeof initServicesPage === "function") initServicesPage();
-        break;
-      case "wallet":
-        if (typeof initWalletPage === "function") initWalletPage();
-        break;
-    }
-
-    // Mark as initialized
+    // Unmigrated pages: no initialization until PageLifecycleRegistry is implemented
+    // Pages without lifecycle will not work until migrated
+    console.warn(
+      `[Router] Page "${pageName}" has no lifecycle - migration required`
+    );
     this.initializedPages[pageName] = true;
   },
 };

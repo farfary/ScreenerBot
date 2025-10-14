@@ -1394,20 +1394,6 @@
     teardownTokensScrollObserver();
   }
 
-  // Global init function for Router to call during SPA navigation
-  window.initTokensPage = function () {
-    console.log("[Tokens] Initializing page");
-    hydrateTokensState();
-    initializeTokensColumnManager();
-    ensureTokensPageReady({ updateStatus: false });
-    setupSortableHeaders();
-    attachGlobalListeners();
-    if (window.Router && typeof Router.registerCleanup === "function") {
-      Router.registerCleanup(() => cleanupTokensPage());
-    }
-    reloadTokensList("Loading tokens...");
-  };
-
   // Debug helper to inspect pagination state
   window.debugTokensPagination = function () {
     const tbody = document.getElementById("tokensTableBody");
@@ -2187,143 +2173,6 @@
     reloadTokensList(null, { preserveItems: true, silent: true });
   }
 
-  function ensureTokensAutoRefresh() {
-    const state = window.tokensAutoRefreshState;
-    if (!state) {
-      return;
-    }
-
-    if (state.poller) {
-      if (typeof state.poller.start === "function") {
-        state.poller.start({ silent: true });
-      }
-      return;
-    }
-
-    if (window.PagePoller && typeof window.PagePoller.create === "function") {
-      state.poller = window.PagePoller.create({
-        label: "Tokens",
-        onPoll: tokensAutoRefreshPoll,
-      });
-      state.poller.start({ silent: true });
-      return;
-    }
-
-    console.warn(
-      "[Tokens] PagePoller unavailable; using fallback polling logic"
-    );
-    state.poller = createTokensFallbackPoller(tokensAutoRefreshPoll);
-    if (state.poller && typeof state.poller.start === "function") {
-      state.poller.start({ silent: true });
-    }
-  }
-
-  function createTokensFallbackPoller(onPoll) {
-    const logPrefix = "[Tokens] (fallback)";
-    let intervalId = null;
-    let listener = null;
-
-    const computeInterval = () => {
-      if (
-        window.PollingManager &&
-        typeof window.PollingManager.getInterval === "function"
-      ) {
-        const value = Number(window.PollingManager.getInterval());
-        if (Number.isFinite(value) && value > 0) {
-          return value;
-        }
-      }
-      return 1000;
-    };
-
-    const ensureListener = () => {
-      if (
-        !window.PollingManager ||
-        typeof window.PollingManager.onChange !== "function" ||
-        listener
-      ) {
-        return;
-      }
-
-      listener = window.PollingManager.onChange(() => {
-        if (!intervalId) {
-          return;
-        }
-        start({ silent: true });
-        console.log(`${logPrefix} Polling interval changed`);
-      });
-    };
-
-    const start = ({ silent } = {}) => {
-      stop({ silent: true });
-      const interval = computeInterval();
-      intervalId = setInterval(() => {
-        try {
-          onPoll();
-        } catch (error) {
-          console.error(`${logPrefix} Poll failed`, error);
-        }
-      }, interval);
-
-      if (window.Router && typeof Router.trackInterval === "function") {
-        Router.trackInterval(intervalId);
-      }
-
-      ensureListener();
-
-      if (!silent) {
-        console.log(`${logPrefix} Started polling every ${interval} ms`);
-      }
-
-      return interval;
-    };
-
-    const stop = ({ silent } = {}) => {
-      if (!intervalId) {
-        return;
-      }
-      clearInterval(intervalId);
-      intervalId = null;
-      if (!silent) {
-        console.log(`${logPrefix} Stopped polling`);
-      }
-    };
-
-    const cleanup = () => {
-      stop({ silent: true });
-      if (
-        listener &&
-        window.PollingManager &&
-        typeof window.PollingManager.removeListener === "function"
-      ) {
-        window.PollingManager.removeListener(listener);
-      }
-      listener = null;
-    };
-
-    return {
-      start,
-      stop,
-      restart: () => start({ silent: true }),
-      cleanup,
-    };
-  }
-
-  function stopTokensAutoRefresh() {
-    const state = window.tokensAutoRefreshState;
-    if (!state || !state.poller) {
-      return;
-    }
-
-    if (typeof state.poller.cleanup === "function") {
-      state.poller.cleanup();
-    } else if (typeof state.poller.stop === "function") {
-      state.poller.stop();
-    }
-
-    state.poller = null;
-  }
-
   function initTokensSubTabs() {
     const subTabsContainer = document.getElementById("subTabsContainer");
     if (!subTabsContainer) return;
@@ -2479,16 +2328,6 @@
       setTokenCountStatus(statusMessage);
     }
   }
-
-  function ensureTokensPageReady(options = {}) {
-    initializeTokensColumnManager();
-    ensureTokensSubTabsVisible();
-    ensureTokensToolbarVisible(options);
-    attachGlobalListeners();
-    ensureTokensAutoRefresh();
-  }
-
-  window.ensureTokensPageReady = ensureTokensPageReady;
 
   function initTokensToolbar() {
     const toolbarContainer = document.getElementById("toolbarContainer");
@@ -3877,40 +3716,6 @@
     }
   }
 
-  function cleanupTokensPage() {
-    teardownTokensScrollObserver();
-
-    if (tokensFetchState.abortController) {
-      try {
-        tokensFetchState.abortController.abort();
-      } catch (_) {
-        /* no-op */
-      }
-      tokensFetchState.abortController = null;
-    }
-
-    tokensFetchState.inProgress = false;
-    tokensFetchState.message = "";
-    tokensTableState.loading = false;
-    tokensTableState.pendingReload = false;
-
-    if (searchDebounceHandle) {
-      clearTimeout(searchDebounceHandle);
-      searchDebounceHandle = null;
-    }
-
-    if (window.__tokensVisibilityHandler) {
-      document.removeEventListener(
-        "visibilitychange",
-        window.__tokensVisibilityHandler
-      );
-      window.__tokensVisibilityHandler = null;
-    }
-
-    stopTokensAutoRefresh();
-    closeTokensColumnDialog();
-  }
-
   function openDropdownMenu(btn, menu) {
     const rect = btn.getBoundingClientRect();
     const menuWidth = Math.max(200, menu.offsetWidth || 200);
@@ -4865,6 +4670,136 @@
   // Make retryChartLoad globally accessible
   window.retryChartLoad = retryChartLoad;
 
-  // Execute initialization immediately (works for both initial load and SPA navigation)
-  initTokensPage();
+  // ============================================================================
+  // PAGE LIFECYCLE REGISTRATION
+  // ============================================================================
+
+  function createTokensPageLifecycle() {
+    let managedPoller = null;
+    let lifecycleContext = null;
+
+    return {
+      /**
+       * One-time initialization: hydrate state, setup column manager, bind sort headers
+       */
+      init(context) {
+        console.log("[Tokens] Lifecycle: init");
+        lifecycleContext = context;
+        hydrateTokensState();
+        initializeTokensColumnManager();
+        setupSortableHeaders();
+        attachGlobalListeners();
+      },
+
+      /**
+       * Activate: start poller, fetch initial data, render cached content
+       */
+      activate(context) {
+        console.log("[Tokens] Lifecycle: activate");
+        lifecycleContext = context;
+
+        // Initialize UI components
+        ensureTokensSubTabsVisible();
+        ensureTokensToolbarVisible({ updateStatus: false });
+
+        // Create and start poller with context management
+        const state = window.tokensAutoRefreshState;
+        if (state && !state.poller) {
+          const poller = window.PagePoller.create({
+            label: "Tokens",
+            onPoll: tokensAutoRefreshPoll,
+          });
+          managedPoller = context.managePoller(poller);
+          state.poller = managedPoller;
+          managedPoller.start({ silent: true });
+        }
+
+        // Load initial data
+        reloadTokensList("Loading tokens...");
+      },
+
+      /**
+       * Deactivate: stop poller, abort in-flight fetches
+       */
+      deactivate(context) {
+        console.log("[Tokens] Lifecycle: deactivate");
+
+        // Stop poller
+        const state = window.tokensAutoRefreshState;
+        if (state && state.poller) {
+          if (typeof state.poller.stop === "function") {
+            state.poller.stop();
+          }
+          // Don't null it out yet - managed poller will be cleaned up by context
+        }
+
+        // Abort in-flight fetches
+        if (tokensFetchState.abortController) {
+          try {
+            tokensFetchState.abortController.abort();
+          } catch (_) {
+            /* no-op */
+          }
+          tokensFetchState.abortController = null;
+        }
+      },
+
+      /**
+       * Full cleanup: teardown observers, timers, listeners, dialogs
+       */
+      dispose(context) {
+        console.log("[Tokens] Lifecycle: dispose");
+
+        // Teardown scroll observer
+        teardownTokensScrollObserver();
+
+        // Clear search debounce
+        if (searchDebounceHandle) {
+          clearTimeout(searchDebounceHandle);
+          searchDebounceHandle = null;
+        }
+
+        // Remove visibility handler
+        if (window.__tokensVisibilityHandler) {
+          document.removeEventListener(
+            "visibilitychange",
+            window.__tokensVisibilityHandler
+          );
+          window.__tokensVisibilityHandler = null;
+        }
+
+        // Close column dialog
+        closeTokensColumnDialog();
+
+        // Clear poller reference
+        const state = window.tokensAutoRefreshState;
+        if (state) {
+          state.poller = null;
+        }
+        managedPoller = null;
+
+        // Reset fetch state
+        tokensFetchState.inProgress = false;
+        tokensFetchState.message = "";
+        tokensTableState.loading = false;
+        tokensTableState.pendingReload = false;
+
+        lifecycleContext = null;
+      },
+    };
+  }
+
+  function registerTokensPageLifecycle(registry) {
+    registry.register("tokens", createTokensPageLifecycle());
+  }
+
+  // Queue-based registration for PageLifecycleRegistry
+  if (window.PageRegistry) {
+    registerTokensPageLifecycle(window.PageRegistry);
+  } else {
+    window.__pendingPageRegistrations = window.__pendingPageRegistrations || [];
+    window.__pendingPageRegistrations.push((registry) =>
+      registerTokensPageLifecycle(registry)
+    );
+  }
 </script>
