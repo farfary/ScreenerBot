@@ -415,6 +415,7 @@
     const subTabsContainer = document.getElementById("subTabsContainer");
     if (!subTabsContainer) return;
 
+    subTabsContainer.dataset.subTabsOwner = "status";
     const views = [
       { id: "system", label: "💻 System" },
       { id: "rpc", label: "📡 RPC" },
@@ -460,7 +461,9 @@
     if (!subTabsContainer) return;
 
     // If container is empty or still hidden, (re)initialize
-    const needsInit = subTabsContainer.children.length === 0;
+    const currentOwner = subTabsContainer.dataset.subTabsOwner;
+    const needsInit =
+      subTabsContainer.children.length === 0 || currentOwner !== "status";
     const hidden =
       getComputedStyle(subTabsContainer).display === "none" ||
       subTabsContainer.style.display === "none";

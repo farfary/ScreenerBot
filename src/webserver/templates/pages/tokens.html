@@ -2328,6 +2328,7 @@
     const subTabsContainer = document.getElementById("subTabsContainer");
     if (!subTabsContainer) return;
 
+    subTabsContainer.dataset.subTabsOwner = "tokens";
     subTabsContainer.innerHTML = TOKENS_VIEW_DEFS.map(function (view) {
       var isActive = view.id === tokensState.view;
       return (
@@ -2359,7 +2360,9 @@
       window.sessionStorage.setItem("tokens.view", tokensState.view);
     }
 
-    const needsInit = subTabsContainer.children.length === 0;
+    const currentOwner = subTabsContainer.dataset.subTabsOwner;
+    const needsInit =
+      subTabsContainer.children.length === 0 || currentOwner !== "tokens";
     const computed =
       typeof window.getComputedStyle === "function"
         ? window.getComputedStyle(subTabsContainer)
