@@ -649,6 +649,8 @@ impl TokenDatabase {
 
         let info_image_url = info_image_url.or_else(|| token.logo_url.clone());
         let is_verified = if token.is_verified { 1 } else { 0 };
+        let price_native = token.price_dexscreener_sol.unwrap_or(0.0);
+        let price_usd = token.price_dexscreener_usd.unwrap_or(0.0);
 
         let connection = self.connection.lock().map_err(|e| {
             Box::new(std::io::Error::new(
@@ -682,8 +684,8 @@ impl TokenDatabase {
                 token.dex_id,
                 token.pair_address,
                 token.pair_url,
-                token.price_dexscreener_sol, // price_native maps to price_dexscreener_sol
-                token.price_dexscreener_usd,
+                price_native, // price_native column must remain non-null
+                price_usd,
                 token.price_dexscreener_sol,
                 token.liquidity.as_ref().and_then(|l| l.usd),
                 token.liquidity.as_ref().and_then(|l| l.base),
@@ -1043,6 +1045,8 @@ impl TokenDatabase {
             }
         }
 
+        let mut info_image_column_added = false;
+
         let token_columns = [
             (
                 "description",
@@ -1058,6 +1062,10 @@ impl TokenDatabase {
                 "ALTER TABLE tokens ADD COLUMN is_verified INTEGER NOT NULL DEFAULT 0",
             ),
             ("website", "ALTER TABLE tokens ADD COLUMN website TEXT"),
+            (
+                "info_image_url",
+                "ALTER TABLE tokens ADD COLUMN info_image_url TEXT",
+            ),
             (
                 "info_websites",
                 "ALTER TABLE tokens ADD COLUMN info_websites TEXT",
@@ -1089,6 +1097,41 @@ impl TokenDatabase {
                         LogTag::Cache,
                         "MIGRATION",
                         &format!("Added column {} to tokens table", column),
+                    );
+                    if column.eq_ignore_ascii_case("info_image_url") {
+                        info_image_column_added = true;
+                    }
+                }
+            }
+        }
+
+        if table_has_column(&migration_conn, "tokens", "info_image_url")?
+            && table_has_column(&migration_conn, "tokens", "logo_url")?
+        {
+            match migration_conn.execute(
+                "UPDATE tokens SET info_image_url = logo_url WHERE info_image_url IS NULL AND logo_url IS NOT NULL",
+                [],
+            ) {
+                Ok(updated) => {
+                    if info_image_column_added || updated > 0 {
+                        log(
+                            LogTag::Cache,
+                            "MIGRATION",
+                            &format!(
+                                "Backfilled info_image_url values from legacy logo_url column (rows_updated={})",
+                                updated
+                            ),
+                        );
+                    }
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Cache,
+                        "MIGRATION_WARN",
+                        &format!(
+                            "Failed to backfill info_image_url from legacy logo_url column: {}",
+                            e
+                        ),
                     );
                 }
             }
