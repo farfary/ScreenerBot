@@ -12,11 +12,18 @@ const COMPONENT_STYLES: &str = include_str!("templates/styles/components.css");
 const TOOLBAR_STYLES: &str = include_str!("templates/styles/toolbar.css");
 const TOKEN_MODAL_STYLES: &str = include_str!("templates/styles/token-modal.css");
 const COMMON_STYLES: &str = include_str!("templates/styles/common.css");
-const UTIL_SCRIPTS: &str = include_str!("templates/scripts/utils.js");
-const COMMON_SCRIPTS: &str = include_str!("templates/scripts/common.js");
+const SERVICES_PAGE_STYLES: &str = include_str!("templates/styles/pages/services.css");
+
+pub const CORE_LIFECYCLE: &str = include_str!("templates/scripts/core/lifecycle.js");
+pub const CORE_APP_STATE: &str = include_str!("templates/scripts/core/app_state.js");
+pub const CORE_POLLER: &str = include_str!("templates/scripts/core/poller.js");
+pub const CORE_DOM: &str = include_str!("templates/scripts/core/dom.js");
+pub const CORE_UTILS: &str = include_str!("templates/scripts/core/utils.js");
+pub const CORE_ROUTER: &str = include_str!("templates/scripts/core/router.js");
+
 const THEME_SCRIPTS: &str = include_str!("templates/scripts/theme.js");
-const CHART_SCRIPTS: &str = include_str!("templates/scripts/chart.js");
-const POSITION_MODAL_SCRIPTS: &str = include_str!("templates/modals/position_modal.js");
+
+pub const SERVICES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/services.js");
 
 const HOME_PAGE: &str = include_str!("templates/pages/home.html");
 const STATUS_PAGE: &str = include_str!("templates/pages/status.html");
@@ -34,31 +41,19 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     let mut html = BASE_TEMPLATE.replace("{{TITLE}}", title);
     html = html.replace("{{NAV_TABS}}", &nav_tabs(active_tab));
     html = html.replace("{{CONTENT}}", content);
-    let combined_styles = [
+    let mut combined_styles = vec![
         FOUNDATION_STYLES,
         LAYOUT_STYLES,
         COMPONENT_STYLES,
         TOOLBAR_STYLES,
         TOKEN_MODAL_STYLES,
         COMMON_STYLES,
-    ]
-    .join("\n");
-    html = html.replace("/*__INJECTED_STYLES__*/", &combined_styles);
-    if arguments::is_debug_webserver_enabled() {
-        const DEBUG_BOOTSTRAP: &str = r#"
-      window.__DEBUG_TOKENS_VERBOSE = true;
-"#;
-        let mut util_block = String::with_capacity(DEBUG_BOOTSTRAP.len() + UTIL_SCRIPTS.len());
-        util_block.push_str(DEBUG_BOOTSTRAP);
-        util_block.push_str(UTIL_SCRIPTS);
-        html = html.replace("/*__UTIL_SCRIPTS__*/", &util_block);
-    } else {
-        html = html.replace("/*__UTIL_SCRIPTS__*/", UTIL_SCRIPTS);
+    ];
+    if active_tab == "services" {
+        combined_styles.push(SERVICES_PAGE_STYLES);
     }
-    html = html.replace("/*__COMMON_SCRIPTS__*/", COMMON_SCRIPTS);
+    html = html.replace("/*__INJECTED_STYLES__*/", &combined_styles.join("\n"));
     html = html.replace("/*__THEME_SCRIPTS__*/", THEME_SCRIPTS);
-    html = html.replace("/*__CHART_SCRIPTS__*/", CHART_SCRIPTS);
-    html = html.replace("/*__POSITION_MODAL_SCRIPTS__*/", POSITION_MODAL_SCRIPTS);
     html
 }
 

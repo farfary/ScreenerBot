@@ -1,0 +1,3330 @@
+<style>
+  .status-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .status-metric-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+
+  .status-metric-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  .status-metric-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-secondary);
+    font-size: 0.85em;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .status-metric-icon {
+    font-size: 1.2em;
+  }
+
+  .status-metric-value {
+    font-size: 1.8em;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .status-metric-unit {
+    font-size: 0.6em;
+    font-weight: 400;
+    color: var(--text-secondary);
+    margin-left: 4px;
+  }
+
+  .status-services-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin-top: 16px;
+  }
+
+  .status-services-table th {
+    background: var(--card-bg);
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid var(--border-color);
+  }
+
+  .status-services-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .status-services-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.85em;
+    font-weight: 600;
+  }
+
+  .status-badge.ready {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+  }
+
+  .status-badge.not-ready {
+    background: rgba(251, 191, 36, 0.1);
+    color: #fbbf24;
+  }
+
+  .status-section-title {
+    font-size: 1.1em;
+    font-weight: 600;
+    margin: 24px 0 12px 0;
+    color: var(--text-primary);
+  }
+
+  .status-wallet-tokens {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-top: 16px;
+  }
+
+  .status-trader-info {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .status-trader-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+  }
+
+  .status-trader-label {
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .status-trader-value {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .status-placeholder {
+    padding: 40px;
+    text-align: center;
+    color: var(--text-secondary);
+  }
+
+  .status-placeholder-icon {
+    font-size: 3em;
+    margin-bottom: 16px;
+    opacity: 0.5;
+  }
+
+  .status-placeholder-title {
+    font-size: 1.1em;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .status-placeholder-text {
+    font-size: 0.9em;
+  }
+
+  .status-page {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .status-page .status-scroll-wrap {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .status-scroll-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+</style>
+
+<script>
+  (function () {
+    const STATUS_VIEWS = [
+      "system",
+      "rpc",
+      "transactions",
+      "positions",
+      "pools",
+      "dexscreener",
+      "geckoterminal",
+      "discovery",
+      "ohlcvs",
+      "events",
+      "wallet",
+      "trader",
+      "sol_price",
+      "webserver",
+      "rl_learner",
+    ];
+
+    const SUB_TAB_OPTIONS = [
+      { id: "system", label: "💻 System" },
+      { id: "rpc", label: "📡 RPC" },
+      { id: "transactions", label: "💱 Transactions" },
+      { id: "positions", label: "💰 Positions" },
+      { id: "pools", label: "🏊 Pools" },
+      { id: "dexscreener", label: "🧮 DexScreener" },
+      { id: "geckoterminal", label: "🦎 GeckoTerminal" },
+      { id: "discovery", label: "🔍 Discovery" },
+      { id: "ohlcvs", label: "📊 OHLCVS" },
+      { id: "events", label: "📡 Events" },
+      { id: "wallet", label: "👛 Wallet" },
+      { id: "trader", label: "🤖 Trader" },
+      { id: "sol_price", label: "💵 SOL Price" },
+      { id: "webserver", label: "🌐 Webserver" },
+      { id: "rl_learner", label: "🧠 RL Learner" },
+    ];
+
+    const STORAGE_KEY = "status.view";
+
+    const state = {
+      context: null,
+      view: "system",
+      data: null,
+      message: "Loading status...",
+      error: null,
+      lastSnapshotAt: null,
+      poller: null,
+      isFetching: false,
+      abortController: null,
+      subTabsTeardown: null,
+    };
+
+    function restoreViewFromStorage() {
+      try {
+        const saved = window.sessionStorage.getItem(STORAGE_KEY);
+        if (saved && STATUS_VIEWS.includes(saved)) {
+          state.view = saved;
+        }
+      } catch (error) {
+        console.warn("[Status] Failed to restore saved view", error);
+      }
+    }
+
+    function persistView() {
+      try {
+        window.sessionStorage.setItem(STORAGE_KEY, state.view);
+      } catch (error) {
+        console.warn("[Status] Failed to persist view", error);
+      }
+    }
+
+    function getContentContainer() {
+      return document.getElementById("statusContent");
+    }
+
+    function setStatusMessage(message) {
+      state.message = message;
+      state.error = null;
+      if (!state.data) {
+        renderStatusContent();
+      }
+    }
+
+    function setStatusError(message) {
+      state.error = message;
+      if (!state.data) {
+        renderStatusContent();
+      }
+    }
+
+    function highlightActiveSubTab() {
+      const container = document.getElementById("subTabsContainer");
+      if (!container) {
+        return;
+      }
+      container
+        .querySelectorAll(".sub-tab")
+        .forEach((button) =>
+          button.classList.toggle("active", button.dataset.view === state.view)
+        );
+    }
+
+    function teardownSubTabs() {
+      if (typeof state.subTabsTeardown === "function") {
+        try {
+          state.subTabsTeardown();
+        } catch (error) {
+          console.error("[Status] Failed to teardown sub-tabs", error);
+        }
+        state.subTabsTeardown = null;
+      }
+    }
+
+    function mountSubTabs(context) {
+      const container = document.getElementById("subTabsContainer");
+      if (!container) {
+        return;
+      }
+
+      teardownSubTabs();
+
+      container.innerHTML = SUB_TAB_OPTIONS.map((view) => {
+        const active = view.id === state.view ? " active" : "";
+        return `<button class="sub-tab${active}" data-view="${view.id}">${view.label}</button>`;
+      }).join("");
+
+      container.setAttribute("data-page", "status");
+      container.style.display = "flex";
+
+      const handlers = [];
+      container.querySelectorAll(".sub-tab").forEach((button) => {
+        const handler = () => switchView(button.dataset.view);
+        button.addEventListener("click", handler);
+        handlers.push(() => button.removeEventListener("click", handler));
+      });
+
+      const cleanup = () => {
+        handlers.forEach((dispose) => dispose());
+        if (container.getAttribute("data-page") === "status") {
+          container.innerHTML = "";
+        }
+      };
+
+      const deactivateDispose = context.onDeactivate(() => {
+        cleanup();
+        state.subTabsTeardown = null;
+      });
+
+      context.onDispose(() => {
+        deactivateDispose();
+        cleanup();
+        if (container.getAttribute("data-page") === "status") {
+          container.style.display = "none";
+        }
+        state.subTabsTeardown = null;
+      });
+
+      state.subTabsTeardown = cleanup;
+      highlightActiveSubTab();
+    }
+
+    function applyStatusSnapshot(snapshot) {
+      state.data = snapshot;
+      state.message = null;
+      state.error = null;
+      state.lastSnapshotAt = Date.now();
+      highlightActiveSubTab();
+      renderStatusContent();
+
+      if (typeof renderStatusBadgesFromSnapshot === "function") {
+        try {
+          renderStatusBadgesFromSnapshot(snapshot);
+        } catch (error) {
+          console.warn("[Status] Failed to render status badges", error);
+        }
+      }
+    }
+
+    function createFetchController() {
+      if (
+        state.context &&
+        typeof state.context.createAbortController === "function"
+      ) {
+        return state.context.createAbortController();
+      }
+      return new AbortController();
+    }
+
+    async function fetchStatusSnapshot(options = {}) {
+      const { showLoading = false } = options;
+
+      if (showLoading) {
+        setStatusMessage("Loading status...");
+      }
+
+      if (state.isFetching) {
+        return;
+      }
+
+      const controller = createFetchController();
+
+      if (state.abortController && state.abortController !== controller) {
+        try {
+          state.abortController.abort();
+        } catch (error) {
+          console.warn("[Status] Failed to abort prior request", error);
+        }
+      }
+
+      state.abortController = controller;
+      state.isFetching = true;
+
+      try {
+        const response = await fetch("/api/status", {
+          signal: controller.signal,
+          headers: { "X-Requested-With": "fetch" },
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const snapshot = await response.json();
+        applyStatusSnapshot(snapshot);
+      } catch (error) {
+        if (error?.name === "AbortError") {
+          return;
+        }
+
+        console.error("[Status] Failed to load snapshot", error);
+
+        if (!state.data) {
+          setStatusError("Unable to load status snapshot");
+        } else if (window.Utils && typeof Utils.showToast === "function") {
+          Utils.showToast("⚠️ Failed to refresh status data", "warning");
+        }
+      } finally {
+        if (state.abortController === controller) {
+          state.abortController = null;
+        }
+        state.isFetching = false;
+      }
+    }
+
+    function ensurePoller(context) {
+      if (state.poller) {
+        return state.poller;
+      }
+
+      const poller = PagePoller.create({
+        label: "StatusSnapshot",
+        onPoll: () => fetchStatusSnapshot({ showLoading: false }),
+      });
+
+      state.poller = context.managePoller(poller);
+      return state.poller;
+    }
+
+    function startPoller() {
+      if (state.poller) {
+        state.poller.start();
+      }
+    }
+
+    function stopPoller() {
+      if (state.poller) {
+        state.poller.stop();
+      }
+      if (state.abortController) {
+        try {
+          state.abortController.abort();
+        } catch (error) {
+          console.warn("[Status] Failed to abort fetch on stop", error);
+        } finally {
+          state.abortController = null;
+        }
+      }
+    }
+
+    function cleanupPoller() {
+      if (state.poller) {
+        try {
+          state.poller.cleanup();
+        } catch (error) {
+          console.error("[Status] Poller cleanup failed", error);
+        }
+        state.poller = null;
+      }
+      if (state.abortController) {
+        try {
+          state.abortController.abort();
+        } catch (error) {
+          console.warn("[Status] Failed to abort fetch on dispose", error);
+        } finally {
+          state.abortController = null;
+        }
+      }
+    }
+
+    function switchView(nextView) {
+      if (
+        !nextView ||
+        state.view === nextView ||
+        !STATUS_VIEWS.includes(nextView)
+      ) {
+        return;
+      }
+
+      state.view = nextView;
+      persistView();
+      highlightActiveSubTab();
+      renderStatusContent();
+    }
+
+    function renderStatusContent() {
+      const contentContainer = getContentContainer();
+      if (!contentContainer) {
+        return;
+      }
+
+      const data = state.data;
+      if (!data) {
+        const message = state.error || state.message || "Loading status...";
+        contentContainer.innerHTML = `
+          <div class="page-section">
+            <div style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
+              <div class="loading-text">${message}</div>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      switch (state.view) {
+        case "system":
+          renderSystemTab(data);
+          break;
+        case "rpc":
+          renderRPCTab(data);
+          break;
+        case "wallet":
+          renderWalletTab(data);
+          break;
+        case "trader":
+          renderTraderTab(data);
+          break;
+        case "pools":
+          renderPoolsTab(data);
+          break;
+        case "dexscreener":
+          renderDexScreenerTab(data);
+          break;
+        case "geckoterminal":
+          renderGeckoTerminalTab(data);
+          break;
+        case "discovery":
+          renderDiscoveryTab(data);
+          break;
+        case "transactions":
+          renderTransactionsTab(data);
+          break;
+        case "events":
+          renderEventsTab(data);
+          break;
+        case "ohlcvs":
+          renderOHLCVSTab(data);
+          break;
+        default:
+          renderPlaceholderTab(state.view);
+      }
+    }
+
+    function createStatusPageLifecycle() {
+      return {
+        init(context) {
+          state.context = context;
+          context.data.state = state;
+          restoreViewFromStorage();
+        },
+        activate(context) {
+          state.context = context;
+          mountSubTabs(context);
+          highlightActiveSubTab();
+          ensurePoller(context);
+          renderStatusContent();
+          fetchStatusSnapshot({ showLoading: !state.data });
+          startPoller();
+        },
+        deactivate() {
+          stopPoller();
+        },
+        dispose() {
+          stopPoller();
+          cleanupPoller();
+          teardownSubTabs();
+          state.context = null;
+          state.data = null;
+          state.message = "Loading status...";
+          state.error = null;
+        },
+      };
+    }
+
+    if (window.PageLifecycleRegistry) {
+      window.PageLifecycleRegistry.register(
+        "status",
+        createStatusPageLifecycle()
+      );
+    } else {
+      if (!window.__pendingPageRegistrations) {
+        window.__pendingPageRegistrations = [];
+      }
+      window.__pendingPageRegistrations.push({
+        pageId: "status",
+        lifecycle: createStatusPageLifecycle(),
+      });
+    }
+
+    function renderSystemTab(data) {
+      const contentContainer = document.getElementById("statusContent");
+
+      const metrics = data.metrics || {};
+      const services = data.services || {};
+
+      contentContainer.innerHTML = `
+                <div class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">💻</span>
+                            <span class="card-title">System Information</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="status-metrics-grid">
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">⏱️</span>
+                                        <span>Uptime</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${data.uptime_formatted || "N/A"}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🔥</span>
+                                        <span>CPU (System)</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${Utils.formatNumber(
+                                          metrics.cpu_system_percent ||
+                                            metrics.cpu_usage_percent ||
+                                            0,
+                                          1,
+                                          { fallback: "N/A" }
+                                        )}<span class="status-metric-unit">%</span>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">⚙️</span>
+                                        <span>CPU (Process)</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${Utils.formatNumber(
+                                          metrics.cpu_process_percent || 0,
+                                          1,
+                                          { fallback: "N/A" }
+                                        )}<span class="status-metric-unit">%</span>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">💾</span>
+                                        <span>Memory (System)</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${Utils.formatNumber(
+                                          metrics.system_memory_used_mb ||
+                                            metrics.memory_usage_mb ||
+                                            0,
+                                          0,
+                                          { fallback: "N/A" }
+                                        )}<span class="status-metric-unit">MB</span>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">📦</span>
+                                        <span>Memory (Process)</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${Utils.formatNumber(
+                                          metrics.process_memory_mb || 0,
+                                          0,
+                                          { fallback: "N/A" }
+                                        )}<span class="status-metric-unit">MB</span>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🧵</span>
+                                        <span>Active Threads</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${metrics.active_threads || 0}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">📡</span>
+                                        <span>RPC Calls</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${Utils.formatNumber(
+                                          metrics.rpc_calls_total || 0,
+                                          0,
+                                          { fallback: "N/A" }
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <h3 class="status-section-title">Services Status</h3>
+                            <table class="status-services-table sticky-table">
+                                <thead>
+                                    <tr>
+                                        <th>Service</th>
+                                        <th>Status</th>
+                                        <th>Last Check</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${renderServicesRows(services)}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+    }
+
+    function renderServicesRows(services) {
+      const servicesList = [
+        { key: "tokens_system", label: "Tokens System" },
+        { key: "positions_system", label: "Positions System" },
+        { key: "pool_service", label: "Pool Service" },
+        { key: "security_analyzer", label: "Security Analyzer" },
+        { key: "transactions_system", label: "Transactions System" },
+      ];
+
+      return servicesList
+        .map(({ key, label }) => {
+          const service = services[key] || {};
+          const ready = service.ready || false;
+          const lastCheck = service.last_check || "N/A";
+
+          return `
+                    <tr>
+                        <td><strong>${label}</strong></td>
+                        <td>
+                            <span class="status-badge ${
+                              ready ? "ready" : "not-ready"
+                            }">
+                                ${ready ? "✅ Ready" : "⏳ Loading"}
+                            </span>
+                        </td>
+                        <td>${Utils.formatTimestamp(lastCheck, {
+                          fallback: "N/A",
+                        })}</td>
+                    </tr>
+                `;
+        })
+        .join("");
+    }
+
+    function renderRPCTab(data) {
+      const contentContainer = document.getElementById("statusContent");
+
+      const rpcStats = data.rpc_stats;
+
+      if (!rpcStats) {
+        contentContainer.innerHTML = `
+                    <div class="page-section">
+                        <div class="card">
+                            <div class="card-header">
+                                <span class="card-icon">📡</span>
+                                <span class="card-title">RPC Statistics</span>
+                            </div>
+                            <div class="status-placeholder">
+                                <div class="status-placeholder-icon">📡</div>
+                                <div class="status-placeholder-title">RPC Statistics</div>
+                                <div class="status-placeholder-text">RPC stats not available</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+        return;
+      }
+
+      // Calculate uptime formatted
+      const uptimeHours = Math.floor(rpcStats.uptime_seconds / 3600);
+      const uptimeMinutes = Math.floor((rpcStats.uptime_seconds % 3600) / 60);
+      const uptimeFormatted =
+        uptimeHours > 0
+          ? `${uptimeHours}h ${uptimeMinutes}m`
+          : `${uptimeMinutes}m`;
+
+      // Sort URLs by call count
+      const urlsArray = Object.entries(rpcStats.calls_per_url || {})
+        .map(([url, calls]) => ({
+          url,
+          calls,
+          errors: (rpcStats.errors_per_url || {})[url] || 0,
+          successRate:
+            calls > 0
+              ? (
+                  ((calls - ((rpcStats.errors_per_url || {})[url] || 0)) /
+                    calls) *
+                  100
+                ).toFixed(2)
+              : "100.00",
+        }))
+        .sort((a, b) => b.calls - a.calls);
+
+      // Sort methods by call count
+      const methodsArray = Object.entries(rpcStats.calls_per_method || {})
+        .map(([method, calls]) => ({
+          method,
+          calls,
+          errors: (rpcStats.errors_per_method || {})[method] || 0,
+          successRate:
+            calls > 0
+              ? (
+                  ((calls - ((rpcStats.errors_per_method || {})[method] || 0)) /
+                    calls) *
+                  100
+                ).toFixed(2)
+              : "100.00",
+        }))
+        .sort((a, b) => b.calls - a.calls);
+
+      contentContainer.innerHTML = `
+                <div class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">📡</span>
+                            <span class="card-title">RPC Statistics</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="status-metrics-grid">
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">📊</span>
+                                        <span>Total Calls</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${Utils.formatNumber(
+                                          rpcStats.total_calls,
+                                          0,
+                                          { fallback: "N/A" }
+                                        )}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">❌</span>
+                                        <span>Total Errors</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${Utils.formatNumber(
+                                          rpcStats.total_errors,
+                                          0,
+                                          { fallback: "N/A" }
+                                        )}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">✅</span>
+                                        <span>Success Rate</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${Utils.formatNumber(
+                                          rpcStats.success_rate,
+                                          2,
+                                          { fallback: "N/A" }
+                                        )}<span class="status-metric-unit">%</span>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">⚡</span>
+                                        <span>Calls Per Second</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${Utils.formatNumber(
+                                          rpcStats.calls_per_second,
+                                          2,
+                                          { fallback: "N/A" }
+                                        )}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">⏱️</span>
+                                        <span>Avg Response Time</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${Utils.formatNumber(
+                                          rpcStats.average_response_time_ms,
+                                          1,
+                                          { fallback: "N/A" }
+                                        )}<span class="status-metric-unit">ms</span>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🕐</span>
+                                        <span>Uptime</span>
+                                    </div>
+                                    <div class="status-metric-value" style="font-size: 1.4em;">
+                                        ${uptimeFormatted}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <h3 class="status-section-title">Calls by RPC Endpoint</h3>
+                            <table class="status-services-table sticky-table">
+                                <thead>
+                                    <tr>
+                                        <th>Endpoint</th>
+                                        <th style="text-align: right;">Calls</th>
+                                        <th style="text-align: right;">Errors</th>
+                                        <th style="text-align: right;">Success Rate</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${urlsArray
+                                      .map(
+                                        (item) => `
+                                        <tr>
+                                            <td>
+                                                <code style="font-size: 0.85em; word-break: break-all;">
+                                                    ${
+                                                      item.url.length > 60
+                                                        ? item.url.slice(
+                                                            0,
+                                                            57
+                                                          ) + "..."
+                                                        : item.url
+                                                    }
+                                                </code>
+                                            </td>
+                                            <td style="text-align: right;"><strong>${Utils.formatNumber(
+                                              item.calls,
+                                              0,
+                                              { fallback: "N/A" }
+                                            )}</strong></td>
+                                            <td style="text-align: right; color: ${
+                                              item.errors > 0
+                                                ? "#ef4444"
+                                                : "inherit"
+                                            };">
+                                                ${Utils.formatNumber(
+                                                  item.errors,
+                                                  0,
+                                                  { fallback: "N/A" }
+                                                )}
+                                            </td>
+                                            <td style="text-align: right;">
+                                                <span class="status-badge ${
+                                                  item.successRate >= 99
+                                                    ? "ready"
+                                                    : "not-ready"
+                                                }">
+                                                    ${item.successRate}%
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    `
+                                      )
+                                      .join("")}
+                                </tbody>
+                            </table>
+
+                            <h3 class="status-section-title" style="margin-top: 32px;">Calls by Method</h3>
+                            <table class="status-services-table sticky-table">
+                                <thead>
+                                    <tr>
+                                        <th>Method</th>
+                                        <th style="text-align: right;">Calls</th>
+                                        <th style="text-align: right;">Errors</th>
+                                        <th style="text-align: right;">Success Rate</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${methodsArray
+                                      .slice(0, 15)
+                                      .map(
+                                        (item) => `
+                                        <tr>
+                                            <td><code style="font-size: 0.85em;">${
+                                              item.method
+                                            }</code></td>
+                                            <td style="text-align: right;"><strong>${Utils.formatNumber(
+                                              item.calls,
+                                              0,
+                                              { fallback: "N/A" }
+                                            )}</strong></td>
+                                            <td style="text-align: right; color: ${
+                                              item.errors > 0
+                                                ? "#ef4444"
+                                                : "inherit"
+                                            };">
+                                                ${Utils.formatNumber(
+                                                  item.errors,
+                                                  0,
+                                                  { fallback: "N/A" }
+                                                )}
+                                            </td>
+                                            <td style="text-align: right;">
+                                                <span class="status-badge ${
+                                                  item.successRate >= 99
+                                                    ? "ready"
+                                                    : "not-ready"
+                                                }">
+                                                    ${item.successRate}%
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    `
+                                      )
+                                      .join("")}
+                                    ${
+                                      methodsArray.length > 15
+                                        ? `
+                                        <tr>
+                                            <td colspan="4" style="text-align: center; color: var(--text-secondary); font-size: 0.9em; padding: 16px;">
+                                                Showing top 15 of ${methodsArray.length} methods
+                                            </td>
+                                        </tr>
+                                    `
+                                        : ""
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+    }
+
+    function renderWalletTab(data) {
+      const contentContainer = document.getElementById("statusContent");
+
+      const wallet = data.wallet || null;
+
+      if (!wallet) {
+        contentContainer.innerHTML = `
+                <div class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">👛</span>
+                            <span class="card-title">Wallet Status</span>
+                        </div>
+                        <div class="status-placeholder">
+                            <div class="status-placeholder-icon">👛</div>
+                            <div class="status-placeholder-title">Wallet snapshot unavailable</div>
+                            <div class="status-placeholder-text">No wallet data has been captured yet</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        return;
+      }
+
+      const solBalance = Number.isFinite(wallet.sol_balance)
+        ? wallet.sol_balance
+        : 0;
+      const tokenCount = Number.isFinite(wallet.total_tokens_count)
+        ? wallet.total_tokens_count
+        : (wallet.token_balances || []).length;
+      const tokenBalances = Array.isArray(wallet.token_balances)
+        ? wallet.token_balances
+        : [];
+
+      let snapshotTime = "Unknown";
+      if (wallet.snapshot_time) {
+        const parsed = new Date(wallet.snapshot_time);
+        snapshotTime = Number.isNaN(parsed.getTime())
+          ? "Unknown"
+          : parsed.toLocaleString();
+      }
+
+      contentContainer.innerHTML = `
+                <div class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">👛</span>
+                            <span class="card-title">Wallet Status</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="status-metrics-grid">
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">💎</span>
+                                        <span>SOL Balance</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${Utils.formatNumber(solBalance, 4, {
+                                          fallback: "N/A",
+                                        })}<span class="status-metric-unit">SOL</span>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🪙</span>
+                                        <span>Token Count</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${tokenCount}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">⏱️</span>
+                                        <span>Snapshot Time</span>
+                                    </div>
+                                    <div class="status-metric-value" style="font-size: 1.1em;">
+                                        ${snapshotTime}
+                                    </div>
+                                </div>
+                            </div>
+
+                            ${
+                              tokenBalances.length > 0
+                                ? `
+                                <h3 class="status-section-title">Token Balances</h3>
+                                <div class="status-wallet-tokens">
+                                    <table class="status-services-table sticky-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Mint</th>
+                                                <th>Balance</th>
+                                                <th>Type</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${tokenBalances
+                                              .map((token) => {
+                                                const mint = (
+                                                  token.mint || ""
+                                                ).toString();
+                                                const shortMint =
+                                                  mint.length > 14
+                                                    ? `${mint.slice(
+                                                        0,
+                                                        8
+                                                      )}...${mint.slice(-6)}`
+                                                    : mint || "Unknown";
+                                                const balance =
+                                                  Utils.formatNumber(
+                                                    token.balance_ui,
+                                                    6,
+                                                    {
+                                                      fallback: "N/A",
+                                                    }
+                                                  );
+                                                const tokenType =
+                                                  token.is_token_2022
+                                                    ? "Token-2022"
+                                                    : "SPL Token";
+                                                return `
+                                                <tr>
+                                                    <td><code style="font-size: 0.85em;">${shortMint}</code></td>
+                                                    <td><strong>${balance}</strong></td>
+                                                    <td>${tokenType}</td>
+                                                </tr>
+                                            `;
+                                              })
+                                              .join("")}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            `
+                                : '<p style="text-align: center; color: var(--text-secondary); margin-top: 24px;">No token balances found</p>'
+                            }
+                        </div>
+                    </div>
+                </div>
+            `;
+    }
+
+    function renderTraderTab(data) {
+      const contentContainer = document.getElementById("statusContent");
+
+      const tradingEnabled = !!data.trading_enabled;
+      const traderMode = (data.trader_mode || "unknown").toString();
+      const openPositions = Number.isFinite(data.open_positions)
+        ? data.open_positions
+        : 0;
+      const closedToday = Number.isFinite(data.closed_positions_today)
+        ? data.closed_positions_today
+        : 0;
+      const isRunning = !!data.trader_running;
+
+      contentContainer.innerHTML = `
+                <div class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">🤖</span>
+                            <span class="card-title">Trading Engine</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="status-metrics-grid">
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">⚡</span>
+                                        <span>Trading Status</span>
+                                    </div>
+                                    <div class="status-metric-value" style="font-size: 1.4em;">
+                                        <span class="status-badge ${
+                                          tradingEnabled ? "ready" : "not-ready"
+                                        }">
+                                            ${
+                                              tradingEnabled
+                                                ? "✅ Enabled"
+                                                : "❌ Disabled"
+                                            }
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🔄</span>
+                                        <span>Running</span>
+                                    </div>
+                                    <div class="status-metric-value" style="font-size: 1.4em;">
+                                        <span class="status-badge ${
+                                          isRunning ? "ready" : "not-ready"
+                                        }">
+                                            ${isRunning ? "✅ Yes" : "❌ No"}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">📊</span>
+                                        <span>Mode</span>
+                                    </div>
+                                    <div class="status-metric-value" style="font-size: 1.2em;">
+                                        ${traderMode.toUpperCase()}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">💰</span>
+                                        <span>Open Positions</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${openPositions}
+                                    </div>
+                                </div>
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">✅</span>
+                    <span>Closed Today</span>
+                  </div>
+                  <div class="status-metric-value">
+                    ${closedToday}
+                  </div>
+                </div>
+                            </div>
+
+                            <h3 class="status-section-title">Trader Information</h3>
+                            <div class="status-trader-info">
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">Configuration Status</span>
+                                    <span class="status-trader-value">${
+                                      tradingEnabled ? "Enabled" : "Disabled"
+                                    }</span>
+                                </div>
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">Runtime Status</span>
+                                    <span class="status-trader-value">${
+                                      isRunning ? "Running" : "Stopped"
+                                    }</span>
+                                </div>
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">Active Monitoring</span>
+                                    <span class="status-trader-value">${
+                                      isRunning ? "Active" : "Inactive"
+                                    }</span>
+                </div>
+                <div class="status-trader-row">
+                  <span class="status-trader-label">Closed Positions Today</span>
+                  <span class="status-trader-value">${closedToday}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+    }
+
+    function renderOHLCVSTab(data) {
+      const contentContainer = document.getElementById("statusContent");
+
+      const ohlcvStats = data.ohlcv_stats;
+
+      if (!ohlcvStats) {
+        contentContainer.innerHTML = `
+                    <div class="page-section">
+                        <div class="card">
+                            <div class="card-header">
+                                <span class="card-icon">📊</span>
+                                <span class="card-title">OHLCV Data</span>
+                            </div>
+                            <div class="status-placeholder">
+                                <div class="status-placeholder-icon">📊</div>
+                                <div class="status-placeholder-title">OHLCV Data</div>
+                                <div class="status-placeholder-text">OHLCV service not available</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+        return;
+      }
+
+      const totalTokens = ohlcvStats.total_tokens || 0;
+      const critical = ohlcvStats.critical_tokens || 0;
+      const high = ohlcvStats.high_tokens || 0;
+      const medium = ohlcvStats.medium_tokens || 0;
+      const low = ohlcvStats.low_tokens || 0;
+      const telemetry = ohlcvStats.telemetry || {};
+      const topOpenGaps = Array.isArray(ohlcvStats.top_open_gaps)
+        ? ohlcvStats.top_open_gaps
+        : [];
+      const backfillsInProgress = Number(ohlcvStats.backfills_in_progress || 0);
+      const openGapTokens = Number(ohlcvStats.open_gap_tokens || 0);
+      const openGapTotal = Number(ohlcvStats.open_gap_total || 0);
+
+      const formatCount = (value) =>
+        Utils.formatNumber(Number(value || 0), 0, { fallback: "0" });
+
+      const formatMs = (value) => {
+        const num = Number(value);
+        if (!Number.isFinite(num) || num <= 0) {
+          return "—";
+        }
+        if (num < 1000) {
+          return `${Math.round(num)} ms`;
+        }
+        const seconds = num / 1000;
+        if (seconds < 60) {
+          return `${seconds < 10 ? seconds.toFixed(1) : seconds.toFixed(0)} s`;
+        }
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = Math.floor(seconds % 60);
+        if (minutes < 60) {
+          return `${minutes}m ${remainingSeconds}s`;
+        }
+        const hours = Math.floor(minutes / 60);
+        const remainingMinutes = minutes % 60;
+        return `${hours}h ${remainingMinutes}m`;
+      };
+
+      const formatTimestampWithAgo = (value) => {
+        if (!value) {
+          return "—";
+        }
+        const timestamp = Utils.escapeHtml(
+          Utils.formatTimestamp(value, { includeSeconds: true })
+        );
+        const relative = Utils.formatTimeAgo(value, { fallback: "" });
+        if (!relative || relative === "-") {
+          return timestamp;
+        }
+        return `${timestamp} <span class="status-metric-unit">${Utils.escapeHtml(
+          relative
+        )}</span>`;
+      };
+
+      const monitorCycleStartedLabel = formatTimestampWithAgo(
+        telemetry.monitor_cycle_started_at
+      );
+      const monitorCycleCompletedLabel = formatTimestampWithAgo(
+        telemetry.monitor_cycle_completed_at
+      );
+      const monitorCycleDurationLabel = formatMs(
+        telemetry.monitor_cycle_duration_ms
+      );
+      const monitorCycleTokens = formatCount(
+        telemetry.monitor_cycle_tokens_processed
+      );
+      const monitorCycleTotal = formatCount(telemetry.monitor_cycle_total);
+
+      const gapCycleStartedLabel = formatTimestampWithAgo(
+        telemetry.gap_cycle_started_at
+      );
+      const gapCycleCompletedLabel = formatTimestampWithAgo(
+        telemetry.gap_cycle_completed_at
+      );
+      const gapCycleDurationLabel = formatMs(telemetry.gap_cycle_duration_ms);
+      const gapCycleTokens = formatCount(telemetry.gap_cycle_tokens_processed);
+      const gapCycleTotal = formatCount(telemetry.gap_cycle_total);
+
+      const totalBackfillsScheduled = formatCount(
+        telemetry.total_backfills_scheduled
+      );
+      const totalBackfillsCompleted = formatCount(
+        telemetry.total_backfills_completed
+      );
+      const totalBackfillsFailed = formatCount(
+        telemetry.total_backfills_failed
+      );
+      const lastBackfillStartedLabel = formatTimestampWithAgo(
+        telemetry.last_backfill_started_at
+      );
+      const lastBackfillCompletedLabel = formatTimestampWithAgo(
+        telemetry.last_backfill_completed_at
+      );
+      const lastBackfillDurationLabel = formatMs(
+        telemetry.last_backfill_duration_ms
+      );
+      const lastBackfillPointsLabel =
+        telemetry.last_backfill_points !== undefined &&
+        telemetry.last_backfill_points !== null
+          ? formatCount(telemetry.last_backfill_points)
+          : "—";
+      const lastBackfillErrorLabel = telemetry.last_backfill_error
+        ? `<span style="color: var(--badge-error); font-weight: 600;">${Utils.escapeHtml(
+            telemetry.last_backfill_error
+          )}</span>`
+        : "None";
+      const rateLimitEventsLabel = formatCount(telemetry.rate_limit_events);
+      const lastRateLimitLabel = formatTimestampWithAgo(
+        telemetry.last_rate_limit_at
+      );
+
+      const gapRows = topOpenGaps.length
+        ? topOpenGaps
+            .map((gap) => {
+              const largestGap =
+                gap.largest_gap_seconds === null ||
+                gap.largest_gap_seconds === undefined
+                  ? "—"
+                  : Utils.escapeHtml(
+                      Utils.formatUptime(gap.largest_gap_seconds, {
+                        fallback: "—",
+                        style: "compact",
+                      })
+                    );
+              const latestGapEnd = formatTimestampWithAgo(gap.latest_gap_end);
+              return `
+              <tr>
+                <td>${Utils.escapeHtml(gap.mint || "Unknown")}</td>
+                <td style="text-align: right;">${formatCount(
+                  gap.open_gaps
+                )}</td>
+                <td style="text-align: right;">${largestGap}</td>
+                <td style="text-align: right;">${latestGapEnd}</td>
+              </tr>
+            `;
+            })
+            .join("")
+        : `
+              <tr>
+                <td colspan="4" style="text-align: center; padding: 16px; color: var(--text-secondary);">
+                  No open gaps detected
+                </td>
+              </tr>
+            `;
+
+      contentContainer.innerHTML = `
+                <div class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">📊</span>
+                            <span class="card-title">OHLCV Data</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="status-metrics-grid">
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">📈</span>
+                                        <span>Total Tokens</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${totalTokens}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🎯</span>
+                                        <span>Cache Hit Rate</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${Utils.formatNumber(
+                                          ohlcvStats.cache_hit_rate || 0,
+                                          1,
+                                          { fallback: "N/A" }
+                                        )}<span class="status-metric-unit">%</span>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">📡</span>
+                                        <span>API Calls/Min</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${Utils.formatNumber(
+                                          ohlcvStats.api_calls_per_minute || 0,
+                                          1,
+                                          { fallback: "N/A" }
+                                        )}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">📥</span>
+                                        <span>Queue Size</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${ohlcvStats.queue_size || 0}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🛠️</span>
+                                        <span>Backfills In Flight</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${formatCount(backfillsInProgress)}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🧩</span>
+                                        <span>Tokens With Gaps</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${formatCount(openGapTokens)}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🕳️</span>
+                                        <span>Open Gap Count</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${formatCount(openGapTotal)}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <h3 class="status-section-title">Tokens by Priority</h3>
+                            <div style="margin-top: 16px;">
+                                <div style="display: flex; flex-direction: column; gap: 12px;">
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <div style="min-width: 100px; font-weight: 500; color: var(--text-secondary);">Critical</div>
+                                        <div style="flex: 1; height: 32px; background: var(--card-bg); border-radius: 8px; overflow: hidden; position: relative;">
+                                            <div style="height: 100%; background: linear-gradient(90deg, #ef4444, #dc2626); width: ${
+                                              totalTokens > 0
+                                                ? (critical / totalTokens) * 100
+                                                : 0
+                                            }%; transition: width 0.3s;"></div>
+                                            <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-weight: 600; color: var(--text-primary);">${critical}</span>
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <div style="min-width: 100px; font-weight: 500; color: var(--text-secondary);">High</div>
+                                        <div style="flex: 1; height: 32px; background: var(--card-bg); border-radius: 8px; overflow: hidden; position: relative;">
+                                            <div style="height: 100%; background: linear-gradient(90deg, #f59e0b, #d97706); width: ${
+                                              totalTokens > 0
+                                                ? (high / totalTokens) * 100
+                                                : 0
+                                            }%; transition: width 0.3s;"></div>
+                                            <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-weight: 600; color: var(--text-primary);">${high}</span>
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <div style="min-width: 100px; font-weight: 500; color: var(--text-secondary);">Medium</div>
+                                        <div style="flex: 1; height: 32px; background: var(--card-bg); border-radius: 8px; overflow: hidden; position: relative;">
+                                            <div style="height: 100%; background: linear-gradient(90deg, #3b82f6, #2563eb); width: ${
+                                              totalTokens > 0
+                                                ? (medium / totalTokens) * 100
+                                                : 0
+                                            }%; transition: width 0.3s;"></div>
+                                            <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-weight: 600; color: var(--text-primary);">${medium}</span>
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <div style="min-width: 100px; font-weight: 500; color: var(--text-secondary);">Low</div>
+                                        <div style="flex: 1; height: 32px; background: var(--card-bg); border-radius: 8px; overflow: hidden; position: relative;">
+                                            <div style="height: 100%; background: linear-gradient(90deg, #6b7280, #4b5563); width: ${
+                                              totalTokens > 0
+                                                ? (low / totalTokens) * 100
+                                                : 0
+                                            }%; transition: width 0.3s;"></div>
+                                            <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-weight: 600; color: var(--text-primary);">${low}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <h3 class="status-section-title">Runtime Cycles</h3>
+                            <div class="status-metrics-grid">
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🔁</span>
+                                        <span>Monitor Cycle</span>
+                                    </div>
+                                    <div class="status-trader-info" style="margin-top: 12px;">
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Last Started</span>
+                                            <span class="status-trader-value">${monitorCycleStartedLabel}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Last Completed</span>
+                                            <span class="status-trader-value">${monitorCycleCompletedLabel}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Duration</span>
+                                            <span class="status-trader-value">${monitorCycleDurationLabel}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Tokens Processed</span>
+                                            <span class="status-trader-value">${monitorCycleTokens}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Cycles Recorded</span>
+                                            <span class="status-trader-value">${monitorCycleTotal}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🧵</span>
+                                        <span>Gap Cycle</span>
+                                    </div>
+                                    <div class="status-trader-info" style="margin-top: 12px;">
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Last Started</span>
+                                            <span class="status-trader-value">${gapCycleStartedLabel}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Last Completed</span>
+                                            <span class="status-trader-value">${gapCycleCompletedLabel}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Duration</span>
+                                            <span class="status-trader-value">${gapCycleDurationLabel}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Tokens Reviewed</span>
+                                            <span class="status-trader-value">${gapCycleTokens}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Cycles Recorded</span>
+                                            <span class="status-trader-value">${gapCycleTotal}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <h3 class="status-section-title">Backfill & Rate Limits</h3>
+                            <div class="status-metrics-grid">
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🛠️</span>
+                                        <span>Backfill Activity</span>
+                                    </div>
+                                    <div class="status-trader-info" style="margin-top: 12px;">
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Backfills In Flight</span>
+                                            <span class="status-trader-value">${formatCount(
+                                              backfillsInProgress
+                                            )}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Total Scheduled</span>
+                                            <span class="status-trader-value">${totalBackfillsScheduled}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Total Completed</span>
+                                            <span class="status-trader-value">${totalBackfillsCompleted}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Total Failed</span>
+                                            <span class="status-trader-value">${totalBackfillsFailed}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Last Started</span>
+                                            <span class="status-trader-value">${lastBackfillStartedLabel}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Last Completed</span>
+                                            <span class="status-trader-value">${lastBackfillCompletedLabel}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Last Duration</span>
+                                            <span class="status-trader-value">${lastBackfillDurationLabel}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Last Points Written</span>
+                                            <span class="status-trader-value">${lastBackfillPointsLabel}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Last Error</span>
+                                            <span class="status-trader-value">${lastBackfillErrorLabel}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Rate Limit Events</span>
+                                            <span class="status-trader-value">${rateLimitEventsLabel}</span>
+                                        </div>
+                                        <div class="status-trader-row">
+                                            <span class="status-trader-label">Last Rate Limit</span>
+                                            <span class="status-trader-value">${lastRateLimitLabel}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <h3 class="status-section-title">Gap Overview</h3>
+                            <table class="status-services-table sticky-table">
+                                <thead>
+                                    <tr>
+                                        <th>Mint</th>
+                                        <th style="text-align: right;">Open Gaps</th>
+                                        <th style="text-align: right;">Largest Gap</th>
+                                        <th style="text-align: right;">Latest Gap End</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${gapRows}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+    }
+
+    function renderPoolsTab(data) {
+      const contentContainer = document.getElementById("statusContent");
+      if (!contentContainer) return;
+
+      const pools = data.pools;
+
+      if (!pools) {
+        contentContainer.innerHTML = `
+        <div class="page-section">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-icon">🏊</span>
+              <span class="card-title">Pool Service</span>
+            </div>
+            <div class="status-placeholder">
+              <div class="status-placeholder-icon">🏊</div>
+              <div class="status-placeholder-title">Pool Service Metrics</div>
+              <div class="status-placeholder-text">Pool service details are not available yet. Ensure the pool services are initialized.</div>
+            </div>
+          </div>
+        </div>
+      `;
+        return;
+      }
+
+      const serviceLabel = pools.running ? "Running" : "Stopped";
+      const readyLabel = pools.system_ready ? "Ready" : "Not Ready";
+      const modeLabel = pools.single_pool_mode ? "Single Pool" : "Multi Pool";
+
+      const monitoredLabel = Utils.formatNumber(
+        Number(pools.monitored_tokens || 0),
+        0,
+        {
+          fallback: "0",
+        }
+      );
+      const capacityLabel = Utils.formatNumber(
+        Number(pools.monitored_capacity || 0),
+        0,
+        {
+          fallback: "0",
+        }
+      );
+      const subscribersLabel = Utils.formatNumber(
+        Number(pools.price_subscribers || 0),
+        0,
+        {
+          fallback: "0",
+        }
+      );
+
+      const cache = pools.cache || {};
+      const totalPricesLabel = Utils.formatNumber(
+        Number(cache.total_prices || 0),
+        0,
+        {
+          fallback: "0",
+        }
+      );
+      const freshPricesLabel = Utils.formatNumber(
+        Number(cache.fresh_prices || 0),
+        0,
+        {
+          fallback: "0",
+        }
+      );
+      const historyEntriesLabel = Utils.formatNumber(
+        Number(cache.history_entries || 0),
+        0,
+        { fallback: "0" }
+      );
+
+      const analyzer = pools.analyzer || null;
+      const analyzerTotalLabel = analyzer
+        ? Utils.formatNumber(Number(analyzer.total_pools || 0), 0, {
+            fallback: "0",
+          })
+        : "N/A";
+
+      const programRows =
+        analyzer &&
+        Array.isArray(analyzer.program_distribution) &&
+        analyzer.program_distribution.length
+          ? analyzer.program_distribution
+              .map(
+                (item) => `
+              <tr>
+                <td>${Utils.escapeHtml(item.program || "Unknown")}</td>
+                <td style="text-align: right;">${Utils.formatNumber(
+                  Number(item.count || 0),
+                  0,
+                  { fallback: "0" }
+                )}</td>
+              </tr>
+            `
+              )
+              .join("")
+          : `
+              <tr>
+                <td colspan="2" style="text-align: center; padding: 16px; color: var(--text-secondary);">
+                  No analyzer data available
+                </td>
+              </tr>
+            `;
+
+      const fetcher = pools.fetcher || null;
+      const fetcherRows = fetcher
+        ? `
+              <tr>
+                <td>Total Bundles</td>
+                <td style="text-align: right;">${Utils.formatNumber(
+                  Number(fetcher.total_bundles || 0),
+                  0,
+                  { fallback: "0" }
+                )}</td>
+              </tr>
+              <tr>
+                <td>Bundles With Data</td>
+                <td style="text-align: right;">${Utils.formatNumber(
+                  Number(fetcher.bundles_with_data || 0),
+                  0,
+                  { fallback: "0" }
+                )}</td>
+              </tr>
+              <tr>
+                <td>Total Accounts Tracked</td>
+                <td style="text-align: right;">${Utils.formatNumber(
+                  Number(fetcher.total_accounts_tracked || 0),
+                  0,
+                  { fallback: "0" }
+                )}</td>
+              </tr>
+            `
+        : `
+              <tr>
+                <td colspan="2" style="text-align: center; padding: 16px; color: var(--text-secondary);">
+                  Fetcher metrics unavailable
+                </td>
+              </tr>
+            `;
+
+      const discovery = pools.discovery || null;
+      const sourcesText = discovery
+        ? discovery.sources_enabled && discovery.sources_enabled.length
+          ? discovery.sources_enabled
+              .map((source) => Utils.escapeHtml(source))
+              .join(", ")
+          : "None"
+        : "Unknown";
+
+      const debugOverrideText = discovery
+        ? discovery.debug_override_active
+          ? `Active (${Utils.formatNumber(
+              Number(discovery.debug_override_count || 0),
+              0,
+              { fallback: "0" }
+            )} tokens)`
+          : "Inactive"
+        : "Unknown";
+
+      contentContainer.innerHTML = `
+        <div class="page-section">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-icon">🏊</span>
+              <span class="card-title">Pool Service</span>
+            </div>
+            <div class="card-body">
+              <div class="status-metrics-grid">
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">⚙️</span>
+                    <span>Service</span>
+                  </div>
+                  <div class="status-metric-value">
+                    ${serviceLabel}
+                    <span class="status-metric-unit">${readyLabel}</span>
+                  </div>
+                </div>
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">🧭</span>
+                    <span>Monitoring Mode</span>
+                  </div>
+                  <div class="status-metric-value">
+                    ${modeLabel}
+                  </div>
+                </div>
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">🔍</span>
+                    <span>Monitored Tokens</span>
+                  </div>
+                  <div class="status-metric-value">
+                    ${monitoredLabel}
+                    <span class="status-metric-unit">of ${capacityLabel}</span>
+                  </div>
+                </div>
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">💾</span>
+                    <span>Fresh Prices</span>
+                  </div>
+                  <div class="status-metric-value">
+                    ${freshPricesLabel}
+                    <span class="status-metric-unit">/ ${totalPricesLabel}</span>
+                  </div>
+                </div>
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">📚</span>
+                    <span>History Entries</span>
+                  </div>
+                  <div class="status-metric-value">
+                    ${historyEntriesLabel}
+                  </div>
+                </div>
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">📡</span>
+                    <span>Price Subscribers</span>
+                  </div>
+                  <div class="status-metric-value">
+                    ${subscribersLabel}
+                  </div>
+                </div>
+              </div>
+
+              <h3 class="status-section-title">Cache Summary</h3>
+              <table class="status-services-table sticky-table">
+                <tbody>
+                  <tr>
+                    <td>Total Prices in Cache</td>
+                    <td style="text-align: right;">${totalPricesLabel}</td>
+                  </tr>
+                  <tr>
+                    <td>Fresh Prices</td>
+                    <td style="text-align: right;">${freshPricesLabel}</td>
+                  </tr>
+                  <tr>
+                    <td>History Entries</td>
+                    <td style="text-align: right;">${historyEntriesLabel}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h3 class="status-section-title">Analyzer Distribution</h3>
+              <table class="status-services-table sticky-table">
+                <thead>
+                  <tr>
+                    <th>Program</th>
+                    <th style="text-align: right;">Pools</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${programRows}
+                </tbody>
+              </table>
+              <div class="status-trader-info" style="margin-top: 12px;">
+                <div class="status-trader-row">
+                  <span class="status-trader-label">Total Pools Tracked</span>
+                  <span class="status-trader-value">${analyzerTotalLabel}</span>
+                </div>
+              </div>
+
+              <h3 class="status-section-title">Fetcher Metrics</h3>
+              <table class="status-services-table sticky-table">
+                <tbody>
+                  ${fetcherRows}
+                </tbody>
+              </table>
+
+              <h3 class="status-section-title">Discovery Configuration</h3>
+              <div class="status-trader-info">
+                <div class="status-trader-row">
+                  <span class="status-trader-label">Enabled Sources</span>
+                  <span class="status-trader-value">${Utils.escapeHtml(
+                    sourcesText
+                  )}</span>
+                </div>
+                <div class="status-trader-row">
+                  <span class="status-trader-label">Debug Token Override</span>
+                  <span class="status-trader-value">${Utils.escapeHtml(
+                    debugOverrideText
+                  )}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderDexScreenerTab(data) {
+      const contentContainer = document.getElementById("statusContent");
+      if (!contentContainer) return;
+
+      const snapshot = data.dexscreener;
+      if (!snapshot) {
+        renderPlaceholderTab("dexscreener");
+        return;
+      }
+
+      const totalCalls = Utils.formatNumber(
+        snapshot.api_total_requests || 0,
+        0,
+        {
+          fallback: "0",
+        }
+      );
+      const successRate = Utils.formatNumber(snapshot.api_success_rate || 0, {
+        decimals: 1,
+        fallback: "0.0",
+      });
+      const averageResponse = Utils.formatNumber(
+        snapshot.api_average_response_ms || 0,
+        {
+          decimals: 1,
+          fallback: "0.0",
+        }
+      );
+      const cacheHitRate = Utils.formatNumber(
+        snapshot.api_cache_hit_rate || 0,
+        {
+          decimals: 1,
+          fallback: "0.0",
+        }
+      );
+      const tokenCacheFresh = Utils.formatNumber(
+        snapshot.token_cache_fresh || 0,
+        0,
+        { fallback: "0" }
+      );
+      const tokenCacheTotal = Utils.formatNumber(
+        snapshot.token_cache_entries || 0,
+        0,
+        { fallback: "0" }
+      );
+      const poolCacheFresh = Utils.formatNumber(
+        snapshot.pool_cache_fresh || 0,
+        0,
+        { fallback: "0" }
+      );
+      const poolCacheTotal = Utils.formatNumber(
+        snapshot.pool_cache_entries || 0,
+        0,
+        { fallback: "0" }
+      );
+      const lastRequestRelative = snapshot.last_request_time
+        ? Utils.formatTimeAgo(snapshot.last_request_time)
+        : "No requests yet";
+      const lastRequestAbsolute = snapshot.last_request_time
+        ? new Date(snapshot.last_request_time).toLocaleString()
+        : "—";
+
+      const rateLimitPerMinute = snapshot.rate_limit_per_minute ?? "—";
+      const rateLimitLabel =
+        typeof rateLimitPerMinute === "number"
+          ? `${Utils.formatNumber(rateLimitPerMinute, 0, {
+              fallback: "—",
+            })} req/min`
+          : rateLimitPerMinute;
+      const discoveryRateLimit =
+        snapshot.discovery_rate_limit_per_minute ?? "—";
+      const discoveryRateLimitLabel =
+        typeof discoveryRateLimit === "number"
+          ? `${Utils.formatNumber(discoveryRateLimit, 0, {
+              fallback: "—",
+            })} req/min`
+          : discoveryRateLimit;
+      const maxTokensPerCall = snapshot.max_tokens_per_call ?? "—";
+      const maxTokensPerCallLabel =
+        typeof maxTokensPerCall === "number"
+          ? Utils.formatNumber(maxTokensPerCall, 0, { fallback: "—" })
+          : maxTokensPerCall;
+      const priceCacheTtl =
+        snapshot.price_cache_ttl_secs !== undefined &&
+        snapshot.price_cache_ttl_secs !== null
+          ? `${snapshot.price_cache_ttl_secs}s`
+          : "—";
+      const poolCacheTtl =
+        snapshot.pool_cache_ttl_secs !== undefined &&
+        snapshot.pool_cache_ttl_secs !== null
+          ? `${snapshot.pool_cache_ttl_secs}s`
+          : "—";
+
+      const enabledBadge = snapshot.enabled
+        ? '<span class="status-badge ready">Enabled</span>'
+        : '<span class="status-badge not-ready">Disabled</span>';
+      const initializedBadge = snapshot.initialized
+        ? '<span class="status-badge ready">Initialized</span>'
+        : '<span class="status-badge not-ready">Not Ready</span>';
+
+      contentContainer.innerHTML = `
+        <div class="page-section">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-icon">🧮</span>
+              <span class="card-title">DexScreener API Usage</span>
+              <span style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+                ${enabledBadge}
+                ${initializedBadge}
+              </span>
+            </div>
+            <div class="card-body">
+              <div class="status-metrics-grid">
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">📈</span>
+                    <span>API Calls</span>
+                  </div>
+                  <div class="status-metric-value">${totalCalls}</div>
+                </div>
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">✅</span>
+                    <span>Success Rate</span>
+                  </div>
+                  <div class="status-metric-value">${successRate}<span class="status-metric-unit">%</span></div>
+                </div>
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">⏱️</span>
+                    <span>Avg Response</span>
+                  </div>
+                  <div class="status-metric-value">${averageResponse}<span class="status-metric-unit">ms</span></div>
+                </div>
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">🗃️</span>
+                    <span>Cache Hit Rate</span>
+                  </div>
+                  <div class="status-metric-value">${cacheHitRate}<span class="status-metric-unit">%</span></div>
+                </div>
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">🧊</span>
+                    <span>Token Cache</span>
+                  </div>
+                  <div class="status-metric-value">${tokenCacheFresh}<span class="status-metric-unit">/ ${tokenCacheTotal}</span></div>
+                </div>
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">🏛️</span>
+                    <span>Pool Cache</span>
+                  </div>
+                  <div class="status-metric-value">${poolCacheFresh}<span class="status-metric-unit">/ ${poolCacheTotal}</span></div>
+                </div>
+              </div>
+
+              <h3 class="status-section-title">Configuration</h3>
+              <div class="status-trader-info">
+                <div class="status-trader-row">
+                  <span class="status-trader-label">Rate Limit</span>
+                  <span class="status-trader-value">${rateLimitLabel}</span>
+                </div>
+                <div class="status-trader-row">
+                  <span class="status-trader-label">Discovery Rate Limit</span>
+                  <span class="status-trader-value">${discoveryRateLimitLabel}</span>
+                </div>
+                <div class="status-trader-row">
+                  <span class="status-trader-label">Max Tokens Per Call</span>
+                  <span class="status-trader-value">${maxTokensPerCallLabel}</span>
+                </div>
+                <div class="status-trader-row">
+                  <span class="status-trader-label">Price Cache TTL</span>
+                  <span class="status-trader-value">${priceCacheTtl}</span>
+                </div>
+                <div class="status-trader-row">
+                  <span class="status-trader-label">Pool Cache TTL</span>
+                  <span class="status-trader-value">${poolCacheTtl}</span>
+                </div>
+                <div class="status-trader-row">
+                  <span class="status-trader-label">Last Request</span>
+                  <span class="status-trader-value">${lastRequestRelative} • ${lastRequestAbsolute}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderGeckoTerminalTab(data) {
+      const contentContainer = document.getElementById("statusContent");
+      if (!contentContainer) return;
+
+      const snapshot = data.geckoterminal;
+      if (!snapshot) {
+        renderPlaceholderTab("geckoterminal");
+        return;
+      }
+
+      const totalCalls = Utils.formatNumber(
+        snapshot.api_total_requests || 0,
+        0,
+        {
+          fallback: "0",
+        }
+      );
+      const successRate = Utils.formatNumber(snapshot.api_success_rate || 0, {
+        decimals: 1,
+        fallback: "0.0",
+      });
+      const averageResponse = Utils.formatNumber(
+        snapshot.api_average_response_ms || 0,
+        {
+          decimals: 1,
+          fallback: "0.0",
+        }
+      );
+      const cacheHitRate = Utils.formatNumber(
+        snapshot.api_cache_hit_rate || 0,
+        {
+          decimals: 1,
+          fallback: "0.0",
+        }
+      );
+      const cacheFresh = Utils.formatNumber(snapshot.cache_fresh || 0, 0, {
+        fallback: "0",
+      });
+      const cacheTotal = Utils.formatNumber(snapshot.cache_entries || 0, 0, {
+        fallback: "0",
+      });
+      const rateLimitUsage = `${Utils.formatNumber(
+        snapshot.current_rate_limit_calls || 0,
+        0,
+        { fallback: "0" }
+      )} / ${Utils.formatNumber(snapshot.current_rate_limit_max || 0, 0, {
+        fallback: "0",
+      })}`;
+      const rateLimitResetDisplay =
+        snapshot.rate_limit_resets_in_ms !== undefined &&
+        snapshot.rate_limit_resets_in_ms !== null
+          ? `${Utils.formatNumber(snapshot.rate_limit_resets_in_ms / 1000, {
+              decimals: 1,
+              fallback: "0.0",
+            })}s`
+          : "Ready";
+      const rateLimitPerMinute = snapshot.rate_limit_per_minute ?? "—";
+      const rateLimitLabel =
+        typeof rateLimitPerMinute === "number"
+          ? `${Utils.formatNumber(rateLimitPerMinute, 0, {
+              fallback: "—",
+            })} req/min`
+          : rateLimitPerMinute;
+      const maxTokensPerBatch = snapshot.max_tokens_per_batch ?? "—";
+      const maxTokensPerBatchLabel =
+        typeof maxTokensPerBatch === "number"
+          ? Utils.formatNumber(maxTokensPerBatch, 0, { fallback: "—" })
+          : maxTokensPerBatch;
+      const cacheTtl =
+        snapshot.cache_ttl_secs !== undefined &&
+        snapshot.cache_ttl_secs !== null
+          ? `${snapshot.cache_ttl_secs}s`
+          : "—";
+      const lastRequestRelative = snapshot.last_request_time
+        ? Utils.formatTimeAgo(snapshot.last_request_time)
+        : "No requests yet";
+      const lastRequestAbsolute = snapshot.last_request_time
+        ? new Date(snapshot.last_request_time).toLocaleString()
+        : "—";
+      const lastSuccessDisplay = snapshot.last_success_time
+        ? `${Utils.formatTimeAgo(snapshot.last_success_time)} • ${new Date(
+            snapshot.last_success_time
+          ).toLocaleString()}`
+        : "None";
+      const lastErrorDisplay = snapshot.last_error_message
+        ? `${Utils.escapeHtml(snapshot.last_error_message)}${
+            snapshot.last_error_time
+              ? ` (${Utils.formatTimeAgo(snapshot.last_error_time)})`
+              : ""
+          }`
+        : "None";
+
+      const enabledBadge = snapshot.enabled
+        ? '<span class="status-badge ready">Enabled</span>'
+        : '<span class="status-badge not-ready">Disabled</span>';
+      const initializedBadge = snapshot.initialized
+        ? '<span class="status-badge ready">Initialized</span>'
+        : '<span class="status-badge not-ready">Not Ready</span>';
+
+      contentContainer.innerHTML = `
+        <div class="page-section">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-icon">🦎</span>
+              <span class="card-title">GeckoTerminal API Usage</span>
+              <span style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+                ${enabledBadge}
+                ${initializedBadge}
+              </span>
+            </div>
+            <div class="card-body">
+              <div class="status-metrics-grid">
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">📈</span>
+                    <span>API Calls</span>
+                  </div>
+                  <div class="status-metric-value">${totalCalls}</div>
+                </div>
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">✅</span>
+                    <span>Success Rate</span>
+                  </div>
+                  <div class="status-metric-value">${successRate}<span class="status-metric-unit">%</span></div>
+                </div>
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">⏱️</span>
+                    <span>Avg Response</span>
+                  </div>
+                  <div class="status-metric-value">${averageResponse}<span class="status-metric-unit">ms</span></div>
+                </div>
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">🗃️</span>
+                    <span>Cache Hit Rate</span>
+                  </div>
+                  <div class="status-metric-value">${cacheHitRate}<span class="status-metric-unit">%</span></div>
+                </div>
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">🧊</span>
+                    <span>Pool Cache</span>
+                  </div>
+                  <div class="status-metric-value">${cacheFresh}<span class="status-metric-unit">/ ${cacheTotal}</span></div>
+                </div>
+                <div class="status-metric-card">
+                  <div class="status-metric-header">
+                    <span class="status-metric-icon">🚦</span>
+                    <span>Rate Limit Usage</span>
+                  </div>
+                  <div class="status-metric-value">${rateLimitUsage}</div>
+                </div>
+              </div>
+
+              <h3 class="status-section-title">Configuration</h3>
+              <div class="status-trader-info">
+                <div class="status-trader-row">
+                  <span class="status-trader-label">Rate Limit</span>
+                  <span class="status-trader-value">${rateLimitLabel}</span>
+                </div>
+                <div class="status-trader-row">
+                  <span class="status-trader-label">Max Tokens Per Batch</span>
+                  <span class="status-trader-value">${maxTokensPerBatchLabel}</span>
+                </div>
+                <div class="status-trader-row">
+                  <span class="status-trader-label">Pool Cache TTL</span>
+                  <span class="status-trader-value">${cacheTtl}</span>
+                </div>
+                <div class="status-trader-row">
+                  <span class="status-trader-label">Rate Limit Resets In</span>
+                  <span class="status-trader-value">${rateLimitResetDisplay}</span>
+                </div>
+                <div class="status-trader-row">
+                  <span class="status-trader-label">Last Request</span>
+                  <span class="status-trader-value">${lastRequestRelative} • ${lastRequestAbsolute}</span>
+                </div>
+                <div class="status-trader-row">
+                  <span class="status-trader-label">Last Success</span>
+                  <span class="status-trader-value">${lastSuccessDisplay}</span>
+                </div>
+                <div class="status-trader-row">
+                  <span class="status-trader-label">Last Error</span>
+                  <span class="status-trader-value">${lastErrorDisplay}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderDiscoveryTab(data) {
+      const contentContainer = document.getElementById("statusContent");
+      if (!contentContainer) return;
+
+      const discovery = data.discovery;
+
+      if (!discovery) {
+        contentContainer.innerHTML = `
+                <div class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">🔍</span>
+                            <span class="card-title">Token Discovery</span>
+                        </div>
+                        <div class="status-placeholder">
+                            <div class="status-placeholder-icon">🔍</div>
+                            <div class="status-placeholder-title">Token Discovery Metrics</div>
+                            <div class="status-placeholder-text">Discovery service details are not available yet. Ensure the discovery service is running.</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        return;
+      }
+
+      const serviceLabel = discovery.running ? "Running" : "Stopped";
+
+      const totalCyclesLabel = Utils.formatNumber(
+        Number(discovery.total_cycles || 0),
+        0,
+        {
+          fallback: "0",
+        }
+      );
+      const lastProcessedLabel = Utils.formatNumber(
+        Number(discovery.last_processed || 0),
+        0,
+        {
+          fallback: "0",
+        }
+      );
+      const lastAddedLabel = Utils.formatNumber(
+        Number(discovery.last_added || 0),
+        0,
+        {
+          fallback: "0",
+        }
+      );
+      const deduplicatedLabel = Utils.formatNumber(
+        Number(discovery.last_deduplicated_removed || 0),
+        0,
+        { fallback: "0" }
+      );
+      const blacklistLabel = Utils.formatNumber(
+        Number(discovery.last_blacklist_removed || 0),
+        0,
+        { fallback: "0" }
+      );
+      const totalProcessedLabel = Utils.formatNumber(
+        Number(discovery.total_processed || 0),
+        0,
+        { fallback: "0" }
+      );
+      const totalAddedLabel = Utils.formatNumber(
+        Number(discovery.total_added || 0),
+        0,
+        {
+          fallback: "0",
+        }
+      );
+
+      const lastStarted = Utils.formatTimestamp(discovery.last_cycle_started, {
+        fallback: "Never",
+      });
+      const lastCompleted = Utils.formatTimestamp(
+        discovery.last_cycle_completed,
+        {
+          fallback: "Never",
+        }
+      );
+
+      const sources = discovery.sources || {};
+      const sourceRows = [
+        { name: "DexScreener Profiles", count: sources.profiles || 0 },
+        { name: "DexScreener Boosted", count: sources.boosted || 0 },
+        { name: "DexScreener Top Boosts", count: sources.top_boosts || 0 },
+        { name: "RugCheck New", count: sources.rug_new || 0 },
+        { name: "RugCheck Viewed", count: sources.rug_viewed || 0 },
+        { name: "RugCheck Trending", count: sources.rug_trending || 0 },
+        { name: "RugCheck Verified", count: sources.rug_verified || 0 },
+        { name: "GeckoTerminal Updated", count: sources.gecko_updated || 0 },
+        { name: "GeckoTerminal Trending", count: sources.gecko_trending || 0 },
+        { name: "Jupiter Tokens", count: sources.jupiter_tokens || 0 },
+        {
+          name: "Jupiter Top Organic",
+          count: sources.jupiter_top_organic || 0,
+        },
+        { name: "Jupiter Top Traded", count: sources.jupiter_top_traded || 0 },
+        {
+          name: "Jupiter Top Trending",
+          count: sources.jupiter_top_trending || 0,
+        },
+        { name: "CoinGecko Markets", count: sources.coingecko_markets || 0 },
+        {
+          name: "DeFiLlama Protocols",
+          count: sources.defillama_protocols || 0,
+        },
+      ];
+
+      const totalSourceCount = sourceRows.reduce(
+        (sum, row) => sum + row.count,
+        0
+      );
+
+      const sourceTableRows = sourceRows
+        .filter((row) => row.count > 0)
+        .sort((a, b) => b.count - a.count)
+        .map(
+          (row) => `
+                            <tr>
+                                <td>${Utils.escapeHtml(row.name)}</td>
+                                <td style="text-align: right;">${Utils.formatNumber(
+                                  Number(row.count),
+                                  0,
+                                  { fallback: "0" }
+                                )}</td>
+                            </tr>
+                        `
+        )
+        .join("");
+
+      const sourcesDisplay =
+        sourceTableRows ||
+        `
+                            <tr>
+                                <td colspan="2" style="text-align: center; padding: 16px; color: var(--text-secondary);">
+                                    No source data for last cycle
+                                </td>
+                            </tr>
+                        `;
+
+      const errorDisplay = discovery.last_error
+        ? `
+                            <div style="margin-top: 16px; padding: 12px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; color: #ef4444;">
+                                <strong>Last Error:</strong> ${Utils.escapeHtml(
+                                  discovery.last_error
+                                )}
+                            </div>
+                        `
+        : "";
+
+      // Show waiting message if no cycles have completed yet
+      const waitingDisplay =
+        discovery.running &&
+        discovery.total_cycles === 0 &&
+        !discovery.last_cycle_started
+          ? `
+                            <div style="margin-top: 16px; padding: 12px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; color: #3b82f6;">
+                                <strong>ℹ️ Waiting for first discovery cycle...</strong>
+                                <p style="margin: 8px 0 0 0; font-size: 0.9em; color: var(--text-secondary);">
+                                    The discovery service is running but hasn't completed its first cycle yet. 
+                                    Discovery cycles fetch data from multiple APIs and may take 30-60 seconds to complete. 
+                                    Data will appear here once the first cycle finishes.
+                                </p>
+                            </div>
+                        `
+          : "";
+
+      contentContainer.innerHTML = `
+                <div class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">🔍</span>
+                            <span class="card-title">Token Discovery</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="status-metrics-grid">
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">⚙️</span>
+                                        <span>Service Status</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${serviceLabel}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🔄</span>
+                                        <span>Total Cycles</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${totalCyclesLabel}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">📊</span>
+                                        <span>Last Processed</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${lastProcessedLabel}
+                                        <span class="status-metric-unit">tokens</span>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">✅</span>
+                                        <span>Last Added</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${lastAddedLabel}
+                                        <span class="status-metric-unit">new</span>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🔁</span>
+                                        <span>Deduplicated</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${deduplicatedLabel}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🚫</span>
+                                        <span>Blacklisted</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${blacklistLabel}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">📈</span>
+                                        <span>Total Processed</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${totalProcessedLabel}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">💾</span>
+                                        <span>Total Added</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${totalAddedLabel}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <h3 class="status-section-title">Cycle Timing</h3>
+                            <div class="status-trader-info">
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">Last Cycle Started</span>
+                                    <span class="status-trader-value">${lastStarted}</span>
+                                </div>
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">Last Cycle Completed</span>
+                                    <span class="status-trader-value">${lastCompleted}</span>
+                                </div>
+                            </div>
+
+                            <h3 class="status-section-title">Discovery Sources (Last Cycle)</h3>
+                            <table class="status-services-table sticky-table">
+                                <thead>
+                                    <tr>
+                                        <th>Source</th>
+                                        <th style="text-align: right;">Tokens Found</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${sourcesDisplay}
+                                </tbody>
+                            </table>
+                            <div class="status-trader-info" style="margin-top: 12px;">
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">Total from All Sources</span>
+                                    <span class="status-trader-value">${Utils.formatNumber(
+                                      Number(totalSourceCount),
+                                      0,
+                                      { fallback: "0" }
+                                    )}</span>
+                                </div>
+                            </div>
+
+                            ${waitingDisplay}
+                            ${errorDisplay}
+                        </div>
+                    </div>
+                </div>
+            `;
+    }
+
+    function renderEventsTab(data) {
+      const contentContainer = document.getElementById("statusContent");
+      if (!contentContainer) return;
+
+      const events = data.events;
+
+      if (!events) {
+        contentContainer.innerHTML = `
+                <div class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">📋</span>
+                            <span class="card-title">Events System</span>
+                        </div>
+                        <div class="status-placeholder">
+                            <div class="status-placeholder-icon">📋</div>
+                            <div class="status-placeholder-title">Events Data</div>
+                            <div class="status-placeholder-text">Events metrics are not available yet. Ensure the events service is running.</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        return;
+      }
+
+      const serviceLabel = events.running ? "Running" : "Stopped";
+      const totalEventsLabel = Utils.formatNumber(
+        Number(events.total_events || 0),
+        0,
+        { fallback: "0" }
+      );
+      const events24hLabel = Utils.formatNumber(
+        Number(events.events_24h || 0),
+        0,
+        { fallback: "0" }
+      );
+      const dbSizeLabel = Utils.formatBytes(
+        Number(events.db_size_bytes || 0),
+        "0 B"
+      );
+
+      // Build category counts table
+      const categoryCountsMap = events.category_counts || {};
+      const categoryEntries = Object.entries(categoryCountsMap).sort(
+        (a, b) => b[1] - a[1]
+      );
+      const categoriesDisplay =
+        categoryEntries.length > 0
+          ? categoryEntries
+              .map(
+                ([category, count]) => `
+                            <tr>
+                                <td>${Utils.escapeHtml(category)}</td>
+                                <td style="text-align: right;">${Utils.formatNumber(
+                                  Number(count),
+                                  0,
+                                  { fallback: "0" }
+                                )}</td>
+                            </tr>
+                        `
+              )
+              .join("")
+          : `
+                            <tr>
+                                <td colspan="2" style="text-align: center; color: #888;">
+                                    No category data for last 24 hours
+                                </td>
+                            </tr>
+                        `;
+
+      // Build recent events table
+      const recentEventsList = events.recent_events || [];
+      const recentEventsDisplay =
+        recentEventsList.length > 0
+          ? recentEventsList
+              .map((event) => {
+                const severity = event.severity || "INFO";
+                const severityBadge =
+                  severity === "ERROR"
+                    ? '<span style="padding: 2px 8px; border-radius: 4px; background: rgba(239, 68, 68, 0.2); color: #ef4444; font-size: 0.75em; font-weight: 600;">ERROR</span>'
+                    : severity === "WARN"
+                    ? '<span style="padding: 2px 8px; border-radius: 4px; background: rgba(245, 158, 11, 0.2); color: #f59e0b; font-size: 0.75em; font-weight: 600;">WARN</span>'
+                    : '<span style="padding: 2px 8px; border-radius: 4px; background: rgba(59, 130, 246, 0.2); color: #3b82f6; font-size: 0.75em; font-weight: 600;">INFO</span>';
+
+                let eventTime = "Unknown";
+                if (event.event_time) {
+                  const parsed = new Date(event.event_time);
+                  eventTime = Number.isNaN(parsed.getTime())
+                    ? "Unknown"
+                    : parsed.toLocaleString();
+                }
+
+                const mint = event.mint || "";
+                const shortMint =
+                  mint.length > 14
+                    ? `${mint.slice(0, 8)}...${mint.slice(-6)}`
+                    : mint || "—";
+                const category = Utils.escapeHtml(event.category || "—");
+                const subtype = Utils.escapeHtml(event.subtype || "—");
+                const refId = event.reference_id || "";
+                const shortRefId =
+                  refId.length > 14
+                    ? `${refId.slice(0, 8)}...${refId.slice(-6)}`
+                    : refId || "—";
+
+                return `
+                            <tr>
+                                <td>${eventTime}</td>
+                                <td>${severityBadge}</td>
+                                <td>${category}</td>
+                                <td>${subtype}</td>
+                                <td style="font-family: 'SF Mono', Monaco, monospace; font-size: 0.9em;">${shortMint}</td>
+                                <td style="font-family: 'SF Mono', Monaco, monospace; font-size: 0.9em;">${shortRefId}</td>
+                            </tr>
+                        `;
+              })
+              .join("")
+          : `
+                            <tr>
+                                <td colspan="6" style="text-align: center; color: #888;">
+                                    No recent events
+                                </td>
+                            </tr>
+                        `;
+
+      contentContainer.innerHTML = `
+                <div class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">📋</span>
+                            <span class="card-title">Events System</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="status-metrics-grid">
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">⚙️</span>
+                                        <span>Service Status</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${serviceLabel}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">📊</span>
+                                        <span>Total Events</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${totalEventsLabel}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">⏰</span>
+                                        <span>Events (24h)</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${events24hLabel}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">💾</span>
+                                        <span>Database Size</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${dbSizeLabel}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <h3 class="status-section-title">Category Breakdown (24h)</h3>
+                            <table class="status-services-table sticky-table">
+                                <thead>
+                                    <tr>
+                                        <th>Category</th>
+                                        <th style="text-align: right;">Count</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${categoriesDisplay}
+                                </tbody>
+                            </table>
+
+                            <h3 class="status-section-title" style="margin-top: 24px;">Recent Events</h3>
+                            <table class="status-services-table sticky-table">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Severity</th>
+                                        <th>Category</th>
+                                        <th>Subtype</th>
+                                        <th>Mint</th>
+                                        <th>Reference ID</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${recentEventsDisplay}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+    }
+
+    function renderTransactionsTab(data) {
+      const contentContainer = document.getElementById("statusContent");
+      if (!contentContainer) return;
+
+      const tx = data.transactions;
+
+      if (!tx) {
+        contentContainer.innerHTML = `
+                <div class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">💱</span>
+                            <span class="card-title">Transactions System</span>
+                        </div>
+                        <div class="status-placeholder">
+                            <div class="status-placeholder-icon">💱</div>
+                            <div class="status-placeholder-title">Transactions Data</div>
+                            <div class="status-placeholder-text">Transactions metrics are not available yet. Ensure the transactions service is running.</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        return;
+      }
+
+      const stats = tx.stats || {};
+      const queue = tx.queue || {};
+      const database = tx.database || null;
+      const bootstrap = tx.bootstrap || null;
+
+      const serviceLabel = tx.running ? "Running" : "Stopped";
+      const readyLabel = tx.system_ready ? "Ready" : "Not Ready";
+
+      const totalTxLabel = Utils.formatNumber(
+        Number(stats.total_transactions || 0),
+        0,
+        { fallback: "0" }
+      );
+      const newTransactionsLabel = Utils.formatNumber(
+        Number(stats.new_transactions_count || 0),
+        0,
+        { fallback: "0" }
+      );
+      const successRateLabel = Utils.formatNumber(
+        Number(tx.success_rate || 0),
+        2,
+        {
+          fallback: "0.00",
+        }
+      );
+      const failureRateLabel = Utils.formatNumber(
+        Number(tx.failure_rate || 0),
+        2,
+        {
+          fallback: "0.00",
+        }
+      );
+      const pendingLocalLabel = Utils.formatNumber(
+        Number(queue.pending_local || 0),
+        0,
+        { fallback: "0" }
+      );
+      const pendingGlobalLabel = Utils.formatNumber(
+        Number(queue.pending_global || 0),
+        0,
+        { fallback: "0" }
+      );
+      const knownLabel = Utils.formatNumber(
+        Number(stats.known_signatures_count || 0),
+        0,
+        { fallback: "0" }
+      );
+      const deferredLabel = Utils.formatNumber(
+        Number(queue.deferred_retries || 0),
+        0,
+        { fallback: "0" }
+      );
+      const databaseSizeLabel = database
+        ? Utils.formatBytes(Number(database.size_bytes || 0), "0 B")
+        : "N/A";
+      const oldestPendingLabel = Number.isFinite(queue.oldest_age_seconds)
+        ? Utils.formatUptime(queue.oldest_age_seconds, { fallback: "0s" })
+        : "N/A";
+      const lastSignatureCheck = Utils.formatTimestamp(
+        tx.last_signature_check,
+        {
+          fallback: "Never",
+        }
+      );
+      const dbLastUpdated = Utils.formatTimestamp(
+        database ? database.last_updated : null,
+        { fallback: "N/A" }
+      );
+
+      const walletPubkey = tx.wallet_pubkey
+        ? Utils.escapeHtml(tx.wallet_pubkey)
+        : "N/A";
+      const schemaLabel = database
+        ? `Schema v${Utils.escapeHtml(String(database.schema_version))}`
+        : "";
+
+      const formatSignature = (sig) => {
+        if (!sig) {
+          return "N/A";
+        }
+        if (sig.length <= 12) {
+          return Utils.escapeHtml(sig);
+        }
+        const compact = `${sig.slice(0, 6)}…${sig.slice(-6)}`;
+        return Utils.escapeHtml(compact);
+      };
+
+      const pendingSample = queue.sample || [];
+      const pendingRows = pendingSample.length
+        ? pendingSample
+            .map(
+              (item) => `
+                            <tr>
+                                <td><code title="${Utils.escapeHtml(
+                                  String(item.signature || "")
+                                )}">${formatSignature(
+                item.signature
+              )}</code></td>
+                                <td style="text-align: right;">${Utils.formatUptime(
+                                  item.age_seconds || 0,
+                                  { fallback: "0s" }
+                                )}</td>
+                            </tr>
+                        `
+            )
+            .join("")
+        : `
+                            <tr>
+                                <td colspan="2" style="text-align: center; padding: 16px; color: var(--text-secondary);">
+                                    No pending signatures
+                                </td>
+                            </tr>
+                        `;
+
+      const newestSignature = tx.newest_known_signature
+        ? `<code title="${Utils.escapeHtml(
+            String(tx.newest_known_signature)
+          )}">${formatSignature(tx.newest_known_signature)}</code>`
+        : "N/A";
+      const oldestSignature = tx.oldest_known_signature
+        ? `<code title="${Utils.escapeHtml(
+            String(tx.oldest_known_signature)
+          )}">${formatSignature(tx.oldest_known_signature)}</code>`
+        : "N/A";
+
+      const rawCountLabel = Utils.formatNumber(
+        Number(database ? database.raw_transactions : 0),
+        0,
+        { fallback: "0" }
+      );
+      const processedCountLabel = Utils.formatNumber(
+        Number(database ? database.processed_transactions : 0),
+        0,
+        { fallback: "0" }
+      );
+      const pendingRecordLabel = Utils.formatNumber(
+        Number(database ? database.pending_records : 0),
+        0,
+        { fallback: "0" }
+      );
+      const deferredRecordLabel = Utils.formatNumber(
+        Number(database ? database.deferred_retry_records : 0),
+        0,
+        { fallback: "0" }
+      );
+
+      const bootstrapStatusLabel = bootstrap
+        ? bootstrap.full_history_completed
+          ? "Completed"
+          : "In Progress"
+        : "Unknown";
+      const bootstrapCursorLabel =
+        bootstrap && bootstrap.backfill_cursor
+          ? `<code title="${Utils.escapeHtml(
+              String(bootstrap.backfill_cursor)
+            )}">${formatSignature(bootstrap.backfill_cursor)}</code>`
+          : "None";
+
+      contentContainer.innerHTML = `
+                <div class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">💱</span>
+                            <span class="card-title">Transactions System</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="status-metrics-grid">
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">⚙️</span>
+                                        <span>Service</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${serviceLabel}
+                                        <span class="status-metric-unit">${readyLabel}</span>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">📊</span>
+                                        <span>Total Transactions</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${totalTxLabel}
+                                        <span class="status-metric-unit">+${newTransactionsLabel} new</span>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">✅</span>
+                                        <span>Success Rate</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${successRateLabel}<span class="status-metric-unit">%</span>
+                                        <span class="status-metric-unit" style="margin-left: 0;">Fail ${failureRateLabel}%</span>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">⌛</span>
+                                        <span>Pending Queue</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${pendingLocalLabel}
+                                        <span class="status-metric-unit">Global ${pendingGlobalLabel}</span>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🧾</span>
+                                        <span>Known Signatures</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${knownLabel}
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🗄️</span>
+                                        <span>Database Size</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${databaseSizeLabel}
+                                        <span class="status-metric-unit">${schemaLabel}</span>
+                                    </div>
+                                </div>
+                                <div class="status-metric-card">
+                                    <div class="status-metric-header">
+                                        <span class="status-metric-icon">🔁</span>
+                                        <span>Deferred Retries</span>
+                                    </div>
+                                    <div class="status-metric-value">
+                                        ${deferredLabel}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <h3 class="status-section-title">Service Details</h3>
+                            <div class="status-trader-info">
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">Wallet Monitored</span>
+                                    <span class="status-trader-value">${walletPubkey}</span>
+                                </div>
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">System Ready</span>
+                                    <span class="status-trader-value">${readyLabel}</span>
+                                </div>
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">Last Signature Check</span>
+                                    <span class="status-trader-value">${lastSignatureCheck}</span>
+                                </div>
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">Newest Known Signature</span>
+                                    <span class="status-trader-value">${newestSignature}</span>
+                                </div>
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">Oldest Known Signature</span>
+                                    <span class="status-trader-value">${oldestSignature}</span>
+                                </div>
+                            </div>
+
+                            <h3 class="status-section-title">Processing Queue</h3>
+                            <table class="status-services-table sticky-table">
+                                <thead>
+                                    <tr>
+                                        <th>Signature</th>
+                                        <th style="text-align: right;">Age</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${pendingRows}
+                                </tbody>
+                            </table>
+                            <div class="status-trader-info" style="margin-top: 12px;">
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">Oldest Pending Age</span>
+                                    <span class="status-trader-value">${oldestPendingLabel}</span>
+                                </div>
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">Deferred Retries</span>
+                                    <span class="status-trader-value">${deferredLabel}</span>
+                                </div>
+                            </div>
+
+                            <h3 class="status-section-title">Database Summary</h3>
+                            <table class="status-services-table sticky-table">
+                                <tbody>
+                                    <tr>
+                                        <td>Total Raw Transactions</td>
+                                        <td style="text-align: right;">${rawCountLabel}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Total Processed Transactions</td>
+                                        <td style="text-align: right;">${processedCountLabel}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Pending Records</td>
+                                        <td style="text-align: right;">${pendingRecordLabel}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Deferred Retry Records</td>
+                                        <td style="text-align: right;">${deferredRecordLabel}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Last Updated</td>
+                                        <td style="text-align: right;">${dbLastUpdated}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <h3 class="status-section-title">Bootstrap Status</h3>
+                            <div class="status-trader-info">
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">History Status</span>
+                                    <span class="status-trader-value">${bootstrapStatusLabel}</span>
+                                </div>
+                                <div class="status-trader-row">
+                                    <span class="status-trader-label">Backfill Cursor</span>
+                                    <span class="status-trader-value">${bootstrapCursorLabel}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+    }
+
+    function renderPlaceholderTab(view) {
+      const contentContainer = document.getElementById("statusContent");
+
+      const viewTitles = {
+        rpc: "RPC Statistics",
+        transactions: "Transaction Processing",
+        positions: "Position Management",
+        pools: "Pool Service",
+        dexscreener: "DexScreener API",
+        geckoterminal: "GeckoTerminal API",
+        discovery: "Token Discovery",
+        events: "Event System",
+        sol_price: "SOL Price Tracking",
+        webserver: "Webserver Metrics",
+        rl_learner: "Reinforcement Learning",
+      };
+
+      const viewIcons = {
+        rpc: "📡",
+        transactions: "💱",
+        positions: "💰",
+        pools: "🏊",
+        dexscreener: "🧮",
+        geckoterminal: "🦎",
+        discovery: "🔍",
+        events: "📡",
+        sol_price: "💵",
+        webserver: "🌐",
+        rl_learner: "🧠",
+      };
+
+      const icon = viewIcons[view] || "📊";
+      const title = viewTitles[view] || "Status";
+
+      contentContainer.innerHTML = `
+                <div class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">${icon}</span>
+                            <span class="card-title">${title}</span>
+                        </div>
+                        <div class="status-placeholder">
+                            <div class="status-placeholder-icon">${icon}</div>
+                            <div class="status-placeholder-title">${title}</div>
+                            <div class="status-placeholder-text">Real-time data integration coming soon</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+    }
+  })();
+</script>
+
+<div class="page-table status-page">
+  <div class="table-wrap status-scroll-wrap">
+    <div id="statusContent" class="status-scroll-body">
+      <div class="page-section">
+        <div
+          style="
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+          "
+        >
+          <div class="loading-text">Loading status...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

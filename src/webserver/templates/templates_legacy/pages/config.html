@@ -1,0 +1,2328 @@
+<style>
+  /* COMPACT PROFESSIONAL CONFIG UI */
+  .config-page {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    padding: 20px 28px 32px;
+    box-sizing: border-box;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .config-page > * {
+    width: 100%;
+    max-width: 1200px;
+  }
+
+  .config-scroll-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 8px;
+    padding-bottom: 56px;
+    scroll-behavior: smooth;
+  }
+
+  .config-scroll-body::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .config-scroll-body::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+  }
+
+  #configContainer {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .config-page #globalStatus {
+    margin-top: -4px;
+  }
+
+  @media (max-width: 1200px) {
+    .config-page {
+      padding: 16px 20px 28px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .config-page {
+      padding: 14px 16px 24px;
+    }
+
+    .config-scroll-body {
+      padding-right: 0;
+      padding-bottom: 40px;
+    }
+  }
+
+  .config-toolbar {
+    margin-bottom: 12px;
+  }
+
+  .config-toolbar .toolbar-actions {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .config-toolbar .toolbar-actions .btn {
+    white-space: nowrap;
+  }
+
+  .toolbar-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0;
+    padding: 10px 16px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(15, 17, 30, 0.7);
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .dirty-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(56, 239, 125, 0.15);
+    border: 1px solid rgba(56, 239, 125, 0.4);
+    border-radius: 999px;
+    color: rgba(56, 239, 125, 0.9);
+    font-weight: 600;
+    letter-spacing: 0.2px;
+  }
+
+  .dirty-pill.hidden {
+    display: none;
+  }
+
+  .config-card {
+    background: rgba(21, 23, 38, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 14px;
+    margin: 0;
+    overflow: hidden;
+    box-shadow: 0 14px 36px rgba(8, 10, 24, 0.35);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .config-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 40px rgba(10, 12, 30, 0.45);
+  }
+
+  .config-card.hidden {
+    display: none;
+  }
+
+  .config-card.search-active {
+    border-color: rgba(21, 101, 192, 0.5);
+    box-shadow: 0 0 0 1px rgba(21, 101, 192, 0.3);
+  }
+
+  .config-card.pulse {
+    animation: configCardPulse 1.2s ease;
+  }
+
+  @keyframes configCardPulse {
+    0% {
+      box-shadow: 0 0 0 0 rgba(21, 101, 192, 0.6);
+    }
+    100% {
+      box-shadow: 0 0 0 12px rgba(21, 101, 192, 0);
+    }
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 20px;
+    background: rgba(13, 16, 28, 0.85);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .card-header-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .card-header h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .field-count {
+    font-size: 11px;
+    opacity: 0.6;
+    font-weight: 400;
+  }
+
+  .field-count[data-dirty="true"] {
+    color: rgba(56, 239, 125, 0.8);
+    opacity: 1;
+  }
+
+  .expand-icon {
+    font-size: 12px;
+    transition: transform 0.2s;
+  }
+
+  .expand-icon.expanded {
+    transform: rotate(180deg);
+  }
+
+  .card-body {
+    display: none;
+    padding: 18px 20px 20px;
+    background: rgba(13, 16, 28, 0.65);
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .card-body.expanded {
+    display: block;
+  }
+
+  .category {
+    background: rgba(20, 22, 38, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    margin-bottom: 12px;
+  }
+
+  .category.hidden {
+    display: none;
+  }
+
+  .category-header {
+    padding: 12px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .category-header:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .category-header .category-title {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .category-header .category-count {
+    font-size: 11px;
+    opacity: 0.6;
+  }
+
+  .category-body {
+    /* Vertical stacked layout for all fields */
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 16px 16px;
+  }
+
+  .category-body.collapsed {
+    display: none;
+  }
+
+  .field {
+    background: rgba(15, 16, 28, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 12px 14px;
+    transition: border-color 0.15s ease, background 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .field:hover {
+    background: rgba(22, 24, 40, 0.85);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 8px 22px rgba(5, 8, 20, 0.25);
+  }
+
+  .field.object-field textarea {
+    font-family: monospace;
+    min-height: 140px;
+    white-space: pre;
+    line-height: 1.45;
+    resize: vertical;
+  }
+
+  .field.hidden {
+    display: none !important;
+  }
+
+  .field.modified {
+    border-color: rgba(56, 239, 125, 0.6);
+    background: rgba(56, 239, 125, 0.08);
+  }
+
+  .field.search-match {
+    border-color: rgba(21, 101, 192, 0.6);
+    background: rgba(21, 101, 192, 0.08);
+  }
+
+  .field-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
+  .field-header label {
+    font-size: 13px;
+    font-weight: 500;
+    color: #f1f1f5;
+  }
+
+  .category-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .category-badge.general {
+    background: rgba(59, 130, 246, 0.18);
+    border-color: rgba(59, 130, 246, 0.5);
+    color: #bfdbfe;
+  }
+
+  .category-badge.advanced {
+    background: rgba(249, 115, 22, 0.18);
+    border-color: rgba(249, 115, 22, 0.45);
+    color: #fdba74;
+  }
+
+  .category-badge.developer {
+    background: rgba(139, 92, 246, 0.18);
+    border-color: rgba(139, 92, 246, 0.45);
+    color: #ddd6fe;
+  }
+
+  .field input,
+  .field select,
+  .field textarea {
+    width: 100%;
+    padding: 6px 10px;
+    background: rgba(11, 12, 22, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+    color: white;
+    font-size: 13px;
+    font-family: monospace;
+  }
+
+  .field textarea {
+    min-height: 64px;
+  }
+
+  .field textarea.object-editor {
+    white-space: pre;
+  }
+
+  .field input:focus,
+  .field select:focus,
+  .field textarea:focus {
+    outline: none;
+    border-color: #1565c0;
+    background: rgba(15, 15, 25, 0.9);
+  }
+
+  .field input.valid {
+    border-color: #38ef7d;
+  }
+
+  .field input.invalid {
+    border-color: #ef4444;
+    background: rgba(239, 68, 68, 0.08);
+  }
+
+  .field-hint {
+    font-size: 10px;
+    color: #888;
+    margin-top: 3px;
+    line-height: 1.3;
+  }
+
+  .field-error {
+    display: none;
+    font-size: 10px;
+    color: #f5576c;
+    margin-top: 3px;
+    font-weight: 500;
+  }
+
+  .field-error.visible {
+    display: block;
+  }
+
+  .card-actions {
+    display: flex;
+    gap: 8px;
+    padding: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .save-btn {
+    flex: 1;
+    padding: 8px 16px;
+    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    border: none;
+    border-radius: 5px;
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .save-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(56, 239, 125, 0.3);
+  }
+
+  .save-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .reset-btn {
+    padding: 8px 16px;
+    background: rgba(30, 30, 50, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 5px;
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .reset-btn:hover {
+    background: rgba(40, 40, 60, 0.9);
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .status {
+    padding: 6px 10px;
+    border-radius: 5px;
+    font-size: 11px;
+    margin-top: 8px;
+    display: none;
+  }
+
+  .status.success {
+    background: rgba(56, 239, 125, 0.15);
+    border: 1px solid rgba(56, 239, 125, 0.4);
+    color: #38ef7d;
+  }
+
+  .status.error {
+    background: rgba(245, 87, 108, 0.15);
+    border: 1px solid rgba(245, 87, 108, 0.4);
+    color: #f5576c;
+  }
+
+  .status.visible {
+    display: block;
+  }
+
+  /* Modal styles */
+  .modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+  }
+
+  .modal.visible {
+    display: flex;
+  }
+
+  .modal-content {
+    background: #1a1a2e;
+    border-radius: 10px;
+    max-width: 90%;
+    max-height: 85%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: rgba(30, 30, 50, 0.8);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .modal-header h3 {
+    margin: 0;
+    font-size: 16px;
+  }
+
+  .modal-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-body {
+    padding: 16px;
+    overflow-y: auto;
+  }
+
+  .diff-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  .diff-table th {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 8px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 11px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .diff-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    font-family: monospace;
+  }
+
+  .diff-table .new-value {
+    background: rgba(56, 239, 125, 0.1);
+    color: #38ef7d;
+  }
+
+  .diff-table .old-value {
+    background: rgba(245, 87, 108, 0.1);
+    color: #f5576c;
+  }
+
+  .diff-section {
+    margin-bottom: 16px;
+  }
+
+  .diff-section h4 {
+    margin: 0 0 8px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+</style>
+
+<!-- DYNAMIC CONFIG UI -->
+<div class="config-page">
+  <div class="config-toolbar toolbar">
+    <div class="toolbar-row">
+      <div class="toolbar-field toolbar-field--grow">
+        <label class="toolbar-label" for="searchInput">Search</label>
+        <div class="toolbar-search">
+          <span class="toolbar-search__icon" aria-hidden="true">🔍</span>
+          <input
+            type="text"
+            id="searchInput"
+            class="toolbar-input"
+            placeholder="Search configurations..."
+            title="Search configurations (/ to focus)"
+            autocomplete="off"
+          />
+          <button
+            type="button"
+            id="configSearchClear"
+            class="toolbar-search__clear"
+            aria-label="Clear search"
+            hidden
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+      <div class="toolbar-field toolbar-field--compact">
+        <label class="toolbar-label" for="sectionJump">Jump To</label>
+        <select
+          id="sectionJump"
+          class="toolbar-select"
+          onchange="jumpToSection(this.value)"
+        >
+          <option value="">Jump to section...</option>
+        </select>
+      </div>
+      <div class="toolbar-field toolbar-field--compact">
+        <label class="toolbar-label" for="configCategory">Category</label>
+        <select
+          id="configCategory"
+          class="toolbar-select"
+          onchange="filterByCategory(this.value)"
+        >
+          <option value="all" data-label="All">All</option>
+          <option value="general" data-label="General">General</option>
+          <option value="advanced" data-label="Advanced">Advanced</option>
+          <option value="developer" data-label="Developer">Developer</option>
+          <option value="modified" data-label="Modified">Modified</option>
+        </select>
+      </div>
+      <div class="toolbar-actions">
+        <button
+          type="button"
+          class="btn"
+          onclick="toggleAllSections(true)"
+          title="Expand all sections"
+        >
+          ⬇️ Expand
+        </button>
+        <button
+          type="button"
+          class="btn"
+          onclick="toggleAllSections(false)"
+          title="Collapse all sections"
+        >
+          ⬆️ Collapse
+        </button>
+        <button
+          class="btn btn-secondary"
+          type="button"
+          onclick="exportConfig()"
+        >
+          📥 Export
+        </button>
+        <button
+          class="btn btn-secondary"
+          type="button"
+          onclick="document.getElementById('importFile').click()"
+        >
+          📤 Import
+        </button>
+        <input
+          type="file"
+          id="importFile"
+          style="display: none"
+          accept=".json"
+          onchange="importConfig(this.files[0])"
+        />
+        <button class="btn btn-primary" type="button" onclick="reloadConfig()">
+          🔄 Reload
+        </button>
+        <button class="btn btn-danger" type="button" onclick="resetConfig()">
+          ⚠️ Reset
+        </button>
+        <button class="btn" type="button" onclick="viewDiff()">📋 Diff</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toolbar-meta">
+    <span id="configResultsMeta">Preparing configuration...</span>
+    <span id="configDirtyBadge" class="dirty-pill hidden"
+      >Unsaved edits: 0</span
+    >
+  </div>
+
+  <div id="globalStatus" class="status"></div>
+  <div class="config-scroll-body">
+    <div id="configContainer"></div>
+  </div>
+</div>
+
+<!-- Diff Modal -->
+<div id="diffModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Configuration Differences</h3>
+      <button class="modal-close" onclick="closeDiffModal()">×</button>
+    </div>
+    <div class="modal-body" id="diffModalBody">
+      <p style="text-align: center; opacity: 0.6">Loading...</p>
+    </div>
+  </div>
+</div>
+
+<script>
+  // COMPLETE DYNAMIC CONFIG UI IMPLEMENTATION - ALL 155 FIELDS
+  // =============================================================================
+  // CONFIGURATION METADATA - Single source of truth for all 155 fields
+  // =============================================================================
+  // CONFIGURATION METADATA - Loaded dynamically from backend
+  let CONFIG_METADATA = {};
+  let diffModalListenerAttached = false;
+
+  const SECTION_ORDER = [
+    "trader",
+    "positions",
+    "filtering",
+    "swaps",
+    "tokens",
+    "rpc",
+    "sol_price",
+    "summary",
+    "events",
+    "webserver",
+    "services",
+    "monitoring",
+    "ohlcv",
+  ];
+
+  const SECTION_ICON_MAP = {
+    trader: "🤖",
+    positions: "📌",
+    filtering: "🔍",
+    swaps: "🔄",
+    tokens: "🪙",
+    rpc: "🌐",
+    sol_price: "💲",
+    summary: "📊",
+    events: "📝",
+    webserver: "🖥️",
+    services: "🛠️",
+    monitoring: "📈",
+    ohlcv: "🕒",
+  };
+
+  const SECTION_TITLE_MAP = {
+    rpc: "RPC",
+    sol_price: "SOL Price",
+    ohlcv: "OHLCV",
+  };
+
+  let SECTION_STATE = {};
+  let SECTION_BASELINES = {};
+  let TOTAL_FIELD_COUNT = 0;
+  let currentCategoryFilter = "all";
+  let searchShortcutAttached = false;
+  let dirtySummaryRaf = null;
+
+  const STORAGE_KEYS = {
+    search: "config.search",
+    category: "config.category",
+    section: "config.section",
+  };
+
+  function formatSectionTitle(sectionName) {
+    if (SECTION_TITLE_MAP[sectionName]) {
+      return SECTION_TITLE_MAP[sectionName];
+    }
+    return sectionName
+      .split("_")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+
+  function deepClone(value) {
+    if (value === undefined) return undefined;
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch (_err) {
+      return value;
+    }
+  }
+
+  function formatFieldLabel(fieldKey) {
+    return fieldKey
+      .split("_")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+
+  function isIntegerField(sectionName, fieldKey) {
+    const fieldMeta = CONFIG_METADATA[sectionName]?.[fieldKey];
+    return fieldMeta?.type === "integer";
+  }
+
+  async function fetchConfigMetadata() {
+    try {
+      const response = await fetch("/api/config/metadata");
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.error?.message || "Failed to load config metadata"
+        );
+      }
+
+      CONFIG_METADATA = result.data || {};
+
+      const sectionNames = Object.keys(CONFIG_METADATA).sort((a, b) => {
+        const indexA = SECTION_ORDER.indexOf(a);
+        const indexB = SECTION_ORDER.indexOf(b);
+        const safeA = indexA === -1 ? Number.POSITIVE_INFINITY : indexA;
+        const safeB = indexB === -1 ? Number.POSITIVE_INFINITY : indexB;
+        if (safeA === safeB) {
+          return a.localeCompare(b);
+        }
+        return safeA - safeB;
+      });
+
+      SECTION_STATE = {};
+      SECTION_BASELINES = {};
+      sectionNames.forEach((sectionName) => {
+        SECTION_STATE[sectionName] = {
+          icon: SECTION_ICON_MAP[sectionName] || "⚙️",
+          title: formatSectionTitle(sectionName),
+          fields: Object.keys(CONFIG_METADATA[sectionName] || {}).length,
+        };
+      });
+    } catch (error) {
+      console.error("[Config] Metadata fetch failed", error);
+      showStatus(
+        document.getElementById("globalStatus"),
+        "error",
+        error.message || "Failed to load metadata"
+      );
+      throw error;
+    }
+  }
+
+  // =============================================================================
+  // TOOLBAR HELPERS & STATE MANAGEMENT
+  // =============================================================================
+
+  function ensureSearchShortcut() {
+    if (searchShortcutAttached) return;
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+
+      const active = document.activeElement;
+      if (active && ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName)) {
+        return;
+      }
+
+      const searchInput = document.getElementById("searchInput");
+      if (!searchInput) return;
+
+      event.preventDefault();
+      searchInput.focus();
+      searchInput.select();
+    });
+
+    searchShortcutAttached = true;
+  }
+
+  function initializeToolbarEnhancements() {
+    ensureSearchShortcut();
+
+    const searchInput = document.getElementById("searchInput");
+    if (searchInput && !searchInput.dataset.enhanced) {
+      searchInput.dataset.enhanced = "true";
+      searchInput.addEventListener("input", (event) => {
+        updateConfigSearchClearVisibility();
+        filterConfigs(event.target.value);
+      });
+      searchInput.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          event.stopPropagation();
+          clearConfigSearch();
+          searchInput.blur();
+        }
+      });
+    }
+
+    const searchClear = document.getElementById("configSearchClear");
+    if (searchClear && !searchClear.dataset.enhanced) {
+      searchClear.dataset.enhanced = "true";
+      searchClear.addEventListener("click", () => {
+        clearConfigSearch();
+        const input = document.getElementById("searchInput");
+        if (input) input.focus();
+      });
+    }
+
+    const sectionJump = document.getElementById("sectionJump");
+    if (sectionJump && !sectionJump.dataset.enhanced) {
+      sectionJump.dataset.enhanced = "true";
+      sectionJump.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && sectionJump.value) {
+          jumpToSection(sectionJump.value);
+        }
+      });
+    }
+
+    updateConfigSearchClearVisibility();
+  }
+
+  function populateSectionJump() {
+    const select = document.getElementById("sectionJump");
+    if (!select) return;
+
+    const savedValue =
+      window.sessionStorage.getItem(STORAGE_KEYS.section) || "";
+
+    const options = ['<option value="">Jump to section...</option>'];
+    Object.entries(SECTION_STATE).forEach(([sectionName, info]) => {
+      const optionLabel = `${info.icon} ${info.title}`.trim();
+      options.push(
+        `<option value="${sectionName}"${
+          savedValue === sectionName ? " selected" : ""
+        }>${optionLabel}</option>`
+      );
+    });
+
+    select.innerHTML = options.join("");
+  }
+
+  function jumpToSection(sectionName) {
+    if (!sectionName) {
+      window.sessionStorage.removeItem(STORAGE_KEYS.section);
+      return;
+    }
+
+    const card = document.querySelector(
+      `.config-card[data-section="${sectionName}"]`
+    );
+    if (!card) return;
+
+    window.sessionStorage.setItem(STORAGE_KEYS.section, sectionName);
+    setSectionExpansion(sectionName, true);
+
+    window.requestAnimationFrame(() => {
+      card.scrollIntoView({ behavior: "smooth", block: "start" });
+      card.classList.add("pulse");
+      window.setTimeout(() => card.classList.remove("pulse"), 900);
+    });
+  }
+
+  function toggleAllSections(shouldExpand) {
+    Object.keys(SECTION_STATE).forEach((sectionName) => {
+      setSectionExpansion(sectionName, shouldExpand);
+    });
+
+    if (!shouldExpand) {
+      window.sessionStorage.removeItem(STORAGE_KEYS.section);
+    }
+  }
+
+  function setSectionExpansion(sectionName, shouldExpand, options = {}) {
+    const body = document.getElementById(`${sectionName}-body`);
+    const icon = document.getElementById(`${sectionName}-icon`);
+    const card = document.querySelector(
+      `.config-card[data-section="${sectionName}"]`
+    );
+    if (!body || !icon) return;
+
+    const isExpanded = body.classList.contains("expanded");
+
+    if (shouldExpand) {
+      if (!isExpanded) {
+        body.classList.add("expanded");
+        icon.classList.add("expanded");
+        if (options.auto) {
+          body.dataset.autoExpanded = "1";
+        } else {
+          delete body.dataset.autoExpanded;
+        }
+        loadSection(sectionName);
+      }
+
+      if (options.auto) {
+        card?.classList.add("search-active");
+      } else {
+        card?.classList.remove("search-active");
+      }
+    } else {
+      if (isExpanded) {
+        body.classList.remove("expanded");
+        icon.classList.remove("expanded");
+        delete body.dataset.autoExpanded;
+      }
+      card?.classList.remove("search-active");
+    }
+  }
+
+  function setCategoryExpansion(header, shouldExpand, options = {}) {
+    if (!header) return;
+
+    const body = header.nextElementSibling;
+    const toggle = header.querySelector(".category-toggle");
+    if (!body || !toggle) return;
+
+    const isCollapsed = body.classList.contains("collapsed");
+
+    if (shouldExpand) {
+      if (isCollapsed) {
+        body.classList.remove("collapsed");
+        toggle.textContent = "▼";
+        if (options.auto) {
+          body.dataset.autoExpanded = "1";
+        } else {
+          delete body.dataset.autoExpanded;
+        }
+      }
+    } else {
+      if (!isCollapsed) {
+        body.classList.add("collapsed");
+        toggle.textContent = "▶";
+      }
+      if (options.auto) {
+        delete body.dataset.autoExpanded;
+      }
+    }
+
+    if (!shouldExpand && !options.auto) {
+      delete body.dataset.autoExpanded;
+    }
+  }
+
+  function setCategorySelectValue(level) {
+    const select = document.getElementById("configCategory");
+    if (!select) return;
+    const validValues = new Set(
+      Array.from(select.options).map((option) => option.value || "all")
+    );
+    const nextValue = validValues.has(level) ? level : "all";
+    select.value = nextValue;
+    currentCategoryFilter = nextValue;
+  }
+
+  function updateConfigSearchClearVisibility() {
+    const searchInput = document.getElementById("searchInput");
+    const clearBtn = document.getElementById("configSearchClear");
+    if (!clearBtn) return;
+    if (searchInput && searchInput.value.trim().length > 0) {
+      clearBtn.removeAttribute("hidden");
+    } else {
+      clearBtn.setAttribute("hidden", "true");
+    }
+  }
+
+  function clearConfigSearch() {
+    const searchInput = document.getElementById("searchInput");
+    if (!searchInput) return;
+    if (searchInput.value === "") {
+      updateConfigSearchClearVisibility();
+      return;
+    }
+
+    searchInput.value = "";
+    window.sessionStorage.removeItem(STORAGE_KEYS.search);
+    updateConfigSearchClearVisibility();
+    filterConfigs("");
+  }
+
+  function restoreToolbarState() {
+    if (window.sessionStorage.getItem("config.impact")) {
+      window.sessionStorage.removeItem("config.impact");
+    }
+
+    const categorySelect = document.getElementById("configCategory");
+    if (categorySelect) {
+      let savedCategory =
+        window.sessionStorage.getItem(STORAGE_KEYS.category) || "all";
+      const validCategories = new Set(
+        Array.from(categorySelect.options).map(
+          (option) => option.value || "all"
+        )
+      );
+
+      if (!validCategories.has(savedCategory)) {
+        window.sessionStorage.removeItem(STORAGE_KEYS.category);
+        savedCategory = "all";
+      }
+
+      setCategorySelectValue(savedCategory);
+    }
+
+    const searchInput = document.getElementById("searchInput");
+    const savedSearch =
+      window.sessionStorage.getItem(STORAGE_KEYS.search) || "";
+    if (searchInput) {
+      searchInput.value = savedSearch;
+    }
+
+    const savedSection = window.sessionStorage.getItem(STORAGE_KEYS.section);
+    if (savedSection && !SECTION_STATE[savedSection]) {
+      window.sessionStorage.removeItem(STORAGE_KEYS.section);
+    }
+
+    const sectionJump = document.getElementById("sectionJump");
+    if (sectionJump) {
+      if (savedSection && SECTION_STATE[savedSection]) {
+        sectionJump.value = savedSection;
+      } else {
+        sectionJump.value = "";
+      }
+    }
+
+    filterConfigs(savedSearch);
+
+    if (savedSection && SECTION_STATE[savedSection]) {
+      jumpToSection(savedSection);
+    }
+  }
+
+  function updateCategorySelectCounts() {
+    const select = document.getElementById("configCategory");
+    if (!select) return;
+
+    const counts = {
+      all: 0,
+      general: 0,
+      advanced: 0,
+      developer: 0,
+      modified: 0,
+    };
+
+    const fields = document.querySelectorAll(".field");
+    fields.forEach((field) => {
+      const category = (field.dataset.category || "general").toLowerCase();
+      counts.all += 1;
+      const bucket = counts[category] !== undefined ? category : "general";
+      counts[bucket] += 1;
+      if (field.dataset.modified === "true") {
+        counts.modified += 1;
+      }
+    });
+
+    TOTAL_FIELD_COUNT = counts.all;
+
+    Array.from(select.options).forEach((option) => {
+      const filterKey = option.value || "all";
+      if (!(filterKey in counts)) return;
+      const baseLabel = option.dataset.label || option.textContent.trim();
+      option.dataset.label = baseLabel;
+      option.textContent = `${baseLabel} (${counts[filterKey] ?? 0})`;
+    });
+  }
+
+  function updateResultsSummary(visibleFields, visibleSections) {
+    const summary = document.getElementById("configResultsMeta");
+    if (!summary) return;
+
+    const totalSections = Object.keys(SECTION_STATE).length;
+    const fieldText = `${visibleFields} of ${TOTAL_FIELD_COUNT} fields visible`;
+    const sectionText = `${visibleSections} of ${totalSections} sections shown`;
+    summary.textContent = `${fieldText} • ${sectionText}`;
+  }
+
+  function scheduleDirtySummaryUpdate() {
+    if (dirtySummaryRaf !== null) return;
+    dirtySummaryRaf = window.requestAnimationFrame(() => {
+      dirtySummaryRaf = null;
+      updateDirtySummary();
+      updateCategorySelectCounts();
+    });
+  }
+
+  function updateDirtySummary() {
+    const badge = document.getElementById("configDirtyBadge");
+    if (!badge) return;
+
+    const dirtyFields = document.querySelectorAll(
+      '.field[data-modified="true"]'
+    ).length;
+
+    if (dirtyFields > 0) {
+      badge.textContent = `Unsaved edits: ${dirtyFields}`;
+      badge.classList.remove("hidden");
+    } else {
+      badge.classList.add("hidden");
+      badge.textContent = "Unsaved edits: 0";
+    }
+
+    document.querySelectorAll(".config-card").forEach((card) => {
+      const sectionName = card.dataset.section;
+      const countEl = document.getElementById(`${sectionName}-count`);
+      if (!countEl) return;
+
+      const total =
+        Number(countEl.dataset.total) || card.querySelectorAll(".field").length;
+      const visible = Number(countEl.dataset.visible ?? total) || total;
+      const dirty = card.querySelectorAll(
+        '.field[data-modified="true"]'
+      ).length;
+
+      countEl.dataset.dirty = dirty > 0 ? "true" : "false";
+      let label =
+        visible === total ? `${total} fields` : `${visible} / ${total} visible`;
+      if (dirty > 0) {
+        label += ` • ${dirty} edited`;
+      }
+      countEl.textContent = label;
+    });
+
+    document.querySelectorAll(".category-header").forEach((header) => {
+      const body = header.nextElementSibling;
+      const countEl = header.querySelector(".category-count");
+      if (!body || !countEl) return;
+
+      const total =
+        Number(countEl.dataset.total) || body.querySelectorAll(".field").length;
+      const visible = Number(countEl.dataset.visible ?? total) || total;
+      const dirty = body.querySelectorAll(
+        '.field[data-modified="true"]'
+      ).length;
+
+      let label =
+        visible === total ? `${total} fields` : `${visible} / ${total} visible`;
+      if (dirty > 0) {
+        label += ` • ${dirty} edited`;
+      }
+      countEl.textContent = label;
+    });
+  }
+
+  // =============================================================================
+  // DYNAMIC RENDERING ENGINE
+  // =============================================================================
+
+  function renderAllSections() {
+    const container = document.getElementById("configContainer");
+    container.innerHTML = "";
+
+    for (const [sectionName, sectionInfo] of Object.entries(SECTION_STATE)) {
+      container.innerHTML += renderSection(sectionName, sectionInfo);
+    }
+  }
+
+  function renderSection(sectionName, sectionInfo) {
+    const metadata = CONFIG_METADATA[sectionName];
+    if (!metadata) return "";
+    const fieldCount = sectionInfo.fields;
+
+    // Group fields by category
+    const categories = {};
+    for (const [fieldKey, fieldMeta] of Object.entries(metadata)) {
+      const cat = fieldMeta.category || "General";
+      if (!categories[cat]) categories[cat] = [];
+      categories[cat].push({ key: fieldKey, ...fieldMeta });
+    }
+
+    let html = `
+    <div class="config-card" id="section-${sectionName}" data-section="${sectionName}">
+      <div class="card-header" onclick="toggleSection('${sectionName}')">
+        <h3>
+          <span>${sectionInfo.icon}</span>
+          <span>${sectionInfo.title}</span>
+        </h3>
+        <div class="card-header-meta">
+          <span class="field-count" id="${sectionName}-count" data-total="${fieldCount}" data-visible="${fieldCount}">${fieldCount} fields</span>
+          <span class="expand-icon" id="${sectionName}-icon">▼</span>
+        </div>
+      </div>
+      <div class="card-body" id="${sectionName}-body">
+  `;
+
+    // Render categories
+    for (const [catName, fields] of Object.entries(categories)) {
+      html += renderCategory(sectionName, catName, fields);
+    }
+
+    // Card actions
+    html += `
+                <div class="card-actions">
+                    <button class="save-btn" onclick="saveSection('${sectionName}')">💾 Save</button>
+                    <button class="reset-btn" onclick="resetSection('${sectionName}')">🔙 Reset</button>
+                </div>
+                <div class="status" id="${sectionName}-status"></div>
+            </div>
+        </div>
+    `;
+
+    return html;
+  }
+
+  function renderCategory(sectionName, catName, fields) {
+    const shouldCollapse = catName === "Advanced" || catName === "Developer";
+    const collapsedClass = shouldCollapse ? " collapsed" : "";
+    const toggleSymbol = collapsedClass ? "▶" : "▼";
+
+    let html = `
+        <div class="category">
+            <div class="category-header" onclick="toggleCategory(this)">
+  <span class="category-title">${catName}</span>
+  <span class="category-count" data-total="${fields.length}" data-visible="${fields.length}">${fields.length} fields</span>
+  <span class="category-toggle">${toggleSymbol}</span>
+            </div>
+            <div class="category-body${collapsedClass}">
+    `;
+
+    fields.forEach((field) => {
+      html += renderField(sectionName, field);
+    });
+
+    html += `
+            </div>
+        </div>
+    `;
+
+    return html;
+  }
+
+  function renderField(sectionName, field) {
+    const fieldId = `${sectionName}_${field.key}`;
+    const requiresInteger = isIntegerField(sectionName, field.key);
+    const labelText = field.label || formatFieldLabel(field.key);
+    const categoryLabel = field.category || "General";
+    const categoryValue = categoryLabel.toLowerCase();
+    const hintText = field.hint || "";
+    let inputHTML = "";
+
+    if (field.type === "boolean") {
+      inputHTML = `
+            <select id="${fieldId}" onchange="validateField(this)">
+                <option value="true">Enabled</option>
+                <option value="false">Disabled</option>
+            </select>
+        `;
+    } else if (field.type === "object") {
+      inputHTML = `
+            <textarea id="${fieldId}" data-field-type="object" class="object-editor" rows="6" placeholder="JSON object" oninput="validateField(this)"></textarea>
+        `;
+    } else if (field.type === "array") {
+      inputHTML = `
+            <textarea id="${fieldId}" data-field-type="array" rows="2" placeholder="Comma-separated values" oninput="validateField(this)"></textarea>
+        `;
+    } else if (field.type === "string") {
+      inputHTML = `
+            <input type="text" id="${fieldId}" oninput="validateField(this)">
+        `;
+    } else {
+      // number
+      const integerAttr = requiresInteger ? ' data-integer="true"' : "";
+      const stepValue =
+        field.step !== undefined ? field.step : requiresInteger ? 1 : undefined;
+      inputHTML = `
+            <input type="number" id="${fieldId}"
+                ${field.min !== undefined ? `min="${field.min}"` : ""}
+                ${field.max !== undefined ? `max="${field.max}"` : ""}
+                ${stepValue !== undefined ? `step="${stepValue}"` : ""}
+                oninput="validateField(this)"${integerAttr}>
+        `;
+    }
+
+    const fieldClasses = ["field"];
+    if (field.type === "object") {
+      fieldClasses.push("object-field");
+    }
+
+    return `
+        <div class="${fieldClasses.join(
+          " "
+        )}" data-category="${categoryValue}" data-category-label="${categoryLabel}" data-field-key="${
+      field.key
+    }">
+            <div class="field-header">
+                <label>${labelText}${
+      field.unit ? ` (${field.unit})` : ""
+    }</label>
+                <span class="category-badge ${categoryValue}">${categoryLabel}</span>
+            </div>
+            ${inputHTML}
+            <div class="field-hint">${hintText}</div>
+            <div class="field-error"></div>
+        </div>
+    `;
+  }
+
+  function readInputValue(input) {
+    if (!input) return undefined;
+
+    if (input.tagName === "SELECT") {
+      return input.value === "true";
+    }
+
+    if (input.tagName === "TEXTAREA") {
+      if (input.dataset.fieldType === "object") {
+        const raw = input.value || "";
+        if (raw.trim() === "") {
+          return {};
+        }
+
+        try {
+          return JSON.parse(raw);
+        } catch (_jsonErr) {
+          return raw;
+        }
+      }
+
+      const value = input.value || "";
+      const parts = value
+        .split(",")
+        .map((v) => v.trim())
+        .filter((v) => v.length > 0);
+
+      if (parts.length === 0) {
+        return [];
+      }
+
+      const numericParts = parts.map((v) => Number(v));
+      if (numericParts.every((n) => !Number.isNaN(n))) {
+        return numericParts;
+      }
+
+      return parts;
+    }
+
+    if (input.type === "number") {
+      if (input.value === "") {
+        return "";
+      }
+      const requiresInteger = input.dataset.integer === "true";
+      const parsed = requiresInteger
+        ? parseInt(input.value, 10)
+        : parseFloat(input.value);
+      return Number.isNaN(parsed) ? "" : parsed;
+    }
+
+    return input.value;
+  }
+
+  function collectSectionValues(sectionName, inputsOverride) {
+    const body = document.getElementById(`${sectionName}-body`);
+    if (!body) return null;
+
+    const inputs =
+      inputsOverride || body.querySelectorAll("input, select, textarea");
+    if (!inputs || inputs.length === 0) {
+      return null;
+    }
+
+    const values = {};
+
+    inputs.forEach((input) => {
+      const key = input.id.replace(`${sectionName}_`, "");
+      values[key] = readInputValue(input);
+    });
+
+    return values;
+  }
+
+  function valuesEqual(a, b) {
+    return JSON.stringify({ value: a }) === JSON.stringify({ value: b });
+  }
+
+  function updateFieldDirtyState(input) {
+    if (!input) return;
+    const fieldEl = input.closest(".field");
+    if (!fieldEl) return;
+
+    const [sectionName, ...keyParts] = input.id.split("_");
+    const fieldKey = keyParts.join("_");
+    const baselineSection = SECTION_BASELINES[sectionName];
+    const hasBaseline =
+      baselineSection &&
+      Object.prototype.hasOwnProperty.call(baselineSection, fieldKey);
+
+    if (!hasBaseline) {
+      fieldEl.dataset.modified = "false";
+      fieldEl.classList.remove("modified");
+      return;
+    }
+
+    const currentValue = readInputValue(input);
+    const baselineValue = baselineSection[fieldKey];
+    const isDirty = !valuesEqual(baselineValue, currentValue);
+
+    fieldEl.dataset.modified = isDirty ? "true" : "false";
+    fieldEl.classList.toggle("modified", isDirty);
+    scheduleDirtySummaryUpdate();
+  }
+
+  function refreshSectionDirtyState(sectionName) {
+    const body = document.getElementById(`${sectionName}-body`);
+    if (!body) return;
+
+    const inputs = body.querySelectorAll("input, select, textarea");
+    inputs.forEach((input) => updateFieldDirtyState(input));
+  }
+
+  function computeLocalDiff() {
+    const diffs = [];
+
+    for (const [sectionName, baseline] of Object.entries(SECTION_BASELINES)) {
+      const currentValues = collectSectionValues(sectionName);
+      if (!currentValues) continue;
+
+      const keys = new Set([
+        ...Object.keys(baseline || {}),
+        ...Object.keys(currentValues || {}),
+      ]);
+
+      keys.forEach((key) => {
+        const originalValue = baseline ? baseline[key] : undefined;
+        const currentValue = currentValues[key];
+
+        if (!valuesEqual(originalValue, currentValue)) {
+          diffs.push({
+            section: sectionName,
+            field: key,
+            original: originalValue,
+            current: currentValue,
+          });
+        }
+      });
+    }
+
+    diffs.sort((a, b) => {
+      if (a.section === b.section) {
+        return a.field.localeCompare(b.field);
+      }
+      return a.section.localeCompare(b.section);
+    });
+
+    return diffs;
+  }
+
+  function formatDiffValue(value) {
+    if (value === undefined) return "—";
+    if (typeof value === "string") {
+      return value === "" ? '""' : value;
+    }
+    return JSON.stringify(value);
+  }
+
+  // =============================================================================
+  // LOAD & SAVE FUNCTIONS
+  // =============================================================================
+
+  async function loadAllConfigs() {
+    for (const sectionName of Object.keys(SECTION_STATE)) {
+      await loadSection(sectionName);
+    }
+  }
+
+  async function loadSection(sectionName) {
+    try {
+      const response = await fetch(`/api/config/${sectionName}`);
+      const result = await response.json();
+
+      if (result.data) {
+        SECTION_BASELINES[sectionName] = deepClone(result.data);
+        // Populate fields
+        for (const [key, value] of Object.entries(result.data)) {
+          const fieldId = `${sectionName}_${key}`;
+          const input = document.getElementById(fieldId);
+          if (input) {
+            if (input.tagName === "SELECT") {
+              input.value = value.toString();
+            } else if (input.tagName === "TEXTAREA") {
+              if (input.dataset.fieldType === "object") {
+                if (value === null || value === undefined) {
+                  input.value = "";
+                } else {
+                  try {
+                    input.value = JSON.stringify(value, null, 2);
+                  } catch (_jsonErr) {
+                    input.value = String(value);
+                  }
+                }
+              } else {
+                input.value = Array.isArray(value) ? value.join(", ") : value;
+              }
+            } else {
+              input.value = value;
+            }
+            validateField(input);
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to load ${sectionName} config:`, error);
+    }
+  }
+
+  async function saveSection(sectionName) {
+    const btn = event.target;
+    const statusDiv = document.getElementById(`${sectionName}-status`);
+
+    // Validate first
+    const body = document.getElementById(`${sectionName}-body`);
+    const inputs = body.querySelectorAll("input, select, textarea");
+    let hasErrors = false;
+
+    inputs.forEach((input) => {
+      if (!validateField(input)) hasErrors = true;
+    });
+
+    if (hasErrors) {
+      showStatus(statusDiv, "error", "Fix validation errors first");
+      return;
+    }
+
+    // Loading state
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Saving...';
+
+    try {
+      // Collect data
+      const updates = collectSectionValues(sectionName, inputs);
+      if (!updates) {
+        throw new Error("Unable to gather section values");
+      }
+
+      // Save
+      const response = await fetch(`/api/config/${sectionName}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        showStatus(
+          statusDiv,
+          "success",
+          result.message || "Saved successfully"
+        );
+        SECTION_BASELINES[sectionName] = deepClone(updates);
+        refreshSectionDirtyState(sectionName);
+        btn.innerHTML = "✅ Saved";
+        setTimeout(() => {
+          btn.innerHTML = "💾 Save";
+        }, 2000);
+      } else {
+        throw new Error(result.error?.message || "Save failed");
+      }
+    } catch (error) {
+      showStatus(statusDiv, "error", error.message);
+      btn.innerHTML = "❌ Failed";
+      setTimeout(() => {
+        btn.innerHTML = "💾 Save";
+      }, 2000);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function resetSection(sectionName) {
+    if (
+      !confirm(
+        `Reset ${SECTION_STATE[sectionName].title} to last saved values?`
+      )
+    )
+      return;
+    await loadSection(sectionName);
+    showStatus(
+      document.getElementById(`${sectionName}-status`),
+      "success",
+      "Reset to saved values"
+    );
+  }
+
+  // =============================================================================
+  // VALIDATION
+  // =============================================================================
+
+  function validateField(input) {
+    const [sectionName, ...keyParts] = input.id.split("_");
+    const fieldKey = keyParts.join("_");
+    const metadata = CONFIG_METADATA[sectionName]?.[fieldKey];
+
+    if (!metadata) return true;
+
+    const errorEl = input.parentElement.querySelector(".field-error");
+    const errors = [];
+    const requiresInteger = input.dataset.integer === "true";
+    const isNumericField =
+      metadata.type === "number" || metadata.type === "integer";
+
+    if (metadata.type === "object") {
+      const raw = input.value || "";
+      if (raw.trim() === "") {
+        errors.push("Value required");
+      } else {
+        try {
+          JSON.parse(raw);
+        } catch (jsonError) {
+          errors.push(`Invalid JSON: ${jsonError.message}`);
+        }
+      }
+    }
+
+    if (isNumericField) {
+      const value = parseFloat(input.value);
+      if (isNaN(value)) {
+        errors.push("Must be a number");
+      } else {
+        if (metadata.min !== undefined && value < metadata.min) {
+          errors.push(`Min: ${metadata.min}`);
+        }
+        if (metadata.max !== undefined && value > metadata.max) {
+          errors.push(`Max: ${metadata.max}`);
+        }
+        if (
+          (metadata.type === "integer" || requiresInteger) &&
+          !Number.isInteger(value)
+        ) {
+          errors.push("Must be an integer");
+        }
+      }
+    }
+
+    const isValid = errors.length === 0;
+
+    if (!isValid) {
+      input.classList.add("invalid");
+      input.classList.remove("valid");
+      errorEl.textContent = errors.join(", ");
+      errorEl.classList.add("visible");
+    } else {
+      input.classList.remove("invalid");
+      input.classList.add("valid");
+      errorEl.classList.remove("visible");
+    }
+
+    updateFieldDirtyState(input);
+    return isValid;
+  }
+
+  // =============================================================================
+  // SEARCH & FILTER
+  // =============================================================================
+
+  function filterConfigs(query) {
+    const rawQuery = (query || "").trim();
+    const normalizedQuery = rawQuery.toLowerCase();
+    const queryActive = normalizedQuery.length > 0;
+    const highlightMode = queryActive || currentCategoryFilter === "modified";
+
+    if (rawQuery) {
+      window.sessionStorage.setItem(STORAGE_KEYS.search, rawQuery);
+    } else {
+      window.sessionStorage.removeItem(STORAGE_KEYS.search);
+    }
+
+    let visibleFieldCount = 0;
+
+    document.querySelectorAll(".field").forEach((field) => {
+      const label =
+        field.querySelector("label")?.textContent.toLowerCase() || "";
+      const hint =
+        field.querySelector(".field-hint")?.textContent.toLowerCase() || "";
+      const category = (field.dataset.category || "general").toLowerCase();
+      const isModified = field.dataset.modified === "true";
+
+      const categoryMatch =
+        currentCategoryFilter === "all"
+          ? true
+          : currentCategoryFilter === "modified"
+          ? isModified
+          : category === currentCategoryFilter;
+
+      const textMatch =
+        !queryActive ||
+        label.includes(normalizedQuery) ||
+        hint.includes(normalizedQuery);
+
+      const shouldShow = categoryMatch && textMatch;
+      field.classList.toggle("hidden", !shouldShow);
+      field.classList.toggle("search-match", shouldShow && queryActive);
+
+      if (shouldShow) {
+        visibleFieldCount += 1;
+      }
+    });
+
+    let visibleSectionCount = 0;
+
+    document.querySelectorAll(".config-card").forEach((card) => {
+      const sectionName = card.dataset.section;
+      const body = document.getElementById(`${sectionName}-body`);
+      const visibleFieldsInSection = card.querySelectorAll(
+        ".field:not(.hidden)"
+      ).length;
+      const dirtyFieldsInSection = card.querySelectorAll(
+        '.field[data-modified="true"]'
+      ).length;
+      const hasVisibleFields = visibleFieldsInSection > 0;
+
+      const countEl = document.getElementById(`${sectionName}-count`);
+      if (countEl) {
+        countEl.dataset.visible = visibleFieldsInSection;
+        countEl.dataset.dirty = dirtyFieldsInSection > 0 ? "true" : "false";
+        const totalFields =
+          Number(countEl.dataset.total) || visibleFieldsInSection;
+        let label =
+          visibleFieldsInSection === totalFields
+            ? `${totalFields} fields`
+            : `${visibleFieldsInSection} / ${totalFields} visible`;
+        if (dirtyFieldsInSection > 0) {
+          label += ` • ${dirtyFieldsInSection} edited`;
+        }
+        countEl.textContent = label;
+      }
+
+      card.classList.toggle("hidden", !hasVisibleFields);
+
+      if (highlightMode && hasVisibleFields) {
+        setSectionExpansion(sectionName, true, { auto: true });
+      } else if (!highlightMode && body?.dataset.autoExpanded === "1") {
+        setSectionExpansion(sectionName, false, { auto: true });
+      }
+
+      if (!highlightMode) {
+        card.classList.remove("search-active");
+      }
+
+      if (hasVisibleFields) {
+        visibleSectionCount += 1;
+      }
+    });
+
+    document.querySelectorAll(".category-header").forEach((header) => {
+      const body = header.nextElementSibling;
+      if (!body) return;
+
+      const countEl = header.querySelector(".category-count");
+      const total =
+        Number(countEl?.dataset.total) ||
+        body.querySelectorAll(".field").length;
+      const visible = body.querySelectorAll(".field:not(.hidden)").length;
+      const dirty = body.querySelectorAll(
+        '.field[data-modified="true"]'
+      ).length;
+
+      if (countEl) {
+        countEl.dataset.visible = visible;
+        let label =
+          visible === total
+            ? `${total} fields`
+            : `${visible} / ${total} visible`;
+        if (dirty > 0) {
+          label += ` • ${dirty} edited`;
+        }
+        countEl.textContent = label;
+      }
+
+      const hasVisible = visible > 0;
+      header.parentElement.classList.toggle("hidden", !hasVisible);
+
+      if (highlightMode && hasVisible) {
+        setCategoryExpansion(header, true, { auto: true });
+      } else if (!highlightMode && body.dataset.autoExpanded === "1") {
+        setCategoryExpansion(header, false, { auto: true });
+      }
+    });
+
+    updateResultsSummary(visibleFieldCount, visibleSectionCount);
+    scheduleDirtySummaryUpdate();
+  }
+
+  function filterByCategory(filterKey) {
+    const select = document.getElementById("configCategory");
+    let categoryKey = filterKey || "all";
+    if (select) {
+      const validValues = new Set(
+        Array.from(select.options).map((option) => option.value || "all")
+      );
+      if (!validValues.has(categoryKey)) {
+        categoryKey = "all";
+      }
+    } else {
+      categoryKey = "all";
+    }
+
+    if (categoryKey === "all") {
+      window.sessionStorage.removeItem(STORAGE_KEYS.category);
+    } else {
+      window.sessionStorage.setItem(STORAGE_KEYS.category, categoryKey);
+    }
+
+    setCategorySelectValue(categoryKey);
+
+    const searchInput = document.getElementById("searchInput");
+    const currentQuery = searchInput ? searchInput.value : "";
+    filterConfigs(currentQuery);
+  }
+
+  // =============================================================================
+  // UTILITY FUNCTIONS
+  // =============================================================================
+
+  async function exportConfig() {
+    try {
+      const response = await fetch("/api/config");
+      const payload = await response
+        .json()
+        .catch(() => ({ error: { message: "Unable to parse response" } }));
+
+      if (!response.ok || payload?.error) {
+        throw new Error(payload?.error?.message || "Export failed");
+      }
+
+      const { timestamp, ...rest } = payload || {};
+      const exportData = Object.keys(rest).length > 0 ? rest : payload;
+
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `screenerbot-config-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      showStatus(
+        document.getElementById("globalStatus"),
+        "error",
+        "Export failed"
+      );
+    }
+  }
+
+  async function importConfig(file) {
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const config = JSON.parse(text);
+
+      if (
+        !confirm(
+          `Import configuration from ${file.name}? This will update ALL settings.`
+        )
+      ) {
+        return;
+      }
+
+      const skippedKeys = ["timestamp"];
+
+      // Update each section
+      for (const [section, data] of Object.entries(config)) {
+        if (
+          skippedKeys.includes(section) ||
+          typeof data !== "object" ||
+          data === null
+        ) {
+          continue;
+        }
+
+        try {
+          const response = await fetch(`/api/config/${section}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+          });
+          const result = await response
+            .json()
+            .catch(() => ({ error: { message: "Unable to parse response" } }));
+
+          if (!response.ok || result?.error) {
+            const message = result?.error?.message || "Update failed";
+            throw new Error(message);
+          }
+        } catch (sectionError) {
+          console.error(`Failed to import section ${section}:`, sectionError);
+          throw new Error(`Section ${section} failed: ${sectionError.message}`);
+        }
+      }
+
+      showStatus(
+        document.getElementById("globalStatus"),
+        "success",
+        "Config imported"
+      );
+      await loadAllConfigs();
+    } catch (error) {
+      showStatus(
+        document.getElementById("globalStatus"),
+        "error",
+        `Import failed: ${error.message}`
+      );
+    }
+  }
+
+  async function reloadConfig() {
+    if (
+      !confirm("Reload configuration from disk? Unsaved changes will be lost.")
+    )
+      return;
+
+    try {
+      const response = await fetch("/api/config/reload", { method: "POST" });
+      const result = await response.json();
+
+      if (response.ok) {
+        showStatus(
+          document.getElementById("globalStatus"),
+          "success",
+          "Reloaded from disk"
+        );
+        await loadAllConfigs();
+      } else {
+        throw new Error(result.error?.message || "Reload failed");
+      }
+    } catch (error) {
+      showStatus(
+        document.getElementById("globalStatus"),
+        "error",
+        error.message
+      );
+    }
+  }
+
+  async function resetConfig() {
+    if (
+      !confirm("⚠️ Reset ALL configuration to defaults? This CANNOT be undone!")
+    )
+      return;
+
+    try {
+      const response = await fetch("/api/config/reset", { method: "POST" });
+      const result = await response.json();
+
+      if (response.ok) {
+        showStatus(
+          document.getElementById("globalStatus"),
+          "success",
+          "Reset to defaults"
+        );
+        await loadAllConfigs();
+      } else {
+        throw new Error(result.error?.message || "Reset failed");
+      }
+    } catch (error) {
+      showStatus(
+        document.getElementById("globalStatus"),
+        "error",
+        error.message
+      );
+    }
+  }
+
+  async function viewDiff() {
+    const modal = document.getElementById("diffModal");
+    const body = document.getElementById("diffModalBody");
+
+    modal.classList.add("visible");
+    body.innerHTML = '<p style="text-align:center;opacity:0.6;">Loading...</p>';
+
+    try {
+      const localDiff = computeLocalDiff();
+
+      const localHtml = (() => {
+        if (localDiff.length === 0) {
+          return '<p style="text-align:center;opacity:0.7;">No unsaved changes detected.</p>';
+        }
+
+        const rows = localDiff
+          .map(
+            (entry) => `
+              <tr>
+                  <td>${entry.section}</td>
+                  <td>${entry.field}</td>
+                  <td class="old-value">${formatDiffValue(entry.original)}</td>
+                  <td class="new-value">${formatDiffValue(entry.current)}</td>
+              </tr>
+            `
+          )
+          .join("");
+
+        return `
+            <table class="diff-table sticky-table">
+                <thead>
+                    <tr>
+                        <th>Section</th>
+                        <th>Field</th>
+                        <th>Saved</th>
+                        <th>Current</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rows}
+                </tbody>
+            </table>
+        `;
+      })();
+
+      let serverHtml = "";
+
+      try {
+        const response = await fetch("/api/config/diff");
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error?.message || "Failed to fetch diff");
+        }
+
+        if (!result.memory || !result.disk) {
+          serverHtml =
+            '<p style="color:#f5576c;text-align:center;">Diff data unavailable</p>';
+        } else {
+          let diffRows = "";
+
+          for (const [section, memData] of Object.entries(result.memory)) {
+            if (!memData || typeof memData !== "object") continue;
+            const diskData = result.disk[section] || {};
+            const fieldKeys = new Set([
+              ...Object.keys(memData),
+              ...Object.keys(diskData),
+            ]);
+
+            fieldKeys.forEach((key) => {
+              const memValue = memData[key];
+              const diskValue = diskData[key];
+              if (JSON.stringify(memValue) !== JSON.stringify(diskValue)) {
+                diffRows += `
+                            <tr>
+                                <td>${section}</td>
+                                <td>${key}</td>
+                                <td class="new-value">${formatDiffValue(
+                                  memValue
+                                )}</td>
+                                <td class="old-value">${formatDiffValue(
+                                  diskValue
+                                )}</td>
+                            </tr>
+                        `;
+              }
+            });
+          }
+
+          if (!diffRows) {
+            serverHtml =
+              '<p style="text-align:center;opacity:0.7;">In-memory configuration matches disk version.</p>';
+          } else {
+            serverHtml = `
+                <table class="diff-table sticky-table">
+                    <thead>
+                        <tr>
+                            <th>Section</th>
+                            <th>Field</th>
+                            <th>Memory</th>
+                            <th>Disk</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${diffRows}
+                    </tbody>
+                </table>
+            `;
+          }
+        }
+      } catch (error) {
+        serverHtml = `<p style="color:#f5576c;text-align:center;">Backend diff failed: ${error.message}</p>`;
+      }
+
+      body.innerHTML = `
+        <div class="diff-section">
+            <h4>Unsaved Changes (UI vs Saved)</h4>
+            ${localHtml}
+        </div>
+        <div class="diff-section">
+            <h4>Backend vs Disk</h4>
+            ${serverHtml}
+        </div>
+      `;
+    } catch (error) {
+      body.innerHTML = `<p style="color:#f5576c;text-align:center;">Error: ${error.message}</p>`;
+    }
+  }
+
+  function closeDiffModal() {
+    document.getElementById("diffModal").classList.remove("visible");
+  }
+
+  function toggleSection(sectionName) {
+    const body = document.getElementById(`${sectionName}-body`);
+    if (!body) return;
+    const shouldExpand = !body.classList.contains("expanded");
+    setSectionExpansion(sectionName, shouldExpand);
+  }
+
+  function toggleCategory(header) {
+    if (!header) return;
+    const body = header.nextElementSibling;
+    if (!body) return;
+    const shouldExpand = body.classList.contains("collapsed");
+    setCategoryExpansion(header, shouldExpand);
+  }
+
+  function showStatus(element, type, message) {
+    element.className = `status ${type} visible`;
+    element.textContent = message;
+
+    setTimeout(() => {
+      element.classList.remove("visible");
+    }, 5000);
+  }
+
+  // =============================================================================
+  // INITIALIZATION
+  // =============================================================================
+
+  let configPageInitialized = false;
+  let diffModalCloseHandler = null;
+
+  async function initConfigPageInternal() {
+    console.log("[Config] Initializing page");
+
+    try {
+      await fetchConfigMetadata();
+    } catch (error) {
+      return;
+    }
+
+    renderAllSections();
+    populateSectionJump();
+    initializeToolbarEnhancements();
+    updateCategorySelectCounts();
+    restoreToolbarState();
+    updateDirtySummary();
+  }
+
+  function attachDiffModalHandler() {
+    if (diffModalListenerAttached) return;
+
+    diffModalCloseHandler = (e) => {
+      if (e.target.id === "diffModal") {
+        closeDiffModal();
+      }
+    };
+    document.addEventListener("click", diffModalCloseHandler);
+    diffModalListenerAttached = true;
+  }
+
+  function removeDiffModalHandler() {
+    if (diffModalCloseHandler) {
+      document.removeEventListener("click", diffModalCloseHandler);
+      diffModalCloseHandler = null;
+      diffModalListenerAttached = false;
+    }
+  }
+
+  // =============================================================================
+  // PAGE LIFECYCLE REGISTRATION
+  // =============================================================================
+
+  function createConfigPageLifecycle() {
+    let lifecycleContext = null;
+
+    return {
+      /**
+       * One-time initialization: attach keyboard shortcuts
+       */
+      init(context) {
+        console.log("[Config] Lifecycle: init");
+        lifecycleContext = context;
+        ensureSearchShortcut();
+      },
+
+      /**
+       * Activate: load metadata and render UI
+       */
+      async activate(context) {
+        console.log("[Config] Lifecycle: activate");
+        lifecycleContext = context;
+
+        if (!configPageInitialized) {
+          await initConfigPageInternal();
+          attachDiffModalHandler();
+          configPageInitialized = true;
+        } else {
+          // Re-render on return
+          renderAllSections();
+          updateCategorySelectCounts();
+          restoreToolbarState();
+          updateDirtySummary();
+        }
+      },
+
+      /**
+       * Deactivate: minimal cleanup (keep state)
+       */
+      deactivate(context) {
+        console.log("[Config] Lifecycle: deactivate");
+        // Keep state for quick return
+      },
+
+      /**
+       * Full cleanup: remove handlers, reset state
+       */
+      dispose(context) {
+        console.log("[Config] Lifecycle: dispose");
+
+        removeDiffModalHandler();
+        configPageInitialized = false;
+        lifecycleContext = null;
+      },
+    };
+  }
+
+  if (window.PageLifecycleRegistry) {
+    window.PageLifecycleRegistry.register(
+      "config",
+      createConfigPageLifecycle()
+    );
+  } else {
+    if (!window.__pendingPageRegistrations) {
+      window.__pendingPageRegistrations = [];
+    }
+    window.__pendingPageRegistrations.push({
+      pageId: "config",
+      lifecycle: createConfigPageLifecycle(),
+    });
+  }
+</script>

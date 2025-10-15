@@ -1,5 +1,9 @@
 use crate::webserver::{state::AppState, templates};
-use axum::{response::Html, Router};
+use axum::{
+    http::{header, StatusCode},
+    response::{Html, IntoResponse, Response},
+    Router,
+};
 use std::sync::Arc;
 
 pub mod blacklist;
@@ -31,6 +35,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/wallet", axum::routing::get(wallet_page))
         .route("/config", axum::routing::get(config_page))
         .route("/transactions", axum::routing::get(transactions_page))
+        .route("/scripts/core/:file", axum::routing::get(get_core_script))
+        .route("/scripts/pages/:file", axum::routing::get(get_page_script))
         .nest("/api", api_routes())
         .with_state(state)
 }
@@ -154,4 +160,51 @@ async fn get_page_content(axum::extract::Path(page): axum::extract::Path<String>
     };
 
     Html(content)
+}
+
+/// Serve core JavaScript modules
+async fn get_core_script(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
+    let content = match file.as_str() {
+        "lifecycle.js" => Some(templates::CORE_LIFECYCLE),
+        "app_state.js" => Some(templates::CORE_APP_STATE),
+        "poller.js" => Some(templates::CORE_POLLER),
+        "dom.js" => Some(templates::CORE_DOM),
+        "utils.js" => Some(templates::CORE_UTILS),
+        "router.js" => Some(templates::CORE_ROUTER),
+        _ => None,
+    };
+
+    match content {
+        Some(js) => (
+            StatusCode::OK,
+            [(
+                header::CONTENT_TYPE,
+                "application/javascript; charset=utf-8",
+            )],
+            js,
+        )
+            .into_response(),
+        None => (StatusCode::NOT_FOUND, "Script not found").into_response(),
+    }
+}
+
+/// Serve page JavaScript modules
+async fn get_page_script(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
+    let content = match file.as_str() {
+        "services.js" => Some(templates::SERVICES_PAGE_SCRIPT),
+        _ => None,
+    };
+
+    match content {
+        Some(js) => (
+            StatusCode::OK,
+            [(
+                header::CONTENT_TYPE,
+                "application/javascript; charset=utf-8",
+            )],
+            js,
+        )
+            .into_response(),
+        None => (StatusCode::NOT_FOUND, "Script not found").into_response(),
+    }
 }

@@ -1,0 +1,137 @@
+.services-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+}
+
+.services-toolbar .toolbar-left,
+.services-toolbar .toolbar-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.services-toolbar .toolbar-left .input {
+  min-width: 180px;
+}
+
+.services-toolbar .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.services-toolbar .chip span {
+  font-weight: 700;
+}
+
+.services-toolbar .chip-success {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+.services-toolbar .chip-warn {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+.services-toolbar .chip-error {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.services-page .table-wrap {
+  border-radius: 12px;
+}
+
+.services-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.services-table th,
+.services-table td {
+  padding: 0.65rem 0.75rem;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.services-table tbody tr:nth-child(even) {
+  background: var(--bg-secondary);
+}
+
+.services-table th[data-sort] {
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  white-space: nowrap;
+}
+
+.services-table th[data-sort].asc::after {
+  content: " ▲";
+  color: var(--text-muted);
+}
+
+.services-table th[data-sort].desc::after {
+  content: " ▼";
+  color: var(--text-muted);
+}
+
+.activity-cell {
+  min-width: 170px;
+}
+
+.activity-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--bg-secondary);
+  margin-bottom: 4px;
+}
+
+.activity-fill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.activity-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.dependency-badge {
+  font-size: 0.75rem;
+  background: var(--bg-secondary);
+  padding: 0.25rem 0.6rem;
+  border-radius: 12px;
+  display: inline-block;
+  margin: 2px;
+}
+
+@media (max-width: 900px) {
+  .services-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .services-toolbar .toolbar-right {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}

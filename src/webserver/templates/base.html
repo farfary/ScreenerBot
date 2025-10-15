@@ -83,12 +83,17 @@
 
     <main class="content">{{CONTENT}}</main>
 
+    <!-- Core ES Modules - Loaded as external files for proper import resolution -->
+    <script type="module" src="/scripts/core/lifecycle.js"></script>
+    <script type="module" src="/scripts/core/app_state.js"></script>
+    <script type="module" src="/scripts/core/poller.js"></script>
+    <script type="module" src="/scripts/core/dom.js"></script>
+    <script type="module" src="/scripts/core/utils.js"></script>
+    <script type="module" src="/scripts/core/router.js"></script>
+
+    <!-- Theme toggle (non-module) -->
     <script>
-      /*__UTIL_SCRIPTS__*/
-      /*__COMMON_SCRIPTS__*/
       /*__THEME_SCRIPTS__*/
-      /*__CHART_SCRIPTS__*/
-      /*__POSITION_MODAL_SCRIPTS__*/
     </script>
   </body>
 </html>

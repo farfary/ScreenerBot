@@ -1,0 +1,1539 @@
+<style>
+  .pnl-positive {
+    color: #10b981;
+    font-weight: 600;
+  }
+
+  .pnl-negative {
+    color: #ef4444;
+    font-weight: 600;
+  }
+
+  .pnl-neutral {
+    color: #6b7280;
+  }
+
+  .status-badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    font-weight: 600;
+    display: inline-block;
+  }
+
+  .status-open {
+    background: #10b98120;
+    color: #10b981;
+  }
+
+  .status-closed {
+    background: #64748b20;
+    color: #64748b;
+  }
+
+  .status-synthetic {
+    background: #f59e0b20;
+    color: #f59e0b;
+  }
+
+  .position-row {
+    cursor: pointer;
+    transition: background-color 0.25s ease;
+  }
+
+  .position-row:hover {
+    background-color: rgba(59, 130, 246, 0.08);
+  }
+
+  .position-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.72);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    z-index: 900;
+  }
+
+  .position-modal-overlay.active {
+    display: flex;
+  }
+
+  .position-modal {
+    width: min(960px, 95vw);
+    max-height: 90vh;
+    background: var(--bg-primary);
+    border-radius: 16px;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .position-modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .position-modal-header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .position-modal-header h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .position-modal-body {
+    padding: 20px 24px 28px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .position-section {
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    padding: 16px 18px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+  }
+
+  .position-section h3 {
+    margin: 0 0 12px 0;
+    font-size: 1rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .position-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px 18px;
+  }
+
+  .position-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .position-metric-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+  }
+
+  .position-metric-value {
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .position-modal-close {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.75rem;
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .position-modal-header .status-badge {
+    font-size: 0.75rem;
+  }
+
+  .position-modal-content.hidden {
+    display: none;
+  }
+
+  .position-modal-loading {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    padding: 24px 0;
+  }
+
+  .position-modal-loading.active {
+    display: flex;
+  }
+
+  .position-modal-spinner {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 3px solid rgba(148, 163, 184, 0.35);
+    border-top-color: #3b82f6;
+    animation: position-modal-spin 0.8s linear infinite;
+  }
+
+  @keyframes position-modal-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .position-modal-error {
+    display: none;
+    padding: 14px 16px;
+    border-radius: 10px;
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #f87171;
+    font-size: 0.95rem;
+  }
+
+  .position-modal-error.active {
+    display: block;
+  }
+
+  .position-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px 18px;
+  }
+
+  .position-table-container {
+    overflow-x: auto;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.12);
+  }
+
+  .position-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    background: var(--bg-primary);
+  }
+
+  .position-table thead {
+    background: rgba(148, 163, 184, 0.1);
+  }
+
+  .position-table th,
+  .position-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .position-table th {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+
+  .position-table td {
+    color: var(--text-primary);
+  }
+
+  .position-table tbody tr:hover {
+    background: rgba(59, 130, 246, 0.08);
+  }
+
+  .position-signature-cell {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: "SFMono-Regular", ui-monospace, SFMono, Menlo, Monaco, Consolas,
+      "Liberation Mono", "Courier New", monospace;
+    font-size: 0.78rem;
+  }
+
+  .position-signature-button {
+    border: none;
+    background: rgba(59, 130, 246, 0.14);
+    color: #60a5fa;
+    padding: 4px 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.7rem;
+    transition: background-color 0.2s ease;
+  }
+
+  .position-signature-button:hover {
+    background: rgba(59, 130, 246, 0.25);
+  }
+
+  .position-timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 12px;
+  }
+
+  .position-timeline-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: rgba(148, 163, 184, 0.06);
+  }
+
+  .position-timeline-item strong {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary);
+  }
+
+  .position-timeline-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 160px;
+    text-align: right;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+  }
+
+  .position-empty {
+    padding: 14px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+  }
+
+  @media (max-width: 720px) {
+    .position-modal-body {
+      padding: 18px;
+      gap: 14px;
+    }
+
+    .position-modal-header {
+      padding: 18px;
+    }
+
+    .position-modal {
+      width: 100%;
+      max-height: 92vh;
+    }
+  }
+</style>
+<div class="page-table">
+  <div class="toolbar">
+    <span style="font-weight: 600">💰 Positions</span>
+    <select
+      id="statusFilter"
+      onchange="onPositionsStatusChanged()"
+      style="
+        padding: 6px 8px;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        font-size: 0.9em;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+      "
+    >
+      <option value="all">All</option>
+      <option value="open" selected>Open</option>
+      <option value="closed">Closed</option>
+    </select>
+    <input
+      type="text"
+      id="searchInput"
+      placeholder="Search symbol, name, or mint"
+      style="
+        flex: 1;
+        min-width: 200px;
+        padding: 6px 8px;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        font-size: 0.9em;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+      "
+    />
+    <div class="spacer"></div>
+    <span
+      id="positionCount"
+      style="color: var(--text-secondary); font-size: 0.9em"
+      >Loading...</span
+    >
+    <button onclick="refreshPositions()" class="btn btn-primary">
+      🔄 Refresh
+    </button>
+  </div>
+  <div class="table-wrap">
+    <table class="table" id="positionsTable">
+      <thead>
+        <tr>
+          <th style="min-width: 80px">Status</th>
+          <th style="min-width: 100px">Symbol</th>
+          <th style="min-width: 150px">Name</th>
+          <th style="min-width: 120px">Entry Price</th>
+          <th style="min-width: 120px">Current/Exit</th>
+          <th style="min-width: 100px">Size (SOL)</th>
+          <th style="min-width: 120px">P&L</th>
+          <th style="min-width: 120px">P&L %</th>
+          <th style="min-width: 150px">Entry Time</th>
+          <th style="min-width: 100px">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="positionsTableBody">
+        <tr>
+          <td
+            colspan="10"
+            style="text-align: center; padding: 20px; color: #64748b"
+          >
+            Loading positions...
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div
+  class="position-modal-overlay"
+  id="positionModal"
+  onclick="closePositionModal(event)"
+>
+  <div
+    class="position-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="positionModalTitle"
+    onclick="event.stopPropagation()"
+  >
+    <div class="position-modal-header">
+      <h2 id="positionModalTitle">
+        <span id="positionModalSymbol">—</span>
+        <span
+          id="positionModalName"
+          style="font-size: 0.85rem; color: var(--text-secondary)"
+        >
+          —
+        </span>
+      </h2>
+      <div class="position-modal-header-right">
+        <span class="status-badge" id="positionModalStatus">OPEN</span>
+        <button
+          class="position-modal-close"
+          type="button"
+          aria-label="Close"
+          onclick="closePositionModal()"
+        >
+          ×
+        </button>
+      </div>
+    </div>
+    <div class="position-modal-body">
+      <div class="position-modal-loading" id="positionModalLoading">
+        <div class="position-modal-spinner"></div>
+        <span id="positionModalLoadingText">Loading position details...</span>
+      </div>
+      <div class="position-modal-error" id="positionModalError"></div>
+      <div class="position-modal-content hidden" id="positionModalContent">
+        <div class="position-section">
+          <h3>Overview</h3>
+          <div class="position-info-grid">
+            <div class="position-metric">
+              <span class="position-metric-label">Mint</span>
+              <span class="position-metric-value" id="positionMint">—</span>
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Position Id</span>
+              <span class="position-metric-value" id="positionId">—</span>
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">State</span>
+              <span class="position-metric-value" id="positionState">—</span>
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Position Type</span>
+              <span class="position-metric-value" id="positionPositionType"
+                >—</span
+              >
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Liquidity Tier</span>
+              <span class="position-metric-value" id="positionLiquidityTier"
+                >—</span
+              >
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Profit Targets</span>
+              <span class="position-metric-value" id="positionProfitTargets"
+                >—</span
+              >
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Phantom</span>
+              <span class="position-metric-value" id="positionPhantom">—</span>
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Phantom First Seen</span>
+              <span class="position-metric-value" id="positionPhantomFirstSeen"
+                >—</span
+              >
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Synthetic Exit</span>
+              <span class="position-metric-value" id="positionSynthetic"
+                >—</span
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class="position-section">
+          <h3>Performance</h3>
+          <div class="position-info-grid">
+            <div class="position-metric">
+              <span class="position-metric-label">Entry Price (SOL)</span>
+              <span class="position-metric-value" id="positionEntryPrice"
+                >—</span
+              >
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Effective Entry Price</span>
+              <span
+                class="position-metric-value"
+                id="positionEffectiveEntryPrice"
+                >—</span
+              >
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Entry Size (SOL)</span>
+              <span class="position-metric-value" id="positionEntrySize"
+                >—</span
+              >
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Total Size (SOL)</span>
+              <span class="position-metric-value" id="positionTotalSize"
+                >—</span
+              >
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Price High</span>
+              <span class="position-metric-value" id="positionPriceHigh"
+                >—</span
+              >
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Price Low</span>
+              <span class="position-metric-value" id="positionPriceLow">—</span>
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Current Price (SOL)</span>
+              <span class="position-metric-value" id="positionCurrentPrice"
+                >—</span
+              >
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Updated</span>
+              <span class="position-metric-value" id="positionCurrentUpdated"
+                >—</span
+              >
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Unrealized P&L</span>
+              <span class="position-metric-value" id="positionUnrealizedPnl"
+                >—</span
+              >
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Unrealized P&L %</span>
+              <span class="position-metric-value" id="positionUnrealizedPercent"
+                >—</span
+              >
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Realized P&L</span>
+              <span class="position-metric-value" id="positionRealizedPnl"
+                >—</span
+              >
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Realized P&L %</span>
+              <span class="position-metric-value" id="positionRealizedPercent"
+                >—</span
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class="position-section">
+          <h3>Entry Details</h3>
+          <div class="position-info-grid">
+            <div class="position-metric">
+              <span class="position-metric-label">Entry Timestamp</span>
+              <span class="position-metric-value" id="positionEntryTime"
+                >—</span
+              >
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Entry Signature</span>
+              <span class="position-metric-value" id="positionEntrySig">—</span>
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Entry Verified</span>
+              <span class="position-metric-value" id="positionEntryVerified"
+                >—</span
+              >
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Entry Fee</span>
+              <span class="position-metric-value" id="positionEntryFee">—</span>
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Token Amount</span>
+              <span class="position-metric-value" id="positionTokenAmount"
+                >—</span
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class="position-section" id="positionExitSection">
+          <h3>Exit Details</h3>
+          <div class="position-info-grid">
+            <div class="position-metric">
+              <span class="position-metric-label">Exit Price (SOL)</span>
+              <span class="position-metric-value" id="positionExitPrice"
+                >—</span
+              >
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Effective Exit Price</span>
+              <span
+                class="position-metric-value"
+                id="positionEffectiveExitPrice"
+                >—</span
+              >
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">SOL Received</span>
+              <span class="position-metric-value" id="positionSolReceived"
+                >—</span
+              >
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Exit Timestamp</span>
+              <span class="position-metric-value" id="positionExitTime">—</span>
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Exit Signature</span>
+              <span class="position-metric-value" id="positionExitSig">—</span>
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Exit Verified</span>
+              <span class="position-metric-value" id="positionExitVerified"
+                >—</span
+              >
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Exit Fee</span>
+              <span class="position-metric-value" id="positionExitFee">—</span>
+            </div>
+            <div class="position-metric">
+              <span class="position-metric-label">Closed Reason</span>
+              <span class="position-metric-value" id="positionClosedReason"
+                >—</span
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class="position-section" id="positionCurrentSection">
+          <h3>Executions</h3>
+          <div class="position-table-container">
+            <table class="position-table">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Timestamp</th>
+                  <th>Price (SOL)</th>
+                  <th>Effective (SOL)</th>
+                  <th>Size (SOL)</th>
+                  <th>SOL Δ</th>
+                  <th>Tokens</th>
+                  <th>Fee (SOL)</th>
+                  <th>Verified</th>
+                  <th>Signature</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody id="positionExecutionsBody">
+                <tr>
+                  <td colspan="11" class="position-empty">No execution data</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="position-section">
+          <h3>Transactions</h3>
+          <div class="position-table-container">
+            <table class="position-table">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Success</th>
+                  <th>Timestamp</th>
+                  <th>Slot</th>
+                  <th>Fee (SOL)</th>
+                  <th>Direction</th>
+                  <th>Router</th>
+                  <th>SOL Δ</th>
+                  <th>Signature</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody id="positionTransactionsBody">
+                <tr>
+                  <td colspan="11" class="position-empty">
+                    No transaction data
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="position-section">
+          <h3>Lifecycle</h3>
+          <ul class="position-timeline" id="positionStateTimeline">
+            <li class="position-empty">No state history recorded</li>
+          </ul>
+        </div>
+
+        <div class="position-section">
+          <h3>Links</h3>
+          <div class="position-grid" style="gap: 10px 12px">
+            <button
+              class="btn btn-secondary"
+              type="button"
+              onclick="copyPositionMint()"
+            >
+              📋 Copy Mint
+            </button>
+            <button
+              class="btn btn-secondary"
+              type="button"
+              onclick="openPositionTokenDetail()"
+            >
+              🔎 Token Detail
+            </button>
+            <button
+              class="btn btn-secondary"
+              type="button"
+              onclick="openPositionGMGN()"
+            >
+              🔗 Open GMGN
+            </button>
+            <button
+              class="btn btn-secondary"
+              type="button"
+              onclick="openPositionDexScreener()"
+            >
+              📊 Open DexScreener
+            </button>
+            <button
+              class="btn btn-secondary"
+              type="button"
+              onclick="openPositionSolscan()"
+            >
+              🔍 Open Solscan
+            </button>
+            <button
+              class="btn btn-secondary"
+              type="button"
+              onclick="copyPositionDebug()"
+            >
+              🐛 Copy Debug Info
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ===== Position Store =====
+  var positionsStore =
+    window.positionsStore instanceof Map ? window.positionsStore : new Map();
+  window.positionsStore = positionsStore;
+
+  // ===== Modal Integration =====
+  // Position modal is now in separate module: src/webserver/templates/modals/position_modal.js
+  // Access via window.PositionModal API
+
+  // Wrapper functions for compatibility
+  function openPositionDetail(key) {
+    if (
+      window.PositionModal &&
+      typeof window.PositionModal.open === "function"
+    ) {
+      window.PositionModal.open(key);
+    } else {
+      console.error("[Positions] PositionModal not loaded");
+    }
+  }
+
+  function closePositionModal(event) {
+    if (
+      window.PositionModal &&
+      typeof window.PositionModal.close === "function"
+    ) {
+      window.PositionModal.close(event);
+    }
+  }
+
+  function refreshOpenPositionModal() {
+    if (
+      window.PositionModal &&
+      typeof window.PositionModal.refresh === "function"
+    ) {
+      window.PositionModal.refresh();
+    }
+  }
+
+  // Action wrappers for dropdown menu
+  function copyPositionMint() {
+    if (window.PositionModal) window.PositionModal.copyMint();
+  }
+
+  function openPositionGMGN() {
+    if (window.PositionModal) window.PositionModal.openGMGN();
+  }
+
+  function openPositionDexScreener() {
+    if (window.PositionModal) window.PositionModal.openDexScreener();
+  }
+
+  function openPositionSolscan() {
+    if (window.PositionModal) window.PositionModal.openSolscan();
+  }
+
+  function openPositionTokenDetail() {
+    if (window.PositionModal) window.PositionModal.openTokenDetail();
+  }
+
+  function copyPositionDebug() {
+    if (window.PositionModal) window.PositionModal.copyDebug();
+  }
+
+  function copyPositionSignature(signature) {
+    if (window.PositionModal) window.PositionModal.copySignature(signature);
+  }
+
+  function handlePositionDropdown(event) {
+    if (event?.stopPropagation) {
+      event.stopPropagation();
+    }
+    if (Utils?.toggleDropdown) {
+      Utils.toggleDropdown(event);
+    }
+  }
+
+  // Expose wrappers globally for HTML onclick handlers
+  window.openPositionDetail = openPositionDetail;
+  window.closePositionModal = closePositionModal;
+  window.copyPositionMint = copyPositionMint;
+  window.openPositionGMGN = openPositionGMGN;
+  window.openPositionDexScreener = openPositionDexScreener;
+  window.openPositionSolscan = openPositionSolscan;
+  window.copyPositionDebug = copyPositionDebug;
+  window.handlePositionDropdown = handlePositionDropdown;
+  window.copyPositionSignature = copyPositionSignature;
+  window.openPositionTokenDetail = openPositionTokenDetail;
+
+  // ===== Position Filtering and Display Logic =====
+
+  // Truncate address
+  // Use Utils.formatAddressCompact (truncates addresses)
+
+  function getCurrentStatusFilter() {
+    const select = document.getElementById("statusFilter");
+    return select ? select.value : "all";
+  }
+
+  function getSearchTerm() {
+    const input = document.getElementById("searchInput");
+    return input ? input.value.toLowerCase().trim() : "";
+  }
+
+  function isDropdownOpen() {
+    return Boolean(document.querySelector(".dropdown-menu.show"));
+  }
+
+  function parsePossibleTimestamp(value) {
+    if (value === null || value === undefined) return null;
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === "string" && value.trim() !== "") {
+      const numeric = Number(value);
+      if (Number.isFinite(numeric)) {
+        return numeric;
+      }
+
+      const parsed = Date.parse(value);
+      if (Number.isFinite(parsed)) {
+        return Math.floor(parsed / 1000);
+      }
+    }
+    return null;
+  }
+
+  function toFiniteNumber(value) {
+    try {
+      if (
+        typeof Utils !== "undefined" &&
+        Utils &&
+        typeof Utils.coerceNumber === "function"
+      ) {
+        const coerced = Utils.coerceNumber(value);
+        return Number.isFinite(coerced) ? coerced : null;
+      }
+    } catch (_) {}
+
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+  }
+
+  function computeDerivedMetrics(position) {
+    if (!position || typeof position !== "object") {
+      return position;
+    }
+
+    const entrySize = toFiniteNumber(position.entry_size_sol);
+    const entryPrice = toFiniteNumber(
+      position.effective_entry_price ?? position.entry_price
+    );
+    const currentPrice = toFiniteNumber(position.current_price);
+    const solReceived = toFiniteNumber(position.sol_received);
+    const exitPrice = toFiniteNumber(
+      position.effective_exit_price ?? position.exit_price
+    );
+
+    if (position.transaction_exit_verified) {
+      let pnlValue = null;
+      let pnlPercent = null;
+
+      if (solReceived != null && entrySize != null) {
+        pnlValue = solReceived - entrySize;
+        if (entrySize > 0) {
+          pnlPercent = (pnlValue / entrySize) * 100;
+        }
+      } else if (exitPrice != null && entryPrice != null && entryPrice > 0) {
+        pnlPercent = ((exitPrice - entryPrice) / entryPrice) * 100;
+        if (entrySize != null) {
+          pnlValue = entrySize * (pnlPercent / 100);
+        }
+      }
+
+      if (pnlValue != null && Number.isFinite(pnlValue)) {
+        position.pnl = pnlValue;
+      } else if (position.pnl === undefined) {
+        position.pnl = null;
+      }
+
+      if (pnlPercent != null && Number.isFinite(pnlPercent)) {
+        position.pnl_percent = pnlPercent;
+      } else if (position.pnl_percent === undefined) {
+        position.pnl_percent = null;
+      }
+
+      if (position.unrealized_pnl === undefined) {
+        position.unrealized_pnl = null;
+      }
+      if (position.unrealized_pnl_percent === undefined) {
+        position.unrealized_pnl_percent = null;
+      }
+    } else {
+      let unrealizedValue = null;
+      let unrealizedPercent = null;
+
+      if (
+        currentPrice != null &&
+        entryPrice != null &&
+        entryPrice > 0 &&
+        entrySize != null
+      ) {
+        unrealizedPercent = ((currentPrice - entryPrice) / entryPrice) * 100;
+        unrealizedValue = entrySize * (unrealizedPercent / 100);
+      }
+
+      if (unrealizedValue != null && Number.isFinite(unrealizedValue)) {
+        position.unrealized_pnl = unrealizedValue;
+      } else if (position.unrealized_pnl === undefined) {
+        position.unrealized_pnl = null;
+      }
+
+      if (unrealizedPercent != null && Number.isFinite(unrealizedPercent)) {
+        position.unrealized_pnl_percent = unrealizedPercent;
+      } else if (position.unrealized_pnl_percent === undefined) {
+        position.unrealized_pnl_percent = null;
+      }
+
+      if (position.pnl === undefined) {
+        position.pnl = null;
+      }
+      if (position.pnl_percent === undefined) {
+        position.pnl_percent = null;
+      }
+    }
+
+    return position;
+  }
+
+  function normalizePositionFromApi(raw) {
+    if (!raw || typeof raw !== "object") return raw;
+    const position = { ...raw };
+
+    position.entry_time = parsePossibleTimestamp(position.entry_time);
+    position.exit_time = parsePossibleTimestamp(position.exit_time);
+    position.current_price_updated = parsePossibleTimestamp(
+      position.current_price_updated
+    );
+
+    return computeDerivedMetrics(position);
+  }
+
+  function getPositionKey(position) {
+    if (!position) return null;
+
+    if (position.id !== undefined && position.id !== null) {
+      return `id:${position.id}`;
+    }
+
+    if (position.mint) {
+      return `mint:${position.mint}`;
+    }
+
+    return null;
+  }
+
+  function matchesStatusFilter(position, filterValue) {
+    if (filterValue === "all") return true;
+    const isOpen = !position.transaction_exit_verified;
+    if (filterValue === "open") {
+      return isOpen;
+    }
+    if (filterValue === "closed") {
+      return !isOpen;
+    }
+    return true;
+  }
+
+  function matchesSearchFilter(position, searchTerm) {
+    if (!searchTerm) return true;
+    const fields = [position.symbol, position.name, position.mint];
+    return fields.some(
+      (field) => field && field.toLowerCase().includes(searchTerm)
+    );
+  }
+
+  function renderPositionRow(pos) {
+    const isOpen = !pos.transaction_exit_verified;
+    const statusBadge = pos.synthetic_exit
+      ? '<span class="status-badge status-synthetic">SYNTHETIC</span>'
+      : isOpen
+      ? '<span class="status-badge status-open">OPEN</span>'
+      : '<span class="status-badge status-closed">CLOSED</span>';
+
+    const currentOrExitPrice = isOpen
+      ? pos.current_price
+        ? Utils.formatNumber(pos.current_price, 8, {
+            fallback: "-",
+            useGrouping: false,
+          })
+        : "-"
+      : pos.effective_exit_price || pos.exit_price
+      ? Utils.formatNumber(pos.effective_exit_price || pos.exit_price, 8, {
+          fallback: "-",
+          useGrouping: false,
+        })
+      : "-";
+
+    const pnl = isOpen ? pos.unrealized_pnl : pos.pnl;
+    const pnlPercent = isOpen ? pos.unrealized_pnl_percent : pos.pnl_percent;
+
+    return `
+                <tr class="position-row" data-position-key="${
+                  getPositionKey(pos) || ""
+                }">
+                    <td>${statusBadge}</td>
+                    <td><strong>${pos.symbol}</strong></td>
+                    <td style="font-size: 0.85em;">${pos.name}</td>
+                    <td>${Utils.formatNumber(
+                      pos.effective_entry_price || pos.entry_price,
+                      8,
+                      { fallback: "-", useGrouping: false }
+                    )}</td>
+                    <td>${currentOrExitPrice}</td>
+                    <td>${Utils.formatSol(pos.entry_size_sol, {
+                      decimals: 4,
+                      fallback: "-",
+                    })}</td>
+                    <td>${Utils.formatPnL(pnl, {
+                      decimals: 4,
+                      fallback: "-",
+                    })}</td>
+                    <td>${Utils.formatPercent(pnlPercent, {
+                      style: "pnl",
+                      decimals: 2,
+                      fallback: "-",
+                    })}</td>
+                    <td style="font-size: 0.85em;">${Utils.formatTimeFromSeconds(
+                      pos.entry_time,
+                      { fallback: "-" }
+                    )}</td>
+                    <td>
+                        <div class="dropdown-container">
+              <button class="dropdown-btn" onclick="handlePositionDropdown(event)" aria-label="Actions">
+                                ⋮
+                            </button>
+                            <div class="dropdown-menu">
+                                <button onclick="Utils.copyDebugInfo('${
+                                  pos.mint
+                                }', 'position')" class="dropdown-item">
+                                    📋 Copy Debug Info
+                                </button>
+                                <button onclick="Utils.copyMint('${
+                                  pos.mint
+                                }')" class="dropdown-item">
+                                    📋 Copy Mint
+                                </button>
+                                <button onclick="Utils.openGMGN('${
+                                  pos.mint
+                                }')" class="dropdown-item">
+                                    🔗 Open GMGN
+                                </button>
+                                <button onclick="Utils.openDexScreener('${
+                                  pos.mint
+                                }')" class="dropdown-item">
+                                    📊 Open DexScreener
+                                </button>
+                                <button onclick="Utils.openSolscan('${
+                                  pos.mint
+                                }')" class="dropdown-item">
+                                    🔍 Open Solscan
+                                </button>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            `;
+  }
+
+  function updatePositionCount(count) {
+    const label = document.getElementById("positionCount");
+    if (!label) return;
+    const value = Number.isFinite(count) ? count : positionsStore.size;
+    label.textContent = `${value} ${value === 1 ? "position" : "positions"}`;
+  }
+
+  function renderEmptyState(message, color = "#64748b") {
+    const tbody = document.getElementById("positionsTableBody");
+    if (!tbody) return;
+    tbody.innerHTML = `
+                <tr>
+                    <td colspan="10" style="text-align: center; padding: 20px; color: ${color};">
+                        ${message}
+                    </td>
+                </tr>
+            `;
+  }
+
+  function renderPositionsTable() {
+    const tbody = document.getElementById("positionsTableBody");
+    if (!tbody) return;
+
+    const table = tbody.closest("table");
+    const container =
+      table && table.parentElement instanceof HTMLElement
+        ? table.parentElement
+        : null;
+    const previousScroll =
+      container instanceof HTMLElement
+        ? { top: container.scrollTop, left: container.scrollLeft }
+        : null;
+
+    try {
+      const controller = window.positionsController;
+      const hasSnapshot = controller ? controller.hasInitialSnapshot : false;
+
+      if (!hasSnapshot && positionsStore.size === 0) {
+        renderEmptyState("Loading positions...");
+        refreshOpenPositionModal();
+        return;
+      }
+
+      if (
+        positionsStore.size === 0 &&
+        controller &&
+        controller.lastErrorMessage
+      ) {
+        renderEmptyState(controller.lastErrorMessage, "#ef4444");
+        updatePositionCount(0);
+        refreshOpenPositionModal();
+        return;
+      }
+
+      const statusFilter = getCurrentStatusFilter();
+      const searchTerm = getSearchTerm();
+
+      const rows = Array.from(positionsStore.values())
+        .filter((pos) => matchesStatusFilter(pos, statusFilter))
+        .filter((pos) => matchesSearchFilter(pos, searchTerm))
+        .sort((a, b) => {
+          const aTime = a.entry_time ?? 0;
+          const bTime = b.entry_time ?? 0;
+          return bTime - aTime;
+        });
+
+      if (rows.length === 0) {
+        renderEmptyState("No positions found");
+        updatePositionCount(0);
+        refreshOpenPositionModal();
+        return;
+      }
+
+      tbody.innerHTML = rows.map(renderPositionRow).join("");
+      bindPositionRowClicks();
+      refreshOpenPositionModal();
+      updatePositionCount(rows.length);
+    } finally {
+      if (container && previousScroll) {
+        if (container.scrollTop !== previousScroll.top) {
+          container.scrollTop = previousScroll.top;
+        }
+        if (container.scrollLeft !== previousScroll.left) {
+          container.scrollLeft = previousScroll.left;
+        }
+      }
+    }
+  }
+
+  const positionsController =
+    window.positionsController ||
+    (function () {
+      let searchBound = false;
+
+      const controller = {
+        hasInitialSnapshot: positionsStore.size > 0,
+        fetchLimit: 500,
+        pollTimer: null,
+        abortController: null,
+        isFetching: false,
+        isActive: false,
+        lastErrorMessage: null,
+        intervalChangeListener: null,
+
+        activate() {
+          if (this.isActive) {
+            console.log(
+              "[Positions] Controller already active; rendering cache"
+            );
+            renderPositionsTable();
+            return;
+          }
+
+          this.isActive = true;
+          this.bindSearchInput();
+          this.lastErrorMessage = null;
+
+          if (!this.hasInitialSnapshot || positionsStore.size === 0) {
+            renderEmptyState("Loading positions...");
+            updatePositionCount(0);
+          } else {
+            renderPositionsTable();
+          }
+
+          // Register interval change listener
+          if (window.PollingManager && !this.intervalChangeListener) {
+            this.intervalChangeListener = window.PollingManager.onChange(() => {
+              if (this.isActive) {
+                console.log(
+                  "[Positions] Polling interval changed, restarting polling"
+                );
+                this.startPolling();
+              }
+            });
+          }
+
+          this.fetchPositions({
+            reason: this.hasInitialSnapshot ? "resume" : "initial",
+            showSpinner: !this.hasInitialSnapshot || positionsStore.size === 0,
+          });
+          this.startPolling();
+        },
+
+        teardown() {
+          if (!this.isActive) {
+            return;
+          }
+          console.log("[Positions] Tearing down controller");
+          this.isActive = false;
+          this.stopPolling();
+          this.abortInFlight();
+          closePositionModal();
+
+          // Remove interval change listener
+          if (this.intervalChangeListener && window.PollingManager) {
+            window.PollingManager.removeListener(this.intervalChangeListener);
+            this.intervalChangeListener = null;
+          }
+        },
+
+        bindSearchInput() {
+          if (searchBound) return;
+          const searchInput = document.getElementById("searchInput");
+          if (searchInput) {
+            searchInput.addEventListener("input", () => {
+              renderPositionsTable();
+            });
+            searchBound = true;
+          }
+        },
+
+        startPolling() {
+          if (!this.isActive) {
+            return;
+          }
+          this.stopPolling();
+          const interval = window.PollingManager.getInterval();
+          const intervalId = setInterval(() => {
+            this.fetchPositions({ reason: "poll" });
+          }, interval);
+          this.pollTimer = intervalId;
+          if (window.Router && typeof Router.trackInterval === "function") {
+            Router.trackInterval(intervalId);
+          }
+          console.log("[Positions] Started polling every", interval, "ms");
+        },
+
+        stopPolling() {
+          if (this.pollTimer) {
+            clearInterval(this.pollTimer);
+            this.pollTimer = null;
+            console.log("[Positions] Stopped polling");
+          }
+        },
+
+        abortInFlight() {
+          if (this.abortController) {
+            this.abortController.abort();
+            this.abortController = null;
+            console.log("[Positions] Aborted in-flight request");
+          }
+        },
+
+        handleStatusChange() {
+          console.log(
+            "[Positions] Status changed to",
+            getCurrentStatusFilter()
+          );
+          this.stopPolling();
+          this.abortInFlight();
+          this.hasInitialSnapshot = false;
+          this.lastErrorMessage = null;
+          closePositionModal();
+          positionsStore.clear();
+          renderEmptyState("Loading positions...");
+          updatePositionCount(0);
+          this.fetchPositions({ reason: "filter", showSpinner: false }).finally(
+            () => {
+              if (this.isActive) {
+                this.startPolling();
+              }
+            }
+          );
+        },
+
+        handleManualRefresh() {
+          console.log("[Positions] Manual refresh requested");
+          this.stopPolling();
+          this.abortInFlight();
+          this.hasInitialSnapshot = false;
+          this.lastErrorMessage = null;
+          closePositionModal();
+          positionsStore.clear();
+          renderEmptyState("Refreshing positions...");
+          updatePositionCount(0);
+          this.fetchPositions({ reason: "manual", showSpinner: false }).finally(
+            () => {
+              if (this.isActive) {
+                this.startPolling();
+              }
+            }
+          );
+        },
+
+        async fetchPositions({ reason = "load", showSpinner = false } = {}) {
+          if (!this.isActive && reason !== "initial") {
+            return;
+          }
+
+          if (this.isFetching) {
+            if (reason === "poll") {
+              console.log(
+                "[Positions] Skipping poll; request already in flight"
+              );
+              return;
+            }
+            this.abortInFlight();
+          }
+
+          const status = getCurrentStatusFilter();
+          const params = new URLSearchParams();
+          if (status && status !== "all") {
+            params.set("status", status);
+          }
+          if (this.fetchLimit > 0) {
+            params.set("limit", String(this.fetchLimit));
+          }
+          const query = params.toString();
+          const url = `/api/positions${query ? `?${query}` : ""}`;
+
+          if (showSpinner) {
+            renderEmptyState("Loading positions...");
+            updatePositionCount(0);
+          }
+
+          try {
+            this.isFetching = true;
+            this.abortController = new AbortController();
+            console.log(`[Positions] Fetching positions (${reason}) via`, url);
+
+            const response = await fetch(url, {
+              signal: this.abortController.signal,
+              headers: { "X-Requested-With": "fetch" },
+            });
+            if (!response.ok) {
+              throw new Error(
+                `HTTP ${response.status}: ${response.statusText}`
+              );
+            }
+
+            const payload = await response.json();
+            const nextStore = new Map();
+            if (Array.isArray(payload)) {
+              payload.forEach((raw) => {
+                const normalized = normalizePositionFromApi(raw);
+                const key = getPositionKey(normalized);
+                if (key) {
+                  nextStore.set(key, normalized);
+                }
+              });
+            }
+
+            this.lastErrorMessage = null;
+            positionsStore.clear();
+            nextStore.forEach((value, key) => {
+              positionsStore.set(key, value);
+            });
+
+            this.hasInitialSnapshot = true;
+            renderPositionsTable();
+            console.log(
+              `[Positions] Loaded ${positionsStore.size} positions (${reason})`
+            );
+          } catch (error) {
+            if (error.name === "AbortError") {
+              console.log("[Positions] Fetch aborted");
+              return;
+            }
+            console.error("[Positions] Failed to fetch positions:", error);
+            if (!this.hasInitialSnapshot || positionsStore.size === 0) {
+              this.hasInitialSnapshot = true;
+              this.lastErrorMessage = `Failed to load positions: ${error.message}`;
+              renderEmptyState(this.lastErrorMessage, "#ef4444");
+              updatePositionCount(0);
+            }
+          } finally {
+            this.isFetching = false;
+            this.abortController = null;
+          }
+        },
+      };
+
+      return controller;
+    })();
+
+  window.positionsController = positionsController;
+
+  window.onPositionsStatusChanged = function () {
+    if (window.positionsController) {
+      window.positionsController.handleStatusChange();
+    }
+  };
+
+  window.refreshPositions = function () {
+    if (window.positionsController) {
+      window.positionsController.handleManualRefresh();
+    }
+  };
+
+  // ===== PageRegistry Lifecycle Integration =====
+  (function () {
+    function createPositionsPageLifecycle() {
+      return {
+        init(context) {
+          console.log("[Positions] Lifecycle init");
+          // Store context for future use if needed
+          if (context && context.data) {
+            context.data.controller = positionsController;
+          }
+        },
+        activate(context) {
+          console.log("[Positions] Lifecycle activate");
+          positionsController.activate();
+        },
+        deactivate() {
+          console.log("[Positions] Lifecycle deactivate");
+          positionsController.stopPolling();
+          positionsController.abortInFlight();
+          closePositionModal();
+        },
+        dispose() {
+          console.log("[Positions] Lifecycle dispose");
+          positionsController.teardown();
+        },
+      };
+    }
+
+    if (window.PageLifecycleRegistry) {
+      window.PageLifecycleRegistry.register(
+        "positions",
+        createPositionsPageLifecycle()
+      );
+    } else {
+      if (!window.__pendingPageRegistrations) {
+        window.__pendingPageRegistrations = [];
+      }
+      window.__pendingPageRegistrations.push({
+        pageId: "positions",
+        lifecycle: createPositionsPageLifecycle(),
+      });
+    }
+  })();
+</script>
