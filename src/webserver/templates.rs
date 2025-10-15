@@ -13,6 +13,7 @@ const TOOLBAR_STYLES: &str = include_str!("templates/styles/toolbar.css");
 const TOKEN_MODAL_STYLES: &str = include_str!("templates/styles/token-modal.css");
 const COMMON_STYLES: &str = include_str!("templates/styles/common.css");
 const SERVICES_PAGE_STYLES: &str = include_str!("templates/styles/pages/services.css");
+const TRANSACTIONS_PAGE_STYLES: &str = include_str!("templates/styles/pages/transactions.css");
 const DATA_TABLE_STYLES: &str = include_str!("templates/styles/ui/data_table.css");
 
 pub const CORE_LIFECYCLE: &str = include_str!("templates/scripts/core/lifecycle.js");
@@ -27,6 +28,7 @@ const THEME_SCRIPTS: &str = include_str!("templates/scripts/theme.js");
 pub const DATA_TABLE_UI: &str = include_str!("templates/scripts/ui/data_table.js");
 
 pub const SERVICES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/services.js");
+pub const TRANSACTIONS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/transactions.js");
 
 const HOME_PAGE: &str = include_str!("templates/pages/home.html");
 const STATUS_PAGE: &str = include_str!("templates/pages/status.html");
@@ -55,6 +57,9 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     ];
     if active_tab == "services" {
         combined_styles.push(SERVICES_PAGE_STYLES);
+    }
+    if active_tab == "transactions" {
+        combined_styles.push(TRANSACTIONS_PAGE_STYLES);
     }
     html = html.replace("/*__INJECTED_STYLES__*/", &combined_styles.join("\n"));
     html = html.replace("/*__THEME_SCRIPTS__*/", THEME_SCRIPTS);

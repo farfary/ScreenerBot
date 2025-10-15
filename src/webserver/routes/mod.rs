@@ -193,6 +193,7 @@ async fn get_core_script(axum::extract::Path(file): axum::extract::Path<String>)
 async fn get_page_script(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
     let content = match file.as_str() {
         "services.js" => Some(templates::SERVICES_PAGE_SCRIPT),
+        "transactions.js" => Some(templates::TRANSACTIONS_PAGE_SCRIPT),
         _ => None,
     };
 

@@ -1,6 +1,35 @@
 {
+  "type": "module",
   "dependencies": {
     "progress": "^2.0.3",
     "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.37.0",
+    "eslint": "^9.37.0",
+    "html-validate": "^10.1.2",
+    "prettier": "^3.6.2",
+    "prettier-plugin-sh": "^0.18.0",
+    "prettier-plugin-toml": "^2.0.6",
+    "stylelint": "^16.25.0",
+    "stylelint-config-standard": "^39.0.1"
+  },
+  "scripts": {
+    "lint:js": "eslint 'src/webserver/templates/**/*.js'",
+    "lint:css": "stylelint 'src/webserver/templates/**/*.css'",
+    "lint:html": "html-validate 'src/webserver/templates/**/*.html'",
+    "lint": "npm run lint:js && npm run lint:css && npm run lint:html",
+    "format:js": "prettier --write 'src/webserver/templates/**/*.js'",
+    "format:css": "prettier --write 'src/webserver/templates/**/*.css'",
+    "format:html": "prettier --write 'src/webserver/templates/**/*.html'",
+    "format:json": "prettier --write '**/*.json' --ignore-path .gitignore",
+    "format:md": "prettier --write '**/*.md' --ignore-path .gitignore",
+    "format:toml": "prettier --write '**/*.toml' --ignore-path .gitignore",
+    "format:sh": "prettier --write 'scripts/**/*.sh'",
+    "format:rust": "cargo fmt --all",
+    "format:frontend": "npm run format:js && npm run format:css && npm run format:html",
+    "format:docs": "npm run format:json && npm run format:md && npm run format:toml",
+    "format": "npm run format:frontend && npm run format:docs && npm run format:sh && npm run format:rust",
+    "check": "npm run lint"
   }
 }
