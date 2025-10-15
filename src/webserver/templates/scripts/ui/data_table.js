@@ -139,6 +139,16 @@ export class DataTable {
       stickyHeader: options.stickyHeader !== false,
       zebra: options.zebra !== false,
       compact: options.compact || false,
+      autoSizeColumns: options.autoSizeColumns !== false,
+      autoSizeSample:
+        Number.isInteger(options.autoSizeSample) && options.autoSizeSample > 0
+          ? options.autoSizeSample
+          : 25,
+      autoSizePadding:
+        typeof options.autoSizePadding === "number" &&
+        Number.isFinite(options.autoSizePadding)
+          ? Math.max(0, options.autoSizePadding)
+          : 16,
       ...options,
     };
 
@@ -157,6 +167,7 @@ export class DataTable {
       isLoading: false,
       tableWidth: null,
       hasAutoFitted: false, // Track if columns have been auto-fitted once
+      userResizedColumns: {},
     };
 
     this.elements = {};
@@ -421,9 +432,22 @@ export class DataTable {
       <colgroup>
         ${visibleColumns
           .map((col) => {
-            const width = this.state.columnWidths[col.id] || col.width || 120;
-            const widthValue = typeof width === 'number' ? `${width}px` : width;
-            return `<col data-column-id="${col.id}" style="width: ${widthValue};">`;
+            const storedWidth = this.state.columnWidths[col.id];
+            const configuredWidth = col.width;
+
+            let widthValue = null;
+            if (typeof storedWidth === "number" && !Number.isNaN(storedWidth)) {
+              widthValue = `${storedWidth}px`;
+            } else if (typeof configuredWidth === "number" && !Number.isNaN(configuredWidth)) {
+              widthValue = `${configuredWidth}px`;
+            } else if (typeof configuredWidth === "string" && configuredWidth.trim().length > 0) {
+              widthValue = configuredWidth;
+            } else if (this.options.autoSizeColumns === false) {
+              widthValue = "120px";
+            }
+
+            const styleAttr = widthValue ? ` style="width: ${widthValue};"` : "";
+            return `<col data-column-id="${col.id}"${styleAttr}>`;
           })
           .join('')}
       </colgroup>
@@ -1401,6 +1425,16 @@ export class DataTable {
     return 50;
   }
 
+  _markColumnAsUserResized(columnId) {
+    if (!columnId) {
+      return;
+    }
+    if (!this.state.userResizedColumns) {
+      this.state.userResizedColumns = {};
+    }
+    this.state.userResizedColumns[columnId] = true;
+  }
+
   /**
    * Apply column width by updating the <col> element
    * This is much more efficient than updating every <td> element
@@ -1450,6 +1484,113 @@ export class DataTable {
     });
 
     this._applyTableWidth();
+  }
+
+  _autoSizeColumnsFromContent() {
+    if (this.options.autoSizeColumns === false) {
+      return;
+    }
+    if (!this.elements.thead || !this.elements.tbody) {
+      return;
+    }
+
+    const visibleColumns = this._getOrderedColumns();
+    if (!visibleColumns || visibleColumns.length === 0) {
+      return;
+    }
+
+    const allRows = Array.from(
+      this.elements.tbody.querySelectorAll("tr[data-row-id]")
+    );
+    const sampleSize = Math.min(
+      this.options.autoSizeSample,
+      allRows.length
+    );
+    const sampleRows = sampleSize > 0 ? allRows.slice(0, sampleSize) : [];
+    const padding = this.options.autoSizePadding;
+
+    let didChange = false;
+
+    visibleColumns.forEach((col) => {
+      const columnId = col.id;
+      if (!columnId || !this._isColumnVisible(columnId)) {
+        return;
+      }
+
+      const hasFixedWidth =
+        col.autoWidth !== true &&
+        col.width !== undefined &&
+        col.width !== null &&
+        !(
+          typeof col.width === "string" &&
+          col.width.trim().toLowerCase() === "auto"
+        );
+
+      if (hasFixedWidth) {
+        if (
+          typeof col.width === "number" &&
+          !Number.isNaN(col.width) &&
+          this.state.columnWidths[columnId] !== col.width
+        ) {
+          this.state.columnWidths[columnId] = col.width;
+          this._applyColumnWidth(columnId, col.width);
+          didChange = true;
+        }
+        return;
+      }
+
+      if (this.state.userResizedColumns?.[columnId]) {
+        return;
+      }
+
+      const headerCell = this.elements.thead.querySelector(
+        `th[data-column-id="${columnId}"]`
+      );
+
+      let maxWidth = headerCell
+        ? Math.ceil(headerCell.scrollWidth)
+        : 0;
+
+      sampleRows.forEach((row) => {
+        const cell = row.querySelector(`td[data-column-id="${columnId}"]`);
+        if (!cell) {
+          return;
+        }
+        const cellWidth = Math.ceil(cell.scrollWidth);
+        if (cellWidth > maxWidth) {
+          maxWidth = cellWidth;
+        }
+      });
+
+      if (maxWidth === 0 && headerCell) {
+        maxWidth = Math.ceil(headerCell.offsetWidth);
+      }
+
+      const minWidth = this._getColumnMinWidth(columnId);
+      const finalWidth = Math.max(minWidth, maxWidth + padding);
+
+      if (!Number.isFinite(finalWidth)) {
+        return;
+      }
+
+      const previous = this.state.columnWidths[columnId];
+      if (
+        !Number.isFinite(previous) ||
+        Math.abs(previous - finalWidth) > 1
+      ) {
+        this.state.columnWidths[columnId] = finalWidth;
+        this._applyColumnWidth(columnId, finalWidth);
+        didChange = true;
+      }
+    });
+
+    if (didChange) {
+      const total = this._computeTableWidthFromState();
+      if (typeof total === "number") {
+        this.state.tableWidth = total;
+      }
+      this.state.hasAutoFitted = false;
+    }
   }
 
   // Snapshot current natural widths for visible columns into state if missing
@@ -1603,6 +1744,7 @@ export class DataTable {
       }
 
       const newWidth = Math.max(effectiveMin, Math.round(startWidth + diff));
+      this._markColumnAsUserResized(columnId);
       this.state.columnWidths[columnId] = newWidth;
       this._applyColumnWidth(columnId, newWidth);
 
@@ -1719,6 +1861,16 @@ export class DataTable {
       this.elements.tbody.innerHTML = this._renderBody();
     }
 
+    if (this.elements.table) {
+      const colgroupMarkup = this._renderColgroup().trim();
+      const existingColgroup = this.elements.table.querySelector("colgroup");
+      if (existingColgroup) {
+        existingColgroup.outerHTML = colgroupMarkup;
+      } else {
+        this.elements.table.insertAdjacentHTML("afterbegin", colgroupMarkup);
+      }
+    }
+
     // Re-query elements after innerHTML update to ensure fresh references
     if (this.elements.container) {
       this.elements.thead = this.elements.container.querySelector("thead");
@@ -1739,6 +1891,7 @@ export class DataTable {
     }
 
     // Make sure widths are captured and applied consistently
+    this._autoSizeColumnsFromContent();
     this._snapshotColumnWidths();
     this._applyStoredColumnWidths();
 
@@ -1763,6 +1916,14 @@ export class DataTable {
     const saved = AppState.load(this.options.stateKey);
     if (saved) {
       this.state = { ...this.state, ...saved };
+      if (
+        saved.userResizedColumns &&
+        typeof saved.userResizedColumns === "object"
+      ) {
+        this.state.userResizedColumns = { ...saved.userResizedColumns };
+      } else {
+        this.state.userResizedColumns = {};
+      }
       this._log("info", "State loaded", saved);
     }
   }
@@ -1781,6 +1942,7 @@ export class DataTable {
       scrollPosition: this.state.scrollPosition,
       columnOrder: this.state.columnOrder,
       tableWidth: this.state.tableWidth,
+      userResizedColumns: this.state.userResizedColumns,
     };
     AppState.save(this.options.stateKey, toSave);
     this._log("debug", "State saved", toSave);
@@ -1792,6 +1954,7 @@ export class DataTable {
   setData(data) {
     this.state.data = data;
     this.state.filteredData = [...data];
+    this.state.hasAutoFitted = false;
     this._applyFilters();
     this._log("info", "Data set", { rows: data.length });
   }
@@ -1802,6 +1965,7 @@ export class DataTable {
   clearData() {
     this.state.data = [];
     this.state.filteredData = [];
+    this.state.hasAutoFitted = false;
     this._renderTable();
     this._log("info", "Data cleared");
   }

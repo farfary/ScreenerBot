@@ -320,7 +320,7 @@ function createTable() {
     {
       id: "timestamp",
       label: "Date / Time",
-      width: 130,
+      minWidth: 140,
       render: (val) => {
         if (!val) return '<span class="text-muted">—</span>';
         const date = new Date(val);
@@ -332,7 +332,8 @@ function createTable() {
     {
       id: "signature",
       label: "Signature",
-      width: 110,
+      minWidth: 200,
+      wrap: false,
       render: (val) => {
         if (!val) return '<span class="text-muted">—</span>';
         const short = Utils.formatSignatureCompact(val);
@@ -342,25 +343,25 @@ function createTable() {
     {
       id: "transaction_type",
       label: "Type",
-      width: 70,
+      minWidth: 80,
       render: (val) => getTypeBadge(val || "unknown"),
     },
     {
       id: "direction",
       label: "Direction",
-      width: 70,
+      minWidth: 80,
       render: (val) => getDirectionBadge(val || "Unknown"),
     },
     {
       id: "status",
       label: "Status",
-      width: 80,
+      minWidth: 90,
       render: (val) => getStatusBadge(val || "Unknown"),
     },
     {
       id: "token_mint",
       label: "Mint",
-      width: 110,
+      minWidth: 140,
       render: (val) => {
         if (!val) return '<span class="text-muted">—</span>';
         const short = Utils.formatAddressCompact(val);
@@ -370,13 +371,13 @@ function createTable() {
     {
       id: "router",
       label: "Router",
-      width: 90,
+      minWidth: 100,
       render: (val) => val || '<span class="text-muted">—</span>',
     },
     {
       id: "sol_delta",
       label: "SOL Δ",
-      width: 80,
+      minWidth: 90,
       sortable: true,
       render: (val) => {
         if (val === null || val === undefined) return "—";
@@ -389,19 +390,19 @@ function createTable() {
     {
       id: "fee_sol",
       label: "Fee",
-      width: 70,
+      minWidth: 80,
       render: (val) => (val ? Utils.formatSol(val, { suffix: "" }) : "—"),
     },
     {
       id: "ata_rents",
       label: "ATA Rent",
-      width: 70,
+      minWidth: 80,
       render: (val) => (val ? Utils.formatSol(val, { suffix: "" }) : "—"),
     },
     {
       id: "instructions_count",
       label: "Instr",
-      width: 50,
+      minWidth: 48,
       render: (val) => (val !== null && val !== undefined ? val : "—"),
     },
   ];
@@ -417,6 +418,9 @@ function createTable() {
     stickyHeader: true,
     zebra: true,
     fitToContainer: true,
+    autoSizeColumns: true,
+    autoSizeSample: 40,
+    autoSizePadding: 20,
     // Disable built-in toolbar since we use custom filters
     toolbar: {},
   });

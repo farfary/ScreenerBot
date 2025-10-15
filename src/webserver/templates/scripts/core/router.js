@@ -1,6 +1,7 @@
 // Client-Side Router - SPA Navigation
 import { PageLifecycleRegistry } from "./lifecycle.js";
 import * as AppState from "./app_state.js";
+import * as PollingManager from "./poller.js";
 
 const _state = {
   currentPage: null,
@@ -210,6 +211,9 @@ export async function loadPage(pageName) {
 }
 
 export function initRouter() {
+  // Initialize polling interval selector
+  initPollingIntervalControl();
+
   // Handle navigation links
   document.addEventListener("click", (e) => {
     const link = e.target.closest("a[data-page]");
@@ -280,6 +284,33 @@ function getPageFromPath() {
   const path = window.location.pathname;
   if (path === "/" || path === "") return "home";
   return path.slice(1);
+}
+
+/**
+ * Initialize polling interval control in header
+ * Connects the dropdown to PollingManager
+ */
+function initPollingIntervalControl() {
+  const dropdown = document.getElementById("refreshInterval");
+  if (!dropdown) {
+    console.warn("[Router] Polling interval dropdown not found");
+    return;
+  }
+
+  // Load saved interval and set dropdown value
+  const currentInterval = PollingManager.getInterval();
+  dropdown.value = String(currentInterval);
+
+  // Listen for changes
+  dropdown.addEventListener("change", (e) => {
+    const newInterval = parseInt(e.target.value, 10);
+    if (Number.isFinite(newInterval) && newInterval > 0) {
+      PollingManager.setInterval(newInterval);
+      console.log(`[Router] Polling interval changed to ${newInterval}ms`);
+    }
+  });
+
+  console.log("[Router] Polling interval control initialized:", currentInterval, "ms");
 }
 
 if (document.readyState === "loading") {

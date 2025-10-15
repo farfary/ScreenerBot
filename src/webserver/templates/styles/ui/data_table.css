@@ -432,6 +432,11 @@ body.dt-column-resizing * {
 .data-table tbody tr {
   border-bottom: 1px solid var(--border-color);
   transition: all 0.15s ease;
+  height: 44px; /* Fixed row height for consistent layout */
+}
+
+.data-table.compact tbody tr {
+  height: 36px; /* Compact mode fixed height */
 }
 
 .data-table tbody tr:hover {
@@ -462,8 +467,10 @@ body.dt-column-resizing * {
   transition: color 0.15s ease;
   word-wrap: break-word;
   overflow-wrap: break-word;
-  max-width: 300px; /* Prevent extremely wide cells */
+  max-width: none;
   box-sizing: border-box; /* Make width include padding and borders */
+  height: inherit; /* Inherit fixed height from tr */
+  vertical-align: middle; /* Center content vertically */
 }
 
 /* Text wrapping support */
