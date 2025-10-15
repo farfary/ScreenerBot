@@ -37,6 +37,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/transactions", axum::routing::get(transactions_page))
         .route("/scripts/core/:file", axum::routing::get(get_core_script))
         .route("/scripts/pages/:file", axum::routing::get(get_page_script))
+        .route("/scripts/ui/:file", axum::routing::get(get_ui_script))
         .nest("/api", api_routes())
         .with_state(state)
 }
@@ -192,6 +193,27 @@ async fn get_core_script(axum::extract::Path(file): axum::extract::Path<String>)
 async fn get_page_script(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
     let content = match file.as_str() {
         "services.js" => Some(templates::SERVICES_PAGE_SCRIPT),
+        _ => None,
+    };
+
+    match content {
+        Some(js) => (
+            StatusCode::OK,
+            [(
+                header::CONTENT_TYPE,
+                "application/javascript; charset=utf-8",
+            )],
+            js,
+        )
+            .into_response(),
+        None => (StatusCode::NOT_FOUND, "Script not found").into_response(),
+    }
+}
+
+/// Serve UI component JavaScript modules
+async fn get_ui_script(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
+    let content = match file.as_str() {
+        "data_table.js" => Some(templates::DATA_TABLE_UI),
         _ => None,
     };
 

@@ -13,6 +13,7 @@ const TOOLBAR_STYLES: &str = include_str!("templates/styles/toolbar.css");
 const TOKEN_MODAL_STYLES: &str = include_str!("templates/styles/token-modal.css");
 const COMMON_STYLES: &str = include_str!("templates/styles/common.css");
 const SERVICES_PAGE_STYLES: &str = include_str!("templates/styles/pages/services.css");
+const DATA_TABLE_STYLES: &str = include_str!("templates/styles/ui/data_table.css");
 
 pub const CORE_LIFECYCLE: &str = include_str!("templates/scripts/core/lifecycle.js");
 pub const CORE_APP_STATE: &str = include_str!("templates/scripts/core/app_state.js");
@@ -22,6 +23,8 @@ pub const CORE_UTILS: &str = include_str!("templates/scripts/core/utils.js");
 pub const CORE_ROUTER: &str = include_str!("templates/scripts/core/router.js");
 
 const THEME_SCRIPTS: &str = include_str!("templates/scripts/theme.js");
+
+pub const DATA_TABLE_UI: &str = include_str!("templates/scripts/ui/data_table.js");
 
 pub const SERVICES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/services.js");
 
@@ -48,6 +51,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         TOOLBAR_STYLES,
         TOKEN_MODAL_STYLES,
         COMMON_STYLES,
+        DATA_TABLE_STYLES,
     ];
     if active_tab == "services" {
         combined_styles.push(SERVICES_PAGE_STYLES);
