@@ -175,17 +175,29 @@ export class DataTable {
 
     if (toolbar.filters && toolbar.filters.length > 0) {
       toolbar.filters.forEach((filter) => {
-        const value = this.state.filters[filter.id] || filter.options[0];
+        // Handle both string options and object options { value, label }
+        const firstOption = filter.options[0];
+        const isObjectOptions =
+          typeof firstOption === "object" && firstOption !== null;
+        const defaultValue = isObjectOptions ? firstOption.value : firstOption;
+        const currentValue = this.state.filters[filter.id] || defaultValue;
+
         leftParts.push(`
           <select class="dt-filter" data-filter-id="${filter.id}">
             ${filter.options
-              .map(
-                (opt) => `
-              <option value="${opt}" ${opt === value ? "selected" : ""}>
-                ${filter.optionLabels?.[opt] || opt}
+              .map((opt) => {
+                const optValue = isObjectOptions ? opt.value : opt;
+                const optLabel = isObjectOptions
+                  ? opt.label
+                  : filter.optionLabels?.[opt] || opt;
+                return `
+              <option value="${optValue}" ${
+                  optValue === currentValue ? "selected" : ""
+                }>
+                ${optLabel}
               </option>
-            `
-              )
+            `;
+              })
               .join("")}
           </select>
         `);
