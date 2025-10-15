@@ -151,6 +151,7 @@ export class DataTable {
       filters: {},
       columnWidths: {},
       visibleColumns: {},
+      columnOrder: [], // Store custom column order
       selectedRows: new Set(),
       scrollPosition: 0,
       isLoading: false,
@@ -158,6 +159,7 @@ export class DataTable {
 
     this.elements = {};
     this.resizing = null;
+    this.draggingColumn = null; // Track column being dragged
     this.documentClickHandler = null;
     this.scrollThrottle = null;
     this.eventHandlers = new Map(); // Store all event handlers for cleanup
@@ -334,12 +336,41 @@ export class DataTable {
   }
 
   /**
-   * Render table header with sortable columns
+   * Get columns in the correct order
    */
-  _renderHeader() {
+  _getOrderedColumns() {
     const visibleColumns = this.options.columns.filter((col) =>
       this._isColumnVisible(col.id)
     );
+
+    // If no custom order, return original order
+    if (this.state.columnOrder.length === 0) {
+      return visibleColumns;
+    }
+
+    // Sort columns by custom order
+    const ordered = [];
+    const columnMap = new Map(visibleColumns.map((col) => [col.id, col]));
+
+    // Add columns in saved order
+    for (const colId of this.state.columnOrder) {
+      if (columnMap.has(colId)) {
+        ordered.push(columnMap.get(colId));
+        columnMap.delete(colId);
+      }
+    }
+
+    // Add any remaining columns (newly added)
+    ordered.push(...columnMap.values());
+
+    return ordered;
+  }
+
+  /**
+   * Render table header with sortable columns
+   */
+  _renderHeader() {
+    const visibleColumns = this._getOrderedColumns();
 
     return `
       <tr>
@@ -357,12 +388,13 @@ export class DataTable {
             return `
             <th 
               data-column-id="${col.id}"
+              draggable="true"
               style="width: ${
                 typeof width === "number" ? width + "px" : width
               }; ${col.minWidth ? "min-width: " + col.minWidth + "px;" : ""}"
               class="${col.sortable ? "sortable" : ""} ${
               isSorted ? "sorted" : ""
-            }"
+            } dt-draggable-column"
             >
               <div class="dt-header-content">
                 <span class="dt-header-label">${col.label}</span>
@@ -420,9 +452,7 @@ export class DataTable {
    * Render individual row cells
    */
   _renderRow(row) {
-    const visibleColumns = this.options.columns.filter((col) =>
-      this._isColumnVisible(col.id)
-    );
+    const visibleColumns = this._getOrderedColumns();
 
     return visibleColumns
       .map((col) => {
@@ -713,6 +743,72 @@ export class DataTable {
       this._addEventListener(th, "click", handler);
     });
 
+    // Column drag and drop for reordering
+    const draggableHeaders = this.elements.thead.querySelectorAll(
+      ".dt-draggable-column"
+    );
+    draggableHeaders.forEach((th) => {
+      const dragStartHandler = (e) => {
+        // Don't start drag if clicking on resize handle
+        if (e.target.classList.contains("dt-resize-handle")) {
+          e.preventDefault();
+          return;
+        }
+
+        this.draggingColumn = th.dataset.columnId;
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/html", th.innerHTML);
+        th.classList.add("dt-dragging");
+      };
+
+      const dragOverHandler = (e) => {
+        if (e.preventDefault) {
+          e.preventDefault();
+        }
+        e.dataTransfer.dropEffect = "move";
+
+        const targetColumnId = e.currentTarget.dataset.columnId;
+        if (this.draggingColumn && this.draggingColumn !== targetColumnId) {
+          e.currentTarget.classList.add("dt-drag-over");
+        }
+        return false;
+      };
+
+      const dragLeaveHandler = (e) => {
+        e.currentTarget.classList.remove("dt-drag-over");
+      };
+
+      const dropHandler = (e) => {
+        if (e.stopPropagation) {
+          e.stopPropagation();
+        }
+        e.preventDefault();
+
+        const targetColumnId = e.currentTarget.dataset.columnId;
+
+        if (this.draggingColumn && this.draggingColumn !== targetColumnId) {
+          this._reorderColumn(this.draggingColumn, targetColumnId);
+        }
+
+        e.currentTarget.classList.remove("dt-drag-over");
+        return false;
+      };
+
+      const dragEndHandler = (e) => {
+        e.currentTarget.classList.remove("dt-dragging");
+        draggableHeaders.forEach((header) => {
+          header.classList.remove("dt-drag-over");
+        });
+        this.draggingColumn = null;
+      };
+
+      this._addEventListener(th, "dragstart", dragStartHandler);
+      this._addEventListener(th, "dragover", dragOverHandler);
+      this._addEventListener(th, "dragleave", dragLeaveHandler);
+      this._addEventListener(th, "drop", dropHandler);
+      this._addEventListener(th, "dragend", dragEndHandler);
+    });
+
     // Column resizing
     const resizeHandles =
       this.elements.thead.querySelectorAll(".dt-resize-handle");
@@ -802,6 +898,37 @@ export class DataTable {
       "scroll",
       scrollHandler
     );
+  }
+
+  /**
+   * Reorder columns by moving sourceId before/after targetId
+   */
+  _reorderColumn(sourceId, targetId) {
+    // Get current order or create from visible columns
+    let order = this.state.columnOrder;
+    if (order.length === 0) {
+      order = this._getOrderedColumns().map((col) => col.id);
+    }
+
+    // Find indices
+    const sourceIndex = order.indexOf(sourceId);
+    const targetIndex = order.indexOf(targetId);
+
+    if (sourceIndex === -1 || targetIndex === -1) return;
+
+    // Remove source
+    order.splice(sourceIndex, 1);
+
+    // Insert at new position (adjust if source was before target)
+    const newTargetIndex =
+      sourceIndex < targetIndex ? targetIndex : targetIndex + 1;
+    order.splice(newTargetIndex, 0, sourceId);
+
+    this.state.columnOrder = order;
+    this._saveState();
+    this._renderTable();
+
+    this._log("info", "Column reordered", { sourceId, targetId, order });
   }
 
   /**
