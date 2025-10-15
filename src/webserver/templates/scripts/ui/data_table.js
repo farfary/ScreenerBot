@@ -159,7 +159,8 @@ export class DataTable {
 
     this.elements = {};
     this.resizing = null;
-    this.draggingColumn = null; // Track column being dragged
+    this.draggingColumn = null; // Track column ID being dragged
+    this.draggingElement = null; // Track column element being dragged
     this.documentClickHandler = null;
     this.scrollThrottle = null;
     this.eventHandlers = new Map(); // Store all event handlers for cleanup
@@ -430,7 +431,7 @@ export class DataTable {
               </div>
               ${
                 col.resizable !== false
-                  ? '<div class="dt-resize-handle"></div>'
+                  ? '<div class="dt-resize-handle" draggable="false"></div>'
                   : ""
               }
             </th>
@@ -934,18 +935,62 @@ export class DataTable {
     const draggableHeaders = this.elements.thead.querySelectorAll(
       ".dt-draggable-column"
     );
+
+    // Create drop indicator element (reused for all drags)
+    let dropIndicator = this.elements.table.querySelector(".dt-drop-indicator");
+    if (!dropIndicator) {
+      dropIndicator = document.createElement("div");
+      dropIndicator.className = "dt-drop-indicator";
+      dropIndicator.style.display = "none";
+    }
+
+    // Helper to remove all drag indicators
+    const clearDragIndicators = () => {
+      draggableHeaders.forEach((header) => {
+        header.classList.remove("dt-drop-target");
+      });
+      dropIndicator.style.display = "none";
+      if (dropIndicator.parentElement) {
+        dropIndicator.remove();
+      }
+    };
+
+    // Helper to show drop indicator
+    const showDropIndicator = (targetTh, isLeft) => {
+      // Position indicator relative to target column
+      targetTh.style.position = "relative";
+      dropIndicator.className = `dt-drop-indicator ${
+        isLeft ? "left" : "right"
+      }`;
+      dropIndicator.style.display = "block";
+
+      // Append to target column
+      if (dropIndicator.parentElement !== targetTh) {
+        targetTh.appendChild(dropIndicator);
+      }
+
+      // Add visual feedback class
+      targetTh.classList.add("dt-drop-target");
+    };
+
     draggableHeaders.forEach((th) => {
       const dragStartHandler = (e) => {
-        // Don't start drag if clicking on resize handle
-        if (e.target.classList.contains("dt-resize-handle")) {
+        // Don't start drag if clicking on resize handle or its children
+        if (
+          e.target.classList.contains("dt-resize-handle") ||
+          e.target.closest(".dt-resize-handle")
+        ) {
           e.preventDefault();
           return;
         }
 
         this.draggingColumn = th.dataset.columnId;
+        this.draggingElement = th;
         e.dataTransfer.effectAllowed = "move";
         e.dataTransfer.setData("text/html", th.innerHTML);
         th.classList.add("dt-dragging");
+
+        this._log("debug", "Drag started", { columnId: this.draggingColumn });
       };
 
       const dragOverHandler = (e) => {
@@ -955,14 +1000,39 @@ export class DataTable {
         e.dataTransfer.dropEffect = "move";
 
         const targetColumnId = e.currentTarget.dataset.columnId;
+
+        // Don't show indicator for the dragging column itself
         if (this.draggingColumn && this.draggingColumn !== targetColumnId) {
-          e.currentTarget.classList.add("dt-drag-over");
+          clearDragIndicators();
+
+          // Calculate which side of the column we're on
+          const rect = e.currentTarget.getBoundingClientRect();
+          const midpoint = rect.left + rect.width / 2;
+          const mouseX = e.clientX;
+
+          // Show indicator on left or right side based on mouse position
+          const isLeft = mouseX < midpoint;
+          showDropIndicator(e.currentTarget, isLeft);
+
+          // Store drop position for the drop handler
+          e.currentTarget.dataset.dropBefore = isLeft ? "true" : "false";
         }
+
+        return false;
+      };
+
+      const dragEnterHandler = (e) => {
+        e.preventDefault();
         return false;
       };
 
       const dragLeaveHandler = (e) => {
-        e.currentTarget.classList.remove("dt-drag-over");
+        // Only remove indicator if we're actually leaving the element
+        // (not just entering a child element)
+        const relatedTarget = e.relatedTarget;
+        if (!e.currentTarget.contains(relatedTarget)) {
+          clearDragIndicators();
+        }
       };
 
       const dropHandler = (e) => {
@@ -974,23 +1044,28 @@ export class DataTable {
         const targetColumnId = e.currentTarget.dataset.columnId;
 
         if (this.draggingColumn && this.draggingColumn !== targetColumnId) {
-          this._reorderColumn(this.draggingColumn, targetColumnId);
+          // Determine drop position based on stored data
+          const dropBefore = e.currentTarget.dataset.dropBefore === "true";
+
+          this._reorderColumn(this.draggingColumn, targetColumnId, dropBefore);
         }
 
-        e.currentTarget.classList.remove("dt-drag-over");
+        clearDragIndicators();
         return false;
       };
 
       const dragEndHandler = (e) => {
         e.currentTarget.classList.remove("dt-dragging");
-        draggableHeaders.forEach((header) => {
-          header.classList.remove("dt-drag-over");
-        });
+        clearDragIndicators();
         this.draggingColumn = null;
+        this.draggingElement = null;
+
+        this._log("debug", "Drag ended");
       };
 
       this._addEventListener(th, "dragstart", dragStartHandler);
       this._addEventListener(th, "dragover", dragOverHandler);
+      this._addEventListener(th, "dragenter", dragEnterHandler);
       this._addEventListener(th, "dragleave", dragLeaveHandler);
       this._addEventListener(th, "drop", dropHandler);
       this._addEventListener(th, "dragend", dragEndHandler);
@@ -1002,6 +1077,7 @@ export class DataTable {
     resizeHandles.forEach((handle) => {
       const handler = (e) => {
         e.preventDefault();
+        e.stopPropagation(); // Prevent drag events on parent column
         const th = handle.parentElement;
         const columnId = th.dataset.columnId;
 
@@ -1224,8 +1300,11 @@ export class DataTable {
 
   /**
    * Reorder columns by moving sourceId before/after targetId
+   * @param {string} sourceId - Column being moved
+   * @param {string} targetId - Target column to drop near
+   * @param {boolean} dropBefore - If true, insert before target; if false, insert after
    */
-  _reorderColumn(sourceId, targetId) {
+  _reorderColumn(sourceId, targetId, dropBefore = false) {
     // Get current order or create from visible columns
     let order = this.state.columnOrder;
     if (order.length === 0) {
@@ -1236,21 +1315,51 @@ export class DataTable {
     const sourceIndex = order.indexOf(sourceId);
     const targetIndex = order.indexOf(targetId);
 
-    if (sourceIndex === -1 || targetIndex === -1) return;
+    if (sourceIndex === -1 || targetIndex === -1) {
+      this._log("warn", "Column reorder failed: invalid indices", {
+        sourceId,
+        targetId,
+        sourceIndex,
+        targetIndex,
+      });
+      return;
+    }
 
-    // Remove source
+    // Don't do anything if they're already adjacent in the desired order
+    if (
+      (dropBefore && sourceIndex === targetIndex - 1) ||
+      (!dropBefore && sourceIndex === targetIndex + 1)
+    ) {
+      this._log("debug", "Column already in desired position", {
+        sourceId,
+        targetId,
+      });
+      return;
+    }
+
+    // Remove source from its current position
     order.splice(sourceIndex, 1);
 
-    // Insert at new position (adjust if source was before target)
-    const newTargetIndex =
-      sourceIndex < targetIndex ? targetIndex : targetIndex + 1;
-    order.splice(newTargetIndex, 0, sourceId);
+    // Calculate new target index after removal
+    let newTargetIndex = order.indexOf(targetId);
+
+    // Insert before or after target
+    if (dropBefore) {
+      order.splice(newTargetIndex, 0, sourceId);
+    } else {
+      order.splice(newTargetIndex + 1, 0, sourceId);
+    }
 
     this.state.columnOrder = order;
     this._saveState();
     this._renderTable();
 
-    this._log("info", "Column reordered", { sourceId, targetId, order });
+    this._log("info", "Column reordered", {
+      sourceId,
+      targetId,
+      dropBefore,
+      newOrder: order,
+    });
   }
 
   /**

@@ -343,6 +343,7 @@
 .dt-draggable-column {
   cursor: grab;
   transition: all 0.2s ease;
+  position: relative;
 }
 
 .dt-draggable-column:active {
@@ -350,18 +351,50 @@
 }
 
 .dt-draggable-column.dt-dragging {
-  opacity: 0.6;
+  opacity: 0.5;
   background: var(--primary-color);
   color: white;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  transform: scale(1.02);
+  transform: scale(1.05);
   z-index: 1000;
 }
 
-.dt-draggable-column.dt-drag-over {
-  background: rgba(59, 130, 246, 0.1);
-  border-left: 3px solid var(--primary-color);
-  border-right: 3px solid var(--primary-color);
+/* Drop indicator - shows where column will be inserted */
+.dt-drop-indicator {
+  position: absolute;
+  top: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--primary-color);
+  z-index: 1002;
+  pointer-events: none;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.8);
+  animation: dropIndicatorPulse 0.6s ease-in-out infinite;
+}
+
+.dt-drop-indicator.left {
+  left: 0;
+}
+
+.dt-drop-indicator.right {
+  right: 0;
+}
+
+@keyframes dropIndicatorPulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.8);
+  }
+  50% {
+    opacity: 0.7;
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+  }
+}
+
+/* Visual feedback during drag over */
+.dt-draggable-column.dt-drop-target {
+  background: rgba(59, 130, 246, 0.08);
 }
 
 /* Resize handle */
