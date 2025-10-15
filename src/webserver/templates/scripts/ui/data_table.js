@@ -397,7 +397,10 @@ export class DataTable {
             } dt-draggable-column"
             >
               <div class="dt-header-content">
-                <span class="dt-header-label">${col.label}</span>
+                <span class="dt-header-label">
+                  <span class="dt-drag-handle" title="Drag to reorder">⋮⋮</span>
+                  ${col.label}
+                </span>
                 ${
                   col.sortable
                     ? `<span class="dt-sort-icon">${sortIcon}</span>`
@@ -422,7 +425,7 @@ export class DataTable {
    */
   _renderBody() {
     if (this.state.isLoading) {
-      return `<tr><td colspan="100" class="dt-empty">${this.options.loadingMessage}</td></tr>`;
+      return `<tr><td colspan="100" class="dt-loading">${this.options.loadingMessage}</td></tr>`;
     }
 
     const data = this.state.filteredData;
