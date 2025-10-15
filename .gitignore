@@ -37,5 +37,5 @@ cache_tokens.db
 *_backup.*
 *.backup
 
-
+.playwright-mcp
 node_modules
