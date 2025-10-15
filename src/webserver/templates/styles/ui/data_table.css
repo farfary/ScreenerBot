@@ -206,6 +206,33 @@
   min-height: 0; /* Critical for flex scrolling */
 }
 
+/* Fixed height support */
+.data-table-wrapper.fixed-height {
+  height: 600px; /* Default fixed height */
+}
+
+.data-table-wrapper.fixed-height .data-table-scroll-container {
+  max-height: calc(100% - 52px); /* Subtract toolbar height */
+  overflow-y: auto;
+}
+
+/* Custom height variants */
+.data-table-wrapper.fixed-height-sm {
+  height: 400px;
+}
+
+.data-table-wrapper.fixed-height-md {
+  height: 600px;
+}
+
+.data-table-wrapper.fixed-height-lg {
+  height: 800px;
+}
+
+.data-table-wrapper.fixed-height-xl {
+  height: 1000px;
+}
+
 /* Table */
 .data-table {
   width: 100%;
@@ -399,6 +426,22 @@
   color: var(--text-primary);
   border-bottom: 1px solid var(--border-color);
   transition: color 0.15s ease;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  max-width: 300px; /* Prevent extremely wide cells */
+}
+
+/* Text wrapping support */
+.data-table td.wrap-text {
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+.data-table td.no-wrap {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .data-table td.dt-empty {
@@ -678,5 +721,290 @@
 
   .dt-image-container {
     gap: 8px;
+  }
+}
+
+/* ==================== Action Buttons Column Styles ==================== */
+
+/* Action cell container */
+.dt-actions-cell {
+  padding: 8px 12px !important;
+  white-space: nowrap;
+}
+
+.dt-actions-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+/* Action button base */
+.dt-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.dt-action-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary-color);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.dt-action-btn:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.dt-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Action button icon */
+.dt-action-btn-icon {
+  font-size: 0.9375rem;
+  line-height: 1;
+}
+
+/* Action button variants */
+.dt-action-btn-primary {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.dt-action-btn-primary:hover {
+  background: var(--primary-hover, #2563eb);
+  border-color: var(--primary-hover, #2563eb);
+}
+
+.dt-action-btn-success {
+  background: var(--success-color, #10b981);
+  color: white;
+  border-color: var(--success-color, #10b981);
+}
+
+.dt-action-btn-success:hover {
+  background: var(--success-hover, #059669);
+  border-color: var(--success-hover, #059669);
+}
+
+.dt-action-btn-danger {
+  background: var(--error-color, #ef4444);
+  color: white;
+  border-color: var(--error-color, #ef4444);
+}
+
+.dt-action-btn-danger:hover {
+  background: var(--error-hover, #dc2626);
+  border-color: var(--error-hover, #dc2626);
+}
+
+.dt-action-btn-warning {
+  background: var(--warning-color, #f59e0b);
+  color: white;
+  border-color: var(--warning-color, #f59e0b);
+}
+
+.dt-action-btn-warning:hover {
+  background: var(--warning-hover, #d97706);
+  border-color: var(--warning-hover, #d97706);
+}
+
+.dt-action-btn-ghost {
+  background: transparent;
+  border-color: transparent;
+}
+
+.dt-action-btn-ghost:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-color);
+}
+
+/* Icon-only button */
+.dt-action-btn-icon-only {
+  padding: 6px;
+  min-width: 32px;
+  min-height: 32px;
+}
+
+/* Small button variant */
+.dt-action-btn-sm {
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  min-height: 26px;
+}
+
+.dt-action-btn-sm.dt-action-btn-icon-only {
+  padding: 4px;
+  min-width: 26px;
+  min-height: 26px;
+}
+
+/* ==================== Dropdown Menu (Three Dot Style) ==================== */
+
+/* Dropdown trigger */
+.dt-actions-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.dt-actions-dropdown-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.dt-actions-dropdown-trigger:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary-color);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.dt-actions-dropdown-trigger:active {
+  transform: translateY(0);
+}
+
+.dt-actions-dropdown-trigger.active {
+  background: var(--bg-hover);
+  border-color: var(--primary-color);
+}
+
+/* Dropdown menu */
+.dt-actions-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 160px;
+  padding: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  animation: slideDown 0.15s ease;
+}
+
+.dt-actions-dropdown-menu.menu-left {
+  right: auto;
+  left: 0;
+}
+
+/* Dropdown item */
+.dt-actions-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.dt-actions-dropdown-item:hover {
+  background: var(--bg-hover);
+  color: var(--primary-color);
+}
+
+.dt-actions-dropdown-item:active {
+  transform: scale(0.98);
+}
+
+.dt-actions-dropdown-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.dt-actions-dropdown-item.danger {
+  color: var(--error-color, #ef4444);
+}
+
+.dt-actions-dropdown-item.danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--error-color, #ef4444);
+}
+
+/* Dropdown item icon */
+.dt-actions-dropdown-item-icon {
+  font-size: 1rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* Dropdown divider */
+.dt-actions-dropdown-divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border-color);
+}
+
+/* Dark theme support */
+[data-theme="dark"] .dt-action-btn {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .dt-actions-dropdown-trigger {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .dt-actions-dropdown-menu {
+  background: var(--bg-secondary);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .dt-actions-container {
+    gap: 4px;
+  }
+
+  .dt-action-btn {
+    padding: 4px 8px;
+    font-size: 0.75rem;
+  }
+
+  .dt-action-btn-icon-only {
+    min-width: 28px;
+    min-height: 28px;
+  }
+
+  .dt-actions-dropdown-trigger {
+    width: 28px;
+    height: 28px;
   }
 }

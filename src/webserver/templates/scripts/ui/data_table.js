@@ -201,8 +201,29 @@ export class DataTable {
   _render() {
     const { container } = this.elements;
 
+    // Determine fixed height class
+    let fixedHeightClass = "";
+    if (this.options.fixedHeight) {
+      if (typeof this.options.fixedHeight === "string") {
+        // Support 'sm', 'md', 'lg', 'xl' or custom height
+        const sizeMap = {
+          sm: "fixed-height-sm",
+          md: "fixed-height-md",
+          lg: "fixed-height-lg",
+          xl: "fixed-height-xl",
+        };
+        fixedHeightClass = sizeMap[this.options.fixedHeight] || "fixed-height";
+      } else if (this.options.fixedHeight === true) {
+        fixedHeightClass = "fixed-height";
+      }
+    }
+
     container.innerHTML = `
-      <div class="data-table-wrapper">
+      <div class="data-table-wrapper ${fixedHeightClass}" ${
+      typeof this.options.fixedHeight === "number"
+        ? `style="height: ${this.options.fixedHeight}px;"`
+        : ""
+    }>
         ${this._renderToolbar()}
         <div class="data-table-scroll-container">
           <table class="data-table ${this.options.compact ? "compact" : ""} ${
@@ -461,10 +482,15 @@ export class DataTable {
       .map((col) => {
         let value = row[col.id];
         let cellContent = "";
+        let cellClass = col.className || "";
 
         // Handle different column types
-        if (col.type === "image" && col.image) {
+        if (col.type === "actions" && col.actions) {
+          cellContent = this._renderActionsCell(col, row);
+          cellClass += " dt-actions-cell";
+        } else if (col.type === "image" && col.image) {
           cellContent = this._renderImageCell(col, row);
+          cellClass += " dt-image-cell";
         } else if (col.render && typeof col.render === "function") {
           // Custom renderer with error handling
           try {
@@ -486,10 +512,17 @@ export class DataTable {
           }
         }
 
+        // Add text wrapping class
+        const wrapClass = col.wrap
+          ? "wrap-text"
+          : col.wrap === false
+          ? "no-wrap"
+          : "";
+
         return `
-        <td data-column-id="${col.id}" class="${col.className || ""} ${
-          col.type === "image" ? "dt-image-cell" : ""
-        }">
+        <td data-column-id="${col.id}" 
+            class="${cellClass} ${wrapClass}"
+            data-row-id="${row[this.options.rowIdField] || ""}">
           ${cellContent}
         </td>
       `;
@@ -610,6 +643,157 @@ export class DataTable {
         ${textHtml}
       </div>
     `;
+  }
+
+  /**
+   * Render actions cell with buttons or dropdown menu
+   *
+   * @param {Object} col - Column configuration
+   * @param {Object} row - Row data
+   * @returns {string} - HTML for actions cell
+   *
+   * Example configurations:
+   *
+   * Multiple buttons:
+   * {
+   *   id: 'actions',
+   *   label: 'Actions',
+   *   type: 'actions',
+   *   actions: {
+   *     buttons: [
+   *       {
+   *         id: 'edit',
+   *         label: 'Edit',
+   *         icon: '✏️',
+   *         variant: 'primary',
+   *         onClick: (row) => editRow(row)
+   *       },
+   *       {
+   *         id: 'delete',
+   *         label: 'Delete',
+   *         icon: '🗑️',
+   *         variant: 'danger',
+   *         onClick: (row) => deleteRow(row)
+   *       }
+   *     ]
+   *   }
+   * }
+   *
+   * Dropdown menu (three dots):
+   * {
+   *   id: 'actions',
+   *   label: 'Actions',
+   *   type: 'actions',
+   *   actions: {
+   *     dropdown: true,
+   *     icon: '⋮', // or '•••' or '⚙️'
+   *     menuPosition: 'left', // 'left' or 'right' (default)
+   *     items: [
+   *       {
+   *         id: 'view',
+   *         label: 'View Details',
+   *         icon: '👁️',
+   *         onClick: (row) => viewRow(row)
+   *       },
+   *       {
+   *         id: 'edit',
+   *         label: 'Edit',
+   *         icon: '✏️',
+   *         onClick: (row) => editRow(row)
+   *       },
+   *       { type: 'divider' },
+   *       {
+   *         id: 'delete',
+   *         label: 'Delete',
+   *         icon: '🗑️',
+   *         variant: 'danger',
+   *         onClick: (row) => deleteRow(row)
+   *       }
+   *     ]
+   *   }
+   * }
+   */
+  _renderActionsCell(col, row) {
+    const config = col.actions;
+
+    if (!config) {
+      return "";
+    }
+
+    // Dropdown menu style
+    if (config.dropdown && config.items) {
+      const icon = config.icon || "⋮";
+      const menuPosition = config.menuPosition || "right";
+      const menuClass = menuPosition === "left" ? "menu-left" : "";
+
+      return `
+        <div class="dt-actions-container">
+          <div class="dt-actions-dropdown" data-row-id="${
+            row[this.options.rowIdField] || ""
+          }">
+            <button class="dt-actions-dropdown-trigger" data-action="dropdown-toggle">
+              ${icon}
+            </button>
+            <div class="dt-actions-dropdown-menu ${menuClass}" style="display: none;">
+              ${config.items
+                .map((item) => {
+                  if (item.type === "divider") {
+                    return '<div class="dt-actions-dropdown-divider"></div>';
+                  }
+
+                  const itemVariant = item.variant === "danger" ? "danger" : "";
+                  const disabled = item.disabled ? "disabled" : "";
+
+                  return `
+                  <div class="dt-actions-dropdown-item ${itemVariant} ${disabled}" 
+                       data-action-id="${item.id}">
+                    ${
+                      item.icon
+                        ? `<span class="dt-actions-dropdown-item-icon">${item.icon}</span>`
+                        : ""
+                    }
+                    ${item.label}
+                  </div>
+                `;
+                })
+                .join("")}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Multiple buttons style
+    if (config.buttons && Array.isArray(config.buttons)) {
+      return `
+        <div class="dt-actions-container">
+          ${config.buttons
+            .map((btn) => {
+              const variant = btn.variant ? `dt-action-btn-${btn.variant}` : "";
+              const size = btn.size === "sm" ? "dt-action-btn-sm" : "";
+              const iconOnly =
+                !btn.label && btn.icon ? "dt-action-btn-icon-only" : "";
+              const disabled = btn.disabled ? "disabled" : "";
+
+              return `
+              <button class="dt-action-btn ${variant} ${size} ${iconOnly} ${disabled}" 
+                      data-action-id="${btn.id}"
+                      ${btn.tooltip ? `title="${btn.tooltip}"` : ""}>
+                ${
+                  btn.icon
+                    ? `<span class="dt-action-btn-icon">${btn.icon}</span>`
+                    : ""
+                }
+                ${btn.label ? btn.label : ""}
+              </button>
+            `;
+            })
+            .join("")}
+        </div>
+      `;
+    }
+
+    return "";
   }
 
   /**
@@ -865,6 +1049,141 @@ export class DataTable {
       };
       this._addEventListener(container, "click", handler);
     });
+
+    // Action button click handlers
+    const actionButtons = this.elements.tbody.querySelectorAll(
+      ".dt-action-btn[data-action-id]"
+    );
+    actionButtons.forEach((btn) => {
+      const handler = (e) => {
+        e.stopPropagation(); // Prevent row click
+        const actionId = btn.dataset.actionId;
+        const td = btn.closest("td");
+        if (td && td.dataset.rowId) {
+          const rowId = td.dataset.rowId;
+          const row = this.state.filteredData.find(
+            (r) => String(r[this.options.rowIdField]) === String(rowId)
+          );
+          if (row) {
+            const columnId = td.dataset.columnId;
+            const column = this.options.columns.find((c) => c.id === columnId);
+            if (column?.actions?.buttons) {
+              const action = column.actions.buttons.find(
+                (a) => a.id === actionId
+              );
+              if (action?.onClick) {
+                try {
+                  action.onClick(row, e);
+                } catch (error) {
+                  this._log(
+                    "error",
+                    `Action button handler failed for action ${actionId}`,
+                    error
+                  );
+                }
+              }
+            }
+          }
+        }
+      };
+      this._addEventListener(btn, "click", handler);
+    });
+
+    // Dropdown toggle handlers
+    const dropdownTriggers = this.elements.tbody.querySelectorAll(
+      ".dt-actions-dropdown-trigger[data-action='dropdown-toggle']"
+    );
+    dropdownTriggers.forEach((trigger) => {
+      const handler = (e) => {
+        e.stopPropagation(); // Prevent row click
+        const dropdown = trigger.closest(".dt-actions-dropdown");
+        const menu = dropdown.querySelector(".dt-actions-dropdown-menu");
+
+        // Close all other dropdowns first
+        const allMenus = this.elements.tbody.querySelectorAll(
+          ".dt-actions-dropdown-menu"
+        );
+        allMenus.forEach((m) => {
+          if (m !== menu) {
+            m.style.display = "none";
+          }
+        });
+
+        // Toggle current menu
+        if (menu) {
+          const isOpen = menu.style.display === "block";
+          menu.style.display = isOpen ? "none" : "block";
+          trigger.classList.toggle("active", !isOpen);
+        }
+      };
+      this._addEventListener(trigger, "click", handler);
+    });
+
+    // Dropdown item click handlers
+    const dropdownItems = this.elements.tbody.querySelectorAll(
+      ".dt-actions-dropdown-item[data-action-id]"
+    );
+    dropdownItems.forEach((item) => {
+      const handler = (e) => {
+        e.stopPropagation(); // Prevent row click
+        const actionId = item.dataset.actionId;
+        const dropdown = item.closest(".dt-actions-dropdown");
+        const rowId = dropdown?.dataset.rowId;
+
+        if (rowId) {
+          const row = this.state.filteredData.find(
+            (r) => String(r[this.options.rowIdField]) === String(rowId)
+          );
+          if (row) {
+            const td = dropdown.closest("td");
+            const columnId = td?.dataset.columnId;
+            const column = this.options.columns.find((c) => c.id === columnId);
+            if (column?.actions?.items) {
+              const action = column.actions.items.find(
+                (a) => a.id === actionId
+              );
+              if (action?.onClick) {
+                try {
+                  action.onClick(row, e);
+
+                  // Close dropdown after action
+                  const menu = dropdown.querySelector(
+                    ".dt-actions-dropdown-menu"
+                  );
+                  const trigger = dropdown.querySelector(
+                    ".dt-actions-dropdown-trigger"
+                  );
+                  if (menu) menu.style.display = "none";
+                  if (trigger) trigger.classList.remove("active");
+                } catch (error) {
+                  this._log(
+                    "error",
+                    `Dropdown action handler failed for action ${actionId}`,
+                    error
+                  );
+                }
+              }
+            }
+          }
+        }
+      };
+      this._addEventListener(item, "click", handler);
+    });
+
+    // Close dropdowns when clicking outside
+    const closeDropdownsHandler = (e) => {
+      if (!e.target.closest(".dt-actions-dropdown")) {
+        const allMenus = this.elements.tbody.querySelectorAll(
+          ".dt-actions-dropdown-menu"
+        );
+        const allTriggers = this.elements.tbody.querySelectorAll(
+          ".dt-actions-dropdown-trigger"
+        );
+        allMenus.forEach((menu) => (menu.style.display = "none"));
+        allTriggers.forEach((trigger) => trigger.classList.remove("active"));
+      }
+    };
+    this._addEventListener(document, "click", closeDropdownsHandler);
 
     // Row click
     if (this.options.onRowClick) {
