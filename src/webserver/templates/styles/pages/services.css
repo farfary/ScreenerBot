@@ -46,9 +46,19 @@
   border-color: rgba(239, 68, 68, 0.3);
 }
 
+/* Page container - ensure proper height for scrolling */
+.services-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
 /* DataTable container */
 #services-root {
-  margin-top: 0;
+  flex: 1;
+  min-height: 0; /* Critical for flex scrolling */
+  overflow: hidden;
 }
 
 .activity-cell {

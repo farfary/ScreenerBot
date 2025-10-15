@@ -70,6 +70,7 @@
  * Column Configuration:
  * - id: Unique column identifier (required)
  * - label: Display name (required)
+ * - type: Column type - 'text', 'image', 'badge', etc. (optional, default: 'text')
  * - sortable: Enable sorting (optional, default: false)
  * - width: Column width in px or 'auto' (optional)
  * - resizable: Enable column resizing (optional, default: true)
@@ -78,6 +79,38 @@
  * - sortFn: (rowA, rowB) => number - Custom sort function (optional)
  * - className: CSS class for cells (optional)
  * - fallback: Default value for null/undefined (optional, default: "—")
+ *
+ * Image Column Configuration (type: 'image'):
+ * - image: {
+ *     src: string | (row) => string - Image URL or function to get URL
+ *     alt: string | (row) => string - Alt text (optional)
+ *     size: number - Image size in px (optional, default: 32)
+ *     shape: 'circle' | 'square' | 'rounded' - Image shape (optional, default: 'rounded')
+ *     fallback: string - Fallback image URL or emoji (optional, default: '🖼️')
+ *     lazyLoad: boolean - Enable lazy loading (optional, default: true)
+ *     withText: boolean - Show text alongside image (optional, default: false)
+ *     textField: string - Field name for text to display (optional, uses column id)
+ *     onClick: (row) => void - Click handler (optional)
+ *     title: string | (row) => string - Tooltip text (optional)
+ *   }
+ *
+ * Example - Token Image Column:
+ * {
+ *   id: 'logo',
+ *   label: 'Token',
+ *   type: 'image',
+ *   width: 150,
+ *   image: {
+ *     src: (row) => row.logo_url || `https://placeholder.com/32x32`,
+ *     alt: (row) => row.symbol || 'Token',
+ *     size: 32,
+ *     shape: 'circle',
+ *     fallback: '🪙',
+ *     withText: true,
+ *     textField: 'symbol',
+ *     title: (row) => `${row.name} (${row.symbol})`
+ *   }
+ * }
  *
  * Filter Options Format:
  * - Must be objects with { value: string, label: string }
@@ -127,6 +160,7 @@ export class DataTable {
     this.resizing = null;
     this.documentClickHandler = null;
     this.scrollThrottle = null;
+    this.eventHandlers = new Map(); // Store all event handlers for cleanup
 
     this._loadState();
     this._init();
@@ -393,26 +427,37 @@ export class DataTable {
     return visibleColumns
       .map((col) => {
         let value = row[col.id];
+        let cellContent = "";
 
-        // Custom renderer with error handling
-        if (col.render && typeof col.render === "function") {
+        // Handle different column types
+        if (col.type === "image" && col.image) {
+          cellContent = this._renderImageCell(col, row);
+        } else if (col.render && typeof col.render === "function") {
+          // Custom renderer with error handling
           try {
-            value = col.render(value, row);
+            cellContent = col.render(value, row);
           } catch (error) {
             this._log(
               "error",
               `Render function failed for column ${col.id}`,
               error
             );
-            value = `<span class="dt-render-error" title="${error.message}">Error</span>`;
+            cellContent = `<span class="dt-render-error" title="${error.message}">Error</span>`;
           }
-        } else if (value === null || value === undefined) {
-          value = col.fallback || "—";
+        } else {
+          // Default text rendering
+          if (value === null || value === undefined) {
+            cellContent = col.fallback || "—";
+          } else {
+            cellContent = value;
+          }
         }
 
         return `
-        <td data-column-id="${col.id}" class="${col.className || ""}">
-          ${value}
+        <td data-column-id="${col.id}" class="${col.className || ""} ${
+          col.type === "image" ? "dt-image-cell" : ""
+        }">
+          ${cellContent}
         </td>
       `;
       })
@@ -420,30 +465,183 @@ export class DataTable {
   }
 
   /**
+   * Render image cell with advanced features
+   */
+  _renderImageCell(col, row) {
+    const config = col.image;
+
+    // Get image source
+    let src = "";
+    if (typeof config.src === "function") {
+      try {
+        src = config.src(row);
+      } catch (error) {
+        this._log(
+          "error",
+          `Image src function failed for column ${col.id}`,
+          error
+        );
+        src = "";
+      }
+    } else {
+      src = config.src || "";
+    }
+
+    // Get alt text
+    let alt = "";
+    if (typeof config.alt === "function") {
+      try {
+        alt = config.alt(row);
+      } catch (error) {
+        alt = "Image";
+      }
+    } else {
+      alt = config.alt || "Image";
+    }
+
+    // Get title/tooltip
+    let title = "";
+    if (typeof config.title === "function") {
+      try {
+        title = config.title(row);
+      } catch (error) {
+        title = "";
+      }
+    } else {
+      title = config.title || "";
+    }
+
+    // Image configuration
+    const size = config.size || 32;
+    const shape = config.shape || "rounded"; // 'circle', 'square', 'rounded'
+    const fallback = config.fallback || "🖼️";
+    const lazyLoad = config.lazyLoad !== false;
+    const withText = config.withText || false;
+    const textField = config.textField || col.id;
+
+    // Build CSS classes
+    const shapeClass =
+      {
+        circle: "dt-img-circle",
+        square: "dt-img-square",
+        rounded: "dt-img-rounded",
+      }[shape] || "dt-img-rounded";
+
+    // Build image HTML
+    let imageHtml = "";
+    if (src) {
+      imageHtml = `
+        <img 
+          class="dt-image ${shapeClass}" 
+          src="${src}" 
+          alt="${alt}"
+          ${title ? `title="${title}"` : ""}
+          ${lazyLoad ? 'loading="lazy"' : ""}
+          style="width: ${size}px; height: ${size}px; object-fit: cover;"
+          onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-flex';"
+        />
+        <span class="dt-image-fallback ${shapeClass}" style="display:none; width: ${size}px; height: ${size}px; font-size: ${
+        size * 0.6
+      }px;">
+          ${fallback}
+        </span>
+      `;
+    } else {
+      imageHtml = `
+        <span class="dt-image-fallback ${shapeClass}" style="display:inline-flex; width: ${size}px; height: ${size}px; font-size: ${
+        size * 0.6
+      }px;">
+          ${fallback}
+        </span>
+      `;
+    }
+
+    // Add text if configured
+    let textHtml = "";
+    if (withText) {
+      const textValue = row[textField] || "";
+      textHtml = `<span class="dt-image-text">${textValue}</span>`;
+    }
+
+    // Wrap with click handler if provided
+    const hasClickHandler =
+      config.onClick && typeof config.onClick === "function";
+    const clickClass = hasClickHandler ? "dt-image-clickable" : "";
+    const clickAttr = hasClickHandler ? `data-image-click="${col.id}"` : "";
+
+    return `
+      <div class="dt-image-container ${clickClass}" ${clickAttr} ${
+      title ? `title="${title}"` : ""
+    }>
+        ${imageHtml}
+        ${textHtml}
+      </div>
+    `;
+  }
+
+  /**
+   * Remove all attached event listeners
+   */
+  _removeEventListeners() {
+    // Remove all stored event handlers
+    this.eventHandlers.forEach(({ element, event, handler }) => {
+      element.removeEventListener(event, handler);
+    });
+    this.eventHandlers.clear();
+
+    // Remove document click handler
+    if (this.documentClickHandler) {
+      document.removeEventListener("click", this.documentClickHandler);
+      this.documentClickHandler = null;
+    }
+
+    // Remove resize handlers
+    document.removeEventListener("mousemove", this._handleResize);
+    document.removeEventListener("mouseup", this._handleResizeEnd);
+  }
+
+  /**
+   * Helper to add and track event listeners
+   */
+  _addEventListener(element, event, handler) {
+    element.addEventListener(event, handler);
+    this.eventHandlers.set(`${event}_${Date.now()}_${Math.random()}`, {
+      element,
+      event,
+      handler,
+    });
+  }
+
+  /**
    * Attach event listeners
    */
   _attachEvents() {
+    // Remove old listeners first to prevent duplicates
+    this._removeEventListeners();
+
     // Search input
     const searchInput =
       this.elements.container.querySelector(".dt-search-input");
     if (searchInput) {
-      searchInput.addEventListener("input", (e) => {
+      const handler = (e) => {
         this.state.searchQuery = e.target.value;
         this._applyFilters();
         this._saveState();
-      });
+      };
+      this._addEventListener(searchInput, "input", handler);
     }
 
     // Filter dropdowns
     const filterSelects =
       this.elements.container.querySelectorAll(".dt-filter");
     filterSelects.forEach((select) => {
-      select.addEventListener("change", (e) => {
+      const handler = (e) => {
         const filterId = e.target.dataset.filterId;
         this.state.filters[filterId] = e.target.value;
         this._applyFilters();
         this._saveState();
-      });
+      };
+      this._addEventListener(select, "change", handler);
     });
 
     // Toolbar buttons
@@ -451,7 +649,7 @@ export class DataTable {
       ".dt-btn[data-btn-id]"
     );
     buttons.forEach((btn) => {
-      btn.addEventListener("click", () => {
+      const handler = () => {
         const btnId = btn.dataset.btnId;
         const btnConfig = this.options.toolbar.buttons?.find(
           (b) => b.id === btnId
@@ -459,23 +657,22 @@ export class DataTable {
         if (btnConfig?.onClick) {
           btnConfig.onClick();
         }
-      });
+      };
+      this._addEventListener(btn, "click", handler);
     });
 
     // Column visibility toggle
     const columnBtn = this.elements.container.querySelector(".dt-btn-columns");
     const columnMenu = this.elements.container.querySelector(".dt-column-menu");
     if (columnBtn && columnMenu) {
-      columnBtn.addEventListener("click", (e) => {
+      const btnHandler = (e) => {
         e.stopPropagation();
         columnMenu.style.display =
           columnMenu.style.display === "none" ? "block" : "none";
-      });
+      };
+      this._addEventListener(columnBtn, "click", btnHandler);
 
-      // Close menu when clicking outside (cleanup on destroy)
-      if (this.documentClickHandler) {
-        document.removeEventListener("click", this.documentClickHandler);
-      }
+      // Close menu when clicking outside
       this.documentClickHandler = () => {
         columnMenu.style.display = "none";
       };
@@ -484,19 +681,20 @@ export class DataTable {
       // Column checkboxes
       const checkboxes = columnMenu.querySelectorAll('input[type="checkbox"]');
       checkboxes.forEach((cb) => {
-        cb.addEventListener("change", (e) => {
+        const handler = (e) => {
           const columnId = e.target.dataset.columnId;
           this.state.visibleColumns[columnId] = e.target.checked;
           this._saveState();
           this._renderTable();
-        });
+        };
+        this._addEventListener(cb, "change", handler);
       });
     }
 
     // Sortable headers
     const headers = this.elements.thead.querySelectorAll("th.sortable");
     headers.forEach((th) => {
-      th.addEventListener("click", (e) => {
+      const handler = (e) => {
         if (e.target.classList.contains("dt-resize-handle")) return;
 
         const columnId = th.dataset.columnId;
@@ -511,14 +709,15 @@ export class DataTable {
         this._applySort();
         this._saveState();
         this._renderTable();
-      });
+      };
+      this._addEventListener(th, "click", handler);
     });
 
     // Column resizing
     const resizeHandles =
       this.elements.thead.querySelectorAll(".dt-resize-handle");
     resizeHandles.forEach((handle) => {
-      handle.addEventListener("mousedown", (e) => {
+      const handler = (e) => {
         e.preventDefault();
         const th = handle.parentElement;
         const columnId = th.dataset.columnId;
@@ -531,12 +730,46 @@ export class DataTable {
 
         document.addEventListener("mousemove", this._handleResize);
         document.addEventListener("mouseup", this._handleResizeEnd);
-      });
+      };
+      this._addEventListener(handle, "mousedown", handler);
+    });
+
+    // Image click handlers
+    const imageContainers = this.elements.tbody.querySelectorAll(
+      ".dt-image-clickable[data-image-click]"
+    );
+    imageContainers.forEach((container) => {
+      const handler = (e) => {
+        e.stopPropagation(); // Prevent row click
+        const columnId = container.dataset.imageClick;
+        const tr = container.closest("tr");
+        if (tr && tr.dataset.rowId) {
+          const rowId = tr.dataset.rowId;
+          const row = this.state.filteredData.find(
+            (r) => String(r[this.options.rowIdField]) === String(rowId)
+          );
+          if (row) {
+            const column = this.options.columns.find((c) => c.id === columnId);
+            if (column?.image?.onClick) {
+              try {
+                column.image.onClick(row, e);
+              } catch (error) {
+                this._log(
+                  "error",
+                  `Image click handler failed for column ${columnId}`,
+                  error
+                );
+              }
+            }
+          }
+        }
+      };
+      this._addEventListener(container, "click", handler);
     });
 
     // Row click
     if (this.options.onRowClick) {
-      this.elements.tbody.addEventListener("click", (e) => {
+      const handler = (e) => {
         const tr = e.target.closest("tr");
         if (tr && tr.dataset.rowId) {
           const rowId = tr.dataset.rowId;
@@ -547,11 +780,12 @@ export class DataTable {
             this.options.onRowClick(row, e);
           }
         }
-      });
+      };
+      this._addEventListener(this.elements.tbody, "click", handler);
     }
 
     // Scroll position tracking (throttled to avoid excessive saves)
-    this.elements.scrollContainer.addEventListener("scroll", () => {
+    const scrollHandler = () => {
       this.state.scrollPosition = this.elements.scrollContainer.scrollTop;
 
       // Throttle state saves to once per 500ms
@@ -562,7 +796,12 @@ export class DataTable {
         this._saveState();
         this.scrollThrottle = null;
       }, 500);
-    });
+    };
+    this._addEventListener(
+      this.elements.scrollContainer,
+      "scroll",
+      scrollHandler
+    );
   }
 
   /**
@@ -671,6 +910,13 @@ export class DataTable {
     if (this.elements.tbody) {
       this.elements.tbody.innerHTML = this._renderBody();
     }
+
+    // Re-query elements after innerHTML update to ensure fresh references
+    if (this.elements.container) {
+      this.elements.thead = this.elements.container.querySelector("thead");
+      this.elements.tbody = this.elements.container.querySelector("tbody");
+    }
+
     this._attachEvents();
   }
 
@@ -779,16 +1025,13 @@ export class DataTable {
    * Destroy table and cleanup
    */
   destroy() {
+    // Remove all event listeners
+    this._removeEventListeners();
+
     // Clean up resize listeners
     if (this.resizing) {
       document.removeEventListener("mousemove", this._handleResize);
       document.removeEventListener("mouseup", this._handleResizeEnd);
-    }
-
-    // Clean up document click listener
-    if (this.documentClickHandler) {
-      document.removeEventListener("click", this.documentClickHandler);
-      this.documentClickHandler = null;
     }
 
     // Clean up scroll throttle
