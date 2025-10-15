@@ -1,93 +1,54 @@
-.services-toolbar {
+/* Summary metrics bar above DataTable */
+.services-summary {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 8px 12px;
+  gap: 0.75rem;
+  padding: 12px;
+  margin-bottom: 12px;
   border: 1px solid var(--border-color);
   border-radius: 6px;
   background: var(--bg-secondary);
 }
 
-.services-toolbar .toolbar-left,
-.services-toolbar .toolbar-right {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.services-toolbar .toolbar-left .input {
-  min-width: 180px;
-}
-
-.services-toolbar .chip {
+.services-summary .chip {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   color: var(--text-primary);
   padding: 0.35rem 0.65rem;
   border-radius: 999px;
   font-size: 0.85rem;
   font-weight: 600;
+  border: 1px solid var(--border-color);
 }
 
-.services-toolbar .chip span {
+.services-summary .chip span {
   font-weight: 700;
 }
 
-.services-toolbar .chip-success {
+.services-summary .chip-success {
   background: rgba(16, 185, 129, 0.15);
   color: #10b981;
+  border-color: rgba(16, 185, 129, 0.3);
 }
 
-.services-toolbar .chip-warn {
+.services-summary .chip-warn {
   background: rgba(245, 158, 11, 0.15);
   color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.3);
 }
 
-.services-toolbar .chip-error {
+.services-summary .chip-error {
   background: rgba(239, 68, 68, 0.15);
   color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
 }
 
-.services-page .table-wrap {
-  border-radius: 12px;
-}
-
-.services-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.services-table th,
-.services-table td {
-  padding: 0.65rem 0.75rem;
-  text-align: left;
-  vertical-align: middle;
-}
-
-.services-table tbody tr:nth-child(even) {
-  background: var(--bg-secondary);
-}
-
-.services-table th[data-sort] {
-  cursor: pointer;
-  user-select: none;
-  position: relative;
-  white-space: nowrap;
-}
-
-.services-table th[data-sort].asc::after {
-  content: " ▲";
-  color: var(--text-muted);
-}
-
-.services-table th[data-sort].desc::after {
-  content: " ▼";
-  color: var(--text-muted);
+/* DataTable container */
+#services-root {
+  margin-top: 0;
 }
 
 .activity-cell {
@@ -125,13 +86,8 @@
 }
 
 @media (max-width: 900px) {
-  .services-toolbar {
+  .services-summary {
     flex-direction: column;
     align-items: flex-start;
-  }
-
-  .services-toolbar .toolbar-right {
-    width: 100%;
-    justify-content: flex-start;
   }
 }
