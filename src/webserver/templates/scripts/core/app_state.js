@@ -10,7 +10,23 @@ export function save(key, value) {
 export function load(key, defaultValue = null) {
   try {
     const item = localStorage.getItem(`screenerbot_${key}`);
-    return item ? JSON.parse(item) : defaultValue;
+    if (item === null) {
+      return defaultValue;
+    }
+
+    try {
+      return JSON.parse(item);
+    } catch (parseError) {
+      localStorage.removeItem(`screenerbot_${key}`);
+      console.warn(
+        "Invalid stored state removed:",
+        key,
+        "value=",
+        item,
+        parseError
+      );
+      return defaultValue;
+    }
   } catch (e) {
     console.warn("Failed to load state:", key, e);
     return defaultValue;

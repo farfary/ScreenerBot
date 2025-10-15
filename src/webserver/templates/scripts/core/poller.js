@@ -111,7 +111,7 @@ export class Poller {
 
   _schedule() {
     const interval = this._computeInterval();
-    this.timerId = setInterval(() => {
+    this.timerId = globalThis.setInterval(() => {
       try {
         const result = this.onPoll();
         if (result && typeof result.then === "function") {
@@ -167,7 +167,7 @@ export class Poller {
       return;
     }
 
-    clearInterval(this.timerId);
+    globalThis.clearInterval(this.timerId);
     this.timerId = null;
     this.active = false;
 

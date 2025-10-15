@@ -1981,23 +1981,27 @@ export class DataTable {
    * Refresh table (re-render)
    */
   refresh() {
-    if (this.options.onRefresh) {
-      this.state.isLoading = true;
+    if (!this.options.onRefresh) {
       this._renderTable();
-
-      Promise.resolve(this.options.onRefresh())
-        .then(() => {
-          this.state.isLoading = false;
-          this._renderTable();
-        })
-        .catch((err) => {
-          this.state.isLoading = false;
-          this._log("error", "Refresh failed", err);
-          this._renderTable();
-        });
-    } else {
-      this._renderTable();
+      return Promise.resolve();
     }
+
+    this.state.isLoading = true;
+    this._renderTable();
+
+    const refreshPromise = Promise.resolve(this.options.onRefresh())
+      .then(() => {
+        this.state.isLoading = false;
+        this._renderTable();
+      })
+      .catch((err) => {
+        this.state.isLoading = false;
+        this._log("error", "Refresh failed", err);
+        this._renderTable();
+        throw err;
+      });
+
+    return refreshPromise;
   }
 
   /**

@@ -583,7 +583,7 @@ function createLifecycle() {
       // Initial load
       loadTransactions();
 
-      // Start summary poller
+      // Start summary poller (honors global polling interval)
       summaryPoller = ctx.managePoller(
         new Poller(async () => {
           const summary = await fetchSummary();
@@ -591,8 +591,8 @@ function createLifecycle() {
             renderSummary(summary);
             updateLastUpdated();
           }
-        }, 10000)
-      ); // Poll every 10s
+        }, { label: "TransactionsSummary" })
+      );
 
       summaryPoller.start();
     },

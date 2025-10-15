@@ -71,13 +71,25 @@ function updateSummary(summary) {
 function updateProcessMetrics(firstService) {
   const cpuEl = $("#processCpu");
   const memEl = $("#processMemory");
-  const metrics = firstService?.metrics || {};
+
+  if (!cpuEl && !memEl) {
+    return;
+  }
+
+  const metrics = firstService?.metrics;
+  if (!metrics) {
+    if (cpuEl) cpuEl.textContent = "-";
+    if (memEl) memEl.textContent = "-";
+    return;
+  }
+
   if (cpuEl) {
     const cpu = Number.isFinite(metrics.process_cpu_percent)
-      ? metrics.process_cpu_percent.toFixed(1) + "%"
+      ? `${metrics.process_cpu_percent.toFixed(1)}%`
       : "-";
     cpuEl.textContent = cpu;
   }
+
   if (memEl) {
     const mem = metrics.process_memory_bytes
       ? Utils.formatBytes(metrics.process_memory_bytes)
@@ -89,10 +101,109 @@ function updateProcessMetrics(firstService) {
 function createLifecycle() {
   let table = null;
   let poller = null;
+  let ctxRef = null;
+  let inflightRequest = null;
+  let abortController = null;
+  let nextRefreshReason = "poll";
+  let nextRefreshOptions = {};
+
+  const getAbortController = () => {
+    if (ctxRef && typeof ctxRef.createAbortController === "function") {
+      return ctxRef.createAbortController();
+    }
+    if (typeof window !== "undefined" && window.AbortController) {
+      return new window.AbortController();
+    }
+    return {
+      abort() {},
+      signal: undefined,
+    };
+  };
+
+  const fetchServices = async (reason = "poll", options = {}) => {
+    const { force = false, showToast = false } = options;
+
+    if (inflightRequest) {
+      if (!force && reason === "poll") {
+        return inflightRequest;
+      }
+      if (abortController) {
+        try {
+          abortController.abort();
+        } catch (error) {
+          console.warn("[Services] Failed to abort in-flight request", error);
+        }
+        abortController = null;
+      }
+    }
+
+    const controller = getAbortController();
+
+    abortController = controller;
+
+    const request = (async () => {
+      try {
+        const response = await fetch("/api/services/overview", {
+          headers: { "X-Requested-With": "fetch" },
+          cache: "no-store",
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(
+            `HTTP ${response.status}: ${response.statusText}`
+          );
+        }
+
+        const data = await response.json();
+
+        updateSummary(data.summary);
+        if (Array.isArray(data.services) && data.services.length > 0) {
+          updateProcessMetrics(data.services[0]);
+        } else {
+          updateProcessMetrics(null);
+        }
+
+        if (table) {
+          table.setData(Array.isArray(data.services) ? data.services : []);
+        }
+
+        return data;
+      } catch (error) {
+        if (error?.name === "AbortError") {
+          return null;
+        }
+
+        console.error("[Services] Failed to fetch:", error);
+        if (showToast) {
+          Utils.showToast("⚠️ Failed to refresh services", "warning");
+        }
+        throw error;
+      } finally {
+        if (abortController === controller) {
+          abortController = null;
+        }
+        inflightRequest = null;
+      }
+    })();
+
+    inflightRequest = request;
+    return request;
+  };
+
+  const triggerRefresh = (reason = "poll", options = {}) => {
+    nextRefreshReason = reason;
+    nextRefreshOptions = options;
+    if (table) {
+      return table.refresh();
+    }
+    return Promise.resolve(null);
+  };
 
   return {
     init(ctx) {
       console.log("[Services] Lifecycle init");
+      ctxRef = ctx;
 
       // Define table columns with custom renderers
       const columns = [
@@ -314,72 +425,57 @@ function createLifecycle() {
           ],
           buttons: [
             {
+              id: "refresh",
               label: "Refresh",
               onClick: () => {
-                if (poller) {
-                  table.setData([]);
-                  poller.restart();
-                }
+                triggerRefresh("manual", { force: true, showToast: true }).catch(
+                  () => {}
+                );
               },
             },
           ],
         },
-        onRefresh: async () => {
-          try {
-            const response = await fetch("/api/services/overview", {
-              headers: { "X-Requested-With": "fetch" },
-            });
-            if (!response.ok) {
-              throw new Error(
-                `HTTP ${response.status}: ${response.statusText}`
-              );
-            }
-            const data = await response.json();
-
-            // Update summary cards
-            updateSummary(data.summary);
-            if (Array.isArray(data.services) && data.services.length > 0) {
-              updateProcessMetrics(data.services[0]);
-            }
-
-            // Update table data
-            table.setData(data.services || []);
-          } catch (error) {
-            console.error("[Services] Failed to fetch:", error);
-            Utils.showToast("⚠️ Failed to refresh services", "warning");
-          }
+        onRefresh: () => {
+          const reason = nextRefreshReason;
+          const options = nextRefreshOptions;
+          nextRefreshReason = "poll";
+          nextRefreshOptions = {};
+          return fetchServices(reason, options);
         },
       });
     },
 
     activate(ctx) {
       console.log("[Services] Lifecycle activate");
+      ctxRef = ctx;
 
       // Create and start poller
       if (!poller) {
         poller = ctx.managePoller(
-          new Poller(
-            async () => {
-              if (table) {
-                await table.refresh();
-              }
-            },
-            { label: "Services" }
-          )
+          new Poller(() => triggerRefresh("poll"), { label: "Services" })
         );
       }
 
       poller.start();
 
       // Initial data load
-      if (table) {
-        table.refresh();
-      }
+      triggerRefresh("initial", { force: true, showToast: true }).catch(
+        () => {}
+      );
     },
 
     deactivate() {
       console.log("[Services] Lifecycle deactivate");
       // Poller auto-paused by lifecycle context
+      if (abortController) {
+        try {
+          abortController.abort();
+        } catch (error) {
+          console.warn("[Services] Failed to abort request on deactivate", error);
+        }
+        abortController = null;
+      }
+      inflightRequest = null;
     },
 
     dispose() {
@@ -389,6 +485,18 @@ function createLifecycle() {
         table = null;
       }
       poller = null;
+      ctxRef = null;
+      inflightRequest = null;
+      nextRefreshReason = "poll";
+      nextRefreshOptions = {};
+      if (abortController) {
+        try {
+          abortController.abort();
+        } catch (error) {
+          console.warn("[Services] Failed to abort request on dispose", error);
+        }
+        abortController = null;
+      }
     },
   };
 }
