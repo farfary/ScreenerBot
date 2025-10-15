@@ -48,6 +48,15 @@ function getStatusBadge(status) {
 // STATE & FILTERS
 // =============================================================================
 
+// Pagination state
+let paginationState = {
+  currentCursor: null,
+  isLoading: false,
+  hasMore: true,
+  allLoadedData: [], // Track all loaded rows for client-side operations
+};
+
+// Current active filters
 let currentFilters = {
   signature: null,
   types: [],
@@ -73,7 +82,16 @@ function applyFilters() {
   currentFilters = getFiltersFromUI();
   AppState.save("tx_filters", currentFilters);
 
-  // Reset table and reload
+  console.log("[TX] Applying filters:", currentFilters);
+
+  // Reset pagination and reload from scratch
+  paginationState = {
+    currentCursor: null,
+    isLoading: false,
+    hasMore: true,
+    allLoadedData: [],
+  };
+
   if (window.transactionsTable) {
     window.transactionsTable.clearData();
     loadTransactions();
@@ -96,7 +114,16 @@ function resetFilters() {
 
   AppState.save("tx_filters", currentFilters);
 
-  // Reset table and reload
+  console.log("[TX] Resetting filters");
+
+  // Reset pagination and reload
+  paginationState = {
+    currentCursor: null,
+    isLoading: false,
+    hasMore: true,
+    allLoadedData: [],
+  };
+
   if (window.transactionsTable) {
     window.transactionsTable.clearData();
     loadTransactions();
@@ -205,19 +232,58 @@ function updateLastUpdated() {
   }
 }
 
-async function loadTransactions() {
-  console.log("[TX] loadTransactions called");
+/**
+ * Load transactions with pagination support
+ * @param {boolean} append - If true, append to existing data; if false, replace
+ */
+async function loadTransactions(append = false) {
+  console.log("[TX] loadTransactions called, append:", append);
+  
   if (!window.transactionsTable) {
     console.error("[TX] transactionsTable not initialized!");
     return;
   }
 
-  const result = await fetchTransactions(null, 50);
+  // Prevent duplicate loads
+  if (paginationState.isLoading) {
+    console.log("[TX] Already loading, skipping");
+    return;
+  }
+
+  // Check if we have more data to load
+  if (append && !paginationState.hasMore) {
+    console.log("[TX] No more data to load");
+    return;
+  }
+
+  paginationState.isLoading = true;
+
+  const cursor = append ? paginationState.currentCursor : null;
+  const result = await fetchTransactions(cursor, 50);
+  
+  paginationState.isLoading = false;
+
   console.log("[TX] fetchTransactions result:", result);
   if (!result) return;
 
-  console.log("[TX] Setting data, items count:", result.items?.length);
-  window.transactionsTable.setData(result.items);
+  // Update pagination state
+  paginationState.currentCursor = result.next_cursor;
+  paginationState.hasMore = result.next_cursor !== null && result.next_cursor !== undefined;
+
+  console.log("[TX] Next cursor:", paginationState.currentCursor);
+  console.log("[TX] Has more:", paginationState.hasMore);
+
+  if (append) {
+    // Append to existing data
+    paginationState.allLoadedData.push(...result.items);
+    console.log("[TX] Appending items, new total:", paginationState.allLoadedData.length);
+    window.transactionsTable.setData(paginationState.allLoadedData);
+  } else {
+    // Replace data (initial load or filter change)
+    paginationState.allLoadedData = result.items;
+    console.log("[TX] Setting initial data, items count:", result.items?.length);
+    window.transactionsTable.setData(result.items);
+  }
 
   // Update summary meta
   const summaryEl = $("#tx-summary");
@@ -226,6 +292,23 @@ async function loadTransactions() {
       result.total_estimate
     )} total`;
   }
+
+  // Update loaded count indicator
+  updateLoadedCountIndicator();
+}
+
+/**
+ * Update the indicator showing how many transactions are loaded
+ */
+function updateLoadedCountIndicator() {
+  const summaryEl = $("#tx-summary");
+  if (!summaryEl) return;
+
+  const loaded = paginationState.allLoadedData.length;
+  const hasMore = paginationState.hasMore;
+  const suffix = hasMore ? " (scroll for more)" : " (all loaded)";
+  
+  summaryEl.textContent = `${Utils.formatNumber(loaded)} loaded ${suffix}`;
 }
 
 // =============================================================================
@@ -330,11 +413,101 @@ function createTable() {
     emptyMessage: "No transactions found",
     loadingMessage: "Loading transactions...",
     stateKey: "transactions-table",
-    compact: true, // Enable compact mode for denser display
+    compact: true,
     stickyHeader: true,
     zebra: true,
-    fitToContainer: true, // Auto-fit columns to container width
+    fitToContainer: true,
+    // Disable built-in toolbar since we use custom filters
+    toolbar: {},
   });
+
+  // Setup scroll pagination
+  setupScrollPagination();
+}
+
+/**
+ * Setup infinite scroll pagination
+ */
+function setupScrollPagination() {
+  // Wait for table to be rendered
+  setTimeout(() => {
+    const scrollContainer = document.querySelector(
+      "#transactions-root .data-table-scroll-container"
+    );
+
+    if (!scrollContainer) {
+      console.warn("[TX] Scroll container not found for pagination");
+      return;
+    }
+
+    console.log("[TX] Scroll container found:", {
+      scrollHeight: scrollContainer.scrollHeight,
+      clientHeight: scrollContainer.clientHeight,
+      isScrollable: scrollContainer.scrollHeight > scrollContainer.clientHeight,
+    });
+
+    // Runtime safeguard: if CSS max-height didn't apply and container isn't scrollable,
+    // forcibly set a sensible max-height so infinite scroll can trigger.
+    try {
+      const computed = window.getComputedStyle(scrollContainer);
+      const computedMaxHeight = computed?.maxHeight || "";
+      if (
+        scrollContainer.scrollHeight === scrollContainer.clientHeight ||
+        computedMaxHeight === "none"
+      ) {
+        console.warn(
+          "[TX] Scroll container not scrollable (or max-height none); applying runtime max-height fallback"
+        );
+        // Apply fallback styles
+        scrollContainer.style.maxHeight = "600px"; // matches CSS default
+        scrollContainer.style.overflowY = "auto";
+        // Re-evaluate after style application
+        setTimeout(() => {
+          console.log("[TX] Post-fallback scroll container:", {
+            scrollHeight: scrollContainer.scrollHeight,
+            clientHeight: scrollContainer.clientHeight,
+            isScrollable:
+              scrollContainer.scrollHeight > scrollContainer.clientHeight,
+            computedMaxHeight:
+              window.getComputedStyle(scrollContainer)?.maxHeight || "",
+          });
+        }, 0);
+      }
+    } catch (e) {
+      console.warn("[TX] Failed to inspect/apply fallback styles:", e);
+    }
+
+    let scrollThrottle = null;
+
+    scrollContainer.addEventListener("scroll", () => {
+      // Throttle scroll events
+      if (scrollThrottle) {
+        window.clearTimeout(scrollThrottle);
+      }
+
+      scrollThrottle = window.setTimeout(() => {
+        const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
+        const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
+
+        console.log("[TX] Scroll event:", {
+          scrollTop,
+          scrollHeight,
+          clientHeight,
+          percentage: (scrollPercentage * 100).toFixed(1) + "%",
+          isLoading: paginationState.isLoading,
+          hasMore: paginationState.hasMore
+        });
+
+        // Load more when scrolled to 80% of the way down
+        if (scrollPercentage > 0.8 && !paginationState.isLoading && paginationState.hasMore) {
+          console.log("[TX] Scroll threshold reached (>80%), loading more data...");
+          loadTransactions(true); // append = true
+        }
+      }, 150); // 150ms throttle
+    });
+
+    console.log("[TX] Scroll pagination setup complete");
+  }, 500); // Wait for DataTable to fully render
 }
 
 // =============================================================================

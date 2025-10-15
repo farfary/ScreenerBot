@@ -1699,6 +1699,16 @@ export class DataTable {
   }
 
   /**
+   * Clear all table data
+   */
+  clearData() {
+    this.state.data = [];
+    this.state.filteredData = [];
+    this._renderTable();
+    this._log("info", "Data cleared");
+  }
+
+  /**
    * Get current filtered data
    */
   getData() {
