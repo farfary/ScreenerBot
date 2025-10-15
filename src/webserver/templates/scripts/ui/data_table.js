@@ -255,6 +255,7 @@ export class DataTable {
       </div>
     `;
 
+    this.elements.wrapper = container.querySelector(".data-table-wrapper");
     this.elements.toolbar = container.querySelector(".data-table-toolbar");
     this.elements.scrollContainer = container.querySelector(
       ".data-table-scroll-container"
@@ -287,6 +288,8 @@ export class DataTable {
     if (this.state.scrollPosition) {
       this.elements.scrollContainer.scrollTop = this.state.scrollPosition;
     }
+
+    this._updateLoadingClass();
   }
 
   /**
@@ -505,7 +508,7 @@ export class DataTable {
    * Render table body rows
    */
   _renderBody() {
-    if (this.state.isLoading) {
+    if (this.state.isLoading && this.state.filteredData.length === 0) {
       return `<tr><td colspan="100" class="dt-loading">${this.options.loadingMessage}</td></tr>`;
     }
 
@@ -1854,6 +1857,12 @@ export class DataTable {
    * Re-render table content only (not full structure)
    */
   _renderTable() {
+    const scrollContainer = this.elements.scrollContainer;
+    const prevScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
+    const prevScrollLeft = scrollContainer ? scrollContainer.scrollLeft : 0;
+
+    this._updateLoadingClass();
+
     if (this.elements.thead) {
       this.elements.thead.innerHTML = this._renderHeader();
     }
@@ -1896,6 +1905,17 @@ export class DataTable {
     this._applyStoredColumnWidths();
 
     this._attachEvents();
+
+    if (scrollContainer) {
+      const maxScrollTop = Math.max(
+        0,
+        scrollContainer.scrollHeight - scrollContainer.clientHeight
+      );
+      const targetTop = Math.min(prevScrollTop, maxScrollTop);
+      scrollContainer.scrollTop = targetTop;
+      scrollContainer.scrollLeft = prevScrollLeft;
+      this.state.scrollPosition = targetTop;
+    }
   }
 
   /**
@@ -1907,6 +1927,29 @@ export class DataTable {
     }
     const col = this.options.columns.find((c) => c.id === columnId);
     return col ? col.visible !== false : true;
+  }
+
+  _updateLoadingClass() {
+    const wrapper = this.elements.wrapper;
+    if (!wrapper) {
+      return;
+    }
+
+    if (this.state.isLoading && this.state.filteredData.length > 0) {
+      wrapper.classList.add("is-refreshing");
+    } else {
+      wrapper.classList.remove("is-refreshing");
+    }
+  }
+
+  _setLoadingState(value) {
+    const normalized = Boolean(value);
+    if (this.state.isLoading === normalized) {
+      this._updateLoadingClass();
+      return;
+    }
+    this.state.isLoading = normalized;
+    this._updateLoadingClass();
   }
 
   /**
@@ -1952,11 +1995,13 @@ export class DataTable {
    * Set table data
    */
   setData(data) {
-    this.state.data = data;
-    this.state.filteredData = [...data];
+    const rows = Array.isArray(data) ? data : [];
+    this.state.data = rows;
+    this.state.filteredData = [...rows];
     this.state.hasAutoFitted = false;
+    this._setLoadingState(false);
     this._applyFilters();
-    this._log("info", "Data set", { rows: data.length });
+    this._log("info", "Data set", { rows: rows.length });
   }
 
   /**
@@ -1966,6 +2011,7 @@ export class DataTable {
     this.state.data = [];
     this.state.filteredData = [];
     this.state.hasAutoFitted = false;
+    this._setLoadingState(false);
     this._renderTable();
     this._log("info", "Data cleared");
   }
@@ -1986,18 +2032,28 @@ export class DataTable {
       return Promise.resolve();
     }
 
-    this.state.isLoading = true;
-    this._renderTable();
+    const hadRows = Array.isArray(this.state.filteredData)
+      ? this.state.filteredData.length > 0
+      : false;
+
+    this._setLoadingState(true);
+    if (!hadRows) {
+      this._renderTable();
+    }
 
     const refreshPromise = Promise.resolve(this.options.onRefresh())
       .then(() => {
-        this.state.isLoading = false;
-        this._renderTable();
+        this._setLoadingState(false);
+        if (!hadRows && this.state.filteredData.length === 0) {
+          this._renderTable();
+        }
       })
       .catch((err) => {
-        this.state.isLoading = false;
+        this._setLoadingState(false);
         this._log("error", "Refresh failed", err);
-        this._renderTable();
+        if (!hadRows) {
+          this._renderTable();
+        }
         throw err;
       });
 
