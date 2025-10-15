@@ -156,6 +156,7 @@ export class DataTable {
       scrollPosition: 0,
       isLoading: false,
       tableWidth: null,
+      hasAutoFitted: false, // Track if columns have been auto-fitted once
     };
 
     this.elements = {};
@@ -1438,10 +1439,18 @@ export class DataTable {
         if (w && !Number.isNaN(w)) this.state.columnWidths[id] = Math.round(w);
       }
     });
+    
     // Compute table width sum
     const sum = this._computeTableWidthFromState();
     if (typeof sum === "number") {
       this.state.tableWidth = sum;
+      
+      // Auto-fit columns to container if they overflow (only on initial load)
+      if (!this.state.hasAutoFitted && this.options.fitToContainer !== false) {
+        this._fitColumnsToContainer();
+        this.state.hasAutoFitted = true;
+      }
+      
       this._applyTableWidth();
     }
   }
@@ -1456,6 +1465,46 @@ export class DataTable {
       if (typeof w === "number" && !Number.isNaN(w)) total += w;
     });
     return Math.max(0, Math.round(total));
+  }
+
+  /**
+   * Fit columns proportionally to container width if they would overflow
+   */
+  _fitColumnsToContainer() {
+    if (!this.elements.scrollContainer) return;
+    
+    const containerWidth = this.elements.scrollContainer.clientWidth;
+    const totalWidth = this._computeTableWidthFromState();
+    
+    // If table is narrower than container or within acceptable range, don't adjust
+    if (totalWidth <= containerWidth * 1.05) return;
+    
+    // Calculate scale factor to fit all columns
+    const scaleFactor = (containerWidth - 20) / totalWidth; // 20px padding
+    
+    const visibleColumns = this._getOrderedColumns();
+    visibleColumns.forEach((col) => {
+      const currentWidth = this.state.columnWidths[col.id];
+      if (typeof currentWidth === "number" && !Number.isNaN(currentWidth)) {
+        const minWidth = this._getColumnMinWidth(col.id);
+        const scaledWidth = Math.max(minWidth, Math.round(currentWidth * scaleFactor));
+        this.state.columnWidths[col.id] = scaledWidth;
+        this._applyColumnWidth(col.id, scaledWidth);
+      }
+    });
+    
+    // Recalculate table width
+    const newTotal = this._computeTableWidthFromState();
+    if (typeof newTotal === "number") {
+      this.state.tableWidth = newTotal;
+    }
+    
+    this._log("info", "Auto-fitted columns to container", {
+      originalWidth: totalWidth,
+      containerWidth,
+      scaleFactor: scaleFactor.toFixed(3),
+      newWidth: newTotal,
+    });
   }
 
   /**

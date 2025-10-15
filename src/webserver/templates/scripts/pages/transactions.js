@@ -237,7 +237,7 @@ function createTable() {
     {
       id: "timestamp",
       label: "Date / Time",
-      width: 150,
+      width: 130,
       render: (val) => {
         if (!val) return '<span class="text-muted">—</span>';
         const date = new Date(val);
@@ -249,7 +249,7 @@ function createTable() {
     {
       id: "signature",
       label: "Signature",
-      width: 140,
+      width: 110,
       render: (val) => {
         if (!val) return '<span class="text-muted">—</span>';
         const short = Utils.formatSignatureCompact(val);
@@ -259,13 +259,13 @@ function createTable() {
     {
       id: "transaction_type",
       label: "Type",
-      width: 80,
+      width: 70,
       render: (val) => getTypeBadge(val || "unknown"),
     },
     {
       id: "direction",
       label: "Direction",
-      width: 80,
+      width: 70,
       render: (val) => getDirectionBadge(val || "Unknown"),
     },
     {
@@ -277,7 +277,7 @@ function createTable() {
     {
       id: "token_mint",
       label: "Mint",
-      width: 120,
+      width: 110,
       render: (val) => {
         if (!val) return '<span class="text-muted">—</span>';
         const short = Utils.formatAddressCompact(val);
@@ -287,13 +287,13 @@ function createTable() {
     {
       id: "router",
       label: "Router",
-      width: 100,
+      width: 90,
       render: (val) => val || '<span class="text-muted">—</span>',
     },
     {
       id: "sol_delta",
       label: "SOL Δ",
-      width: 100,
+      width: 80,
       sortable: true,
       render: (val) => {
         if (val === null || val === undefined) return "—";
@@ -306,19 +306,19 @@ function createTable() {
     {
       id: "fee_sol",
       label: "Fee",
-      width: 90,
+      width: 70,
       render: (val) => (val ? Utils.formatSol(val, { suffix: "" }) : "—"),
     },
     {
       id: "ata_rents",
       label: "ATA Rent",
-      width: 90,
+      width: 70,
       render: (val) => (val ? Utils.formatSol(val, { suffix: "" }) : "—"),
     },
     {
       id: "instructions_count",
       label: "Instr",
-      width: 60,
+      width: 50,
       render: (val) => (val !== null && val !== undefined ? val : "—"),
     },
   ];
@@ -329,6 +329,11 @@ function createTable() {
     rowIdField: "signature",
     emptyMessage: "No transactions found",
     loadingMessage: "Loading transactions...",
+    stateKey: "transactions-table",
+    compact: true, // Enable compact mode for denser display
+    stickyHeader: true,
+    zebra: true,
+    fitToContainer: true, // Auto-fit columns to container width
   });
 }
 

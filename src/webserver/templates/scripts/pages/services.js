@@ -100,14 +100,14 @@ function createLifecycle() {
           id: "name",
           label: "Service",
           sortable: true,
-          width: 150,
+          width: 100,
           render: (v) => `<strong>${v || "-"}</strong>`,
         },
         {
           id: "health",
           label: "Health",
           sortable: true,
-          width: 120,
+          width: 100,
           render: (v, row) => getHealthBadge(row.health),
           sortFn: (a, b) =>
             healthRank(a.health?.status) - healthRank(b.health?.status),
@@ -116,21 +116,21 @@ function createLifecycle() {
           id: "priority",
           label: "Priority",
           sortable: true,
-          width: 80,
+          width: 60,
           render: (v) => v ?? "-",
         },
         {
           id: "enabled",
           label: "Enabled",
           sortable: true,
-          width: 80,
+          width: 60,
           render: (v) => (v ? "✅" : "❌"),
         },
         {
           id: "uptime",
           label: "Uptime",
           sortable: true,
-          width: 100,
+          width: 80,
           render: (v, row) =>
             Utils.formatUptime(row.uptime_seconds, { style: "compact" }),
           sortFn: (a, b) => (a.uptime_seconds || 0) - (b.uptime_seconds || 0),
@@ -159,7 +159,7 @@ function createLifecycle() {
           id: "lastCycle",
           label: "Last Cycle",
           sortable: true,
-          width: 100,
+          width: 80,
           render: (v, row) =>
             Utils.formatDuration(row.metrics?.last_cycle_duration_ns || 0),
           sortFn: (a, b) =>
@@ -170,7 +170,7 @@ function createLifecycle() {
           id: "avgCycle",
           label: "Avg Cycle",
           sortable: true,
-          width: 100,
+          width: 80,
           render: (v, row) =>
             Utils.formatDuration(row.metrics?.avg_cycle_duration_ns || 0),
           sortFn: (a, b) =>
@@ -181,7 +181,7 @@ function createLifecycle() {
           id: "avgPoll",
           label: "Avg Poll",
           sortable: true,
-          width: 100,
+          width: 80,
           render: (v, row) =>
             Utils.formatDuration(row.metrics?.mean_poll_duration_ns || 0),
           sortFn: (a, b) =>
@@ -192,7 +192,7 @@ function createLifecycle() {
           id: "cycleRate",
           label: "Cycle Rate",
           sortable: true,
-          width: 100,
+          width: 70,
           render: (v, row) => {
             const rate = row.metrics?.cycles_per_second;
             return Number.isFinite(rate) ? rate.toFixed(2) : "0.00";
@@ -205,7 +205,7 @@ function createLifecycle() {
           id: "tasks",
           label: "Tasks",
           sortable: true,
-          width: 80,
+          width: 60,
           render: (v, row) => {
             const m = row.metrics || {};
             const taskInfo =
@@ -229,7 +229,7 @@ function createLifecycle() {
           id: "ops",
           label: "Ops/sec",
           sortable: true,
-          width: 90,
+          width: 70,
           render: (v, row) =>
             (row.metrics?.operations_per_second || 0).toFixed(2),
           sortFn: (a, b) =>
@@ -240,7 +240,7 @@ function createLifecycle() {
           id: "errors",
           label: "Errors",
           sortable: true,
-          width: 80,
+          width: 60,
           render: (v, row) => row.metrics?.errors_total || 0,
           sortFn: (a, b) =>
             (a.metrics?.errors_total || 0) - (b.metrics?.errors_total || 0),
@@ -249,7 +249,7 @@ function createLifecycle() {
           id: "dependencies",
           label: "Dependencies",
           sortable: false,
-          width: 150,
+          width: 120,
           render: (v, row) => {
             const deps = Array.isArray(row.dependencies)
               ? row.dependencies
@@ -273,11 +273,10 @@ function createLifecycle() {
           defaultColumn: "priority",
           defaultDirection: "asc",
         },
-        display: {
-          stickyHeader: true,
-          zebra: true,
-          compact: false,
-        },
+        compact: true, // Enable compact mode for denser display
+        stickyHeader: true,
+        zebra: true,
+        fitToContainer: true, // Auto-fit columns to container width
         toolbar: {
           search: {
             enabled: true,
