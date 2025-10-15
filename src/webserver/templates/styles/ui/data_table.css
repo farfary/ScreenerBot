@@ -168,36 +168,6 @@
   }
 }
 
-.dt-column-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: all 0.15s ease;
-  user-select: none;
-}
-
-.dt-column-menu-item:hover {
-  background: var(--bg-hover);
-  transform: translateX(2px);
-}
-
-.dt-column-menu-item input[type="checkbox"] {
-  cursor: pointer;
-  margin: 0;
-  width: 16px;
-  height: 16px;
-  accent-color: var(--primary-color);
-}
-
-.dt-column-menu-item span {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
 /* Scroll container */
 .data-table-scroll-container {
   flex: 1;
@@ -308,22 +278,6 @@
   gap: 6px;
 }
 
-.dt-drag-handle {
-  opacity: 0;
-  cursor: grab;
-  transition: opacity 0.2s ease;
-  font-size: 0.875rem;
-}
-
-.data-table th:hover .dt-drag-handle {
-  opacity: 0.5;
-}
-
-.data-table th.dt-dragging .dt-drag-handle {
-  cursor: grabbing;
-  opacity: 1;
-}
-
 .dt-sort-icon {
   font-size: 0.75rem;
   opacity: 0.4;
@@ -339,62 +293,82 @@
   color: var(--primary-color);
 }
 
-/* Column dragging */
-.dt-draggable-column {
-  cursor: grab;
-  transition: all 0.2s ease;
+.dt-header-column {
   position: relative;
 }
 
-.dt-draggable-column:active {
+.dt-header-column.dt-resizing,
+.dt-header-column.dt-resizing-adjacent {
+  background: rgba(59, 130, 246, 0.12);
+  border-bottom-color: var(--primary-color);
+  box-shadow: inset 0 -2px 0 rgba(59, 130, 246, 0.35);
+  color: var(--text-primary);
+}
+
+body.dt-column-resizing,
+body.dt-column-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+.dt-column-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  cursor: grab;
+  user-select: none;
+  transition: color 0.2s ease;
+}
+
+.dt-column-drag-handle:hover {
+  color: var(--primary-color);
+}
+
+.dt-column-drag-handle:active {
   cursor: grabbing;
 }
 
-.dt-draggable-column.dt-dragging {
-  opacity: 0.5;
-  background: var(--primary-color);
-  color: white;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  transform: scale(1.05);
-  z-index: 1000;
+.dt-column-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+  user-select: none;
+  box-sizing: border-box;
 }
 
-/* Drop indicator - shows where column will be inserted */
-.dt-drop-indicator {
-  position: absolute;
-  top: 0;
-  width: 4px;
-  height: 100%;
-  background: var(--primary-color);
-  z-index: 1002;
-  pointer-events: none;
-  box-shadow: 0 0 12px rgba(59, 130, 246, 0.8);
-  animation: dropIndicatorPulse 0.6s ease-in-out infinite;
+.dt-column-menu-item:hover {
+  background: var(--bg-hover);
+  transform: translateX(2px);
 }
 
-.dt-drop-indicator.left {
-  left: 0;
+.dt-column-menu-item.dragging {
+  opacity: 0.6;
 }
 
-.dt-drop-indicator.right {
-  right: 0;
+.dt-column-menu-item.drag-over {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px dashed var(--primary-color);
 }
 
-@keyframes dropIndicatorPulse {
-  0%,
-  100% {
-    opacity: 1;
-    box-shadow: 0 0 12px rgba(59, 130, 246, 0.8);
-  }
-  50% {
-    opacity: 0.7;
-    box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
-  }
+.dt-column-menu-item input[type="checkbox"] {
+  cursor: pointer;
+  margin: 0;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary-color);
 }
 
-/* Visual feedback during drag over */
-.dt-draggable-column.dt-drop-target {
-  background: rgba(59, 130, 246, 0.08);
+.dt-column-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
 }
 
 /* Resize handle */
@@ -422,9 +396,15 @@
   transition: background 0.2s ease;
 }
 
-.dt-resize-handle:hover::after {
+.dt-resize-handle:hover,
+.dt-resize-handle.active {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.dt-resize-handle:hover::after,
+.dt-resize-handle.active::after {
   background: var(--primary-color);
-  box-shadow: 0 0 4px var(--primary-color);
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.6);
 }
 
 /* Table body */

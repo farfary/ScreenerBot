@@ -155,15 +155,15 @@ export class DataTable {
       selectedRows: new Set(),
       scrollPosition: 0,
       isLoading: false,
+      tableWidth: null,
     };
 
     this.elements = {};
     this.resizing = null;
-    this.draggingColumn = null; // Track column ID being dragged
-    this.draggingElement = null; // Track column element being dragged
     this.documentClickHandler = null;
     this.scrollThrottle = null;
     this.eventHandlers = new Map(); // Store all event handlers for cleanup
+    this._pendingColumnMenuOpen = false;
 
     this._loadState();
     this._init();
@@ -249,6 +249,13 @@ export class DataTable {
     this.elements.thead = container.querySelector("thead");
     this.elements.tbody = container.querySelector("tbody");
 
+    if (this.elements.table && typeof this.state.tableWidth === "number") {
+      this.elements.table.style.width = `${this.state.tableWidth}px`;
+    }
+
+    // Snapshot natural widths on first paint so later resizes don't cause other columns to stretch
+    this._snapshotColumnWidths();
+
     // Restore scroll position
     if (this.state.scrollPosition) {
       this.elements.scrollContainer.scrollTop = this.state.scrollPosition;
@@ -320,23 +327,25 @@ export class DataTable {
       });
     }
 
-    // Column visibility toggle
+    // Column visibility toggle with reordering
+    const menuColumns = this._getOrderedColumns(true);
     rightParts.push(`
       <div class="dt-column-toggle">
         <button class="dt-btn dt-btn-columns" title="Show/Hide Columns">
           <span class="dt-btn-icon">⚙️</span>
         </button>
         <div class="dt-column-menu" style="display: none;">
-          ${this.options.columns
+          ${menuColumns
             .map(
               (col) => `
-            <label class="dt-column-menu-item">
+            <label class="dt-column-menu-item" data-column-id="${col.id}">
+              <span class="dt-column-drag-handle" draggable="true" title="Drag to reorder columns">☰</span>
               <input 
                 type="checkbox" 
                 data-column-id="${col.id}"
                 ${this._isColumnVisible(col.id) ? "checked" : ""}
               />
-              <span>${col.label}</span>
+              <span class="dt-column-label">${col.label}</span>
             </label>
           `
             )
@@ -360,21 +369,18 @@ export class DataTable {
   /**
    * Get columns in the correct order
    */
-  _getOrderedColumns() {
-    const visibleColumns = this.options.columns.filter((col) =>
-      this._isColumnVisible(col.id)
-    );
+  _getOrderedColumns(includeHidden = false) {
+    const sourceColumns = includeHidden
+      ? [...this.options.columns]
+      : this.options.columns.filter((col) => this._isColumnVisible(col.id));
 
-    // If no custom order, return original order
     if (this.state.columnOrder.length === 0) {
-      return visibleColumns;
+      return sourceColumns;
     }
 
-    // Sort columns by custom order
     const ordered = [];
-    const columnMap = new Map(visibleColumns.map((col) => [col.id, col]));
+    const columnMap = new Map(sourceColumns.map((col) => [col.id, col]));
 
-    // Add columns in saved order
     for (const colId of this.state.columnOrder) {
       if (columnMap.has(colId)) {
         ordered.push(columnMap.get(colId));
@@ -382,7 +388,6 @@ export class DataTable {
       }
     }
 
-    // Add any remaining columns (newly added)
     ordered.push(...columnMap.values());
 
     return ordered;
@@ -410,17 +415,15 @@ export class DataTable {
             return `
             <th 
               data-column-id="${col.id}"
-              draggable="true"
               style="width: ${
                 typeof width === "number" ? width + "px" : width
               }; ${col.minWidth ? "min-width: " + col.minWidth + "px;" : ""}"
-              class="${col.sortable ? "sortable" : ""} ${
+              class="dt-header-column ${col.sortable ? "sortable" : ""} ${
               isSorted ? "sorted" : ""
-            } dt-draggable-column"
+            }"
             >
               <div class="dt-header-content">
                 <span class="dt-header-label">
-                  <span class="dt-drag-handle" title="Drag to reorder">⋮⋮</span>
                   ${col.label}
                 </span>
                 ${
@@ -431,7 +434,7 @@ export class DataTable {
               </div>
               ${
                 col.resizable !== false
-                  ? '<div class="dt-resize-handle" draggable="false"></div>'
+                  ? '<div class="dt-resize-handle"></div>'
                   : ""
               }
             </th>
@@ -520,10 +523,16 @@ export class DataTable {
           ? "no-wrap"
           : "";
 
+        const storedWidth = this.state.columnWidths[col.id];
+        const widthAttr =
+          typeof storedWidth === "number" && !Number.isNaN(storedWidth)
+            ? `style="width: ${Math.max(0, Math.round(storedWidth))}px;"`
+            : "";
+
         return `
         <td data-column-id="${col.id}" 
             class="${cellClass} ${wrapClass}"
-            data-row-id="${row[this.options.rowIdField] || ""}">
+            data-row-id="${row[this.options.rowIdField] || ""}" ${widthAttr}>
           ${cellContent}
         </td>
       `;
@@ -907,6 +916,140 @@ export class DataTable {
         };
         this._addEventListener(cb, "change", handler);
       });
+
+      // Column reordering within the settings menu
+      let draggingMenuItem = null;
+
+      const clearMenuDragHighlights = () => {
+        columnMenu
+          .querySelectorAll(".dt-column-menu-item.drag-over")
+          .forEach((dragItem) => dragItem.classList.remove("drag-over"));
+      };
+
+      const menuItems = columnMenu.querySelectorAll(".dt-column-menu-item");
+      menuItems.forEach((item) => {
+        const handle = item.querySelector(".dt-column-drag-handle");
+        if (!handle) {
+          return;
+        }
+
+        const preventClickHandler = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        };
+        this._addEventListener(handle, "click", preventClickHandler);
+
+        const dragStartHandler = (e) => {
+          draggingMenuItem = item;
+          item.classList.add("dragging");
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData(
+            "text/plain",
+            item.dataset.columnId || "column"
+          );
+        };
+
+        const dragEndHandler = () => {
+          if (draggingMenuItem) {
+            draggingMenuItem.classList.remove("dragging");
+            draggingMenuItem = null;
+            this._updateColumnOrderFromMenu(columnMenu);
+          }
+          clearMenuDragHighlights();
+        };
+
+        const dragOverHandler = (e) => {
+          if (!draggingMenuItem || draggingMenuItem === item) {
+            return;
+          }
+
+          e.preventDefault();
+          const rect = item.getBoundingClientRect();
+          const shouldInsertBefore = e.clientY - rect.top < rect.height / 2;
+
+          const parent = item.parentElement;
+          if (!parent) {
+            return;
+          }
+
+          if (shouldInsertBefore) {
+            if (item.previousElementSibling !== draggingMenuItem) {
+              parent.insertBefore(draggingMenuItem, item);
+            }
+          } else {
+            if (item.nextElementSibling !== draggingMenuItem) {
+              parent.insertBefore(draggingMenuItem, item.nextElementSibling);
+            }
+          }
+
+          clearMenuDragHighlights();
+          item.classList.add("drag-over");
+        };
+
+        const dragLeaveHandler = () => {
+          item.classList.remove("drag-over");
+        };
+
+        const dropHandler = (e) => {
+          if (!draggingMenuItem || draggingMenuItem === item) {
+            return;
+          }
+
+          e.preventDefault();
+          const rect = item.getBoundingClientRect();
+          const shouldInsertBefore = e.clientY - rect.top < rect.height / 2;
+          const parent = item.parentElement;
+          if (!parent) {
+            return;
+          }
+
+          if (shouldInsertBefore) {
+            parent.insertBefore(draggingMenuItem, item);
+          } else {
+            parent.insertBefore(draggingMenuItem, item.nextElementSibling);
+          }
+
+          this._updateColumnOrderFromMenu(columnMenu);
+          if (draggingMenuItem) {
+            draggingMenuItem.classList.remove("dragging");
+          }
+          draggingMenuItem = null;
+          clearMenuDragHighlights();
+        };
+
+        this._addEventListener(handle, "dragstart", dragStartHandler);
+        this._addEventListener(handle, "dragend", dragEndHandler);
+        this._addEventListener(item, "dragover", dragOverHandler);
+        this._addEventListener(item, "dragleave", dragLeaveHandler);
+        this._addEventListener(item, "drop", dropHandler);
+      });
+
+      const menuDragOverHandler = (e) => {
+        if (!draggingMenuItem || e.target !== columnMenu) {
+          return;
+        }
+        e.preventDefault();
+      };
+
+      const menuDropHandler = (e) => {
+        if (!draggingMenuItem || e.target !== columnMenu) {
+          return;
+        }
+        e.preventDefault();
+        columnMenu.appendChild(draggingMenuItem);
+        this._updateColumnOrderFromMenu(columnMenu);
+        draggingMenuItem.classList.remove("dragging");
+        draggingMenuItem = null;
+        clearMenuDragHighlights();
+      };
+
+      this._addEventListener(columnMenu, "dragover", menuDragOverHandler);
+      this._addEventListener(columnMenu, "drop", menuDropHandler);
+
+      if (this._pendingColumnMenuOpen) {
+        columnMenu.style.display = "block";
+        this._pendingColumnMenuOpen = false;
+      }
     }
 
     // Sortable headers
@@ -931,161 +1074,34 @@ export class DataTable {
       this._addEventListener(th, "click", handler);
     });
 
-    // Column drag and drop for reordering
-    const draggableHeaders = this.elements.thead.querySelectorAll(
-      ".dt-draggable-column"
-    );
-
-    // Create drop indicator element (reused for all drags)
-    let dropIndicator = this.elements.table.querySelector(".dt-drop-indicator");
-    if (!dropIndicator) {
-      dropIndicator = document.createElement("div");
-      dropIndicator.className = "dt-drop-indicator";
-      dropIndicator.style.display = "none";
-    }
-
-    // Helper to remove all drag indicators
-    const clearDragIndicators = () => {
-      draggableHeaders.forEach((header) => {
-        header.classList.remove("dt-drop-target");
-      });
-      dropIndicator.style.display = "none";
-      if (dropIndicator.parentElement) {
-        dropIndicator.remove();
-      }
-    };
-
-    // Helper to show drop indicator
-    const showDropIndicator = (targetTh, isLeft) => {
-      // Position indicator relative to target column
-      targetTh.style.position = "relative";
-      dropIndicator.className = `dt-drop-indicator ${
-        isLeft ? "left" : "right"
-      }`;
-      dropIndicator.style.display = "block";
-
-      // Append to target column
-      if (dropIndicator.parentElement !== targetTh) {
-        targetTh.appendChild(dropIndicator);
-      }
-
-      // Add visual feedback class
-      targetTh.classList.add("dt-drop-target");
-    };
-
-    draggableHeaders.forEach((th) => {
-      const dragStartHandler = (e) => {
-        // Don't start drag if clicking on resize handle or its children
-        if (
-          e.target.classList.contains("dt-resize-handle") ||
-          e.target.closest(".dt-resize-handle")
-        ) {
-          e.preventDefault();
-          return;
-        }
-
-        this.draggingColumn = th.dataset.columnId;
-        this.draggingElement = th;
-        e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/html", th.innerHTML);
-        th.classList.add("dt-dragging");
-
-        this._log("debug", "Drag started", { columnId: this.draggingColumn });
-      };
-
-      const dragOverHandler = (e) => {
-        if (e.preventDefault) {
-          e.preventDefault();
-        }
-        e.dataTransfer.dropEffect = "move";
-
-        const targetColumnId = e.currentTarget.dataset.columnId;
-
-        // Don't show indicator for the dragging column itself
-        if (this.draggingColumn && this.draggingColumn !== targetColumnId) {
-          clearDragIndicators();
-
-          // Calculate which side of the column we're on
-          const rect = e.currentTarget.getBoundingClientRect();
-          const midpoint = rect.left + rect.width / 2;
-          const mouseX = e.clientX;
-
-          // Show indicator on left or right side based on mouse position
-          const isLeft = mouseX < midpoint;
-          showDropIndicator(e.currentTarget, isLeft);
-
-          // Store drop position for the drop handler
-          e.currentTarget.dataset.dropBefore = isLeft ? "true" : "false";
-        }
-
-        return false;
-      };
-
-      const dragEnterHandler = (e) => {
-        e.preventDefault();
-        return false;
-      };
-
-      const dragLeaveHandler = (e) => {
-        // Only remove indicator if we're actually leaving the element
-        // (not just entering a child element)
-        const relatedTarget = e.relatedTarget;
-        if (!e.currentTarget.contains(relatedTarget)) {
-          clearDragIndicators();
-        }
-      };
-
-      const dropHandler = (e) => {
-        if (e.stopPropagation) {
-          e.stopPropagation();
-        }
-        e.preventDefault();
-
-        const targetColumnId = e.currentTarget.dataset.columnId;
-
-        if (this.draggingColumn && this.draggingColumn !== targetColumnId) {
-          // Determine drop position based on stored data
-          const dropBefore = e.currentTarget.dataset.dropBefore === "true";
-
-          this._reorderColumn(this.draggingColumn, targetColumnId, dropBefore);
-        }
-
-        clearDragIndicators();
-        return false;
-      };
-
-      const dragEndHandler = (e) => {
-        e.currentTarget.classList.remove("dt-dragging");
-        clearDragIndicators();
-        this.draggingColumn = null;
-        this.draggingElement = null;
-
-        this._log("debug", "Drag ended");
-      };
-
-      this._addEventListener(th, "dragstart", dragStartHandler);
-      this._addEventListener(th, "dragover", dragOverHandler);
-      this._addEventListener(th, "dragenter", dragEnterHandler);
-      this._addEventListener(th, "dragleave", dragLeaveHandler);
-      this._addEventListener(th, "drop", dropHandler);
-      this._addEventListener(th, "dragend", dragEndHandler);
-    });
-
     // Column resizing
     const resizeHandles =
       this.elements.thead.querySelectorAll(".dt-resize-handle");
     resizeHandles.forEach((handle) => {
       const handler = (e) => {
         e.preventDefault();
-        e.stopPropagation(); // Prevent drag events on parent column
-        const th = handle.parentElement;
+        e.stopPropagation();
+
+        const th = handle.closest("th[data-column-id]");
+        if (!th) {
+          return;
+        }
+
         const columnId = th.dataset.columnId;
+        const minWidth = this._getColumnMinWidth(columnId);
 
         this.resizing = {
           columnId,
           startX: e.pageX,
           startWidth: th.offsetWidth,
+          minWidth,
+          leftHeader: th,
+          handle,
         };
+
+        th.classList.add("dt-resizing");
+        handle.classList.add("active");
+        document.body.classList.add("dt-column-resizing");
 
         document.addEventListener("mousemove", this._handleResize);
         document.addEventListener("mouseup", this._handleResizeEnd);
@@ -1299,67 +1315,147 @@ export class DataTable {
   }
 
   /**
-   * Reorder columns by moving sourceId before/after targetId
-   * @param {string} sourceId - Column being moved
-   * @param {string} targetId - Target column to drop near
-   * @param {boolean} dropBefore - If true, insert before target; if false, insert after
+   * Persist column order changes from the column menu
+   * @param {HTMLElement} columnMenu
    */
-  _reorderColumn(sourceId, targetId, dropBefore = false) {
-    // Get current order or create from visible columns
-    let order = this.state.columnOrder;
-    if (order.length === 0) {
-      order = this._getOrderedColumns().map((col) => col.id);
-    }
-
-    // Find indices
-    const sourceIndex = order.indexOf(sourceId);
-    const targetIndex = order.indexOf(targetId);
-
-    if (sourceIndex === -1 || targetIndex === -1) {
-      this._log("warn", "Column reorder failed: invalid indices", {
-        sourceId,
-        targetId,
-        sourceIndex,
-        targetIndex,
-      });
+  _updateColumnOrderFromMenu(columnMenu) {
+    if (!columnMenu) {
       return;
     }
 
-    // Don't do anything if they're already adjacent in the desired order
-    if (
-      (dropBefore && sourceIndex === targetIndex - 1) ||
-      (!dropBefore && sourceIndex === targetIndex + 1)
-    ) {
-      this._log("debug", "Column already in desired position", {
-        sourceId,
-        targetId,
-      });
+    const orderedIds = Array.from(
+      columnMenu.querySelectorAll(".dt-column-menu-item")
+    )
+      .map((item) => item.dataset.columnId)
+      .filter(Boolean);
+
+    if (orderedIds.length === 0) {
       return;
     }
 
-    // Remove source from its current position
-    order.splice(sourceIndex, 1);
-
-    // Calculate new target index after removal
-    let newTargetIndex = order.indexOf(targetId);
-
-    // Insert before or after target
-    if (dropBefore) {
-      order.splice(newTargetIndex, 0, sourceId);
-    } else {
-      order.splice(newTargetIndex + 1, 0, sourceId);
+    if (this._arraysEqual(orderedIds, this.state.columnOrder)) {
+      return;
     }
 
-    this.state.columnOrder = order;
+    const existingMenu = this.elements.container
+      ? this.elements.container.querySelector(".dt-column-menu")
+      : null;
+    const shouldReopen = existingMenu?.style.display === "block";
+
+    this.state.columnOrder = orderedIds;
     this._saveState();
+    this._pendingColumnMenuOpen = shouldReopen;
     this._renderTable();
 
-    this._log("info", "Column reordered", {
-      sourceId,
-      targetId,
-      dropBefore,
-      newOrder: order,
+    this._log("info", "Column order updated", {
+      via: "column-menu",
+      order: orderedIds,
     });
+  }
+
+  _arraysEqual(a = [], b = []) {
+    if (a.length !== b.length) {
+      return false;
+    }
+    return a.every((value, index) => value === b[index]);
+  }
+
+  _getColumnConfig(columnId) {
+    return this.options.columns.find((col) => col.id === columnId);
+  }
+
+  _getColumnMinWidth(columnId) {
+    const column = this._getColumnConfig(columnId);
+    if (!column) {
+      return 50;
+    }
+    if (typeof column.minWidth === "number" && column.minWidth >= 0) {
+      return column.minWidth;
+    }
+    return 50;
+  }
+
+  _applyColumnWidth(columnId, widthPx) {
+    if (!columnId || typeof widthPx !== "number" || Number.isNaN(widthPx)) {
+      return;
+    }
+
+    const sanitizedWidth = Math.max(0, Math.round(widthPx));
+    const widthValue = `${sanitizedWidth}px`;
+
+    const header = this.elements.thead?.querySelector(
+      `th[data-column-id="${columnId}"]`
+    );
+    if (header) {
+      header.style.width = widthValue;
+    }
+
+    if (this.elements.tbody) {
+      const cells = this.elements.tbody.querySelectorAll(
+        `td[data-column-id="${columnId}"]`
+      );
+      cells.forEach((cell) => {
+        cell.style.width = widthValue;
+      });
+    }
+  }
+
+  _applyTableWidth() {
+    if (!this.elements.table) {
+      return;
+    }
+
+    if (typeof this.state.tableWidth === "number") {
+      this.elements.table.style.width = `${this.state.tableWidth}px`;
+    } else {
+      this.elements.table.style.width = "";
+    }
+  }
+
+  _applyStoredColumnWidths() {
+    if (!this.elements.table) {
+      return;
+    }
+
+    Object.entries(this.state.columnWidths).forEach(([columnId, width]) => {
+      if (typeof width === "number" && !Number.isNaN(width)) {
+        this._applyColumnWidth(columnId, width);
+      }
+    });
+
+    this._applyTableWidth();
+  }
+
+  // Snapshot current natural widths for visible columns into state if missing
+  _snapshotColumnWidths() {
+    if (!this.elements.thead) return;
+    const headers = this.elements.thead.querySelectorAll("th[data-column-id]");
+    headers.forEach((th) => {
+      const id = th.dataset.columnId;
+      if (!id) return;
+      if (typeof this.state.columnWidths[id] !== "number") {
+        const w = th.offsetWidth;
+        if (w && !Number.isNaN(w)) this.state.columnWidths[id] = Math.round(w);
+      }
+    });
+    // Compute table width sum
+    const sum = this._computeTableWidthFromState();
+    if (typeof sum === "number") {
+      this.state.tableWidth = sum;
+      this._applyTableWidth();
+    }
+  }
+
+  _computeTableWidthFromState() {
+    const cols = this._getOrderedColumns();
+    if (!cols || cols.length === 0) return null;
+    let total = 0;
+    cols.forEach((c) => {
+      if (!this._isColumnVisible(c.id)) return;
+      const w = this.state.columnWidths[c.id];
+      if (typeof w === "number" && !Number.isNaN(w)) total += w;
+    });
+    return Math.max(0, Math.round(total));
   }
 
   /**
@@ -1368,16 +1464,26 @@ export class DataTable {
   _handleResize = (e) => {
     if (!this.resizing) return;
 
-    const diff = e.pageX - this.resizing.startX;
-    const newWidth = Math.max(50, this.resizing.startWidth + diff);
+    const { columnId, startX, startWidth, minWidth } = this.resizing;
 
-    this.state.columnWidths[this.resizing.columnId] = newWidth;
+    const effectiveMin = typeof minWidth === "number" ? minWidth : 50;
+    let diff = e.pageX - startX;
 
-    const th = this.elements.thead.querySelector(
-      `th[data-column-id="${this.resizing.columnId}"]`
-    );
-    if (th) {
-      th.style.width = newWidth + "px";
+    // Prevent shrinking beyond min width
+    const maxDecrease = startWidth - effectiveMin;
+    if (diff < -maxDecrease) {
+      diff = -maxDecrease;
+    }
+
+    const newWidth = Math.max(effectiveMin, Math.round(startWidth + diff));
+    this.state.columnWidths[columnId] = newWidth;
+    this._applyColumnWidth(columnId, newWidth);
+
+    // Recompute total table width as the sum of all visible column widths
+    const total = this._computeTableWidthFromState();
+    if (typeof total === "number") {
+      this.state.tableWidth = total;
+      this._applyTableWidth();
     }
   };
 
@@ -1386,11 +1492,21 @@ export class DataTable {
    */
   _handleResizeEnd = () => {
     if (this.resizing) {
+      const { leftHeader, handle } = this.resizing;
+      if (leftHeader) {
+        leftHeader.classList.remove("dt-resizing");
+      }
+      if (handle) {
+        handle.classList.remove("active");
+      }
+
       this._saveState();
       this.resizing = null;
-      document.removeEventListener("mousemove", this._handleResize);
-      document.removeEventListener("mouseup", this._handleResizeEnd);
     }
+
+    document.body.classList.remove("dt-column-resizing");
+    document.removeEventListener("mousemove", this._handleResize);
+    document.removeEventListener("mouseup", this._handleResizeEnd);
   };
 
   /**
@@ -1475,6 +1591,10 @@ export class DataTable {
       this.elements.tbody = this.elements.container.querySelector("tbody");
     }
 
+    // Make sure widths are captured and applied consistently
+    this._snapshotColumnWidths();
+    this._applyStoredColumnWidths();
+
     this._attachEvents();
   }
 
@@ -1512,6 +1632,8 @@ export class DataTable {
       columnWidths: this.state.columnWidths,
       visibleColumns: this.state.visibleColumns,
       scrollPosition: this.state.scrollPosition,
+      columnOrder: this.state.columnOrder,
+      tableWidth: this.state.tableWidth,
     };
     AppState.save(this.options.stateKey, toSave);
     this._log("debug", "State saved", toSave);
@@ -1588,9 +1710,19 @@ export class DataTable {
 
     // Clean up resize listeners
     if (this.resizing) {
+      const { leftHeader, handle } = this.resizing;
+      if (leftHeader) {
+        leftHeader.classList.remove("dt-resizing");
+      }
+      if (handle) {
+        handle.classList.remove("active");
+      }
       document.removeEventListener("mousemove", this._handleResize);
       document.removeEventListener("mouseup", this._handleResizeEnd);
+      this.resizing = null;
     }
+
+    document.body.classList.remove("dt-column-resizing");
 
     // Clean up scroll throttle
     if (this.scrollThrottle) {
