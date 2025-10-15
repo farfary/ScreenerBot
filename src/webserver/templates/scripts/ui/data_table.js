@@ -161,6 +161,7 @@ export class DataTable {
 
     this.elements = {};
     this.resizing = null;
+    this._pendingRAF = null;
     this.documentClickHandler = null;
     this.scrollThrottle = null;
     this.eventHandlers = new Map(); // Store all event handlers for cleanup
@@ -231,6 +232,7 @@ export class DataTable {
           <table class="data-table ${this.options.compact ? "compact" : ""} ${
       this.options.zebra ? "zebra" : ""
     }">
+            ${this._renderColgroup()}
             <thead class="${this.options.stickyHeader ? "sticky" : ""}">
               ${this._renderHeader()}
             </thead>
@@ -249,6 +251,19 @@ export class DataTable {
     this.elements.table = container.querySelector(".data-table");
     this.elements.thead = container.querySelector("thead");
     this.elements.tbody = container.querySelector("tbody");
+    
+    // Cache col elements for fast width updates
+    this.elements.colgroup = container.querySelector("colgroup");
+    this.elements.cols = {};
+    if (this.elements.colgroup) {
+      const cols = this.elements.colgroup.querySelectorAll("col[data-column-id]");
+      cols.forEach(col => {
+        const columnId = col.dataset.columnId;
+        if (columnId) {
+          this.elements.cols[columnId] = col;
+        }
+      });
+    }
 
     if (this.elements.table && typeof this.state.tableWidth === "number") {
       this.elements.table.style.width = `${this.state.tableWidth}px`;
@@ -395,6 +410,27 @@ export class DataTable {
   }
 
   /**
+   * Render colgroup for efficient column width management
+   * Using <col> elements allows the browser to handle column widths
+   * without needing to update every cell individually
+   */
+  _renderColgroup() {
+    const visibleColumns = this._getOrderedColumns();
+    
+    return `
+      <colgroup>
+        ${visibleColumns
+          .map((col) => {
+            const width = this.state.columnWidths[col.id] || col.width || 120;
+            const widthValue = typeof width === 'number' ? `${width}px` : width;
+            return `<col data-column-id="${col.id}" style="width: ${widthValue};">`;
+          })
+          .join('')}
+      </colgroup>
+    `;
+  }
+
+  /**
    * Render table header with sortable columns
    */
   _renderHeader() {
@@ -404,8 +440,6 @@ export class DataTable {
       <tr>
         ${visibleColumns
           .map((col) => {
-            const width =
-              this.state.columnWidths[col.id] || col.width || "auto";
             const isSorted = this.state.sortColumn === col.id;
             const sortIcon = isSorted
               ? this.state.sortDirection === "asc"
@@ -416,9 +450,6 @@ export class DataTable {
             return `
             <th 
               data-column-id="${col.id}"
-              style="width: ${
-                typeof width === "number" ? width + "px" : width
-              }; ${col.minWidth ? "min-width: " + col.minWidth + "px;" : ""}"
               class="dt-header-column ${col.sortable ? "sortable" : ""} ${
               isSorted ? "sorted" : ""
             }"
@@ -524,16 +555,10 @@ export class DataTable {
           ? "no-wrap"
           : "";
 
-        const storedWidth = this.state.columnWidths[col.id];
-        const widthAttr =
-          typeof storedWidth === "number" && !Number.isNaN(storedWidth)
-            ? `style="width: ${Math.max(0, Math.round(storedWidth))}px;"`
-            : "";
-
         return `
         <td data-column-id="${col.id}" 
             class="${cellClass} ${wrapClass}"
-            data-row-id="${row[this.options.rowIdField] || ""}" ${widthAttr}>
+            data-row-id="${row[this.options.rowIdField] || ""}">
           ${cellContent}
         </td>
       `;
@@ -1376,28 +1401,28 @@ export class DataTable {
     return 50;
   }
 
+  /**
+   * Apply column width by updating the <col> element
+   * This is much more efficient than updating every <td> element
+   * The browser handles the column layout automatically
+   */
   _applyColumnWidth(columnId, widthPx) {
-    if (!columnId || typeof widthPx !== "number" || Number.isNaN(widthPx)) {
-      return;
+    if (!columnId || !Number.isFinite(widthPx)) return;
+    
+    const w = Math.max(0, Math.round(widthPx));
+    
+    // Update <col> element (primary width control)
+    const col = this.elements.cols?.[columnId];
+    if (col) {
+      col.style.width = `${w}px`;
+      col.style.minWidth = `${w}px`;
+      col.style.maxWidth = `${w}px`;
     }
-
-    const sanitizedWidth = Math.max(0, Math.round(widthPx));
-    const widthValue = `${sanitizedWidth}px`;
-
-    const header = this.elements.thead?.querySelector(
-      `th[data-column-id="${columnId}"]`
-    );
-    if (header) {
-      header.style.width = widthValue;
-    }
-
-    if (this.elements.tbody) {
-      const cells = this.elements.tbody.querySelectorAll(
-        `td[data-column-id="${columnId}"]`
-      );
-      cells.forEach((cell) => {
-        cell.style.width = widthValue;
-      });
+    
+    // Update header for proper pointer events hit-box
+    const th = this.elements.thead?.querySelector(`th[data-column-id="${columnId}"]`);
+    if (th) {
+      th.style.width = `${w}px`;
     }
   }
 
@@ -1472,74 +1497,134 @@ export class DataTable {
    */
   _fitColumnsToContainer() {
     if (!this.elements.scrollContainer) return;
-    
+
+    // Use clientWidth which excludes vertical scrollbar width
     const containerWidth = this.elements.scrollContainer.clientWidth;
     const totalWidth = this._computeTableWidthFromState();
-    
-    // If table is narrower than container or within acceptable range, don't adjust
-    if (totalWidth <= containerWidth * 1.05) return;
-    
-    // Calculate scale factor to fit all columns
-    const scaleFactor = (containerWidth - 20) / totalWidth; // 20px padding
-    
+    if (!totalWidth || totalWidth <= 0) return;
+
     const visibleColumns = this._getOrderedColumns();
-    visibleColumns.forEach((col) => {
-      const currentWidth = this.state.columnWidths[col.id];
-      if (typeof currentWidth === "number" && !Number.isNaN(currentWidth)) {
-        const minWidth = this._getColumnMinWidth(col.id);
-        const scaledWidth = Math.max(minWidth, Math.round(currentWidth * scaleFactor));
-        this.state.columnWidths[col.id] = scaledWidth;
-        this._applyColumnWidth(col.id, scaledWidth);
-      }
-    });
-    
-    // Recalculate table width
-    const newTotal = this._computeTableWidthFromState();
-    if (typeof newTotal === "number") {
-      this.state.tableWidth = newTotal;
+    if (!visibleColumns || visibleColumns.length === 0) return;
+
+    // We always attempt to match the container exactly on init-fit
+    const targetWidth = Math.max(0, Math.floor(containerWidth));
+
+    // Helper to apply final widths and snap table width to target
+    const applyFinal = () => {
+      // After adjusting individual columns, recompute and set table width
+      const recomputed = this._computeTableWidthFromState();
+      // Snap to target to avoid 1px rounding horizontal scrollbars
+      this.state.tableWidth = targetWidth;
+      this._applyTableWidth();
+
+      this._log("info", "Columns fitted to container", {
+        originalWidth: totalWidth,
+        containerWidth: targetWidth,
+        resultingWidth: recomputed,
+      });
+    };
+
+    // Proportional scale when overflowing
+    if (totalWidth > targetWidth) {
+      const scaleFactor = targetWidth / totalWidth;
+      let runningTotal = 0;
+      const lastIdx = visibleColumns.length - 1;
+
+      visibleColumns.forEach((col, idx) => {
+        const currentWidth = this.state.columnWidths[col.id];
+        if (typeof currentWidth === "number" && !Number.isNaN(currentWidth)) {
+          const minWidth = this._getColumnMinWidth(col.id);
+          // Round down to avoid overflow accumulation, we'll fix remainder on last column
+          let scaled = Math.max(minWidth, Math.floor(currentWidth * scaleFactor));
+
+          // On last column, absorb remainder so total matches targetWidth exactly (or as close as min allows)
+          if (idx === lastIdx) {
+            const remainder = targetWidth - runningTotal;
+            // If remainder is less than minWidth, respect minWidth but it may still overflow in extreme cases
+            scaled = Math.max(minWidth, remainder);
+          }
+
+          runningTotal += scaled;
+          this.state.columnWidths[col.id] = scaled;
+          this._applyColumnWidth(col.id, scaled);
+        }
+      });
+
+      applyFinal();
+      return;
     }
-    
-    this._log("info", "Auto-fitted columns to container", {
-      originalWidth: totalWidth,
-      containerWidth,
-      scaleFactor: scaleFactor.toFixed(3),
-      newWidth: newTotal,
-    });
+
+    // If under target, expand last column to fill remaining gap for exact fit
+    if (totalWidth < targetWidth) {
+      // Choose the last visible column to absorb the gap
+      const lastCol = visibleColumns[visibleColumns.length - 1];
+      if (lastCol) {
+        const currentWidth = this.state.columnWidths[lastCol.id];
+        if (typeof currentWidth === "number" && !Number.isNaN(currentWidth)) {
+          const gap = targetWidth - totalWidth;
+          const newWidth = currentWidth + gap;
+          this.state.columnWidths[lastCol.id] = newWidth;
+          this._applyColumnWidth(lastCol.id, newWidth);
+        }
+      }
+
+      applyFinal();
+      return;
+    }
+
+    // Already exactly matching
+    applyFinal();
   }
 
   /**
-   * Handle column resize drag
+   * Handle column resize drag with RAF throttling for smooth performance
    */
   _handleResize = (e) => {
     if (!this.resizing) return;
+    e.preventDefault();
 
-    const { columnId, startX, startWidth, minWidth } = this.resizing;
+    // Throttle updates with requestAnimationFrame
+    if (this._pendingRAF) return;
+    
+    this._pendingRAF = requestAnimationFrame(() => {
+      this._pendingRAF = null;
+      
+      if (!this.resizing) return;
 
-    const effectiveMin = typeof minWidth === "number" ? minWidth : 50;
-    let diff = e.pageX - startX;
+      const { columnId, startX, startWidth, minWidth } = this.resizing;
 
-    // Prevent shrinking beyond min width
-    const maxDecrease = startWidth - effectiveMin;
-    if (diff < -maxDecrease) {
-      diff = -maxDecrease;
-    }
+      const effectiveMin = typeof minWidth === "number" ? minWidth : 50;
+      let diff = e.pageX - startX;
 
-    const newWidth = Math.max(effectiveMin, Math.round(startWidth + diff));
-    this.state.columnWidths[columnId] = newWidth;
-    this._applyColumnWidth(columnId, newWidth);
+      // Prevent shrinking beyond min width
+      const maxDecrease = startWidth - effectiveMin;
+      if (diff < -maxDecrease) {
+        diff = -maxDecrease;
+      }
 
-    // Recompute total table width as the sum of all visible column widths
-    const total = this._computeTableWidthFromState();
-    if (typeof total === "number") {
-      this.state.tableWidth = total;
-      this._applyTableWidth();
-    }
+      const newWidth = Math.max(effectiveMin, Math.round(startWidth + diff));
+      this.state.columnWidths[columnId] = newWidth;
+      this._applyColumnWidth(columnId, newWidth);
+
+      // Grow table width - don't shrink other columns
+      const total = this._computeTableWidthFromState();
+      if (typeof total === "number") {
+        this.state.tableWidth = total;
+        this._applyTableWidth();
+      }
+    });
   };
 
   /**
    * Handle resize end
    */
   _handleResizeEnd = () => {
+    // Cancel any pending RAF
+    if (this._pendingRAF) {
+      cancelAnimationFrame(this._pendingRAF);
+      this._pendingRAF = null;
+    }
+    
     if (this.resizing) {
       const { leftHeader, handle } = this.resizing;
       if (leftHeader) {
@@ -1638,6 +1723,19 @@ export class DataTable {
     if (this.elements.container) {
       this.elements.thead = this.elements.container.querySelector("thead");
       this.elements.tbody = this.elements.container.querySelector("tbody");
+      
+      // Re-cache col elements
+      this.elements.colgroup = this.elements.container.querySelector("colgroup");
+      this.elements.cols = {};
+      if (this.elements.colgroup) {
+        const cols = this.elements.colgroup.querySelectorAll("col[data-column-id]");
+        cols.forEach(col => {
+          const columnId = col.dataset.columnId;
+          if (columnId) {
+            this.elements.cols[columnId] = col;
+          }
+        });
+      }
     }
 
     // Make sure widths are captured and applied consistently
@@ -1766,6 +1864,12 @@ export class DataTable {
   destroy() {
     // Remove all event listeners
     this._removeEventListeners();
+
+    // Cancel any pending RAF
+    if (this._pendingRAF) {
+      cancelAnimationFrame(this._pendingRAF);
+      this._pendingRAF = null;
+    }
 
     // Clean up resize listeners
     if (this.resizing) {

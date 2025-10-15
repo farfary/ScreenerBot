@@ -1,5 +1,19 @@
 /* DataTable Component Styles */
 
+/* ==================== Colgroup Column Width Management ==================== */
+
+/* Smooth column width transitions */
+.data-table col {
+  transition: width 0.08s ease-out;
+}
+
+/* Disable transition during active resize for immediate feedback */
+body.dt-column-resizing .data-table col {
+  transition: none;
+}
+
+/* ==================== Table Wrapper ==================== */
+
 .data-table-wrapper {
   display: flex;
   flex-direction: column;
@@ -171,7 +185,7 @@
 /* Scroll container */
 .data-table-scroll-container {
   flex: 1;
-  overflow: auto;
+  overflow: auto; /* Allow both horizontal and vertical scrolling when needed */
   position: relative;
   min-height: 0; /* Critical for flex scrolling */
   max-height: 600px; /* Default max height for scrolling */
@@ -210,6 +224,7 @@
   border-collapse: separate;
   border-spacing: 0;
   font-size: 0.875rem;
+  table-layout: fixed; /* Stabilize width distribution and prevent overflow from content */
 }
 
 .data-table.compact {
@@ -252,6 +267,7 @@
   position: relative;
   user-select: none;
   transition: all 0.2s ease;
+  box-sizing: border-box; /* Make width include padding and borders */
 }
 
 .data-table th.sortable {
@@ -447,6 +463,7 @@ body.dt-column-resizing * {
   word-wrap: break-word;
   overflow-wrap: break-word;
   max-width: 300px; /* Prevent extremely wide cells */
+  box-sizing: border-box; /* Make width include padding and borders */
 }
 
 /* Text wrapping support */
