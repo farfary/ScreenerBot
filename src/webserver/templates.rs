@@ -62,6 +62,24 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         combined_styles.push(TRANSACTIONS_PAGE_STYLES);
     }
     html = html.replace("/*__INJECTED_STYLES__*/", &combined_styles.join("\n"));
+    let mut page_style_injections = String::new();
+    for (page, styles) in [
+        ("services", SERVICES_PAGE_STYLES),
+        ("transactions", TRANSACTIONS_PAGE_STYLES),
+    ] {
+        if styles.trim().is_empty() {
+            continue;
+        }
+        let page_json = serde_json::to_string(page)
+            .expect("failed to serialize page name for style map");
+        let styles_json = serde_json::to_string(styles)
+            .expect("failed to serialize page styles for style map");
+        page_style_injections.push_str(&format!(
+            "window.__PAGE_STYLES__[{}] = {};\n",
+            page_json, styles_json
+        ));
+    }
+    html = html.replace("/*__PAGE_STYLES__*/", &page_style_injections);
     html = html.replace("/*__THEME_SCRIPTS__*/", THEME_SCRIPTS);
     html
 }

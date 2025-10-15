@@ -15,6 +15,27 @@ export function getCurrentPage() {
   return _state.currentPage;
 }
 
+function ensurePageStyles(pageName) {
+  if (typeof pageName !== "string" || !pageName) {
+    return;
+  }
+  const registry = window.__PAGE_STYLES__;
+  if (!registry || typeof registry !== "object") {
+    return;
+  }
+  if (document.head.querySelector(`style[data-page-style="${pageName}"]`)) {
+    return;
+  }
+  const styles = registry[pageName];
+  if (typeof styles !== "string" || !styles.trim()) {
+    return;
+  }
+  const styleTag = document.createElement("style");
+  styleTag.setAttribute("data-page-style", pageName);
+  styleTag.textContent = styles;
+  document.head.appendChild(styleTag);
+}
+
 export function setActiveTab(pageName) {
   document.querySelectorAll("nav .tab").forEach((tab) => {
     const tabPage = tab.getAttribute("data-page");
@@ -132,6 +153,7 @@ export async function loadPage(pageName) {
   if (cachedEl) {
     console.log("[Router] Using cached page:", pageName);
 
+    ensurePageStyles(pageName);
     displayPageElement(mainContent, cachedEl);
     PageLifecycleRegistry.activate(pageName);
 
@@ -175,6 +197,7 @@ export async function loadPage(pageName) {
     _state.pageCache[pageName] = pageEl;
 
     loadingEl.remove();
+    ensurePageStyles(pageName);
     displayPageElement(mainContent, pageEl);
 
     // Load page-specific module if it exists
@@ -260,6 +283,7 @@ export function initRouter() {
     }
     _state.pageCache[initialPage] = pageEl;
     mainContent.appendChild(pageEl);
+    ensurePageStyles(initialPage);
 
     // Try to load and activate page module
     (async () => {
