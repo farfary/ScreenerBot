@@ -1,6 +1,6 @@
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
-import { $, $$ } from "../core/dom.js";
+import { $ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import { DataTable } from "../ui/data_table.js";
@@ -252,7 +252,7 @@ function createTable() {
       width: 140,
       render: (val) => {
         if (!val) return '<span class="text-muted">—</span>';
-        const short = Utils.truncateMiddle(val, 12);
+        const short = Utils.formatSignatureCompact(val);
         return `<a href="https://solscan.io/tx/${val}" target="_blank" rel="noopener" class="link-signature">${short}</a>`;
       },
     },
@@ -280,7 +280,7 @@ function createTable() {
       width: 120,
       render: (val) => {
         if (!val) return '<span class="text-muted">—</span>';
-        const short = Utils.truncateMiddle(val, 12);
+        const short = Utils.formatAddressCompact(val);
         return `<a href="https://solscan.io/token/${val}" target="_blank" rel="noopener" class="link-signature" title="${val}">${short}</a>`;
       },
     },
@@ -297,7 +297,7 @@ function createTable() {
       sortable: true,
       render: (val) => {
         if (val === null || val === undefined) return "—";
-        const formatted = Utils.formatPrice(Math.abs(val), true);
+        const formatted = Utils.formatSol(Math.abs(val), { suffix: "" });
         const className = val >= 0 ? "value-positive" : "value-negative";
         const sign = val >= 0 ? "+" : "";
         return `<span class="${className}">${sign}${formatted}</span>`;
@@ -307,13 +307,13 @@ function createTable() {
       id: "fee_sol",
       label: "Fee",
       width: 90,
-      render: (val) => (val ? Utils.formatPrice(val, true) : "—"),
+      render: (val) => (val ? Utils.formatSol(val, { suffix: "" }) : "—"),
     },
     {
       id: "ata_rents",
       label: "ATA Rent",
       width: 90,
-      render: (val) => (val ? Utils.formatPrice(val, true) : "—"),
+      render: (val) => (val ? Utils.formatSol(val, { suffix: "" }) : "—"),
     },
     {
       id: "instructions_count",
@@ -326,7 +326,7 @@ function createTable() {
   window.transactionsTable = new DataTable({
     container: "#transactions-root",
     columns,
-    rowKey: "signature",
+    rowIdField: "signature",
     emptyMessage: "No transactions found",
     loadingMessage: "Loading transactions...",
   });
