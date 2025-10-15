@@ -20,21 +20,68 @@
  * const table = new DataTable({
  *   container: '#table-root',
  *   columns: [
- *     { id: 'name', label: 'Name', sortable: true, width: 200, resizable: true },
- *     { id: 'status', label: 'Status', sortable: true, width: 100, render: (val) => `<span>${val}</span>` }
+ *     {
+ *       id: 'name',
+ *       label: 'Name',
+ *       sortable: true,
+ *       width: 200,
+ *       resizable: true,
+ *       render: (value, row) => `<strong>${value}</strong>`,
+ *       sortFn: (a, b) => a.name.localeCompare(b.name)
+ *     },
+ *     {
+ *       id: 'status',
+ *       label: 'Status',
+ *       sortable: true,
+ *       width: 100,
+ *       render: (val) => `<span class="badge">${val}</span>`
+ *     }
  *   ],
  *   toolbar: {
  *     search: { enabled: true, placeholder: 'Search...' },
- *     filters: [{ id: 'status', label: 'Status', options: ['all', 'active', 'inactive'] }],
- *     buttons: [{ id: 'refresh', label: 'Refresh', icon: '🔄', onClick: () => table.refresh() }]
+ *     filters: [
+ *       {
+ *         id: 'status',
+ *         label: 'Status',
+ *         options: [
+ *           { value: 'all', label: 'All Statuses' },
+ *           { value: 'active', label: 'Active' },
+ *           { value: 'inactive', label: 'Inactive' }
+ *         ],
+ *         filterFn: (row, value) => value === 'all' || row.status === value
+ *       }
+ *     ],
+ *     buttons: [
+ *       { id: 'refresh', label: 'Refresh', icon: '🔄', onClick: () => table.refresh() }
+ *     ]
  *   },
  *   sorting: { column: 'name', direction: 'asc' },
  *   stateKey: 'my-table',
- *   enableLogging: true
+ *   enableLogging: true,
+ *   onRefresh: async () => {
+ *     const data = await fetchData();
+ *     table.setData(data);
+ *   }
  * });
  *
  * table.setData(rowsArray);
  * ```
+ *
+ * Column Configuration:
+ * - id: Unique column identifier (required)
+ * - label: Display name (required)
+ * - sortable: Enable sorting (optional, default: false)
+ * - width: Column width in px or 'auto' (optional)
+ * - resizable: Enable column resizing (optional, default: true)
+ * - visible: Initial visibility (optional, default: true)
+ * - render: (value, row) => string - Custom cell renderer (optional)
+ * - sortFn: (rowA, rowB) => number - Custom sort function (optional)
+ * - className: CSS class for cells (optional)
+ * - fallback: Default value for null/undefined (optional, default: "—")
+ *
+ * Filter Options Format:
+ * - Must be objects with { value: string, label: string }
+ * - filterFn: (row, filterValue) => boolean - Custom filter logic (required)
  */
 
 import * as AppState from "../core/app_state.js";
@@ -78,6 +125,8 @@ export class DataTable {
 
     this.elements = {};
     this.resizing = null;
+    this.documentClickHandler = null;
+    this.scrollThrottle = null;
 
     this._loadState();
     this._init();
@@ -175,29 +224,22 @@ export class DataTable {
 
     if (toolbar.filters && toolbar.filters.length > 0) {
       toolbar.filters.forEach((filter) => {
-        // Handle both string options and object options { value, label }
-        const firstOption = filter.options[0];
-        const isObjectOptions =
-          typeof firstOption === "object" && firstOption !== null;
-        const defaultValue = isObjectOptions ? firstOption.value : firstOption;
+        // Filter options must be objects with { value, label }
+        const defaultValue = filter.options[0].value;
         const currentValue = this.state.filters[filter.id] || defaultValue;
 
         leftParts.push(`
           <select class="dt-filter" data-filter-id="${filter.id}">
             ${filter.options
-              .map((opt) => {
-                const optValue = isObjectOptions ? opt.value : opt;
-                const optLabel = isObjectOptions
-                  ? opt.label
-                  : filter.optionLabels?.[opt] || opt;
-                return `
-              <option value="${optValue}" ${
-                  optValue === currentValue ? "selected" : ""
+              .map(
+                (opt) => `
+              <option value="${opt.value}" ${
+                  opt.value === currentValue ? "selected" : ""
                 }>
-                ${optLabel}
+                ${opt.label}
               </option>
-            `;
-              })
+            `
+              )
               .join("")}
           </select>
         `);
@@ -352,9 +394,18 @@ export class DataTable {
       .map((col) => {
         let value = row[col.id];
 
-        // Custom renderer
+        // Custom renderer with error handling
         if (col.render && typeof col.render === "function") {
-          value = col.render(value, row);
+          try {
+            value = col.render(value, row);
+          } catch (error) {
+            this._log(
+              "error",
+              `Render function failed for column ${col.id}`,
+              error
+            );
+            value = `<span class="dt-render-error" title="${error.message}">Error</span>`;
+          }
         } else if (value === null || value === undefined) {
           value = col.fallback || "—";
         }
@@ -421,10 +472,14 @@ export class DataTable {
           columnMenu.style.display === "none" ? "block" : "none";
       });
 
-      // Close menu when clicking outside
-      document.addEventListener("click", () => {
+      // Close menu when clicking outside (cleanup on destroy)
+      if (this.documentClickHandler) {
+        document.removeEventListener("click", this.documentClickHandler);
+      }
+      this.documentClickHandler = () => {
         columnMenu.style.display = "none";
-      });
+      };
+      document.addEventListener("click", this.documentClickHandler);
 
       // Column checkboxes
       const checkboxes = columnMenu.querySelectorAll('input[type="checkbox"]');
@@ -495,10 +550,18 @@ export class DataTable {
       });
     }
 
-    // Scroll position tracking
+    // Scroll position tracking (throttled to avoid excessive saves)
     this.elements.scrollContainer.addEventListener("scroll", () => {
       this.state.scrollPosition = this.elements.scrollContainer.scrollTop;
-      this._saveState();
+
+      // Throttle state saves to once per 500ms
+      if (this.scrollThrottle) {
+        clearTimeout(this.scrollThrottle);
+      }
+      this.scrollThrottle = setTimeout(() => {
+        this._saveState();
+        this.scrollThrottle = null;
+      }, 500);
     });
   }
 
@@ -577,15 +640,16 @@ export class DataTable {
     if (!column) return;
 
     this.state.filteredData.sort((a, b) => {
+      // Custom sort function receives full row objects
+      if (column.sortFn) {
+        const result = column.sortFn(a, b);
+        return this.state.sortDirection === "asc" ? result : -result;
+      }
+
+      // Default sorting by column values
       let aVal = a[this.state.sortColumn];
       let bVal = b[this.state.sortColumn];
 
-      // Custom sort function
-      if (column.sortFn) {
-        return column.sortFn(aVal, bVal, this.state.sortDirection);
-      }
-
-      // Default sorting
       if (aVal === null || aVal === undefined) aVal = "";
       if (bVal === null || bVal === undefined) bVal = "";
 
@@ -614,7 +678,7 @@ export class DataTable {
    * Check if column is visible
    */
   _isColumnVisible(columnId) {
-    if (this.state.visibleColumns.hasOwnProperty(columnId)) {
+    if (columnId in this.state.visibleColumns) {
       return this.state.visibleColumns[columnId];
     }
     const col = this.options.columns.find((c) => c.id === columnId);
@@ -715,13 +779,29 @@ export class DataTable {
    * Destroy table and cleanup
    */
   destroy() {
+    // Clean up resize listeners
     if (this.resizing) {
       document.removeEventListener("mousemove", this._handleResize);
       document.removeEventListener("mouseup", this._handleResizeEnd);
     }
+
+    // Clean up document click listener
+    if (this.documentClickHandler) {
+      document.removeEventListener("click", this.documentClickHandler);
+      this.documentClickHandler = null;
+    }
+
+    // Clean up scroll throttle
+    if (this.scrollThrottle) {
+      clearTimeout(this.scrollThrottle);
+      this.scrollThrottle = null;
+    }
+
+    // Clear container
     if (this.elements.container) {
       this.elements.container.innerHTML = "";
     }
+
     this._log("info", "DataTable destroyed");
   }
 
