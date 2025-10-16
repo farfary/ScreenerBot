@@ -166,6 +166,40 @@ function createLifecycle() {
 
         if (table) {
           table.setData(Array.isArray(data.services) ? data.services : []);
+          if (data.summary) {
+            const healthy = data.summary.healthy_services || 0;
+            const degraded = data.summary.degraded_services || 0;
+            const unhealthy = data.summary.unhealthy_services || 0;
+            const alerts = degraded + unhealthy;
+            table.updateToolbarSummary([
+              {
+                id: "services-total",
+                label: "Total",
+                value: Utils.formatNumber(
+                  data.summary.total_services ?? healthy + alerts
+                ),
+              },
+              {
+                id: "services-healthy",
+                label: "Healthy",
+                value: Utils.formatNumber(healthy),
+                variant: "success",
+              },
+              {
+                id: "services-alerts",
+                label: "Alerts",
+                value: Utils.formatNumber(alerts),
+                variant: alerts > 0 ? "warning" : "success",
+                tooltip: `${Utils.formatNumber(degraded)} degraded / ${Utils.formatNumber(unhealthy)} unhealthy`,
+              },
+            ]);
+            table.updateToolbarMeta([
+              {
+                id: "services-last-update",
+                text: `Last update ${new Date().toLocaleTimeString()}`,
+              },
+            ]);
+          }
         }
 
         return data;
@@ -389,6 +423,26 @@ function createLifecycle() {
         zebra: true,
         fitToContainer: true, // Auto-fit columns to container width
         toolbar: {
+          title: {
+            icon: "🔧",
+            text: "Services",
+            meta: [{ id: "services-last-update", text: "Last update —" }],
+          },
+          summary: [
+            { id: "services-total", label: "Total", value: "0" },
+            {
+              id: "services-healthy",
+              label: "Healthy",
+              value: "0",
+              variant: "success",
+            },
+            {
+              id: "services-alerts",
+              label: "Alerts",
+              value: "0",
+              variant: "warning",
+            },
+          ],
           search: {
             enabled: true,
             placeholder: "Search services...",
@@ -427,6 +481,7 @@ function createLifecycle() {
             {
               id: "refresh",
               label: "Refresh",
+              variant: "primary",
               onClick: () => {
                 triggerRefresh("manual", { force: true, showToast: true }).catch(
                   () => {}

@@ -1,14 +1,5 @@
 /* Transactions page-specific styles */
 
-.transactions-page .toolbar-field--grow {
-  min-width: 220px;
-  flex: 1 1 220px;
-}
-
-.transactions-page .toolbar-field--compact {
-  min-width: 110px;
-}
-
 .transactions-summary-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

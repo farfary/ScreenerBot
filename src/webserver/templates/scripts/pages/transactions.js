@@ -57,6 +57,14 @@ let paginationState = {
 };
 
 // Current active filters
+const DEFAULT_FILTERS = {
+  signature: "",
+  type: "all",
+  direction: "all",
+  status: "all",
+};
+
+let pendingFilters = { ...DEFAULT_FILTERS };
 let currentFilters = {
   signature: null,
   types: [],
@@ -64,27 +72,73 @@ let currentFilters = {
   status: null,
 };
 
-function getFiltersFromUI() {
-  const signature = $("#tx-filter-signature")?.value.trim() || "";
-  const type = $("#tx-filter-type")?.value || "all";
-  const direction = $("#tx-filter-direction")?.value || "all";
-  const status = $("#tx-filter-status")?.value || "all";
-
+function normalizeFilters(raw) {
   return {
-    signature: signature || null,
-    types: type === "all" ? [] : [type.toLowerCase()],
-    direction: direction === "all" ? null : direction,
-    status: status === "all" ? null : status,
+    signature: raw.signature ? raw.signature.trim() || null : null,
+    types:
+      raw.type && raw.type !== "all" ? [raw.type.toLowerCase()] : [],
+    direction:
+      raw.direction && raw.direction !== "all" ? raw.direction : null,
+    status: raw.status && raw.status !== "all" ? raw.status : null,
   };
 }
 
-function applyFilters() {
-  currentFilters = getFiltersFromUI();
-  AppState.save("tx_filters", currentFilters);
+function loadSavedFilters() {
+  const saved = AppState.load("tx_filters");
+  if (saved && typeof saved === "object") {
+    pendingFilters = { ...DEFAULT_FILTERS };
+    if (typeof saved.signature === "string") {
+      pendingFilters.signature = saved.signature;
+    }
+    if (Array.isArray(saved.types) && saved.types.length > 0) {
+      pendingFilters.type = saved.types[0] || "all";
+    } else if (typeof saved.type === "string") {
+      pendingFilters.type = saved.type || "all";
+    }
+    if (typeof saved.direction === "string") {
+      pendingFilters.direction = saved.direction || "all";
+    }
+    if (typeof saved.status === "string") {
+      pendingFilters.status = saved.status || "all";
+    }
+  } else {
+    pendingFilters = { ...DEFAULT_FILTERS };
+  }
+  currentFilters = normalizeFilters(pendingFilters);
+}
+
+function persistPendingFilters() {
+  AppState.save("tx_filters", pendingFilters);
+}
+
+function resetPendingFilters(table) {
+  pendingFilters = { ...DEFAULT_FILTERS };
+  currentFilters = normalizeFilters(pendingFilters);
+  persistPendingFilters();
+  if (table) {
+    table.setToolbarCustomControlValue("signature", "");
+    table.setToolbarFilterValue("type", "all", { apply: false });
+    table.setToolbarFilterValue("direction", "all", { apply: false });
+    table.setToolbarFilterValue("status", "all", { apply: false });
+  }
+  paginationState = {
+    currentCursor: null,
+    isLoading: false,
+    hasMore: true,
+    allLoadedData: [],
+  };
+  if (table) {
+    table.clearData();
+  }
+  loadTransactions();
+}
+
+function applyPendingFilters(table, options = {}) {
+  currentFilters = normalizeFilters(pendingFilters);
+  persistPendingFilters();
 
   console.log("[TX] Applying filters:", currentFilters);
 
-  // Reset pagination and reload from scratch
   paginationState = {
     currentCursor: null,
     isLoading: false,
@@ -92,42 +146,28 @@ function applyFilters() {
     allLoadedData: [],
   };
 
-  if (window.transactionsTable) {
-    window.transactionsTable.clearData();
-    loadTransactions();
+  if (table) {
+    table.clearData();
   }
+  loadTransactions(options.append === true);
 }
 
-function resetFilters() {
-  currentFilters = {
-    signature: null,
-    types: [],
-    direction: null,
-    status: null,
-  };
-
-  // Reset UI
-  if ($("#tx-filter-signature")) $("#tx-filter-signature").value = "";
-  if ($("#tx-filter-type")) $("#tx-filter-type").value = "all";
-  if ($("#tx-filter-direction")) $("#tx-filter-direction").value = "all";
-  if ($("#tx-filter-status")) $("#tx-filter-status").value = "all";
-
-  AppState.save("tx_filters", currentFilters);
-
-  console.log("[TX] Resetting filters");
-
-  // Reset pagination and reload
-  paginationState = {
-    currentCursor: null,
-    isLoading: false,
-    hasMore: true,
-    allLoadedData: [],
-  };
-
-  if (window.transactionsTable) {
-    window.transactionsTable.clearData();
-    loadTransactions();
+function syncToolbarFromPending(table) {
+  if (!table) {
+    return;
   }
+  table.setToolbarCustomControlValue("signature", pendingFilters.signature || "");
+  table.setToolbarFilterValue("type", pendingFilters.type || "all", {
+    apply: false,
+  });
+  table.setToolbarFilterValue(
+    "direction",
+    pendingFilters.direction || "all",
+    { apply: false }
+  );
+  table.setToolbarFilterValue("status", pendingFilters.status || "all", {
+    apply: false,
+  });
 }
 
 // =============================================================================
@@ -226,10 +266,12 @@ function renderSummary(summary) {
 }
 
 function updateLastUpdated() {
-  const el = $("#tx-last-updated");
-  if (el) {
-    el.textContent = `Last update: ${new Date().toLocaleTimeString()}`;
+  if (!window.transactionsTable) {
+    return;
   }
+  window.transactionsTable.updateToolbarMeta([
+    { id: "lastUpdate", text: `Last update ${new Date().toLocaleTimeString()}` },
+  ]);
 }
 
 /**
@@ -268,7 +310,8 @@ async function loadTransactions(append = false) {
 
   // Update pagination state
   paginationState.currentCursor = result.next_cursor;
-  paginationState.hasMore = result.next_cursor !== null && result.next_cursor !== undefined;
+  paginationState.hasMore =
+    result.next_cursor !== null && result.next_cursor !== undefined;
 
   console.log("[TX] Next cursor:", paginationState.currentCursor);
   console.log("[TX] Has more:", paginationState.hasMore);
@@ -285,30 +328,36 @@ async function loadTransactions(append = false) {
     window.transactionsTable.setData(result.items);
   }
 
-  // Update summary meta
-  const summaryEl = $("#tx-summary");
-  if (summaryEl && result.total_estimate !== undefined) {
-    summaryEl.textContent = `${Utils.formatNumber(
-      result.total_estimate
-    )} total`;
-  }
-
-  // Update loaded count indicator
-  updateLoadedCountIndicator();
+  updateToolbarStats(result.total_estimate);
+  updateLastUpdated();
 }
 
-/**
- * Update the indicator showing how many transactions are loaded
- */
-function updateLoadedCountIndicator() {
-  const summaryEl = $("#tx-summary");
-  if (!summaryEl) return;
+function updateToolbarStats(totalEstimate) {
+  if (!window.transactionsTable) {
+    return;
+  }
 
   const loaded = paginationState.allLoadedData.length;
   const hasMore = paginationState.hasMore;
-  const suffix = hasMore ? " (scroll for more)" : " (all loaded)";
-  
-  summaryEl.textContent = `${Utils.formatNumber(loaded)} loaded ${suffix}`;
+
+  const summaryItems = [
+    {
+      id: "loaded",
+      label: "Loaded",
+      value: Utils.formatNumber(loaded),
+      tooltip: hasMore ? "Scroll for more" : "All results loaded",
+    },
+    {
+      id: "total",
+      label: "Total",
+      value:
+        totalEstimate !== undefined && totalEstimate !== null
+          ? Utils.formatNumber(totalEstimate)
+          : "—",
+    },
+  ];
+
+  window.transactionsTable.updateToolbarSummary(summaryItems);
 }
 
 // =============================================================================
@@ -421,9 +470,112 @@ function createTable() {
     autoSizeColumns: true,
     autoSizeSample: 40,
     autoSizePadding: 20,
-    // Disable built-in toolbar since we use custom filters
-    toolbar: {},
+    toolbar: {
+      title: {
+        icon: "💱",
+        text: "Transactions",
+        meta: [{ id: "lastUpdate", text: "Last update —" }],
+      },
+      summary: [
+        { id: "loaded", label: "Loaded", value: "0" },
+        { id: "total", label: "Total", value: "—" },
+      ],
+      customControls: [
+        {
+          id: "signature",
+          type: "input",
+          label: "Signature",
+          placeholder: "Signature contains...",
+          clearable: true,
+          minWidth: "220px",
+          onChange: (value) => {
+            pendingFilters.signature = value ?? "";
+          },
+          onClear: () => {
+            pendingFilters.signature = "";
+          },
+          onSubmit: () => {
+            applyPendingFilters(window.transactionsTable);
+          },
+        },
+      ],
+      filters: [
+        {
+          id: "type",
+          label: "Type",
+          defaultValue: "all",
+          minWidth: "140px",
+          autoApply: false,
+          options: [
+            { value: "all", label: "All types" },
+            { value: "buy", label: "Buy" },
+            { value: "sell", label: "Sell" },
+            { value: "swap", label: "Swap" },
+            { value: "transfer", label: "Transfer" },
+            { value: "ata", label: "ATA" },
+            { value: "failed", label: "Failed" },
+            { value: "unknown", label: "Unknown" },
+          ],
+          onChange: (value) => {
+            pendingFilters.type = value || "all";
+          },
+        },
+        {
+          id: "direction",
+          label: "Direction",
+          defaultValue: "all",
+          minWidth: "140px",
+          autoApply: false,
+          options: [
+            { value: "all", label: "All directions" },
+            { value: "Incoming", label: "Incoming" },
+            { value: "Outgoing", label: "Outgoing" },
+            { value: "Internal", label: "Internal" },
+            { value: "Unknown", label: "Unknown" },
+          ],
+          onChange: (value) => {
+            pendingFilters.direction = value || "all";
+          },
+        },
+        {
+          id: "status",
+          label: "Status",
+          defaultValue: "all",
+          minWidth: "140px",
+          autoApply: false,
+          options: [
+            { value: "all", label: "All statuses" },
+            { value: "Pending", label: "Pending" },
+            { value: "Confirmed", label: "Confirmed" },
+            { value: "Finalized", label: "Finalized" },
+            { value: "Failed", label: "Failed" },
+          ],
+          onChange: (value) => {
+            pendingFilters.status = value || "all";
+          },
+        },
+      ],
+      buttons: [
+        {
+          id: "reset",
+          label: "Reset",
+          onClick: (_btn, table) => {
+            resetPendingFilters(table);
+          },
+        },
+        {
+          id: "apply",
+          label: "Apply Filters",
+          variant: "primary",
+          onClick: (_btn, table) => {
+            applyPendingFilters(table);
+          },
+        },
+      ],
+    },
   });
+
+  syncToolbarFromPending(window.transactionsTable);
 
   // Setup scroll pagination
   setupScrollPagination();
@@ -523,60 +675,14 @@ function createLifecycle() {
 
   return {
     init(ctx) {
-      // Restore filters from state
-      const savedFilters = AppState.load("tx_filters");
-      if (savedFilters) {
-        currentFilters = savedFilters;
-
-        // Apply to UI
-        if (savedFilters.signature && $("#tx-filter-signature")) {
-          $("#tx-filter-signature").value = savedFilters.signature;
-        }
-        if (savedFilters.types && savedFilters.types.length > 0 && $("#tx-filter-type")) {
-          $("#tx-filter-type").value = savedFilters.types[0];
-        }
-        if (savedFilters.direction && $("#tx-filter-direction")) {
-          $("#tx-filter-direction").value = savedFilters.direction;
-        }
-        if (savedFilters.status && $("#tx-filter-status")) {
-          $("#tx-filter-status").value = savedFilters.status;
-        }
-      }
-
-      // Create table
+      loadSavedFilters();
+      paginationState = {
+        currentCursor: null,
+        isLoading: false,
+        hasMore: true,
+        allLoadedData: [],
+      };
       createTable();
-
-      // Bind filter controls
-      const applyBtn = $("#tx-apply-filters");
-      const resetBtn = $("#tx-reset-filters");
-      const signatureInput = $("#tx-filter-signature");
-      const clearBtn = $("#tx-clear-signature");
-
-      if (applyBtn) {
-        applyBtn.addEventListener("click", applyFilters);
-      }
-
-      if (resetBtn) {
-        resetBtn.addEventListener("click", resetFilters);
-      }
-
-      if (signatureInput && clearBtn) {
-        signatureInput.addEventListener("input", () => {
-          clearBtn.hidden = !signatureInput.value;
-        });
-
-        signatureInput.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") {
-            applyFilters();
-          }
-        });
-
-        clearBtn.addEventListener("click", () => {
-          signatureInput.value = "";
-          clearBtn.hidden = true;
-          signatureInput.focus();
-        });
-      }
     },
 
     activate(ctx) {
@@ -589,6 +695,9 @@ function createLifecycle() {
           const summary = await fetchSummary();
           if (summary) {
             renderSummary(summary);
+            if (typeof summary.total === "number") {
+              updateToolbarStats(summary.total);
+            }
             updateLastUpdated();
           }
         }, { label: "TransactionsSummary" })

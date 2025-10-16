@@ -119,6 +119,7 @@
 
 import * as AppState from "../core/app_state.js";
 import { $, $$, cls } from "../core/dom.js";
+import { TableToolbarView } from "./table_toolbar.js";
 
 export class DataTable {
   constructor(options) {
@@ -159,6 +160,7 @@ export class DataTable {
       sortDirection: this.options.sorting.direction,
       searchQuery: "",
       filters: {},
+      customControls: {},
       columnWidths: {},
       visibleColumns: {},
       columnOrder: [], // Store custom column order
@@ -171,6 +173,7 @@ export class DataTable {
     };
 
     this.elements = {};
+    this.toolbarView = null;
     this.resizing = null;
     this._pendingRAF = null;
     this.documentClickHandler = null;
@@ -297,103 +300,24 @@ export class DataTable {
    */
   _renderToolbar() {
     const { toolbar } = this.options;
-    if (!toolbar || Object.keys(toolbar).length === 0) return "";
-
-    const parts = [];
-
-    // Left section: Search and filters
-    const leftParts = [];
-
-    if (toolbar.search?.enabled) {
-      leftParts.push(`
-        <div class="dt-search">
-          <input 
-            type="text" 
-            class="dt-search-input" 
-            placeholder="${toolbar.search.placeholder || "Search..."}"
-            value="${this.state.searchQuery}"
-          />
-        </div>
-      `);
+    if (!toolbar || Object.keys(toolbar).length === 0) {
+      this.toolbarView = null;
+      return "";
     }
 
-    if (toolbar.filters && toolbar.filters.length > 0) {
-      toolbar.filters.forEach((filter) => {
-        // Filter options must be objects with { value, label }
-        const defaultValue = filter.options[0].value;
-        const currentValue = this.state.filters[filter.id] || defaultValue;
-
-        leftParts.push(`
-          <select class="dt-filter" data-filter-id="${filter.id}">
-            ${filter.options
-              .map(
-                (opt) => `
-              <option value="${opt.value}" ${
-                  opt.value === currentValue ? "selected" : ""
-                }>
-                ${opt.label}
-              </option>
-            `
-              )
-              .join("")}
-          </select>
-        `);
-      });
+    if (!this.toolbarView) {
+      this.toolbarView = new TableToolbarView(toolbar);
+    } else {
+      this.toolbarView.config = toolbar;
     }
 
-    // Right section: Buttons and column toggle
-    const rightParts = [];
+    const toolbarState = {
+      searchQuery: this.state.searchQuery,
+      filters: this.state.filters,
+      customControls: this.state.customControls,
+    };
 
-    if (toolbar.buttons && toolbar.buttons.length > 0) {
-      toolbar.buttons.forEach((btn) => {
-        rightParts.push(`
-          <button class="dt-btn" data-btn-id="${btn.id}" title="${
-          btn.tooltip || btn.label
-        }">
-            ${btn.icon ? `<span class="dt-btn-icon">${btn.icon}</span>` : ""}
-            <span class="dt-btn-label">${btn.label}</span>
-          </button>
-        `);
-      });
-    }
-
-    // Column visibility toggle with reordering
-    const menuColumns = this._getOrderedColumns(true);
-    rightParts.push(`
-      <div class="dt-column-toggle">
-        <button class="dt-btn dt-btn-columns" title="Show/Hide Columns">
-          <span class="dt-btn-icon">⚙️</span>
-        </button>
-        <div class="dt-column-menu" style="display: none;">
-          ${menuColumns
-            .map(
-              (col) => `
-            <label class="dt-column-menu-item" data-column-id="${col.id}">
-              <span class="dt-column-drag-handle" draggable="true" title="Drag to reorder columns">☰</span>
-              <input 
-                type="checkbox" 
-                data-column-id="${col.id}"
-                ${this._isColumnVisible(col.id) ? "checked" : ""}
-              />
-              <span class="dt-column-label">${col.label}</span>
-            </label>
-          `
-            )
-            .join("")}
-        </div>
-      </div>
-    `);
-
-    return `
-      <div class="data-table-toolbar">
-        <div class="dt-toolbar-left">
-          ${leftParts.join("")}
-        </div>
-        <div class="dt-toolbar-right">
-          ${rightParts.join("")}
-        </div>
-      </div>
-    `;
+    return this.toolbarView.render(toolbarState);
   }
 
   /**
@@ -899,183 +823,349 @@ export class DataTable {
     // Remove old listeners first to prevent duplicates
     this._removeEventListeners();
 
+    const toolbarRoot = this.elements.toolbar;
+
     // Search input
-    const searchInput =
-      this.elements.container.querySelector(".dt-search-input");
+    const searchInput = toolbarRoot?.querySelector(".dt-search-input");
+    const searchClear = toolbarRoot?.querySelector(
+      ".table-toolbar-search__clear"
+    );
     if (searchInput) {
       const handler = (e) => {
         this.state.searchQuery = e.target.value;
+        if (searchClear) {
+          searchClear.hidden = !(e.target.value || "").length;
+        }
         this._applyFilters();
         this._saveState();
       };
       this._addEventListener(searchInput, "input", handler);
+
+      const keyHandler = (e) => {
+        if (e.key === "Escape" && searchInput.value) {
+          searchInput.value = "";
+          this.state.searchQuery = "";
+          if (searchClear) {
+            searchClear.hidden = true;
+          }
+          this._applyFilters();
+          this._saveState();
+        }
+      };
+      this._addEventListener(searchInput, "keydown", keyHandler);
+    }
+
+    if (searchClear) {
+      searchClear.hidden = !(this.state.searchQuery || "").length;
+      const clearHandler = () => {
+        if (searchInput) {
+          searchInput.value = "";
+          searchInput.focus();
+        }
+        this.state.searchQuery = "";
+        searchClear.hidden = true;
+        this._applyFilters();
+        this._saveState();
+      };
+      this._addEventListener(searchClear, "click", clearHandler);
     }
 
     // Filter dropdowns
-    const filterSelects =
-      this.elements.container.querySelectorAll(".dt-filter");
+    const filterSelects = toolbarRoot?.querySelectorAll(".dt-filter") || [];
     filterSelects.forEach((select) => {
+      const filterId = select.dataset.filterId;
+      if (!filterId) {
+        return;
+      }
+
+      if (!(filterId in this.state.filters)) {
+        this.state.filters[filterId] = select.value;
+      }
+
       const handler = (e) => {
-        const filterId = e.target.dataset.filterId;
-        this.state.filters[filterId] = e.target.value;
-        this._applyFilters();
+        const value = e.target.value;
+        this.state.filters[filterId] = value;
+        const filterConfig = this.options.toolbar.filters?.find(
+          (filter) => filter.id === filterId
+        );
+
+        const autoApply = filterConfig?.autoApply !== false;
+        if (autoApply) {
+          this._applyFilters();
+        }
         this._saveState();
+
+        if (typeof filterConfig?.onChange === "function") {
+          filterConfig.onChange(value, e.target);
+        }
       };
       this._addEventListener(select, "change", handler);
     });
 
+    // Custom controls (text inputs, etc.)
+    const controlInputs =
+      toolbarRoot?.querySelectorAll(
+        ".table-toolbar-input[data-control-id]"
+      ) || [];
+    controlInputs.forEach((input) => {
+      const controlId = input.dataset.controlId;
+      if (!controlId) {
+        return;
+      }
+
+      const controlConfig = this.options.toolbar.customControls?.find(
+        (control) => control.id === controlId
+      );
+
+      if (!(controlId in this.state.customControls)) {
+        this.state.customControls[controlId] = input.value ?? "";
+      } else if (input.value !== this.state.customControls[controlId]) {
+        input.value = this.state.customControls[controlId];
+      }
+
+      const updateClearButton = () => {
+        const wrapper = input.closest("[data-control-wrapper]");
+        if (!wrapper) {
+          return;
+        }
+        const clearBtn = wrapper.querySelector(".table-toolbar-input__clear");
+        if (clearBtn) {
+          clearBtn.hidden = !(input.value || "").length;
+        }
+      };
+
+      updateClearButton();
+
+      const inputHandler = (e) => {
+        const value = e.target.value;
+        this.state.customControls[controlId] = value;
+        updateClearButton();
+        this._saveState();
+        if (typeof controlConfig?.onChange === "function") {
+          controlConfig.onChange(value, input);
+        }
+      };
+      this._addEventListener(input, "input", inputHandler);
+
+      const keyHandler = (e) => {
+        if (e.key === "Enter") {
+          if (typeof controlConfig?.onSubmit === "function") {
+            controlConfig.onSubmit(input.value, input);
+          }
+        }
+      };
+      this._addEventListener(input, "keydown", keyHandler);
+
+      const wrapper = input.closest("[data-control-wrapper]");
+      if (wrapper) {
+        const clearBtn = wrapper.querySelector(".table-toolbar-input__clear");
+        if (clearBtn) {
+          const clearHandler = () => {
+            input.value = "";
+            this.state.customControls[controlId] = "";
+            updateClearButton();
+            this._saveState();
+            if (typeof controlConfig?.onChange === "function") {
+              controlConfig.onChange("", input);
+            }
+            if (typeof controlConfig?.onClear === "function") {
+              controlConfig.onClear(input);
+            }
+            input.focus();
+          };
+          this._addEventListener(clearBtn, "click", clearHandler);
+        }
+      }
+    });
+
     // Toolbar buttons
-    const buttons = this.elements.container.querySelectorAll(
-      ".dt-btn[data-btn-id]"
-    );
+    const buttons =
+      toolbarRoot?.querySelectorAll(".table-toolbar-btn[data-btn-id]") || [];
     buttons.forEach((btn) => {
       const handler = () => {
         const btnId = btn.dataset.btnId;
         const btnConfig = this.options.toolbar.buttons?.find(
           (b) => b.id === btnId
         );
-        if (btnConfig?.onClick) {
-          btnConfig.onClick();
+        if (typeof btnConfig?.onClick === "function") {
+          btnConfig.onClick(btn, this);
         }
       };
       this._addEventListener(btn, "click", handler);
     });
 
     // Column visibility toggle
-    const columnBtn = this.elements.container.querySelector(".dt-btn-columns");
-    const columnMenu = this.elements.container.querySelector(".dt-column-menu");
+    const columnBtn = toolbarRoot?.querySelector(".dt-btn-columns");
+    const columnMenu = toolbarRoot?.querySelector(".dt-column-menu");
     if (columnBtn && columnMenu) {
-      const btnHandler = (e) => {
-        e.stopPropagation();
-        columnMenu.style.display =
-          columnMenu.style.display === "none" ? "block" : "none";
-      };
-      this._addEventListener(columnBtn, "click", btnHandler);
-
-      // Close menu when clicking outside
-      this.documentClickHandler = () => {
-        columnMenu.style.display = "none";
-      };
-      document.addEventListener("click", this.documentClickHandler);
-
-      // Column checkboxes
-      const checkboxes = columnMenu.querySelectorAll('input[type="checkbox"]');
-      checkboxes.forEach((cb) => {
-        const handler = (e) => {
-          const columnId = e.target.dataset.columnId;
-          this.state.visibleColumns[columnId] = e.target.checked;
-          this._saveState();
-          this._renderTable();
-        };
-        this._addEventListener(cb, "change", handler);
-      });
-
-      // Column reordering within the settings menu
       let draggingMenuItem = null;
+      let clearMenuDragHighlights = () => {};
 
-      const clearMenuDragHighlights = () => {
-        columnMenu
-          .querySelectorAll(".dt-column-menu-item.drag-over")
-          .forEach((dragItem) => dragItem.classList.remove("drag-over"));
-      };
+      const buildColumnMenu = () => {
+        const menuColumns = this._getOrderedColumns(true);
+        columnMenu.innerHTML = menuColumns
+          .map(
+            (col) => `
+            <label class="dt-column-menu-item" data-column-id="${col.id}">
+              <span class="dt-column-drag-handle" draggable="true" title="Drag to reorder columns">☰</span>
+              <input 
+                type="checkbox" 
+                data-column-id="${col.id}"
+                ${this._isColumnVisible(col.id) ? "checked" : ""}
+              />
+              <span class="dt-column-label">${col.label}</span>
+            </label>
+          `
+          )
+          .join("");
 
-      const menuItems = columnMenu.querySelectorAll(".dt-column-menu-item");
-      menuItems.forEach((item) => {
-        const handle = item.querySelector(".dt-column-drag-handle");
-        if (!handle) {
-          return;
-        }
-
-        const preventClickHandler = (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        };
-        this._addEventListener(handle, "click", preventClickHandler);
-
-        const dragStartHandler = (e) => {
-          draggingMenuItem = item;
-          item.classList.add("dragging");
-          e.dataTransfer.effectAllowed = "move";
-          e.dataTransfer.setData(
-            "text/plain",
-            item.dataset.columnId || "column"
-          );
+        clearMenuDragHighlights = () => {
+          columnMenu
+            .querySelectorAll(".dt-column-menu-item.drag-over")
+            .forEach((dragItem) => dragItem.classList.remove("drag-over"));
         };
 
-        const dragEndHandler = () => {
-          if (draggingMenuItem) {
-            draggingMenuItem.classList.remove("dragging");
-            draggingMenuItem = null;
-            this._updateColumnOrderFromMenu(columnMenu);
-          }
-          clearMenuDragHighlights();
-        };
+        const checkboxes = columnMenu.querySelectorAll(
+          'input[type="checkbox"]'
+        );
+        checkboxes.forEach((cb) => {
+          const handler = (e) => {
+            const columnId = e.target.dataset.columnId;
+            this.state.visibleColumns[columnId] = e.target.checked;
+            const shouldReopen = columnMenu.style.display === "block";
+            this._pendingColumnMenuOpen = shouldReopen;
+            this._saveState();
+            this._renderTable();
+          };
+          this._addEventListener(cb, "change", handler);
+        });
 
-        const dragOverHandler = (e) => {
-          if (!draggingMenuItem || draggingMenuItem === item) {
+        const menuItems = columnMenu.querySelectorAll(".dt-column-menu-item");
+        menuItems.forEach((item) => {
+          const handle = item.querySelector(".dt-column-drag-handle");
+          if (!handle) {
             return;
           }
 
-          e.preventDefault();
-          const rect = item.getBoundingClientRect();
-          const shouldInsertBefore = e.clientY - rect.top < rect.height / 2;
+          const preventClickHandler = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          };
+          this._addEventListener(handle, "click", preventClickHandler);
 
-          const parent = item.parentElement;
-          if (!parent) {
-            return;
-          }
+          const dragStartHandler = (e) => {
+            draggingMenuItem = item;
+            item.classList.add("dragging");
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData(
+              "text/plain",
+              item.dataset.columnId || "column"
+            );
+          };
 
-          if (shouldInsertBefore) {
-            if (item.previousElementSibling !== draggingMenuItem) {
-              parent.insertBefore(draggingMenuItem, item);
+          const dragEndHandler = () => {
+            if (draggingMenuItem) {
+              draggingMenuItem.classList.remove("dragging");
+              draggingMenuItem = null;
+              this._updateColumnOrderFromMenu(columnMenu);
             }
-          } else {
-            if (item.nextElementSibling !== draggingMenuItem) {
+            clearMenuDragHighlights();
+          };
+
+          const dragOverHandler = (e) => {
+            if (!draggingMenuItem || draggingMenuItem === item) {
+              return;
+            }
+
+            e.preventDefault();
+            const rect = item.getBoundingClientRect();
+            const shouldInsertBefore = e.clientY - rect.top < rect.height / 2;
+
+            const parent = item.parentElement;
+            if (!parent) {
+              return;
+            }
+
+            if (shouldInsertBefore) {
+              if (item.previousElementSibling !== draggingMenuItem) {
+                parent.insertBefore(draggingMenuItem, item);
+              }
+            } else if (item.nextElementSibling !== draggingMenuItem) {
               parent.insertBefore(draggingMenuItem, item.nextElementSibling);
             }
-          }
 
-          clearMenuDragHighlights();
-          item.classList.add("drag-over");
-        };
+            clearMenuDragHighlights();
+            item.classList.add("drag-over");
+          };
 
-        const dragLeaveHandler = () => {
-          item.classList.remove("drag-over");
-        };
+          const dragLeaveHandler = () => {
+            item.classList.remove("drag-over");
+          };
 
-        const dropHandler = (e) => {
-          if (!draggingMenuItem || draggingMenuItem === item) {
-            return;
-          }
+          const dropHandler = (e) => {
+            if (!draggingMenuItem || draggingMenuItem === item) {
+              return;
+            }
 
-          e.preventDefault();
-          const rect = item.getBoundingClientRect();
-          const shouldInsertBefore = e.clientY - rect.top < rect.height / 2;
-          const parent = item.parentElement;
-          if (!parent) {
-            return;
-          }
+            e.preventDefault();
+            const rect = item.getBoundingClientRect();
+            const shouldInsertBefore = e.clientY - rect.top < rect.height / 2;
+            const parent = item.parentElement;
+            if (!parent) {
+              return;
+            }
 
-          if (shouldInsertBefore) {
-            parent.insertBefore(draggingMenuItem, item);
-          } else {
-            parent.insertBefore(draggingMenuItem, item.nextElementSibling);
-          }
+            if (shouldInsertBefore) {
+              parent.insertBefore(draggingMenuItem, item);
+            } else {
+              parent.insertBefore(draggingMenuItem, item.nextElementSibling);
+            }
 
-          this._updateColumnOrderFromMenu(columnMenu);
-          if (draggingMenuItem) {
-            draggingMenuItem.classList.remove("dragging");
-          }
-          draggingMenuItem = null;
-          clearMenuDragHighlights();
-        };
+            this._updateColumnOrderFromMenu(columnMenu);
+            if (draggingMenuItem) {
+              draggingMenuItem.classList.remove("dragging");
+            }
+            draggingMenuItem = null;
+            clearMenuDragHighlights();
+          };
 
-        this._addEventListener(handle, "dragstart", dragStartHandler);
-        this._addEventListener(handle, "dragend", dragEndHandler);
-        this._addEventListener(item, "dragover", dragOverHandler);
-        this._addEventListener(item, "dragleave", dragLeaveHandler);
-        this._addEventListener(item, "drop", dropHandler);
-      });
+          this._addEventListener(handle, "dragstart", dragStartHandler);
+          this._addEventListener(handle, "dragend", dragEndHandler);
+          this._addEventListener(item, "dragover", dragOverHandler);
+          this._addEventListener(item, "dragleave", dragLeaveHandler);
+          this._addEventListener(item, "drop", dropHandler);
+        });
+      };
+
+      const toggleColumnMenu = (shouldOpen) => {
+        const isOpen = columnMenu.style.display === "block";
+        const nextState =
+          typeof shouldOpen === "boolean" ? shouldOpen : !isOpen;
+        if (nextState) {
+          buildColumnMenu();
+          columnMenu.style.display = "block";
+        } else {
+          columnMenu.style.display = "none";
+        }
+      };
+
+      const columnToggleHandler = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleColumnMenu();
+      };
+      this._addEventListener(columnBtn, "click", columnToggleHandler);
+
+      this.documentClickHandler = (event) => {
+        if (
+          columnMenu.style.display === "block" &&
+          !columnMenu.contains(event.target) &&
+          !columnBtn.contains(event.target)
+        ) {
+          toggleColumnMenu(false);
+        }
+      };
+      document.addEventListener("click", this.documentClickHandler);
 
       const menuDragOverHandler = (e) => {
         if (!draggingMenuItem || e.target !== columnMenu) {
@@ -1100,8 +1190,10 @@ export class DataTable {
       this._addEventListener(columnMenu, "drop", menuDropHandler);
 
       if (this._pendingColumnMenuOpen) {
-        columnMenu.style.display = "block";
+        toggleColumnMenu(true);
         this._pendingColumnMenuOpen = false;
+      } else {
+        buildColumnMenu();
       }
     }
 
@@ -1960,6 +2052,15 @@ export class DataTable {
     if (saved) {
       this.state = { ...this.state, ...saved };
       if (
+        saved.customControls &&
+        typeof saved.customControls === "object" &&
+        !Array.isArray(saved.customControls)
+      ) {
+        this.state.customControls = { ...saved.customControls };
+      } else {
+        this.state.customControls = {};
+      }
+      if (
         saved.userResizedColumns &&
         typeof saved.userResizedColumns === "object"
       ) {
@@ -1980,6 +2081,7 @@ export class DataTable {
       sortDirection: this.state.sortDirection,
       searchQuery: this.state.searchQuery,
       filters: this.state.filters,
+      customControls: this.state.customControls,
       columnWidths: this.state.columnWidths,
       visibleColumns: this.state.visibleColumns,
       scrollPosition: this.state.scrollPosition,
@@ -2058,6 +2160,69 @@ export class DataTable {
       });
 
     return refreshPromise;
+  }
+
+  updateToolbarSummary(summaryItems = []) {
+    if (!this.elements.toolbar) {
+      return;
+    }
+    TableToolbarView.updateSummary(this.elements.toolbar, summaryItems);
+  }
+
+  updateToolbarMeta(metaItems = []) {
+    if (!this.elements.toolbar) {
+      return;
+    }
+    TableToolbarView.updateMeta(this.elements.toolbar, metaItems);
+  }
+
+  setToolbarSearchValue(value, options = {}) {
+    const nextValue = value ?? "";
+    this.state.searchQuery = nextValue;
+    if (this.elements.toolbar) {
+      TableToolbarView.setSearchValue(this.elements.toolbar, nextValue);
+    }
+    if (options.apply !== false) {
+      this._applyFilters();
+    }
+    this._saveState();
+  }
+
+  setToolbarFilterValue(filterId, value, options = {}) {
+    if (!filterId) {
+      return;
+    }
+    this.state.filters[filterId] = value;
+    if (this.elements.toolbar) {
+      TableToolbarView.setFilterValue(
+        this.elements.toolbar,
+        filterId,
+        value
+      );
+    }
+    if (options.apply !== false) {
+      this._applyFilters();
+    }
+    this._saveState();
+  }
+
+  setToolbarCustomControlValue(controlId, value, options = {}) {
+    if (!controlId) {
+      return;
+    }
+    const nextValue = value ?? "";
+    this.state.customControls[controlId] = nextValue;
+    if (this.elements.toolbar) {
+      TableToolbarView.setCustomControlValue(
+        this.elements.toolbar,
+        controlId,
+        nextValue
+      );
+    }
+    if (options.apply) {
+      this._applyFilters();
+    }
+    this._saveState();
   }
 
   /**

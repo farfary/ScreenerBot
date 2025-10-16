@@ -26,6 +26,7 @@ pub const CORE_ROUTER: &str = include_str!("templates/scripts/core/router.js");
 const THEME_SCRIPTS: &str = include_str!("templates/scripts/theme.js");
 
 pub const DATA_TABLE_UI: &str = include_str!("templates/scripts/ui/data_table.js");
+pub const TABLE_TOOLBAR_UI: &str = include_str!("templates/scripts/ui/table_toolbar.js");
 
 pub const SERVICES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/services.js");
 pub const TRANSACTIONS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/transactions.js");

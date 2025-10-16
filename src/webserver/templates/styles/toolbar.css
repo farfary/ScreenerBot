@@ -1,4 +1,348 @@
 /* Shared toolbar and filtering styles for dashboard tabs */
+
+/* ===================== Data Table Toolbar ===================== */
+.data-table-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.table-toolbar {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.table-toolbar__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.table-toolbar__row--controls {
+  align-items: flex-start;
+}
+
+.table-toolbar-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.table-toolbar-title__icon {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.table-toolbar-title__text-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.table-toolbar-title__line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.table-toolbar-title__tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--primary-color);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.table-toolbar-meta,
+.table-toolbar-title__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.table-toolbar-meta__item {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.table-toolbar-meta__item[data-variant="accent"] {
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.table-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.table-toolbar-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+}
+
+.table-toolbar-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.table-toolbar-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.table-toolbar-chip__icon {
+  font-size: 0.85em;
+}
+
+.table-toolbar-chip__label {
+  color: var(--text-secondary);
+}
+
+.table-toolbar-chip[data-variant="success"] {
+  background: rgba(34, 197, 94, 0.18);
+  color: #4ade80;
+}
+
+.table-toolbar-chip[data-variant="warning"] {
+  background: rgba(250, 204, 21, 0.18);
+  color: #facc15;
+}
+
+.table-toolbar-chip[data-variant="error"] {
+  background: rgba(248, 113, 113, 0.2);
+  color: #f87171;
+}
+
+.table-toolbar-chip[data-variant="info"] {
+  background: rgba(59, 130, 246, 0.18);
+  color: #60a5fa;
+}
+
+.table-toolbar-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 160px;
+  flex: 0 1 auto;
+}
+
+.table-toolbar-field__label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  line-height: 1.2;
+}
+
+.table-toolbar-input,
+.table-toolbar-select,
+.dt-filter,
+.dt-search-input {
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+}
+
+.table-toolbar-input:focus,
+.table-toolbar-select:focus,
+.dt-filter:focus,
+.dt-search-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.table-toolbar-input:hover,
+.table-toolbar-select:hover,
+.dt-filter:hover,
+.dt-search-input:hover {
+  border-color: var(--primary-color);
+}
+
+.table-toolbar-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.table-toolbar-search--inline {
+  width: auto;
+}
+
+.table-toolbar-search .dt-search-input {
+  padding-left: 36px;
+  padding-right: 30px;
+  min-width: 220px;
+}
+
+.table-toolbar-search__icon {
+  position: absolute;
+  left: 12px;
+  font-size: 0.9rem;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.table-toolbar-search__clear,
+.table-toolbar-input__clear {
+  position: absolute;
+  right: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  width: 18px;
+  height: 18px;
+  font-size: 0.85em;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.table-toolbar-input__clear {
+  right: 6px;
+}
+
+.table-toolbar-search__clear:hover,
+.table-toolbar-search__clear:focus,
+.table-toolbar-input__clear:hover,
+.table-toolbar-input__clear:focus {
+  color: var(--text-primary);
+  outline: none;
+}
+
+.table-toolbar-search[data-control-wrapper] {
+  width: 100%;
+}
+
+.table-toolbar-input--text {
+  min-width: 200px;
+  padding-right: 30px;
+}
+
+.table-toolbar-select {
+  min-width: 160px;
+  cursor: pointer;
+}
+
+.table-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.table-toolbar-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary-color);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.table-toolbar-btn:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.table-toolbar-btn--icon {
+  padding: 8px;
+  justify-content: center;
+  width: 38px;
+  min-width: 38px;
+}
+
+.table-toolbar-btn--primary {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: #ffffff;
+}
+
+.table-toolbar-btn--danger {
+  background: var(--danger-bg, rgba(248, 113, 113, 0.2));
+  border-color: rgba(248, 113, 113, 0.35);
+  color: var(--danger-color, #f87171);
+}
+
+.table-toolbar-settings {
+  position: relative;
+}
+
+@media (max-width: 960px) {
+  .table-toolbar__row {
+    gap: 10px;
+  }
+
+  .table-toolbar-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .table-toolbar-summary {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 720px) {
+  .data-table-toolbar {
+    padding: 10px 12px;
+  }
+
+  .table-toolbar-search .dt-search-input {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .table-toolbar-field {
+    width: 100%;
+    min-width: 0;
+  }
+}
 .toolbar {
   display: flex;
   flex-direction: column;
