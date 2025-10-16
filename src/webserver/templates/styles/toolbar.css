@@ -32,17 +32,20 @@
   align-items: center;
   gap: 12px;
   min-width: 0;
+  flex-wrap: wrap;
 }
 
 .table-toolbar-title__icon {
   font-size: 1.35rem;
   line-height: 1;
+  display: flex;
+  align-items: center;
 }
 
 .table-toolbar-title__text-block {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 
@@ -53,6 +56,7 @@
   font-weight: 600;
   color: var(--text-primary);
   font-size: 0.95rem;
+  line-height: 1.3;
 }
 
 .table-toolbar-title__tag {
@@ -69,6 +73,7 @@
 .table-toolbar-meta,
 .table-toolbar-title__meta {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 12px;
   font-size: 0.78rem;
@@ -78,6 +83,7 @@
 .table-toolbar-meta__item {
   font-size: 0.78rem;
   color: var(--text-secondary);
+  line-height: 1.3;
 }
 
 .table-toolbar-meta__item[data-variant="accent"] {
@@ -106,7 +112,6 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  margin-top: 8px;
 }
 
 .table-toolbar-chip {
