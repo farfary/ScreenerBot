@@ -1,5 +1,20 @@
 /* Transactions page-specific styles */
 
+/* Page container - ensure proper height for scrolling */
+.transactions-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* DataTable container */
+#transactions-root {
+  flex: 1;
+  min-height: 0; /* Critical for flex scrolling */
+  overflow: hidden;
+}
+
 .value-positive {
   color: var(--badge-online);
   font-weight: 600;

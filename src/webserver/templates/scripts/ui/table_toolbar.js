@@ -269,6 +269,7 @@ export class TableToolbarView {
                 ${titleTag}
               </div>
               ${titleMeta}
+              ${summarySection}
             </div>
           </div>
           <div class="table-toolbar-actions">
@@ -277,14 +278,13 @@ export class TableToolbarView {
             ${settingsButton}
           </div>
         </div>
-        ${controlsPresent || summarySection ? `
+        ${controlsPresent ? `
           <div class="table-toolbar__row table-toolbar__row--controls">
             <div class="table-toolbar-controls">
               ${searchSection}
               ${customControlsSection}
               ${filtersSection}
             </div>
-            ${summarySection}
           </div>
         ` : ""}
       </div>
