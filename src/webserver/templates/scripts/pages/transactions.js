@@ -634,11 +634,7 @@ function createLifecycle() {
       if (!poller) {
         poller = ctx.managePoller(
           new Poller(
-            () =>
-              Promise.all([
-                fetchSummary({}),
-                requestReload("poll", { silent: true, preserveScroll: true }),
-              ]),
+            () => fetchSummary({}),
             { label: "Transactions" }
           )
         );
