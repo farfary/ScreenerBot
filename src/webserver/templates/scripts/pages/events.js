@@ -288,6 +288,7 @@ function createLifecycle() {
         zebra: true,
         fitToContainer: true,
         autoSizeColumns: true,
+        uniformRowHeight: 2, // enforce consistent row height (2 lines)
         sorting: {
           column: "event_time",
           direction: "desc",

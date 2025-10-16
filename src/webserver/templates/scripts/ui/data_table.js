@@ -152,6 +152,28 @@ export class DataTable {
           : 16,
       ...options,
     };
+    this.options.lockColumnWidths = options.lockColumnWidths === true;
+    // Uniform row height: number of text lines to display (clamps content)
+    // truthy enables, number sets lines; true defaults to 2 lines
+    if (options.uniformRowHeight === true) {
+      this.options.uniformRowHeight = 2;
+    } else if (
+      typeof options.uniformRowHeight === "string" &&
+      /^\d+$/.test(options.uniformRowHeight.trim())
+    ) {
+      this.options.uniformRowHeight = parseInt(options.uniformRowHeight.trim(), 10) || undefined;
+    } else if (
+      typeof options.uniformRowHeight === "number" &&
+      Number.isFinite(options.uniformRowHeight) &&
+      options.uniformRowHeight > 0
+    ) {
+      // keep as-is
+    } else if (options.uniformRowHeight === undefined) {
+      // leave undefined when not provided
+    } else {
+      // disable on invalid values
+      this.options.uniformRowHeight = undefined;
+    }
 
     this.state = {
       data: [],
@@ -170,6 +192,7 @@ export class DataTable {
       tableWidth: null,
       hasAutoFitted: false, // Track if columns have been auto-fitted once
       userResizedColumns: {},
+      columnWidthsLocked: false,
     };
 
     this.elements = {};
@@ -321,6 +344,11 @@ export class DataTable {
       }
     }
 
+    const uniformRowsLines =
+      typeof this.options.uniformRowHeight === "number" && this.options.uniformRowHeight > 0
+        ? this.options.uniformRowHeight
+        : null;
+
     container.innerHTML = `
       <div class="data-table-wrapper ${fixedHeightClass}" ${
       typeof this.options.fixedHeight === "number"
@@ -331,7 +359,9 @@ export class DataTable {
         <div class="data-table-scroll-container">
           <table class="data-table ${this.options.compact ? "compact" : ""} ${
       this.options.zebra ? "zebra" : ""
-    }">
+    } ${uniformRowsLines ? "uniform-rows" : ""}" ${
+      uniformRowsLines ? `style="--dt-row-lines: ${uniformRowsLines};"` : ""
+    }>
             ${this._renderColgroup()}
             <thead class="${this.options.stickyHeader ? "sticky" : ""}">
               ${this._renderHeader()}
@@ -592,11 +622,15 @@ export class DataTable {
           ? "no-wrap"
           : "";
 
+        const content = this.options.uniformRowHeight
+          ? `<div class="dt-cell-clamp">${cellContent}</div>`
+          : cellContent;
+
         return `
         <td data-column-id="${col.id}" 
             class="${cellClass} ${wrapClass}"
             data-row-id="${row[this.options.rowIdField] || ""}">
-          ${cellContent}
+          ${content}
         </td>
       `;
       })
@@ -1724,6 +1758,15 @@ export class DataTable {
       return;
     }
 
+    if (this.options.lockColumnWidths && this.state.columnWidthsLocked) {
+      const needsSizing = visibleColumns.some(
+        (col) => typeof this.state.columnWidths[col.id] !== "number"
+      );
+      if (!needsSizing) {
+        return;
+      }
+    }
+
     const allRows = Array.from(
       this.elements.tbody.querySelectorAll("tr[data-row-id]")
     );
@@ -1815,6 +1858,15 @@ export class DataTable {
         this.state.tableWidth = total;
       }
       this.state.hasAutoFitted = false;
+    }
+
+    if (this.options.lockColumnWidths) {
+      const allSized = visibleColumns.every(
+        (col) => typeof this.state.columnWidths[col.id] === "number"
+      );
+      if (allSized) {
+        this.state.columnWidthsLocked = true;
+      }
     }
   }
 
@@ -2098,6 +2150,16 @@ export class DataTable {
         : scrollContainer
         ? scrollContainer.scrollHeight
         : 0;
+
+    if (this.options.lockColumnWidths) {
+      const visibleColumns = this._getOrderedColumns();
+      const needsSizing = visibleColumns.some(
+        (col) => typeof this.state.columnWidths[col.id] !== "number"
+      );
+      if (needsSizing) {
+        this.state.columnWidthsLocked = false;
+      }
+    }
 
     this._updateLoadingClass();
 

@@ -329,11 +329,11 @@ body.dt-column-resizing * {
 .data-table tbody tr {
   border-bottom: 1px solid var(--border-color);
   transition: all 0.15s ease;
-  height: 44px; /* Fixed row height for consistent layout */
+  min-height: 44px;
 }
 
 .data-table.compact tbody tr {
-  height: 36px; /* Compact mode fixed height */
+  min-height: 36px;
 }
 
 .data-table tbody tr:hover {
@@ -366,8 +366,36 @@ body.dt-column-resizing * {
   overflow-wrap: break-word;
   max-width: none;
   box-sizing: border-box; /* Make width include padding and borders */
-  height: inherit; /* Inherit fixed height from tr */
+  min-height: inherit;
   vertical-align: middle; /* Center content vertically */
+}
+
+/* Uniform row height mode */
+.data-table.uniform-rows tbody tr {
+  /* Row height = line-height * lines + vertical padding (approx) */
+  --dt-row-line-height: 1.4;
+  --dt-row-lines: var(--dt-row-lines, 2);
+  --dt-row-padding-y: 16px; /* td padding top + bottom */
+  height: calc((var(--dt-row-line-height) * 1em * var(--dt-row-lines)) + var(--dt-row-padding-y));
+  max-height: calc((var(--dt-row-line-height) * 1em * var(--dt-row-lines)) + var(--dt-row-padding-y));
+}
+
+.data-table.compact.uniform-rows tbody tr {
+  --dt-row-padding-y: 12px; /* compact td padding top + bottom */
+}
+
+.data-table.uniform-rows td {
+  /* Ensure content doesn't expand row */
+  line-height: var(--dt-row-line-height);
+}
+
+.data-table.uniform-rows td .dt-cell-clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  line-clamp: var(--dt-row-lines);
+  -webkit-line-clamp: var(--dt-row-lines);
+  overflow: hidden;
+  white-space: normal;
 }
 
 /* Text wrapping support */
@@ -377,10 +405,21 @@ body.dt-column-resizing * {
   line-height: 1.5;
 }
 
+.data-table td.wrap-text code {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .data-table td.no-wrap {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.data-table td .mono-text {
+  font-family: var(--font-mono, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
+  word-break: break-all;
+  display: inline;
 }
 
 .data-table td.dt-empty {
