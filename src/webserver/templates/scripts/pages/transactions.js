@@ -95,6 +95,7 @@ function formatTokenDisplay(row) {
 }
 
 function createLifecycle() {
+  let ctxRef = null;
   let table = null;
   let poller = null;
 
@@ -102,6 +103,7 @@ function createLifecycle() {
     filters: { ...DEFAULT_FILTERS },
     signature: "",
     totalEstimate: null,
+    summary: null,
   };
 
   const buildFiltersPayload = () => {
@@ -139,29 +141,34 @@ function createLifecycle() {
       return;
     }
 
-    const rows = table.getData();
-    const loaded = rows.length;
-    let successCount = 0;
-    let failedCount = 0;
-
-    for (const row of rows) {
-      if (row?.success) {
-        successCount += 1;
-      } else if (row?.success === false || row?.status === "Failed") {
-        failedCount += 1;
-      }
-    }
-
+    // Prefer exact totals from summary; fall back to estimate if unavailable
+    const totalFromSummary = state.summary?.total;
     const totalEstimate =
       state.totalEstimate === null || state.totalEstimate === undefined
         ? null
         : state.totalEstimate;
+    const totalValue =
+      typeof totalFromSummary === "number"
+        ? totalFromSummary
+        : totalEstimate ?? null;
+
+    const successCountGlobal =
+      typeof state.summary?.success_count === "number"
+        ? state.summary.success_count
+        : null;
+    const failedCountGlobal =
+      typeof state.summary?.failed_count === "number"
+        ? state.summary.failed_count
+        : null;
 
     table.updateToolbarSummary([
       {
-        id: "tx-loaded",
-        label: "Loaded",
-        value: Utils.formatNumber(loaded, { decimals: 0 }),
+        id: "tx-total",
+        label: "Total",
+        value:
+          totalValue === null
+            ? "—"
+            : Utils.formatNumber(totalValue, { decimals: 0 }),
       },
       {
         id: "tx-estimate",
@@ -174,14 +181,26 @@ function createLifecycle() {
       {
         id: "tx-success",
         label: "Success",
-        value: Utils.formatNumber(successCount, { decimals: 0 }),
-        variant: successCount > 0 ? "success" : "secondary",
+        value:
+          successCountGlobal === null
+            ? "—"
+            : Utils.formatNumber(successCountGlobal, { decimals: 0 }),
+        variant:
+          typeof successCountGlobal === "number" && successCountGlobal > 0
+            ? "success"
+            : "secondary",
       },
       {
         id: "tx-failed",
         label: "Failed",
-        value: Utils.formatNumber(failedCount, { decimals: 0 }),
-        variant: failedCount > 0 ? "warning" : "success",
+        value:
+          failedCountGlobal === null
+            ? "—"
+            : Utils.formatNumber(failedCountGlobal, { decimals: 0 }),
+        variant:
+          typeof failedCountGlobal === "number" && failedCountGlobal > 0
+            ? "warning"
+            : "success",
       },
     ]);
 
@@ -191,6 +210,34 @@ function createLifecycle() {
         text: `Last update ${new Date().toLocaleTimeString()}`,
       },
     ]);
+  };
+
+  const fetchSummary = async ({ signal } = {}) => {
+    try {
+      const response = await fetch("/api/transactions/summary", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Requested-With": "fetch",
+        },
+        cache: "no-store",
+        signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      state.summary = data ?? null;
+      updateToolbar();
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        throw error;
+      }
+      // Silent failure for summary to avoid noisy toasts
+      console.warn("[Transactions] Failed to fetch summary:", error);
+    }
   };
 
   const loadTransactionsPage = async ({
@@ -465,10 +512,10 @@ function createLifecycle() {
             meta: [{ id: "tx-last-update", text: "Last update —" }],
           },
           summary: [
-            { id: "tx-loaded", label: "Loaded", value: "0" },
+            { id: "tx-total", label: "Total", value: "—" },
             { id: "tx-estimate", label: "Estimate", value: "—" },
-            { id: "tx-success", label: "Success", value: "0", variant: "secondary" },
-            { id: "tx-failed", label: "Failed", value: "0", variant: "success" },
+            { id: "tx-success", label: "Success", value: "—", variant: "secondary" },
+            { id: "tx-failed", label: "Failed", value: "—", variant: "success" },
           ],
           search: {
             enabled: true,
@@ -588,17 +635,23 @@ function createLifecycle() {
         poller = ctx.managePoller(
           new Poller(
             () =>
-              requestReload("poll", { silent: true, preserveScroll: true }),
+              Promise.all([
+                fetchSummary({}),
+                requestReload("poll", { silent: true, preserveScroll: true }),
+              ]),
             { label: "Transactions" }
           )
         );
       }
       poller.start();
       if ((table?.getData?.() ?? []).length === 0) {
-        requestReload("initial", {
-          silent: false,
-          resetScroll: true,
-        }).catch(() => {});
+        Promise.all([
+          fetchSummary({}),
+          requestReload("initial", {
+            silent: false,
+            resetScroll: true,
+          }),
+        ]).catch(() => {});
       }
     },
 
@@ -619,6 +672,7 @@ function createLifecycle() {
       state.filters = { ...DEFAULT_FILTERS };
       state.signature = "";
       state.totalEstimate = null;
+      state.summary = null;
     },
   };
 }

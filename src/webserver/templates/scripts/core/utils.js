@@ -596,7 +596,7 @@
     lines.push(
       `Price (SOL): ${
         price.pool_price_sol != null
-          ? formatPriceSol(p.price_sol, { fallback: "N/A" })
+          ? formatPriceSol(price.pool_price_sol, { fallback: "N/A" })
           : "N/A"
       }`
     );
