@@ -1835,13 +1835,25 @@ export class DataTable {
       }
 
       const minWidth = this._getColumnMinWidth(columnId);
-      const finalWidth = Math.max(minWidth, maxWidth + padding);
+      let finalWidth = Math.max(minWidth, maxWidth + padding);
+      const previous = this.state.columnWidths[columnId];
+
+      if (Number.isFinite(previous)) {
+        // Prevent repeated auto-sizing from inflating widths when content width is unchanged
+        const growthThreshold = 1;
+        const hasContentGrowth = maxWidth > previous + growthThreshold;
+
+        if (!hasContentGrowth) {
+          finalWidth = previous;
+        } else if (finalWidth < previous) {
+          finalWidth = previous;
+        }
+      }
 
       if (!Number.isFinite(finalWidth)) {
         return;
       }
 
-      const previous = this.state.columnWidths[columnId];
       if (
         !Number.isFinite(previous) ||
         Math.abs(previous - finalWidth) > 1
