@@ -1,0 +1,16 @@
+/* Events page-specific styles */
+
+/* Page container - ensure proper height for scrolling */
+.events-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* DataTable container */
+#events-root {
+  flex: 1;
+  min-height: 0; /* Critical for flex scrolling */
+  overflow: hidden;
+}
