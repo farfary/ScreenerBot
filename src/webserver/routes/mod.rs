@@ -24,46 +24,16 @@ pub mod wallet;
 
 pub fn create_router(state: Arc<AppState>) -> Router {
     Router::new()
-        .route("/", axum::routing::get(home_page))
-        .route("/home", axum::routing::get(home_page))
-        .route("/status", axum::routing::get(status_page))
-        .route("/positions", axum::routing::get(positions_page))
-        .route("/filtering", axum::routing::get(filtering_page))
+        .route("/", axum::routing::get(services_page))
+        .route("/services", axum::routing::get(services_page))
         .route("/tokens", axum::routing::get(tokens_page))
         .route("/events", axum::routing::get(events_page))
-        .route("/services", axum::routing::get(services_page))
-        .route("/wallet", axum::routing::get(wallet_page))
-        .route("/config", axum::routing::get(config_page))
         .route("/transactions", axum::routing::get(transactions_page))
         .route("/scripts/core/:file", axum::routing::get(get_core_script))
         .route("/scripts/pages/:file", axum::routing::get(get_page_script))
         .route("/scripts/ui/:file", axum::routing::get(get_ui_script))
         .nest("/api", api_routes())
         .with_state(state)
-}
-
-/// Home page handler
-async fn home_page() -> Html<String> {
-    let content = templates::home_content();
-    Html(templates::base_template("Home", "home", &content))
-}
-
-/// Status page handler
-async fn status_page() -> Html<String> {
-    let content = templates::status_content();
-    Html(templates::base_template("Status", "status", &content))
-}
-
-/// Positions page handler
-async fn positions_page() -> Html<String> {
-    let content = templates::positions_content();
-    Html(templates::base_template("Positions", "positions", &content))
-}
-
-/// Filtering page handler
-async fn filtering_page() -> Html<String> {
-    let content = templates::filtering_content();
-    Html(templates::base_template("Filtering", "filtering", &content))
 }
 
 /// Tokens page handler
@@ -82,22 +52,6 @@ async fn events_page() -> Html<String> {
 async fn services_page() -> Html<String> {
     let content = templates::services_content();
     Html(templates::base_template("Services", "services", &content))
-}
-
-/// Wallet page handler
-async fn wallet_page() -> Html<String> {
-    let content = templates::wallet_content();
-    Html(templates::base_template("Wallet", "wallet", &content))
-}
-
-/// Config page handler
-async fn config_page() -> Html<String> {
-    let content = templates::config_content();
-    Html(templates::base_template(
-        "Configuration",
-        "config",
-        &content,
-    ))
 }
 
 /// Transactions page handler
@@ -133,15 +87,9 @@ fn api_routes() -> Router<Arc<AppState>> {
 /// SPA page content handler - returns just the content HTML (not full template)
 async fn get_page_content(axum::extract::Path(page): axum::extract::Path<String>) -> Html<String> {
     let content = match page.as_str() {
-        "home" => templates::home_content(),
-        "status" => templates::status_content(),
-        "positions" => templates::positions_content(),
-        "filtering" => templates::filtering_content(),
         "tokens" => templates::tokens_content(),
-        "wallet" => templates::wallet_content(),
         "events" => templates::events_content(),
         "services" => templates::services_content(),
-        "config" => templates::config_content(),
         "transactions" => templates::transactions_content(),
         _ => {
             // Escape page name to prevent XSS

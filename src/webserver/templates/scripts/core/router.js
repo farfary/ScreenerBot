@@ -171,7 +171,7 @@ export async function loadPage(pageName) {
     displayPageElement(mainContent, cachedEl);
     PageLifecycleRegistry.activate(pageName);
 
-    const targetUrl = pageName === "home" ? "/" : `/${pageName}`;
+    const targetUrl = `/${pageName}`;
     if (window.location.pathname !== targetUrl) {
       window.history.pushState({ page: pageName }, "", targetUrl);
     }
@@ -223,7 +223,7 @@ export async function loadPage(pageName) {
 
     PageLifecycleRegistry.activate(pageName);
 
-    const targetUrl = pageName === "home" ? "/" : `/${pageName}`;
+    const targetUrl = `/${pageName}`;
     if (window.location.pathname !== targetUrl) {
       window.history.pushState({ page: pageName }, "", targetUrl);
     }
@@ -272,7 +272,7 @@ export function initRouter() {
   });
 
   // Detect initial page from URL/tab state
-  const initialPage = getPageFromPath() || "home";
+  const initialPage = getPageFromPath() || "services";
   _state.currentPage = initialPage;
   setActiveTab(initialPage);
 
@@ -320,7 +320,7 @@ export function initRouter() {
 
 function getPageFromPath() {
   const path = window.location.pathname;
-  if (path === "/" || path === "") return "home";
+  if (path === "/" || path === "") return "services";
   return path.slice(1);
 }
 
