@@ -281,18 +281,19 @@ function createLifecycle() {
           label: "Token",
           sortable: true,
           minWidth: 200,
+          wrap: false,
           render: (_v, row) => tokenCell(row),
           sortFn: (a, b) => (a.symbol || "").localeCompare(b.symbol || ""),
         },
-        { id: "price_sol", label: "Price (SOL)", sortable: true, minWidth: 120, render: (v) => priceCell(v), sortFn: (a, b) => (a.price_sol ?? -Infinity) - (b.price_sol ?? -Infinity) },
-        { id: "liquidity_usd", label: "Liquidity", sortable: true, minWidth: 110, render: (v) => usdCell(v), sortFn: (a, b) => (a.liquidity_usd ?? 0) - (b.liquidity_usd ?? 0) },
-        { id: "volume_24h", label: "24h Vol", sortable: true, minWidth: 110, render: (v) => usdCell(v), sortFn: (a, b) => (a.volume_24h ?? 0) - (b.volume_24h ?? 0) },
-        { id: "fdv", label: "FDV", sortable: true, minWidth: 110, render: (v) => usdCell(v), sortFn: (a, b) => (a.fdv ?? 0) - (b.fdv ?? 0) },
-        { id: "market_cap", label: "Mkt Cap", sortable: true, minWidth: 110, render: (v) => usdCell(v), sortFn: (a, b) => (a.market_cap ?? 0) - (b.market_cap ?? 0) },
-        { id: "price_change_h1", label: "1h", sortable: true, minWidth: 90, render: (v) => percentCell(v), sortFn: (a, b) => (a.price_change_h1 ?? 0) - (b.price_change_h1 ?? 0) },
-        { id: "price_change_h24", label: "24h", sortable: true, minWidth: 90, render: (v) => percentCell(v), sortFn: (a, b) => (a.price_change_h24 ?? 0) - (b.price_change_h24 ?? 0) },
-        { id: "security_score", label: "Security", sortable: true, minWidth: 90, render: (v) => Utils.formatNumber(v, 0), sortFn: (a, b) => (a.security_score ?? 0) - (b.security_score ?? 0) },
-        { id: "status", label: "Status", sortable: false, minWidth: 140, render: (_v, row) => {
+        { id: "price_sol", label: "Price (SOL)", sortable: true, minWidth: 120, wrap: false, render: (v) => priceCell(v), sortFn: (a, b) => (a.price_sol ?? -Infinity) - (b.price_sol ?? -Infinity) },
+        { id: "liquidity_usd", label: "Liquidity", sortable: true, minWidth: 110, wrap: false, render: (v) => usdCell(v), sortFn: (a, b) => (a.liquidity_usd ?? 0) - (b.liquidity_usd ?? 0) },
+        { id: "volume_24h", label: "24h Vol", sortable: true, minWidth: 110, wrap: false, render: (v) => usdCell(v), sortFn: (a, b) => (a.volume_24h ?? 0) - (b.volume_24h ?? 0) },
+        { id: "fdv", label: "FDV", sortable: true, minWidth: 110, wrap: false, render: (v) => usdCell(v), sortFn: (a, b) => (a.fdv ?? 0) - (b.fdv ?? 0) },
+        { id: "market_cap", label: "Mkt Cap", sortable: true, minWidth: 110, wrap: false, render: (v) => usdCell(v), sortFn: (a, b) => (a.market_cap ?? 0) - (b.market_cap ?? 0) },
+        { id: "price_change_h1", label: "1h", sortable: true, minWidth: 90, wrap: false, render: (v) => percentCell(v), sortFn: (a, b) => (a.price_change_h1 ?? 0) - (b.price_change_h1 ?? 0) },
+        { id: "price_change_h24", label: "24h", sortable: true, minWidth: 90, wrap: false, render: (v) => percentCell(v), sortFn: (a, b) => (a.price_change_h24 ?? 0) - (b.price_change_h24 ?? 0) },
+        { id: "security_score", label: "Security", sortable: true, minWidth: 90, wrap: false, render: (v) => Utils.formatNumber(v, 0), sortFn: (a, b) => (a.security_score ?? 0) - (b.security_score ?? 0) },
+        { id: "status", label: "Status", sortable: false, minWidth: 140, wrap: false, render: (_v, row) => {
             const flags = [];
             if (row.has_pool_price) flags.push("<span class=\"badge info\">Price</span>");
             if (row.has_ohlcv) flags.push("<span class=\"badge\">OHLCV</span>");
@@ -301,7 +302,7 @@ function createLifecycle() {
             return flags.join(" ") || "—";
           }
         },
-        { id: "price_updated_at", label: "Updated", sortable: true, minWidth: 110, render: (v) => timeAgoCell(v), sortFn: (a, b) => (a.price_updated_at ?? 0) - (b.price_updated_at ?? 0) },
+        { id: "price_updated_at", label: "Updated", sortable: true, minWidth: 110, wrap: false, render: (v) => timeAgoCell(v), sortFn: (a, b) => (a.price_updated_at ?? 0) - (b.price_updated_at ?? 0) },
       ];
 
       table = new DataTable({
@@ -315,6 +316,8 @@ function createLifecycle() {
         stickyHeader: true,
         zebra: true,
         fitToContainer: true,
+        autoSizeColumns: true,
+        uniformRowHeight: 2,
         pagination: {
           threshold: 160,
           maxRows: 5000,
