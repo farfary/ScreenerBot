@@ -9,7 +9,7 @@ const DEFAULT_FILTERS = {
   severity: "all",
 };
 
-const PAGE_LIMIT = 200;
+const PAGE_LIMIT = 100;
 
 function formatSeverityBadge(value) {
   const key = (value || "").toLowerCase();
