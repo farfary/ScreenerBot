@@ -342,7 +342,7 @@ function createLifecycle() {
         stickyHeader: true,
         zebra: true,
         fitToContainer: true,
-        autoSizeColumns: true,
+        autoSizeColumns: false,
         uniformRowHeight: 2, // enforce consistent row height (2 lines)
         onRowClick: (row, event) => {
           if (!row) {

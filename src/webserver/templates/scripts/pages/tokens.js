@@ -516,7 +516,7 @@ function createLifecycle() {
         stickyHeader: true,
         zebra: true,
         fitToContainer: true,
-        autoSizeColumns: true,
+        autoSizeColumns: false,
         uniformRowHeight: 2,
         pagination: {
           threshold: 160,
