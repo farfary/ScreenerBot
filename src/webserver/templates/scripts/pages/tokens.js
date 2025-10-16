@@ -16,7 +16,8 @@ const TOKEN_VIEWS = [
   { id: "recent", label: "🆕 Recent" },
 ];
 
-const DEFAULT_VIEW = "pool";
+// Constants
+const DEFAULT_VIEW = "all";
 const DEFAULT_SERVER_SORT = { by: "symbol", direction: "asc" };
 const DEFAULT_FILTERS = { priced: "all", positions: "all" };
 const DEFAULT_SUMMARY = { priced: 0, positions: 0, blacklisted: 0 };
@@ -400,6 +401,16 @@ function createLifecycle() {
       // Integrate with lifecycle for auto-cleanup
       ctx.manageTabBar(tabBar);
 
+      // Show the tab bar
+      tabBar.show();
+
+      // Get the active tab after state restoration
+      const activeTab = tabBar.getActiveTab();
+      if (activeTab && activeTab !== state.view) {
+        // Sync state with tab bar's restored state (e.g., from URL hash)
+        state.view = activeTab;
+      }
+
       const initialSortColumn = resolveSortColumn(state.sort.by);
 
       const columns = [
@@ -619,6 +630,10 @@ function createLifecycle() {
       syncToolbarFilters();
       table.setToolbarSearchValue(state.search, { apply: false });
       updateToolbar();
+
+      // Trigger initial data load for the active view
+      // This is needed because TabBar restoration with { silent: true } doesn't trigger onChange
+      requestReload("initial", { silent: false, resetScroll: true }).catch(() => {});
     },
 
     activate(ctx) {
