@@ -369,10 +369,7 @@ fn sort_summaries(items: &mut [TokenSummary], sort_key: TokenSortKey, direction:
                 .security_score
                 .unwrap_or(0)
                 .cmp(&b.security_score.unwrap_or(0)),
-            TokenSortKey::UpdatedAt => a
-                .price_updated_at
-                .unwrap_or_default()
-                .cmp(&b.price_updated_at.unwrap_or_default()),
+            TokenSortKey::UpdatedAt => a.updated_at.cmp(&b.updated_at),
             TokenSortKey::Mint => a.mint.cmp(&b.mint),
         };
 

@@ -31,7 +31,7 @@ const COLUMN_TO_SORT_KEY = {
   price_change_h1: "price_change_h1",
   price_change_h24: "price_change_h24",
   security_score: "security_score",
-  price_updated_at: "updated_at",
+  updated_at: "updated_at",
 };
 
 const SORT_KEY_TO_COLUMN = Object.entries(COLUMN_TO_SORT_KEY).reduce(
@@ -407,7 +407,7 @@ function createLifecycle() {
           id: "token",
           label: "Token",
           sortable: true,
-          minWidth: 200,
+          minWidth: 180,
           wrap: false,
           render: (_v, row) => tokenCell(row),
         },
@@ -491,10 +491,10 @@ function createLifecycle() {
           },
         },
         {
-          id: "price_updated_at",
+          id: "updated_at",
           label: "Updated",
           sortable: true,
-          minWidth: 110,
+          minWidth: 100,
           wrap: false,
           render: (v) => timeAgoCell(v),
         },

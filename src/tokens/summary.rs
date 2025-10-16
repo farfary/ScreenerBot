@@ -17,6 +17,7 @@ pub struct TokenSummary {
     pub logo_url: Option<String>,
     pub price_sol: Option<f64>,
     pub price_updated_at: Option<i64>,
+    pub updated_at: i64,
     pub liquidity_usd: Option<f64>,
     pub volume_24h: Option<f64>,
     pub fdv: Option<f64>,
@@ -105,6 +106,9 @@ pub fn token_to_summary(token: &Token, caches: &TokenSummaryContext) -> TokenSum
             (None, None)
         };
 
+    // Token data updated timestamp (from DexScreener or other sources)
+    let updated_at = token.last_updated.timestamp();
+
     let has_pool_price = price_sol.is_some();
     let has_ohlcv = caches.has_ohlcv(&token.mint);
     let has_open_position = caches.has_open_position(&token.mint);
@@ -128,6 +132,7 @@ pub fn token_to_summary(token: &Token, caches: &TokenSummaryContext) -> TokenSum
         logo_url: token.logo_url.clone(),
         price_sol,
         price_updated_at,
+        updated_at,
         liquidity_usd: token.liquidity.as_ref().and_then(|l| l.usd),
         volume_24h: token.volume.as_ref().and_then(|v| v.h24),
         fdv: token.fdv,
