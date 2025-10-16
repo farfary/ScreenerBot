@@ -268,8 +268,8 @@ export class TableToolbarView {
                 ${titleText}
                 ${titleTag}
               </div>
+              ${titleMeta}
             </div>
-            ${titleMeta}
             ${summarySection}
           </div>
           <div class="table-toolbar-actions">
