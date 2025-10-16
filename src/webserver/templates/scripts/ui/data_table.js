@@ -79,6 +79,10 @@
  * - sortFn: (rowA, rowB) => number - Custom sort function (optional)
  * - className: CSS class for cells (optional)
  * - fallback: Default value for null/undefined (optional, default: "—")
+ * - wrap: Text wrapping behavior (optional)
+ *   - true: Allow multi-line text wrapping (word-break)
+ *   - false: Single line with ellipsis truncation (recommended for long text)
+ *   - undefined: Default behavior (respects uniformRowHeight if set)
  *
  * Image Column Configuration (type: 'image'):
  * - image: {
@@ -622,7 +626,10 @@ export class DataTable {
           ? "no-wrap"
           : "";
 
-        const content = this.options.uniformRowHeight
+        // Apply dt-cell-clamp for uniformRowHeight, but NOT for no-wrap columns
+        // no-wrap columns handle truncation via CSS (white-space: nowrap + text-overflow: ellipsis)
+        const shouldClamp = this.options.uniformRowHeight && col.wrap !== false;
+        const content = shouldClamp
           ? `<div class="dt-cell-clamp">${cellContent}</div>`
           : cellContent;
 

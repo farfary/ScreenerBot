@@ -277,8 +277,9 @@ function createLifecycle() {
         {
           id: "event_time",
           label: "Time",
-          minWidth: 150,
+          minWidth: 165,
           sortable: true,
+          wrap: false,
           render: (value) => {
             if (!value) {
               return "—";
@@ -292,6 +293,7 @@ function createLifecycle() {
           label: "Category",
           minWidth: 110,
           sortable: true,
+          wrap: false,
           render: (value) => value || "—",
         },
         {
@@ -299,6 +301,7 @@ function createLifecycle() {
           label: "Type",
           minWidth: 120,
           sortable: true,
+          wrap: false,
           render: (value) => value || "—",
         },
         {
@@ -312,6 +315,7 @@ function createLifecycle() {
           id: "message",
           label: "Message",
           minWidth: 320,
+          wrap: false,
           render: (value) => formatMessagePreview(value),
         },
         {
@@ -324,6 +328,7 @@ function createLifecycle() {
           id: "payload",
           label: "Details",
           minWidth: 200,
+          wrap: false,
           render: (value) => formatPayloadPreview(value),
         },
       ];
