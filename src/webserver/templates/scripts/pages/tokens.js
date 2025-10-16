@@ -17,38 +17,31 @@ const TOKEN_VIEWS = [
 ];
 
 const DEFAULT_VIEW = "pool";
-const DEFAULT_SORT = { column: "symbol", direction: "asc" };
-const PAGE_SIZE = 100; // client-page chunking; server also pages
+const DEFAULT_SERVER_SORT = { by: "symbol", direction: "asc" };
+const DEFAULT_FILTERS = { priced: "all", positions: "all" };
 
-function normalizePageNumber(value, fallback = null) {
-  if (value === null || value === undefined) {
-    return fallback;
-  }
-  const num = Number(value);
-  if (!Number.isFinite(num)) {
-    return fallback;
-  }
-  const int = Math.floor(num);
-  if (int < 1) {
-    return fallback;
-  }
-  return int;
-}
+const COLUMN_TO_SORT_KEY = {
+  token: "symbol",
+  price_sol: "price_sol",
+  liquidity_usd: "liquidity_usd",
+  volume_24h: "volume_24h",
+  fdv: "fdv",
+  market_cap: "market_cap",
+  price_change_h1: "price_change_h1",
+  price_change_h24: "price_change_h24",
+  security_score: "security_score",
+  price_updated_at: "updated_at",
+};
 
-function normalizeNonNegativeInt(value, fallback = null, { min = 0 } = {}) {
-  if (value === null || value === undefined) {
-    return fallback;
-  }
-  const num = Number(value);
-  if (!Number.isFinite(num)) {
-    return fallback;
-  }
-  const int = Math.floor(num);
-  if (int < min) {
-    return fallback;
-  }
-  return int;
-}
+const SORT_KEY_TO_COLUMN = Object.entries(COLUMN_TO_SORT_KEY).reduce(
+  (acc, [columnId, sortKey]) => {
+    acc[sortKey] = columnId;
+    return acc;
+  },
+  {}
+);
+
+const PAGE_LIMIT = 100; // chunked fetch size for incremental scrolling
 
 function priceCell(value) {
   return Utils.formatPriceSol(value, { fallback: "—", decimals: 9 });
@@ -80,6 +73,24 @@ function tokenCell(row) {
   return `<div class="token-cell">${logo}<div><div class="token-symbol">${sym}</div>${name}</div></div>`;
 }
 
+function resolveSortColumn(sortKey) {
+  if (!sortKey) {
+    return null;
+  }
+  return SORT_KEY_TO_COLUMN[sortKey] ?? null;
+}
+
+function resolveSortKey(columnId) {
+  if (!columnId) {
+    return null;
+  }
+  return COLUMN_TO_SORT_KEY[columnId] ?? null;
+}
+
+function normalizeSortDirection(direction) {
+  return direction === "desc" ? "desc" : "asc";
+}
+
 function createLifecycle() {
   let table = null;
   let poller = null;
@@ -88,8 +99,10 @@ function createLifecycle() {
   const state = {
     view: DEFAULT_VIEW,
     search: "",
-    summary: null,
-    pageMeta: null,
+    totalCount: null,
+    lastUpdate: null,
+    sort: { ...DEFAULT_SERVER_SORT },
+    filters: { ...DEFAULT_FILTERS },
   };
 
   const updateToolbar = () => {
@@ -109,81 +122,130 @@ function createLifecycle() {
     ]);
 
     const metaEntries = [];
-    if (state.pageMeta?.timestamp) {
-      metaEntries.push({
-        id: "tokens-last-update",
-        text: `Last update ${Utils.formatTimestamp(state.pageMeta.timestamp, { includeSeconds: true })}`,
-      });
-    } else {
-      metaEntries.push({
-        id: "tokens-last-update",
-        text: "Last update —",
-      });
-    }
+    metaEntries.push({
+      id: "tokens-last-update",
+      text: state.lastUpdate
+        ? `Last update ${Utils.formatTimestamp(state.lastUpdate, { includeSeconds: true })}`
+        : "Last update —",
+    });
 
-    if (state.pageMeta?.page && state.pageMeta?.totalPages) {
-      metaEntries.push({
-        id: "tokens-page",
-        text: `Page ${state.pageMeta.page}/${state.pageMeta.totalPages}`,
-      });
-    }
+    const loaded = Utils.formatNumber(total, { decimals: 0 });
+    const hasTotalCount =
+      typeof state.totalCount === "number" && Number.isFinite(state.totalCount);
+    const totalLabel = hasTotalCount
+      ? `Loaded ${loaded} / ${Utils.formatNumber(state.totalCount, { decimals: 0 })}`
+      : `Loaded ${loaded}`;
 
-    if (typeof state.pageMeta?.total === "number" && Number.isFinite(state.pageMeta.total)) {
-      metaEntries.push({
-        id: "tokens-total-count",
-        text: `${Utils.formatNumber(state.pageMeta.total, { decimals: 0 })} tokens`,
-      });
-    }
+    metaEntries.push({
+      id: "tokens-loaded",
+      text: `${totalLabel} tokens`,
+    });
 
     table.updateToolbarMeta(metaEntries);
   };
 
-  const buildQuery = ({ page = 1 } = {}) => {
+  const buildQuery = ({ cursor = null } = {}) => {
     const params = new URLSearchParams();
     params.set("view", state.view);
     if (state.search) params.set("search", state.search);
-    params.set("sort_by", "symbol");
-    params.set("sort_dir", "asc");
-    const pageNumber = normalizePageNumber(page, 1) ?? 1;
-    params.set("page", String(pageNumber));
-    params.set("page_size", String(PAGE_SIZE));
+    const sort = state.sort ?? DEFAULT_SERVER_SORT;
+    const sortBy = sort?.by ?? DEFAULT_SERVER_SORT.by;
+    const sortDir = sort?.direction ?? DEFAULT_SERVER_SORT.direction;
+    params.set("sort_by", sortBy);
+    params.set("sort_dir", sortDir);
+    if (state.filters.priced === "priced") {
+      params.set("has_pool_price", "true");
+    } else if (state.filters.priced === "noprice") {
+      params.set("has_pool_price", "false");
+    }
+    if (state.filters.positions === "open") {
+      params.set("has_open_position", "true");
+    }
+    params.set("limit", String(PAGE_LIMIT));
+    if (cursor !== null && cursor !== undefined) {
+      params.set("cursor", String(cursor));
+    }
     return params;
   };
 
-  const loadTokensPage = async ({ direction, cursor, reason, signal, table }) => {
-    const paginationState = typeof table?.getPaginationState === "function" ? table.getPaginationState() : null;
-    const currentMeta = paginationState?.meta ?? {};
+  const shouldSkipPollReload = () => {
+    if (!table) return false;
 
-    let targetPage = normalizePageNumber(cursor, null);
-    const currentPage = normalizePageNumber(currentMeta.page, null);
-    const totalPages = normalizePageNumber(currentMeta.totalPages, null);
-
-    if (targetPage === null) {
-      if (direction === "next" && currentPage !== null) {
-        const candidate = currentPage + 1;
-        if (totalPages !== null && candidate > totalPages) {
-          return { rows: [], cursorNext: null, hasMoreNext: false };
-        }
-        targetPage = candidate;
-      } else if (direction === "prev" && currentPage !== null) {
-        const candidate = Math.max(1, currentPage - 1);
-        if (candidate === currentPage) {
-          return { rows: [], cursorPrev: null, hasMorePrev: false };
-        }
-        targetPage = candidate;
-      } else {
-        targetPage = 1;
-      }
+    const paginationState =
+      typeof table.getPaginationState === "function"
+        ? table.getPaginationState()
+        : null;
+    if (paginationState?.loadingNext || paginationState?.loadingPrev) {
+      return true;
     }
 
-    if (direction === "next" && totalPages !== null && targetPage > totalPages) {
-      return { rows: [], cursorNext: null, hasMoreNext: false };
-    }
-    if (direction === "prev" && targetPage < 1) {
-      return { rows: [], cursorPrev: null, hasMorePrev: false };
+    const container = table?.elements?.scrollContainer;
+    if (!container) {
+      return false;
     }
 
-    const params = buildQuery({ page: targetPage });
+    const hasScrollableContent =
+      container.scrollHeight > container.clientHeight + 16;
+    if (!hasScrollableContent) {
+      return false;
+    }
+
+    const nearTop = container.scrollTop <= 120;
+    return !nearTop;
+  };
+
+  const syncTableSortState = (options = {}) => {
+    if (!table) {
+      return;
+    }
+    const columnId = resolveSortColumn(state.sort.by);
+    table.setSortState(columnId, state.sort.direction, options);
+  };
+
+  const syncToolbarFilters = () => {
+    if (!table) {
+      return;
+    }
+    table.setToolbarFilterValue("priced", state.filters.priced, {
+      apply: false,
+    });
+    table.setToolbarFilterValue("positions", state.filters.positions, {
+      apply: false,
+    });
+  };
+
+  const handleSortChange = ({ column, direction }) => {
+    const sortKey = resolveSortKey(column);
+    if (!sortKey) {
+      syncTableSortState({ render: true });
+      return;
+    }
+
+    const nextDirection = normalizeSortDirection(direction);
+    state.sort = { by: sortKey, direction: nextDirection };
+    state.totalCount = null;
+    state.lastUpdate = null;
+    updateToolbar();
+    requestReload("sort", {
+      silent: false,
+      resetScroll: true,
+    }).catch(() => {});
+  };
+
+  const loadTokensPage = async ({ direction = "initial", cursor, reason, signal }) => {
+    if (direction === "prev") {
+      const currentTotal = state.totalCount ?? table?.getData?.().length ?? 0;
+      return {
+        rows: [],
+        cursorPrev: null,
+        hasMorePrev: false,
+        total: currentTotal,
+        meta: { timestamp: state.lastUpdate },
+        preserveScroll: true,
+      };
+    }
+
+    const params = buildQuery({ cursor });
     const url = `/api/tokens/list?${params.toString()}`;
 
     try {
@@ -199,30 +261,22 @@ function createLifecycle() {
       const data = await response.json();
       const items = Array.isArray(data?.items) ? data.items : [];
 
-      const responsePage = normalizePageNumber(data?.page, targetPage) ?? targetPage;
-      const responseTotalPages = normalizePageNumber(data?.total_pages, totalPages ?? null) ?? responsePage;
-  const totalCount = normalizeNonNegativeInt(data?.total, null);
-  const pageSize = normalizeNonNegativeInt(data?.page_size, PAGE_SIZE, { min: 1 }) ?? PAGE_SIZE;
+      if (typeof data?.total === "number" && Number.isFinite(data.total)) {
+        state.totalCount = data.total;
+      } else {
+        state.totalCount = null;
+      }
 
-      const nextPage = responsePage < responseTotalPages ? responsePage + 1 : null;
-      const prevPage = responsePage > 1 ? responsePage - 1 : null;
-
-      state.pageMeta = {
-        page: responsePage,
-        totalPages: responseTotalPages,
-        total: totalCount,
-        pageSize,
-        timestamp: data?.timestamp ?? null,
-      };
+      state.lastUpdate = data?.timestamp ?? null;
 
       return {
         rows: items,
-        cursorNext: nextPage,
-        cursorPrev: prevPage,
-        hasMoreNext: nextPage !== null,
-        hasMorePrev: prevPage !== null,
-        total: totalCount ?? items.length,
-        meta: { ...state.pageMeta },
+        cursorNext: data?.next_cursor ?? null,
+        cursorPrev: null,
+        hasMoreNext: Boolean(data?.next_cursor),
+        hasMorePrev: false,
+        total: state.totalCount ?? items.length,
+        meta: { timestamp: state.lastUpdate },
         preserveScroll: reason === "poll",
       };
     } catch (error) {
@@ -239,6 +293,9 @@ function createLifecycle() {
 
   const requestReload = (reason = "manual", options = {}) => {
     if (!table) return Promise.resolve(null);
+    if (reason === "poll" && shouldSkipPollReload()) {
+      return Promise.resolve(null);
+    }
     return table.reload({
       reason,
       silent: options.silent ?? false,
@@ -250,7 +307,12 @@ function createLifecycle() {
   const switchView = (view) => {
     if (!TOKEN_VIEWS.some((v) => v.id === view)) return;
     state.view = view;
-    state.pageMeta = null;
+    state.totalCount = null;
+    state.lastUpdate = null;
+    state.sort = { ...DEFAULT_SERVER_SORT };
+    state.filters = { ...DEFAULT_FILTERS };
+    syncTableSortState({ render: true });
+    syncToolbarFilters();
     updateToolbar();
     requestReload("view", { silent: false, resetScroll: true }).catch(() => {});
   };
@@ -275,6 +337,8 @@ function createLifecycle() {
       // Integrate with lifecycle for auto-cleanup
       ctx.manageTabBar(tabBar);
 
+      const initialSortColumn = resolveSortColumn(state.sort.by);
+
       const columns = [
         {
           id: "token",
@@ -283,35 +347,108 @@ function createLifecycle() {
           minWidth: 200,
           wrap: false,
           render: (_v, row) => tokenCell(row),
-          sortFn: (a, b) => (a.symbol || "").localeCompare(b.symbol || ""),
         },
-        { id: "price_sol", label: "Price (SOL)", sortable: true, minWidth: 120, wrap: false, render: (v) => priceCell(v), sortFn: (a, b) => (a.price_sol ?? -Infinity) - (b.price_sol ?? -Infinity) },
-        { id: "liquidity_usd", label: "Liquidity", sortable: true, minWidth: 110, wrap: false, render: (v) => usdCell(v), sortFn: (a, b) => (a.liquidity_usd ?? 0) - (b.liquidity_usd ?? 0) },
-        { id: "volume_24h", label: "24h Vol", sortable: true, minWidth: 110, wrap: false, render: (v) => usdCell(v), sortFn: (a, b) => (a.volume_24h ?? 0) - (b.volume_24h ?? 0) },
-        { id: "fdv", label: "FDV", sortable: true, minWidth: 110, wrap: false, render: (v) => usdCell(v), sortFn: (a, b) => (a.fdv ?? 0) - (b.fdv ?? 0) },
-        { id: "market_cap", label: "Mkt Cap", sortable: true, minWidth: 110, wrap: false, render: (v) => usdCell(v), sortFn: (a, b) => (a.market_cap ?? 0) - (b.market_cap ?? 0) },
-        { id: "price_change_h1", label: "1h", sortable: true, minWidth: 90, wrap: false, render: (v) => percentCell(v), sortFn: (a, b) => (a.price_change_h1 ?? 0) - (b.price_change_h1 ?? 0) },
-        { id: "price_change_h24", label: "24h", sortable: true, minWidth: 90, wrap: false, render: (v) => percentCell(v), sortFn: (a, b) => (a.price_change_h24 ?? 0) - (b.price_change_h24 ?? 0) },
-        { id: "security_score", label: "Security", sortable: true, minWidth: 90, wrap: false, render: (v) => Utils.formatNumber(v, 0), sortFn: (a, b) => (a.security_score ?? 0) - (b.security_score ?? 0) },
-        { id: "status", label: "Status", sortable: false, minWidth: 140, wrap: false, render: (_v, row) => {
+        {
+          id: "price_sol",
+          label: "Price (SOL)",
+          sortable: true,
+          minWidth: 120,
+          wrap: false,
+          render: (v) => priceCell(v),
+        },
+        {
+          id: "liquidity_usd",
+          label: "Liquidity",
+          sortable: true,
+          minWidth: 110,
+          wrap: false,
+          render: (v) => usdCell(v),
+        },
+        {
+          id: "volume_24h",
+          label: "24h Vol",
+          sortable: true,
+          minWidth: 110,
+          wrap: false,
+          render: (v) => usdCell(v),
+        },
+        {
+          id: "fdv",
+          label: "FDV",
+          sortable: true,
+          minWidth: 110,
+          wrap: false,
+          render: (v) => usdCell(v),
+        },
+        {
+          id: "market_cap",
+          label: "Mkt Cap",
+          sortable: true,
+          minWidth: 110,
+          wrap: false,
+          render: (v) => usdCell(v),
+        },
+        {
+          id: "price_change_h1",
+          label: "1h",
+          sortable: true,
+          minWidth: 90,
+          wrap: false,
+          render: (v) => percentCell(v),
+        },
+        {
+          id: "price_change_h24",
+          label: "24h",
+          sortable: true,
+          minWidth: 90,
+          wrap: false,
+          render: (v) => percentCell(v),
+        },
+        {
+          id: "security_score",
+          label: "Security",
+          sortable: true,
+          minWidth: 90,
+          wrap: false,
+          render: (v) => Utils.formatNumber(v, 0),
+        },
+        {
+          id: "status",
+          label: "Status",
+          sortable: false,
+          minWidth: 140,
+          wrap: false,
+          render: (_v, row) => {
             const flags = [];
             if (row.has_pool_price) flags.push("<span class=\"badge info\">Price</span>");
             if (row.has_ohlcv) flags.push("<span class=\"badge\">OHLCV</span>");
             if (row.has_open_position) flags.push("<span class=\"badge success\">Position</span>");
             if (row.blacklisted) flags.push("<span class=\"badge warning\">Blacklisted</span>");
             return flags.join(" ") || "—";
-          }
+          },
         },
-        { id: "price_updated_at", label: "Updated", sortable: true, minWidth: 110, wrap: false, render: (v) => timeAgoCell(v), sortFn: (a, b) => (a.price_updated_at ?? 0) - (b.price_updated_at ?? 0) },
+        {
+          id: "price_updated_at",
+          label: "Updated",
+          sortable: true,
+          minWidth: 110,
+          wrap: false,
+          render: (v) => timeAgoCell(v),
+        },
       ];
 
       table = new DataTable({
         container: "#tokens-root",
         columns,
         rowIdField: "mint",
-        stateKey: "tokens-table",
+        stateKey: "tokens-table.v2",
         enableLogging: false,
-        sorting: DEFAULT_SORT,
+        sorting: {
+          mode: "server",
+          column: initialSortColumn,
+          direction: state.sort.direction,
+          onChange: handleSortChange,
+        },
         compact: true,
         stickyHeader: true,
         zebra: true,
@@ -340,36 +477,64 @@ function createLifecycle() {
           ],
           search: {
             enabled: true,
+            mode: "server",
             placeholder: "Search by symbol or mint...",
             onChange: (value) => {
               state.search = (value || "").trim();
             },
             onSubmit: () => {
-              state.pageMeta = null;
+              state.totalCount = null;
+              state.lastUpdate = null;
               updateToolbar();
-              requestReload("search", { silent: false, resetScroll: true }).catch(() => {});
+              requestReload("search", {
+                silent: false,
+                resetScroll: true,
+              }).catch(() => {});
             },
           },
           filters: [
             {
               id: "priced",
               label: "With Price",
+              mode: "server",
+              autoApply: false,
+              defaultValue: DEFAULT_FILTERS.priced,
               options: [
                 { value: "all", label: "All" },
                 { value: "priced", label: "With Price" },
                 { value: "noprice", label: "No Price" },
               ],
-              filterFn: (row, value) =>
-                value === "all" || (value === "priced" ? row.has_pool_price : !row.has_pool_price),
+              onChange: (value) => {
+                state.filters.priced = value;
+                state.totalCount = null;
+                state.lastUpdate = null;
+                updateToolbar();
+                requestReload("filters", {
+                  silent: false,
+                  resetScroll: true,
+                }).catch(() => {});
+              },
             },
             {
               id: "positions",
               label: "Positions",
+              mode: "server",
+              autoApply: false,
+              defaultValue: DEFAULT_FILTERS.positions,
               options: [
                 { value: "all", label: "All" },
                 { value: "open", label: "Open Only" },
               ],
-              filterFn: (row, value) => value === "all" || (value === "open" && row.has_open_position),
+              onChange: (value) => {
+                state.filters.positions = value;
+                state.totalCount = null;
+                state.lastUpdate = null;
+                updateToolbar();
+                requestReload("filters", {
+                  silent: false,
+                  resetScroll: true,
+                }).catch(() => {});
+              },
             },
           ],
           buttons: [
@@ -377,12 +542,19 @@ function createLifecycle() {
               id: "refresh",
               label: "Refresh",
               variant: "primary",
-              onClick: () => requestReload("manual", { silent: false, preserveScroll: false }).catch(() => {}),
+              onClick: () =>
+                requestReload("manual", {
+                  silent: false,
+                  preserveScroll: false,
+                }).catch(() => {}),
             },
           ],
         },
       });
 
+      syncTableSortState({ render: false });
+      syncToolbarFilters();
+      table.setToolbarSearchValue(state.search, { apply: false });
       updateToolbar();
     },
 
@@ -412,6 +584,12 @@ function createLifecycle() {
       poller = null;
       tabBar = null; // Cleaned up automatically by manageTabBar
       TabBarManager.unregister("tokens");
+      state.view = DEFAULT_VIEW;
+      state.search = "";
+      state.totalCount = null;
+      state.lastUpdate = null;
+      state.sort = { ...DEFAULT_SERVER_SORT };
+      state.filters = { ...DEFAULT_FILTERS };
     },
   };
 }

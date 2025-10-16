@@ -11,7 +11,9 @@ use std::sync::Arc;
 
 use crate::{
     config::with_config,
-    filtering::{self, FilteringQuery, FilteringView, SortDirection, TokenSortKey},
+    filtering::{
+        self, FilteringQuery, FilteringQueryResult, FilteringView, SortDirection, TokenSortKey,
+    },
     global::is_debug_webserver_enabled,
     logger::{log, LogTag},
     pools, positions,
@@ -35,6 +37,12 @@ pub struct TokenListResponse {
     pub total: usize,
     pub total_pages: usize,
     pub timestamp: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prev_cursor: Option<usize>,
 }
 
 /// Period-based numeric metrics helper
@@ -219,12 +227,20 @@ pub struct TokenListQuery {
     pub sort_by: String,
     #[serde(default = "default_sort_dir")]
     pub sort_dir: String,
+    #[serde(default)]
+    pub cursor: Option<usize>,
+    #[serde(default)]
+    pub limit: Option<usize>,
     #[serde(default = "default_page")]
     pub page: usize,
     #[serde(default = "default_page_size")]
     pub page_size: usize,
     #[serde(default)]
     pub min_holders: Option<i32>,
+    #[serde(default)]
+    pub has_pool_price: Option<bool>,
+    #[serde(default)]
+    pub has_open_position: Option<bool>,
 }
 
 fn default_view() -> String {
@@ -282,6 +298,10 @@ pub struct FilterRequest {
     pub sort_by: String,
     #[serde(default = "default_sort_dir")]
     pub sort_dir: String,
+    #[serde(default)]
+    pub cursor: Option<usize>,
+    #[serde(default)]
+    pub limit: Option<usize>,
     #[serde(default = "default_page")]
     pub page: usize,
     #[serde(default = "default_page_size")]
@@ -297,16 +317,81 @@ fn normalize_search(value: String) -> Option<String> {
     }
 }
 
+fn resolve_page_and_size(
+    cursor: Option<usize>,
+    limit: Option<usize>,
+    page: usize,
+    page_size: usize,
+    max_page_size: usize,
+) -> (usize, usize) {
+    let mut effective_limit = limit.unwrap_or(page_size).max(1);
+    let max_page_size = max_page_size.max(1);
+    if effective_limit > max_page_size {
+        effective_limit = max_page_size;
+    }
+
+    let base_cursor = cursor.unwrap_or_else(|| {
+        let safe_page = page.max(1);
+        safe_page.saturating_sub(1).saturating_mul(effective_limit)
+    });
+
+    let normalized_cursor = (base_cursor / effective_limit).saturating_mul(effective_limit);
+    let computed_page = (normalized_cursor / effective_limit).saturating_add(1);
+
+    (computed_page.max(1), effective_limit)
+}
+
+fn build_token_list_response(result: FilteringQueryResult) -> TokenListResponse {
+    let start_index = result
+        .page
+        .saturating_sub(1)
+        .saturating_mul(result.page_size);
+    let current_len = result.items.len();
+
+    let next_cursor = if start_index + current_len < result.total {
+        Some(start_index + current_len)
+    } else {
+        None
+    };
+
+    let prev_cursor = if start_index == 0 || result.page_size == 0 {
+        None
+    } else {
+        Some(start_index.saturating_sub(result.page_size))
+    };
+
+    TokenListResponse {
+        items: result.items,
+        page: result.page,
+        page_size: result.page_size,
+        total: result.total,
+        total_pages: result.total_pages,
+        timestamp: result.timestamp.to_rfc3339(),
+        cursor: Some(start_index),
+        next_cursor,
+        prev_cursor,
+    }
+}
+
 impl TokenListQuery {
     fn into_filtering_query(self, max_page_size: usize) -> FilteringQuery {
+        let (page, page_size) = resolve_page_and_size(
+            self.cursor,
+            self.limit,
+            self.page,
+            self.page_size,
+            max_page_size,
+        );
         let mut query = FilteringQuery::default();
         query.view = FilteringView::from_str(&self.view);
         query.search = normalize_search(self.search);
         query.sort_key = TokenSortKey::from_str(&self.sort_by);
         query.sort_direction = SortDirection::from_str(&self.sort_dir);
-        query.page = self.page.max(1);
-        query.page_size = self.page_size.max(1);
+        query.page = page.max(1);
+        query.page_size = page_size.max(1);
         query.min_unique_holders = self.min_holders;
+        query.has_pool_price = self.has_pool_price;
+        query.has_open_position = self.has_open_position;
         query.clamp_page_size(max_page_size);
         query
     }
@@ -314,13 +399,20 @@ impl TokenListQuery {
 
 impl FilterRequest {
     fn into_filtering_query(self, max_page_size: usize) -> FilteringQuery {
+        let (page, page_size) = resolve_page_and_size(
+            self.cursor,
+            self.limit,
+            self.page,
+            self.page_size,
+            max_page_size,
+        );
         let mut query = FilteringQuery::default();
         query.view = FilteringView::from_str(&self.view);
         query.search = normalize_search(self.search);
         query.sort_key = TokenSortKey::from_str(&self.sort_by);
         query.sort_direction = SortDirection::from_str(&self.sort_dir);
-        query.page = self.page.max(1);
-        query.page_size = self.page_size.max(1);
+        query.page = page.max(1);
+        query.page_size = page_size.max(1);
         query.min_liquidity = self.min_liquidity;
         query.max_liquidity = self.max_liquidity;
         query.min_volume_24h = self.min_volume_24h;
@@ -356,7 +448,8 @@ pub fn routes() -> Router<Arc<AppState>> {
 
 /// GET /api/tokens/list
 ///
-/// Query: view, search, sort_by, sort_dir, page, page_size
+/// Query: view, search, sort_by, sort_dir, cursor, limit, page, page_size,
+///        has_pool_price, has_open_position
 pub(crate) async fn get_tokens_list(
     Query(query): Query<TokenListQuery>,
 ) -> Json<TokenListResponse> {
@@ -381,14 +474,7 @@ pub(crate) async fn get_tokens_list(
                 );
             }
 
-            Json(TokenListResponse {
-                items: result.items,
-                page: result.page,
-                page_size: result.page_size,
-                total: result.total,
-                total_pages: result.total_pages,
-                timestamp: result.timestamp.to_rfc3339(),
-            })
+            Json(build_token_list_response(result))
         }
         Err(err) => {
             log(
@@ -404,6 +490,9 @@ pub(crate) async fn get_tokens_list(
                 total: 0,
                 total_pages: 0,
                 timestamp: chrono::Utc::now().to_rfc3339(),
+                cursor: Some(0),
+                next_cursor: None,
+                prev_cursor: None,
             })
         }
     }
@@ -1119,14 +1208,7 @@ async fn filter_tokens(
     let filtering_query = filter.into_filtering_query(max_page_size);
 
     match filtering::query_tokens(filtering_query).await {
-        Ok(result) => Ok(Json(TokenListResponse {
-            items: result.items,
-            page: result.page,
-            page_size: result.page_size,
-            total: result.total,
-            total_pages: result.total_pages,
-            timestamp: result.timestamp.to_rfc3339(),
-        })),
+        Ok(result) => Ok(Json(build_token_list_response(result))),
         Err(err) => {
             log(
                 LogTag::Webserver,

@@ -292,6 +292,23 @@ export class DataTable {
     };
   }
 
+  _getSortingMode() {
+    const mode = this.options?.sorting?.mode;
+    return mode === "server" ? "server" : "client";
+  }
+
+  _getSearchMode() {
+    const searchConfig = this.options?.toolbar?.search || {};
+    return searchConfig.mode === "server" ? "server" : "client";
+  }
+
+  _isServerFilter(filterConfig) {
+    if (!filterConfig) {
+      return false;
+    }
+    return filterConfig.mode === "server";
+  }
+
   /**
    * Initialize the table
    */
@@ -1371,6 +1388,29 @@ export class DataTable {
         if (e.target.classList.contains("dt-resize-handle")) return;
 
         const columnId = th.dataset.columnId;
+        if (!columnId) {
+          return;
+        }
+
+        if (this._getSortingMode() === "server") {
+          const currentDirection = this.state.sortColumn === columnId ? this.state.sortDirection : null;
+          const nextDirection = currentDirection === "asc" ? "desc" : "asc";
+          this.state.sortColumn = columnId;
+          this.state.sortDirection = nextDirection;
+          this._saveState();
+          this._renderTable();
+
+          const sortingConfig = this.options.sorting || {};
+          if (typeof sortingConfig.onChange === "function") {
+            sortingConfig.onChange({
+              column: columnId,
+              direction: nextDirection,
+              table: this,
+            });
+          }
+          return;
+        }
+
         if (this.state.sortColumn === columnId) {
           this.state.sortDirection =
             this.state.sortDirection === "asc" ? "desc" : "asc";
@@ -2087,8 +2127,8 @@ export class DataTable {
   _applyFilters(options = {}) {
     let data = [...this.state.data];
 
-    // Apply search
-    if (this.state.searchQuery) {
+    // Apply search (client-side only)
+    if (this._getSearchMode() !== "server" && this.state.searchQuery) {
       const query = this.state.searchQuery.toLowerCase();
       data = data.filter((row) => {
         return this.options.columns.some((col) => {
@@ -2102,7 +2142,12 @@ export class DataTable {
     if (this.options.toolbar.filters) {
       this.options.toolbar.filters.forEach((filter) => {
         const filterValue = this.state.filters[filter.id];
-        if (filterValue && filterValue !== "all" && filter.filterFn) {
+        if (
+          filterValue &&
+          filterValue !== "all" &&
+          filter.filterFn &&
+          !this._isServerFilter(filter)
+        ) {
           data = data.filter((row) => filter.filterFn(row, filterValue));
         }
       });
@@ -2117,6 +2162,9 @@ export class DataTable {
    * Apply sorting
    */
   _applySort() {
+    if (this._getSortingMode() === "server") {
+      return;
+    }
     if (!this.state.sortColumn) return;
 
     const column = this.options.columns.find(
@@ -2942,6 +2990,17 @@ export class DataTable {
     }
 
     return Promise.resolve();
+  }
+
+  setSortState(columnId, direction = "asc", options = {}) {
+    const nextColumn = columnId ?? null;
+    const nextDirection = direction === "desc" ? "desc" : "asc";
+    this.state.sortColumn = nextColumn;
+    this.state.sortDirection = nextDirection;
+    this._saveState();
+    if (options.render !== false) {
+      this._renderTable(options.renderOptions || {});
+    }
   }
 
   getPaginationState() {

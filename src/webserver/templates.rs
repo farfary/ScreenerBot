@@ -81,10 +81,10 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         if styles.trim().is_empty() {
             continue;
         }
-        let page_json = serde_json::to_string(page)
-            .expect("failed to serialize page name for style map");
-        let styles_json = serde_json::to_string(styles)
-            .expect("failed to serialize page styles for style map");
+        let page_json =
+            serde_json::to_string(page).expect("failed to serialize page name for style map");
+        let styles_json =
+            serde_json::to_string(styles).expect("failed to serialize page styles for style map");
         page_style_injections.push_str(&format!(
             "window.__PAGE_STYLES__[{}] = {};\n",
             page_json, styles_json
@@ -121,21 +121,7 @@ fn render_page(template: &'static str) -> String {
 }
 
 pub fn tokens_content() -> String {
-    use crate::config::with_config;
-
-    let (default_page_size, max_page_size) = with_config(|cfg| {
-        (
-            cfg.webserver.tokens_tab.default_page_size,
-            cfg.webserver.tokens_tab.max_page_size,
-        )
-    });
-
-    TOKENS_PAGE
-        .replace(
-            "__TOKENS_DEFAULT_PAGE_SIZE__",
-            &default_page_size.to_string(),
-        )
-        .replace("__TOKENS_MAX_PAGE_SIZE__", &max_page_size.to_string())
+    render_page(TOKENS_PAGE)
 }
 
 pub fn events_content() -> String {
