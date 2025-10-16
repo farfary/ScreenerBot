@@ -1,0 +1,55 @@
+/* Tokens page-specific styles */
+
+/* Page container - ensure proper height for scrolling */
+.tokens-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* DataTable container */
+#tokens-root {
+  flex: 1;
+  min-height: 0; /* Critical for flex scrolling */
+  overflow: hidden;
+}
+
+/* Token name cell with logo */
+.token-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.token-cell .token-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg-secondary);
+}
+
+.token-cell .token-symbol {
+  font-weight: 600;
+}
+
+.token-cell .token-name {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.value-positive {
+  color: var(--badge-online);
+  font-weight: 600;
+}
+
+.value-negative {
+  color: var(--badge-error);
+  font-weight: 600;
+}
+
+.hint-muted {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}

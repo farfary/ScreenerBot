@@ -15,6 +15,7 @@ const COMMON_STYLES: &str = include_str!("templates/styles/common.css");
 const SERVICES_PAGE_STYLES: &str = include_str!("templates/styles/pages/services.css");
 const TRANSACTIONS_PAGE_STYLES: &str = include_str!("templates/styles/pages/transactions.css");
 const EVENTS_PAGE_STYLES: &str = include_str!("templates/styles/pages/events.css");
+const TOKENS_PAGE_STYLES: &str = include_str!("templates/styles/pages/tokens.css");
 const DATA_TABLE_STYLES: &str = include_str!("templates/styles/ui/data_table.css");
 const EVENTS_DIALOG_STYLES: &str = include_str!("templates/styles/ui/events_dialog.css");
 
@@ -34,6 +35,7 @@ pub const EVENTS_DIALOG_UI: &str = include_str!("templates/scripts/ui/events_dia
 pub const SERVICES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/services.js");
 pub const TRANSACTIONS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/transactions.js");
 pub const EVENTS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/events.js");
+pub const TOKENS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/tokens.js");
 
 const HOME_PAGE: &str = include_str!("templates/pages/home.html");
 const STATUS_PAGE: &str = include_str!("templates/pages/status.html");
@@ -70,12 +72,16 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     if active_tab == "events" {
         combined_styles.push(EVENTS_PAGE_STYLES);
     }
+    if active_tab == "tokens" {
+        combined_styles.push(TOKENS_PAGE_STYLES);
+    }
     html = html.replace("/*__INJECTED_STYLES__*/", &combined_styles.join("\n"));
     let mut page_style_injections = String::new();
     for (page, styles) in [
         ("services", SERVICES_PAGE_STYLES),
         ("transactions", TRANSACTIONS_PAGE_STYLES),
         ("events", EVENTS_PAGE_STYLES),
+        ("tokens", TOKENS_PAGE_STYLES),
     ] {
         if styles.trim().is_empty() {
             continue;
