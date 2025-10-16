@@ -1,6 +1,5 @@
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
-import { $ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import { DataTable } from "../ui/data_table.js";
 
@@ -53,50 +52,6 @@ function getActivityBar(metrics) {
   `;
 }
 
-function updateSummary(summary) {
-  const total = $("#totalServices");
-  const healthy = $("#healthyServices");
-  const starting = $("#startingServices");
-  const unhealthy = $("#unhealthyServices");
-  if (total) total.textContent = summary?.total_services ?? "-";
-  if (healthy) healthy.textContent = summary?.healthy_services ?? "-";
-  if (starting) starting.textContent = summary?.starting_services ?? "-";
-  if (unhealthy) {
-    const degraded = summary?.degraded_services || 0;
-    const unhealthyCount = summary?.unhealthy_services || 0;
-    unhealthy.textContent = summary ? unhealthyCount + degraded : "-";
-  }
-}
-
-function updateProcessMetrics(firstService) {
-  const cpuEl = $("#processCpu");
-  const memEl = $("#processMemory");
-
-  if (!cpuEl && !memEl) {
-    return;
-  }
-
-  const metrics = firstService?.metrics;
-  if (!metrics) {
-    if (cpuEl) cpuEl.textContent = "-";
-    if (memEl) memEl.textContent = "-";
-    return;
-  }
-
-  if (cpuEl) {
-    const cpu = Number.isFinite(metrics.process_cpu_percent)
-      ? `${metrics.process_cpu_percent.toFixed(1)}%`
-      : "-";
-    cpuEl.textContent = cpu;
-  }
-
-  if (memEl) {
-    const mem = metrics.process_memory_bytes
-      ? Utils.formatBytes(metrics.process_memory_bytes)
-      : "-";
-    memEl.textContent = mem;
-  }
-}
 
 function createLifecycle() {
   let table = null;
@@ -157,12 +112,6 @@ function createLifecycle() {
 
         const data = await response.json();
 
-        updateSummary(data.summary);
-        if (Array.isArray(data.services) && data.services.length > 0) {
-          updateProcessMetrics(data.services[0]);
-        } else {
-          updateProcessMetrics(null);
-        }
 
         if (table) {
           table.setData(Array.isArray(data.services) ? data.services : []);

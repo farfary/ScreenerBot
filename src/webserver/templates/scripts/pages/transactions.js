@@ -1,6 +1,5 @@
 import { registerPage } from "../core/lifecycle.js";
-import { Poller } from "../core/poller.js";
-import { $ } from "../core/dom.js";
+// Poller no longer used for page-level summary; keep import if needed later
 import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import { DataTable } from "../ui/data_table.js";
@@ -116,7 +115,7 @@ function resetPendingFilters(table) {
   currentFilters = normalizeFilters(pendingFilters);
   persistPendingFilters();
   if (table) {
-    table.setToolbarCustomControlValue("signature", "");
+    table.setToolbarSearchValue("", { apply: false });
     table.setToolbarFilterValue("type", "all", { apply: false });
     table.setToolbarFilterValue("direction", "all", { apply: false });
     table.setToolbarFilterValue("status", "all", { apply: false });
@@ -156,7 +155,7 @@ function syncToolbarFromPending(table) {
   if (!table) {
     return;
   }
-  table.setToolbarCustomControlValue("signature", pendingFilters.signature || "");
+  table.setToolbarSearchValue(pendingFilters.signature || "", { apply: false });
   table.setToolbarFilterValue("type", pendingFilters.type || "all", {
     apply: false,
   });
@@ -174,23 +173,6 @@ function syncToolbarFromPending(table) {
 // API CALLS
 // =============================================================================
 
-async function fetchSummary() {
-  try {
-    const response = await fetch("/api/transactions/summary", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    return await response.json();
-  } catch (err) {
-    console.error("Failed to fetch transaction summary:", err);
-    return null;
-  }
-}
 
 async function fetchTransactions(cursor = null, limit = 50) {
   try {
@@ -225,45 +207,6 @@ async function fetchTransactions(cursor = null, limit = 50) {
 // RENDERING
 // =============================================================================
 
-function renderSummary(summary) {
-  const grid = $("#tx-summary-grid");
-  if (!grid || !summary) return;
-
-  grid.innerHTML = `
-    <div class="transactions-summary-card">
-      <div class="summary-label">Total Transactions</div>
-      <div class="summary-value">${Utils.formatNumber(summary.total)}</div>
-    </div>
-    <div class="transactions-summary-card">
-      <div class="summary-label">Success / Failed</div>
-      <div class="summary-value">
-        ${Utils.formatNumber(summary.success_count)} / ${Utils.formatNumber(
-    summary.failed_count
-  )}
-      </div>
-      <div class="summary-subvalue">
-        <span class="value-positive">${summary.success_rate.toFixed(1)}%</span>
-        <span class="value-negative">${summary.failure_rate.toFixed(1)}%</span>
-      </div>
-    </div>
-    <div class="transactions-summary-card">
-      <div class="summary-label">Pending</div>
-      <div class="summary-value">${Utils.formatNumber(
-        summary.pending_global
-      )}</div>
-      ${
-        summary.deferred_count > 0
-          ? `<div class="summary-subvalue">${summary.deferred_count} deferred</div>`
-          : ""
-      }
-    </div>
-    <div class="transactions-summary-card">
-      <div class="summary-label">Database</div>
-      <div class="summary-value">${summary.db_size_mb.toFixed(2)} MB</div>
-      <div class="summary-subvalue">Schema v${summary.db_schema_version}</div>
-    </div>
-  `;
-}
 
 function updateLastUpdated() {
   if (!window.transactionsTable) {
@@ -480,25 +423,16 @@ function createTable() {
         { id: "loaded", label: "Loaded", value: "0" },
         { id: "total", label: "Total", value: "—" },
       ],
-      customControls: [
-        {
-          id: "signature",
-          type: "input",
-          label: "Signature",
-          placeholder: "Signature contains...",
-          clearable: true,
-          minWidth: "220px",
-          onChange: (value) => {
-            pendingFilters.signature = value ?? "";
-          },
-          onClear: () => {
-            pendingFilters.signature = "";
-          },
-          onSubmit: () => {
-            applyPendingFilters(window.transactionsTable);
-          },
+      search: {
+        enabled: true,
+        placeholder: "Search by signature...",
+        onChange: (value) => {
+          pendingFilters.signature = value ?? "";
         },
-      ],
+        onSubmit: () => {
+          applyPendingFilters(window.transactionsTable);
+        },
+      },
       filters: [
         {
           id: "type",
@@ -671,10 +605,8 @@ function setupScrollPagination() {
 // =============================================================================
 
 function createLifecycle() {
-  let summaryPoller = null;
-
   return {
-    init(ctx) {
+    init(_ctx) {
       loadSavedFilters();
       paginationState = {
         currentCursor: null,
@@ -685,25 +617,9 @@ function createLifecycle() {
       createTable();
     },
 
-    activate(ctx) {
+    activate(_ctx) {
       // Initial load
       loadTransactions();
-
-      // Start summary poller (honors global polling interval)
-      summaryPoller = ctx.managePoller(
-        new Poller(async () => {
-          const summary = await fetchSummary();
-          if (summary) {
-            renderSummary(summary);
-            if (typeof summary.total === "number") {
-              updateToolbarStats(summary.total);
-            }
-            updateLastUpdated();
-          }
-        }, { label: "TransactionsSummary" })
-      );
-
-      summaryPoller.start();
     },
 
     deactivate() {
@@ -712,7 +628,6 @@ function createLifecycle() {
 
     dispose() {
       // Cleanup
-      summaryPoller = null;
       if (window.transactionsTable) {
         window.transactionsTable = null;
       }

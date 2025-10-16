@@ -1,56 +1,5 @@
 /* Transactions page-specific styles */
 
-.transactions-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.transactions-summary-card {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px 10px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  background: var(--bg-card);
-}
-
-.transactions-summary-card .summary-label {
-  font-size: 0.7em;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-  margin-bottom: 0;
-}
-
-.transactions-summary-card .summary-value {
-  font-family: var(
-    --font-mono,
-    "SFMono-Regular",
-    Menlo,
-    Monaco,
-    Consolas,
-    "Liberation Mono",
-    "Courier New",
-    monospace
-  );
-  font-size: 0.95em;
-  font-weight: 600;
-  color: var(--text-primary);
-  line-height: 1.3;
-}
-
-.transactions-summary-card .summary-subvalue {
-  color: var(--text-secondary);
-  font-size: 0.75em;
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-  line-height: 1.4;
-}
-
 .value-positive {
   color: var(--badge-online);
   font-weight: 600;

@@ -831,12 +831,23 @@ export class DataTable {
       ".table-toolbar-search__clear"
     );
     if (searchInput) {
+      const searchConfig = this.options.toolbar?.search || {};
+      
       const handler = (e) => {
         this.state.searchQuery = e.target.value;
         if (searchClear) {
           searchClear.hidden = !(e.target.value || "").length;
         }
-        this._applyFilters();
+        
+        // Call custom onChange if provided
+        if (typeof searchConfig.onChange === "function") {
+          searchConfig.onChange(e.target.value, searchInput);
+        }
+        
+        // Only apply filters if not using custom onChange (server-side search)
+        if (!searchConfig.onChange) {
+          this._applyFilters();
+        }
         this._saveState();
       };
       this._addEventListener(searchInput, "input", handler);
@@ -848,14 +859,29 @@ export class DataTable {
           if (searchClear) {
             searchClear.hidden = true;
           }
-          this._applyFilters();
+          
+          // Call custom onChange if provided
+          if (typeof searchConfig.onChange === "function") {
+            searchConfig.onChange("", searchInput);
+          }
+          
+          // Only apply filters if not using custom onChange
+          if (!searchConfig.onChange) {
+            this._applyFilters();
+          }
           this._saveState();
+        } else if (e.key === "Enter") {
+          // Call custom onSubmit if provided
+          if (typeof searchConfig.onSubmit === "function") {
+            searchConfig.onSubmit(searchInput.value, searchInput);
+          }
         }
       };
       this._addEventListener(searchInput, "keydown", keyHandler);
     }
 
     if (searchClear) {
+      const searchConfig = this.options.toolbar?.search || {};
       searchClear.hidden = !(this.state.searchQuery || "").length;
       const clearHandler = () => {
         if (searchInput) {
@@ -864,7 +890,16 @@ export class DataTable {
         }
         this.state.searchQuery = "";
         searchClear.hidden = true;
-        this._applyFilters();
+        
+        // Call custom onChange if provided
+        if (typeof searchConfig.onChange === "function") {
+          searchConfig.onChange("", searchInput);
+        }
+        
+        // Only apply filters if not using custom onChange
+        if (!searchConfig.onChange) {
+          this._applyFilters();
+        }
         this._saveState();
       };
       this._addEventListener(searchClear, "click", clearHandler);
