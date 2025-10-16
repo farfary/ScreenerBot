@@ -118,7 +118,7 @@
  */
 
 import * as AppState from "../core/app_state.js";
-import { $, $$, cls } from "../core/dom.js";
+import { $ } from "../core/dom.js";
 import { TableToolbarView } from "./table_toolbar.js";
 
 export class DataTable {
@@ -180,9 +180,89 @@ export class DataTable {
     this.scrollThrottle = null;
     this.eventHandlers = new Map(); // Store all event handlers for cleanup
     this._pendingColumnMenuOpen = false;
+    this._pagination = this._initializePagination(this.options.pagination);
+    this._paginationScrollRAF = null;
+    this._pendingRenderOptions = null;
 
     this._loadState();
     this._init();
+  }
+
+  _initializePagination(paginationOptions) {
+    if (!paginationOptions || typeof paginationOptions.loadPage !== "function") {
+      return null;
+    }
+
+    const threshold =
+      typeof paginationOptions.threshold === "number" &&
+      Number.isFinite(paginationOptions.threshold)
+        ? Math.max(0, paginationOptions.threshold)
+        : 320;
+
+    const maxRows =
+      typeof paginationOptions.maxRows === "number" &&
+      Number.isFinite(paginationOptions.maxRows) &&
+      paginationOptions.maxRows > 0
+        ? Math.floor(paginationOptions.maxRows)
+        : null;
+
+    const context =
+      paginationOptions.context && typeof paginationOptions.context === "object"
+        ? { ...paginationOptions.context }
+        : {};
+
+    return {
+      enabled: true,
+      loadPage: paginationOptions.loadPage,
+      threshold,
+      maxRows,
+      autoLoad: paginationOptions.autoLoad !== false,
+      initialCursor: paginationOptions.initialCursor ?? null,
+      initialPrevCursor: paginationOptions.initialPrevCursor ?? null,
+      initialHasMoreNext: paginationOptions.initialHasMoreNext,
+      initialHasMorePrev: paginationOptions.initialHasMorePrev,
+      cursorNext: paginationOptions.initialCursor ?? null,
+      cursorPrev: paginationOptions.initialPrevCursor ?? null,
+      hasMoreNext:
+        paginationOptions.initialHasMoreNext !== undefined
+          ? Boolean(paginationOptions.initialHasMoreNext)
+          : true,
+      hasMorePrev:
+        paginationOptions.initialHasMorePrev !== undefined
+          ? Boolean(paginationOptions.initialHasMorePrev)
+          : Boolean(paginationOptions.initialPrevCursor),
+      loadingNext: false,
+      loadingPrev: false,
+      loadingInitial: false,
+      pendingRequest: null,
+      abortController: null,
+      context,
+      dedupe: paginationOptions.dedupe !== false,
+      dedupeKey:
+        typeof paginationOptions.dedupeKey === "function"
+          ? paginationOptions.dedupeKey
+          : null,
+      rowIdField: paginationOptions.rowIdField || this.options.rowIdField,
+      preserveScrollOnAppend:
+        paginationOptions.preserveScrollOnAppend !== false,
+      preserveScrollOnPrepend:
+        paginationOptions.preserveScrollOnPrepend !== false,
+      onPageLoaded:
+        typeof paginationOptions.onPageLoaded === "function"
+          ? paginationOptions.onPageLoaded
+          : null,
+      onStateChange:
+        typeof paginationOptions.onStateChange === "function"
+          ? paginationOptions.onStateChange
+          : null,
+      debounceMs:
+        typeof paginationOptions.debounceMs === "number" &&
+        Number.isFinite(paginationOptions.debounceMs)
+          ? Math.max(0, paginationOptions.debounceMs)
+          : 120,
+      total: null,
+      meta: {},
+    };
   }
 
   /**
@@ -210,6 +290,12 @@ export class DataTable {
     this._log("info", "DataTable initialized", {
       columns: this.options.columns.length,
     });
+
+    if (this._pagination?.enabled && this._pagination.autoLoad) {
+      this.reload({ reason: "init", silent: true }).catch((error) => {
+        this._log("error", "Initial pagination load failed", error);
+      });
+    }
   }
 
   /**
@@ -376,7 +462,7 @@ export class DataTable {
             const styleAttr = widthValue ? ` style="width: ${widthValue};"` : "";
             return `<col data-column-id="${col.id}"${styleAttr}>`;
           })
-          .join('')}
+          .join("")}
       </colgroup>
     `;
   }
@@ -545,7 +631,7 @@ export class DataTable {
     if (typeof config.alt === "function") {
       try {
         alt = config.alt(row);
-      } catch (error) {
+      } catch (_error) {
         alt = "Image";
       }
     } else {
@@ -557,7 +643,7 @@ export class DataTable {
     if (typeof config.title === "function") {
       try {
         title = config.title(row);
-      } catch (error) {
+      } catch (_error) {
         title = "";
       }
     } else {
@@ -802,6 +888,11 @@ export class DataTable {
     // Remove resize handlers
     document.removeEventListener("mousemove", this._handleResize);
     document.removeEventListener("mouseup", this._handleResizeEnd);
+
+    if (this._paginationScrollRAF !== null) {
+      cancelAnimationFrame(this._paginationScrollRAF);
+      this._paginationScrollRAF = null;
+    }
   }
 
   /**
@@ -1476,7 +1567,11 @@ export class DataTable {
 
     // Scroll position tracking (throttled to avoid excessive saves)
     const scrollHandler = () => {
+      if (!this.elements.scrollContainer) {
+        return;
+      }
       this.state.scrollPosition = this.elements.scrollContainer.scrollTop;
+      this._handlePaginationScroll();
 
       // Throttle state saves to once per 500ms
       if (this.scrollThrottle) {
@@ -1918,7 +2013,7 @@ export class DataTable {
   /**
    * Apply filters (search + custom filters)
    */
-  _applyFilters() {
+  _applyFilters(options = {}) {
     let data = [...this.state.data];
 
     // Apply search
@@ -1944,7 +2039,7 @@ export class DataTable {
 
     this.state.filteredData = data;
     this._applySort();
-    this._renderTable();
+    this._renderTable(options.renderOptions || {});
   }
 
   /**
@@ -1983,10 +2078,26 @@ export class DataTable {
   /**
    * Re-render table content only (not full structure)
    */
-  _renderTable() {
+  _renderTable(renderOptions = {}) {
     const scrollContainer = this.elements.scrollContainer;
-    const prevScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
-    const prevScrollLeft = scrollContainer ? scrollContainer.scrollLeft : 0;
+    const prevScrollTop =
+      typeof renderOptions.prevScrollTop === "number"
+        ? renderOptions.prevScrollTop
+        : scrollContainer
+        ? scrollContainer.scrollTop
+        : 0;
+    const prevScrollLeft =
+      typeof renderOptions.prevScrollLeft === "number"
+        ? renderOptions.prevScrollLeft
+        : scrollContainer
+        ? scrollContainer.scrollLeft
+        : 0;
+    const prevScrollHeight =
+      typeof renderOptions.prevScrollHeight === "number"
+        ? renderOptions.prevScrollHeight
+        : scrollContainer
+        ? scrollContainer.scrollHeight
+        : 0;
 
     this._updateLoadingClass();
 
@@ -2038,11 +2149,740 @@ export class DataTable {
         0,
         scrollContainer.scrollHeight - scrollContainer.clientHeight
       );
-      const targetTop = Math.min(prevScrollTop, maxScrollTop);
+
+      let targetTop;
+      if (renderOptions.preserveTopDistance && prevScrollHeight > 0) {
+        const baseline =
+          typeof renderOptions.prevScrollTop === "number"
+            ? renderOptions.prevScrollTop
+            : prevScrollTop;
+        const delta = scrollContainer.scrollHeight - prevScrollHeight;
+        targetTop = Math.max(0, baseline + delta);
+      } else if (typeof renderOptions.targetScrollTop === "number") {
+        targetTop = Math.max(0, renderOptions.targetScrollTop);
+      } else if (renderOptions.resetScroll === true) {
+        targetTop = 0;
+      } else {
+        targetTop = Math.min(prevScrollTop, maxScrollTop);
+      }
+
       scrollContainer.scrollTop = targetTop;
       scrollContainer.scrollLeft = prevScrollLeft;
       this.state.scrollPosition = targetTop;
+
+      if (this._pagination?.enabled) {
+        this._autoLoadIfViewportShort();
+      }
     }
+  }
+
+  _handlePaginationScroll() {
+    if (!this._pagination?.enabled || !this.elements.scrollContainer) {
+      return;
+    }
+
+    if (this._paginationScrollRAF !== null) {
+      return;
+    }
+
+    this._paginationScrollRAF = requestAnimationFrame(() => {
+      this._paginationScrollRAF = null;
+      this._maybeTriggerPaginationLoad();
+    });
+  }
+
+  _maybeTriggerPaginationLoad() {
+    const pagination = this._pagination;
+    const container = this.elements.scrollContainer;
+    if (!pagination?.enabled || !container) {
+      return;
+    }
+
+    const distanceToBottom =
+      container.scrollHeight - (container.scrollTop + container.clientHeight);
+
+    if (
+      pagination.hasMoreNext !== false &&
+      !pagination.loadingNext &&
+      distanceToBottom <= pagination.threshold
+    ) {
+      this.loadNext({ reason: "scroll", silent: true });
+    }
+
+    if (
+      pagination.hasMorePrev !== false &&
+      !pagination.loadingPrev &&
+      container.scrollTop <= pagination.threshold
+    ) {
+      this.loadPrevious({ reason: "scroll", silent: true });
+    }
+  }
+
+  _autoLoadIfViewportShort() {
+    const pagination = this._pagination;
+    const container = this.elements.scrollContainer;
+    if (!pagination?.enabled || !container) {
+      return;
+    }
+
+    if (
+      pagination.hasMoreNext !== false &&
+      !pagination.loadingNext &&
+      container.scrollHeight <= container.clientHeight + pagination.threshold
+    ) {
+      this.loadNext({ reason: "auto-fill", silent: true });
+    }
+  }
+
+  _loadPage(direction, options = {}) {
+    if (!this._pagination?.enabled) {
+      return Promise.resolve(null);
+    }
+
+    const pagination = this._pagination;
+    const normalizedDirection =
+      direction === "prev" || direction === "next" ? direction : "initial";
+    const reason = options.reason ?? "scroll";
+    const silent = options.silent ?? false;
+    const force = options.force ?? false;
+
+    if (normalizedDirection === "next") {
+      if (pagination.loadingNext && !force) {
+        return pagination.pendingRequest ?? Promise.resolve(null);
+      }
+      if (pagination.hasMoreNext === false && !force) {
+        return Promise.resolve(null);
+      }
+    } else if (normalizedDirection === "prev") {
+      if (pagination.loadingPrev && !force) {
+        return pagination.pendingRequest ?? Promise.resolve(null);
+      }
+      if (pagination.hasMorePrev === false && !force) {
+        return Promise.resolve(null);
+      }
+    } else if (pagination.pendingRequest && !force) {
+      return pagination.pendingRequest;
+    }
+
+    if (force) {
+      this._cancelPaginationRequest();
+    }
+
+    const controller = this._createAbortController();
+    pagination.abortController = controller;
+
+    const cursor =
+      options.cursor !== undefined
+        ? options.cursor
+        : normalizedDirection === "prev"
+        ? pagination.cursorPrev ?? null
+        : normalizedDirection === "next"
+        ? pagination.cursorNext ?? null
+        : pagination.cursorNext ?? null;
+
+    const loadArgs = {
+      direction: normalizedDirection,
+      cursor,
+      reason,
+      context: pagination.context,
+      signal: controller.signal,
+      table: this,
+    };
+
+    if (normalizedDirection === "next") {
+      pagination.loadingNext = true;
+    } else if (normalizedDirection === "prev") {
+      pagination.loadingPrev = true;
+    } else {
+      pagination.loadingInitial = true;
+    }
+
+    if (!silent && normalizedDirection === "initial") {
+      this._setLoadingState(true);
+    }
+
+    let loadPromise;
+    try {
+      loadPromise = Promise.resolve(pagination.loadPage(loadArgs));
+    } catch (error) {
+      pagination.loadingNext = false;
+      pagination.loadingPrev = false;
+      pagination.loadingInitial = false;
+      this._setLoadingState(false);
+      this._log("error", "pagination.loadPage threw", error);
+      return Promise.reject(error);
+    }
+
+    pagination.pendingRequest = loadPromise
+      .then((result) => {
+        this._applyPageResult(normalizedDirection, result, options);
+        return result;
+      })
+      .catch((error) => {
+        if (error?.name === "AbortError") {
+          return null;
+        }
+        this._log(
+          "error",
+          `Pagination load failed (${normalizedDirection})`,
+          error
+        );
+        throw error;
+      })
+      .finally(() => {
+        if (pagination.abortController === controller) {
+          pagination.abortController = null;
+        }
+        if (normalizedDirection === "next") {
+          pagination.loadingNext = false;
+        } else if (normalizedDirection === "prev") {
+          pagination.loadingPrev = false;
+        } else {
+          pagination.loadingInitial = false;
+        }
+        pagination.pendingRequest = null;
+        this._setLoadingState(false);
+        this._notifyPaginationStateChange();
+      });
+
+    return pagination.pendingRequest;
+  }
+
+  _applyPageResult(direction, result, options = {}) {
+    const normalized = this._normalizePageResult(result);
+
+    const meta = {
+      cursorNext: normalized.cursorNext,
+      cursorPrev: normalized.cursorPrev,
+      hasMoreNext: normalized.hasMoreNext,
+      hasMorePrev: normalized.hasMorePrev,
+      total: normalized.total,
+      meta: normalized.meta,
+      renderOptions: normalized.renderOptions,
+      resetScroll: normalized.resetScroll,
+      preserveScroll: normalized.preserveScroll,
+    };
+
+    const mode = normalized.mode?.toString().toLowerCase?.();
+    const effectiveDirection =
+      direction === "initial" && mode === "append"
+        ? "next"
+        : direction === "initial" && mode === "prepend"
+        ? "prev"
+        : direction;
+
+    if (effectiveDirection === "prev" || mode === "prepend") {
+      this._prependData(normalized.rows, {
+        ...meta,
+        preserveScroll:
+          normalized.preserveScroll ?? options.preserveScroll ?? undefined,
+      });
+    } else if (effectiveDirection === "next" || mode === "append") {
+      this._appendData(normalized.rows, meta);
+    } else {
+      const renderOptions = {
+        ...(meta.renderOptions || {}),
+      };
+      if (normalized.resetScroll ?? options.resetScroll) {
+        renderOptions.resetScroll = true;
+      }
+      this._replaceData(normalized.rows, {
+        ...meta,
+        renderOptions,
+      });
+    }
+
+    if (this._pagination) {
+      if (normalized.total !== undefined) {
+        this._pagination.total = normalized.total;
+      }
+      if (normalized.meta !== undefined) {
+        this._pagination.meta = normalized.meta;
+      }
+    }
+
+    if (typeof this._pagination?.onPageLoaded === "function") {
+      try {
+        this._pagination.onPageLoaded({
+          direction: effectiveDirection,
+          rows: normalized.rows,
+          raw: result,
+          meta: normalized.meta,
+          cursorNext: this._pagination?.cursorNext ?? null,
+          cursorPrev: this._pagination?.cursorPrev ?? null,
+          total: normalized.total,
+          reason: options.reason ?? "scroll",
+          table: this,
+        });
+      } catch (error) {
+        this._log("error", "pagination.onPageLoaded failed", error);
+      }
+    }
+  }
+
+  _normalizePageResult(result) {
+    if (Array.isArray(result)) {
+      return {
+        rows: result,
+        cursorNext: undefined,
+        cursorPrev: undefined,
+        hasMoreNext: undefined,
+        hasMorePrev: undefined,
+        total: undefined,
+        meta: undefined,
+        mode: undefined,
+        renderOptions: undefined,
+        resetScroll: undefined,
+        preserveScroll: undefined,
+      };
+    }
+
+    if (!result || typeof result !== "object") {
+      return {
+        rows: [],
+        cursorNext: undefined,
+        cursorPrev: undefined,
+        hasMoreNext: undefined,
+        hasMorePrev: undefined,
+        total: undefined,
+        meta: undefined,
+        mode: undefined,
+        renderOptions: undefined,
+        resetScroll: undefined,
+        preserveScroll: undefined,
+      };
+    }
+
+    const rows = Array.isArray(result.rows)
+      ? result.rows
+      : Array.isArray(result.items)
+      ? result.items
+      : Array.isArray(result.data)
+      ? result.data
+      : [];
+
+    return {
+      rows,
+      cursorNext:
+        result.cursorNext ??
+        result.cursor_next ??
+        result.next_cursor ??
+        undefined,
+      cursorPrev:
+        result.cursorPrev ??
+        result.cursor_prev ??
+        result.prev_cursor ??
+        result.previous_cursor ??
+        undefined,
+      hasMoreNext:
+        result.hasMoreNext ??
+        result.has_more_next ??
+        undefined,
+      hasMorePrev:
+        result.hasMorePrev ??
+        result.has_more_prev ??
+        undefined,
+      total: result.total ?? result.count ?? undefined,
+      meta: result.meta ?? undefined,
+      mode: result.mode ?? undefined,
+      renderOptions: result.renderOptions ?? undefined,
+      resetScroll: result.resetScroll ?? undefined,
+      preserveScroll: result.preserveScroll ?? undefined,
+    };
+  }
+
+  _replaceData(rows, meta = {}) {
+    const sanitized = Array.isArray(rows)
+      ? rows.filter((row) => row !== null && row !== undefined)
+      : [];
+    this.state.data = [...sanitized];
+    this.state.hasAutoFitted = false;
+    this._updatePaginationMeta(meta, { replace: true });
+    this._setLoadingState(false);
+
+    const renderOptions = meta.renderOptions ? { ...meta.renderOptions } : {};
+    if (meta.resetScroll) {
+      renderOptions.resetScroll = true;
+    }
+    this._applyFilters({ renderOptions });
+    this._log("info", "Data replaced", { rows: sanitized.length });
+  }
+
+  _appendData(rows, meta = {}) {
+    const sanitized = Array.isArray(rows)
+      ? rows.filter((row) => row !== null && row !== undefined)
+      : [];
+    if (sanitized.length === 0) {
+      this._updatePaginationMeta(meta);
+      this._setLoadingState(false);
+      return;
+    }
+
+    const deduped = this._dedupeRows(sanitized, "append");
+    if (deduped.length === 0) {
+      this._updatePaginationMeta(meta);
+      this._setLoadingState(false);
+      return;
+    }
+
+    this.state.data = [...this.state.data, ...deduped];
+    this._pruneRows("append");
+    this.state.hasAutoFitted = false;
+    this._updatePaginationMeta(meta);
+    this._setLoadingState(false);
+    this._applyFilters({ renderOptions: meta.renderOptions || {} });
+    this._log("info", "Data appended", { rows: deduped.length });
+  }
+
+  _prependData(rows, meta = {}) {
+    const sanitized = Array.isArray(rows)
+      ? rows.filter((row) => row !== null && row !== undefined)
+      : [];
+    if (sanitized.length === 0) {
+      this._updatePaginationMeta(meta);
+      this._setLoadingState(false);
+      return;
+    }
+
+    const deduped = this._dedupeRows(sanitized, "prepend");
+    if (deduped.length === 0) {
+      this._updatePaginationMeta(meta);
+      this._setLoadingState(false);
+      return;
+    }
+
+    let renderOptions = meta.renderOptions ? { ...meta.renderOptions } : {};
+    const preserveScroll =
+      meta.preserveScroll !== undefined
+        ? meta.preserveScroll
+        : this._pagination?.preserveScrollOnPrepend;
+
+    if (preserveScroll && this.elements.scrollContainer) {
+      renderOptions = {
+        ...renderOptions,
+        preserveTopDistance: true,
+        prevScrollHeight: this.elements.scrollContainer.scrollHeight,
+        prevScrollTop: this.elements.scrollContainer.scrollTop,
+      };
+    }
+
+    this.state.data = [...deduped, ...this.state.data];
+    this._pruneRows("prepend");
+    this.state.hasAutoFitted = false;
+    this._updatePaginationMeta(meta);
+    this._setLoadingState(false);
+    this._applyFilters({ renderOptions });
+    this._log("info", "Data prepended", { rows: deduped.length });
+  }
+
+  _pruneRows(direction) {
+    if (!this._pagination?.maxRows) {
+      return;
+    }
+
+    const maxRows = this._pagination.maxRows;
+    if (this.state.data.length <= maxRows) {
+      return;
+    }
+
+    const excess = this.state.data.length - maxRows;
+    if (excess <= 0) {
+      return;
+    }
+
+    if (direction === "prepend") {
+      this.state.data.splice(this.state.data.length - excess, excess);
+    } else {
+      this.state.data.splice(0, excess);
+    }
+  }
+
+  _updatePaginationMeta(meta = {}, options = {}) {
+    if (!this._pagination?.enabled) {
+      return;
+    }
+
+    const pagination = this._pagination;
+
+    if (Object.prototype.hasOwnProperty.call(meta, "cursorNext")) {
+      pagination.cursorNext = meta.cursorNext ?? null;
+      pagination.hasMoreNext =
+        meta.hasMoreNext !== undefined
+          ? Boolean(meta.hasMoreNext)
+          : pagination.cursorNext !== null &&
+            pagination.cursorNext !== undefined;
+    } else if (Object.prototype.hasOwnProperty.call(meta, "hasMoreNext")) {
+      pagination.hasMoreNext = Boolean(meta.hasMoreNext);
+    } else if (options.replace) {
+      pagination.cursorNext = pagination.cursorNext ?? null;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(meta, "cursorPrev")) {
+      pagination.cursorPrev = meta.cursorPrev ?? null;
+      pagination.hasMorePrev =
+        meta.hasMorePrev !== undefined
+          ? Boolean(meta.hasMorePrev)
+          : pagination.cursorPrev !== null &&
+            pagination.cursorPrev !== undefined;
+    } else if (Object.prototype.hasOwnProperty.call(meta, "hasMorePrev")) {
+      pagination.hasMorePrev = Boolean(meta.hasMorePrev);
+    } else if (options.replace) {
+      pagination.cursorPrev = pagination.cursorPrev ?? null;
+    }
+
+    if (meta.total !== undefined) {
+      pagination.total = meta.total;
+    }
+    if (meta.meta !== undefined) {
+      pagination.meta = meta.meta;
+    }
+  }
+
+  _notifyPaginationStateChange() {
+    const pagination = this._pagination;
+    if (!pagination?.enabled || typeof pagination.onStateChange !== "function") {
+      return;
+    }
+
+    try {
+      pagination.onStateChange(
+        {
+          cursorNext: pagination.cursorNext ?? null,
+          cursorPrev: pagination.cursorPrev ?? null,
+          hasMoreNext: pagination.hasMoreNext !== false,
+          hasMorePrev: pagination.hasMorePrev !== false,
+          loadingNext: Boolean(pagination.loadingNext),
+          loadingPrev: Boolean(pagination.loadingPrev),
+          total: pagination.total,
+          meta: pagination.meta,
+        },
+        this
+      );
+    } catch (error) {
+      this._log("error", "pagination.onStateChange failed", error);
+    }
+  }
+
+  _getRowKey(row) {
+    if (!row || typeof row !== "object") {
+      return null;
+    }
+
+    if (this._pagination?.dedupeKey) {
+      try {
+        const value = this._pagination.dedupeKey(row);
+        if (value === undefined || value === null) {
+          return null;
+        }
+        return String(value);
+      } catch (error) {
+        this._log("error", "pagination.dedupeKey failed", error);
+        return null;
+      }
+    }
+
+    const field = this._pagination?.rowIdField || this.options.rowIdField;
+    const key = row[field];
+    if (key === undefined || key === null) {
+      return null;
+    }
+    return String(key);
+  }
+
+  _dedupeRows(rows, direction) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return [];
+    }
+
+    if (!this._pagination?.enabled || this._pagination.dedupe === false) {
+      return rows.slice();
+    }
+
+    const seen = new Set(
+      this.state.data
+        .map((existing) => this._getRowKey(existing))
+        .filter((key) => key !== null)
+    );
+
+    const result = [];
+    for (const row of rows) {
+      const key = this._getRowKey(row);
+      if (!key) {
+        result.push(row);
+        continue;
+      }
+
+      if (seen.has(key)) {
+        if (direction === "prepend") {
+          break;
+        }
+        continue;
+      }
+
+      seen.add(key);
+      result.push(row);
+    }
+
+    return result;
+  }
+
+  _createAbortController() {
+    if (typeof AbortController !== "undefined") {
+      return new AbortController();
+    }
+    return {
+      abort() {},
+      signal: undefined,
+    };
+  }
+
+  _cancelPaginationRequest() {
+    if (!this._pagination) {
+      return;
+    }
+
+    if (this._pagination.abortController) {
+      try {
+        this._pagination.abortController.abort();
+      } catch (error) {
+        this._log("warn", "Pagination abort failed", error);
+      }
+      this._pagination.abortController = null;
+    }
+
+    this._pagination.pendingRequest = null;
+    this._pagination.loadingNext = false;
+    this._pagination.loadingPrev = false;
+    this._pagination.loadingInitial = false;
+  }
+
+  reload(options = {}) {
+    if (!this._pagination?.enabled) {
+      return this.refresh(options);
+    }
+
+    const pagination = this._pagination;
+    const reason = options.reason ?? "reload";
+    const silent = options.silent ?? false;
+    const preserveScroll = options.preserveScroll ?? false;
+
+    this._cancelPaginationRequest();
+
+    pagination.cursorNext =
+      options.cursor ?? pagination.initialCursor ?? null;
+    pagination.cursorPrev =
+      options.prevCursor ?? pagination.initialPrevCursor ?? null;
+    pagination.hasMoreNext =
+      options.hasMoreNext !== undefined
+        ? Boolean(options.hasMoreNext)
+        : pagination.initialHasMoreNext !== undefined
+        ? Boolean(pagination.initialHasMoreNext)
+        : true;
+    pagination.hasMorePrev =
+      options.hasMorePrev !== undefined
+        ? Boolean(options.hasMorePrev)
+        : pagination.initialHasMorePrev !== undefined
+        ? Boolean(pagination.initialHasMorePrev)
+        : Boolean(pagination.cursorPrev);
+
+    pagination.total = null;
+    pagination.meta = {};
+    pagination.loadingNext = false;
+    pagination.loadingPrev = false;
+    pagination.loadingInitial = false;
+
+    if (!silent) {
+      this._setLoadingState(true);
+    }
+
+    pagination.loadingInitial = true;
+
+    return this._loadPage("initial", {
+      reason,
+      silent,
+      preserveScroll,
+      cursor: pagination.cursorNext ?? null,
+      replace: true,
+      resetScroll: options.resetScroll ?? false,
+    }).finally(() => {
+      pagination.loadingInitial = false;
+      if (!silent) {
+        this._setLoadingState(false);
+      }
+    });
+  }
+
+  loadNext(options = {}) {
+    return this._loadPage("next", options);
+  }
+
+  loadPrevious(options = {}) {
+    return this._loadPage("prev", options);
+  }
+
+  setPaginationContext(context = {}, options = {}) {
+    if (!this._pagination?.enabled) {
+      return Promise.resolve();
+    }
+
+    this._pagination.context = { ...context };
+    this._notifyPaginationStateChange();
+
+    if (options.reload) {
+      return this.reload({
+        reason: options.reason ?? "context-update",
+        silent: options.silent ?? false,
+        preserveScroll: options.preserveScroll ?? false,
+        resetScroll: options.resetScroll ?? false,
+      });
+    }
+
+    return Promise.resolve();
+  }
+
+  mergePaginationContext(partial = {}, options = {}) {
+    if (!this._pagination?.enabled) {
+      return Promise.resolve();
+    }
+
+    this._pagination.context = {
+      ...this._pagination.context,
+      ...partial,
+    };
+    this._notifyPaginationStateChange();
+
+    if (options.reload) {
+      return this.reload({
+        reason: options.reason ?? "context-update",
+        silent: options.silent ?? false,
+        preserveScroll: options.preserveScroll ?? false,
+        resetScroll: options.resetScroll ?? false,
+      });
+    }
+
+    return Promise.resolve();
+  }
+
+  getPaginationState() {
+    if (!this._pagination?.enabled) {
+      return null;
+    }
+
+    return {
+      cursorNext: this._pagination.cursorNext ?? null,
+      cursorPrev: this._pagination.cursorPrev ?? null,
+      hasMoreNext: this._pagination.hasMoreNext !== false,
+      hasMorePrev: this._pagination.hasMorePrev !== false,
+      loadingNext: Boolean(this._pagination.loadingNext),
+      loadingPrev: Boolean(this._pagination.loadingPrev),
+      total: this._pagination.total,
+      meta: this._pagination.meta,
+      context: { ...this._pagination.context },
+    };
+  }
+
+  cancelPendingLoad() {
+    this._cancelPaginationRequest();
   }
 
   /**
@@ -2131,14 +2971,69 @@ export class DataTable {
   /**
    * Set table data
    */
-  setData(data) {
-    const rows = Array.isArray(data) ? data : [];
-    this.state.data = rows;
-    this.state.filteredData = [...rows];
-    this.state.hasAutoFitted = false;
-    this._setLoadingState(false);
-    this._applyFilters();
-    this._log("info", "Data set", { rows: rows.length });
+  setData(data, meta = {}) {
+    if (Array.isArray(data)) {
+      this._replaceData(data, meta);
+      return;
+    }
+
+    if (data && typeof data === "object") {
+      const payload = data;
+      const candidateRows = Array.isArray(payload.rows)
+        ? payload.rows
+        : Array.isArray(payload.items)
+        ? payload.items
+        : Array.isArray(payload.data)
+        ? payload.data
+        : [];
+
+      const combinedMeta = {
+        cursorNext:
+          payload.cursorNext ??
+          payload.cursor_next ??
+          payload.next_cursor ??
+          meta.cursorNext,
+        cursorPrev:
+          payload.cursorPrev ??
+          payload.cursor_prev ??
+          payload.prev_cursor ??
+          payload.previous_cursor ??
+          meta.cursorPrev,
+        hasMoreNext:
+          payload.hasMoreNext ??
+          payload.has_more_next ??
+          meta.hasMoreNext,
+        hasMorePrev:
+          payload.hasMorePrev ??
+          payload.has_more_prev ??
+          meta.hasMorePrev,
+        total: payload.total ?? payload.count ?? meta.total,
+        meta: payload.meta ?? meta.meta,
+        renderOptions: payload.renderOptions ?? meta.renderOptions,
+        resetScroll: payload.resetScroll ?? meta.resetScroll,
+        preserveScroll: payload.preserveScroll ?? meta.preserveScroll,
+      };
+
+      const modeValue = (payload.mode || meta.mode || "replace").toString();
+      const mode = modeValue.toLowerCase();
+
+      if (mode === "noop") {
+        this._updatePaginationMeta(combinedMeta);
+        this._setLoadingState(false);
+        return;
+      }
+
+      if (mode === "append") {
+        this._appendData(candidateRows, combinedMeta);
+      } else if (mode === "prepend") {
+        this._prependData(candidateRows, combinedMeta);
+      } else {
+        this._replaceData(candidateRows, combinedMeta);
+      }
+      return;
+    }
+
+    this._replaceData([], meta);
   }
 
   /**
@@ -2149,6 +3044,10 @@ export class DataTable {
     this.state.filteredData = [];
     this.state.hasAutoFitted = false;
     this._setLoadingState(false);
+    this._updatePaginationMeta(
+      { cursorNext: null, cursorPrev: null, hasMoreNext: false, hasMorePrev: false },
+      { replace: true }
+    );
     this._renderTable();
     this._log("info", "Data cleared");
   }
@@ -2163,7 +3062,24 @@ export class DataTable {
   /**
    * Refresh table (re-render)
    */
-  refresh() {
+  refresh(request = {}) {
+    const options =
+      typeof request === "string"
+        ? { reason: request }
+        : request && typeof request === "object"
+        ? { ...request }
+        : {};
+
+    if (this._pagination?.enabled) {
+      return this.reload({
+        reason: options.reason ?? "refresh",
+        silent: options.silent ?? false,
+        preserveScroll: options.preserveScroll ?? false,
+        cursor: options.cursor,
+        force: options.force ?? false,
+      });
+    }
+
     if (!this.options.onRefresh) {
       this._renderTable();
       return Promise.resolve();
@@ -2178,7 +3094,9 @@ export class DataTable {
       this._renderTable();
     }
 
-    const refreshPromise = Promise.resolve(this.options.onRefresh())
+    const refreshPromise = Promise.resolve(
+      this.options.onRefresh(options)
+    )
       .then(() => {
         this._setLoadingState(false);
         if (!hadRows && this.state.filteredData.length === 0) {
@@ -2288,6 +3206,8 @@ export class DataTable {
   destroy() {
     // Remove all event listeners
     this._removeEventListeners();
+
+    this._cancelPaginationRequest();
 
     // Cancel any pending RAF
     if (this._pendingRAF) {

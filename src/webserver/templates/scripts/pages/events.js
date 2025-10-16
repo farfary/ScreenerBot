@@ -39,48 +39,33 @@ function createLifecycle() {
   let table = null;
   let poller = null;
   let ctxRef = null;
-  let inflightRequest = null;
-  let abortController = null;
-  let nextRefreshReason = "poll";
-  let nextRefreshOptions = {};
-  let currentFilters = { ...DEFAULT_FILTERS };
-  let searchTerm = "";
 
-  const getAbortController = () => {
-    if (ctxRef && typeof ctxRef.createAbortController === "function") {
-      return ctxRef.createAbortController();
-    }
-    if (typeof window !== "undefined" && window.AbortController) {
-      return new window.AbortController();
-    }
-    return {
-      abort() {},
-      signal: undefined,
-    };
+  const state = {
+    filters: { ...DEFAULT_FILTERS },
+    search: "",
   };
 
-  const buildQueryParams = () => {
-    const params = new URLSearchParams({ limit: String(PAGE_LIMIT) });
-    if (currentFilters.category && currentFilters.category !== "all") {
-      params.set("category", currentFilters.category);
+  const buildBaseParams = (limit = PAGE_LIMIT) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (state.filters.category && state.filters.category !== "all") {
+      params.set("category", state.filters.category);
     }
-    if (currentFilters.severity && currentFilters.severity !== "all") {
-      params.set("severity", currentFilters.severity);
+    if (state.filters.severity && state.filters.severity !== "all") {
+      params.set("severity", state.filters.severity);
     }
-    if (searchTerm) {
-      params.set("search", searchTerm);
+    if (state.search) {
+      params.set("search", state.search);
     }
     return params;
   };
 
-  const applyDataToTable = (data) => {
+  const updateToolbar = () => {
     if (!table) {
       return;
     }
-    const events = Array.isArray(data?.events) ? data.events : [];
-    table.setData(events);
 
-    const total = Number.isFinite(data?.count) ? data.count : events.length;
+    const rows = table.getData();
+    const total = rows.length;
     table.updateToolbarSummary([
       {
         id: "events-total",
@@ -89,84 +74,128 @@ function createLifecycle() {
       },
     ]);
 
-    const timestamp = data?.timestamp || new Date().toISOString();
     table.updateToolbarMeta([
       {
         id: "events-last-update",
-        text: `Last update ${new Date(timestamp).toLocaleTimeString()}`,
+        text: `Last update ${new Date().toLocaleTimeString()}`,
       },
     ]);
   };
 
-  const fetchEvents = async (reason = "poll", options = {}) => {
-    const { force = false, showToast = false } = options;
+  const loadEventsPage = async ({ direction, cursor, reason, signal }) => {
+    const existingRows = table?.getData?.() ?? [];
+    const existingIds = new Set(
+      existingRows
+        .map((row) => row?.id)
+        .filter((id) => typeof id === "number" || typeof id === "string")
+    );
 
-    if (inflightRequest) {
-      if (!force && reason === "poll") {
-        return inflightRequest;
+    const fetchJson = async (url) => {
+      const response = await fetch(url, {
+        headers: { "X-Requested-With": "fetch" },
+        cache: "no-store",
+        signal,
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-      if (abortController) {
-        try {
-          abortController.abort();
-        } catch (error) {
-          console.warn("[Events] Failed to abort in-flight request", error);
+      return response.json();
+    };
+
+    const normaliseEvents = (events, order = "desc") => {
+      const list = Array.isArray(events) ? [...events] : [];
+      if (order === "asc") {
+        list.sort((a, b) => (b?.id ?? 0) - (a?.id ?? 0));
+      }
+      const deduped = [];
+      for (const event of list) {
+        const id = event?.id;
+        if (id === undefined || id === null) {
+          continue;
         }
-        abortController = null;
+        if (existingIds.has(id)) {
+          continue;
+        }
+        existingIds.add(id);
+        deduped.push(event);
       }
+      return deduped;
+    };
+
+    if (direction === "prev") {
+      const maxId = cursor ?? existingRows[0]?.id ?? null;
+      if (!maxId) {
+        return loadEventsPage({ direction: "initial", cursor: null, reason, signal });
+      }
+
+      const params = buildBaseParams();
+      params.set("after_id", String(maxId));
+      const data = await fetchJson(`/api/events/since?${params.toString()}`);
+
+      const fresh = normaliseEvents(data?.events, "asc");
+      const nextCursor = fresh.length > 0 ? fresh[0].id : maxId;
+      const hasMorePrev = fresh.length > 0 && (data?.events?.length ?? 0) >= PAGE_LIMIT;
+
+      return {
+        rows: fresh,
+        cursorPrev: nextCursor ?? maxId,
+        hasMorePrev,
+      };
     }
 
-    const controller = getAbortController();
-    abortController = controller;
-
-    const request = (async () => {
-      try {
-        const params = buildQueryParams();
-        const response = await fetch(`/api/events/head?${params.toString()}`, {
-          headers: { "X-Requested-With": "fetch" },
-          cache: "no-store",
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        applyDataToTable(data);
-        return data;
-      } catch (error) {
-        if (error?.name === "AbortError") {
-          return null;
-        }
-        console.error("[Events] Failed to fetch:", error);
-        if (showToast) {
-          Utils.showToast("⚠️ Failed to refresh events", "warning");
-        }
-        throw error;
-      } finally {
-        if (abortController === controller) {
-          abortController = null;
-        }
-        inflightRequest = null;
+    if (direction === "next") {
+      const minId = cursor ?? existingRows[existingRows.length - 1]?.id ?? null;
+      if (!minId) {
+        return { rows: [], hasMoreNext: false };
       }
-    })();
+      const params = buildBaseParams();
+      params.set("before_id", String(minId));
+      const data = await fetchJson(`/api/events/before?${params.toString()}`);
+      const fresh = normaliseEvents(data?.events, "desc");
+      const nextCursor = fresh.length > 0 ? fresh[fresh.length - 1].id : null;
 
-    inflightRequest = request;
-    return request;
+      return {
+        rows: fresh,
+        cursorNext: nextCursor,
+        hasMoreNext: (data?.events?.length ?? 0) >= PAGE_LIMIT,
+      };
+    }
+
+    const params = buildBaseParams();
+    const data = await fetchJson(`/api/events/head?${params.toString()}`);
+    const fresh = normaliseEvents(data?.events, "desc");
+    const cursorPrev = fresh.length > 0 ? fresh[0].id : cursor ?? null;
+    const cursorNext =
+      fresh.length > 0 ? fresh[fresh.length - 1].id : cursor ?? null;
+
+    return {
+      rows: fresh,
+      cursorPrev,
+      cursorNext,
+      hasMoreNext: (data?.events?.length ?? 0) >= PAGE_LIMIT,
+      hasMorePrev: true,
+    };
   };
 
-  const triggerRefresh = (reason = "poll", options = {}) => {
-    nextRefreshReason = reason;
-    nextRefreshOptions = options;
-    if (table) {
-      return table.refresh();
+  const handlePageLoaded = () => {
+    updateToolbar();
+  };
+
+  const requestReload = (reason = "manual", options = {}) => {
+    if (!table) {
+      return Promise.resolve(null);
     }
-    return Promise.resolve(null);
+    return table.reload({
+      reason,
+      silent: options.silent ?? false,
+      preserveScroll: options.preserveScroll ?? false,
+      resetScroll: options.resetScroll ?? false,
+    });
   };
 
   const resetFilters = () => {
-    currentFilters = { ...DEFAULT_FILTERS };
-    searchTerm = "";
+    state.filters = { ...DEFAULT_FILTERS };
+    state.search = "";
     if (table) {
       table.setToolbarFilterValue("category", DEFAULT_FILTERS.category, {
         apply: false,
@@ -176,7 +205,7 @@ function createLifecycle() {
       });
       table.setToolbarSearchValue("", { apply: false });
     }
-    triggerRefresh("reset", { force: true, showToast: true }).catch(() => {});
+    requestReload("reset", { silent: false, resetScroll: true }).catch(() => {});
   };
 
   return {
@@ -260,8 +289,16 @@ function createLifecycle() {
         fitToContainer: true,
         autoSizeColumns: true,
         sorting: {
-          defaultColumn: "event_time",
-          defaultDirection: "desc",
+          column: "event_time",
+          direction: "desc",
+        },
+        pagination: {
+          threshold: 240,
+          maxRows: 1500,
+          loadPage: loadEventsPage,
+          dedupeKey: (row) => row?.id ?? null,
+          rowIdField: "id",
+          onPageLoaded: handlePageLoaded,
         },
         toolbar: {
           title: {
@@ -274,10 +311,13 @@ function createLifecycle() {
             enabled: true,
             placeholder: "Search events...",
             onChange: (value) => {
-              searchTerm = (value || "").trim();
+              state.search = (value || "").trim();
             },
             onSubmit: () => {
-              triggerRefresh("search", { force: true }).catch(() => {});
+              requestReload("search", {
+                silent: false,
+                resetScroll: true,
+              }).catch(() => {});
             },
           },
           filters: [
@@ -304,8 +344,11 @@ function createLifecycle() {
                 { value: "other", label: "Other" },
               ],
               onChange: (value) => {
-                currentFilters.category = value === "all" ? "all" : value;
-                triggerRefresh("filters", { force: true }).catch(() => {});
+                state.filters.category = value === "all" ? "all" : value;
+                requestReload("filters", {
+                  silent: false,
+                  resetScroll: true,
+                }).catch(() => {});
               },
             },
             {
@@ -322,8 +365,11 @@ function createLifecycle() {
                 { value: "debug", label: "Debug" },
               ],
               onChange: (value) => {
-                currentFilters.severity = value === "all" ? "all" : value;
-                triggerRefresh("filters", { force: true }).catch(() => {});
+                state.filters.severity = value === "all" ? "all" : value;
+                requestReload("filters", {
+                  silent: false,
+                  resetScroll: true,
+                }).catch(() => {});
               },
             },
           ],
@@ -333,9 +379,10 @@ function createLifecycle() {
               label: "Refresh",
               variant: "primary",
               onClick: () => {
-                triggerRefresh("manual", { force: true, showToast: true }).catch(
-                  () => {}
-                );
+                requestReload("manual", {
+                  silent: false,
+                  preserveScroll: false,
+                }).catch(() => {});
               },
             },
             {
@@ -344,13 +391,6 @@ function createLifecycle() {
               onClick: () => resetFilters(),
             },
           ],
-        },
-        onRefresh: () => {
-          const reason = nextRefreshReason;
-          const options = nextRefreshOptions;
-          nextRefreshReason = "poll";
-          nextRefreshOptions = {};
-          return fetchEvents(reason, options);
         },
       });
 
@@ -362,6 +402,7 @@ function createLifecycle() {
         apply: false,
       });
       table.setToolbarSearchValue("", { apply: false });
+      updateToolbar();
     },
 
     activate(ctx) {
@@ -369,23 +410,25 @@ function createLifecycle() {
 
       if (!poller) {
         poller = ctx.managePoller(
-          new Poller(() => triggerRefresh("poll"), { label: "Events" })
+          new Poller(
+            () =>
+              requestReload("poll", { silent: true, preserveScroll: true }),
+            { label: "Events" }
+          )
         );
       }
 
       poller.start();
-      triggerRefresh("initial", { force: true }).catch(() => {});
+      if ((table?.getData?.() ?? []).length === 0) {
+        requestReload("initial", {
+          silent: false,
+          resetScroll: true,
+        }).catch(() => {});
+      }
     },
 
     deactivate() {
-      if (abortController) {
-        try {
-          abortController.abort();
-        } catch (error) {
-          console.warn("[Events] Failed to abort request on deactivate", error);
-        }
-        abortController = null;
-      }
+      table?.cancelPendingLoad();
     },
 
     dispose() {
@@ -397,20 +440,9 @@ function createLifecycle() {
         table.destroy();
         table = null;
       }
-      if (abortController) {
-        try {
-          abortController.abort();
-        } catch (error) {
-          console.warn("[Events] Failed to abort request on dispose", error);
-        }
-        abortController = null;
-      }
-      inflightRequest = null;
       ctxRef = null;
-      nextRefreshReason = "poll";
-      nextRefreshOptions = {};
-      currentFilters = { ...DEFAULT_FILTERS };
-      searchTerm = "";
+      state.filters = { ...DEFAULT_FILTERS };
+      state.search = "";
       window.eventsTable = null;
     },
   };

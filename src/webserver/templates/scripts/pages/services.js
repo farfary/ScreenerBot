@@ -52,141 +52,113 @@ function getActivityBar(metrics) {
   `;
 }
 
-
 function createLifecycle() {
   let table = null;
   let poller = null;
-  let ctxRef = null;
-  let inflightRequest = null;
-  let abortController = null;
-  let nextRefreshReason = "poll";
-  let nextRefreshOptions = {};
 
-  const getAbortController = () => {
-    if (ctxRef && typeof ctxRef.createAbortController === "function") {
-      return ctxRef.createAbortController();
-    }
-    if (typeof window !== "undefined" && window.AbortController) {
-      return new window.AbortController();
-    }
-    return {
-      abort() {},
-      signal: undefined,
-    };
+  const state = {
+    summary: null,
   };
 
-  const fetchServices = async (reason = "poll", options = {}) => {
-    const { force = false, showToast = false } = options;
-
-    if (inflightRequest) {
-      if (!force && reason === "poll") {
-        return inflightRequest;
-      }
-      if (abortController) {
-        try {
-          abortController.abort();
-        } catch (error) {
-          console.warn("[Services] Failed to abort in-flight request", error);
-        }
-        abortController = null;
-      }
+  const updateToolbar = () => {
+    if (!table) {
+      return;
     }
 
-    const controller = getAbortController();
+    const rows = table.getData();
+    const summary = state.summary;
 
-    abortController = controller;
+    const healthy = summary?.healthy_services ?? rows.filter((row) => row.health?.status === "healthy").length;
+    const degraded = summary?.degraded_services ?? rows.filter((row) => row.health?.status === "degraded").length;
+    const unhealthy = summary?.unhealthy_services ?? rows.filter((row) => row.health?.status === "unhealthy").length;
+    const total = summary?.total_services ?? rows.length;
+    const alerts = degraded + unhealthy;
 
-    const request = (async () => {
-      try {
-        const response = await fetch("/api/services/overview", {
-          headers: { "X-Requested-With": "fetch" },
-          cache: "no-store",
-          signal: controller.signal,
-        });
+    table.updateToolbarSummary([
+      {
+        id: "services-total",
+        label: "Total",
+        value: Utils.formatNumber(total),
+      },
+      {
+        id: "services-healthy",
+        label: "Healthy",
+        value: Utils.formatNumber(healthy),
+        variant: "success",
+      },
+      {
+        id: "services-alerts",
+        label: "Alerts",
+        value: Utils.formatNumber(alerts),
+        variant: alerts > 0 ? "warning" : "success",
+        tooltip: `${Utils.formatNumber(degraded)} degraded / ${Utils.formatNumber(unhealthy)} unhealthy`,
+      },
+    ]);
 
-        if (!response.ok) {
-          throw new Error(
-            `HTTP ${response.status}: ${response.statusText}`
-          );
-        }
+    table.updateToolbarMeta([
+      {
+        id: "services-last-update",
+        text: `Last update ${new Date().toLocaleTimeString()}`,
+      },
+    ]);
+  };
 
-        const data = await response.json();
+  const loadServicesPage = async ({ reason, signal }) => {
+    try {
+      const response = await fetch("/api/services/overview", {
+        headers: { "X-Requested-With": "fetch" },
+        cache: "no-store",
+        signal,
+      });
 
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
 
-        if (table) {
-          table.setData(Array.isArray(data.services) ? data.services : []);
-          if (data.summary) {
-            const healthy = data.summary.healthy_services || 0;
-            const degraded = data.summary.degraded_services || 0;
-            const unhealthy = data.summary.unhealthy_services || 0;
-            const alerts = degraded + unhealthy;
-            table.updateToolbarSummary([
-              {
-                id: "services-total",
-                label: "Total",
-                value: Utils.formatNumber(
-                  data.summary.total_services ?? healthy + alerts
-                ),
-              },
-              {
-                id: "services-healthy",
-                label: "Healthy",
-                value: Utils.formatNumber(healthy),
-                variant: "success",
-              },
-              {
-                id: "services-alerts",
-                label: "Alerts",
-                value: Utils.formatNumber(alerts),
-                variant: alerts > 0 ? "warning" : "success",
-                tooltip: `${Utils.formatNumber(degraded)} degraded / ${Utils.formatNumber(unhealthy)} unhealthy`,
-              },
-            ]);
-            table.updateToolbarMeta([
-              {
-                id: "services-last-update",
-                text: `Last update ${new Date().toLocaleTimeString()}`,
-              },
-            ]);
-          }
-        }
+      const data = await response.json();
+      const services = Array.isArray(data?.services) ? data.services : [];
+      state.summary = data?.summary ?? null;
 
-        return data;
-      } catch (error) {
-        if (error?.name === "AbortError") {
-          return null;
-        }
-
-        console.error("[Services] Failed to fetch:", error);
-        if (showToast) {
-          Utils.showToast("⚠️ Failed to refresh services", "warning");
-        }
+      return {
+        rows: services,
+        cursorNext: null,
+        cursorPrev: null,
+        hasMoreNext: false,
+        hasMorePrev: false,
+        total: services.length,
+        meta: data?.summary ? { summary: data.summary } : {},
+        preserveScroll: reason === "poll",
+      };
+    } catch (error) {
+      if (error?.name === "AbortError") {
         throw error;
-      } finally {
-        if (abortController === controller) {
-          abortController = null;
-        }
-        inflightRequest = null;
       }
-    })();
-
-    inflightRequest = request;
-    return request;
+      console.error("[Services] Failed to fetch:", error);
+      if (reason !== "poll") {
+        Utils.showToast("⚠️ Failed to refresh services", "warning");
+      }
+      throw error;
+    }
   };
 
-  const triggerRefresh = (reason = "poll", options = {}) => {
-    nextRefreshReason = reason;
-    nextRefreshOptions = options;
-    if (table) {
-      return table.refresh();
+  const handlePageLoaded = () => {
+    updateToolbar();
+  };
+
+  const requestReload = (reason = "manual", options = {}) => {
+    if (!table) {
+      return Promise.resolve(null);
     }
-    return Promise.resolve(null);
+    return table.reload({
+      reason,
+      silent: options.silent ?? false,
+      preserveScroll: options.preserveScroll ?? false,
+      resetScroll: options.resetScroll ?? false,
+    });
   };
 
   return {
-    init(ctx) {
-      console.log("[Services] Lifecycle init");
-      ctxRef = ctx;
+    init(_ctx) {
 
       // Define table columns with custom renderers
       const columns = [
@@ -357,20 +329,28 @@ function createLifecycle() {
         },
       ];
 
-      // Create DataTable instance
       table = new DataTable({
         container: "#services-root",
         columns,
+        rowIdField: "name",
         stateKey: "services-table",
         enableLogging: false,
         sorting: {
-          defaultColumn: "priority",
-          defaultDirection: "asc",
+          column: "priority",
+          direction: "asc",
         },
         compact: true, // Enable compact mode for denser display
         stickyHeader: true,
         zebra: true,
         fitToContainer: true, // Auto-fit columns to container width
+        pagination: {
+          threshold: 160,
+          maxRows: 1000,
+          loadPage: loadServicesPage,
+          dedupeKey: (row) => row?.name ?? null,
+          rowIdField: "name",
+          onPageLoaded: handlePageLoaded,
+        },
         toolbar: {
           title: {
             icon: "🔧",
@@ -432,75 +412,53 @@ function createLifecycle() {
               label: "Refresh",
               variant: "primary",
               onClick: () => {
-                triggerRefresh("manual", { force: true, showToast: true }).catch(
-                  () => {}
-                );
+                requestReload("manual", {
+                  silent: false,
+                  preserveScroll: false,
+                }).catch(() => {});
               },
             },
           ],
         },
-        onRefresh: () => {
-          const reason = nextRefreshReason;
-          const options = nextRefreshOptions;
-          nextRefreshReason = "poll";
-          nextRefreshOptions = {};
-          return fetchServices(reason, options);
-        },
       });
+
+      window.servicesTable = table;
+      updateToolbar();
     },
 
     activate(ctx) {
-      console.log("[Services] Lifecycle activate");
-      ctxRef = ctx;
-
       // Create and start poller
       if (!poller) {
         poller = ctx.managePoller(
-          new Poller(() => triggerRefresh("poll"), { label: "Services" })
+          new Poller(
+            () =>
+              requestReload("poll", { silent: true, preserveScroll: true }),
+            { label: "Services" }
+          )
         );
       }
 
       poller.start();
-
-      // Initial data load
-      triggerRefresh("initial", { force: true, showToast: true }).catch(
-        () => {}
-      );
+      if ((table?.getData?.() ?? []).length === 0) {
+        requestReload("initial", {
+          silent: false,
+          resetScroll: true,
+        }).catch(() => {});
+      }
     },
 
     deactivate() {
-      console.log("[Services] Lifecycle deactivate");
-      // Poller auto-paused by lifecycle context
-      if (abortController) {
-        try {
-          abortController.abort();
-        } catch (error) {
-          console.warn("[Services] Failed to abort request on deactivate", error);
-        }
-        abortController = null;
-      }
-      inflightRequest = null;
+      table?.cancelPendingLoad();
     },
 
     dispose() {
-      console.log("[Services] Lifecycle dispose");
       if (table) {
         table.destroy();
         table = null;
       }
       poller = null;
-      ctxRef = null;
-      inflightRequest = null;
-      nextRefreshReason = "poll";
-      nextRefreshOptions = {};
-      if (abortController) {
-        try {
-          abortController.abort();
-        } catch (error) {
-          console.warn("[Services] Failed to abort request on dispose", error);
-        }
-        abortController = null;
-      }
+      state.summary = null;
+      window.servicesTable = null;
     },
   };
 }

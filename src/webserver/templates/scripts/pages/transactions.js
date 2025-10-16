@@ -97,37 +97,21 @@ function formatTokenDisplay(row) {
 function createLifecycle() {
   let table = null;
   let poller = null;
-  let ctxRef = null;
-  let inflightRequest = null;
-  let abortController = null;
-  let nextRefreshReason = "poll";
-  let nextRefreshOptions = {};
-  let nextCursor = null;
-  let loadedRows = [];
-  let filterSelections = { ...DEFAULT_FILTERS };
-  let signatureQuery = "";
-  let scrollContainer = null;
-  let scrollListener = null;
-  let scrollFrame = null;
 
-  const getAbortController = () => {
-    if (ctxRef && typeof ctxRef.createAbortController === "function") {
-      return ctxRef.createAbortController();
-    }
-    if (typeof window !== "undefined" && window.AbortController) {
-      return new window.AbortController();
-    }
-    return { abort() {}, signal: undefined };
+  const state = {
+    filters: { ...DEFAULT_FILTERS },
+    signature: "",
+    totalEstimate: null,
   };
 
   const buildFiltersPayload = () => {
     const filters = {};
-    const typeValue = filterSelections.type;
-    const directionValue = filterSelections.direction;
-    const statusValue = filterSelections.status;
+    const typeValue = state.filters.type;
+    const directionValue = state.filters.direction;
+    const statusValue = state.filters.status;
 
-    if (signatureQuery) {
-      filters.signature = signatureQuery;
+    if (state.signature) {
+      filters.signature = state.signature;
     }
     if (typeValue && typeValue !== "all") {
       filters.types = [typeValue.toLowerCase()];
@@ -150,25 +134,28 @@ function createLifecycle() {
     },
   });
 
-  const updateToolbar = (responseMeta) => {
+  const updateToolbar = () => {
     if (!table) {
       return;
     }
 
-    const totalEstimate = Number.isFinite(responseMeta?.total_estimate)
-      ? responseMeta.total_estimate
-      : null;
-    const loaded = loadedRows.length;
-    const successCount = loadedRows.reduce(
-      (acc, row) => (row?.success ? acc + 1 : acc),
-      0
-    );
-    const failedCount = loadedRows.reduce((acc, row) => {
-      if (row?.success === false || row?.status === "Failed") {
-        return acc + 1;
+    const rows = table.getData();
+    const loaded = rows.length;
+    let successCount = 0;
+    let failedCount = 0;
+
+    for (const row of rows) {
+      if (row?.success) {
+        successCount += 1;
+      } else if (row?.success === false || row?.status === "Failed") {
+        failedCount += 1;
       }
-      return acc;
-    }, 0);
+    }
+
+    const totalEstimate =
+      state.totalEstimate === null || state.totalEstimate === undefined
+        ? null
+        : state.totalEstimate;
 
     table.updateToolbarSummary([
       {
@@ -180,7 +167,7 @@ function createLifecycle() {
         id: "tx-estimate",
         label: "Estimate",
         value:
-          totalEstimate === null || totalEstimate === undefined
+          totalEstimate === null
             ? "—"
             : Utils.formatNumber(totalEstimate, { decimals: 0 }),
       },
@@ -206,167 +193,180 @@ function createLifecycle() {
     ]);
   };
 
-  const detachScrollListener = () => {
-    if (scrollContainer && scrollListener) {
-      scrollContainer.removeEventListener("scroll", scrollListener);
+  const loadTransactionsPage = async ({
+    direction,
+    cursor,
+    reason,
+    signal,
+  }) => {
+    const payloadCursor = direction === "prev" ? null : cursor ?? null;
+    const payload = buildRequestPayload(payloadCursor);
+
+    try {
+      const response = await fetch("/api/transactions/list", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Requested-With": "fetch",
+        },
+        body: JSON.stringify(payload),
+        cache: "no-store",
+        signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      if (
+        data?.total_estimate !== undefined &&
+        data.total_estimate !== null &&
+        Number.isFinite(data.total_estimate)
+      ) {
+        state.totalEstimate = data.total_estimate;
+      }
+
+      const existingRows = table?.getData?.() ?? [];
+      const existingKeys = new Set(
+        existingRows
+          .map((row) => row?.signature)
+          .filter((signature) => typeof signature === "string")
+      );
+
+      if (direction === "prev") {
+        const aggregated = [];
+        let hitDuplicate = false;
+        const processBatch = (batch) => {
+          for (const row of batch) {
+            const signature = row?.signature;
+            if (!signature) {
+              continue;
+            }
+            if (existingKeys.has(signature)) {
+              hitDuplicate = true;
+              return false;
+            }
+            existingKeys.add(signature);
+            aggregated.push(row);
+          }
+          return true;
+        };
+
+        const firstItems = Array.isArray(data?.items) ? data.items : [];
+        processBatch(firstItems);
+
+        let nextCursor = data?.next_cursor ?? null;
+        let guard = 0;
+        const MAX_EXTRA_BATCHES = 5;
+
+        while (nextCursor && guard < MAX_EXTRA_BATCHES && !hitDuplicate) {
+          guard += 1;
+          const nextPayload = buildRequestPayload(nextCursor);
+          const nextResponse = await fetch("/api/transactions/list", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Requested-With": "fetch",
+            },
+            body: JSON.stringify(nextPayload),
+            cache: "no-store",
+            signal,
+          });
+
+          if (!nextResponse.ok) {
+            throw new Error(
+              `HTTP ${nextResponse.status}: ${nextResponse.statusText}`
+            );
+          }
+
+          const nextData = await nextResponse.json();
+          const nextItems = Array.isArray(nextData?.items)
+            ? nextData.items
+            : [];
+
+          processBatch(nextItems);
+          nextCursor = nextData?.next_cursor ?? null;
+        }
+
+        const hasMorePrev = !hitDuplicate && Boolean(nextCursor);
+
+        return {
+          rows: aggregated,
+          hasMorePrev,
+        };
+      }
+
+      const items = Array.isArray(data?.items) ? data.items : [];
+      const fresh = [];
+      for (const row of items) {
+        const signature = row?.signature;
+        if (!signature) {
+          continue;
+        }
+        if (existingKeys.has(signature)) {
+          continue;
+        }
+        existingKeys.add(signature);
+        fresh.push(row);
+      }
+
+      return {
+        rows: fresh,
+        cursorNext: data?.next_cursor ?? null,
+        hasMoreNext: Boolean(data?.next_cursor),
+      };
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        throw error;
+      }
+      console.error("[Transactions] Failed to fetch:", error);
+      if (reason !== "scroll") {
+        Utils.showToast("⚠️ Failed to refresh transactions", "warning");
+      }
+      throw error;
     }
-    if (scrollFrame !== null && typeof window !== "undefined") {
-      window.cancelAnimationFrame(scrollFrame);
-    }
-    scrollContainer = null;
-    scrollListener = null;
-    scrollFrame = null;
   };
 
-  const ensureScrollListener = () => {
-    detachScrollListener();
-    const container = document.querySelector(
-      "#transactions-root .data-table-scroll-container"
-    );
-    if (!container) {
-      return;
+  const handlePageLoaded = () => {
+    updateToolbar();
+  };
+
+  const requestReload = (reason = "manual", options = {}) => {
+    if (!table) {
+      return Promise.resolve(null);
     }
-    scrollContainer = container;
-    scrollListener = () => {
-      if (scrollFrame !== null) {
-        return;
-      }
-      scrollFrame = window.requestAnimationFrame(() => {
-        scrollFrame = null;
-        if (!scrollContainer || !nextCursor || inflightRequest) {
-          return;
-        }
-        const remaining =
-          scrollContainer.scrollHeight -
-          scrollContainer.scrollTop -
-          scrollContainer.clientHeight;
-        if (remaining < 320) {
-          fetchTransactions("append", { append: true }).catch(() => {});
-        }
-      });
-    };
-    scrollContainer.addEventListener("scroll", scrollListener, {
-      passive: true,
+    return table.reload({
+      reason,
+      silent: options.silent ?? false,
+      preserveScroll: options.preserveScroll ?? false,
+      resetScroll: options.resetScroll ?? false,
     });
   };
 
-  const fetchTransactions = async (reason = "poll", options = {}) => {
-    const { force = false, append = false, showToast = false } = options;
-
-    if (append && !nextCursor) {
-      return Promise.resolve(null);
-    }
-
-    if (inflightRequest) {
-      if (append || (!force && reason === "poll")) {
-        return inflightRequest;
-      }
-      if (abortController) {
-        try {
-          abortController.abort();
-        } catch (error) {
-          console.warn("[Transactions] abort failed", error);
-        }
-        abortController = null;
-      }
-    }
-
-    const controller = getAbortController();
-    abortController = controller;
-
-    const request = (async () => {
-      try {
-        const payload = buildRequestPayload(append ? nextCursor : null);
-        const response = await fetch("/api/transactions/list", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Requested-With": "fetch",
-          },
-          body: JSON.stringify(payload),
-          cache: "no-store",
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        const items = Array.isArray(data?.items) ? data.items : [];
-
-        if (append) {
-          loadedRows = loadedRows.concat(items);
-        } else {
-          loadedRows = items;
-        }
-
-        nextCursor = data?.next_cursor ?? null;
-
-        if (table) {
-          table.setData(loadedRows);
-          updateToolbar({ total_estimate: data?.total_estimate });
-          if (!append && scrollContainer) {
-            scrollContainer.scrollTop = 0;
-          }
-        }
-
-        return data;
-      } catch (error) {
-        if (error?.name === "AbortError") {
-          return null;
-        }
-        console.error("[Transactions] Failed to fetch:", error);
-        if (showToast) {
-          Utils.showToast("⚠️ Failed to refresh transactions", "warning");
-        }
-        throw error;
-      } finally {
-        if (abortController === controller) {
-          abortController = null;
-        }
-        inflightRequest = null;
-      }
-    })();
-
-    inflightRequest = request;
-    return request;
-  };
-
-  const triggerRefresh = (reason = "poll", options = {}) => {
-    nextRefreshReason = reason;
-    nextRefreshOptions = options;
-    if (!options.append) {
-      nextCursor = null;
-    }
-    if (table) {
-      return table.refresh();
-    }
-    return Promise.resolve(null);
-  };
-
   const resetFilters = () => {
-    filterSelections = { ...DEFAULT_FILTERS };
-    signatureQuery = "";
+    state.filters = { ...DEFAULT_FILTERS };
+    state.signature = "";
     if (table) {
       table.setToolbarSearchValue("", { apply: false });
-      table.setToolbarFilterValue("type", filterSelections.type, {
+      table.setToolbarFilterValue("type", state.filters.type, {
         apply: false,
       });
-      table.setToolbarFilterValue("direction", filterSelections.direction, {
+      table.setToolbarFilterValue("direction", state.filters.direction, {
         apply: false,
       });
-      table.setToolbarFilterValue("status", filterSelections.status, {
+      table.setToolbarFilterValue("status", state.filters.status, {
         apply: false,
       });
     }
-    triggerRefresh("reset", { force: true, showToast: true }).catch(() => {});
+    return requestReload("reset", {
+      silent: false,
+      resetScroll: true,
+    }).catch(() => {});
   };
 
   return {
-    init(ctx) {
-      ctxRef = ctx;
-
+    init(_ctx) {
       const columns = [
         {
           id: "timestamp",
@@ -440,14 +440,23 @@ function createLifecycle() {
       table = new DataTable({
         container: "#transactions-root",
         columns,
+        rowIdField: "signature",
         stateKey: "transactions-table",
         compact: true,
         stickyHeader: true,
         zebra: true,
         fitToContainer: true,
         sorting: {
-          defaultColumn: "timestamp",
-          defaultDirection: "desc",
+          column: "timestamp",
+          direction: "desc",
+        },
+        pagination: {
+          threshold: 320,
+          maxRows: 1200,
+          loadPage: loadTransactionsPage,
+          dedupeKey: (row) => row?.signature ?? null,
+          rowIdField: "signature",
+          onPageLoaded: handlePageLoaded,
         },
         toolbar: {
           title: {
@@ -465,17 +474,20 @@ function createLifecycle() {
             enabled: true,
             placeholder: "Search by signature…",
             onChange: (value) => {
-              signatureQuery = (value || "").trim();
+              state.signature = (value || "").trim();
             },
             onSubmit: () => {
-              triggerRefresh("search", { force: true }).catch(() => {});
+              requestReload("search", {
+                silent: false,
+                resetScroll: true,
+              }).catch(() => {});
             },
           },
           filters: [
             {
               id: "type",
               label: "Type",
-              defaultValue: filterSelections.type,
+              defaultValue: state.filters.type,
               autoApply: false,
               options: [
                 { value: "all", label: "All Types" },
@@ -488,14 +500,17 @@ function createLifecycle() {
                 { value: "unknown", label: "Unknown" },
               ],
               onChange: (value) => {
-                filterSelections.type = value || "all";
-                triggerRefresh("filter", { force: true }).catch(() => {});
+                state.filters.type = value || "all";
+                requestReload("filter", {
+                  silent: false,
+                  resetScroll: true,
+                }).catch(() => {});
               },
             },
             {
               id: "direction",
               label: "Direction",
-              defaultValue: filterSelections.direction,
+              defaultValue: state.filters.direction,
               autoApply: false,
               options: [
                 { value: "all", label: "All Directions" },
@@ -505,14 +520,17 @@ function createLifecycle() {
                 { value: "Unknown", label: "Unknown" },
               ],
               onChange: (value) => {
-                filterSelections.direction = value || "all";
-                triggerRefresh("filter", { force: true }).catch(() => {});
+                state.filters.direction = value || "all";
+                requestReload("filter", {
+                  silent: false,
+                  resetScroll: true,
+                }).catch(() => {});
               },
             },
             {
               id: "status",
               label: "Status",
-              defaultValue: filterSelections.status,
+              defaultValue: state.filters.status,
               autoApply: false,
               options: [
                 { value: "all", label: "All Statuses" },
@@ -522,8 +540,11 @@ function createLifecycle() {
                 { value: "Failed", label: "Failed" },
               ],
               onChange: (value) => {
-                filterSelections.status = value || "all";
-                triggerRefresh("filter", { force: true }).catch(() => {});
+                state.filters.status = value || "all";
+                requestReload("filter", {
+                  silent: false,
+                  resetScroll: true,
+                }).catch(() => {});
               },
             },
           ],
@@ -533,9 +554,10 @@ function createLifecycle() {
               label: "Refresh",
               variant: "primary",
               onClick: () => {
-                triggerRefresh("manual", { force: true, showToast: true }).catch(
-                  () => {}
-                );
+                requestReload("manual", {
+                  silent: false,
+                  preserveScroll: false,
+                }).catch(() => {});
               },
             },
             {
@@ -545,52 +567,43 @@ function createLifecycle() {
             },
           ],
         },
-        onRefresh: () => {
-          const reason = nextRefreshReason;
-          const options = nextRefreshOptions;
-          nextRefreshReason = "poll";
-          nextRefreshOptions = {};
-          return fetchTransactions(reason, options);
-        },
       });
 
-      table.setToolbarSearchValue(signatureQuery, { apply: false });
-      table.setToolbarFilterValue("type", filterSelections.type, {
+      table.setToolbarSearchValue(state.signature, { apply: false });
+      table.setToolbarFilterValue("type", state.filters.type, {
         apply: false,
       });
-      table.setToolbarFilterValue("direction", filterSelections.direction, {
+      table.setToolbarFilterValue("direction", state.filters.direction, {
         apply: false,
       });
-      table.setToolbarFilterValue("status", filterSelections.status, {
+      table.setToolbarFilterValue("status", state.filters.status, {
         apply: false,
       });
-
-      if (typeof window !== "undefined") {
-        window.requestAnimationFrame(() => ensureScrollListener());
-      }
+      updateToolbar();
     },
 
     activate(ctx) {
       ctxRef = ctx;
       if (!poller) {
         poller = ctx.managePoller(
-          new Poller(() => triggerRefresh("poll"), { label: "Transactions" })
+          new Poller(
+            () =>
+              requestReload("poll", { silent: true, preserveScroll: true }),
+            { label: "Transactions" }
+          )
         );
       }
       poller.start();
-      triggerRefresh("initial", { force: true, showToast: true }).catch(() => {});
+      if ((table?.getData?.() ?? []).length === 0) {
+        requestReload("initial", {
+          silent: false,
+          resetScroll: true,
+        }).catch(() => {});
+      }
     },
 
     deactivate() {
-      if (abortController) {
-        try {
-          abortController.abort();
-        } catch (error) {
-          console.warn("[Transactions] abort on deactivate failed", error);
-        }
-        abortController = null;
-      }
-      inflightRequest = null;
+      table?.cancelPendingLoad();
     },
 
     dispose() {
@@ -602,19 +615,10 @@ function createLifecycle() {
         table.destroy();
         table = null;
       }
-      detachScrollListener();
       ctxRef = null;
-      inflightRequest = null;
-      loadedRows = [];
-      nextCursor = null;
-      if (abortController) {
-        try {
-          abortController.abort();
-        } catch (error) {
-          console.warn("[Transactions] abort on dispose failed", error);
-        }
-        abortController = null;
-      }
+      state.filters = { ...DEFAULT_FILTERS };
+      state.signature = "";
+      state.totalEstimate = null;
     },
   };
 }
