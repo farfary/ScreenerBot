@@ -39,6 +39,7 @@ pub struct HeadQuery {
     pub severity: Option<String>,
     pub mint: Option<String>,
     pub reference: Option<String>,
+    pub search: Option<String>,
 }
 #[derive(Debug, Deserialize)]
 pub struct SinceQuery {
@@ -48,6 +49,7 @@ pub struct SinceQuery {
     pub severity: Option<String>,
     pub mint: Option<String>,
     pub reference: Option<String>,
+    pub search: Option<String>,
 }
 #[derive(Debug, Deserialize)]
 pub struct BeforeQuery {
@@ -57,6 +59,7 @@ pub struct BeforeQuery {
     pub severity: Option<String>,
     pub mint: Option<String>,
     pub reference: Option<String>,
+    pub search: Option<String>,
 }
 
 /// Create events routes
@@ -81,13 +84,14 @@ async fn get_events_head(Query(params): Query<HeadQuery>) -> Json<EventsListResp
         .map(|s| events::Severity::from_string(s));
     let mint = params.mint.as_deref();
     let reference = params.reference.as_deref();
+    let search = params.search.as_deref();
 
     let db = crate::events::EVENTS_DB
         .get()
         .expect("events DB not initialized")
         .clone();
     let (events_vec, max_id) = db
-        .get_events_head(limit, category, severity, mint, reference)
+        .get_events_head(limit, category, severity, mint, reference, search)
         .await
         .unwrap_or((Vec::new(), 0));
 
@@ -142,6 +146,7 @@ async fn get_events_since(Query(params): Query<SinceQuery>) -> Json<EventsListRe
         .map(|s| events::Severity::from_string(s));
     let mint = params.mint.as_deref();
     let reference = params.reference.as_deref();
+    let search = params.search.as_deref();
     let after_id = params.after_id;
 
     let db = crate::events::EVENTS_DB
@@ -149,7 +154,15 @@ async fn get_events_since(Query(params): Query<SinceQuery>) -> Json<EventsListRe
         .expect("events DB not initialized")
         .clone();
     let events_vec = db
-        .get_events_since(after_id, limit, category, severity, mint, reference)
+        .get_events_since(
+            after_id,
+            limit,
+            category,
+            severity,
+            mint,
+            reference,
+            search,
+        )
         .await
         .unwrap_or_default();
 
@@ -208,6 +221,7 @@ async fn get_events_before(Query(params): Query<BeforeQuery>) -> Json<EventsList
         .map(|s| events::Severity::from_string(s));
     let mint = params.mint.as_deref();
     let reference = params.reference.as_deref();
+    let search = params.search.as_deref();
     let before_id = params.before_id;
 
     let db = crate::events::EVENTS_DB
@@ -215,7 +229,15 @@ async fn get_events_before(Query(params): Query<BeforeQuery>) -> Json<EventsList
         .expect("events DB not initialized")
         .clone();
     let events_vec = db
-        .get_events_before(before_id, limit, category, severity, mint, reference)
+        .get_events_before(
+            before_id,
+            limit,
+            category,
+            severity,
+            mint,
+            reference,
+            search,
+        )
         .await
         .unwrap_or_default();
 

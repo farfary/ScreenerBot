@@ -622,6 +622,7 @@ impl EventsDatabase {
         severity: Option<Severity>,
         mint: Option<&str>,
         reference_id: Option<&str>,
+        search: Option<&str>,
     ) -> Result<Vec<Event>, String> {
         let conn = self.get_read_connection()?;
         let mut query = String::from(
@@ -647,6 +648,12 @@ impl EventsDatabase {
         if let Some(r) = reference_id {
             query.push_str(&format!(" AND reference_id = ?{}", idx));
             bind.push(Box::new(r.to_string()));
+            idx += 1;
+        }
+        if let Some(search_term) = search {
+            let wildcard = format!("%{}%", search_term.to_lowercase());
+            query.push_str(&format!(" AND LOWER(json_payload) LIKE ?{}", idx));
+            bind.push(Box::new(wildcard));
             idx += 1;
         }
         query.push_str(" ORDER BY id ASC LIMIT ?");
@@ -710,6 +717,7 @@ impl EventsDatabase {
         severity: Option<Severity>,
         mint: Option<&str>,
         reference_id: Option<&str>,
+        search: Option<&str>,
     ) -> Result<Vec<Event>, String> {
         let conn = self.get_read_connection()?;
         let mut query = String::from(
@@ -735,6 +743,12 @@ impl EventsDatabase {
         if let Some(r) = reference_id {
             query.push_str(&format!(" AND reference_id = ?{}", idx));
             bind.push(Box::new(r.to_string()));
+            idx += 1;
+        }
+        if let Some(search_term) = search {
+            let wildcard = format!("%{}%", search_term.to_lowercase());
+            query.push_str(&format!(" AND LOWER(json_payload) LIKE ?{}", idx));
+            bind.push(Box::new(wildcard));
             idx += 1;
         }
         query.push_str(" ORDER BY id DESC LIMIT ?");
@@ -797,6 +811,7 @@ impl EventsDatabase {
         severity: Option<Severity>,
         mint: Option<&str>,
         reference_id: Option<&str>,
+        search: Option<&str>,
     ) -> Result<(Vec<Event>, i64), String> {
         let conn = self.get_read_connection()?;
         let mut query = String::from(
@@ -859,6 +874,21 @@ impl EventsDatabase {
                 idx
             ));
             bind.push(Box::new(r.to_string()));
+            idx += 1;
+        }
+        if let Some(search_term) = search {
+            let wildcard = format!("%{}%", search_term.to_lowercase());
+            query.push_str(&format!(
+                "{} LOWER(json_payload) LIKE ?{}",
+                if where_added {
+                    " AND"
+                } else {
+                    where_added = true;
+                    " WHERE"
+                },
+                idx
+            ));
+            bind.push(Box::new(wildcard));
             idx += 1;
         }
         query.push_str(" ORDER BY id DESC LIMIT ?");
