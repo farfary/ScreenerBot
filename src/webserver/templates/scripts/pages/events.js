@@ -2,6 +2,7 @@ import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import * as Utils from "../core/utils.js";
 import { DataTable } from "../ui/data_table.js";
+import { EventDetailsDialog } from "../ui/events_dialog.js";
 
 const DEFAULT_FILTERS = {
   category: "all",
@@ -20,7 +21,11 @@ function formatSeverityBadge(value) {
     critical: '<span class="badge error">🔴 Critical</span>',
     debug: '<span class="badge secondary">🐞 Debug</span>',
   };
-  return badges[key] || `<span class="badge">${value || "—"}</span>`;
+  if (badges[key]) {
+    return badges[key];
+  }
+  const label = value ? Utils.escapeHtml(String(value)) : "—";
+  return `<span class="badge">${label}</span>`;
 }
 
 function formatMint(mint) {
@@ -32,13 +37,59 @@ function formatMint(mint) {
     return "—";
   }
   const short = `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
-  return `<span class="mono-text" title="${trimmed}">${short}</span>`;
+  return `<span class="mono-text" title="${Utils.escapeHtml(trimmed)}">${
+    Utils.escapeHtml(short)
+  }</span>`;
+}
+
+function formatMessagePreview(value) {
+  if (!value) {
+    return "—";
+  }
+  const text = String(value);
+  const preview = text.length > 160 ? `${text.slice(0, 160)}...` : text;
+  return `<span title="${Utils.escapeHtml(text)}">${Utils.escapeHtml(
+    preview
+  )}</span>`;
+}
+
+function formatPayloadPreview(value) {
+  if (!value || typeof value !== "object") {
+    return "—";
+  }
+
+  const entries = Array.isArray(value)
+    ? value.map((item, index) => [index, item])
+    : Object.entries(value);
+  if (entries.length === 0) {
+    return "—";
+  }
+
+  const previewParts = entries.slice(0, 3).map(([key, raw]) => {
+    const val =
+      raw === null || raw === undefined
+        ? "null"
+  : typeof raw === "object"
+  ? "{...}"
+        : String(raw);
+    const safeKey = Utils.escapeHtml(String(key));
+  const safeVal = Utils.escapeHtml(val.length > 32 ? `${val.slice(0, 32)}...` : val);
+    return `${safeKey}: ${safeVal}`;
+  });
+
+  const remaining = entries.length - previewParts.length;
+  const preview =
+    previewParts.join(", ") + (remaining > 0 ? `, +${remaining} more` : "");
+  const fullJson = Utils.escapeHtml(JSON.stringify(value, null, 2));
+
+  return `<span class="mono-text" title="${fullJson}">${preview}</span>`;
 }
 
 function createLifecycle() {
   let table = null;
   let poller = null;
   let ctxRef = null;
+  let detailsDialog = null;
 
   const state = {
     filters: { ...DEFAULT_FILTERS },
@@ -88,6 +139,7 @@ function createLifecycle() {
       existingRows
         .map((row) => row?.id)
         .filter((id) => typeof id === "number" || typeof id === "string")
+        .map((id) => String(id))
     );
 
     const fetchJson = async (url) => {
@@ -102,21 +154,26 @@ function createLifecycle() {
       return response.json();
     };
 
-    const normaliseEvents = (events, order = "desc") => {
+    const normaliseEvents = (events, order = "desc", dedupeExisting = true) => {
       const list = Array.isArray(events) ? [...events] : [];
       if (order === "asc") {
         list.sort((a, b) => (b?.id ?? 0) - (a?.id ?? 0));
       }
       const deduped = [];
+      const seenIds = new Set();
       for (const event of list) {
         const id = event?.id;
         if (id === undefined || id === null) {
           continue;
         }
-        if (existingIds.has(id)) {
+        const key = String(id);
+        if (seenIds.has(key)) {
           continue;
         }
-        existingIds.add(id);
+        if (dedupeExisting && existingIds.has(key)) {
+          continue;
+        }
+        seenIds.add(key);
         deduped.push(event);
       }
       return deduped;
@@ -162,8 +219,8 @@ function createLifecycle() {
     }
 
     const params = buildBaseParams();
-    const data = await fetchJson(`/api/events/head?${params.toString()}`);
-    const fresh = normaliseEvents(data?.events, "desc");
+  const data = await fetchJson(`/api/events/head?${params.toString()}`);
+  const fresh = normaliseEvents(data?.events, "desc", false);
     const cursorPrev = fresh.length > 0 ? fresh[0].id : cursor ?? null;
     const cursorNext =
       fresh.length > 0 ? fresh[fresh.length - 1].id : cursor ?? null;
@@ -212,6 +269,10 @@ function createLifecycle() {
     init(ctx) {
       ctxRef = ctx;
 
+      if (!detailsDialog) {
+        detailsDialog = new EventDetailsDialog();
+      }
+
       const columns = [
         {
           id: "event_time",
@@ -251,7 +312,7 @@ function createLifecycle() {
           id: "message",
           label: "Message",
           minWidth: 320,
-          render: (value) => value || "—",
+          render: (value) => formatMessagePreview(value),
         },
         {
           id: "mint",
@@ -263,18 +324,7 @@ function createLifecycle() {
           id: "payload",
           label: "Details",
           minWidth: 200,
-          render: (value) => {
-            if (!value || typeof value !== "object") {
-              return "—";
-            }
-            const keys = Object.keys(value);
-            if (!keys.length) {
-              return "—";
-            }
-            const snippet = JSON.stringify(value);
-            const preview = snippet.length > 120 ? `${snippet.slice(0, 120)}…` : snippet;
-            return `<code style="font-size:0.85em;">${Utils.escapeHtml(preview)}</code>`;
-          },
+          render: (value) => formatPayloadPreview(value),
         },
       ];
 
@@ -289,6 +339,15 @@ function createLifecycle() {
         fitToContainer: true,
         autoSizeColumns: true,
         uniformRowHeight: 2, // enforce consistent row height (2 lines)
+        onRowClick: (row, event) => {
+          if (!row) {
+            return;
+          }
+          if (event?.defaultPrevented) {
+            return;
+          }
+          detailsDialog?.open(row);
+        },
         sorting: {
           column: "event_time",
           direction: "desc",
@@ -430,6 +489,7 @@ function createLifecycle() {
 
     deactivate() {
       table?.cancelPendingLoad();
+      detailsDialog?.close();
     },
 
     dispose() {
@@ -440,6 +500,10 @@ function createLifecycle() {
       if (table) {
         table.destroy();
         table = null;
+      }
+      if (detailsDialog) {
+        detailsDialog.destroy();
+        detailsDialog = null;
       }
       ctxRef = null;
       state.filters = { ...DEFAULT_FILTERS };
