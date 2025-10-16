@@ -19,6 +19,36 @@ const DEFAULT_VIEW = "pool";
 const DEFAULT_SORT = { column: "symbol", direction: "asc" };
 const PAGE_SIZE = 100; // client-page chunking; server also pages
 
+function normalizePageNumber(value, fallback = null) {
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return fallback;
+  }
+  const int = Math.floor(num);
+  if (int < 1) {
+    return fallback;
+  }
+  return int;
+}
+
+function normalizeNonNegativeInt(value, fallback = null, { min = 0 } = {}) {
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return fallback;
+  }
+  const int = Math.floor(num);
+  if (int < min) {
+    return fallback;
+  }
+  return int;
+}
+
 function mountSubTabs(ctx, state) {
   const container = document.getElementById("subTabsContainer");
   if (!container) return () => {};
@@ -78,7 +108,7 @@ function timeAgoCell(seconds) {
 function tokenCell(row) {
   const logo = row.logo_url
     ? `<img class="token-logo" alt="" src="${Utils.escapeHtml(row.logo_url)}" />`
-    : `<span class="token-logo" style="display:inline-block;background:var(--bg-secondary);"></span>`;
+    : "<span class=\"token-logo\" style=\"display:inline-block;background:var(--bg-secondary);\"></span>";
   const sym = Utils.escapeHtml(row.symbol || "—");
   const name = row.name ? `<div class="token-name">${Utils.escapeHtml(row.name)}</div>` : "";
   return `<div class="token-cell">${logo}<div><div class="token-symbol">${sym}</div>${name}</div></div>`;
@@ -93,6 +123,7 @@ function createLifecycle() {
     view: DEFAULT_VIEW,
     search: "",
     summary: null,
+    pageMeta: null,
   };
 
   const updateToolbar = () => {
@@ -111,9 +142,34 @@ function createLifecycle() {
       { id: "tokens-blacklisted", label: "Blacklisted", value: Utils.formatNumber(blacklisted), variant: blacklisted > 0 ? "warning" : "success" },
     ]);
 
-    table.updateToolbarMeta([
-      { id: "tokens-last-update", text: `Last update ${new Date().toLocaleTimeString()}` },
-    ]);
+    const metaEntries = [];
+    if (state.pageMeta?.timestamp) {
+      metaEntries.push({
+        id: "tokens-last-update",
+        text: `Last update ${Utils.formatTimestamp(state.pageMeta.timestamp, { includeSeconds: true })}`,
+      });
+    } else {
+      metaEntries.push({
+        id: "tokens-last-update",
+        text: "Last update —",
+      });
+    }
+
+    if (state.pageMeta?.page && state.pageMeta?.totalPages) {
+      metaEntries.push({
+        id: "tokens-page",
+        text: `Page ${state.pageMeta.page}/${state.pageMeta.totalPages}`,
+      });
+    }
+
+    if (typeof state.pageMeta?.total === "number" && Number.isFinite(state.pageMeta.total)) {
+      metaEntries.push({
+        id: "tokens-total-count",
+        text: `${Utils.formatNumber(state.pageMeta.total, { decimals: 0 })} tokens`,
+      });
+    }
+
+    table.updateToolbarMeta(metaEntries);
   };
 
   const buildQuery = ({ page = 1 } = {}) => {
@@ -122,35 +178,97 @@ function createLifecycle() {
     if (state.search) params.set("search", state.search);
     params.set("sort_by", "symbol");
     params.set("sort_dir", "asc");
-    params.set("page", String(page));
+    const pageNumber = normalizePageNumber(page, 1) ?? 1;
+    params.set("page", String(pageNumber));
     params.set("page_size", String(PAGE_SIZE));
     return params;
   };
 
-  const loadTokensPage = async ({ reason, signal }) => {
-    const params = buildQuery();
+  const loadTokensPage = async ({ direction, cursor, reason, signal, table }) => {
+    const paginationState = typeof table?.getPaginationState === "function" ? table.getPaginationState() : null;
+    const currentMeta = paginationState?.meta ?? {};
+
+    let targetPage = normalizePageNumber(cursor, null);
+    const currentPage = normalizePageNumber(currentMeta.page, null);
+    const totalPages = normalizePageNumber(currentMeta.totalPages, null);
+
+    if (targetPage === null) {
+      if (direction === "next" && currentPage !== null) {
+        const candidate = currentPage + 1;
+        if (totalPages !== null && candidate > totalPages) {
+          return { rows: [], cursorNext: null, hasMoreNext: false };
+        }
+        targetPage = candidate;
+      } else if (direction === "prev" && currentPage !== null) {
+        const candidate = Math.max(1, currentPage - 1);
+        if (candidate === currentPage) {
+          return { rows: [], cursorPrev: null, hasMorePrev: false };
+        }
+        targetPage = candidate;
+      } else {
+        targetPage = 1;
+      }
+    }
+
+    if (direction === "next" && totalPages !== null && targetPage > totalPages) {
+      return { rows: [], cursorNext: null, hasMoreNext: false };
+    }
+    if (direction === "prev" && targetPage < 1) {
+      return { rows: [], cursorPrev: null, hasMorePrev: false };
+    }
+
+    const params = buildQuery({ page: targetPage });
     const url = `/api/tokens/list?${params.toString()}`;
 
-    const response = await fetch(url, {
-      headers: { "X-Requested-With": "fetch" },
-      cache: "no-store",
-      signal,
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    const data = await response.json();
-    const items = Array.isArray(data?.items) ? data.items : [];
+    try {
+      const response = await fetch(url, {
+        headers: { "X-Requested-With": "fetch" },
+        cache: "no-store",
+        signal,
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
 
-    return {
-      rows: items,
-      cursorNext: null,
-      cursorPrev: null,
-      hasMoreNext: false,
-      hasMorePrev: false,
-      total: data?.total ?? items.length,
-      preserveScroll: reason === "poll",
-    };
+      const data = await response.json();
+      const items = Array.isArray(data?.items) ? data.items : [];
+
+      const responsePage = normalizePageNumber(data?.page, targetPage) ?? targetPage;
+      const responseTotalPages = normalizePageNumber(data?.total_pages, totalPages ?? null) ?? responsePage;
+  const totalCount = normalizeNonNegativeInt(data?.total, null);
+  const pageSize = normalizeNonNegativeInt(data?.page_size, PAGE_SIZE, { min: 1 }) ?? PAGE_SIZE;
+
+      const nextPage = responsePage < responseTotalPages ? responsePage + 1 : null;
+      const prevPage = responsePage > 1 ? responsePage - 1 : null;
+
+      state.pageMeta = {
+        page: responsePage,
+        totalPages: responseTotalPages,
+        total: totalCount,
+        pageSize,
+        timestamp: data?.timestamp ?? null,
+      };
+
+      return {
+        rows: items,
+        cursorNext: nextPage,
+        cursorPrev: prevPage,
+        hasMoreNext: nextPage !== null,
+        hasMorePrev: prevPage !== null,
+        total: totalCount ?? items.length,
+        meta: { ...state.pageMeta },
+        preserveScroll: reason === "poll",
+      };
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        throw error;
+      }
+      console.error("[Tokens] Failed to load tokens list:", error);
+      if (reason !== "poll") {
+        Utils.showToast("⚠️ Failed to load tokens", "warning");
+      }
+      throw error;
+    }
   };
 
   const requestReload = (reason = "manual", options = {}) => {
@@ -166,6 +284,7 @@ function createLifecycle() {
   const switchView = (view) => {
     if (!TOKEN_VIEWS.some((v) => v.id === view)) return;
     state.view = view;
+    state.pageMeta = null;
     // Highlight active
     const container = document.getElementById("subTabsContainer");
     if (container && container.getAttribute("data-page") === "tokens") {
@@ -173,6 +292,7 @@ function createLifecycle() {
         .querySelectorAll(".sub-tab")
         .forEach((btn) => btn.classList.toggle("active", btn.dataset.view === view));
     }
+    updateToolbar();
     requestReload("view", { silent: false, resetScroll: true }).catch(() => {});
   };
 
@@ -203,10 +323,10 @@ function createLifecycle() {
         { id: "security_score", label: "Security", sortable: true, minWidth: 90, render: (v) => Utils.formatNumber(v, 0), sortFn: (a, b) => (a.security_score ?? 0) - (b.security_score ?? 0) },
         { id: "status", label: "Status", sortable: false, minWidth: 140, render: (_v, row) => {
             const flags = [];
-            if (row.has_pool_price) flags.push('<span class="badge info">Price</span>');
-            if (row.has_ohlcv) flags.push('<span class="badge">OHLCV</span>');
-            if (row.has_open_position) flags.push('<span class="badge success">Position</span>');
-            if (row.blacklisted) flags.push('<span class="badge warning">Blacklisted</span>');
+            if (row.has_pool_price) flags.push("<span class=\"badge info\">Price</span>");
+            if (row.has_ohlcv) flags.push("<span class=\"badge\">OHLCV</span>");
+            if (row.has_open_position) flags.push("<span class=\"badge success\">Position</span>");
+            if (row.blacklisted) flags.push("<span class=\"badge warning\">Blacklisted</span>");
             return flags.join(" ") || "—";
           }
         },
@@ -251,6 +371,8 @@ function createLifecycle() {
               state.search = (value || "").trim();
             },
             onSubmit: () => {
+              state.pageMeta = null;
+              updateToolbar();
               requestReload("search", { silent: false, resetScroll: true }).catch(() => {});
             },
           },
@@ -315,7 +437,11 @@ function createLifecycle() {
       }
       poller = null;
       if (subTabsCleanup) {
-        try { subTabsCleanup(); } catch (e) {}
+        try {
+          subTabsCleanup();
+        } catch (err) {
+          console.error("[Tokens] Failed to dispose sub-tabs:", err);
+        }
         subTabsCleanup = null;
       }
     },
