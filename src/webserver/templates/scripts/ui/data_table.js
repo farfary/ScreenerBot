@@ -1944,7 +1944,7 @@ export class DataTable {
       if (typeof total === "number") {
         this.state.tableWidth = total;
       }
-      this.state.hasAutoFitted = false;
+      // Don't reset hasAutoFitted here - content-based sizing shouldn't trigger container fit
     }
 
     if (this.options.lockColumnWidths) {
@@ -2038,6 +2038,12 @@ export class DataTable {
       visibleColumns.forEach((col, idx) => {
         const currentWidth = this.state.columnWidths[col.id];
         if (typeof currentWidth === "number" && !Number.isNaN(currentWidth)) {
+          // Skip user-resized columns - preserve their width
+          if (this.state.userResizedColumns?.[col.id]) {
+            runningTotal += currentWidth;
+            return;
+          }
+
           const minWidth = this._getColumnMinWidth(col.id);
           // Round down to avoid overflow accumulation, we'll fix remainder on last column
           let scaled = Math.max(minWidth, Math.floor(currentWidth * scaleFactor));
@@ -2059,10 +2065,17 @@ export class DataTable {
       return;
     }
 
-    // If under target, expand last column to fill remaining gap for exact fit
+    // If under target, expand last non-user-resized column to fill remaining gap for exact fit
     if (totalWidth < targetWidth) {
-      // Choose the last visible column to absorb the gap
-      const lastCol = visibleColumns[visibleColumns.length - 1];
+      // Choose the last visible column that wasn't manually resized to absorb the gap
+      let lastCol = null;
+      for (let i = visibleColumns.length - 1; i >= 0; i--) {
+        if (!this.state.userResizedColumns?.[visibleColumns[i].id]) {
+          lastCol = visibleColumns[i];
+          break;
+        }
+      }
+      
       if (lastCol) {
         const currentWidth = this.state.columnWidths[lastCol.id];
         if (typeof currentWidth === "number" && !Number.isNaN(currentWidth)) {
@@ -2652,8 +2665,13 @@ export class DataTable {
     const sanitized = Array.isArray(rows)
       ? rows.filter((row) => row !== null && row !== undefined)
       : [];
+    const isInitialLoad = this.state.data.length === 0;
     this.state.data = [...sanitized];
-    this.state.hasAutoFitted = false;
+    // Only reset hasAutoFitted on initial load, not on data refreshes
+    // This prevents fitToContainer from running on every poll cycle
+    if (isInitialLoad) {
+      this.state.hasAutoFitted = false;
+    }
     this._updatePaginationMeta(meta, { replace: true });
     this._setLoadingState(false);
 
@@ -2684,7 +2702,7 @@ export class DataTable {
 
     this.state.data = [...this.state.data, ...deduped];
     this._pruneRows("append");
-    this.state.hasAutoFitted = false;
+    // Don't reset hasAutoFitted on append - preserve initial fit state
     this._updatePaginationMeta(meta);
     this._setLoadingState(false);
     this._applyFilters({ renderOptions: meta.renderOptions || {} });
@@ -2725,7 +2743,7 @@ export class DataTable {
 
     this.state.data = [...deduped, ...this.state.data];
     this._pruneRows("prepend");
-    this.state.hasAutoFitted = false;
+    // Don't reset hasAutoFitted on prepend - preserve initial fit state
     this._updatePaginationMeta(meta);
     this._setLoadingState(false);
     this._applyFilters({ renderOptions });
