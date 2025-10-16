@@ -124,72 +124,7 @@
   background: rgba(255, 255, 255, 0.3);
 }
 
-.tabs {
-  background: var(--bg-secondary);
-  padding: 0 4px;
-  box-shadow: 0 1px 3px var(--shadow-md);
-  display: flex;
-  overflow-x: auto;
-  flex: 0 0 auto;
-}
-
-.tab {
-  padding: 8px 12px;
-  text-decoration: none;
-  color: var(--text-secondary);
-  font-weight: 500;
-  border-bottom: 3px solid transparent;
-  transition: all 0.3s ease;
-  white-space: nowrap;
-  font-size: 0.95em;
-}
-
-.tab:hover {
-  background: var(--bg-card-hover);
-  color: var(--link-color);
-}
-
-.tab.active {
-  color: var(--link-color);
-  border-bottom-color: var(--link-color);
-  background: var(--bg-card-hover);
-}
-
-/* Sub-tabs navigation (second row below main tabs) */
-.sub-tabs-container {
-  background: var(--bg-card);
-  border-bottom: 1px solid var(--border-color);
-  padding: 0 10px;
-  display: flex;
-  gap: 4px;
-  overflow-x: auto;
-  flex: 0 0 auto;
-}
-
-.sub-tab {
-  padding: 8px 16px;
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
-  font-weight: 500;
-  font-size: 0.9em;
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  transition: all 0.2s ease;
-  white-space: nowrap;
-  position: relative;
-}
-
-.sub-tab:hover {
-  color: var(--link-color);
-  background: var(--bg-card-hover);
-}
-
-.sub-tab.active {
-  color: var(--link-color);
-  border-bottom-color: var(--link-color);
-  font-weight: 600;
-}
+/* Main tabs styles now in styles/ui/tab_bar.css */
 
 /* Toolbar container (third row for action buttons) */
 .toolbar-container {

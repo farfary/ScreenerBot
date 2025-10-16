@@ -60,6 +60,22 @@ const createContext = (pageName) => {
       });
       return poller;
     },
+    manageTabBar(tabBar) {
+      if (!tabBar || typeof tabBar !== "object") {
+        return tabBar;
+      }
+      this.onDeactivate(() => {
+        if (typeof tabBar.hide === "function") {
+          tabBar.hide({ silent: true });
+        }
+      });
+      this.onDispose(() => {
+        if (typeof tabBar.destroy === "function") {
+          tabBar.destroy();
+        }
+      });
+      return tabBar;
+    },
     createAbortController() {
       const controller = new AbortController();
       const abort = () => {

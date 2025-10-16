@@ -1,0 +1,319 @@
+/**
+ * TabBar Component Styles
+ *
+ * Two-row tab system with CSS Grid for precise alignment:
+ * - Row 1: Main tabs (server-rendered navigation)
+ * - Row 2: Sub-tabs (page-specific navigation)
+ *
+ * CSS Variables for theming:
+ * - --tab-bar-bg-primary: Main tabs background
+ * - --tab-bar-bg-secondary: Sub-tabs background
+ * - --tab-bar-text-color: Default text color
+ * - --tab-bar-text-active: Active tab text color
+ * - --tab-bar-border-color: Border colors
+ * - --tab-bar-hover-bg: Hover background
+ * - --tab-bar-active-border: Active tab border color
+ * - --tab-bar-height: Tab height
+ * - --tab-bar-gap: Spacing between tabs
+ */
+
+/* ============================================================================
+   CSS Variables (Theme-aware)
+   ============================================================================ */
+
+:root {
+  /* Tab bar colors - inherit from theme */
+  --tab-bar-bg-primary: var(--bg-secondary);
+  --tab-bar-bg-secondary: var(--bg-card);
+  --tab-bar-text-color: var(--text-secondary);
+  --tab-bar-text-active: var(--link-color);
+  --tab-bar-border-color: var(--border-color);
+  --tab-bar-hover-bg: var(--bg-card-hover);
+  --tab-bar-active-border: var(--link-color);
+
+  /* Tab bar dimensions */
+  --tab-bar-height: auto;
+  --tab-bar-gap: 4px;
+  --tab-bar-padding-x: 12px;
+  --tab-bar-padding-y: 8px;
+  --tab-bar-font-size: 0.95em;
+  --tab-bar-sub-font-size: 0.9em;
+
+  /* Transitions */
+  --tab-bar-transition: all 0.2s ease;
+}
+
+/* ============================================================================
+   Main Tabs (First Row)
+   ============================================================================ */
+
+.tabs {
+  background: var(--tab-bar-bg-primary);
+  padding: 0 4px;
+  box-shadow: 0 1px 3px var(--shadow-md);
+  display: flex;
+  overflow-x: auto;
+  flex: 0 0 auto;
+  scrollbar-width: thin;
+}
+
+/* Hide scrollbar on webkit browsers for cleaner look */
+.tabs::-webkit-scrollbar {
+  height: 4px;
+}
+
+.tabs::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tabs::-webkit-scrollbar-thumb {
+  background: var(--tab-bar-border-color);
+  border-radius: 2px;
+}
+
+.tab {
+  padding: var(--tab-bar-padding-y) var(--tab-bar-padding-x);
+  text-decoration: none;
+  color: var(--tab-bar-text-color);
+  font-weight: 500;
+  border-bottom: 3px solid transparent;
+  transition: var(--tab-bar-transition);
+  white-space: nowrap;
+  font-size: var(--tab-bar-font-size);
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+}
+
+.tab:hover {
+  background: var(--tab-bar-hover-bg);
+  color: var(--tab-bar-text-active);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--tab-bar-active-border);
+  outline-offset: -2px;
+  z-index: 1;
+}
+
+.tab.active {
+  color: var(--tab-bar-text-active);
+  border-bottom-color: var(--tab-bar-active-border);
+  background: var(--tab-bar-hover-bg);
+  font-weight: 600;
+}
+
+/* ============================================================================
+   Sub-Tabs Container (Second Row)
+   ============================================================================ */
+
+.sub-tabs-container {
+  background: var(--tab-bar-bg-secondary);
+  border-bottom: 1px solid var(--tab-bar-border-color);
+  padding: 0 10px;
+  display: none; /* Hidden by default, shown by TabBar */
+  gap: var(--tab-bar-gap);
+  overflow-x: auto;
+  flex: 0 0 auto;
+  scrollbar-width: thin;
+  min-height: 42px; /* Prevent layout shift */
+}
+
+.sub-tabs-container[data-ui="tab-bar"] {
+  display: flex; /* Show when managed by TabBar */
+}
+
+/* Hide scrollbar on webkit browsers */
+.sub-tabs-container::-webkit-scrollbar {
+  height: 4px;
+}
+
+.sub-tabs-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sub-tabs-container::-webkit-scrollbar-thumb {
+  background: var(--tab-bar-border-color);
+  border-radius: 2px;
+}
+
+/* ============================================================================
+   Sub-Tab Buttons
+   ============================================================================ */
+
+.sub-tab {
+  padding: var(--tab-bar-padding-y) 16px;
+  background: transparent;
+  border: none;
+  color: var(--tab-bar-text-color);
+  font-weight: 500;
+  font-size: var(--tab-bar-sub-font-size);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: var(--tab-bar-transition);
+  white-space: nowrap;
+  position: relative;
+  user-select: none;
+  font-family: inherit;
+}
+
+.sub-tab:hover {
+  color: var(--tab-bar-text-active);
+  background: var(--tab-bar-hover-bg);
+}
+
+.sub-tab:focus-visible {
+  outline: 2px solid var(--tab-bar-active-border);
+  outline-offset: -2px;
+  z-index: 1;
+}
+
+.sub-tab.active {
+  color: var(--tab-bar-text-active);
+  border-bottom-color: var(--tab-bar-active-border);
+  font-weight: 600;
+}
+
+.sub-tab:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ============================================================================
+   Accessibility Enhancements
+   ============================================================================ */
+
+/* Focus indicator for keyboard navigation */
+.tabs [role="tab"]:focus,
+.sub-tabs-container [role="tab"]:focus {
+  outline: 2px solid var(--tab-bar-active-border);
+  outline-offset: -2px;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .tab,
+  .sub-tab {
+    transition: none;
+  }
+}
+
+/* ============================================================================
+   High Contrast Mode Support
+   ============================================================================ */
+
+@media (prefers-contrast: high) {
+  .tab,
+  .sub-tab {
+    border: 1px solid currentColor;
+  }
+
+  .tab.active,
+  .sub-tab.active {
+    background: var(--tab-bar-text-active);
+    color: var(--tab-bar-bg-primary);
+    border-color: currentColor;
+  }
+}
+
+/* ============================================================================
+   Responsive Design
+   ============================================================================ */
+
+/* Tablet and below: Reduce padding for more tabs visible */
+@media (max-width: 1024px) {
+  :root {
+    --tab-bar-padding-x: 10px;
+    --tab-bar-font-size: 0.9em;
+    --tab-bar-sub-font-size: 0.85em;
+  }
+
+  .tabs {
+    padding: 0 2px;
+  }
+
+  .sub-tabs-container {
+    padding: 0 6px;
+    min-height: 40px;
+  }
+}
+
+/* Mobile: Further reduce for small screens */
+@media (max-width: 768px) {
+  :root {
+    --tab-bar-padding-x: 8px;
+    --tab-bar-padding-y: 6px;
+    --tab-bar-font-size: 0.85em;
+    --tab-bar-sub-font-size: 0.8em;
+  }
+
+  .tabs {
+    box-shadow: 0 1px 2px var(--shadow-sm);
+  }
+
+  .sub-tabs-container {
+    padding: 0 4px;
+    gap: 2px;
+    min-height: 38px;
+  }
+
+  .sub-tab {
+    padding: var(--tab-bar-padding-y) 12px;
+  }
+}
+
+/* Very small screens: Minimal padding */
+@media (max-width: 425px) {
+  :root {
+    --tab-bar-padding-x: 6px;
+    --tab-bar-padding-y: 5px;
+  }
+
+  .sub-tab {
+    padding: var(--tab-bar-padding-y) 10px;
+  }
+}
+
+/* ============================================================================
+   Print Styles
+   ============================================================================ */
+
+@media print {
+  .tabs,
+  .sub-tabs-container {
+    display: none;
+  }
+}
+
+/* ============================================================================
+   Dark Theme Adjustments
+   ============================================================================ */
+
+[data-theme="dark"] {
+  --tab-bar-bg-primary: var(--bg-secondary);
+  --tab-bar-bg-secondary: var(--bg-card);
+  --tab-bar-text-color: var(--text-secondary);
+  --tab-bar-text-active: var(--link-color);
+  --tab-bar-border-color: var(--border-color);
+  --tab-bar-hover-bg: var(--bg-card-hover);
+}
+
+/* ============================================================================
+   Utility Classes
+   ============================================================================ */
+
+/* Force hide sub-tabs container (useful for pages without sub-tabs) */
+.sub-tabs-container.hidden {
+  display: none !important;
+}
+
+/* Compact mode (for dense UIs) */
+.sub-tabs-container.compact {
+  min-height: 36px;
+  padding: 0 6px;
+}
+
+.sub-tabs-container.compact .sub-tab {
+  padding: 6px 12px;
+  font-size: 0.85em;
+}

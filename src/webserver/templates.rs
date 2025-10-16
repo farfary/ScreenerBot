@@ -18,6 +18,7 @@ const EVENTS_PAGE_STYLES: &str = include_str!("templates/styles/pages/events.css
 const TOKENS_PAGE_STYLES: &str = include_str!("templates/styles/pages/tokens.css");
 const DATA_TABLE_STYLES: &str = include_str!("templates/styles/ui/data_table.css");
 const EVENTS_DIALOG_STYLES: &str = include_str!("templates/styles/ui/events_dialog.css");
+const TAB_BAR_STYLES: &str = include_str!("templates/styles/ui/tab_bar.css");
 
 pub const CORE_LIFECYCLE: &str = include_str!("templates/scripts/core/lifecycle.js");
 pub const CORE_APP_STATE: &str = include_str!("templates/scripts/core/app_state.js");
@@ -31,6 +32,7 @@ const THEME_SCRIPTS: &str = include_str!("templates/scripts/theme.js");
 pub const DATA_TABLE_UI: &str = include_str!("templates/scripts/ui/data_table.js");
 pub const TABLE_TOOLBAR_UI: &str = include_str!("templates/scripts/ui/table_toolbar.js");
 pub const EVENTS_DIALOG_UI: &str = include_str!("templates/scripts/ui/events_dialog.js");
+pub const TAB_BAR_UI: &str = include_str!("templates/scripts/ui/tab_bar.js");
 
 pub const SERVICES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/services.js");
 pub const TRANSACTIONS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/transactions.js");
@@ -60,8 +62,9 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         TOOLBAR_STYLES,
         TOKEN_MODAL_STYLES,
         COMMON_STYLES,
-    DATA_TABLE_STYLES,
-    EVENTS_DIALOG_STYLES,
+        DATA_TABLE_STYLES,
+        EVENTS_DIALOG_STYLES,
+        TAB_BAR_STYLES,
     ];
     if active_tab == "services" {
         combined_styles.push(SERVICES_PAGE_STYLES);

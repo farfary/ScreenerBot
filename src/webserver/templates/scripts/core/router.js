@@ -3,6 +3,15 @@ import { PageLifecycleRegistry } from "./lifecycle.js";
 import * as AppState from "./app_state.js";
 import * as PollingManager from "./poller.js";
 
+// Import TabBarManager for coordinated tab bar management
+let TabBarManager = null;
+try {
+  const tabBarModule = await import("../ui/tab_bar.js");
+  TabBarManager = tabBarModule.TabBarManager;
+} catch (err) {
+  console.warn("[Router] TabBar module not available:", err.message);
+}
+
 const _state = {
   currentPage: null,
   cleanupHandlers: [],
@@ -138,6 +147,11 @@ export async function loadPage(pageName) {
 
   _state.currentPage = pageName;
   setActiveTab(pageName);
+
+  // Notify TabBarManager about page switch (deferred to ensure DOM is ready)
+  if (TabBarManager) {
+    TabBarManager.onPageSwitch(pageName, previousPage);
+  }
 
   const mainContent = document.querySelector("main");
   if (!mainContent) {

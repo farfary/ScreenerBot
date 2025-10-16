@@ -2,8 +2,9 @@ import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import * as Utils from "../core/utils.js";
 import { DataTable } from "../ui/data_table.js";
+import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 
-// Sub-tabs (views) based on tokens_backup.html
+// Sub-tabs (views) configuration
 const TOKEN_VIEWS = [
   { id: "pool", label: "💧 Pool Service" },
   { id: "all", label: "📋 All Tokens" },
@@ -49,41 +50,6 @@ function normalizeNonNegativeInt(value, fallback = null, { min = 0 } = {}) {
   return int;
 }
 
-function mountSubTabs(ctx, state) {
-  const container = document.getElementById("subTabsContainer");
-  if (!container) return () => {};
-
-  container.innerHTML = TOKEN_VIEWS.map((v) => {
-    const active = v.id === state.view ? " active" : "";
-    return `<button class="sub-tab${active}" data-view="${v.id}">${v.label}</button>`;
-  }).join("");
-  container.setAttribute("data-page", "tokens");
-  container.style.display = "flex";
-
-  const handlers = [];
-  container.querySelectorAll(".sub-tab").forEach((btn) => {
-    const handler = () => state.switchView(btn.dataset.view);
-    btn.addEventListener("click", handler);
-    handlers.push(() => btn.removeEventListener("click", handler));
-  });
-
-  const cleanup = () => {
-    handlers.forEach((dispose) => dispose());
-    if (container.getAttribute("data-page") === "tokens") {
-      container.innerHTML = "";
-      container.style.display = "none";
-    }
-  };
-
-  const deactivateDispose = ctx.onDeactivate(cleanup);
-  ctx.onDispose(() => {
-    deactivateDispose();
-    cleanup();
-  });
-
-  return cleanup;
-}
-
 function priceCell(value) {
   return Utils.formatPriceSol(value, { fallback: "—", decimals: 9 });
 }
@@ -117,7 +83,7 @@ function tokenCell(row) {
 function createLifecycle() {
   let table = null;
   let poller = null;
-  let subTabsCleanup = null;
+  let tabBar = null;
 
   const state = {
     view: DEFAULT_VIEW,
@@ -285,24 +251,29 @@ function createLifecycle() {
     if (!TOKEN_VIEWS.some((v) => v.id === view)) return;
     state.view = view;
     state.pageMeta = null;
-    // Highlight active
-    const container = document.getElementById("subTabsContainer");
-    if (container && container.getAttribute("data-page") === "tokens") {
-      container
-        .querySelectorAll(".sub-tab")
-        .forEach((btn) => btn.classList.toggle("active", btn.dataset.view === view));
-    }
     updateToolbar();
     requestReload("view", { silent: false, resetScroll: true }).catch(() => {});
   };
 
-  // expose for sub-tabs
-  state.switchView = switchView;
-
   return {
     init(ctx) {
-      // Mount sub-tabs
-      subTabsCleanup = mountSubTabs(ctx, state);
+      // Initialize tab bar for tokens page
+      tabBar = new TabBar({
+        container: "#subTabsContainer",
+        tabs: TOKEN_VIEWS,
+        defaultTab: DEFAULT_VIEW,
+        stateKey: "tokens.activeTab",
+        pageName: "tokens",
+        onChange: (tabId) => {
+          switchView(tabId);
+        },
+      });
+
+      // Register with TabBarManager for page-switch coordination
+      TabBarManager.register("tokens", tabBar);
+
+      // Integrate with lifecycle for auto-cleanup
+      ctx.manageTabBar(tabBar);
 
       const columns = [
         {
@@ -436,14 +407,8 @@ function createLifecycle() {
         table = null;
       }
       poller = null;
-      if (subTabsCleanup) {
-        try {
-          subTabsCleanup();
-        } catch (err) {
-          console.error("[Tokens] Failed to dispose sub-tabs:", err);
-        }
-        subTabsCleanup = null;
-      }
+      tabBar = null; // Cleaned up automatically by manageTabBar
+      TabBarManager.unregister("tokens");
     },
   };
 }
