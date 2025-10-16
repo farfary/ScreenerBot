@@ -326,6 +326,7 @@ export class DataTable {
     this.elements.container = container;
     this._render();
     this._attachEvents();
+    this._setupGlobalCleanup();
 
     if (this.options.data.length > 0) {
       this.setData(this.options.data);
@@ -340,6 +341,27 @@ export class DataTable {
         this._log("error", "Initial pagination load failed", error);
       });
     }
+  }
+
+  /**
+   * Setup global cleanup handlers to ensure cursor is never stuck
+   */
+  _setupGlobalCleanup() {
+    // Cleanup on visibility change (tab switch, minimize, etc.)
+    this._visibilityHandler = () => {
+      if (document.hidden && this.resizing) {
+        this._handleResizeEnd();
+      }
+    };
+    document.addEventListener("visibilitychange", this._visibilityHandler);
+
+    // Cleanup on page unload
+    this._unloadHandler = () => {
+      if (this.resizing) {
+        this._handleResizeEnd();
+      }
+    };
+    window.addEventListener("beforeunload", this._unloadHandler);
   }
 
   /**
@@ -943,9 +965,12 @@ export class DataTable {
       this.documentClickHandler = null;
     }
 
-    // Remove resize handlers
-    document.removeEventListener("mousemove", this._handleResize);
-    document.removeEventListener("mouseup", this._handleResizeEnd);
+    // Remove resize handlers ONLY if no active resize operation
+    // This prevents cursor getting stuck when table re-renders during column resize
+    if (!this.resizing) {
+      document.removeEventListener("mousemove", this._handleResize);
+      document.removeEventListener("mouseup", this._handleResizeEnd);
+    }
 
     if (this._paginationScrollRAF !== null) {
       cancelAnimationFrame(this._paginationScrollRAF);
@@ -1455,6 +1480,9 @@ export class DataTable {
         handle.classList.add("active");
         document.body.classList.add("dt-column-resizing");
 
+        // Remove any existing listeners before adding new ones to prevent duplicates
+        document.removeEventListener("mousemove", this._handleResize);
+        document.removeEventListener("mouseup", this._handleResizeEnd);
         document.addEventListener("mousemove", this._handleResize);
         document.addEventListener("mouseup", this._handleResizeEnd);
       };
@@ -3370,6 +3398,16 @@ export class DataTable {
     }
 
     document.body.classList.remove("dt-column-resizing");
+
+    // Clean up global handlers
+    if (this._visibilityHandler) {
+      document.removeEventListener("visibilitychange", this._visibilityHandler);
+      this._visibilityHandler = null;
+    }
+    if (this._unloadHandler) {
+      window.removeEventListener("beforeunload", this._unloadHandler);
+      this._unloadHandler = null;
+    }
 
     // Clean up scroll throttle
     if (this.scrollThrottle) {
