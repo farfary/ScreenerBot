@@ -43,6 +43,9 @@ pub struct TokenListResponse {
     pub next_cursor: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prev_cursor: Option<usize>,
+    pub priced_total: usize,
+    pub positions_total: usize,
+    pub blacklisted_total: usize,
 }
 
 /// Period-based numeric metrics helper
@@ -370,6 +373,9 @@ fn build_token_list_response(result: FilteringQueryResult) -> TokenListResponse 
         cursor: Some(start_index),
         next_cursor,
         prev_cursor,
+        priced_total: result.priced_total,
+        positions_total: result.positions_total,
+        blacklisted_total: result.blacklisted_total,
     }
 }
 
@@ -493,6 +499,9 @@ pub(crate) async fn get_tokens_list(
                 cursor: Some(0),
                 next_cursor: None,
                 prev_cursor: None,
+                priced_total: 0,
+                positions_total: 0,
+                blacklisted_total: 0,
             })
         }
     }

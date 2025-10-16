@@ -190,6 +190,9 @@ pub struct FilteringQueryResult {
     pub total: usize,
     pub total_pages: usize,
     pub timestamp: DateTime<Utc>,
+    pub priced_total: usize,
+    pub positions_total: usize,
+    pub blacklisted_total: usize,
 }
 
 #[derive(Debug, Clone)]

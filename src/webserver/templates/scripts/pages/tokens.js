@@ -19,6 +19,7 @@ const TOKEN_VIEWS = [
 const DEFAULT_VIEW = "pool";
 const DEFAULT_SERVER_SORT = { by: "symbol", direction: "asc" };
 const DEFAULT_FILTERS = { priced: "all", positions: "all" };
+const DEFAULT_SUMMARY = { priced: 0, positions: 0, blacklisted: 0 };
 
 const COLUMN_TO_SORT_KEY = {
   token: "symbol",
@@ -103,22 +104,56 @@ function createLifecycle() {
     lastUpdate: null,
     sort: { ...DEFAULT_SERVER_SORT },
     filters: { ...DEFAULT_FILTERS },
+    summary: { ...DEFAULT_SUMMARY },
   };
 
   const updateToolbar = () => {
     if (!table) return;
     const rows = table.getData();
 
-    const total = rows.length;
-    const withPrice = rows.filter((r) => r.has_pool_price).length;
-    const blacklisted = rows.filter((r) => r.blacklisted).length;
-    const openPos = rows.filter((r) => r.has_open_position).length;
+    const loaded = rows.length;
+    const totalGlobal =
+      typeof state.totalCount === "number" && Number.isFinite(state.totalCount)
+        ? state.totalCount
+        : loaded;
+
+    const summaryPriced =
+      typeof state.summary?.priced === "number" && Number.isFinite(state.summary.priced)
+        ? state.summary.priced
+        : rows.filter((r) => r.has_pool_price).length;
+    const summaryPositions =
+      typeof state.summary?.positions === "number" && Number.isFinite(state.summary.positions)
+        ? state.summary.positions
+        : rows.filter((r) => r.has_open_position).length;
+    const summaryBlacklisted =
+      typeof state.summary?.blacklisted === "number" && Number.isFinite(state.summary.blacklisted)
+        ? state.summary.blacklisted
+        : rows.filter((r) => r.blacklisted).length;
 
     table.updateToolbarSummary([
-      { id: "tokens-total", label: "Total", value: Utils.formatNumber(total) },
-      { id: "tokens-priced", label: "With Price", value: Utils.formatNumber(withPrice), variant: "info" },
-      { id: "tokens-positions", label: "Positions", value: Utils.formatNumber(openPos), variant: openPos > 0 ? "success" : "secondary" },
-      { id: "tokens-blacklisted", label: "Blacklisted", value: Utils.formatNumber(blacklisted), variant: blacklisted > 0 ? "warning" : "success" },
+      {
+        id: "tokens-total",
+        label: "Total",
+        value: Utils.formatNumber(totalGlobal),
+      },
+      {
+        id: "tokens-priced",
+        label: "With Price",
+        value: Utils.formatNumber(summaryPriced),
+        variant: "info",
+      },
+      {
+        id: "tokens-positions",
+        label: "Positions",
+        value: Utils.formatNumber(summaryPositions),
+        variant: summaryPositions > 0 ? "success" : "secondary",
+      },
+      {
+        id: "tokens-blacklisted",
+        label: "Blacklisted",
+        value: Utils.formatNumber(summaryBlacklisted),
+        variant: summaryBlacklisted > 0 ? "warning" : "success",
+      },
     ]);
 
     const metaEntries = [];
@@ -129,12 +164,12 @@ function createLifecycle() {
         : "Last update —",
     });
 
-    const loaded = Utils.formatNumber(total, { decimals: 0 });
+    const loadedLabel = Utils.formatNumber(loaded, { decimals: 0 });
     const hasTotalCount =
       typeof state.totalCount === "number" && Number.isFinite(state.totalCount);
     const totalLabel = hasTotalCount
-      ? `Loaded ${loaded} / ${Utils.formatNumber(state.totalCount, { decimals: 0 })}`
-      : `Loaded ${loaded}`;
+      ? `Loaded ${loadedLabel} / ${Utils.formatNumber(state.totalCount, { decimals: 0 })}`
+      : `Loaded ${loadedLabel}`;
 
     metaEntries.push({
       id: "tokens-loaded",
@@ -268,6 +303,33 @@ function createLifecycle() {
       }
 
       state.lastUpdate = data?.timestamp ?? null;
+      const pricedTotal =
+        typeof data?.priced_total === "number" && Number.isFinite(data.priced_total)
+          ? data.priced_total
+          : null;
+      const positionsTotal =
+        typeof data?.positions_total === "number" && Number.isFinite(data.positions_total)
+          ? data.positions_total
+          : null;
+      const blacklistedTotal =
+        typeof data?.blacklisted_total === "number" && Number.isFinite(data.blacklisted_total)
+          ? data.blacklisted_total
+          : null;
+
+      state.summary = {
+        priced:
+          pricedTotal !== null
+            ? pricedTotal
+            : items.filter((row) => row.has_pool_price).length,
+        positions:
+          positionsTotal !== null
+            ? positionsTotal
+            : items.filter((row) => row.has_open_position).length,
+        blacklisted:
+          blacklistedTotal !== null
+            ? blacklistedTotal
+            : items.filter((row) => row.blacklisted).length,
+      };
 
       return {
         rows: items,
@@ -311,6 +373,7 @@ function createLifecycle() {
     state.lastUpdate = null;
     state.sort = { ...DEFAULT_SERVER_SORT };
     state.filters = { ...DEFAULT_FILTERS };
+    state.summary = { ...DEFAULT_SUMMARY };
     syncTableSortState({ render: true });
     syncToolbarFilters();
     updateToolbar();
@@ -590,6 +653,7 @@ function createLifecycle() {
       state.lastUpdate = null;
       state.sort = { ...DEFAULT_SERVER_SORT };
       state.filters = { ...DEFAULT_FILTERS };
+      state.summary = { ...DEFAULT_SUMMARY };
     },
   };
 }

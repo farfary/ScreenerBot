@@ -129,6 +129,18 @@ impl FilteringStore {
         sort_summaries(&mut summaries, query.sort_key, query.sort_direction);
 
         let total = summaries.len();
+        let priced_total = summaries
+            .iter()
+            .filter(|summary| summary.has_pool_price)
+            .count();
+        let positions_total = summaries
+            .iter()
+            .filter(|summary| summary.has_open_position)
+            .count();
+        let blacklisted_total = summaries
+            .iter()
+            .filter(|summary| summary.blacklisted)
+            .count();
         let total_pages = if total == 0 {
             0
         } else {
@@ -158,6 +170,9 @@ impl FilteringStore {
             total,
             total_pages,
             timestamp: snapshot.updated_at,
+            priced_total,
+            positions_total,
+            blacklisted_total,
         })
     }
 
