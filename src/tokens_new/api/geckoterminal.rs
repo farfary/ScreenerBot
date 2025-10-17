@@ -9,6 +9,7 @@
 /// 4. /networks/{network}/pools/{address} - Get specific pool data by pool address
 /// 5. /networks/{network}/pools/multi/{addresses} - Get multiple pools data (up to 30 addresses)
 /// 6. /networks/{network}/pools/{pool}/ohlcv/{timeframe} - Get OHLCV candlestick data
+/// 7. /networks/{network}/dexes - Get supported DEXes list by network
 
 use super::geckoterminal_types::*;
 use crate::tokens_new::types::GeckoTerminalPool;
@@ -482,6 +483,54 @@ impl GeckoTerminalClient {
             base_token: ohlcv_response.meta.base,
             quote_token: ohlcv_response.meta.quote,
         })
+    }
+
+    /// Get supported DEXes list by network
+    /// Uses /networks/{network}/dexes
+    /// 
+    /// Returns list of all supported decentralized exchanges (DEXs) on the network.
+    /// 
+    /// # Arguments
+    /// * `network` - Network ID (e.g., "solana", "eth")
+    /// * `page` - Page number (default 1)
+    /// 
+    /// # Returns
+    /// Vec<(String, String)> - List of (dex_id, dex_name) tuples
+    pub async fn fetch_dexes_by_network(
+        &self,
+        network: &str,
+        page: Option<u32>,
+    ) -> Result<Vec<(String, String)>, String> {
+        let permit = self.rate_limiter.acquire().await.map_err(|e| format!("Rate limiter error: {}", e))?;
+
+        let url = format!("{}/networks/{}/dexes", GECKOTERMINAL_BASE_URL, network);
+        
+        let final_url = if let Some(p) = page {
+            format!("{}?page={}", url, p)
+        } else {
+            url
+        };
+
+        debug!("[GECKOTERMINAL] Fetching DEXes: network={}, page={:?}", network, page);
+
+        let response = self.client
+            .get(&final_url)
+            .timeout(self.timeout)
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?;
+
+        drop(permit);
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(format!("HTTP {}: {}", status, error_text));
+        }
+
+        let dex_response: GeckoTerminalDexesResponse = response.json().await.map_err(|e| format!("JSON parse error: {}", e))?;
+
+        Ok(dex_response.data.into_iter().map(|d| (d.id, d.attributes.name)).collect())
     }
 }
 

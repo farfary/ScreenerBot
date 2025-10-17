@@ -40,6 +40,10 @@ struct Args {
     #[clap(long)]
     top_pools: bool,
 
+    /// Test DEXes endpoint
+    #[clap(long)]
+    dexes: bool,
+
     /// Verbose output (show response bodies)
     #[clap(short, long)]
     verbose: bool,
@@ -84,7 +88,7 @@ async fn main() {
     println!("{}", "=".repeat(60).green());
     println!("Base URL: {}\n", BASE_URL.yellow());
 
-    let test_all = args.all || (!args.token_pools && !args.ohlcv && !args.trending && !args.pool_data && !args.multi_pools && !args.top_pools);
+    let test_all = args.all || (!args.token_pools && !args.ohlcv && !args.trending && !args.pool_data && !args.multi_pools && !args.top_pools && !args.dexes);
 
     if test_all || args.token_pools {
         test_token_pools(&client, &args).await;
@@ -96,6 +100,10 @@ async fn main() {
 
     if test_all || args.top_pools {
         test_top_pools(&client, &args).await;
+    }
+
+    if test_all || args.dexes {
+        test_dexes(&client, &args).await;
     }
 
     if test_all || args.pool_data {
@@ -633,6 +641,134 @@ async fn test_top_pools(client: &Client, args: &Args) {
                                 println!("    {}. {} - Vol: ${}", i + 1, name.yellow(), volume.cyan());
                             }
                         }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+}
+
+/// Test: GET /networks/{network}/dexes
+/// Get supported DEXes list by network
+async fn test_dexes(client: &Client, args: &Args) {
+    // Test 1: Solana DEXes
+    print_test_header(
+        &format!("DEXes List ({})", args.network),
+        &format!("/networks/{}/dexes", args.network)
+    );
+
+    let url = format!("{}/networks/{}/dexes", BASE_URL, args.network);
+    
+    let start = Instant::now();
+    match client.get(&url).send().await {
+        Ok(response) => {
+            let duration = start.elapsed();
+            let status = response.status();
+            
+            print_status(status.as_u16(), duration);
+
+            if status.is_success() {
+                if let Ok(json) = response.json::<Value>().await {
+                    if let Some(data) = json["data"].as_array() {
+                        println!("  {} {} DEXes supported", "✓".green(), data.len().to_string().cyan().bold());
+                        
+                        // Show first 10 DEXes
+                        println!("  {} First 10 DEXes:", "→".cyan());
+                        for (i, dex) in data.iter().take(10).enumerate() {
+                            if let Some(attrs) = dex["attributes"].as_object() {
+                                let name = attrs.get("name").and_then(|v| v.as_str()).unwrap_or("Unknown");
+                                let id = dex["id"].as_str().unwrap_or("unknown");
+                                println!("    {}. {} ({})", i + 1, name.yellow(), id.bright_black());
+                            }
+                        }
+                        
+                        if args.verbose {
+                            println!("\n{}", serde_json::to_string_pretty(&json).unwrap_or_default());
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 2: Ethereum DEXes
+    print_test_header(
+        "DEXes List (eth)",
+        "/networks/eth/dexes"
+    );
+
+    let url = format!("{}/networks/eth/dexes", BASE_URL);
+    
+    let start = Instant::now();
+    match client.get(&url).send().await {
+        Ok(response) => {
+            let duration = start.elapsed();
+            let status = response.status();
+            
+            print_status(status.as_u16(), duration);
+
+            if status.is_success() {
+                if let Ok(json) = response.json::<Value>().await {
+                    if let Some(data) = json["data"].as_array() {
+                        println!("  {} {} Ethereum DEXes", "✓".green(), data.len().to_string().cyan());
+                        
+                        // Show top 5
+                        for (i, dex) in data.iter().take(5).enumerate() {
+                            if let Some(attrs) = dex["attributes"].as_object() {
+                                let name = attrs.get("name").and_then(|v| v.as_str()).unwrap_or("Unknown");
+                                println!("    {}. {}", i + 1, name.yellow());
+                            }
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 3: Page 2
+    print_test_header(
+        &format!("DEXes List ({}, page 2)", args.network),
+        &format!("/networks/{}/dexes?page=2", args.network)
+    );
+
+    let url = format!("{}/networks/{}/dexes?page=2", BASE_URL, args.network);
+    
+    let start = Instant::now();
+    match client.get(&url).send().await {
+        Ok(response) => {
+            let duration = start.elapsed();
+            let status = response.status();
+            
+            print_status(status.as_u16(), duration);
+
+            if status.is_success() {
+                if let Ok(json) = response.json::<Value>().await {
+                    if let Some(data) = json["data"].as_array() {
+                        println!("  {} {} DEXes on page 2", "✓".green(), data.len().to_string().cyan());
                     }
                 }
             } else {

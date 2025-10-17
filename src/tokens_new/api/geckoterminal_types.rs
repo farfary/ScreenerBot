@@ -183,3 +183,25 @@ impl GeckoTerminalPoolData {
         }
     }
 }
+
+// ============================================================================
+// DEX RESPONSE STRUCTURES
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeckoTerminalDexesResponse {
+    pub data: Vec<GeckoTerminalDexInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeckoTerminalDexInfo {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub dex_type: String,
+    pub attributes: GeckoTerminalDexAttributes,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeckoTerminalDexAttributes {
+    pub name: String,
+}
