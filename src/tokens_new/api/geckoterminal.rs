@@ -13,6 +13,7 @@
 /// 8. /networks/{network}/new_pools - Get latest new pools by network
 /// 9. /networks/{network}/tokens/multi/{addresses} - Get multiple tokens data (up to 30 addresses)
 /// 10. /networks/{network}/tokens/{address}/info - Get token metadata (name, symbol, socials, etc.)
+/// 11. /tokens/info_recently_updated - Get 100 most recently updated tokens (global endpoint)
 
 use super::geckoterminal_types::*;
 use crate::tokens_new::types::GeckoTerminalPool;
@@ -801,6 +802,67 @@ impl GeckoTerminalClient {
             .map_err(|e| format!("JSON parse error: {}", e))?;
 
         Ok(token_info_response)
+    }
+
+    /// Get most recently updated tokens list
+    /// Uses /tokens/info_recently_updated
+    /// 
+    /// Returns 100 most recently updated tokens info, either across all networks or filtered by network.
+    /// This is a global endpoint (no network in path).
+    /// 
+    /// # Arguments
+    /// * `include` - Optional attributes to include (network)
+    /// * `network` - Optional network filter (e.g., "solana", "eth", "bsc")
+    /// 
+    /// # Returns
+    /// Result with recently updated tokens list
+    /// 
+    /// # Example
+    /// ```no_run
+    /// let recent = client.fetch_recently_updated_tokens(Some("network"), Some("eth")).await?;
+    /// ```
+    pub async fn fetch_recently_updated_tokens(
+        &self,
+        include: Option<&str>,
+        network: Option<&str>,
+    ) -> Result<GeckoTerminalRecentlyUpdatedResponse, String> {
+        let permit = self.rate_limiter.acquire().await.map_err(|e| format!("Rate limiter error: {}", e))?;
+
+        let mut url = format!("{}/tokens/info_recently_updated", GECKOTERMINAL_BASE_URL);
+        let mut params = Vec::new();
+
+        if let Some(inc) = include {
+            params.push(format!("include={}", inc));
+        }
+        if let Some(net) = network {
+            params.push(format!("network={}", net));
+        }
+
+        if !params.is_empty() {
+            url.push_str(&format!("?{}", params.join("&")));
+        }
+
+        debug!("[GECKOTERMINAL] Fetching recently updated tokens: network={:?}", network);
+
+        let response = self.client
+            .get(&url)
+            .timeout(self.timeout)
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?;
+
+        drop(permit);
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(format!("HTTP {}: {}", status, error_text));
+        }
+
+        let recently_updated_response: GeckoTerminalRecentlyUpdatedResponse = response.json().await
+            .map_err(|e| format!("JSON parse error: {}", e))?;
+
+        Ok(recently_updated_response)
     }
 }
 

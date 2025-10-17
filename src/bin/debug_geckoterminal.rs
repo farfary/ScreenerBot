@@ -60,6 +60,10 @@ struct Args {
     #[clap(long)]
     token_info: bool,
 
+    /// Test recently updated tokens endpoint
+    #[clap(long)]
+    recently_updated: bool,
+
     /// Verbose output (show response bodies)
     #[clap(short, long)]
     verbose: bool,
@@ -104,7 +108,7 @@ async fn main() {
     println!("{}", "=".repeat(60).green());
     println!("Base URL: {}\n", BASE_URL.yellow());
 
-    let test_all = args.all || (!args.token_pools && !args.top_pools_token && !args.ohlcv && !args.trending && !args.pool_data && !args.multi_pools && !args.top_pools && !args.dexes && !args.new_pools && !args.tokens_multi && !args.token_info);
+    let test_all = args.all || (!args.token_pools && !args.top_pools_token && !args.ohlcv && !args.trending && !args.pool_data && !args.multi_pools && !args.top_pools && !args.dexes && !args.new_pools && !args.tokens_multi && !args.token_info && !args.recently_updated);
 
     if test_all || args.token_pools {
         test_token_pools(&client, &args).await;
@@ -136,6 +140,10 @@ async fn main() {
 
     if test_all || args.token_info {
         test_token_info(&client, &args).await;
+    }
+
+    if test_all || args.recently_updated {
+        test_recently_updated_tokens(&client, &args).await;
     }
 
     if test_all || args.pool_data {
@@ -1559,6 +1567,206 @@ async fn test_token_info(client: &Client, args: &Args) {
                             if let Some(updated) = attrs.get("metadata_updated_at").and_then(|u| u.as_str()) {
                                 println!("    • Last updated: {}", updated);
                             }
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+}
+
+async fn test_recently_updated_tokens(client: &Client, _args: &Args) {
+    // Test 1: Global recently updated (all networks)
+    print_test_header(
+        "Recently Updated Tokens (all networks)",
+        "/tokens/info_recently_updated"
+    );
+
+    let url = format!("{}/tokens/info_recently_updated", BASE_URL);
+    
+    let start = Instant::now();
+    match client.get(&url).timeout(Duration::from_secs(10)).send().await {
+        Ok(response) => {
+            let elapsed = start.elapsed();
+            let status = response.status();
+            
+            println!("  {} {} ({:.2}ms)", "Status:".cyan(), status.as_u16().to_string().green(), elapsed.as_millis());
+
+            if status.is_success() {
+                let body = response.text().await.unwrap_or_default();
+
+                if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                        println!("  {} {} recently updated tokens", "✓".green(), data.len());
+                        
+                        println!("  → First 10 tokens:");
+                        for (i, token) in data.iter().take(10).enumerate() {
+                            if let Some(attrs) = token.get("attributes") {
+                                let symbol = attrs.get("symbol").and_then(|s| s.as_str()).unwrap_or("N/A");
+                                let name = attrs.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown");
+                                let updated = attrs.get("metadata_updated_at").and_then(|u| u.as_str()).unwrap_or("N/A");
+                                println!("    {}. {} ({}) - updated: {}", i+1, symbol, name, updated);
+                            }
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 2: Filter by Ethereum network
+    print_test_header(
+        "Recently Updated Tokens (eth only)",
+        "/tokens/info_recently_updated?network=eth"
+    );
+
+    let url = format!("{}/tokens/info_recently_updated?network=eth", BASE_URL);
+    
+    let start = Instant::now();
+    match client.get(&url).timeout(Duration::from_secs(10)).send().await {
+        Ok(response) => {
+            let elapsed = start.elapsed();
+            let status = response.status();
+            
+            println!("  {} {} ({:.2}ms)", "Status:".cyan(), status.as_u16().to_string().green(), elapsed.as_millis());
+
+            if status.is_success() {
+                let body = response.text().await.unwrap_or_default();
+
+                if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                        println!("  {} {} Ethereum tokens recently updated", "✓".green(), data.len());
+                        
+                        println!("  → First 5 tokens:");
+                        for (i, token) in data.iter().take(5).enumerate() {
+                            if let Some(attrs) = token.get("attributes") {
+                                let symbol = attrs.get("symbol").and_then(|s| s.as_str()).unwrap_or("N/A");
+                                let name = attrs.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown");
+                                let gt_score = attrs.get("gt_score").and_then(|g| g.as_f64()).unwrap_or(0.0);
+                                println!("    {}. {} ({}) - GT Score: {:.2}", i+1, symbol, name, gt_score);
+                            }
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 3: Filter by Solana network
+    print_test_header(
+        "Recently Updated Tokens (solana only)",
+        "/tokens/info_recently_updated?network=solana"
+    );
+
+    let url = format!("{}/tokens/info_recently_updated?network=solana", BASE_URL);
+    
+    let start = Instant::now();
+    match client.get(&url).timeout(Duration::from_secs(10)).send().await {
+        Ok(response) => {
+            let elapsed = start.elapsed();
+            let status = response.status();
+            
+            println!("  {} {} ({:.2}ms)", "Status:".cyan(), status.as_u16().to_string().green(), elapsed.as_millis());
+
+            if status.is_success() {
+                let body = response.text().await.unwrap_or_default();
+
+                if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                        println!("  {} {} Solana tokens recently updated", "✓".green(), data.len());
+                        
+                        // Count tokens with social links
+                        let mut with_twitter = 0;
+                        let mut with_website = 0;
+                        
+                        for token in data.iter() {
+                            if let Some(attrs) = token.get("attributes") {
+                                if attrs.get("twitter_handle").is_some() { with_twitter += 1; }
+                                if let Some(websites) = attrs.get("websites").and_then(|w| w.as_array()) {
+                                    if !websites.is_empty() { with_website += 1; }
+                                }
+                            }
+                        }
+                        
+                        println!("  {} {} with Twitter, {} with websites", "Social:".cyan(), with_twitter, with_website);
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 4: With include=network
+    print_test_header(
+        "Recently Updated Tokens (with network include)",
+        "/tokens/info_recently_updated?include=network"
+    );
+
+    let url = format!("{}/tokens/info_recently_updated?include=network", BASE_URL);
+    
+    let start = Instant::now();
+    match client.get(&url).timeout(Duration::from_secs(10)).send().await {
+        Ok(response) => {
+            let elapsed = start.elapsed();
+            let status = response.status();
+            
+            println!("  {} {} ({:.2}ms)", "Status:".cyan(), status.as_u16().to_string().green(), elapsed.as_millis());
+
+            if status.is_success() {
+                let body = response.text().await.unwrap_or_default();
+
+                if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                        println!("  {} {} tokens with network data", "✓".green(), data.len());
+                        
+                        if let Some(included) = json.get("included").and_then(|i| i.as_array()) {
+                            println!("  {} {} included network relationships", "✓".green(), included.len());
+                        }
+                        
+                        // Show network distribution
+                        let mut network_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+                        for token in data.iter().take(20) {
+                            if let Some(id) = token.get("id").and_then(|i| i.as_str()) {
+                                if let Some(network) = id.split('_').next() {
+                                    *network_counts.entry(network.to_string()).or_insert(0) += 1;
+                                }
+                            }
+                        }
+                        
+                        println!("  {} (first 20 tokens)", "Network distribution:".cyan());
+                        for (network, count) in network_counts.iter().take(5) {
+                            println!("    • {}: {} tokens", network, count);
                         }
                     }
                 }

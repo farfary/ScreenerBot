@@ -287,3 +287,12 @@ pub struct GeckoTerminalTokenInfoAttributes {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata_updated_at: Option<String>,
 }
+
+// ===== Recently Updated Tokens Response Types =====
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeckoTerminalRecentlyUpdatedResponse {
+    pub data: Vec<GeckoTerminalTokenInfoData>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub included: Option<Vec<serde_json::Value>>,
+}
