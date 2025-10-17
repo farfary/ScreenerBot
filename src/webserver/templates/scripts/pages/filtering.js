@@ -27,6 +27,7 @@ const state = {
   lastSaved: null,
   searchQuery: "",
   activeTab: AppState.load("filtering_activeTab", "meta"),
+  collapsedCategories: AppState.load("filtering_collapsedCategories", {}),
 };
 
 // ============================================================================
@@ -515,6 +516,24 @@ function setCategoryEnabled(config, source, enableKey, enabled) {
   config[source][enableKey] = enabled;
 }
 
+function isCategoryCollapsed(categoryName) {
+  if (!state.collapsedCategories || typeof state.collapsedCategories !== "object") {
+    state.collapsedCategories = {};
+  }
+  return Boolean(state.collapsedCategories[categoryName]);
+}
+
+function setCategoryCollapsed(categoryName, collapsed) {
+  if (!state.collapsedCategories || typeof state.collapsedCategories !== "object") {
+    state.collapsedCategories = {};
+  }
+  state.collapsedCategories = {
+    ...state.collapsedCategories,
+    [categoryName]: collapsed,
+  };
+  AppState.save("filtering_collapsedCategories", state.collapsedCategories);
+}
+
 // Deep merge helper so imports keep nested source-level settings intact
 function deepMerge(target, source) {
   const output = !target || typeof target !== "object" || Array.isArray(target) ? {} : target;
@@ -746,21 +765,93 @@ function renderCategoryToggle(source, enableKey, _categoryName) {
   `;
 }
 
+function formatFieldValue(value, field) {
+  if (field.type === "boolean") {
+    return value ? "On" : "Off";
+  }
+
+  if (typeof value === "number" && !Number.isNaN(value)) {
+    const formatter = new Intl.NumberFormat(undefined, {
+      maximumFractionDigits: field.step && field.step < 1 ? 4 : 0,
+    });
+    const formatted = formatter.format(value);
+    return field.unit ? `${formatted} ${field.unit}` : formatted;
+  }
+
+  return value;
+}
+
+function renderCategorySummary(categoryName, categoryData) {
+  const { source, fields, enableKey } = categoryData;
+  if (!state.draft) return "";
+
+  const sourceEnabled = getSourceEnabled(state.draft, source);
+  const categoryEnabled = getCategoryEnabled(state.draft, source, enableKey);
+
+  if ((source !== "meta" && !sourceEnabled) || (enableKey && !categoryEnabled)) {
+    return '<span class="summary-chip muted">Category disabled</span>';
+  }
+
+  const summaryItems = [];
+
+  for (const field of fields) {
+    if (summaryItems.length >= 3) break;
+    const value = getConfigValue(state.draft, source, field.key);
+    if (value === undefined || value === null) continue;
+
+    const display = formatFieldValue(value, field);
+    summaryItems.push(
+      `<span class="summary-chip ${field.type === "boolean" ? (value ? "on" : "off") : ""}">${Utils.escapeHtml(
+        field.label
+      )}: ${Utils.escapeHtml(String(display))}</span>`
+    );
+  }
+
+  if (summaryItems.length === 0) {
+    return '<span class="summary-chip muted">No active filters</span>';
+  }
+
+  return summaryItems.join("");
+}
+
 function renderConfigCategory(categoryName, categoryData) {
   const { source, enableKey, fields } = categoryData;
   const sourceEnabled = getSourceEnabled(state.draft, source);
   const categoryEnabled = getCategoryEnabled(state.draft, source, enableKey);
   const isDisabled = (source !== "meta" && !sourceEnabled) || (enableKey && !categoryEnabled);
-  const disabledClass = isDisabled ? "disabled" : "";
   const matchesSearch = (field) =>
     !state.searchQuery ||
     field.label.toLowerCase().includes(state.searchQuery) ||
     field.key.toLowerCase().includes(state.searchQuery);
 
+  const collapsed = state.searchQuery ? false : isCategoryCollapsed(categoryName);
+  const disabledClass = isDisabled ? "disabled" : "";
+  const collapsedClass = collapsed ? "collapsed" : "";
+
+  const collapseButton = `
+    <button
+      class="collapse-toggle"
+      type="button"
+      data-collapse-category="${Utils.escapeHtml(categoryName)}"
+      aria-expanded="${collapsed ? "false" : "true"}"
+      aria-label="Toggle ${Utils.escapeHtml(categoryName)}"
+    >
+      <span class="chevron">${collapsed ? "▶" : "▼"}</span>
+    </button>
+  `;
+
   return `
-    <div class="filter-card ${disabledClass}" data-source="${source}">
+    <div class="filter-card ${disabledClass} ${collapsedClass}" data-source="${source}" data-category="${Utils.escapeHtml(
+    categoryName
+  )}">
       <div class="card-header">
-        <h3>${Utils.escapeHtml(categoryName)}</h3>
+        <div class="card-header-main">
+          ${collapseButton}
+          <div class="card-title">
+            <h3>${Utils.escapeHtml(categoryName)}</h3>
+            <div class="card-summary">${renderCategorySummary(categoryName, categoryData)}</div>
+          </div>
+        </div>
         ${renderCategoryToggle(source, enableKey, categoryName)}
       </div>
       <div class="card-body">
@@ -927,6 +1018,11 @@ function attachEventListeners() {
     input.addEventListener("change", handleCategoryToggle);
   });
 
+  // Category collapse handlers
+  $$("[data-collapse-category]").forEach((button) => {
+    button.addEventListener("click", handleCategoryCollapseToggle);
+  });
+
   // Tab navigation
   $$(".tab").forEach((tab) => {
     tab.addEventListener("click", (e) => {
@@ -960,6 +1056,16 @@ function attachEventListeners() {
       render();
     });
   }
+}
+
+function handleCategoryCollapseToggle(event) {
+  const button = event.currentTarget;
+  const categoryName = button.dataset.collapseCategory;
+  if (!categoryName) return;
+
+  const currentlyCollapsed = isCategoryCollapsed(categoryName);
+  setCategoryCollapsed(categoryName, !currentlyCollapsed);
+  render();
 }
 
 function handleFieldChange(event) {
