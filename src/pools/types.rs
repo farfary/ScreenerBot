@@ -397,15 +397,16 @@ impl PriceHistory {
 
 /// Configuration constants
 pub const PRICE_HISTORY_MAX_ENTRIES: usize = 1000;
+pub const PRICE_CACHE_TTL_SECS: u64 = 30;
 
 /// Price cache TTL sourced from configuration
 pub fn price_cache_ttl_seconds() -> u64 {
-    with_config(|cfg| cfg.pools.price_cache_ttl_secs.max(1))
+    PRICE_CACHE_TTL_SECS
 }
 
 /// Maximum number of tokens the pool service monitors concurrently
 pub fn max_watched_tokens() -> usize {
-    with_config(|cfg| cfg.pools.max_watched_tokens.max(1))
+    crate::config::with_config(|cfg| cfg.pools.max_watched_tokens.max(1))
 }
 
 /// Maximum allowable gap between consecutive price updates (1 minute)

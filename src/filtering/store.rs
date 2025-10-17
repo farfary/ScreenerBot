@@ -7,7 +7,6 @@ use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use once_cell::sync::Lazy;
 use tokio::sync::RwLock;
 
-use crate::config::with_config;
 use crate::logger::{log, LogTag};
 use crate::tokens::summary::TokenSummary;
 
@@ -19,6 +18,8 @@ use super::types::{
 
 static GLOBAL_STORE: Lazy<Arc<FilteringStore>> = Lazy::new(|| Arc::new(FilteringStore::new()));
 
+// Timing constants
+const FILTER_CACHE_TTL_SECS: u64 = 30;
 const STALE_MULTIPLIER: u64 = 3;
 
 pub struct FilteringStore {
@@ -33,7 +34,7 @@ impl FilteringStore {
     }
 
     async fn ensure_snapshot(&self) -> Result<Arc<FilteringSnapshot>, String> {
-        let max_age = with_config(|cfg| cfg.filtering.filter_cache_ttl_secs.max(5));
+        let max_age = FILTER_CACHE_TTL_SECS;
         let stale_snapshot = self.snapshot.read().await.clone();
 
         if let Some(existing) = stale_snapshot.as_ref() {
@@ -64,7 +65,7 @@ impl FilteringStore {
     }
 
     async fn try_refresh(&self) -> Result<Arc<FilteringSnapshot>, String> {
-        let config = with_config(|cfg| cfg.filtering.clone());
+        let config = crate::config::with_config(|cfg| cfg.filtering.clone());
         let snapshot = Arc::new(compute_snapshot(config).await?);
         let mut guard = self.snapshot.write().await;
         *guard = Some(snapshot.clone());
@@ -94,7 +95,7 @@ impl FilteringStore {
         &self,
         mut query: FilteringQuery,
     ) -> Result<FilteringQueryResult, String> {
-        let (max_page_size, secure_threshold, recent_hours) = with_config(|cfg| {
+        let (max_page_size, secure_threshold, recent_hours) = crate::config::with_config(|cfg| {
             (
                 cfg.webserver.tokens_tab.max_page_size,
                 cfg.webserver.tokens_tab.secure_token_score_threshold,
@@ -178,7 +179,7 @@ impl FilteringStore {
 
     pub async fn get_stats(&self) -> Result<FilteringStatsSnapshot, String> {
         let secure_threshold =
-            with_config(|cfg| cfg.webserver.tokens_tab.secure_token_score_threshold);
+            crate::config::with_config(|cfg| cfg.webserver.tokens_tab.secure_token_score_threshold);
 
         let snapshot = self.ensure_snapshot().await?;
         Ok(build_stats(snapshot.as_ref(), secure_threshold))

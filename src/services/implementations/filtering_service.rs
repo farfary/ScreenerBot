@@ -4,10 +4,12 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 
-use crate::config::with_config;
 use crate::filtering;
 use crate::logger::{log, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
+
+// Timing constants
+const FILTER_CACHE_TTL_SECS: u64 = 30;
 
 pub struct FilteringService {
     operations: Arc<AtomicU64>,
@@ -23,7 +25,7 @@ impl FilteringService {
     }
 
     fn refresh_interval_secs() -> u64 {
-        with_config(|cfg| cfg.filtering.filter_cache_ttl_secs.max(5))
+        FILTER_CACHE_TTL_SECS
     }
 
     fn snapshot_stale_limit_secs() -> u64 {

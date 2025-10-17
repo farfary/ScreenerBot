@@ -1558,12 +1558,7 @@ pub async fn try_acquire_gecko_api_permit(
 }
 
 fn geckoterminal_rate_limit_per_minute() -> usize {
-    let configured = with_config(|cfg| cfg.tokens.geckoterminal_rate_limit_per_minute);
-    if configured == 0 {
-        DEFAULT_GECKOTERMINAL_RATE_LIMIT_PER_MINUTE
-    } else {
-        configured
-    }
+    DEFAULT_GECKOTERMINAL_RATE_LIMIT_PER_MINUTE
 }
 
 fn max_tokens_per_batch_config() -> usize {

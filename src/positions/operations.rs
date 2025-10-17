@@ -5,7 +5,6 @@ use super::{
     state::{
         acquire_global_position_permit, acquire_position_lock, add_position,
         add_signature_to_index, release_global_position_permit, LAST_OPEN_TIME,
-        POSITION_OPEN_COOLDOWN_SECS,
     },
     transitions::PositionTransition,
 };
@@ -118,13 +117,14 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
 
     // Lightweight global cooldown (prevents rapid duplicate openings across different tokens)
     {
+        let cooldown_secs = with_config(|cfg| cfg.positions.position_open_cooldown_secs);
         let last_open_opt = LAST_OPEN_TIME.read().await.clone();
         if let Some(last_open) = last_open_opt {
             let elapsed = Utc::now().signed_duration_since(last_open).num_seconds();
-            if elapsed < POSITION_OPEN_COOLDOWN_SECS {
+            if elapsed < cooldown_secs {
                 return Err(format!(
                     "Opening positions cooldown active: wait {}s",
-                    POSITION_OPEN_COOLDOWN_SECS - elapsed
+                    cooldown_secs - elapsed
                 ));
             }
         }

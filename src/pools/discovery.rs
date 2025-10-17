@@ -37,6 +37,9 @@ use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 use tokio::sync::Notify;
 
+// Timing constants
+const DISCOVERY_TICK_INTERVAL_SECS: u64 = 5;
+
 /// Returns whether DexScreener discovery is enabled via configuration
 pub fn is_dexscreener_discovery_enabled() -> bool {
     with_config(|cfg| cfg.pools.enable_dexscreener_discovery)
@@ -164,7 +167,7 @@ impl PoolDiscovery {
         // Log the current source configuration
         Self::log_source_config();
 
-        let interval_seed = with_config(|cfg| cfg.pools.discovery_tick_interval_secs.max(1));
+        let interval_seed = DISCOVERY_TICK_INTERVAL_SECS;
 
         tokio::spawn(async move {
             let mut current_interval = interval_seed;
@@ -182,7 +185,7 @@ impl PoolDiscovery {
                     _ = interval.tick() => {
                         Self::batched_discovery_tick().await;
 
-                        let updated_interval = with_config(|cfg| cfg.pools.discovery_tick_interval_secs.max(1));
+                        let updated_interval = DISCOVERY_TICK_INTERVAL_SECS;
                         if updated_interval != current_interval {
                             current_interval = updated_interval;
                             interval = tokio::time::interval(tokio::time::Duration::from_secs(current_interval));

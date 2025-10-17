@@ -1,12 +1,14 @@
 use crate::logger::{log, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
-use crate::tokens::config::with_tokens_config;
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::store::get_global_token_store;
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 use tokio_metrics::TaskMonitor;
+
+// Timing constants
+const CACHE_REFRESH_INTERVAL_MINUTES: u64 = 5;
 
 /// Background service responsible for keeping the token store hot.
 #[derive(Default)]
@@ -20,8 +22,7 @@ impl TokenStoreService {
     }
 
     fn refresh_interval() -> Duration {
-        let minutes = with_tokens_config(|cfg| cfg.cache_refresh_interval_minutes).max(1);
-        Duration::from_secs(minutes as u64 * 60)
+        Duration::from_secs(CACHE_REFRESH_INTERVAL_MINUTES * 60)
     }
 }
 

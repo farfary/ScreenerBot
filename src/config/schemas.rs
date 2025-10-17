@@ -315,17 +315,6 @@ config_struct! {
         })]
         enable_raydium_discovery: bool = false,
         #[metadata(field_metadata! {
-            label: "Discovery Tick Interval",
-            hint: "Seconds between discovery sweeps",
-            min: 1,
-            max: 120,
-            step: 1,
-            unit: "seconds",
-            impact: "high",
-            category: "Discovery",
-        })]
-        discovery_tick_interval_secs: u64 = 5,
-        #[metadata(field_metadata! {
             label: "Max Watched Tokens",
             hint: "Upper bound on tokens tracked simultaneously",
             min: 100,
@@ -347,50 +336,6 @@ config_struct! {
             category: "Fetcher",
         })]
         account_batch_size: usize = 50,
-        #[metadata(field_metadata! {
-            label: "Fetcher Interval",
-            hint: "Milliseconds between fetcher loops",
-            min: 100,
-            max: 5000,
-            step: 50,
-            unit: "ms",
-            impact: "medium",
-            category: "Fetcher",
-        })]
-        fetch_interval_ms: u64 = 500,
-        #[metadata(field_metadata! {
-            label: "Account Stale Threshold",
-            hint: "Seconds before inactive account is refreshed",
-            min: 5,
-            max: 300,
-            step: 5,
-            unit: "seconds",
-            impact: "medium",
-            category: "Fetcher",
-        })]
-        account_stale_threshold_secs: u64 = 30,
-        #[metadata(field_metadata! {
-            label: "Open Position Stale Threshold",
-            hint: "Seconds before refreshing accounts backing open positions",
-            min: 1,
-            max: 60,
-            step: 1,
-            unit: "seconds",
-            impact: "high",
-            category: "Fetcher",
-        })]
-        open_position_stale_threshold_secs: u64 = 5,
-        #[metadata(field_metadata! {
-            label: "Price Cache TTL",
-            hint: "Seconds a cached price remains fresh",
-            min: 5,
-            max: 300,
-            step: 5,
-            unit: "seconds",
-            impact: "high",
-            category: "Cache",
-        })]
-        price_cache_ttl_secs: u64 = 30,
     }
 }
 
@@ -401,32 +346,6 @@ config_struct! {
 config_struct! {
     /// Position management configuration
     pub struct PositionsConfig {
-        /// Cooldown between position opens (seconds)
-        #[metadata(field_metadata! {
-            label: "Open Cooldown",
-            hint: "Seconds between opening positions",
-            min: 0,
-            max: 300,
-            step: 1,
-            unit: "seconds",
-            impact: "critical",
-            category: "Timing",
-        })]
-        position_open_cooldown_secs: i64 = 5,
-
-        /// TTL for pending open swaps (seconds)
-        #[metadata(field_metadata! {
-            label: "Pending Open TTL",
-            hint: "Time to live for pending opens (consider failed after this)",
-            min: 30,
-            max: 600,
-            step: 10,
-            unit: "seconds",
-            impact: "critical",
-            category: "Timing",
-        })]
-        pending_open_ttl_secs: i64 = 120,
-
         /// Extra SOL needed for profit calculations (accounts for priority fees, etc.)
         #[metadata(field_metadata! {
             label: "Profit Extra Buffer",
@@ -439,6 +358,19 @@ config_struct! {
             category: "Profit",
         })]
         profit_extra_needed_sol: f64 = 0.0002,
+
+        /// Global cooldown between opening ANY positions (prevents rapid bursts)
+        #[metadata(field_metadata! {
+            label: "Position Open Cooldown",
+            hint: "Seconds between opening any positions (prevents rapid bursts)",
+            min: 1,
+            max: 30,
+            step: 1,
+            unit: "seconds",
+            impact: "medium",
+            category: "Timing",
+        })]
+        position_open_cooldown_secs: i64 = 5,
     }
 }
 
@@ -907,19 +839,6 @@ config_struct! {
 config_struct! {
     /// Main filtering configuration - orchestrates all sources
     pub struct FilteringConfig {
-        // Cache settings
-        #[metadata(field_metadata! {
-            label: "Cache TTL",
-            hint: "How long to cache filter results (lower = more current)",
-            min: 5,
-            max: 300,
-            step: 5,
-            unit: "seconds",
-            impact: "critical",
-            category: "Performance",
-        })]
-        filter_cache_ttl_secs: u64 = 15,
-
         // Processing limits
         #[metadata(field_metadata! {
             label: "Max Tokens to Process",
@@ -1021,190 +940,6 @@ config_struct! {
             category: "Routers",
         })]
         raydium_enabled: bool = false,
-
-        // Transaction confirmation timeouts
-        #[metadata(field_metadata! {
-            label: "TX Confirmation Timeout",
-            hint: "300s = 5 min, congestion may need more",
-            min: 60,
-            max: 600,
-            step: 30,
-            unit: "seconds",
-            impact: "critical",
-            category: "Confirmation",
-        })]
-        transaction_confirmation_timeout_secs: u64 = 300,
-        #[metadata(field_metadata! {
-            label: "Priority Confirm Timeout",
-            hint: "Timeout for priority confirmation",
-            min: 10,
-            max: 300,
-            step: 5,
-            unit: "seconds",
-            impact: "critical",
-            category: "Confirmation",
-        })]
-        priority_confirmation_timeout_secs: u64 = 30,
-        #[metadata(field_metadata! {
-            label: "TX Confirm Max Attempts",
-            hint: "Max attempts to confirm transaction",
-            min: 5,
-            max: 100,
-            step: 5,
-            unit: "attempts",
-            impact: "medium",
-            category: "Confirmation",
-        })]
-        transaction_confirmation_max_attempts: u32 = 20,
-        #[metadata(field_metadata! {
-            label: "Priority Confirm Attempts",
-            hint: "Max attempts for priority confirmation",
-            min: 5,
-            max: 50,
-            step: 5,
-            unit: "attempts",
-            impact: "medium",
-            category: "Confirmation",
-        })]
-        priority_confirmation_max_attempts: u32 = 15,
-        #[metadata(field_metadata! {
-            label: "TX Confirm Retry Delay",
-            hint: "Milliseconds between confirmation retries",
-            min: 1000,
-            max: 10000,
-            step: 500,
-            unit: "ms",
-            impact: "critical",
-            category: "Confirmation",
-        })]
-        transaction_confirmation_retry_delay_ms: u64 = 3000,
-        #[metadata(field_metadata! {
-            label: "Priority Retry Delay",
-            hint: "Milliseconds between priority retries",
-            min: 500,
-            max: 5000,
-            step: 500,
-            unit: "ms",
-            impact: "critical",
-            category: "Confirmation",
-        })]
-        priority_confirmation_retry_delay_ms: u64 = 1000,
-        #[metadata(field_metadata! {
-            label: "Fast Failure Threshold",
-            hint: "Attempts before fast failure",
-            min: 1,
-            max: 20,
-            step: 1,
-            unit: "attempts",
-            impact: "low",
-            category: "Confirmation",
-        })]
-        fast_failure_threshold_attempts: u32 = 10,
-
-        // Confirmation delay configuration
-        #[metadata(field_metadata! {
-            label: "Initial Confirm Delay",
-            hint: "Initial delay before first confirmation check",
-            min: 1000,
-            max: 10000,
-            step: 500,
-            unit: "ms",
-            impact: "critical",
-            category: "Delays",
-        })]
-        initial_confirmation_delay_ms: u64 = 5000,
-        #[metadata(field_metadata! {
-            label: "Max Confirm Delay",
-            hint: "Maximum confirmation delay",
-            min: 1,
-            max: 60,
-            step: 1,
-            unit: "seconds",
-            impact: "critical",
-            category: "Delays",
-        })]
-        max_confirmation_delay_secs: u64 = 8,
-        #[metadata(field_metadata! {
-            label: "Confirm Backoff Multiplier",
-            hint: "Backoff multiplier for retries",
-            min: 1,
-            max: 5,
-            step: 0.1,
-            unit: "x",
-            impact: "critical",
-            category: "Delays",
-        })]
-        confirmation_backoff_multiplier: f64 = 1.5,
-        #[metadata(field_metadata! {
-            label: "Confirmation Timeout",
-            hint: "Overall confirmation timeout",
-            min: 10,
-            max: 300,
-            step: 10,
-            unit: "seconds",
-            impact: "critical",
-            category: "Delays",
-        })]
-        confirmation_timeout_secs: u64 = 60,
-        #[metadata(field_metadata! {
-            label: "Priority Timeout Modifier",
-            hint: "Modifier for priority confirmation timeout",
-            min: 1,
-            max: 30,
-            step: 1,
-            unit: "seconds",
-            impact: "critical",
-            category: "Delays",
-        })]
-        priority_confirmation_timeout_secs_mod: u64 = 5,
-
-        // Rate limit handling
-        #[metadata(field_metadata! {
-            label: "Rate Limit Base Delay",
-            hint: "Base delay for rate limiting",
-            min: 1,
-            max: 60,
-            step: 1,
-            unit: "seconds",
-            impact: "critical",
-            category: "Rate Limit",
-        })]
-        rate_limit_base_delay_secs: u64 = 5,
-        #[metadata(field_metadata! {
-            label: "Rate Limit Increment",
-            hint: "Increment for each rate limit hit",
-            min: 1,
-            max: 30,
-            step: 1,
-            unit: "seconds",
-            impact: "critical",
-            category: "Rate Limit",
-        })]
-        rate_limit_increment_secs: u64 = 2,
-
-        // Early attempt delays
-        #[metadata(field_metadata! {
-            label: "Early Attempt Delay",
-            hint: "Delay for early attempts",
-            min: 500,
-            max: 5000,
-            step: 500,
-            unit: "ms",
-            impact: "critical",
-            category: "Delays",
-        })]
-        early_attempt_delay_ms: u64 = 1000,
-        #[metadata(field_metadata! {
-            label: "Early Attempts Count",
-            hint: "Number of early attempts",
-            min: 1,
-            max: 10,
-            step: 1,
-            unit: "attempts",
-            impact: "low",
-            category: "Delays",
-        })]
-        early_attempts_count: u32 = 3,
 
         // GMGN specific
         #[metadata(field_metadata! {
@@ -1386,17 +1121,6 @@ config_struct! {
         })]
         raydium_rate_limit_per_minute: usize = 120,
         #[metadata(field_metadata! {
-            label: "GeckoTerminal Rate Limit",
-            hint: "GeckoTerminal API calls per minute",
-            min: 10,
-            max: 120,
-            step: 10,
-            unit: "calls/min",
-            impact: "medium",
-            category: "API Limits",
-        })]
-        geckoterminal_rate_limit_per_minute: usize = 30,
-        #[metadata(field_metadata! {
             label: "Max Tokens Per Batch",
             hint: "Tokens per batch operation",
             min: 10,
@@ -1477,17 +1201,6 @@ config_struct! {
             category: "Blacklist",
         })]
         max_no_route_failures: u32 = 5,
-        #[metadata(field_metadata! {
-            label: "Cache Refresh Interval",
-            hint: "Minutes between cache refreshes",
-            min: 1,
-            max: 60,
-            step: 5,
-            unit: "minutes",
-            impact: "critical",
-            category: "Blacklist",
-        })]
-        cache_refresh_interval_minutes: i64 = 5,
 
         // OHLCV
         #[metadata(field_metadata! {

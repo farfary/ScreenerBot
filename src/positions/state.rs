@@ -51,9 +51,6 @@ fn get_global_position_semaphore() -> &'static tokio::sync::Semaphore {
 pub static LAST_OPEN_TIME: LazyLock<RwLock<Option<DateTime<Utc>>>> =
     LazyLock::new(|| RwLock::new(None));
 
-// Cooldown seconds (small to mitigate duplicate bursts; align with previous backup constant 5s)
-pub const POSITION_OPEN_COOLDOWN_SECS: i64 = 5;
-
 // Default TTL in seconds for pending open swaps. During this window we block new opens for the mint.
 pub const PENDING_OPEN_TTL_SECS: i64 = 120;
 

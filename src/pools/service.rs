@@ -22,6 +22,9 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tokio::sync::Notify;
 
+// Timing constants
+const FETCH_INTERVAL_MS: u64 = 500;
+
 // Global service state
 static SERVICE_RUNNING: AtomicBool = AtomicBool::new(false);
 static mut GLOBAL_SHUTDOWN_HANDLE: Option<Arc<Notify>> = None;
@@ -67,7 +70,7 @@ pub async fn initialize_pool_components() -> Result<(), PoolError> {
         (
             cfg.pools.enable_single_pool_mode,
             cfg.pools.enable_dexscreener_discovery,
-            cfg.pools.fetch_interval_ms,
+            FETCH_INTERVAL_MS,
         )
     });
     let max_tokens = max_watched_tokens();

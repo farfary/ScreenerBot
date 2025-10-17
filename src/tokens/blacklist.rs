@@ -28,6 +28,9 @@ macro_rules! log_blacklist_debug {
 // CONFIGURATION CONSTANTS
 // =============================================================================
 
+// Timing constants
+const CACHE_REFRESH_INTERVAL_MINUTES: i64 = 5;
+
 /// System and stable tokens that should always be excluded from trading
 pub const SYSTEM_STABLE_TOKENS: &[&str] = &[
     "So11111111111111111111111111111111111111112",  // SOL
@@ -787,8 +790,7 @@ fn refresh_blacklist_cache() -> bool {
 
 /// Check if cache needs refresh
 fn cache_needs_refresh() -> bool {
-    let cache_refresh_interval_minutes =
-        with_tokens_config(|cfg| cfg.cache_refresh_interval_minutes).max(1);
+    let cache_refresh_interval_minutes = CACHE_REFRESH_INTERVAL_MINUTES;
 
     let last_refresh = match BLACKLIST_CACHE_LAST_REFRESH.lock() {
         Ok(last) => last,
