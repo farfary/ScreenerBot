@@ -56,6 +56,10 @@ struct Args {
     #[clap(long)]
     tokens_multi: bool,
 
+    /// Test token info endpoint
+    #[clap(long)]
+    token_info: bool,
+
     /// Verbose output (show response bodies)
     #[clap(short, long)]
     verbose: bool,
@@ -100,7 +104,7 @@ async fn main() {
     println!("{}", "=".repeat(60).green());
     println!("Base URL: {}\n", BASE_URL.yellow());
 
-    let test_all = args.all || (!args.token_pools && !args.top_pools_token && !args.ohlcv && !args.trending && !args.pool_data && !args.multi_pools && !args.top_pools && !args.dexes && !args.new_pools && !args.tokens_multi);
+    let test_all = args.all || (!args.token_pools && !args.top_pools_token && !args.ohlcv && !args.trending && !args.pool_data && !args.multi_pools && !args.top_pools && !args.dexes && !args.new_pools && !args.tokens_multi && !args.token_info);
 
     if test_all || args.token_pools {
         test_token_pools(&client, &args).await;
@@ -128,6 +132,10 @@ async fn main() {
 
     if test_all || args.tokens_multi {
         test_tokens_multi(&client, &args).await;
+    }
+
+    if test_all || args.token_info {
+        test_token_info(&client, &args).await;
     }
 
     if test_all || args.pool_data {
@@ -1371,6 +1379,186 @@ async fn test_tokens_multi(client: &Client, args: &Args) {
 
                         if let Some(included) = json.get("included").and_then(|i| i.as_array()) {
                             println!("  {} {} included items with composition", "✓".green(), included.len());
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+}
+
+async fn test_token_info(client: &Client, args: &Args) {
+    // Test 1: WETH on Ethereum
+    print_test_header(
+        "Token Info (eth, WETH)",
+        "/networks/eth/tokens/0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2/info"
+    );
+
+    let address = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+    let url = format!("{}/networks/eth/tokens/{}/info", BASE_URL, address);
+    
+    let start = Instant::now();
+    match client.get(&url).timeout(Duration::from_secs(10)).send().await {
+        Ok(response) => {
+            let elapsed = start.elapsed();
+            let status = response.status();
+            
+            println!("  {} {} ({:.2}ms)", "Status:".cyan(), status.as_u16().to_string().green(), elapsed.as_millis());
+
+            if status.is_success() {
+                let body = response.text().await.unwrap_or_default();
+                
+                if args.verbose {
+                    println!("  {}", "Response Body:".cyan());
+                    println!("{}", body);
+                }
+
+                if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                    if let Some(data) = json.get("data") {
+                        if let Some(attrs) = data.get("attributes") {
+                            let name = attrs.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown");
+                            let symbol = attrs.get("symbol").and_then(|s| s.as_str()).unwrap_or("N/A");
+                            let coingecko_id = attrs.get("coingecko_coin_id").and_then(|c| c.as_str()).unwrap_or("N/A");
+                            let gt_score = attrs.get("gt_score").and_then(|g| g.as_f64()).unwrap_or(0.0);
+                            
+                            println!("  {} {}", "✓".green(), "Token metadata retrieved");
+                            println!("    • Name: {}", name);
+                            println!("    • Symbol: {}", symbol);
+                            println!("    • CoinGecko ID: {}", coingecko_id);
+                            println!("    • GT Score: {:.2}", gt_score);
+                            
+                            if let Some(image) = attrs.get("image_url").and_then(|i| i.as_str()) {
+                                println!("    • Image: {}", if image.is_empty() { "N/A" } else { image });
+                            }
+                            
+                            if let Some(twitter) = attrs.get("twitter_handle").and_then(|t| t.as_str()) {
+                                println!("    • Twitter: @{}", twitter);
+                            }
+                            
+                            if let Some(websites) = attrs.get("websites").and_then(|w| w.as_array()) {
+                                if !websites.is_empty() {
+                                    println!("    • Websites: {} links", websites.len());
+                                }
+                            }
+                            
+                            if let Some(desc) = attrs.get("description").and_then(|d| d.as_str()) {
+                                let preview = if desc.len() > 100 { 
+                                    format!("{}...", &desc[..100])
+                                } else {
+                                    desc.to_string()
+                                };
+                                println!("    • Description: {}", preview);
+                            }
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 2: USDC on Ethereum
+    print_test_header(
+        "Token Info (eth, USDC)",
+        "/networks/eth/tokens/0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48/info"
+    );
+
+    let address = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+    let url = format!("{}/networks/eth/tokens/{}/info", BASE_URL, address);
+    
+    let start = Instant::now();
+    match client.get(&url).timeout(Duration::from_secs(10)).send().await {
+        Ok(response) => {
+            let elapsed = start.elapsed();
+            let status = response.status();
+            
+            println!("  {} {} ({:.2}ms)", "Status:".cyan(), status.as_u16().to_string().green(), elapsed.as_millis());
+
+            if status.is_success() {
+                let body = response.text().await.unwrap_or_default();
+
+                if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                    if let Some(data) = json.get("data") {
+                        if let Some(attrs) = data.get("attributes") {
+                            let name = attrs.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown");
+                            let symbol = attrs.get("symbol").and_then(|s| s.as_str()).unwrap_or("N/A");
+                            
+                            println!("  {} {}", "✓".green(), "Token info retrieved");
+                            println!("    • {} ({})", name, symbol);
+                            
+                            // Show social links
+                            let mut socials = Vec::new();
+                            if attrs.get("twitter_handle").is_some() { socials.push("Twitter"); }
+                            if attrs.get("telegram_handle").is_some() { socials.push("Telegram"); }
+                            if attrs.get("discord_url").is_some() { socials.push("Discord"); }
+                            
+                            if !socials.is_empty() {
+                                println!("    • Socials: {}", socials.join(", "));
+                            }
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 3: Solana token (SOL)
+    print_test_header(
+        "Token Info (solana, SOL)",
+        "/networks/solana/tokens/So11111111111111111111111111111111111111112/info"
+    );
+
+    let address = "So11111111111111111111111111111111111111112";
+    let url = format!("{}/networks/solana/tokens/{}/info", BASE_URL, address);
+    
+    let start = Instant::now();
+    match client.get(&url).timeout(Duration::from_secs(10)).send().await {
+        Ok(response) => {
+            let elapsed = start.elapsed();
+            let status = response.status();
+            
+            println!("  {} {} ({:.2}ms)", "Status:".cyan(), status.as_u16().to_string().green(), elapsed.as_millis());
+
+            if status.is_success() {
+                let body = response.text().await.unwrap_or_default();
+
+                if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                    if let Some(data) = json.get("data") {
+                        if let Some(attrs) = data.get("attributes") {
+                            let name = attrs.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown");
+                            let symbol = attrs.get("symbol").and_then(|s| s.as_str()).unwrap_or("N/A");
+                            let coingecko_id = attrs.get("coingecko_coin_id").and_then(|c| c.as_str()).unwrap_or("N/A");
+                            
+                            println!("  {} Solana token info", "✓".green());
+                            println!("    • {} ({})", name, symbol);
+                            println!("    • CoinGecko: {}", coingecko_id);
+                            
+                            if let Some(updated) = attrs.get("metadata_updated_at").and_then(|u| u.as_str()) {
+                                println!("    • Last updated: {}", updated);
+                            }
                         }
                     }
                 }

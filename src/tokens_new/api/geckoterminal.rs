@@ -12,6 +12,7 @@
 /// 7. /networks/{network}/dexes - Get supported DEXes list by network
 /// 8. /networks/{network}/new_pools - Get latest new pools by network
 /// 9. /networks/{network}/tokens/multi/{addresses} - Get multiple tokens data (up to 30 addresses)
+/// 10. /networks/{network}/tokens/{address}/info - Get token metadata (name, symbol, socials, etc.)
 
 use super::geckoterminal_types::*;
 use crate::tokens_new::types::GeckoTerminalPool;
@@ -748,6 +749,58 @@ impl GeckoTerminalClient {
             .map_err(|e| format!("JSON parse error: {}", e))?;
 
         Ok(tokens_response)
+    }
+
+    /// Get token info/metadata by address
+    /// Uses /networks/{network}/tokens/{address}/info
+    /// 
+    /// Returns detailed token metadata including name, symbol, CoinGecko ID, image,
+    /// socials, websites, description, and other metadata.
+    /// 
+    /// # Arguments
+    /// * `network` - Network identifier (e.g., "solana", "eth", "bsc")
+    /// * `address` - Token contract address
+    /// 
+    /// # Returns
+    /// Result with token info/metadata
+    /// 
+    /// # Example
+    /// ```no_run
+    /// let token_info = client.fetch_token_info("eth", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").await?;
+    /// ```
+    pub async fn fetch_token_info(
+        &self,
+        network: &str,
+        address: &str,
+    ) -> Result<GeckoTerminalTokenInfoResponse, String> {
+        let permit = self.rate_limiter.acquire().await.map_err(|e| format!("Rate limiter error: {}", e))?;
+
+        let url = format!(
+            "{}/networks/{}/tokens/{}/info",
+            GECKOTERMINAL_BASE_URL, network, address
+        );
+
+        debug!("[GECKOTERMINAL] Fetching token info: network={}, address={}", network, address);
+
+        let response = self.client
+            .get(&url)
+            .timeout(self.timeout)
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?;
+
+        drop(permit);
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(format!("HTTP {}: {}", status, error_text));
+        }
+
+        let token_info_response: GeckoTerminalTokenInfoResponse = response.json().await
+            .map_err(|e| format!("JSON parse error: {}", e))?;
+
+        Ok(token_info_response)
     }
 }
 

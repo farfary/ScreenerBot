@@ -247,3 +247,43 @@ pub struct GeckoTerminalTokenAttributes {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub market_cap_usd: Option<String>,
 }
+
+// ===== Token Info Response Types =====
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeckoTerminalTokenInfoResponse {
+    pub data: GeckoTerminalTokenInfoData,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeckoTerminalTokenInfoData {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub token_type: String,
+    pub attributes: GeckoTerminalTokenInfoAttributes,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeckoTerminalTokenInfoAttributes {
+    pub address: String,
+    pub name: String,
+    pub symbol: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub coingecko_coin_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub websites: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub discord_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub telegram_handle: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub twitter_handle: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gt_score: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata_updated_at: Option<String>,
+}
