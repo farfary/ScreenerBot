@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 const RUGCHECK_BASE_URL: &str = "https://api.rugcheck.xyz/v1/tokens";
+const RUGCHECK_STATS_BASE_URL: &str = "https://api.rugcheck.xyz/v1/stats";
 
 pub struct RugcheckClient {
     http_client: HttpClient,
@@ -150,5 +151,181 @@ impl RugcheckClient {
             analyzed_at: api_response.analyzed_at,
             fetched_at: Utc::now(),
         })
+    }
+
+    // ========================================================================
+    // Stats Endpoints
+    // ========================================================================
+
+    /// Fetch new tokens from /v1/stats/new_tokens
+    pub async fn fetch_new_tokens(&self) -> Result<Vec<RugcheckNewToken>, ApiError> {
+        if !self.enabled {
+            return Err(ApiError::Disabled);
+        }
+
+        self.rate_limiter.acquire().await;
+        let start = Instant::now();
+
+        let url = format!("{}/new_tokens", RUGCHECK_STATS_BASE_URL);
+
+        let response = self
+            .http_client
+            .client()
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| {
+                let error = ApiError::NetworkError(e.to_string());
+                self.stats.record_cache_miss();
+                error
+            })?;
+
+        let elapsed = start.elapsed().as_millis() as f64;
+
+        if !response.status().is_success() {
+            self.stats.record_request(false, elapsed).await;
+            return Err(ApiError::InvalidResponse(format!(
+                "HTTP {}",
+                response.status()
+            )));
+        }
+
+        let tokens: Vec<RugcheckNewToken> = response.json().await.map_err(|e| {
+            self.stats.record_request(false, elapsed);
+            ApiError::InvalidResponse(e.to_string())
+        })?;
+
+        self.stats.record_request(true, elapsed).await;
+
+        Ok(tokens)
+    }
+
+    /// Fetch most viewed tokens from /v1/stats/recent
+    pub async fn fetch_recent_tokens(&self) -> Result<Vec<RugcheckRecentToken>, ApiError> {
+        if !self.enabled {
+            return Err(ApiError::Disabled);
+        }
+
+        self.rate_limiter.acquire().await;
+        let start = Instant::now();
+
+        let url = format!("{}/recent", RUGCHECK_STATS_BASE_URL);
+
+        let response = self
+            .http_client
+            .client()
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| {
+                let error = ApiError::NetworkError(e.to_string());
+                self.stats.record_cache_miss();
+                error
+            })?;
+
+        let elapsed = start.elapsed().as_millis() as f64;
+
+        if !response.status().is_success() {
+            self.stats.record_request(false, elapsed).await;
+            return Err(ApiError::InvalidResponse(format!(
+                "HTTP {}",
+                response.status()
+            )));
+        }
+
+        let tokens: Vec<RugcheckRecentToken> = response.json().await.map_err(|e| {
+            self.stats.record_request(false, elapsed);
+            ApiError::InvalidResponse(e.to_string())
+        })?;
+
+        self.stats.record_request(true, elapsed).await;
+
+        Ok(tokens)
+    }
+
+    /// Fetch trending tokens from /v1/stats/trending
+    pub async fn fetch_trending_tokens(&self) -> Result<Vec<RugcheckTrendingToken>, ApiError> {
+        if !self.enabled {
+            return Err(ApiError::Disabled);
+        }
+
+        self.rate_limiter.acquire().await;
+        let start = Instant::now();
+
+        let url = format!("{}/trending", RUGCHECK_STATS_BASE_URL);
+
+        let response = self
+            .http_client
+            .client()
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| {
+                let error = ApiError::NetworkError(e.to_string());
+                self.stats.record_cache_miss();
+                error
+            })?;
+
+        let elapsed = start.elapsed().as_millis() as f64;
+
+        if !response.status().is_success() {
+            self.stats.record_request(false, elapsed).await;
+            return Err(ApiError::InvalidResponse(format!(
+                "HTTP {}",
+                response.status()
+            )));
+        }
+
+        let tokens: Vec<RugcheckTrendingToken> = response.json().await.map_err(|e| {
+            self.stats.record_request(false, elapsed);
+            ApiError::InvalidResponse(e.to_string())
+        })?;
+
+        self.stats.record_request(true, elapsed).await;
+
+        Ok(tokens)
+    }
+
+    /// Fetch verified tokens from /v1/stats/verified
+    pub async fn fetch_verified_tokens(&self) -> Result<Vec<RugcheckVerifiedToken>, ApiError> {
+        if !self.enabled {
+            return Err(ApiError::Disabled);
+        }
+
+        self.rate_limiter.acquire().await;
+        let start = Instant::now();
+
+        let url = format!("{}/verified", RUGCHECK_STATS_BASE_URL);
+
+        let response = self
+            .http_client
+            .client()
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| {
+                let error = ApiError::NetworkError(e.to_string());
+                self.stats.record_cache_miss();
+                error
+            })?;
+
+        let elapsed = start.elapsed().as_millis() as f64;
+
+        if !response.status().is_success() {
+            self.stats.record_request(false, elapsed).await;
+            return Err(ApiError::InvalidResponse(format!(
+                "HTTP {}",
+                response.status()
+            )));
+        }
+
+        let tokens: Vec<RugcheckVerifiedToken> = response.json().await.map_err(|e| {
+            self.stats.record_request(false, elapsed);
+            ApiError::InvalidResponse(e.to_string())
+        })?;
+
+        self.stats.record_request(true, elapsed).await;
+
+        Ok(tokens)
     }
 }

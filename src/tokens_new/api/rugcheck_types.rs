@@ -101,3 +101,70 @@ pub struct RugcheckTransferFee {
     pub max_amount: Option<u64>,
     pub authority: Option<String>,
 }
+
+// ============================================================================
+// Stats Endpoints Response Types
+// ============================================================================
+
+/// New token from /v1/stats/new_tokens
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RugcheckNewToken {
+    pub mint: String,
+    pub decimals: u8,
+    pub symbol: String,
+    pub creator: String,
+    #[serde(rename = "mintAuthority")]
+    pub mint_authority: String,
+    #[serde(rename = "freezeAuthority")]
+    pub freeze_authority: String,
+    pub program: String,
+    #[serde(rename = "createAt")]
+    pub create_at: String,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
+    #[serde(default)]
+    pub events: Option<serde_json::Value>,
+}
+
+/// Token metadata for recent tokens
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RugcheckTokenMetadata {
+    pub name: String,
+    pub symbol: String,
+    pub uri: String,
+    pub mutable: bool,
+    #[serde(rename = "updateAuthority")]
+    pub update_authority: String,
+}
+
+/// Recent token from /v1/stats/recent (most viewed)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RugcheckRecentToken {
+    pub mint: String,
+    pub metadata: RugcheckTokenMetadata,
+    pub user_visits: u64,
+    pub visits: u64,
+    pub score: i32,
+}
+
+/// Trending token from /v1/stats/trending
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RugcheckTrendingToken {
+    pub mint: String,
+    pub vote_count: u64,
+    pub up_count: u64,
+}
+
+/// Verified token from /v1/stats/verified
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RugcheckVerifiedToken {
+    pub mint: String,
+    pub payer: String,
+    pub name: String,
+    pub symbol: String,
+    pub description: String,
+    pub jup_verified: bool,
+    pub jup_strict: bool,
+    #[serde(default)]
+    pub links: Option<serde_json::Value>,
+}
