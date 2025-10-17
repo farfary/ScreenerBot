@@ -36,6 +36,10 @@ struct Args {
     #[clap(long)]
     multi_pools: bool,
 
+    /// Test top pools endpoint
+    #[clap(long)]
+    top_pools: bool,
+
     /// Verbose output (show response bodies)
     #[clap(short, long)]
     verbose: bool,
@@ -80,7 +84,7 @@ async fn main() {
     println!("{}", "=".repeat(60).green());
     println!("Base URL: {}\n", BASE_URL.yellow());
 
-    let test_all = args.all || (!args.token_pools && !args.ohlcv && !args.trending && !args.pool_data && !args.multi_pools);
+    let test_all = args.all || (!args.token_pools && !args.ohlcv && !args.trending && !args.pool_data && !args.multi_pools && !args.top_pools);
 
     if test_all || args.token_pools {
         test_token_pools(&client, &args).await;
@@ -88,6 +92,10 @@ async fn main() {
 
     if test_all || args.trending {
         test_trending_pools(&client, &args).await;
+    }
+
+    if test_all || args.top_pools {
+        test_top_pools(&client, &args).await;
     }
 
     if test_all || args.pool_data {
@@ -396,6 +404,233 @@ async fn test_trending_pools(client: &Client, args: &Args) {
                                     if has_quote { "✓".green() } else { "✗".red() },
                                     if has_dex { "✓".green() } else { "✗".red() }
                                 );
+                            }
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+}
+
+/// Test: GET /networks/{network}/pools
+/// Get top pools by network
+async fn test_top_pools(client: &Client, args: &Args) {
+    // Test 1: Basic top pools (default sort)
+    print_test_header(
+        &format!("Top Pools ({}, h24_tx_count)", args.network),
+        &format!("/networks/{}/pools", args.network)
+    );
+
+    let url = format!("{}/networks/{}/pools", BASE_URL, args.network);
+    
+    let start = Instant::now();
+    match client.get(&url).send().await {
+        Ok(response) => {
+            let duration = start.elapsed();
+            let status = response.status();
+            
+            print_status(status.as_u16(), duration);
+
+            if status.is_success() {
+                if let Ok(json) = response.json::<Value>().await {
+                    if let Some(data) = json["data"].as_array() {
+                        println!("  {} {}", "Top pools:".cyan(), data.len().to_string().green().bold());
+                        
+                        // Show first 3 pools
+                        for (i, pool) in data.iter().take(3).enumerate() {
+                            if let Some(attrs) = pool["attributes"].as_object() {
+                                let name = attrs.get("name").and_then(|v| v.as_str()).unwrap_or("Unknown");
+                                let volume = attrs.get("volume_usd")
+                                    .and_then(|v| v.get("h24"))
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("N/A");
+                                println!("    {}. {} - Vol: ${}", i + 1, name.yellow(), volume.cyan());
+                            }
+                        }
+                        
+                        if args.verbose {
+                            println!("\n{}", serde_json::to_string_pretty(&json).unwrap_or_default());
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 2: Sort by volume
+    print_test_header(
+        &format!("Top Pools ({}, h24_volume)", args.network),
+        &format!("/networks/{}/pools?sort=h24_volume_usd_desc", args.network)
+    );
+
+    let url = format!("{}/networks/{}/pools?sort=h24_volume_usd_desc", BASE_URL, args.network);
+    
+    let start = Instant::now();
+    match client.get(&url).send().await {
+        Ok(response) => {
+            let duration = start.elapsed();
+            let status = response.status();
+            
+            print_status(status.as_u16(), duration);
+
+            if status.is_success() {
+                if let Ok(json) = response.json::<Value>().await {
+                    if let Some(data) = json["data"].as_array() {
+                        println!("  {} {}", "Top by volume:".cyan(), data.len().to_string().green().bold());
+                        
+                        // Show first 3 pools with volume
+                        for (i, pool) in data.iter().take(3).enumerate() {
+                            if let Some(attrs) = pool["attributes"].as_object() {
+                                let name = attrs.get("name").and_then(|v| v.as_str()).unwrap_or("Unknown");
+                                let volume = attrs.get("volume_usd")
+                                    .and_then(|v| v.get("h24"))
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("N/A");
+                                let price = attrs.get("base_token_price_usd")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("N/A");
+                                println!("    {}. {} - Vol: ${} | Price: ${}", 
+                                    i + 1, name.yellow(), volume.cyan(), price.green());
+                            }
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 3: With include parameters
+    print_test_header(
+        &format!("Top Pools ({}, with include)", args.network),
+        &format!("/networks/{}/pools?include=base_token,quote_token,dex", args.network)
+    );
+
+    let url = format!("{}/networks/{}/pools?include=base_token,quote_token,dex", BASE_URL, args.network);
+    
+    let start = Instant::now();
+    match client.get(&url).send().await {
+        Ok(response) => {
+            let duration = start.elapsed();
+            let status = response.status();
+            
+            print_status(status.as_u16(), duration);
+
+            if status.is_success() {
+                if let Ok(json) = response.json::<Value>().await {
+                    if let Some(included) = json.get("included").and_then(|v| v.as_array()) {
+                        let has_base_token = included.iter().any(|item| item["type"] == "token");
+                        let has_dex = included.iter().any(|item| item["type"] == "dex");
+                        
+                        println!(
+                            "  {} base_token: {}, quote_token: {}, dex: {}",
+                            "Include fields:".cyan(),
+                            if has_base_token { "✓".green() } else { "✗".red() },
+                            if has_base_token { "✓".green() } else { "✗".red() },
+                            if has_dex { "✓".green() } else { "✗".red() }
+                        );
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 4: Page 2
+    print_test_header(
+        &format!("Top Pools ({}, page 2)", args.network),
+        &format!("/networks/{}/pools?page=2", args.network)
+    );
+
+    let url = format!("{}/networks/{}/pools?page=2", BASE_URL, args.network);
+    
+    let start = Instant::now();
+    match client.get(&url).send().await {
+        Ok(response) => {
+            let duration = start.elapsed();
+            let status = response.status();
+            
+            print_status(status.as_u16(), duration);
+
+            if status.is_success() {
+                if let Ok(json) = response.json::<Value>().await {
+                    if let Some(data) = json["data"].as_array() {
+                        println!("  {} {} pools on page 2", "✓".green(), data.len().to_string().cyan());
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 5: Ethereum network
+    print_test_header(
+        "Top Pools (eth, volume sort)",
+        "/networks/eth/pools?sort=h24_volume_usd_desc"
+    );
+
+    let url = format!("{}/networks/eth/pools?sort=h24_volume_usd_desc", BASE_URL);
+    
+    let start = Instant::now();
+    match client.get(&url).send().await {
+        Ok(response) => {
+            let duration = start.elapsed();
+            let status = response.status();
+            
+            print_status(status.as_u16(), duration);
+
+            if status.is_success() {
+                if let Ok(json) = response.json::<Value>().await {
+                    if let Some(data) = json["data"].as_array() {
+                        println!("  {} {} Ethereum pools", "✓".green(), data.len().to_string().cyan());
+                        
+                        // Show top 3
+                        for (i, pool) in data.iter().take(3).enumerate() {
+                            if let Some(attrs) = pool["attributes"].as_object() {
+                                let name = attrs.get("name").and_then(|v| v.as_str()).unwrap_or("Unknown");
+                                let volume = attrs.get("volume_usd")
+                                    .and_then(|v| v.get("h24"))
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("N/A");
+                                println!("    {}. {} - Vol: ${}", i + 1, name.yellow(), volume.cyan());
                             }
                         }
                     }

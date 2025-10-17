@@ -5,9 +5,10 @@
 /// Endpoints implemented (verified working):
 /// 1. /networks/{network}/tokens/{token}/pools - PRIMARY: Get all pools for a token
 /// 2. /networks/{network}/trending_pools - Get trending pools by network
-/// 3. /networks/{network}/pools/{address} - Get specific pool data by pool address
-/// 4. /networks/{network}/pools/multi/{addresses} - Get multiple pools data (up to 30 addresses)
-/// 5. /networks/{network}/pools/{pool}/ohlcv/{timeframe} - Get OHLCV candlestick data
+/// 3. /networks/{network}/pools - Get top pools by network
+/// 4. /networks/{network}/pools/{address} - Get specific pool data by pool address
+/// 5. /networks/{network}/pools/multi/{addresses} - Get multiple pools data (up to 30 addresses)
+/// 6. /networks/{network}/pools/{pool}/ohlcv/{timeframe} - Get OHLCV candlestick data
 
 use super::geckoterminal_types::*;
 use crate::tokens_new::types::GeckoTerminalPool;
@@ -164,6 +165,76 @@ impl GeckoTerminalClient {
         let api_response: GeckoTerminalResponse = response.json().await.map_err(|e| format!("JSON parse error: {}", e))?;
 
         Ok(api_response.data.into_iter().map(|p| p.to_pool("trending")).collect())
+    }
+
+    /// Get top pools by network
+    /// Uses /networks/{network}/pools
+    /// 
+    /// Returns top pools on the network sorted by volume or transaction count.
+    /// 
+    /// # Arguments
+    /// * `network` - Network ID (e.g., "solana", "eth") - defaults to "solana"
+    /// * `include` - Attributes to include: Vec of "base_token", "quote_token", "dex"
+    /// * `page` - Page number (1-10, default 1)
+    /// * `sort` - Sort field: "h24_volume_usd_desc" or "h24_tx_count_desc" (default)
+    /// 
+    /// # Returns
+    /// Vec<GeckoTerminalPool> - Top pools on the network
+    pub async fn fetch_top_pools_by_network(
+        &self,
+        network: Option<&str>,
+        include: Option<Vec<&str>>,
+        page: Option<u32>,
+        sort: Option<&str>,
+    ) -> Result<Vec<GeckoTerminalPool>, String> {
+        let network_id = network.unwrap_or(DEFAULT_NETWORK);
+        let permit = self.rate_limiter.acquire().await.map_err(|e| format!("Rate limiter error: {}", e))?;
+
+        let url = format!("{}/networks/{}/pools", GECKOTERMINAL_BASE_URL, network_id);
+        
+        let mut params = Vec::new();
+        
+        if let Some(p) = page {
+            let page_num = p.min(10).max(1);
+            params.push(format!("page={}", page_num));
+        }
+        
+        if let Some(s) = sort {
+            params.push(format!("sort={}", s));
+        }
+        
+        if let Some(includes) = include {
+            if !includes.is_empty() {
+                params.push(format!("include={}", includes.join(",")));
+            }
+        }
+
+        let final_url = if !params.is_empty() {
+            format!("{}?{}", url, params.join("&"))
+        } else {
+            url
+        };
+
+        debug!("[GECKOTERMINAL] Fetching top pools: network={}, page={:?}, sort={:?}", network_id, page, sort);
+
+        let response = self.client
+            .get(&final_url)
+            .timeout(self.timeout)
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?;
+
+        drop(permit);
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(format!("HTTP {}: {}", status, error_text));
+        }
+
+        let api_response: GeckoTerminalResponse = response.json().await.map_err(|e| format!("JSON parse error: {}", e))?;
+
+        Ok(api_response.data.into_iter().map(|p| p.to_pool("top_pools")).collect())
     }
 
     /// Get specific pool data by pool address
