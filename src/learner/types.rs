@@ -49,7 +49,7 @@ pub struct TradeRecord {
     // Market Context
     pub tx_activity_5m: Option<i64>, // Transaction count in 5min before entry
     pub tx_activity_1h: Option<i64>, // Transaction count in 1h before entry
-    pub security_score: Option<u8>,  // Security score at entry
+    pub risk_score: Option<u8>,      // Risk score at entry (raw rugcheck score)
     pub holder_count: Option<i64>,   // Holder count at entry
 
     // Entry Conditions
@@ -112,7 +112,7 @@ impl TradeRecord {
             sol_reserves_at_entry,
             tx_activity_5m,
             tx_activity_1h,
-            security_score,
+            risk_score,
             holder_count,
         ) = if let Some(ref snapshot) = opening_snapshot {
             (
@@ -291,7 +291,7 @@ impl TradeRecord {
 
             tx_activity_5m,
             tx_activity_1h,
-            security_score,
+            risk_score,
             holder_count,
 
             drop_10s_pct,
@@ -342,7 +342,7 @@ pub struct FeatureVector {
     // Market Context Features
     pub liquidity_tier: f64,      // Liquidity tier (0-1)
     pub tx_activity_score: f64,   // Transaction activity score (0-1)
-    pub security_score_norm: f64, // Security score normalized (0-1)
+    pub risk_score_norm: f64,     // Risk score normalized (0-1, higher = riskier)
     pub holder_count_log: f64,    // Log of holder count
     pub market_cap_tier: f64,     // Market cap tier (0-1)
 
@@ -387,7 +387,7 @@ impl FeatureVector {
             drop_acceleration: 0.0,
             liquidity_tier: 0.0,
             tx_activity_score: 0.0,
-            security_score_norm: 0.0,
+            risk_score_norm: 0.0,
             holder_count_log: 0.0,
             market_cap_tier: 0.0,
             ath_prox_15m: 0.0,
@@ -422,7 +422,7 @@ impl FeatureVector {
             self.drop_acceleration,
             self.liquidity_tier,
             self.tx_activity_score,
-            self.security_score_norm,
+            self.risk_score_norm,
             self.holder_count_log,
             self.market_cap_tier,
             self.ath_prox_15m,

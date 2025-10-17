@@ -270,7 +270,7 @@ fn collect_entries<'a>(
             .filter(|entry| {
                 entry
                     .summary
-                    .security_score
+                    .risk_score
                     .map(|score| score >= secure_threshold)
                     .unwrap_or(false)
                     && !entry.summary.rugged.unwrap_or(false)
@@ -324,12 +324,8 @@ fn apply_filters(items: &mut Vec<TokenSummary>, query: &FilteringQuery) {
         items.retain(|summary| summary.volume_24h.unwrap_or(f64::MAX) <= max);
     }
 
-    if let Some(min) = query.min_security_score {
-        items.retain(|summary| summary.security_score.unwrap_or(0) >= min);
-    }
-
-    if let Some(max) = query.max_security_score {
-        items.retain(|summary| summary.security_score.unwrap_or(i32::MAX) <= max);
+    if let Some(max) = query.max_risk_score {
+        items.retain(|summary| summary.risk_score.unwrap_or(i32::MAX) <= max);
     }
 
     if let Some(min) = query.min_unique_holders {
@@ -365,10 +361,10 @@ fn sort_summaries(items: &mut [TokenSummary], sort_key: TokenSortKey, direction:
             TokenSortKey::MarketCap => cmp_f64(a.market_cap, b.market_cap),
             TokenSortKey::PriceChangeH1 => cmp_f64(a.price_change_h1, b.price_change_h1),
             TokenSortKey::PriceChangeH24 => cmp_f64(a.price_change_h24, b.price_change_h24),
-            TokenSortKey::SecurityScore => a
-                .security_score
-                .unwrap_or(0)
-                .cmp(&b.security_score.unwrap_or(0)),
+            TokenSortKey::RiskScore => a
+                .risk_score
+                .unwrap_or(i32::MAX)
+                .cmp(&b.risk_score.unwrap_or(i32::MAX)),
             TokenSortKey::UpdatedAt => a.updated_at.cmp(&b.updated_at),
             TokenSortKey::Mint => a.mint.cmp(&b.mint),
         };
@@ -405,7 +401,7 @@ fn build_stats(snapshot: &FilteringSnapshot, secure_threshold: i32) -> Filtering
         }
         if entry
             .summary
-            .security_score
+            .risk_score
             .map(|score| score >= secure_threshold)
             .unwrap_or(false)
             && !entry.summary.rugged.unwrap_or(false)

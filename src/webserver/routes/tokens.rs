@@ -163,8 +163,7 @@ pub struct TokenDetailResponse {
     pub net_flow_24h: Option<i64>,
     pub buy_sell_ratio_24h: Option<f64>,
     // Security info
-    pub security_score: Option<i32>,
-    pub security_score_normalized: Option<i32>,
+    pub risk_score: Option<i32>,
     pub rugged: Option<bool>,
     pub mint_authority: Option<String>,
     pub freeze_authority: Option<String>,
@@ -290,8 +289,7 @@ pub struct FilterRequest {
     pub max_liquidity: Option<f64>,
     pub min_volume_24h: Option<f64>,
     pub max_volume_24h: Option<f64>,
-    pub min_security_score: Option<i32>,
-    pub max_security_score: Option<i32>,
+    pub max_risk_score: Option<i32>,
     pub min_holders: Option<i32>,
     pub has_pool_price: Option<bool>,
     pub has_open_position: Option<bool>,
@@ -423,8 +421,7 @@ impl FilterRequest {
         query.max_liquidity = self.max_liquidity;
         query.min_volume_24h = self.min_volume_24h;
         query.max_volume_24h = self.max_volume_24h;
-        query.min_security_score = self.min_security_score;
-        query.max_security_score = self.max_security_score;
+        query.max_risk_score = self.max_risk_score;
         query.min_unique_holders = self.min_holders;
         query.has_pool_price = self.has_pool_price;
         query.has_open_position = self.has_open_position;
@@ -588,8 +585,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
                 sells_24h: None,
                 net_flow_24h: None,
                 buy_sell_ratio_24h: None,
-                security_score: None,
-                security_score_normalized: None,
+                risk_score: None,
                 rugged: None,
                 mint_authority: None,
                 freeze_authority: None,
@@ -724,7 +720,6 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     let security_start = std::time::Instant::now();
     let (
         security_score,
-        security_score_normalized,
         rugged,
         mint_authority,
         freeze_authority,
@@ -750,7 +745,6 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
                 .collect();
             (
                 Some(sec.score),
-                Some(sec.score_normalised),
                 Some(sec.rugged),
                 sec.mint_authority,
                 sec.freeze_authority,
@@ -759,7 +753,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
                 risks,
             )
         }
-        Ok(None) | Err(_) => (None, None, None, None, None, None, None, vec![]),
+        Ok(None) | Err(_) => (None, None, None, None, None, None, vec![]),
     };
 
     if is_debug_webserver_enabled() {
@@ -1063,8 +1057,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         sells_24h,
         net_flow_24h,
         buy_sell_ratio_24h,
-        security_score,
-        security_score_normalized,
+        risk_score: security_score,
         rugged,
         mint_authority,
         freeze_authority,

@@ -234,8 +234,10 @@ async fn analyze_with_security_analyzer(
         None => return Some(FilterRejectionReason::SecurityNoData),
     };
 
-    if config.min_security_score > 0 && analysis.score_normalized < config.min_security_score {
-        return Some(FilterRejectionReason::SecurityScoreTooLow);
+    // Raw score: lower = safer, higher = more risky
+    // max_risk_score sets the maximum acceptable risk score
+    if config.max_risk_score > 0 && analysis.score > config.max_risk_score {
+        return Some(FilterRejectionReason::RiskScoreTooHigh);
     }
 
     if !analysis.authorities_safe {
@@ -406,7 +408,7 @@ fn has_decimals_in_database(mint: &str) -> bool {
 enum FilterRejectionReason {
     NoDecimalsInDatabase,
     SecurityHighRisk,
-    SecurityScoreTooLow,
+    RiskScoreTooHigh,
     SecurityNoData,
     NoHolderData,
     InsufficientHolders,
@@ -435,7 +437,7 @@ impl FilterRejectionReason {
         match self {
             FilterRejectionReason::NoDecimalsInDatabase => "no_decimals",
             FilterRejectionReason::SecurityHighRisk => "security_high_risk",
-            FilterRejectionReason::SecurityScoreTooLow => "security_score_low",
+            FilterRejectionReason::RiskScoreTooHigh => "risk_score_high",
             FilterRejectionReason::SecurityNoData => "security_no_data",
             FilterRejectionReason::NoHolderData => "holders_no_data",
             FilterRejectionReason::InsufficientHolders => "holders_insufficient",

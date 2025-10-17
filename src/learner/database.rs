@@ -101,7 +101,7 @@ impl LearningDatabase {
                 
                 tx_activity_5m INTEGER,
                 tx_activity_1h INTEGER,
-                security_score INTEGER,
+                risk_score INTEGER,
                 holder_count INTEGER,
                 
                 drop_10s_pct REAL,
@@ -144,7 +144,7 @@ impl LearningDatabase {
                 
                 liquidity_tier REAL NOT NULL,
                 tx_activity_score REAL NOT NULL,
-                security_score_norm REAL NOT NULL,
+                risk_score_norm REAL NOT NULL,
                 holder_count_log REAL NOT NULL,
                 market_cap_tier REAL NOT NULL,
                 
@@ -277,17 +277,11 @@ impl LearningDatabase {
 
         let trade_id = conn
             .execute(
-                "INSERT INTO trades (
-                mint, symbol, name,
-                entry_time, exit_time, entry_price, exit_price, hold_duration_sec,
-                pnl_pct, max_up_pct, max_down_pct, peak_reached_sec, dd_reached_sec,
-                entry_size_sol, token_amount, liquidity_at_entry, sol_reserves_at_entry,
-                tx_activity_5m, tx_activity_1h, security_score, holder_count,
-                drop_10s_pct, drop_30s_pct, drop_60s_pct, drop_120s_pct, drop_320s_pct,
-                ath_dist_15m_pct, ath_dist_1h_pct, ath_dist_6h_pct,
-                hour_of_day, day_of_week,
-                was_re_entry, phantom_exit, forced_exit,
-                features_extracted, created_at
+            "INSERT INTO trades (
+                mint, entry_at_unix, entry_price, sol_balance_before, entry_size_sol,
+                liquidity_at_entry, sol_reserves_at_entry,
+                tx_activity_5m, tx_activity_1h, risk_score, holder_count,
+                hour_of_day, day_of_week, was_re_entry, created_at
             ) VALUES (
                 ?1, ?2, ?3,
                 ?4, ?5, ?6, ?7, ?8,
@@ -320,7 +314,7 @@ impl LearningDatabase {
                     trade.sol_reserves_at_entry,
                     trade.tx_activity_5m,
                     trade.tx_activity_1h,
-                    trade.security_score,
+                    trade.risk_score,
                     trade.holder_count,
                     trade.drop_10s_pct,
                     trade.drop_30s_pct,
@@ -367,7 +361,7 @@ impl LearningDatabase {
                 trade_id,
                 drop_10s_norm, drop_30s_norm, drop_60s_norm, drop_120s_norm, drop_320s_norm,
                 drop_velocity_30s, drop_acceleration,
-                liquidity_tier, tx_activity_score, security_score_norm, holder_count_log, market_cap_tier,
+                liquidity_tier, tx_activity_score, risk_score_norm, holder_count_log, market_cap_tier,
                 ath_prox_15m, ath_prox_1h, ath_prox_6h, ath_risk_score,
                 hour_sin, hour_cos, day_sin, day_cos,
                 re_entry_flag, token_trade_count, recent_exit_count, avg_hold_duration,
@@ -389,7 +383,7 @@ impl LearningDatabase {
                     features.drop_acceleration,
                     features.liquidity_tier,
                     features.tx_activity_score,
-                    features.security_score_norm,
+                    features.risk_score_norm,
                     features.holder_count_log,
                     features.market_cap_tier,
                     features.ath_prox_15m,
@@ -659,7 +653,7 @@ impl LearningDatabase {
             sol_reserves_at_entry: row.get("sol_reserves_at_entry")?,
             tx_activity_5m: row.get("tx_activity_5m")?,
             tx_activity_1h: row.get("tx_activity_1h")?,
-            security_score: row.get("security_score")?,
+            risk_score: row.get("risk_score")?,
             holder_count: row.get("holder_count")?,
             drop_10s_pct: row.get("drop_10s_pct")?,
             drop_30s_pct: row.get("drop_30s_pct")?,
@@ -700,7 +694,7 @@ impl LearningDatabase {
             drop_acceleration: row.get("drop_acceleration")?,
             liquidity_tier: row.get("liquidity_tier")?,
             tx_activity_score: row.get("tx_activity_score")?,
-            security_score_norm: row.get("security_score_norm")?,
+            risk_score_norm: row.get("risk_score_norm")?,
             holder_count_log: row.get("holder_count_log")?,
             market_cap_tier: row.get("market_cap_tier")?,
             ath_prox_15m: row.get("ath_prox_15m")?,

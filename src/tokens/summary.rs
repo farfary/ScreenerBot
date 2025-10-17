@@ -24,7 +24,7 @@ pub struct TokenSummary {
     pub market_cap: Option<f64>,
     pub price_change_h1: Option<f64>,
     pub price_change_h24: Option<f64>,
-    pub security_score: Option<i32>,
+    pub risk_score: Option<i32>,
     pub rugged: Option<bool>,
     pub total_holders: Option<i32>,
     pub has_pool_price: bool,
@@ -114,7 +114,7 @@ pub fn token_to_summary(token: &Token, caches: &TokenSummaryContext) -> TokenSum
     let has_open_position = caches.has_open_position(&token.mint);
     let blacklisted = caches.is_blacklisted(&token.mint);
 
-    let (security_score, rugged, total_holders) = caches
+    let (risk_score, rugged, total_holders) = caches
         .security_snapshot(&token.mint)
         .map(|snapshot| {
             (
@@ -139,7 +139,7 @@ pub fn token_to_summary(token: &Token, caches: &TokenSummaryContext) -> TokenSum
         market_cap: token.market_cap,
         price_change_h1: token.price_change.as_ref().and_then(|p| p.h1),
         price_change_h24: token.price_change.as_ref().and_then(|p| p.h24),
-        security_score,
+        risk_score,
         rugged,
         total_holders,
         has_pool_price,

@@ -796,16 +796,16 @@ config_struct! {
 
         // Security requirements
         #[metadata(field_metadata! {
-            label: "Min Security Score",
-            hint: "10+ decent, 50+ safer (rugcheck score)",
+            label: "Max Risk Score",
+            hint: "Lower = safer. Max acceptable risk score (0 = safest, 100000+ = highest risk)",
             min: 0,
-            max: 100,
-            step: 5,
+            max: 100000,
+            step: 100,
             unit: "score",
             impact: "critical",
             category: "Security",
         })]
-        min_security_score: i32 = 10,
+        max_risk_score: i32 = 10000,
         #[metadata(field_metadata! {
             label: "Max Top Holder %",
             hint: "15% means top holder can own max 15% supply",

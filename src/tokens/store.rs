@@ -183,7 +183,7 @@ pub struct TokenFilter {
     pub require_ohlcv: bool,
     pub min_liquidity_usd: Option<f64>,
     pub min_volume_24h: Option<f64>,
-    pub min_security_score: Option<i32>,
+    pub max_risk_score: Option<i32>,
     pub risk_levels: Vec<RiskLevel>,
     pub min_confidence: Option<f32>,
     pub min_price_sol: Option<f64>,
@@ -205,7 +205,7 @@ impl Default for TokenFilter {
             require_ohlcv: false,
             min_liquidity_usd: None,
             min_volume_24h: None,
-            min_security_score: None,
+            max_risk_score: None,
             risk_levels: Vec::new(),
             min_confidence: None,
             min_price_sol: None,
@@ -224,7 +224,7 @@ pub enum TokenSortField {
     PriceUsd,
     PriceChangeH1,
     PriceChangeH24,
-    SecurityScore,
+    RiskScore,
     LastUpdated,
     MarketCap,
     Fdv,
@@ -921,9 +921,9 @@ fn matches_filter(
         }
     }
 
-    if let Some(min_score) = filter.min_security_score {
+    if let Some(max_score) = filter.max_risk_score {
         match snapshot.security.score {
-            Some(score) if score >= min_score => {}
+            Some(score) if score <= max_score => {}
             _ => return false,
         }
     }
@@ -1059,7 +1059,7 @@ fn compare_snapshots(a: &TokenSnapshot, b: &TokenSnapshot, sort: &TokenSort) -> 
             TokenSortField::PriceChangeH24 => {
                 compare_option_f64(a.price_change_h24(), b.price_change_h24())
             }
-            TokenSortField::SecurityScore => compare_option_i32(a.security.score, b.security.score),
+            TokenSortField::RiskScore => compare_option_i32(a.security.score, b.security.score),
             TokenSortField::LastUpdated => a.meta.updated_at_unix.cmp(&b.meta.updated_at_unix),
             TokenSortField::MarketCap => compare_option_f64(a.data.market_cap, b.data.market_cap),
             TokenSortField::Fdv => compare_option_f64(a.data.fdv, b.data.fdv),

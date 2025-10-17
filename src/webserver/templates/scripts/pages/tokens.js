@@ -31,7 +31,7 @@ const COLUMN_TO_SORT_KEY = {
   market_cap: "market_cap",
   price_change_h1: "price_change_h1",
   price_change_h24: "price_change_h24",
-  security_score: "security_score",
+  risk_score: "risk_score",
   updated_at: "updated_at",
 };
 
@@ -472,12 +472,19 @@ function createLifecycle() {
           render: (v) => percentCell(v),
         },
         {
-          id: "security_score",
-          label: "Security",
+          id: "risk_score",
+          label: "Risk Score",
           sortable: true,
           minWidth: 90,
           wrap: false,
-          render: (v) => Utils.formatNumber(v, 0),
+          render: (v) => {
+            if (v == null) return "—";
+            // Raw rugcheck score: lower = safer, higher = more risky
+            const num = Utils.formatNumber(v, 0);
+            if (v <= 1000) return `<span style="color: var(--success)">${num}</span>`;
+            if (v <= 10000) return `<span style="color: var(--warning)">${num}</span>`;
+            return `<span style="color: var(--error)">${num}</span>`;
+          },
         },
         {
           id: "status",

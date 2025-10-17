@@ -143,9 +143,9 @@ impl PatternAnalyzer {
         let tx_1h = trade.tx_activity_1h.unwrap_or(0) as f64;
         features.tx_activity_score = self.tx_activity_to_score(tx_5m, tx_1h);
 
-        // Security score normalized
-        if let Some(security_score) = trade.security_score {
-            features.security_score_norm = (security_score as f64) / 100.0;
+        // Risk score (raw rugcheck score, lower = safer)
+        if let Some(risk_score) = trade.risk_score {
+            features.risk_score_norm = (risk_score as f64) / 100.0;
         }
 
         // Holder count (log scale)
@@ -807,10 +807,11 @@ impl PatternAnalyzer {
         };
 
         // Pull cached security data when available
-        let (mut security_score_norm, mut holder_count_log) = (0.5, 0.1);
+        let (mut risk_score_norm, mut holder_count_log) = (0.5, 0.1);
         if let Some(analyzer) = get_security_analyzer() {
             if let Some(analysis) = analyzer.analyze_token_any_cached(mint).await {
-                security_score_norm = ((analysis.score_normalized as f64) / 100.0).clamp(0.0, 1.0);
+                // Use raw score (0=safest, 100000+=highest risk), normalize to 0-1 where higher = riskier
+                risk_score_norm = ((analysis.score as f64) / 100000.0).clamp(0.0, 1.0);
                 holder_count_log = if analysis.holders_safe { 0.45 } else { 0.15 };
             }
         }
@@ -844,7 +845,7 @@ impl PatternAnalyzer {
             // Real market context data from pools
             liquidity_tier,
             tx_activity_score,
-            security_score_norm,
+            risk_score_norm,
             holder_count_log,
             market_cap_tier,
 
@@ -1081,10 +1082,11 @@ impl PatternAnalyzer {
             (0.2, 0.2)
         };
 
-        let (mut security_score_norm, mut holder_count_log) = (0.5, 0.2);
+        let (mut risk_score_norm, mut holder_count_log) = (0.5, 0.2);
         if let Some(analyzer) = get_security_analyzer() {
             if let Some(analysis) = analyzer.analyze_token_any_cached(mint).await {
-                security_score_norm = ((analysis.score_normalized as f64) / 100.0).clamp(0.0, 1.0);
+                // Use raw score (0=safest, 100000+=highest risk), normalize to 0-1 where higher = riskier
+                risk_score_norm = ((analysis.score as f64) / 100000.0).clamp(0.0, 1.0);
                 holder_count_log = if analysis.holders_safe { 0.45 } else { 0.15 };
             }
         }
@@ -1108,7 +1110,7 @@ impl PatternAnalyzer {
 
             liquidity_tier,
             tx_activity_score,
-            security_score_norm,
+            risk_score_norm,
             holder_count_log,
             market_cap_tier,
 

@@ -176,14 +176,14 @@ const CONFIG_CATEGORIES = {
   ],
   Security: [
     {
-      key: "min_security_score",
-      label: "Min Security Score",
+      key: "max_risk_score",
+      label: "Max Risk Score",
       type: "number",
       unit: "score",
       min: 0,
-      max: 100,
-      step: 5,
-      hint: "10+ decent, 50+ safer (rugcheck score)",
+      max: 100000,
+      step: 100,
+      hint: "Lower = safer. Max acceptable risk score (0 = safest, 100000+ = highest risk)",
       impact: "critical",
     },
     {
