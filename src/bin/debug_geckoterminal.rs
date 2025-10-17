@@ -28,6 +28,10 @@ struct Args {
     #[clap(long)]
     trending: bool,
 
+    /// Test specific pool endpoint
+    #[clap(long)]
+    pool_data: bool,
+
     /// Verbose output (show response bodies)
     #[clap(short, long)]
     verbose: bool,
@@ -72,7 +76,7 @@ async fn main() {
     println!("{}", "=".repeat(60).green());
     println!("Base URL: {}\n", BASE_URL.yellow());
 
-    let test_all = args.all || (!args.token_pools && !args.ohlcv && !args.trending);
+    let test_all = args.all || (!args.token_pools && !args.ohlcv && !args.trending && !args.pool_data);
 
     if test_all || args.token_pools {
         test_token_pools(&client, &args).await;
@@ -80,6 +84,10 @@ async fn main() {
 
     if test_all || args.trending {
         test_trending_pools(&client, &args).await;
+    }
+
+    if test_all || args.pool_data {
+        test_pool_by_address(&client, &args).await;
     }
 
     if test_all || args.ohlcv {
@@ -384,6 +392,171 @@ async fn test_trending_pools(client: &Client, args: &Args) {
                         }
                     }
                 }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+}
+
+/// Test: GET /networks/{network}/pools/{address}
+/// Get specific pool data by pool address
+async fn test_pool_by_address(client: &Client, args: &Args) {
+    // Test basic pool fetch
+    print_test_header(
+        &format!("Pool Data ({}, basic)", args.network),
+        &format!("/networks/{}/pools/{}", args.network, args.pool)
+    );
+
+    let url = format!("{}/networks/{}/pools/{}", BASE_URL, args.network, args.pool);
+    
+    let start = Instant::now();
+    match client.get(&url).send().await {
+        Ok(response) => {
+            let duration = start.elapsed();
+            let status = response.status();
+            
+            print_status(status.as_u16(), duration);
+
+            if status.is_success() {
+                if let Ok(body) = response.text().await {
+                    if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                        if let Some(data) = json.get("data") {
+                            if let Some(attrs) = data.get("attributes") {
+                                let name = attrs.get("name").and_then(|n| n.as_str()).unwrap_or("?");
+                                let address = attrs.get("address").and_then(|a| a.as_str()).unwrap_or("?");
+                                let price_usd = attrs.get("base_token_price_usd").and_then(|p| p.as_str()).unwrap_or("0");
+                                
+                                println!("  {} {}", "Pool name:".cyan(), name.green());
+                                println!("  {} {}", "Pool address:".cyan(), address);
+                                println!("  {} ${}", "Price USD:".cyan(), price_usd);
+                            }
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test with include parameters
+    print_test_header(
+        &format!("Pool Data ({}, with include)", args.network),
+        &format!("/networks/{}/pools/{}?include=base_token,quote_token,dex", args.network, args.pool)
+    );
+
+    let url = format!("{}/networks/{}/pools/{}?include=base_token,quote_token,dex", BASE_URL, args.network, args.pool);
+    
+    let start = Instant::now();
+    match client.get(&url).send().await {
+        Ok(response) => {
+            let duration = start.elapsed();
+            let status = response.status();
+            
+            print_status(status.as_u16(), duration);
+
+            if status.is_success() {
+                if let Ok(body) = response.text().await {
+                    if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                        if let Some(data) = json.get("data") {
+                            let has_base = data.get("relationships").and_then(|r| r.get("base_token")).is_some();
+                            let has_quote = data.get("relationships").and_then(|r| r.get("quote_token")).is_some();
+                            let has_dex = data.get("relationships").and_then(|r| r.get("dex")).is_some();
+                            
+                            println!("  {} base_token: {}, quote_token: {}, dex: {}", 
+                                "Include fields:".cyan(),
+                                if has_base { "✓".green() } else { "✗".red() },
+                                if has_quote { "✓".green() } else { "✗".red() },
+                                if has_dex { "✓".green() } else { "✗".red() }
+                            );
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test with volume breakdown
+    print_test_header(
+        &format!("Pool Data ({}, volume breakdown)", args.network),
+        &format!("/networks/{}/pools/{}?include_volume_breakdown=true", args.network, args.pool)
+    );
+
+    let url = format!("{}/networks/{}/pools/{}?include_volume_breakdown=true", BASE_URL, args.network, args.pool);
+    
+    let start = Instant::now();
+    match client.get(&url).send().await {
+        Ok(response) => {
+            let duration = start.elapsed();
+            let status = response.status();
+            
+            print_status(status.as_u16(), duration);
+
+            if status.is_success() {
+                if let Ok(body) = response.text().await {
+                    if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                        if let Some(data) = json.get("data") {
+                            if let Some(attrs) = data.get("attributes") {
+                                let has_volume_breakdown = attrs.get("volume_usd").is_some();
+                                println!("  {} {}", 
+                                    "Volume breakdown:".cyan(),
+                                    if has_volume_breakdown { "✓".green() } else { "✗".red() }
+                                );
+                            }
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test with composition
+    print_test_header(
+        &format!("Pool Data ({}, composition)", args.network),
+        &format!("/networks/{}/pools/{}?include_composition=true", args.network, args.pool)
+    );
+
+    let url = format!("{}/networks/{}/pools/{}?include_composition=true", BASE_URL, args.network, args.pool);
+    
+    let start = Instant::now();
+    match client.get(&url).send().await {
+        Ok(response) => {
+            let duration = start.elapsed();
+            let status = response.status();
+            
+            print_status(status.as_u16(), duration);
+
+            if status.is_success() {
+                println!("  {} Pool composition data retrieved", "✓".green());
             } else {
                 let body = response.text().await.unwrap_or_default();
                 println!("  {} {}", "Error:".red(), body);
