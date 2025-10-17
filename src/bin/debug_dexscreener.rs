@@ -45,10 +45,6 @@ struct Args {
     #[clap(long)]
     batch_tokens: bool,
 
-    /// Test GeckoTerminal OHLCV endpoint
-    #[clap(long)]
-    geckoterminal_ohlcv: bool,
-
     /// Verbose output (show response bodies)
     #[clap(short, long)]
     verbose: bool,
@@ -78,7 +74,7 @@ async fn main() {
     println!("Base URL: {}\n", BASE_URL.yellow());
 
     let test_all = args.all || (!args.token_pools && !args.single_pair && !args.search 
-        && !args.profiles && !args.boosts && !args.orders && !args.batch_tokens && !args.geckoterminal_ohlcv);
+        && !args.profiles && !args.boosts && !args.orders && !args.batch_tokens);
 
     if test_all || args.token_pools {
         test_token_pools(&client, &args).await;
@@ -106,10 +102,6 @@ async fn main() {
 
     if test_all || args.orders {
         test_orders(&client, &args).await;
-    }
-
-    if test_all || args.geckoterminal_ohlcv {
-        test_geckoterminal_ohlcv(&client, &args).await;
     }
 
     println!("\n{}", "✅ Debug session complete".bold().green());

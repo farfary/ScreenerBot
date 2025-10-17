@@ -49,7 +49,7 @@ impl ApiClients {
 
         Ok(Self {
             dexscreener: DexScreenerClient::new(dex_rate_limit as usize, dex_timeout),
-            geckoterminal: GeckoTerminalClient::new(gecko_enabled, gecko_rate_limit as usize, gecko_timeout)?,
+            geckoterminal: GeckoTerminalClient::new(gecko_rate_limit as usize, gecko_timeout),
             rugcheck: RugcheckClient::new(rug_enabled, rug_rate_limit as usize, rug_timeout)?,
         })
     }

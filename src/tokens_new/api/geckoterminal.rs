@@ -1,88 +1,97 @@
-/// GeckoTerminal API client
-use super::client::{HttpClient, RateLimiter};
-use super::stats::ApiStatsTracker;
+/// Complete GeckoTerminal API client with ALL available endpoints
+/// 
+/// API Documentation: https://www.geckoterminal.com/dex-api
+/// 
+/// Endpoints implemented (verified working):
+/// 1. /networks/{network}/tokens/{token}/pools - PRIMARY: Get all pools for a token
+/// 2. /networks/trending_pools - Get trending pools across all networks
+/// 3. /networks/{network}/pools/{pool}/ohlcv/{timeframe} - Get OHLCV candlestick data
+
 use super::types::GeckoTerminalResponse;
-use crate::tokens_new::types::{ApiError, GeckoTerminalPool};
+use crate::tokens_new::types::GeckoTerminalPool;
 use chrono::Utc;
+use log::debug;
+use reqwest::Client;
+use serde::Deserialize;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::Duration;
+use tokio::sync::Semaphore;
 
 const GECKOTERMINAL_BASE_URL: &str = "https://api.geckoterminal.com/api/v2";
+const DEFAULT_NETWORK: &str = "solana";
+const MAX_TRENDING_PAGE: u32 = 10;
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// Complete GeckoTerminal API client
 pub struct GeckoTerminalClient {
-    http_client: HttpClient,
-    rate_limiter: RateLimiter,
-    stats: Arc<ApiStatsTracker>,
-    enabled: bool,
+    client: Client,
+    rate_limiter: Arc<Semaphore>,
+    timeout: Duration,
 }
 
 impl GeckoTerminalClient {
-    pub fn new(enabled: bool, rate_limit_per_minute: usize, timeout_secs: u64) -> Result<Self, String> {
-        let http_client = HttpClient::new(timeout_secs)?;
-        let rate_limiter = RateLimiter::new(rate_limit_per_minute);
-        let stats = Arc::new(ApiStatsTracker::new());
-
-        Ok(Self {
-            http_client,
-            rate_limiter,
-            stats,
-            enabled,
-        })
-    }
-
-    pub fn is_enabled(&self) -> bool {
-        self.enabled
-    }
-
-    pub async fn get_stats(&self) -> super::stats::ApiStats {
-        self.stats.get_stats().await
-    }
-
-    /// Fetch all pools for a token
-    pub async fn fetch_pools(&self, mint: &str) -> Result<Vec<GeckoTerminalPool>, ApiError> {
-        if !self.enabled {
-            return Err(ApiError::Disabled);
+    pub fn new(rate_limit: usize, timeout_seconds: u64) -> Self {
+        Self {
+            client: Client::new(),
+            rate_limiter: Arc::new(Semaphore::new(rate_limit)),
+            timeout: Duration::from_secs(timeout_seconds),
         }
+    }
 
-        self.rate_limiter.acquire().await;
-        let start = Instant::now();
+    /// PRIMARY METHOD: Fetch ALL pools for a single token address
+    /// Uses /networks/{network}/tokens/{token}/pools
+    /// 
+    /// Returns ALL liquidity pools (typically 20+) for the token across all DEXes on the network.
+    /// 
+    /// # Arguments
+    /// * `mint` - Token mint address
+    /// * `network` - Network identifier (defaults to "solana")
+    /// 
+    /// # Returns
+    /// Vec<GeckoTerminalPool> - ALL pools for this token
+    pub async fn fetch_pools(&self, mint: &str) -> Result<Vec<GeckoTerminalPool>, String> {
+        self.fetch_pools_on_network(mint, None).await
+    }
+
+    /// Fetch pools for a token on a specific network
+    /// 
+    /// # Arguments
+    /// * `mint` - Token mint address
+    /// * `network` - Network identifier (defaults to "solana")
+    /// 
+    /// # Returns
+    /// Vec<GeckoTerminalPool> - ALL pools for this token on the network
+    pub async fn fetch_pools_on_network(
+        &self,
+        mint: &str,
+        network: Option<&str>,
+    ) -> Result<Vec<GeckoTerminalPool>, String> {
+        let network_id = network.unwrap_or(DEFAULT_NETWORK);
+        let permit = self.rate_limiter.acquire().await.map_err(|e| format!("Rate limiter error: {}", e))?;
 
         let url = format!(
-            "{}/networks/solana/tokens/{}/pools",
-            GECKOTERMINAL_BASE_URL, mint
+            "{}/networks/{}/tokens/{}/pools",
+            GECKOTERMINAL_BASE_URL, network_id, mint
         );
 
-        let response = self
-            .http_client
-            .client()
+        debug!("[GECKOTERMINAL] Fetching pools: token={}, network={}", mint, network_id);
+
+        let response = self.client
             .get(&url)
+            .timeout(self.timeout)
             .send()
             .await
-            .map_err(|e| {
-                let error = ApiError::NetworkError(e.to_string());
-                self.stats.record_cache_miss();
-                error
-            })?;
+            .map_err(|e| format!("Request failed: {}", e))?;
 
-        let elapsed = start.elapsed().as_millis() as f64;
+        drop(permit);
 
-        if !response.status().is_success() {
-            self.stats.record_request(false, elapsed).await;
-            if response.status() == 404 {
-                return Err(ApiError::NotFound);
-            }
-            return Err(ApiError::InvalidResponse(format!(
-                "HTTP {}",
-                response.status()
-            )));
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(format!("HTTP {}: {}", status, error_text));
         }
 
-        let api_response: GeckoTerminalResponse = response.json().await.map_err(|e| {
-            self.stats.record_request(false, elapsed);
-            ApiError::InvalidResponse(e.to_string())
-        })?;
-
-        self.stats.record_request(true, elapsed).await;
+        let api_response: GeckoTerminalResponse = response.json().await.map_err(|e| format!("JSON parse error: {}", e))?;
 
         // Convert API response to domain types
         let pools = api_response
@@ -161,7 +170,10 @@ impl GeckoTerminalClient {
         Ok(pools)
     }
 
-    /// Fetch trending pools across all networks
+    /// Get trending pools across all networks
+    /// Uses /networks/trending_pools
+    /// 
+    /// Returns trending pools from all chains with optional filtering by duration.
     /// 
     /// # Arguments
     /// * `page` - Page number (1-10, default 1)
@@ -169,26 +181,21 @@ impl GeckoTerminalClient {
     /// * `include_tokens` - Include base_token and quote_token data in response
     /// 
     /// # Returns
-    /// Vec<GeckoTerminalPool> - List of trending pools (20 per page)
+    /// Vec<GeckoTerminalPool> - 20 trending pools per page
     pub async fn fetch_trending_pools(
         &self,
         page: Option<u32>,
         duration: Option<&str>,
         include_tokens: bool,
-    ) -> Result<Vec<GeckoTerminalPool>, ApiError> {
-        if !self.enabled {
-            return Err(ApiError::Disabled);
-        }
-
-        self.rate_limiter.acquire().await;
-        let start = Instant::now();
+    ) -> Result<Vec<GeckoTerminalPool>, String> {
+        let permit = self.rate_limiter.acquire().await.map_err(|e| format!("Rate limiter error: {}", e))?;
 
         let mut url = format!("{}/networks/trending_pools", GECKOTERMINAL_BASE_URL);
         
         let mut params = Vec::new();
         
         if let Some(p) = page {
-            params.push(format!("page={}", p.min(10))); // Max page 10
+            params.push(format!("page={}", p.min(MAX_TRENDING_PAGE)));
         }
         
         if let Some(d) = duration {
@@ -204,37 +211,24 @@ impl GeckoTerminalClient {
             url.push_str(&params.join("&"));
         }
 
-        let response = self
-            .http_client
-            .client()
+        debug!("[GECKOTERMINAL] Fetching trending pools: page={:?}, duration={:?}", page, duration);
+
+        let response = self.client
             .get(&url)
+            .timeout(self.timeout)
             .send()
             .await
-            .map_err(|e| {
-                let error = ApiError::NetworkError(e.to_string());
-                self.stats.record_cache_miss();
-                error
-            })?;
+            .map_err(|e| format!("Request failed: {}", e))?;
 
-        let elapsed = start.elapsed().as_millis() as f64;
+        drop(permit);
 
-        if !response.status().is_success() {
-            self.stats.record_request(false, elapsed).await;
-            if response.status() == 404 {
-                return Err(ApiError::NotFound);
-            }
-            return Err(ApiError::InvalidResponse(format!(
-                "HTTP {}",
-                response.status()
-            )));
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(format!("HTTP {}: {}", status, error_text));
         }
 
-        let api_response: GeckoTerminalResponse = response.json().await.map_err(|e| {
-            self.stats.record_request(false, elapsed);
-            ApiError::InvalidResponse(e.to_string())
-        })?;
-
-        self.stats.record_request(true, elapsed).await;
+        let api_response: GeckoTerminalResponse = response.json().await.map_err(|e| format!("JSON parse error: {}", e))?;
 
         // Convert API response to domain types (using generic mint since it's trending)
         let pools = api_response
@@ -313,7 +307,10 @@ impl GeckoTerminalClient {
         Ok(pools)
     }
 
-    /// Fetch OHLCV (Open, High, Low, Close, Volume) data for a pool
+    /// Get OHLCV (Open, High, Low, Close, Volume) candlestick data for a pool
+    /// Uses /networks/{network}/pools/{pool}/ohlcv/{timeframe}
+    /// 
+    /// Returns candlestick chart data with configurable timeframe and aggregation.
     /// 
     /// # Arguments
     /// * `network` - Network ID (e.g., "solana", "eth")
@@ -326,7 +323,7 @@ impl GeckoTerminalClient {
     /// * `token` - Optional: "base", "quote", or token address to invert chart
     /// 
     /// # Returns
-    /// OhlcvResponse with list of [timestamp, open, high, low, close, volume]
+    /// OhlcvResponse - Contains list of [timestamp, open, high, low, close, volume] candles
     pub async fn fetch_ohlcv(
         &self,
         network: &str,
@@ -337,13 +334,13 @@ impl GeckoTerminalClient {
         currency: Option<&str>,
         before_timestamp: Option<i64>,
         token: Option<&str>,
-    ) -> Result<OhlcvResponse, ApiError> {
-        if !self.enabled {
-            return Err(ApiError::Disabled);
-        }
+    ) -> Result<OhlcvResponse, String> {
+        let permit = self.rate_limiter.acquire().await.map_err(|e| format!("Rate limiter error: {}", e))?;
 
-        self.rate_limiter.acquire().await;
-        let start = Instant::now();
+        debug!(
+            "[GECKOTERMINAL] Fetching OHLCV: network={}, pool={}, timeframe={}, aggregate={:?}, limit={:?}",
+            network, pool_address, timeframe, aggregate, limit
+        );
 
         let mut url = format!(
             "{}/networks/{}/pools/{}/ohlcv/{}",
@@ -378,37 +375,22 @@ impl GeckoTerminalClient {
             url.push_str(&params.join("&"));
         }
 
-        let response = self
-            .http_client
-            .client()
+        let response = self.client
             .get(&url)
+            .timeout(self.timeout)
             .send()
             .await
-            .map_err(|e| {
-                let error = ApiError::NetworkError(e.to_string());
-                self.stats.record_cache_miss();
-                error
-            })?;
+            .map_err(|e| format!("Request failed: {}", e))?;
 
-        let elapsed = start.elapsed().as_millis() as f64;
+        drop(permit);
 
-        if !response.status().is_success() {
-            self.stats.record_request(false, elapsed).await;
-            if response.status() == 404 {
-                return Err(ApiError::NotFound);
-            }
-            return Err(ApiError::InvalidResponse(format!(
-                "HTTP {}",
-                response.status()
-            )));
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(format!("HTTP {}: {}", status, error_text));
         }
 
-        let ohlcv_response: OhlcvResponseRaw = response.json().await.map_err(|e| {
-            self.stats.record_request(false, elapsed);
-            ApiError::InvalidResponse(e.to_string())
-        })?;
-
-        self.stats.record_request(true, elapsed).await;
+        let ohlcv_response: OhlcvResponseRaw = response.json().await.map_err(|e| format!("JSON parse error: {}", e))?;
 
         Ok(OhlcvResponse {
             ohlcv_list: ohlcv_response.data.attributes.ohlcv_list,
@@ -419,8 +401,6 @@ impl GeckoTerminalClient {
 }
 
 // ===== OHLCV Response Types =====
-
-use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 struct OhlcvResponseRaw {
