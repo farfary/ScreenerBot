@@ -6,7 +6,7 @@ use clap::Parser;
 use colored::Colorize;
 use reqwest::Client;
 use serde_json::Value;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 #[derive(Parser, Debug)]
 #[clap(name = "debug_geckoterminal")]
@@ -43,6 +43,10 @@ struct Args {
     /// Test DEXes endpoint
     #[clap(long)]
     dexes: bool,
+
+    /// Test new pools endpoint
+    #[clap(long)]
+    new_pools: bool,
 
     /// Verbose output (show response bodies)
     #[clap(short, long)]
@@ -88,7 +92,7 @@ async fn main() {
     println!("{}", "=".repeat(60).green());
     println!("Base URL: {}\n", BASE_URL.yellow());
 
-    let test_all = args.all || (!args.token_pools && !args.ohlcv && !args.trending && !args.pool_data && !args.multi_pools && !args.top_pools && !args.dexes);
+    let test_all = args.all || (!args.token_pools && !args.ohlcv && !args.trending && !args.pool_data && !args.multi_pools && !args.top_pools && !args.dexes && !args.new_pools);
 
     if test_all || args.token_pools {
         test_token_pools(&client, &args).await;
@@ -104,6 +108,10 @@ async fn main() {
 
     if test_all || args.dexes {
         test_dexes(&client, &args).await;
+    }
+
+    if test_all || args.new_pools {
+        test_new_pools(&client, &args).await;
     }
 
     if test_all || args.pool_data {
@@ -769,6 +777,192 @@ async fn test_dexes(client: &Client, args: &Args) {
                 if let Ok(json) = response.json::<Value>().await {
                     if let Some(data) = json["data"].as_array() {
                         println!("  {} {} DEXes on page 2", "✓".green(), data.len().to_string().cyan());
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+}
+
+async fn test_new_pools(client: &Client, args: &Args) {
+    // Test 1: Latest new pools on Solana (basic)
+    print_test_header(
+        &format!("Latest New Pools ({})", args.network),
+        &format!("/networks/{}/new_pools", args.network)
+    );
+
+    let url = format!("{}/networks/{}/new_pools", BASE_URL, args.network);
+    
+    let start = Instant::now();
+    match client.get(&url).timeout(Duration::from_secs(10)).send().await {
+        Ok(response) => {
+            let elapsed = start.elapsed();
+            let status = response.status();
+            
+            println!("  {} {} ({:.2}ms)", "Status:".cyan(), status.as_u16().to_string().green(), elapsed.as_millis());
+
+            if status.is_success() {
+                let body = response.text().await.unwrap_or_default();
+                
+                if args.verbose {
+                    println!("  {}", "Response Body:".cyan());
+                    println!("{}", body);
+                }
+
+                if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                        println!("  {} {} new pools", "✓".green(), data.len());
+                        
+                        println!("  → First 5 pools:");
+                        for (i, pool) in data.iter().take(5).enumerate() {
+                            if let Some(attrs) = pool.get("attributes") {
+                                let name = attrs.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown");
+                                let address = attrs.get("address").and_then(|a| a.as_str()).unwrap_or("N/A");
+                                let created = attrs.get("pool_created_at").and_then(|c| c.as_str()).unwrap_or("N/A");
+                                println!("    {}. {} ({}) - created: {}", i+1, name, &address[..8], created);
+                            }
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 2: New pools with includes (base_token, quote_token)
+    print_test_header(
+        &format!("New Pools ({}, with includes)", args.network),
+        &format!("/networks/{}/new_pools?include=base_token,quote_token", args.network)
+    );
+
+    let url = format!("{}/networks/{}/new_pools?include=base_token,quote_token", BASE_URL, args.network);
+    
+    let start = Instant::now();
+    match client.get(&url).timeout(Duration::from_secs(10)).send().await {
+        Ok(response) => {
+            let elapsed = start.elapsed();
+            let status = response.status();
+            
+            println!("  {} {} ({:.2}ms)", "Status:".cyan(), status.as_u16().to_string().green(), elapsed.as_millis());
+
+            if status.is_success() {
+                let body = response.text().await.unwrap_or_default();
+
+                if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                        println!("  {} {} pools with token data", "✓".green(), data.len());
+                        
+                        if let Some(included) = json.get("included").and_then(|i| i.as_array()) {
+                            println!("  {} {} included relationships", "✓".green(), included.len());
+                        }
+
+                        if let Some(first) = data.first() {
+                            if let Some(rels) = first.get("relationships") {
+                                let has_base = rels.get("base_token").is_some();
+                                let has_quote = rels.get("quote_token").is_some();
+                                println!("  {} base_token: {}, quote_token: {}", 
+                                    "Relationships:".cyan(),
+                                    if has_base { "✓".green() } else { "✗".red() },
+                                    if has_quote { "✓".green() } else { "✗".red() }
+                                );
+                            }
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 3: Ethereum new pools
+    print_test_header(
+        "New Pools (eth)",
+        "/networks/eth/new_pools"
+    );
+
+    let url = format!("{}/networks/eth/new_pools", BASE_URL);
+    
+    let start = Instant::now();
+    match client.get(&url).timeout(Duration::from_secs(10)).send().await {
+        Ok(response) => {
+            let elapsed = start.elapsed();
+            let status = response.status();
+            
+            println!("  {} {} ({:.2}ms)", "Status:".cyan(), status.as_u16().to_string().green(), elapsed.as_millis());
+
+            if status.is_success() {
+                let body = response.text().await.unwrap_or_default();
+
+                if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                        println!("  {} {} Ethereum new pools", "✓".green(), data.len());
+                        
+                        println!("  → First 5 pools:");
+                        for (i, pool) in data.iter().take(5).enumerate() {
+                            if let Some(attrs) = pool.get("attributes") {
+                                let name = attrs.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown");
+                                let dex = attrs.get("dex_id").and_then(|d| d.as_str()).unwrap_or("N/A");
+                                println!("    {}. {} (DEX: {})", i+1, name, dex);
+                            }
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 4: Page 2
+    print_test_header(
+        &format!("New Pools ({}, page 2)", args.network),
+        &format!("/networks/{}/new_pools?page=2", args.network)
+    );
+
+    let url = format!("{}/networks/{}/new_pools?page=2", BASE_URL, args.network);
+    
+    let start = Instant::now();
+    match client.get(&url).timeout(Duration::from_secs(10)).send().await {
+        Ok(response) => {
+            let elapsed = start.elapsed();
+            let status = response.status();
+            
+            println!("  {} {} ({:.2}ms)", "Status:".cyan(), status.as_u16().to_string().green(), elapsed.as_millis());
+
+            if status.is_success() {
+                let body = response.text().await.unwrap_or_default();
+
+                if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                        println!("  {} {} pools on page 2", "✓".green(), data.len());
                     }
                 }
             } else {

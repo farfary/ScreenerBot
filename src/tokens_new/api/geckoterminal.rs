@@ -10,6 +10,7 @@
 /// 5. /networks/{network}/pools/multi/{addresses} - Get multiple pools data (up to 30 addresses)
 /// 6. /networks/{network}/pools/{pool}/ohlcv/{timeframe} - Get OHLCV candlestick data
 /// 7. /networks/{network}/dexes - Get supported DEXes list by network
+/// 8. /networks/{network}/new_pools - Get latest new pools by network
 
 use super::geckoterminal_types::*;
 use crate::tokens_new::types::GeckoTerminalPool;
@@ -531,6 +532,66 @@ impl GeckoTerminalClient {
         let dex_response: GeckoTerminalDexesResponse = response.json().await.map_err(|e| format!("JSON parse error: {}", e))?;
 
         Ok(dex_response.data.into_iter().map(|d| (d.id, d.attributes.name)).collect())
+    }
+
+    /// Get latest new pools by network
+    /// 
+    /// # Arguments
+    /// * `network` - Network identifier (e.g., "solana", "eth", "bsc")
+    /// * `include` - Optional comma-separated attributes to include (base_token, quote_token, dex)
+    /// * `page` - Optional page number for pagination (max: 10, default: 1)
+    /// 
+    /// # Returns
+    /// Vector of pools sorted by creation time (newest first)
+    /// 
+    /// # Example
+    /// ```no_run
+    /// let pools = client.fetch_new_pools_by_network("solana", Some("base_token,quote_token"), None).await?;
+    /// ```
+    pub async fn fetch_new_pools_by_network(
+        &self,
+        network: &str,
+        include: Option<&str>,
+        page: Option<u32>,
+    ) -> Result<Vec<GeckoTerminalPool>, String> {
+        let network_id = network;
+        let permit = self.rate_limiter.acquire().await.map_err(|e| format!("Rate limiter error: {}", e))?;
+
+        let mut url = format!("{}/networks/{}/new_pools", GECKOTERMINAL_BASE_URL, network_id);
+        let mut params = Vec::new();
+
+        if let Some(inc) = include {
+            params.push(format!("include={}", inc));
+        }
+        if let Some(p) = page {
+            params.push(format!("page={}", p));
+        }
+
+        if !params.is_empty() {
+            url.push_str(&format!("?{}", params.join("&")));
+        }
+
+        debug!("[GECKOTERMINAL] Fetching new pools: network={}, page={:?}", network_id, page);
+
+        let response = self.client
+            .get(&url)
+            .timeout(self.timeout)
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?;
+
+        drop(permit);
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(format!("HTTP {}: {}", status, error_text));
+        }
+
+        let api_response: GeckoTerminalResponse = response.json().await
+            .map_err(|e| format!("JSON parse error: {}", e))?;
+
+        Ok(api_response.data.into_iter().map(|p| p.to_pool("new_pools")).collect())
     }
 }
 
