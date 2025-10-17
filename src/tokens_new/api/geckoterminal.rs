@@ -161,6 +161,158 @@ impl GeckoTerminalClient {
         Ok(pools)
     }
 
+    /// Fetch trending pools across all networks
+    /// 
+    /// # Arguments
+    /// * `page` - Page number (1-10, default 1)
+    /// * `duration` - Trending duration: "5m", "1h", "6h", "24h" (default "24h")
+    /// * `include_tokens` - Include base_token and quote_token data in response
+    /// 
+    /// # Returns
+    /// Vec<GeckoTerminalPool> - List of trending pools (20 per page)
+    pub async fn fetch_trending_pools(
+        &self,
+        page: Option<u32>,
+        duration: Option<&str>,
+        include_tokens: bool,
+    ) -> Result<Vec<GeckoTerminalPool>, ApiError> {
+        if !self.enabled {
+            return Err(ApiError::Disabled);
+        }
+
+        self.rate_limiter.acquire().await;
+        let start = Instant::now();
+
+        let mut url = format!("{}/networks/trending_pools", GECKOTERMINAL_BASE_URL);
+        
+        let mut params = Vec::new();
+        
+        if let Some(p) = page {
+            params.push(format!("page={}", p.min(10))); // Max page 10
+        }
+        
+        if let Some(d) = duration {
+            params.push(format!("duration={}", d));
+        }
+        
+        if include_tokens {
+            params.push("include=base_token,quote_token,dex,network".to_string());
+        }
+
+        if !params.is_empty() {
+            url.push('?');
+            url.push_str(&params.join("&"));
+        }
+
+        let response = self
+            .http_client
+            .client()
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| {
+                let error = ApiError::NetworkError(e.to_string());
+                self.stats.record_cache_miss();
+                error
+            })?;
+
+        let elapsed = start.elapsed().as_millis() as f64;
+
+        if !response.status().is_success() {
+            self.stats.record_request(false, elapsed).await;
+            if response.status() == 404 {
+                return Err(ApiError::NotFound);
+            }
+            return Err(ApiError::InvalidResponse(format!(
+                "HTTP {}",
+                response.status()
+            )));
+        }
+
+        let api_response: GeckoTerminalResponse = response.json().await.map_err(|e| {
+            self.stats.record_request(false, elapsed);
+            ApiError::InvalidResponse(e.to_string())
+        })?;
+
+        self.stats.record_request(true, elapsed).await;
+
+        // Convert API response to domain types (using generic mint since it's trending)
+        let pools = api_response
+            .data
+            .into_iter()
+            .map(|pool_data| {
+                let attrs = pool_data.attributes;
+                let rels = pool_data.relationships;
+
+                let parse_f64 = |s: &str| s.parse::<f64>().ok();
+                let parse_i64 = |s: &str| s.parse::<i64>().ok();
+
+                let price_change = attrs.price_change_percentage.as_ref();
+                let transactions = attrs.transactions.as_ref();
+                let volume = attrs.volume_usd.as_ref();
+
+                GeckoTerminalPool {
+                    mint: "trending".to_string(), // Trending pools don't have single mint
+                    pool_address: attrs.address,
+                    pool_name: attrs.name,
+                    dex_id: rels.dex.data.id,
+                    base_token_id: rels.base_token.data.id.clone(),
+                    quote_token_id: rels.quote_token.data.id,
+                    base_token_price_usd: attrs.base_token_price_usd,
+                    base_token_price_native: attrs.base_token_price_native_currency,
+                    base_token_price_quote: attrs.base_token_price_quote_token,
+                    quote_token_price_usd: attrs.quote_token_price_usd,
+                    quote_token_price_native: attrs.quote_token_price_native_currency,
+                    quote_token_price_base: attrs.quote_token_price_base_token,
+                    token_price_usd: attrs.token_price_usd,
+                    fdv_usd: attrs.fdv_usd.and_then(|s| parse_f64(&s)),
+                    market_cap_usd: attrs.market_cap_usd.and_then(|s| parse_f64(&s)),
+                    reserve_usd: attrs.reserve_in_usd.and_then(|s| parse_f64(&s)),
+                    volume_m5: volume.and_then(|v| v.m5.as_ref().and_then(|s| parse_f64(s))),
+                    volume_m15: volume.and_then(|v| v.m15.as_ref().and_then(|s| parse_f64(s))),
+                    volume_m30: volume.and_then(|v| v.m30.as_ref().and_then(|s| parse_f64(s))),
+                    volume_h1: volume.and_then(|v| v.h1.as_ref().and_then(|s| parse_f64(s))),
+                    volume_h6: volume.and_then(|v| v.h6.as_ref().and_then(|s| parse_f64(s))),
+                    volume_h24: volume.and_then(|v| v.h24.as_ref().and_then(|s| parse_f64(s))),
+                    price_change_m5: price_change.and_then(|pc| pc.m5.as_ref().and_then(|s| parse_f64(s))),
+                    price_change_m15: price_change.and_then(|pc| pc.m15.as_ref().and_then(|s| parse_f64(s))),
+                    price_change_m30: price_change.and_then(|pc| pc.m30.as_ref().and_then(|s| parse_f64(s))),
+                    price_change_h1: price_change.and_then(|pc| pc.h1.as_ref().and_then(|s| parse_f64(s))),
+                    price_change_h6: price_change.and_then(|pc| pc.h6.as_ref().and_then(|s| parse_f64(s))),
+                    price_change_h24: price_change.and_then(|pc| pc.h24.as_ref().and_then(|s| parse_f64(s))),
+                    txns_m5_buys: transactions.and_then(|t| t.m5.as_ref().and_then(|p| p.buys)),
+                    txns_m5_sells: transactions.and_then(|t| t.m5.as_ref().and_then(|p| p.sells)),
+                    txns_m5_buyers: transactions.and_then(|t| t.m5.as_ref().and_then(|p| p.buyers)),
+                    txns_m5_sellers: transactions.and_then(|t| t.m5.as_ref().and_then(|p| p.sellers)),
+                    txns_m15_buys: transactions.and_then(|t| t.m15.as_ref().and_then(|p| p.buys)),
+                    txns_m15_sells: transactions.and_then(|t| t.m15.as_ref().and_then(|p| p.sells)),
+                    txns_m15_buyers: transactions.and_then(|t| t.m15.as_ref().and_then(|p| p.buyers)),
+                    txns_m15_sellers: transactions.and_then(|t| t.m15.as_ref().and_then(|p| p.sellers)),
+                    txns_m30_buys: transactions.and_then(|t| t.m30.as_ref().and_then(|p| p.buys)),
+                    txns_m30_sells: transactions.and_then(|t| t.m30.as_ref().and_then(|p| p.sells)),
+                    txns_m30_buyers: transactions.and_then(|t| t.m30.as_ref().and_then(|p| p.buyers)),
+                    txns_m30_sellers: transactions.and_then(|t| t.m30.as_ref().and_then(|p| p.sellers)),
+                    txns_h1_buys: transactions.and_then(|t| t.h1.as_ref().and_then(|p| p.buys)),
+                    txns_h1_sells: transactions.and_then(|t| t.h1.as_ref().and_then(|p| p.sells)),
+                    txns_h1_buyers: transactions.and_then(|t| t.h1.as_ref().and_then(|p| p.buyers)),
+                    txns_h1_sellers: transactions.and_then(|t| t.h1.as_ref().and_then(|p| p.sellers)),
+                    txns_h6_buys: transactions.and_then(|t| t.h6.as_ref().and_then(|p| p.buys)),
+                    txns_h6_sells: transactions.and_then(|t| t.h6.as_ref().and_then(|p| p.sells)),
+                    txns_h6_buyers: transactions.and_then(|t| t.h6.as_ref().and_then(|p| p.buyers)),
+                    txns_h6_sellers: transactions.and_then(|t| t.h6.as_ref().and_then(|p| p.sellers)),
+                    txns_h24_buys: transactions.and_then(|t| t.h24.as_ref().and_then(|p| p.buys)),
+                    txns_h24_sells: transactions.and_then(|t| t.h24.as_ref().and_then(|p| p.sells)),
+                    txns_h24_buyers: transactions.and_then(|t| t.h24.as_ref().and_then(|p| p.buyers)),
+                    txns_h24_sellers: transactions.and_then(|t| t.h24.as_ref().and_then(|p| p.sellers)),
+                    pool_created_at: attrs.pool_created_at,
+                    fetched_at: Utc::now(),
+                }
+            })
+            .collect();
+
+        Ok(pools)
+    }
+
     /// Fetch OHLCV (Open, High, Low, Close, Volume) data for a pool
     /// 
     /// # Arguments

@@ -24,6 +24,10 @@ struct Args {
     #[clap(long)]
     ohlcv: bool,
 
+    /// Test trending pools endpoint
+    #[clap(long)]
+    trending: bool,
+
     /// Verbose output (show response bodies)
     #[clap(short, long)]
     verbose: bool,
@@ -68,10 +72,14 @@ async fn main() {
     println!("{}", "=".repeat(60).green());
     println!("Base URL: {}\n", BASE_URL.yellow());
 
-    let test_all = args.all || (!args.token_pools && !args.ohlcv);
+    let test_all = args.all || (!args.token_pools && !args.ohlcv && !args.trending);
 
     if test_all || args.token_pools {
         test_token_pools(&client, &args).await;
+    }
+
+    if test_all || args.trending {
+        test_trending_pools(&client, &args).await;
     }
 
     if test_all || args.ohlcv {
@@ -133,6 +141,151 @@ async fn test_token_pools(client: &Client, args: &Args) {
                         }
                     }
                     Err(e) => println!("  {} Body read error: {}", "❌".red(), e),
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+}
+
+/// Test: GET /networks/trending_pools
+/// Get trending pools across all networks
+async fn test_trending_pools(client: &Client, args: &Args) {
+    // Test default (24h)
+    print_test_header("Trending Pools (24h)", "/networks/trending_pools");
+
+    let url = format!("{}/networks/trending_pools", BASE_URL);
+    
+    let start = Instant::now();
+    match client.get(&url).send().await {
+        Ok(response) => {
+            let duration = start.elapsed();
+            let status = response.status();
+            
+            print_status(status.as_u16(), duration);
+
+            if status.is_success() {
+                match response.text().await {
+                    Ok(body) => {
+                        match serde_json::from_str::<Value>(&body) {
+                            Ok(json) => {
+                                if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                                    println!("  {} {}", "Trending pools:".cyan(), data.len().to_string().green().bold());
+                                    
+                                    if args.verbose && !data.is_empty() {
+                                        println!("\n  {}", "First 3 trending pools:".cyan());
+                                        for (i, pool) in data.iter().take(3).enumerate() {
+                                            if let Some(attrs) = pool.get("attributes") {
+                                                let name = attrs.get("name").and_then(|n| n.as_str()).unwrap_or("?");
+                                                let volume = attrs.get("volume_usd")
+                                                    .and_then(|v| v.get("h24"))
+                                                    .and_then(|h| h.as_str())
+                                                    .and_then(|s| s.parse::<f64>().ok())
+                                                    .unwrap_or(0.0);
+                                                let price_change = attrs.get("price_change_percentage")
+                                                    .and_then(|p| p.get("h24"))
+                                                    .and_then(|h| h.as_str())
+                                                    .and_then(|s| s.parse::<f64>().ok())
+                                                    .unwrap_or(0.0);
+                                                
+                                                println!("    {}. {} - Vol: ${:.0}k, Change: {:.1}%", 
+                                                    i + 1, name, volume / 1000.0, price_change);
+                                            }
+                                        }
+                                    }
+
+                                    validate_pool_structure(data.first().unwrap());
+                                } else {
+                                    println!("  {} Expected data array", "⚠️".yellow());
+                                }
+                            }
+                            Err(e) => {
+                                println!("  {} Parse error: {}", "❌".red(), e);
+                                if args.verbose {
+                                    println!("  Body: {}", body);
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => println!("  {} Body read error: {}", "❌".red(), e),
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test different durations
+    for duration in &["5m", "1h", "6h"] {
+        print_test_header(
+            &format!("Trending Pools ({})", duration), 
+            &format!("/networks/trending_pools?duration={}", duration)
+        );
+
+        let url = format!("{}/networks/trending_pools?duration={}", BASE_URL, duration);
+        
+        let start = Instant::now();
+        match client.get(&url).send().await {
+            Ok(response) => {
+                let duration_time = start.elapsed();
+                let status = response.status();
+                
+                print_status(status.as_u16(), duration_time);
+
+                if status.is_success() {
+                    if let Ok(body) = response.text().await {
+                        if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                            if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                                println!("  {} {}", "Pools:".cyan(), data.len().to_string().green().bold());
+                            }
+                        }
+                    }
+                } else {
+                    let body = response.text().await.unwrap_or_default();
+                    println!("  {} {}", "Error:".red(), body);
+                }
+            }
+            Err(e) => {
+                println!("  {} Request failed: {}", "❌".red(), e);
+            }
+        }
+
+        println!();
+    }
+
+    // Test pagination
+    print_test_header("Trending Pools (Page 2)", "/networks/trending_pools?page=2");
+
+    let url = format!("{}/networks/trending_pools?page=2", BASE_URL);
+    
+    let start = Instant::now();
+    match client.get(&url).send().await {
+        Ok(response) => {
+            let duration = start.elapsed();
+            let status = response.status();
+            
+            print_status(status.as_u16(), duration);
+
+            if status.is_success() {
+                if let Ok(body) = response.text().await {
+                    if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                        if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                            println!("  {} {}", "Pools on page 2:".cyan(), data.len().to_string().green().bold());
+                        }
+                    }
                 }
             } else {
                 let body = response.text().await.unwrap_or_default();
