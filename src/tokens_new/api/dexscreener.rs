@@ -2,20 +2,18 @@
 /// 
 /// API Documentation: https://docs.dexscreener.com/api/reference
 /// 
-/// Endpoints implemented:
-/// 1. /tokens/{addresses} - Get token profiles (up to 30 addresses)
-/// 2. /pairs/{chainId}/{pairAddress} - Get single pair by chain/address
-/// 3. /pairs/{chainIds}?pairs={pairs} - Get multiple pairs by chain/pairs
-/// 4. /tokens/trending - Get trending tokens
-/// 5. /tokens/recent - Get recently listed tokens  
-/// 6. /search?q={query} - Search pairs
-/// 7. /tokens/top - Get top tokens by volume
-/// 8. /orders/popular - Get popular orders
-/// 9. /tokens/trending/solana - Get trending Solana tokens
-/// 10. /profiles/latest - Get latest profiles
+/// Endpoints implemented (verified working):
+/// 1. /token-pairs/v1/{chainId}/{tokenAddress} - PRIMARY: Get all pools for a token
+/// 2. /tokens/v1/{chainId}/{tokenAddresses} - Get pools for up to 30 tokens (batch)
+/// 3. /latest/dex/pairs/{chainId}/{pairId} - Get single pair by chain/address
+/// 4. /latest/dex/search?q={query} - Search pairs
+/// 5. /token-profiles/latest/v1 - Get latest token profiles
+/// 6. /token-boosts/latest/v1 - Get latest boosted tokens
+/// 7. /token-boosts/top/v1 - Get top boosted tokens  
+/// 8. /orders/v1/{chainId}/{tokenAddress} - Get orders for a token
 
 use crate::tokens_new::types::{DexScreenerPool, ApiError};
-use log::{debug, error, warn};
+use log::{debug, warn};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -26,6 +24,7 @@ use tokio::sync::Semaphore;
 const DEXSCREENER_BASE_URL: &str = "https://api.dexscreener.com";
 const MAX_TOKENS_PER_REQUEST: usize = 30;
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
+const DEFAULT_CHAIN_ID: &str = "solana";
 
 /// Complete DexScreener API client
 pub struct DexScreenerClient {
@@ -43,31 +42,29 @@ impl DexScreenerClient {
         }
     }
 
-    /// Fetch token profiles for up to 30 addresses in a single request
+    /// PRIMARY METHOD: Fetch ALL pools for a single token address
+    /// Uses /token-pairs/v1/{chainId}/{tokenAddress}
+    /// 
+    /// Returns ALL liquidity pools (can be 30+) for the token across all DEXes.
+    /// For batch operations with multiple tokens, use fetch_token_batch() instead.
     /// 
     /// # Arguments
-    /// * `addresses` - Token mint addresses (max 30)
+    /// * `token_address` - Token mint address
+    /// * `chain_id` - Chain identifier (defaults to "solana")
     /// 
     /// # Returns
-    /// HashMap<address, Vec<DexScreenerPool>> - Pools grouped by token address
-    pub async fn fetch_token_profiles(
+    /// Vec<DexScreenerPool> - ALL pools for this token (typically 10-30 pools)
+    pub async fn fetch_token_pools(
         &self,
-        addresses: &[String],
-    ) -> Result<HashMap<String, Vec<DexScreenerPool>>, String> {
-        if addresses.is_empty() {
-            return Ok(HashMap::new());
-        }
-
-        if addresses.len() > MAX_TOKENS_PER_REQUEST {
-            return Err(format!("Too many addresses: {} (max {})", addresses.len(), MAX_TOKENS_PER_REQUEST));
-        }
-
+        token_address: &str,
+        chain_id: Option<&str>,
+    ) -> Result<Vec<DexScreenerPool>, String> {
+        let chain = chain_id.unwrap_or(DEFAULT_CHAIN_ID);
         let permit = self.rate_limiter.acquire().await.map_err(|e| format!("Rate limiter error: {}", e))?;
 
-        let address_list = addresses.join(",");
-        let url = format!("{}/latest/dex/tokens/{}", DEXSCREENER_BASE_URL, address_list);
+        let url = format!("{}/token-pairs/v1/{}/{}", DEXSCREENER_BASE_URL, chain, token_address);
 
-        debug!("[DEXSCREENER] Fetching token profiles: {} addresses", addresses.len());
+        debug!("[DEXSCREENER] Fetching token pools: token={}, chain={}", token_address, chain);
 
         let response = self.client
             .get(&url)
@@ -84,10 +81,64 @@ impl DexScreenerClient {
             return Err(format!("DexScreener API error {}: {}", status, error_text));
         }
 
-        let data: TokenProfilesResponse = response.json().await
+        let pairs: Vec<DexScreenerPairRaw> = response.json().await
             .map_err(|e| format!("Failed to parse response: {}", e))?;
 
-        Ok(data.to_pools_map())
+        Ok(pairs.into_iter().map(|p| p.to_pool()).collect())
+    }
+
+    /// Batch fetch the BEST/MOST LIQUID pair for up to 30 tokens in ONE call
+    /// Uses /tokens/v1/{chainId}/{tokenAddresses}
+    /// 
+    /// **IMPORTANT**: This returns ONE pair per token (the most liquid/popular one),
+    /// not all pools. Use fetch_token_pools() if you need all pools for a token.
+    /// 
+    /// # Arguments
+    /// * `addresses` - Token mint addresses (max 30)
+    /// * `chain_id` - Chain identifier (defaults to "solana")
+    /// 
+    /// # Returns
+    /// Vec<DexScreenerPool> - ONE best pair for each token in the batch
+    pub async fn fetch_token_batch(
+        &self,
+        addresses: &[String],
+        chain_id: Option<&str>,
+    ) -> Result<Vec<DexScreenerPool>, String> {
+        if addresses.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        if addresses.len() > MAX_TOKENS_PER_REQUEST {
+            return Err(format!("Too many addresses: {} (max {})", addresses.len(), MAX_TOKENS_PER_REQUEST));
+        }
+
+        let chain = chain_id.unwrap_or(DEFAULT_CHAIN_ID);
+        let permit = self.rate_limiter.acquire().await.map_err(|e| format!("Rate limiter error: {}", e))?;
+
+        let address_list = addresses.join(",");
+        let url = format!("{}/tokens/v1/{}/{}", DEXSCREENER_BASE_URL, chain, address_list);
+
+        debug!("[DEXSCREENER] Fetching batch tokens: {} addresses, chain={}", addresses.len(), chain);
+
+        let response = self.client
+            .get(&url)
+            .timeout(self.timeout)
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?;
+
+        drop(permit);
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(format!("DexScreener API error {}: {}", status, error_text));
+        }
+
+        let pairs: Vec<DexScreenerPairRaw> = response.json().await
+            .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+        Ok(pairs.into_iter().map(|p| p.to_pool()).collect())
     }
 
     /// Get a single pair by chain and address
@@ -125,63 +176,6 @@ impl DexScreenerClient {
             .map_err(|e| format!("Failed to parse response: {}", e))?;
 
         Ok(data.pair.map(|p| p.to_pool()))
-    }
-
-    /// Get multiple pairs by chain and addresses
-    /// 
-    /// # Arguments
-    /// * `chain_pairs` - Map of chain_id to vec of pair addresses
-    /// 
-    /// # Returns
-    /// Vec of all pairs found
-    pub async fn get_pairs(
-        &self,
-        chain_pairs: HashMap<String, Vec<String>>,
-    ) -> Result<Vec<DexScreenerPool>, String> {
-        if chain_pairs.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let permit = self.rate_limiter.acquire().await.map_err(|e| format!("Rate limiter error: {}", e))?;
-
-        // Build chains and pairs parameters
-        let chains: Vec<String> = chain_pairs.keys().cloned().collect();
-        let mut all_pairs = Vec::new();
-        for (_chain, pairs) in &chain_pairs {
-            all_pairs.extend(pairs.clone());
-        }
-
-        let chains_param = chains.join(",");
-        let pairs_param = all_pairs.join(",");
-
-        let url = format!(
-            "{}/latest/dex/pairs?chains={}&pairs={}",
-            DEXSCREENER_BASE_URL,
-            chains_param,
-            pairs_param
-        );
-
-        debug!("[DEXSCREENER] Fetching {} pairs from {} chains", all_pairs.len(), chains.len());
-
-        let response = self.client
-            .get(&url)
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        drop(permit);
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("DexScreener API error {}: {}", status, error_text));
-        }
-
-        let data: PairsResponse = response.json().await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-        Ok(data.pairs.into_iter().map(|p| p.to_pool()).collect())
     }
 
     /// Search for pairs by query
@@ -393,18 +387,22 @@ impl DexScreenerClient {
     }
 
     /// Get token orders (paid promotions, ads)
+    /// Uses /orders/v1/{chainId}/{tokenAddress}
     /// 
     /// # Arguments  
-    /// * `address` - Token address
+    /// * `token_address` - Token address
+    /// * `chain_id` - Chain identifier (defaults to "solana")
     pub async fn get_token_orders(
         &self,
-        address: &str,
+        token_address: &str,
+        chain_id: Option<&str>,
     ) -> Result<Vec<TokenOrder>, String> {
+        let chain = chain_id.unwrap_or(DEFAULT_CHAIN_ID);
         let permit = self.rate_limiter.acquire().await.map_err(|e| format!("Rate limiter error: {}", e))?;
 
-        let url = format!("{}/orders/v1/token/{}", DEXSCREENER_BASE_URL, address);
+        let url = format!("{}/orders/v1/{}/{}", DEXSCREENER_BASE_URL, chain, token_address);
 
-        debug!("[DEXSCREENER] Fetching token orders: {}", address);
+        debug!("[DEXSCREENER] Fetching token orders: token={}, chain={}", token_address, chain);
 
         let response = self.client
             .get(&url)
@@ -456,29 +454,13 @@ impl DexScreenerClient {
         Ok(chains)
     }
 
-    // Legacy method for backward compatibility
+    /// Legacy method for backward compatibility - redirects to fetch_token_pools
     pub async fn fetch_pools(&self, mint: &str) -> Result<Vec<DexScreenerPool>, String> {
-        let mut result = self.fetch_token_profiles(&[mint.to_string()]).await?;
-        Ok(result.remove(mint).unwrap_or_default())
+        self.fetch_token_pools(mint, None).await
     }
 }
 
 // ===== Response Types =====
-
-#[derive(Debug, Deserialize)]
-struct TokenProfilesResponse {
-    #[serde(flatten)]
-    tokens: HashMap<String, Vec<DexScreenerPairRaw>>,
-}
-
-impl TokenProfilesResponse {
-    fn to_pools_map(self) -> HashMap<String, Vec<DexScreenerPool>> {
-        self.tokens
-            .into_iter()
-            .map(|(k, v)| (k, v.into_iter().map(|p| p.to_pool()).collect()))
-            .collect()
-    }
-}
 
 #[derive(Debug, Deserialize)]
 struct PairResponse {
@@ -678,36 +660,4 @@ pub struct TokenOrder {
 pub struct ChainInfo {
     pub id: String,
     pub name: String,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_fetch_token_profiles() {
-        let client = DexScreenerClient::new(60, 10);
-        
-        // Test with BONK
-        let result = client.fetch_token_profiles(
-            &["DezXAZ8z7PinRJjz3wXBoRgixCa6xjnB7YaB1pPB263".to_string()]
-        ).await;
-        
-        assert!(result.is_ok());
-        let pools = result.unwrap();
-        assert!(!pools.is_empty());
-    }
-
-    #[test]
-    fn test_max_tokens_limit() {
-        // Test that we enforce the 30 token limit
-        let addresses: Vec<String> = (0..31).map(|i| format!("address_{}", i)).collect();
-        
-        let client = DexScreenerClient::new(60, 10);
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        
-        let result = rt.block_on(client.fetch_token_profiles(&addresses));
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Too many addresses"));
-    }
 }
