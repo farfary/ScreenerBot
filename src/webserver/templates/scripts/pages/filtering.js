@@ -12,6 +12,7 @@ import { Poller } from "../core/poller.js";
 import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
+import { TabBar } from "../ui/tab_bar.js";
 
 // ============================================================================
 // STATE
@@ -25,10 +26,21 @@ const state = {
   isSaving: false,
   isRefreshing: false,
   lastSaved: null,
-  searchQuery: "",
+  searchQuery: AppState.load("filtering_searchQuery", ""),
   activeTab: AppState.load("filtering_activeTab", "meta"),
   collapsedCategories: AppState.load("filtering_collapsedCategories", {}),
+  initialized: false,
 };
+
+const FILTER_TABS = [
+  { id: "meta", label: "⚙️ Core" },
+  { id: "dexscreener", label: "📊 DexScreener" },
+  { id: "rugcheck", label: "🛡️ RugCheck" },
+];
+
+const TABBAR_STATE_KEY = "filtering.tab";
+
+let tabBar = null;
 
 // ============================================================================
 // CONFIGURATION METADATA
@@ -608,19 +620,9 @@ async function fetchStats() {
 // RENDERING
 // ============================================================================
 
-function renderStatsCard(title, value, meta) {
-  return `
-    <div class="filtering-stat-card">
-      <h3>${Utils.escapeHtml(title)}</h3>
-      <div class="value">${Utils.escapeHtml(value)}</div>
-      ${meta ? `<div class="meta">${Utils.escapeHtml(meta)}</div>` : ""}
-    </div>
-  `;
-}
-
 function renderStats() {
   if (!state.stats) {
-    return '<div class="filtering-stats">Loading statistics...</div>';
+    return '<div class="filtering-metrics loading">Loading metrics...</div>';
   }
 
   const {
@@ -639,31 +641,47 @@ function renderStats() {
   const cacheAge = updated_at ? Utils.formatTimeAgo(new Date(updated_at)) : "Never";
 
   return `
-    <div class="filtering-stats">
-      ${renderStatsCard("Total Tokens", Utils.formatNumber(total_tokens), "In filtering cache")}
-      ${renderStatsCard(
-        "With Price",
-        Utils.formatNumber(with_pool_price),
-        `${priceRate}% have pool price`
-      )}
-      ${renderStatsCard(
-        "Passed Filtering",
-        Utils.formatNumber(passed_filtering),
-        `${passedRate}% passed all criteria`
-      )}
-      ${renderStatsCard(
-        "Open Positions",
-        Utils.formatNumber(open_positions),
-        "Active trading positions"
-      )}
-      ${renderStatsCard(
-        "Secure Tokens",
-        Utils.formatNumber(secure_tokens),
-        "Meeting security threshold"
-      )}
-      ${renderStatsCard("Blacklisted", Utils.formatNumber(blacklisted), "Flagged tokens")}
-      ${renderStatsCard("With OHLCV", Utils.formatNumber(with_ohlcv), "Historical data available")}
-      ${renderStatsCard("Cache Age", cacheAge, updated_at ? new Date(updated_at).toLocaleString() : "")}
+    <div class="filtering-metrics">
+      <div class="metric-chip dominant">
+        <span class="metric-label">Total Tokens</span>
+        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(total_tokens))}</span>
+        <span class="metric-meta">Filtering cache</span>
+      </div>
+      <div class="metric-chip">
+        <span class="metric-label">With Price</span>
+        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(with_pool_price))}</span>
+        <span class="metric-meta">${Utils.escapeHtml(`${priceRate}% priced`)}</span>
+      </div>
+      <div class="metric-chip">
+        <span class="metric-label">Passed Filters</span>
+        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(passed_filtering))}</span>
+        <span class="metric-meta">${Utils.escapeHtml(`${passedRate}% green`)}</span>
+      </div>
+      <div class="metric-chip">
+        <span class="metric-label">Open Positions</span>
+        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(open_positions))}</span>
+        <span class="metric-meta">Active trades</span>
+      </div>
+      <div class="metric-chip">
+        <span class="metric-label">Secure Tokens</span>
+        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(secure_tokens))}</span>
+        <span class="metric-meta">Security threshold</span>
+      </div>
+      <div class="metric-chip warning">
+        <span class="metric-label">Blacklisted</span>
+        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(blacklisted))}</span>
+        <span class="metric-meta">Flagged tokens</span>
+      </div>
+      <div class="metric-chip">
+        <span class="metric-label">With OHLCV</span>
+        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(with_ohlcv))}</span>
+        <span class="metric-meta">Historical ready</span>
+      </div>
+      <div class="metric-chip subtle">
+        <span class="metric-label">Cache Age</span>
+        <span class="metric-value">${Utils.escapeHtml(cacheAge)}</span>
+        <span class="metric-meta">${updated_at ? Utils.escapeHtml(new Date(updated_at).toLocaleString()) : "No refresh"}</span>
+      </div>
     </div>
   `;
 }
@@ -827,6 +845,11 @@ function renderConfigCategory(categoryName, categoryData) {
   const collapsed = state.searchQuery ? false : isCategoryCollapsed(categoryName);
   const disabledClass = isDisabled ? "disabled" : "";
   const collapsedClass = collapsed ? "collapsed" : "";
+  const visibleFields = fields.filter(matchesSearch);
+
+  if (state.searchQuery && visibleFields.length === 0) {
+    return "";
+  }
 
   const collapseButton = `
     <button
@@ -856,186 +879,150 @@ function renderConfigCategory(categoryName, categoryData) {
       </div>
       <div class="card-body">
         ${
-          fields
-            .filter(matchesSearch)
-            .map((field) => renderConfigField(field, source))
-            .join("") || '<div class="no-matches">No fields match</div>'
+          visibleFields.map((field) => renderConfigField(field, source)).join("") ||
+          '<div class="no-matches">No fields match</div>'
         }
       </div>
     </div>
   `;
 }
 
-function renderConfigEditor() {
+function renderConfigPanels() {
   if (!state.draft) {
-    return '<div class="filtering-config-editor">Loading configuration...</div>';
+    return '<div class="filtering-config-empty">Loading configuration...</div>';
   }
 
-  // Group categories by source
-  const metaCategories = [];
-  const dexCategories = [];
-  const rugCategories = [];
-
-  Object.entries(CONFIG_CATEGORIES).forEach(([name, data]) => {
-    const item = { name, data };
-    if (data.source === "meta") metaCategories.push(item);
-    else if (data.source === "dexscreener") dexCategories.push(item);
-    else if (data.source === "rugcheck") rugCategories.push(item);
+  const targetSource = state.activeTab || "meta";
+  const categories = Object.entries(CONFIG_CATEGORIES).filter(([, data]) => {
+    if (targetSource === "meta") return data.source === "meta";
+    return data.source === targetSource;
   });
 
+  const cards = categories
+    .map(([name, data]) => renderConfigCategory(name, data))
+    .filter((html) => html && html.trim().length > 0)
+    .join("");
+
+  if (!cards) {
+    return '<div class="filtering-config-empty no-results">No filters match your criteria.</div>';
+  }
+
+  return `<div class="cards-grid">${cards}</div>`;
+}
+
+function renderSourceControls() {
+  if (!state.draft) return "";
+
+  return ["dexscreener", "rugcheck"].map((source) => renderSourceToggle(source)).join("");
+}
+
+function getStatusMessage() {
+  if (state.isSaving) return "Saving changes...";
+  if (state.isRefreshing) return "Refreshing snapshot...";
+  if (state.hasChanges) return "Unsaved changes pending";
+  if (state.lastSaved) return `Last saved ${Utils.formatTimeAgo(state.lastSaved)}`;
+  return "Configuration in sync";
+}
+
+function renderShell() {
   return `
-    <div class="filtering-layout">
-      <div class="tabs-container">
-        <button class="tab ${state.activeTab === "meta" ? "active" : ""}" data-tab="meta">
-          ⚙️ Core Settings
-        </button>
-        <button class="tab ${state.activeTab === "dexscreener" ? "active" : ""}" data-tab="dexscreener">
-          📊 DexScreener
-          ${renderSourceToggle("dexscreener", "")}
-        </button>
-        <button class="tab ${state.activeTab === "rugcheck" ? "active" : ""}" data-tab="rugcheck">
-          🛡️ RugCheck
-          ${renderSourceToggle("rugcheck", "")}
-        </button>
-      </div>
-      
-      <div class="search-bar">
-        <input type="text" id="filtering-search" placeholder="🔍 Search settings..." value="${Utils.escapeHtml(state.searchQuery)}" />
-      </div>
-
-      <div class="tab-content">
-        <div class="tab-panel ${state.activeTab === "meta" ? "active" : ""}" data-panel="meta">
-          <div class="cards-grid">
-            ${metaCategories.map(({ name, data }) => renderConfigCategory(name, data)).join("")}
+    <div class="filtering-page">
+      <div class="filtering-shell">
+        <header class="filtering-top">
+          <div class="filtering-top-main">
+            <div class="top-text">
+              <h1>🎯 Filtering Control Center</h1>
+              <p>Dial in discovery limits, DexScreener heuristics, and RugCheck defenses from a single pane.</p>
+            </div>
+          </div>
+          <div class="filtering-metrics-wrapper" id="filtering-metrics">
+            ${renderStats()}
+          </div>
+        </header>
+        <div class="filtering-main">
+          <div class="filtering-toolbar">
+            <div id="filtering-tab-bar" class="filtering-tab-bar"></div>
+            <div class="filtering-search-row">
+              <div class="search-field">
+                <input
+                  type="text"
+                  id="filtering-search"
+                  placeholder="Search settings..."
+                  value="${Utils.escapeHtml(state.searchQuery)}"
+                />
+              </div>
+              <div class="filtering-source-controls" id="filtering-source-controls">
+                ${renderSourceControls()}
+              </div>
+            </div>
+          </div>
+          <div class="filtering-content" id="filtering-config-panels">
+            ${renderConfigPanels()}
           </div>
         </div>
-        <div class="tab-panel ${state.activeTab === "dexscreener" ? "active" : ""}" data-panel="dexscreener">
-          <div class="cards-grid">
-            ${dexCategories.map(({ name, data }) => renderConfigCategory(name, data)).join("")}
+        <footer class="filtering-footer">
+          <div class="footer-left">
+            <span id="filtering-status-message">${Utils.escapeHtml(getStatusMessage())}</span>
           </div>
-        </div>
-        <div class="tab-panel ${state.activeTab === "rugcheck" ? "active" : ""}" data-panel="rugcheck">
-          <div class="cards-grid">
-            ${rugCategories.map(({ name, data }) => renderConfigCategory(name, data)).join("")}
+          <div class="footer-actions">
+            <button class="ghost" id="reset-config-btn">↩️ Reset</button>
+            <button class="ghost" id="refresh-snapshot-btn">🔄 Refresh Snapshot</button>
+            <button class="ghost" id="export-config-btn">📤 Export</button>
+            <button class="ghost" id="import-config-btn">📥 Import</button>
+            <button class="primary" id="save-config-btn">💾 Save Changes</button>
           </div>
-        </div>
+        </footer>
       </div>
     </div>
   `;
 }
 
-function renderActions() {
-  const saveDisabled = !state.hasChanges || state.isSaving;
-  const refreshDisabled = state.isRefreshing;
+function initializeTabBar() {
+  const container = $("#filtering-tab-bar");
+  if (!container) return;
 
-  let statusMessage = "";
-  if (state.isSaving) {
-    statusMessage = "Saving...";
-  } else if (state.isRefreshing) {
-    statusMessage = "Refreshing snapshot...";
-  } else if (state.lastSaved) {
-    statusMessage = `Last saved ${Utils.formatTimeAgo(state.lastSaved)}`;
+  if (tabBar) {
+    tabBar.destroy();
+    tabBar = null;
   }
 
-  return `
-    <div class="filtering-actions">
-      <button
-        class="primary"
-        id="save-config-btn"
-        ${saveDisabled ? "disabled" : ""}
-      >
-        💾 Save Changes
-      </button>
-      <button
-        class="secondary"
-        id="reset-config-btn"
-        ${!state.hasChanges ? "disabled" : ""}
-      >
-        ↩️ Reset
-      </button>
-      <button
-        class="secondary"
-        id="refresh-snapshot-btn"
-        ${refreshDisabled ? "disabled" : ""}
-      >
-        🔄 Refresh Snapshot
-      </button>
-      <button class="secondary" id="export-config-btn">
-        📤 Export
-      </button>
-      <button class="secondary" id="import-config-btn">
-        📥 Import
-      </button>
-      ${statusMessage ? `<span class="status-message">${Utils.escapeHtml(statusMessage)}</span>` : ""}
-    </div>
-  `;
-}
+  tabBar = new TabBar({
+    container,
+    tabs: FILTER_TABS,
+    defaultTab: state.activeTab,
+    stateKey: TABBAR_STATE_KEY,
+    pageName: "filtering",
+    onChange: (tabId) => {
+      state.activeTab = tabId;
+      AppState.save("filtering_activeTab", tabId);
+      updateConfigPanels({ scrollTop: 0 });
+      updateSourceControls();
+    },
+  });
 
-function render() {
-  const root = $("#filtering-root");
-  if (!root) return;
-
-  root.innerHTML = `
-    <div class="filtering-header">
-      <h1>🎯 Filtering Configuration</h1>
-      <p>Configure token filtering rules and monitor filtering performance</p>
-    </div>
-    <div id="filtering-stats-container">
-      ${renderStats()}
-    </div>
-    ${renderConfigEditor()}
-    ${renderActions()}
-  `;
-
-  attachEventListeners();
-}
-
-// Update only the stats section without re-rendering inputs
-function updateStats() {
-  const statsContainer = $("#filtering-stats-container");
-  if (statsContainer) {
-    statsContainer.innerHTML = renderStats();
+  const active = tabBar.getActiveTab();
+  if (active && active !== state.activeTab) {
+    state.activeTab = active;
+    AppState.save("filtering_activeTab", active);
+  } else if (!active && state.activeTab) {
+    tabBar.setActive(state.activeTab, { silent: true, skipValidation: true });
   }
 }
 
-// ============================================================================
-// EVENT HANDLERS
-// ============================================================================
+let globalHandlersBound = false;
 
-function attachEventListeners() {
-  // Field change handlers
-  $$("[data-field]").forEach((input) => {
-    input.addEventListener("input", handleFieldChange);
-  });
+function bindGlobalHandlers() {
+  if (globalHandlersBound) return;
 
-  // Source toggle handlers
-  $$("[data-source-toggle]").forEach((input) => {
-    input.addEventListener("change", handleSourceToggle);
-  });
-
-  // Category toggle handlers
-  $$("[data-category-toggle]").forEach((input) => {
-    input.addEventListener("change", handleCategoryToggle);
-  });
-
-  // Category collapse handlers
-  $$("[data-collapse-category]").forEach((button) => {
-    button.addEventListener("click", handleCategoryCollapseToggle);
-  });
-
-  // Tab navigation
-  $$(".tab").forEach((tab) => {
-    tab.addEventListener("click", (e) => {
-      const tabName = e.currentTarget.dataset.tab;
-      if (tabName && tabName !== state.activeTab) {
-        state.activeTab = tabName;
-        AppState.save("filtering_activeTab", state.activeTab);
-        render();
-      }
+  const searchInput = $("#filtering-search");
+  if (searchInput) {
+    searchInput.addEventListener("input", (event) => {
+      state.searchQuery = (event.target.value || "").toLowerCase();
+      AppState.save("filtering_searchQuery", state.searchQuery);
+      updateConfigPanels({ scrollTop: 0 });
     });
-  });
+  }
 
-  // Action buttons
   const saveBtn = $("#save-config-btn");
   const resetBtn = $("#reset-config-btn");
   const refreshBtn = $("#refresh-snapshot-btn");
@@ -1048,15 +1035,100 @@ function attachEventListeners() {
   if (exportBtn) exportBtn.addEventListener("click", handleExportConfig);
   if (importBtn) importBtn.addEventListener("click", handleImportConfig);
 
-  // Search
-  const searchInput = $("#filtering-search");
-  if (searchInput) {
-    searchInput.addEventListener("input", (e) => {
-      state.searchQuery = (e.target.value || "").toLowerCase();
-      render();
-    });
+  globalHandlersBound = true;
+}
+
+function bindSourceToggleHandlers() {
+  $$("[data-source-toggle]").forEach((input) => {
+    input.addEventListener("change", handleSourceToggle);
+  });
+}
+
+function bindConfigHandlers() {
+  const container = $("#filtering-config-panels");
+  if (!container) return;
+
+  container.querySelectorAll("[data-field]").forEach((input) => {
+    input.addEventListener("input", handleFieldChange);
+    if (input.type === "checkbox") {
+      input.addEventListener("change", handleFieldChange);
+    }
+  });
+
+  container.querySelectorAll("[data-category-toggle]").forEach((input) => {
+    input.addEventListener("change", handleCategoryToggle);
+  });
+
+  container.querySelectorAll("[data-collapse-category]").forEach((button) => {
+    button.addEventListener("click", handleCategoryCollapseToggle);
+  });
+}
+
+function updateMetricsSection() {
+  const container = $("#filtering-metrics");
+  if (container) {
+    container.innerHTML = renderStats();
   }
 }
+
+function updateSourceControls() {
+  const container = $("#filtering-source-controls");
+  if (!container) return;
+
+  container.innerHTML = renderSourceControls();
+  bindSourceToggleHandlers();
+}
+
+function updateStatusMessage() {
+  const statusEl = $("#filtering-status-message");
+  if (statusEl) {
+    statusEl.textContent = getStatusMessage();
+  }
+}
+
+function updateSearchField() {
+  const searchInput = $("#filtering-search");
+  if (searchInput && searchInput.value !== state.searchQuery) {
+    searchInput.value = state.searchQuery;
+  }
+}
+
+function updateConfigPanels(options = {}) {
+  const container = $("#filtering-config-panels");
+  if (!container) return;
+
+  const previousScroll = container.scrollTop;
+  container.innerHTML = renderConfigPanels();
+  bindConfigHandlers();
+
+  if (options.scrollTop === 0) {
+    container.scrollTo({ top: 0, behavior: options.smooth ? "smooth" : "auto" });
+  } else if (options.preserveScroll) {
+    container.scrollTop = previousScroll;
+  }
+}
+
+function render() {
+  const root = $("#filtering-root");
+  if (!root) return;
+
+  if (!state.initialized) {
+    root.innerHTML = renderShell();
+    state.initialized = true;
+    initializeTabBar();
+    bindGlobalHandlers();
+  }
+
+  updateMetricsSection();
+  updateSearchField();
+  updateSourceControls();
+  updateConfigPanels({ preserveScroll: true });
+  updateStatusMessage();
+  updateActionButtons();
+}
+// ============================================================================
+// EVENT HANDLERS
+// ============================================================================
 
 function handleCategoryCollapseToggle(event) {
   const button = event.currentTarget;
@@ -1088,6 +1160,7 @@ function handleFieldChange(event) {
   setConfigValue(state.draft, source, fieldKey, value);
   checkForChanges();
   updateActionButtons();
+  updateStatusMessage();
 }
 
 function handleSourceToggle(event) {
@@ -1114,12 +1187,16 @@ function handleCategoryToggle(event) {
 function updateActionButtons() {
   const saveBtn = $("#save-config-btn");
   const resetBtn = $("#reset-config-btn");
+  const refreshBtn = $("#refresh-snapshot-btn");
 
   if (saveBtn) {
     saveBtn.disabled = !state.hasChanges || state.isSaving;
   }
   if (resetBtn) {
     resetBtn.disabled = !state.hasChanges;
+  }
+  if (refreshBtn) {
+    refreshBtn.disabled = state.isRefreshing;
   }
 }
 
@@ -1137,6 +1214,7 @@ async function handleSaveConfig() {
 
   state.isSaving = true;
   updateActionButtons();
+  updateStatusMessage();
 
   try {
     await saveConfig(state.draft);
@@ -1150,6 +1228,7 @@ async function handleSaveConfig() {
   } finally {
     state.isSaving = false;
     updateActionButtons();
+    updateStatusMessage();
   }
 }
 
@@ -1167,6 +1246,7 @@ async function handleRefreshSnapshot() {
 
   state.isRefreshing = true;
   updateActionButtons();
+  updateStatusMessage();
 
   try {
     await refreshSnapshot();
@@ -1179,6 +1259,7 @@ async function handleRefreshSnapshot() {
   } finally {
     state.isRefreshing = false;
     updateActionButtons();
+    updateStatusMessage();
   }
 }
 
@@ -1270,7 +1351,7 @@ export function createLifecycle() {
           new Poller(
             async () => {
               await loadStats();
-              updateStats(); // Update only stats, don't re-render inputs
+              updateMetricsSection();
             },
             { label: "Filtering Stats" }
           )
@@ -1293,6 +1374,12 @@ export function createLifecycle() {
         poller.stop();
         poller = null;
       }
+      if (tabBar) {
+        tabBar.destroy();
+        tabBar = null;
+      }
+      state.initialized = false;
+      globalHandlersBound = false;
     },
   };
 }
