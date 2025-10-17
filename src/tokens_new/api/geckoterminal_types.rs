@@ -296,3 +296,44 @@ pub struct GeckoTerminalRecentlyUpdatedResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub included: Option<Vec<serde_json::Value>>,
 }
+
+// ===== Pool Trades Response Types =====
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeckoTerminalTradesResponse {
+    pub data: Vec<GeckoTerminalTradeData>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeckoTerminalTradeData {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub trade_type: String,
+    pub attributes: GeckoTerminalTradeAttributes,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeckoTerminalTradeAttributes {
+    pub block_number: u64,
+    pub block_timestamp: String,
+    pub tx_hash: String,
+    pub tx_from_address: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from_token_amount: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub to_token_amount: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub price_from_in_currency_token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub price_to_in_currency_token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub price_from_in_usd: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub price_to_in_usd: Option<String>,
+    pub kind: String,
+    pub volume_in_usd: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from_token_address: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub to_token_address: Option<String>,
+}

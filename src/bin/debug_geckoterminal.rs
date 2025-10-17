@@ -64,6 +64,10 @@ struct Args {
     #[clap(long)]
     recently_updated: bool,
 
+    /// Test pool trades endpoint
+    #[clap(long)]
+    pool_trades: bool,
+
     /// Verbose output (show response bodies)
     #[clap(short, long)]
     verbose: bool,
@@ -108,7 +112,7 @@ async fn main() {
     println!("{}", "=".repeat(60).green());
     println!("Base URL: {}\n", BASE_URL.yellow());
 
-    let test_all = args.all || (!args.token_pools && !args.top_pools_token && !args.ohlcv && !args.trending && !args.pool_data && !args.multi_pools && !args.top_pools && !args.dexes && !args.new_pools && !args.tokens_multi && !args.token_info && !args.recently_updated);
+    let test_all = args.all || (!args.token_pools && !args.top_pools_token && !args.ohlcv && !args.trending && !args.pool_data && !args.multi_pools && !args.top_pools && !args.dexes && !args.new_pools && !args.tokens_multi && !args.token_info && !args.recently_updated && !args.pool_trades);
 
     if test_all || args.token_pools {
         test_token_pools(&client, &args).await;
@@ -144,6 +148,10 @@ async fn main() {
 
     if test_all || args.recently_updated {
         test_recently_updated_tokens(&client, &args).await;
+    }
+
+    if test_all || args.pool_trades {
+        test_pool_trades(&client, &args).await;
     }
 
     if test_all || args.pool_data {
@@ -1767,6 +1775,227 @@ async fn test_recently_updated_tokens(client: &Client, _args: &Args) {
                         println!("  {} (first 20 tokens)", "Network distribution:".cyan());
                         for (network, count) in network_counts.iter().take(5) {
                             println!("    • {}: {} tokens", network, count);
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+}
+
+async fn test_pool_trades(client: &Client, args: &Args) {
+    // Test 1: Basic trades fetch (default pool)
+    print_test_header(
+        &format!("Pool Trades ({}, basic)", args.network),
+        &format!("/networks/{}/pools/{}/trades", args.network, args.pool)
+    );
+
+    let url = format!("{}/networks/{}/pools/{}/trades", BASE_URL, args.network, args.pool);
+    
+    let start = Instant::now();
+    match client.get(&url).timeout(Duration::from_secs(10)).send().await {
+        Ok(response) => {
+            let elapsed = start.elapsed();
+            let status = response.status();
+            
+            println!("  {} {} ({:.2}ms)", "Status:".cyan(), status.as_u16().to_string().green(), elapsed.as_millis());
+
+            if status.is_success() {
+                let body = response.text().await.unwrap_or_default();
+                
+                if args.verbose {
+                    println!("  {}", "Response Body:".cyan());
+                    println!("{}", body);
+                }
+
+                if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                        println!("  {} {} trades in past 24h", "✓".green(), data.len());
+                        
+                        if !data.is_empty() {
+                            println!("  → First 5 trades:");
+                            for (i, trade) in data.iter().take(5).enumerate() {
+                                if let Some(attrs) = trade.get("attributes") {
+                                    let kind = attrs.get("kind").and_then(|k| k.as_str()).unwrap_or("N/A");
+                                    let volume = attrs.get("volume_in_usd").and_then(|v| v.as_str()).unwrap_or("0");
+                                    let timestamp = attrs.get("block_timestamp").and_then(|t| t.as_str()).unwrap_or("N/A");
+                                    let tx_hash = attrs.get("tx_hash").and_then(|h| h.as_str()).unwrap_or("N/A");
+                                    println!("    {}. {} - ${} - {} - tx: {}...", 
+                                        i+1, kind.to_uppercase(), volume, timestamp, &tx_hash[..8]);
+                                }
+                            }
+                            
+                            // Calculate total volume
+                            let mut total_volume = 0.0;
+                            for trade in data.iter() {
+                                if let Some(attrs) = trade.get("attributes") {
+                                    if let Some(vol) = attrs.get("volume_in_usd").and_then(|v| v.as_str()) {
+                                        if let Ok(v) = vol.parse::<f64>() {
+                                            total_volume += v;
+                                        }
+                                    }
+                                }
+                            }
+                            println!("  {} Total volume: ${:.2}", "Summary:".cyan(), total_volume);
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 2: Filter by volume > $100,000
+    print_test_header(
+        &format!("Pool Trades ({}, volume > $100k)", args.network),
+        &format!("/networks/{}/pools/{}/trades?trade_volume_in_usd_greater_than=100000", args.network, args.pool)
+    );
+
+    let url = format!("{}/networks/{}/pools/{}/trades?trade_volume_in_usd_greater_than=100000", BASE_URL, args.network, args.pool);
+    
+    let start = Instant::now();
+    match client.get(&url).timeout(Duration::from_secs(10)).send().await {
+        Ok(response) => {
+            let elapsed = start.elapsed();
+            let status = response.status();
+            
+            println!("  {} {} ({:.2}ms)", "Status:".cyan(), status.as_u16().to_string().green(), elapsed.as_millis());
+
+            if status.is_success() {
+                let body = response.text().await.unwrap_or_default();
+
+                if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                        println!("  {} {} large trades (>$100k)", "✓".green(), data.len());
+                        
+                        if !data.is_empty() {
+                            println!("  → Top 3 trades by volume:");
+                            for (i, trade) in data.iter().take(3).enumerate() {
+                                if let Some(attrs) = trade.get("attributes") {
+                                    let kind = attrs.get("kind").and_then(|k| k.as_str()).unwrap_or("N/A");
+                                    let volume = attrs.get("volume_in_usd").and_then(|v| v.as_str()).unwrap_or("0");
+                                    let from_amt = attrs.get("from_token_amount").and_then(|f| f.as_str()).unwrap_or("N/A");
+                                    let to_amt = attrs.get("to_token_amount").and_then(|t| t.as_str()).unwrap_or("N/A");
+                                    println!("    {}. {} - ${} - {} → {}", i+1, kind.to_uppercase(), volume, from_amt, to_amt);
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 3: Filter by base token
+    print_test_header(
+        &format!("Pool Trades ({}, base token)", args.network),
+        &format!("/networks/{}/pools/{}/trades?token=base", args.network, args.pool)
+    );
+
+    let url = format!("{}/networks/{}/pools/{}/trades?token=base", BASE_URL, args.network, args.pool);
+    
+    let start = Instant::now();
+    match client.get(&url).timeout(Duration::from_secs(10)).send().await {
+        Ok(response) => {
+            let elapsed = start.elapsed();
+            let status = response.status();
+            
+            println!("  {} {} ({:.2}ms)", "Status:".cyan(), status.as_u16().to_string().green(), elapsed.as_millis());
+
+            if status.is_success() {
+                let body = response.text().await.unwrap_or_default();
+
+                if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                        println!("  {} {} trades for base token", "✓".green(), data.len());
+                        
+                        // Count buy vs sell
+                        let mut buys = 0;
+                        let mut sells = 0;
+                        for trade in data.iter() {
+                            if let Some(attrs) = trade.get("attributes") {
+                                if let Some(kind) = attrs.get("kind").and_then(|k| k.as_str()) {
+                                    match kind {
+                                        "buy" => buys += 1,
+                                        "sell" => sells += 1,
+                                        _ => {}
+                                    }
+                                }
+                            }
+                        }
+                        
+                        println!("  {} {} buys, {} sells", "Distribution:".cyan(), buys, sells);
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 4: Filter by quote token
+    print_test_header(
+        &format!("Pool Trades ({}, quote token)", args.network),
+        &format!("/networks/{}/pools/{}/trades?token=quote", args.network, args.pool)
+    );
+
+    let url = format!("{}/networks/{}/pools/{}/trades?token=quote", BASE_URL, args.network, args.pool);
+    
+    let start = Instant::now();
+    match client.get(&url).timeout(Duration::from_secs(10)).send().await {
+        Ok(response) => {
+            let elapsed = start.elapsed();
+            let status = response.status();
+            
+            println!("  {} {} ({:.2}ms)", "Status:".cyan(), status.as_u16().to_string().green(), elapsed.as_millis());
+
+            if status.is_success() {
+                let body = response.text().await.unwrap_or_default();
+
+                if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                        println!("  {} {} trades for quote token (inverted view)", "✓".green(), data.len());
+                        
+                        if !data.is_empty() {
+                            println!("  → Sample trade:");
+                            if let Some(first) = data.first() {
+                                if let Some(attrs) = first.get("attributes") {
+                                    let kind = attrs.get("kind").and_then(|k| k.as_str()).unwrap_or("N/A");
+                                    let volume = attrs.get("volume_in_usd").and_then(|v| v.as_str()).unwrap_or("0");
+                                    let price_from = attrs.get("price_from_in_usd").and_then(|p| p.as_str()).unwrap_or("N/A");
+                                    let price_to = attrs.get("price_to_in_usd").and_then(|p| p.as_str()).unwrap_or("N/A");
+                                    println!("    • {} - ${} - from: ${}, to: ${}", kind.to_uppercase(), volume, price_from, price_to);
+                                }
+                            }
                         }
                     }
                 }

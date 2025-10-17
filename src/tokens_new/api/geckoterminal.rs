@@ -14,6 +14,7 @@
 /// 9. /networks/{network}/tokens/multi/{addresses} - Get multiple tokens data (up to 30 addresses)
 /// 10. /networks/{network}/tokens/{address}/info - Get token metadata (name, symbol, socials, etc.)
 /// 11. /tokens/info_recently_updated - Get 100 most recently updated tokens (global endpoint)
+/// 12. /networks/{network}/pools/{pool_address}/trades - Get last 300 trades in past 24h by pool
 
 use super::geckoterminal_types::*;
 use crate::tokens_new::types::GeckoTerminalPool;
@@ -863,6 +864,80 @@ impl GeckoTerminalClient {
             .map_err(|e| format!("JSON parse error: {}", e))?;
 
         Ok(recently_updated_response)
+    }
+
+    /// Get past 24 hour trades by pool address
+    /// Uses /networks/{network}/pools/{pool_address}/trades
+    /// 
+    /// Returns the last 300 trades in the past 24 hours for a pool.
+    /// 
+    /// # Arguments
+    /// * `network` - Network identifier (e.g., "solana", "eth", "bsc")
+    /// * `pool_address` - Pool contract address
+    /// * `trade_volume_in_usd_greater_than` - Optional minimum trade volume filter in USD
+    /// * `token` - Optional token filter ('base', 'quote', or token address)
+    /// 
+    /// # Returns
+    /// Result with trades data
+    /// 
+    /// # Example
+    /// ```no_run
+    /// let trades = client.fetch_pool_trades(
+    ///     "eth",
+    ///     "0x60594a405d53811d3bc4766596efd80fd545a270",
+    ///     Some(100000.0),
+    ///     Some("base")
+    /// ).await?;
+    /// ```
+    pub async fn fetch_pool_trades(
+        &self,
+        network: &str,
+        pool_address: &str,
+        trade_volume_in_usd_greater_than: Option<f64>,
+        token: Option<&str>,
+    ) -> Result<GeckoTerminalTradesResponse, String> {
+        let permit = self.rate_limiter.acquire().await.map_err(|e| format!("Rate limiter error: {}", e))?;
+
+        let mut url = format!(
+            "{}/networks/{}/pools/{}/trades",
+            GECKOTERMINAL_BASE_URL, network, pool_address
+        );
+
+        let mut params = Vec::new();
+
+        if let Some(min_volume) = trade_volume_in_usd_greater_than {
+            params.push(format!("trade_volume_in_usd_greater_than={}", min_volume));
+        }
+        if let Some(tok) = token {
+            params.push(format!("token={}", tok));
+        }
+
+        if !params.is_empty() {
+            url.push_str(&format!("?{}", params.join("&")));
+        }
+
+        debug!("[GECKOTERMINAL] Fetching pool trades: network={}, pool={}, min_volume={:?}", 
+               network, pool_address, trade_volume_in_usd_greater_than);
+
+        let response = self.client
+            .get(&url)
+            .timeout(self.timeout)
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?;
+
+        drop(permit);
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(format!("HTTP {}: {}", status, error_text));
+        }
+
+        let trades_response: GeckoTerminalTradesResponse = response.json().await
+            .map_err(|e| format!("JSON parse error: {}", e))?;
+
+        Ok(trades_response)
     }
 }
 
