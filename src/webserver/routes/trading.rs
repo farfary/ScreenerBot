@@ -49,15 +49,15 @@ async fn get_trading_config() -> Response {
         trading_limits: TradingLimits {
             max_open_positions: cfg.trader.max_open_positions,
             trade_size_sol: cfg.trader.trade_size_sol,
-            entry_monitor_interval_secs: cfg.trader.entry_monitor_interval_secs,
-            position_monitor_interval_secs: cfg.trader.position_monitor_interval_secs,
+            entry_monitor_interval_secs: crate::trader::ENTRY_MONITOR_INTERVAL_SECS,
+            position_monitor_interval_secs: crate::trader::POSITION_MONITOR_INTERVAL_SECS,
         },
         risk_management: RiskManagement {
             stop_loss_percent: STOP_LOSS_PERCENT,
             time_override_loss_threshold_percent: cfg.trader.time_override_loss_threshold_percent,
             time_override_duration_hours: cfg.trader.time_override_duration_hours,
-            debug_force_sell_mode: cfg.trader.debug_force_sell_mode,
-            debug_force_buy_mode: cfg.trader.debug_force_buy_mode,
+            debug_force_sell_mode: crate::trader::DEBUG_FORCE_SELL_MODE,
+            debug_force_buy_mode: crate::trader::DEBUG_FORCE_BUY_MODE,
         },
         profit_targets: ProfitTargets {
             base_min_profit_percent: cfg.trader.min_profit_threshold_percent,

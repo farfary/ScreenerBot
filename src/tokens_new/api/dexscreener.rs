@@ -34,7 +34,10 @@ const DEFAULT_CHAIN_ID: &str = "solana";
 const MAX_TOKENS_PER_REQUEST: usize = 30;
 
 /// Request timeout in seconds - DexScreener is fast, 10s is sufficient
-const TIMEOUT_SECS: u64 = 10;
+pub const TIMEOUT_SECS: u64 = 10;
+
+/// Rate limit per minute - DexScreener has generous limits, 300/min is conservative
+pub const RATE_LIMIT_PER_MINUTE: usize = 300;
 
 // ============================================================================
 // CLIENT IMPLEMENTATION

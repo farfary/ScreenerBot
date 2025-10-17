@@ -23,8 +23,11 @@ use std::time::Instant;
 const RUGCHECK_BASE_URL: &str = "https://api.rugcheck.xyz/v1/tokens";
 const RUGCHECK_STATS_BASE_URL: &str = "https://api.rugcheck.xyz/v1/stats";
 
-// Note: Rugcheck rate limiting and timeout are configurable per config system
-// This is maintained for backward compatibility with existing config patterns
+/// Request timeout in seconds - Rugcheck can be slow, 15s for security analysis
+pub const TIMEOUT_SECS: u64 = 15;
+
+/// Rate limit per minute - Rugcheck has moderate limits, 60/min is reasonable
+pub const RATE_LIMIT_PER_MINUTE: usize = 60;
 
 // ============================================================================
 // CLIENT IMPLEMENTATION

@@ -38,7 +38,10 @@ const DEFAULT_NETWORK: &str = "solana";
 const MAX_TRENDING_PAGE: u32 = 10;
 
 /// Request timeout in seconds - GeckoTerminal can have latency spikes, 10s is safe
-const TIMEOUT_SECS: u64 = 10;
+pub const TIMEOUT_SECS: u64 = 10;
+
+/// Rate limit per minute - GeckoTerminal has strict limits, 30/min is safe
+pub const RATE_LIMIT_PER_MINUTE: usize = 30;
 
 // ============================================================================
 // CLIENT IMPLEMENTATION

@@ -104,47 +104,6 @@ config_struct! {
         })]
         time_override_loss_threshold_percent: f64 = -40.0,
 
-        // Slippage configuration
-        // Slippage configuration lives under swaps config
-
-        // Debug modes
-        #[metadata(field_metadata! {
-            label: "Force Sell Mode",
-            hint: "⚠️ DEBUG ONLY - Do not use in production!",
-            impact: "critical",
-            category: "Debug",
-        })]
-        debug_force_sell_mode: bool = false,
-        #[metadata(field_metadata! {
-            label: "Force Sell Timeout",
-            hint: "Seconds before force sell (only if enabled)",
-            min: 10,
-            max: 300,
-            step: 5,
-            unit: "seconds",
-            impact: "critical",
-            category: "Debug",
-        })]
-        debug_force_sell_timeout_secs: f64 = 45.0,
-        #[metadata(field_metadata! {
-            label: "Force Buy Mode",
-            hint: "⚠️ DEBUG ONLY - Do not use in production!",
-            impact: "critical",
-            category: "Debug",
-        })]
-        debug_force_buy_mode: bool = false,
-        #[metadata(field_metadata! {
-            label: "Force Buy Drop %",
-            hint: "Price drop % to trigger buy (only if enabled)",
-            min: 0,
-            max: 50,
-            step: 0.1,
-            unit: "%",
-            impact: "high",
-            category: "Debug",
-        })]
-        debug_force_buy_drop_threshold_percent: f64 = 0.5,
-
         // Position timing
         #[metadata(field_metadata! {
             label: "Close Cooldown",
@@ -158,174 +117,7 @@ config_struct! {
         })]
         position_close_cooldown_minutes: i64 = 15,
 
-        // Monitoring intervals
-        #[metadata(field_metadata! {
-            label: "Entry Monitor Interval",
-            hint: "Seconds between entry scans (lower = more responsive)",
-            min: 1,
-            max: 60,
-            step: 1,
-            unit: "seconds",
-            impact: "critical",
-            category: "Timing",
-        })]
-        entry_monitor_interval_secs: u64 = 3,
-        #[metadata(field_metadata! {
-            label: "Position Monitor Interval",
-            hint: "Seconds between position checks",
-            min: 1,
-            max: 60,
-            step: 1,
-            unit: "seconds",
-            impact: "critical",
-            category: "Timing",
-        })]
-        position_monitor_interval_secs: u64 = 2,
-
-        // Task timeouts
-        #[metadata(field_metadata! {
-            label: "Semaphore Timeout",
-            hint: "Prevents deadlocks in concurrent ops",
-            min: 5,
-            max: 300,
-            step: 5,
-            unit: "seconds",
-            impact: "critical",
-            category: "Timeouts",
-        })]
-        semaphore_acquire_timeout_secs: u64 = 60,
-        #[metadata(field_metadata! {
-            label: "Token Check Timeout",
-            hint: "Timeout for individual token validation",
-            min: 5,
-            max: 120,
-            step: 5,
-            unit: "seconds",
-            impact: "critical",
-            category: "Timeouts",
-        })]
-        token_check_task_timeout_secs: u64 = 20,
-        #[metadata(field_metadata! {
-            label: "Token Collection Timeout",
-            hint: "Collecting all token checks",
-            min: 10,
-            max: 180,
-            step: 5,
-            unit: "seconds",
-            impact: "critical",
-            category: "Timeouts",
-        })]
-        token_check_collection_timeout_secs: u64 = 30,
-        #[metadata(field_metadata! {
-            label: "Token Handle Timeout",
-            hint: "Handle timeout for token tasks",
-            min: 10,
-            max: 150,
-            step: 5,
-            unit: "seconds",
-            impact: "critical",
-            category: "Timeouts",
-        })]
-        token_check_handle_timeout_secs: u64 = 25,
-        #[metadata(field_metadata! {
-            label: "Sell Collection Timeout",
-            hint: "Overall limit for batch sells",
-            min: 30,
-            max: 600,
-            step: 10,
-            unit: "seconds",
-            impact: "critical",
-            category: "Timeouts",
-        })]
-        sell_operations_collection_timeout_secs: u64 = 240,
-        #[metadata(field_metadata! {
-            label: "Smart Sell Timeout",
-            hint: "Intelligent timeout adapting to network",
-            min: 60,
-            max: 1200,
-            step: 30,
-            unit: "seconds",
-            impact: "critical",
-            category: "Timeouts",
-        })]
-        sell_operation_smart_timeout_secs: u64 = 600,
-        #[metadata(field_metadata! {
-            label: "Sell Semaphore Timeout",
-            hint: "Sell operation lock timeout",
-            min: 10,
-            max: 300,
-            step: 5,
-            unit: "seconds",
-            impact: "critical",
-            category: "Timeouts",
-        })]
-        sell_semaphore_acquire_timeout_secs: u64 = 30,
-        #[metadata(field_metadata! {
-            label: "Sell Task Handle Timeout",
-            hint: "Handle timeout for sell tasks",
-            min: 60,
-            max: 600,
-            step: 10,
-            unit: "seconds",
-            impact: "critical",
-            category: "Timeouts",
-        })]
-        sell_task_handle_timeout_secs: u64 = 200,
-        #[metadata(field_metadata! {
-            label: "Entry Cycle Min Wait",
-            hint: "Rate limiting for entry checks",
-            min: 10,
-            max: 5000,
-            step: 10,
-            unit: "ms",
-            impact: "critical",
-            category: "Timeouts",
-        })]
-        entry_cycle_min_wait_ms: u64 = 100,
-        #[metadata(field_metadata! {
-            label: "Token Shutdown Check",
-            hint: "Milliseconds between shutdown checks",
-            min: 10,
-            max: 1000,
-            step: 10,
-            unit: "ms",
-            impact: "critical",
-            category: "Timeouts",
-        })]
-        token_processing_shutdown_check_ms: u64 = 10,
-        #[metadata(field_metadata! {
-            label: "Task Shutdown Check",
-            hint: "Milliseconds between task shutdown checks",
-            min: 10,
-            max: 1000,
-            step: 10,
-            unit: "ms",
-            impact: "critical",
-            category: "Timeouts",
-        })]
-        task_shutdown_check_ms: u64 = 10,
-        #[metadata(field_metadata! {
-            label: "Sell Shutdown Check",
-            hint: "Milliseconds between sell shutdown checks",
-            min: 10,
-            max: 1000,
-            step: 10,
-            unit: "ms",
-            impact: "critical",
-            category: "Timeouts",
-        })]
-        sell_operation_shutdown_check_ms: u64 = 10,
-        #[metadata(field_metadata! {
-            label: "Collection Shutdown Check",
-            hint: "Milliseconds between collection shutdown checks",
-            min: 10,
-            max: 1000,
-            step: 10,
-            unit: "ms",
-            impact: "critical",
-            category: "Timeouts",
-        })]
-        collection_shutdown_check_ms: u64 = 50,
+        // Performance settings
         #[metadata(field_metadata! {
             label: "Entry Check Concurrency",
             hint: "Tokens to check concurrently (higher = faster but more CPU)",
@@ -337,6 +129,12 @@ config_struct! {
             category: "Performance",
         })]
         entry_check_concurrency: usize = 10,
+
+        // Dry run mode
+        dry_run_mode: bool = false,
+
+        // Sell concurrency
+        sell_concurrency: usize = 5,
     }
 }
 
@@ -1224,41 +1022,6 @@ config_struct! {
         })]
         raydium_enabled: bool = false,
 
-        // Common timeouts
-        #[metadata(field_metadata! {
-            label: "Quote Timeout",
-            hint: "How long to wait for price quotes",
-            min: 5,
-            max: 60,
-            step: 1,
-            unit: "seconds",
-            impact: "critical",
-            category: "Timeouts",
-        })]
-        quote_timeout_secs: u64 = 15,
-        #[metadata(field_metadata! {
-            label: "API Timeout",
-            hint: "Overall timeout for API calls",
-            min: 10,
-            max: 120,
-            step: 5,
-            unit: "seconds",
-            impact: "critical",
-            category: "Timeouts",
-        })]
-        api_timeout_secs: u64 = 30,
-        #[metadata(field_metadata! {
-            label: "Retry Attempts",
-            hint: "3 is balanced, more can be excessive",
-            min: 0,
-            max: 10,
-            step: 1,
-            unit: "attempts",
-            impact: "medium",
-            category: "Retry",
-        })]
-        retry_attempts: u32 = 3,
-
         // Transaction confirmation timeouts
         #[metadata(field_metadata! {
             label: "TX Confirmation Timeout",
@@ -2109,72 +1872,10 @@ config_struct! {
             category: "Retention",
         })]
         retention_days: i64 = 7,
-        /// GeckoTerminal API rate limit (calls per minute)
-        api_rate_limit: usize = 30,
-        /// Default fetch interval for low priority tokens (seconds)
-        #[metadata(field_metadata! {
-            label: "Default Fetch Interval",
-            hint: "Seconds between fetches for low priority tokens",
-            min: 30,
-            max: 7200,
-            step: 30,
-            unit: "seconds",
-            impact: "critical",
-            category: "Intervals",
-        })]
-        default_fetch_interval_secs: u64 = 900,
-        /// Critical token fetch interval (seconds, for open positions)
-        #[metadata(field_metadata! {
-            label: "Critical Fetch Interval",
-            hint: "Seconds between fetches for critical tokens",
-            min: 5,
-            max: 600,
-            step: 5,
-            unit: "seconds",
-            impact: "critical",
-            category: "Intervals",
-        })]
-        critical_fetch_interval_secs: u64 = 30,
-        /// High priority fetch interval (seconds)
-        #[metadata(field_metadata! {
-            label: "High Priority Interval",
-            hint: "Seconds between fetches for high priority tokens",
-            min: 10,
-            max: 1200,
-            step: 10,
-            unit: "seconds",
-            impact: "critical",
-            category: "Intervals",
-        })]
-        high_fetch_interval_secs: u64 = 60,
-        /// Medium priority fetch interval (seconds)
-        #[metadata(field_metadata! {
-            label: "Medium Priority Interval",
-            hint: "Seconds between fetches for medium priority tokens",
-            min: 30,
-            max: 3600,
-            step: 30,
-            unit: "seconds",
-            impact: "critical",
-            category: "Intervals",
-        })]
-        medium_fetch_interval_secs: u64 = 300,
         /// Maximum consecutive empty fetches before throttling
         max_empty_fetches: u32 = 10,
         /// Enable automatic gap filling
         auto_fill_gaps: bool = true,
-        /// Gap fill check interval (seconds)
-        #[metadata(field_metadata! {
-            label: "Gap Fill Interval",
-            hint: "Seconds between gap fill checks",
-            min: 30,
-            max: 3600,
-            step: 30,
-            unit: "seconds",
-            impact: "critical",
-            category: "Intervals",
-        })]
-        gap_fill_interval_secs: u64 = 300,
         /// Cache size (maximum number of tokens in hot cache)
         cache_size: usize = 100,
         /// Cache retention hours (for hot cache)
@@ -2189,18 +1890,7 @@ config_struct! {
             category: "Cache",
         })]
         cache_retention_hours: i64 = 24,
-        /// Database cleanup interval (seconds)
-        #[metadata(field_metadata! {
-            label: "Cleanup Interval",
-            hint: "Seconds between database cleanup passes",
-            min: 60,
-            max: 86400,
-            step: 60,
-            unit: "seconds",
-            impact: "critical",
-            category: "Maintenance",
-        })]
-        cleanup_interval_secs: u64 = 3600,
+
         /// Enable pool failover
         pool_failover_enabled: bool = true,
         /// Maximum pool failures before switching

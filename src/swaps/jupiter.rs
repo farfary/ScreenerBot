@@ -15,6 +15,23 @@ use crate::tokens::Token;
 use reqwest;
 use tokio::time::{timeout, Duration};
 
+// ============================================================================
+// TIMING CONSTANTS - Hardcoded for optimal Jupiter swap performance
+// ============================================================================
+
+/// Quote API timeout in seconds - Jupiter is fast, 15s is sufficient
+const QUOTE_TIMEOUT_SECS: u64 = 15;
+
+/// Swap API timeout in seconds - includes execution, 20s for safety
+const API_TIMEOUT_SECS: u64 = 20;
+
+/// Retry attempts for failed operations
+const RETRY_ATTEMPTS: usize = 3;
+
+// ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
+
 /// Jupiter swap result structure
 #[derive(Debug)]
 pub struct JupiterSwapResult {
@@ -154,7 +171,7 @@ pub async fn get_jupiter_quote(
         );
     }
 
-    let quote_timeout_secs = with_config(|cfg| cfg.swaps.quote_timeout_secs);
+    let quote_timeout_secs = QUOTE_TIMEOUT_SECS;
 
     if is_debug_swaps_enabled() {
         log(
@@ -380,7 +397,7 @@ pub async fn get_jupiter_swap_transaction(
 
     let client = reqwest::Client::new();
     let jupiter_swap_api = with_config(|cfg| cfg.swaps.jupiter_swap_api.clone());
-    let api_timeout_secs = with_config(|cfg| cfg.swaps.api_timeout_secs);
+    let api_timeout_secs = API_TIMEOUT_SECS;
 
     if is_debug_swaps_enabled() {
         log(

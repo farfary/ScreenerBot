@@ -12,6 +12,20 @@ use crate::tokens::Token;
 use reqwest;
 use serde_json::Value;
 
+// ============================================================================
+// TIMING CONSTANTS - Hardcoded for optimal GMGN swap performance
+// ============================================================================
+
+/// Quote API timeout in seconds - GMGN can be slower, 15s is safe
+const QUOTE_TIMEOUT_SECS: u64 = 15;
+
+/// Retry attempts for failed operations
+const RETRY_ATTEMPTS: usize = 3;
+
+// ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
+
 /// GMGN swap result structure
 #[derive(Debug)]
 pub struct GMGNSwapResult {
@@ -102,8 +116,8 @@ pub async fn get_gmgn_quote(
     let gmgn_anti_mev = with_config(|cfg| cfg.swaps.gmgn_anti_mev);
     let gmgn_quote_api = with_config(|cfg| cfg.swaps.gmgn_quote_api.clone());
     let gmgn_partner = with_config(|cfg| cfg.swaps.gmgn_partner.clone());
-    let quote_timeout_secs = with_config(|cfg| cfg.swaps.quote_timeout_secs);
-    let retry_attempts = with_config(|cfg| cfg.swaps.retry_attempts);
+    let quote_timeout_secs = QUOTE_TIMEOUT_SECS;
+    let retry_attempts = RETRY_ATTEMPTS;
 
     if is_debug_swaps_enabled() {
         log(
