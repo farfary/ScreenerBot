@@ -322,24 +322,10 @@ const CONFIG_CATEGORIES = {
         impact: "critical",
       },
       {
-        key: "mint_authority_enabled",
-        label: "Enable Mint Authority Check",
-        type: "boolean",
-        hint: "Check for mint authority presence",
-        impact: "high",
-      },
-      {
         key: "allow_mint_authority",
         label: "Allow Mint Authority",
         type: "boolean",
         hint: "Allow tokens with mint authority (false = reject if present)",
-        impact: "high",
-      },
-      {
-        key: "freeze_authority_enabled",
-        label: "Enable Freeze Authority Check",
-        type: "boolean",
-        hint: "Check for freeze authority presence",
         impact: "high",
       },
       {

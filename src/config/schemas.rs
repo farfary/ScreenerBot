@@ -890,13 +890,6 @@ config_struct! {
 
         // Mint authority check
         #[metadata(field_metadata! {
-            label: "Enable Mint Authority Check",
-            hint: "Check for mint authority presence",
-            impact: "high",
-            category: "Authorities",
-        })]
-        mint_authority_enabled: bool = true,
-        #[metadata(field_metadata! {
             label: "Allow Mint Authority",
             hint: "Allow tokens with mint authority (false = reject if present)",
             impact: "high",
@@ -905,13 +898,6 @@ config_struct! {
         allow_mint_authority: bool = false,
 
         // Freeze authority check
-        #[metadata(field_metadata! {
-            label: "Enable Freeze Authority Check",
-            hint: "Check for freeze authority presence",
-            impact: "high",
-            category: "Authorities",
-        })]
-        freeze_authority_enabled: bool = true,
         #[metadata(field_metadata! {
             label: "Allow Freeze Authority",
             hint: "Allow tokens with freeze authority (false = reject if present)",
