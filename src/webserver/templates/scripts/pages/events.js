@@ -374,9 +374,14 @@ function createLifecycle() {
           summary: [{ id: "events-total", label: "Total", value: "0" }],
           search: {
             enabled: true,
+            mode: "server",
             placeholder: "Search events...",
-            onChange: (value) => {
+            onChange: (value, el, options) => {
               state.search = (value || "").trim();
+              // Skip if this is state restoration
+              if (options?.restored) {
+                return;
+              }
             },
             onSubmit: () => {
               requestReload("search", {
@@ -389,6 +394,7 @@ function createLifecycle() {
             {
               id: "category",
               label: "Category",
+              mode: "server",
               defaultValue: DEFAULT_FILTERS.category,
               autoApply: false,
               filterFn: () => true,
@@ -408,8 +414,12 @@ function createLifecycle() {
                 { value: "learner", label: "Learner" },
                 { value: "other", label: "Other" },
               ],
-              onChange: (value) => {
+              onChange: (value, el, options) => {
                 state.filters.category = value === "all" ? "all" : value;
+                // Skip reload if this is state restoration
+                if (options?.restored) {
+                  return;
+                }
                 requestReload("filters", {
                   silent: false,
                   resetScroll: true,
@@ -419,6 +429,7 @@ function createLifecycle() {
             {
               id: "severity",
               label: "Severity",
+              mode: "server",
               defaultValue: DEFAULT_FILTERS.severity,
               autoApply: false,
               filterFn: () => true,
@@ -429,8 +440,12 @@ function createLifecycle() {
                 { value: "error", label: "Error" },
                 { value: "debug", label: "Debug" },
               ],
-              onChange: (value) => {
+              onChange: (value, el, options) => {
                 state.filters.severity = value === "all" ? "all" : value;
+                // Skip reload if this is state restoration
+                if (options?.restored) {
+                  return;
+                }
                 requestReload("filters", {
                   silent: false,
                   resetScroll: true,
@@ -459,14 +474,26 @@ function createLifecycle() {
         },
       });
 
+      // Sync state from DataTable's restored server state
+      const serverState = table.getServerState();
+      if (serverState.searchQuery) {
+        state.search = serverState.searchQuery;
+      }
+      if (serverState.filters.category) {
+        state.filters.category = serverState.filters.category;
+      }
+      if (serverState.filters.severity) {
+        state.filters.severity = serverState.filters.severity;
+      }
+
       window.eventsTable = table;
-      table.setToolbarFilterValue("category", DEFAULT_FILTERS.category, {
+      table.setToolbarFilterValue("category", state.filters.category, {
         apply: false,
       });
-      table.setToolbarFilterValue("severity", DEFAULT_FILTERS.severity, {
+      table.setToolbarFilterValue("severity", state.filters.severity, {
         apply: false,
       });
-      table.setToolbarSearchValue("", { apply: false });
+      table.setToolbarSearchValue(state.search, { apply: false });
       updateToolbar();
     },
 

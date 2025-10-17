@@ -121,6 +121,8 @@
  * - filterFn: (row, filterValue) => boolean - Custom filter logic (required)
  */
 
+/* global queueMicrotask */
+
 import * as AppState from "../core/app_state.js";
 import { $ } from "../core/dom.js";
 import { TableToolbarView } from "./table_toolbar.js";
@@ -134,6 +136,8 @@ export class DataTable {
       toolbar: options.toolbar || {},
       sorting: options.sorting || { column: null, direction: "asc" },
       stateKey: options.stateKey || "data-table",
+      serverStateKey: options.serverStateKey || null, // NEW: Separate key for server-side state
+      restoreServerState: options.restoreServerState !== false, // NEW: Auto-restore server state
       enableLogging: options.enableLogging || false,
       rowIdField: options.rowIdField || "id",
       emptyMessage: options.emptyMessage || "No data to display",
@@ -210,8 +214,10 @@ export class DataTable {
     this._pagination = this._initializePagination(this.options.pagination);
     this._paginationScrollRAF = null;
     this._pendingRenderOptions = null;
+    this._serverStateRestored = false; // Track if server state has been restored
 
     this._loadState();
+    this._restoreServerState(); // NEW: Restore server-side state after loading
     this._init();
   }
 
@@ -3131,6 +3137,86 @@ export class DataTable {
       }
       this._log("info", "State loaded", saved);
     }
+  }
+
+  /**
+   * Restore server-side state and trigger callbacks
+   * This enables automatic persistence for server-side sorting, filtering, and search
+   */
+  _restoreServerState() {
+    if (!this.options.restoreServerState || this._serverStateRestored) {
+      return;
+    }
+
+    this._serverStateRestored = true;
+
+    // For server-side tables, fire onChange callbacks with restored state
+    // This allows pages to reload data with the restored parameters
+
+    // Restore server-side sort
+    if (this._getSortingMode() === "server" && this.state.sortColumn) {
+      const sortingConfig = this.options.sorting || {};
+      if (typeof sortingConfig.onChange === "function") {
+        // Defer callback to avoid firing before table is fully initialized
+        queueMicrotask(() => {
+          sortingConfig.onChange({
+            column: this.state.sortColumn,
+            direction: this.state.sortDirection,
+            table: this,
+            restored: true, // Flag to indicate this is state restoration
+          });
+        });
+        this._log("info", "Server-side sort state restored", {
+          column: this.state.sortColumn,
+          direction: this.state.sortDirection,
+        });
+      }
+    }
+
+    // Restore server-side search
+    if (this._getSearchMode() === "server" && this.state.searchQuery) {
+      const searchConfig = this.options.toolbar?.search || {};
+      if (typeof searchConfig.onChange === "function") {
+        queueMicrotask(() => {
+          searchConfig.onChange(this.state.searchQuery, null, { restored: true });
+        });
+        this._log("info", "Server-side search state restored", {
+          query: this.state.searchQuery,
+        });
+      }
+    }
+
+    // Restore server-side filters
+    if (this.options.toolbar?.filters) {
+      Object.entries(this.state.filters).forEach(([filterId, value]) => {
+        const filterConfig = this.options.toolbar.filters.find(
+          (f) => f.id === filterId
+        );
+        if (filterConfig && this._isServerFilter(filterConfig)) {
+          if (typeof filterConfig.onChange === "function") {
+            queueMicrotask(() => {
+              filterConfig.onChange(value, null, { restored: true });
+            });
+            this._log("info", "Server-side filter state restored", {
+              filterId,
+              value,
+            });
+          }
+        }
+      });
+    }
+  }
+
+  /**
+   * Get server-side state (for pages that need to read it)
+   */
+  getServerState() {
+    return {
+      sortColumn: this.state.sortColumn,
+      sortDirection: this.state.sortDirection,
+      searchQuery: this.state.searchQuery,
+      filters: { ...this.state.filters },
+    };
   }
 
   /**

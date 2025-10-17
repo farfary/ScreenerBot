@@ -250,7 +250,7 @@ function createLifecycle() {
     });
   };
 
-  const handleSortChange = ({ column, direction }) => {
+  const handleSortChange = ({ column, direction, restored }) => {
     const sortKey = resolveSortKey(column);
     if (!sortKey) {
       syncTableSortState({ render: true });
@@ -262,7 +262,9 @@ function createLifecycle() {
     state.totalCount = null;
     state.lastUpdate = null;
     updateToolbar();
-    requestReload("sort", {
+    
+    // For restored state, we still need to load data, but silently
+    requestReload(restored ? "restored" : "sort", {
       silent: false,
       resetScroll: true,
     }).catch(() => {});
@@ -555,6 +557,7 @@ function createLifecycle() {
             placeholder: "Search by symbol or mint...",
             onChange: (value) => {
               state.search = (value || "").trim();
+              // onChange just updates state, onSubmit triggers reload
             },
             onSubmit: () => {
               state.totalCount = null;
@@ -578,8 +581,13 @@ function createLifecycle() {
                 { value: "priced", label: "With Price" },
                 { value: "noprice", label: "No Price" },
               ],
-              onChange: (value) => {
+              onChange: (value, el, options) => {
                 state.filters.priced = value;
+                // For restored state, just update state without reload
+                // User must click Apply button to reload
+                if (options?.restored) {
+                  return;
+                }
                 state.totalCount = null;
                 state.lastUpdate = null;
                 updateToolbar();
@@ -599,8 +607,13 @@ function createLifecycle() {
                 { value: "all", label: "All" },
                 { value: "open", label: "Open Only" },
               ],
-              onChange: (value) => {
+              onChange: (value, el, options) => {
                 state.filters.positions = value;
+                // For restored state, just update state without reload
+                // User must click Apply button to reload
+                if (options?.restored) {
+                  return;
+                }
                 state.totalCount = null;
                 state.lastUpdate = null;
                 updateToolbar();
@@ -626,14 +639,40 @@ function createLifecycle() {
         },
       });
 
+      // Sync state from DataTable's restored server state
+      const serverState = table.getServerState();
+      let hasSortRestored = false;
+      
+      if (serverState.sortColumn) {
+        const sortKey = resolveSortKey(serverState.sortColumn);
+        if (sortKey) {
+          state.sort = {
+            by: sortKey,
+            direction: serverState.sortDirection || "asc",
+          };
+          hasSortRestored = true;
+        }
+      }
+      if (serverState.searchQuery) {
+        state.search = serverState.searchQuery;
+      }
+      if (serverState.filters.priced) {
+        state.filters.priced = serverState.filters.priced;
+      }
+      if (serverState.filters.positions) {
+        state.filters.positions = serverState.filters.positions;
+      }
+
       syncTableSortState({ render: false });
       syncToolbarFilters();
       table.setToolbarSearchValue(state.search, { apply: false });
       updateToolbar();
 
-      // Trigger initial data load for the active view
-      // This is needed because TabBar restoration with { silent: true } doesn't trigger onChange
-      requestReload("initial", { silent: false, resetScroll: true }).catch(() => {});
+      // Trigger initial data load if no sort state was restored
+      // (sort restoration triggers reload via handleSortChange)
+      if (!hasSortRestored) {
+        requestReload("initial", { silent: false, resetScroll: true }).catch(() => {});
+      }
     },
 
     activate(ctx) {

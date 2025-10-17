@@ -519,9 +519,14 @@ function createLifecycle() {
           ],
           search: {
             enabled: true,
+            mode: "server",
             placeholder: "Search by signature…",
-            onChange: (value) => {
+            onChange: (value, el, options) => {
               state.signature = (value || "").trim();
+              // Skip if this is state restoration
+              if (options?.restored) {
+                return;
+              }
             },
             onSubmit: () => {
               requestReload("search", {
@@ -534,6 +539,7 @@ function createLifecycle() {
             {
               id: "type",
               label: "Type",
+              mode: "server",
               defaultValue: state.filters.type,
               autoApply: false,
               options: [
@@ -546,8 +552,12 @@ function createLifecycle() {
                 { value: "failed", label: "Failed" },
                 { value: "unknown", label: "Unknown" },
               ],
-              onChange: (value) => {
+              onChange: (value, el, options) => {
                 state.filters.type = value || "all";
+                // Skip reload if this is state restoration
+                if (options?.restored) {
+                  return;
+                }
                 requestReload("filter", {
                   silent: false,
                   resetScroll: true,
@@ -557,6 +567,7 @@ function createLifecycle() {
             {
               id: "direction",
               label: "Direction",
+              mode: "server",
               defaultValue: state.filters.direction,
               autoApply: false,
               options: [
@@ -566,8 +577,12 @@ function createLifecycle() {
                 { value: "Internal", label: "Internal" },
                 { value: "Unknown", label: "Unknown" },
               ],
-              onChange: (value) => {
+              onChange: (value, el, options) => {
                 state.filters.direction = value || "all";
+                // Skip reload if this is state restoration
+                if (options?.restored) {
+                  return;
+                }
                 requestReload("filter", {
                   silent: false,
                   resetScroll: true,
@@ -577,6 +592,7 @@ function createLifecycle() {
             {
               id: "status",
               label: "Status",
+              mode: "server",
               defaultValue: state.filters.status,
               autoApply: false,
               options: [
@@ -586,8 +602,12 @@ function createLifecycle() {
                 { value: "Finalized", label: "Finalized" },
                 { value: "Failed", label: "Failed" },
               ],
-              onChange: (value) => {
+              onChange: (value, el, options) => {
                 state.filters.status = value || "all";
+                // Skip reload if this is state restoration
+                if (options?.restored) {
+                  return;
+                }
                 requestReload("filter", {
                   silent: false,
                   resetScroll: true,
@@ -615,6 +635,21 @@ function createLifecycle() {
           ],
         },
       });
+
+      // Sync state from DataTable's restored server state
+      const serverState = table.getServerState();
+      if (serverState.searchQuery) {
+        state.signature = serverState.searchQuery;
+      }
+      if (serverState.filters.type) {
+        state.filters.type = serverState.filters.type;
+      }
+      if (serverState.filters.direction) {
+        state.filters.direction = serverState.filters.direction;
+      }
+      if (serverState.filters.status) {
+        state.filters.status = serverState.filters.status;
+      }
 
       table.setToolbarSearchValue(state.signature, { apply: false });
       table.setToolbarFilterValue("type", state.filters.type, {
