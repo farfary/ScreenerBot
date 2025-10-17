@@ -1,4 +1,13 @@
-/// Rugcheck API client
+/// Rugcheck API client for token security analysis
+/// 
+/// API Documentation: https://api.rugcheck.xyz/
+/// 
+/// Endpoints implemented:
+/// 1. /v1/tokens/{mint}/report - Get security report for a token
+/// 2. /v1/tokens/{mint}/report/summary - Get summary security report
+/// 3. /v1/stats/summary - Get global platform statistics
+/// 4. /v1/tokens/{mints}/batch - Get multiple token reports (batch)
+
 use super::client::{HttpClient, RateLimiter};
 use super::rugcheck_types::*;
 use super::stats::ApiStatsTracker;
@@ -7,8 +16,19 @@ use chrono::Utc;
 use std::sync::Arc;
 use std::time::Instant;
 
+// ============================================================================
+// API CONFIGURATION - Hardcoded for Rugcheck API
+// ============================================================================
+
 const RUGCHECK_BASE_URL: &str = "https://api.rugcheck.xyz/v1/tokens";
 const RUGCHECK_STATS_BASE_URL: &str = "https://api.rugcheck.xyz/v1/stats";
+
+// Note: Rugcheck rate limiting and timeout are configurable per config system
+// This is maintained for backward compatibility with existing config patterns
+
+// ============================================================================
+// CLIENT IMPLEMENTATION
+// ============================================================================
 
 pub struct RugcheckClient {
     http_client: HttpClient,

@@ -130,6 +130,37 @@ pub struct ChainInfo {
 }
 
 // ============================================================================
+// BOOST/DISCOVERY RESPONSE TYPES
+// ============================================================================
+
+/// Token boost from /token-boosts/latest/v1
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenBoostLatest {
+    pub url: String,
+    pub chain_id: String,
+    pub token_address: String,
+    pub open_graph: Option<String>,
+    pub total_amount: i64,
+    pub amount: i64,
+}
+
+/// Token boost from /token-boosts/top/v1
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenBoostTop {
+    pub url: String,
+    pub chain_id: String,
+    pub token_address: String,
+    pub description: Option<String>,
+    pub icon: Option<String>,
+    pub header: Option<String>,
+    pub open_graph: Option<String>,
+    pub links: Option<Vec<serde_json::Value>>,
+    pub total_amount: i64,
+}
+
+// ============================================================================
 // CONVERSION IMPLEMENTATION - SAME PATTERN AS GECKOTERMINAL
 // ============================================================================
 

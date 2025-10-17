@@ -25,10 +25,24 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Semaphore;
 
+// ============================================================================
+// API CONFIGURATION - Hardcoded for GeckoTerminal API
+// ============================================================================
+
 const GECKOTERMINAL_BASE_URL: &str = "https://api.geckoterminal.com/api/v2";
+
+/// Default network for Solana operations
 const DEFAULT_NETWORK: &str = "solana";
+
+/// Maximum page number for trending pools pagination
 const MAX_TRENDING_PAGE: u32 = 10;
+
+/// Request timeout - GeckoTerminal can have latency spikes, 10s is safe
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
+
+// ============================================================================
+// CLIENT IMPLEMENTATION
+// ============================================================================
 
 /// Complete GeckoTerminal API client
 pub struct GeckoTerminalClient {

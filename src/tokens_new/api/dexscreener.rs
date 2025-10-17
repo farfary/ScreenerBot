@@ -21,10 +21,24 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Semaphore;
 
+// ============================================================================
+// API CONFIGURATION - Hardcoded for DexScreener API
+// ============================================================================
+
 const DEXSCREENER_BASE_URL: &str = "https://api.dexscreener.com";
-const MAX_TOKENS_PER_REQUEST: usize = 30;
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Default chain for Solana operations
 const DEFAULT_CHAIN_ID: &str = "solana";
+
+/// Maximum tokens per batch request
+const MAX_TOKENS_PER_REQUEST: usize = 30;
+
+/// Request timeout - DexScreener is fast, 10s is sufficient
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
+
+// ============================================================================
+// CLIENT IMPLEMENTATION
+// ============================================================================
 
 /// Complete DexScreener API client
 pub struct DexScreenerClient {
@@ -254,14 +268,18 @@ impl DexScreenerClient {
         Ok(profiles)
     }
 
-    /// Get boosted tokens (paid promotions)
+    /// Get top boosted tokens (most promoted)
+    /// Uses /token-boosts/top/v1
     /// 
     /// # Arguments
     /// * `chain_id` - Optional chain filter (e.g., "solana")
-    pub async fn get_boosted_tokens(
+    /// 
+    /// # Returns
+    /// Vec<TokenBoostTop> - Top boosted tokens with promotion details
+    pub async fn get_top_boosted_tokens(
         &self,
         chain_id: Option<&str>,
-    ) -> Result<Vec<DexScreenerPool>, String> {
+    ) -> Result<Vec<TokenBoostTop>, String> {
         let permit = self.rate_limiter.acquire().await.map_err(|e| format!("Rate limiter error: {}", e))?;
 
         let mut url = format!("{}/token-boosts/top/v1", DEXSCREENER_BASE_URL);
@@ -269,7 +287,7 @@ impl DexScreenerClient {
             url = format!("{}?chainId={}", url, chain);
         }
 
-        debug!("[DEXSCREENER] Fetching boosted tokens");
+        debug!("[DEXSCREENER] Fetching top boosted tokens");
 
         let response = self.client
             .get(&url)
@@ -281,16 +299,48 @@ impl DexScreenerClient {
         drop(permit);
 
         let status = response.status();
-        if (!status.is_success()) {
+        if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
             return Err(format!("DexScreener API error {}: {}", status, error_text));
         }
 
-        let data: serde_json::Value = response.json().await
+        let boosts: Vec<TokenBoostTop> = response.json().await
             .map_err(|e| format!("Failed to parse response: {}", e))?;
 
-        // Parse boosts data
-        Ok(Vec::new()) // Implement when needed
+        Ok(boosts)
+    }
+
+    /// Get latest boosted tokens (newest promotions)
+    /// Uses /token-boosts/latest/v1
+    /// 
+    /// # Returns
+    /// Vec<TokenBoostLatest> - Latest boosted tokens
+    pub async fn get_latest_boosted_tokens(&self) -> Result<Vec<TokenBoostLatest>, String> {
+        let permit = self.rate_limiter.acquire().await.map_err(|e| format!("Rate limiter error: {}", e))?;
+
+        let url = format!("{}/token-boosts/latest/v1", DEXSCREENER_BASE_URL);
+
+        debug!("[DEXSCREENER] Fetching latest boosted tokens");
+
+        let response = self.client
+            .get(&url)
+            .timeout(self.timeout)
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?;
+
+        drop(permit);
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(format!("DexScreener API error {}: {}", status, error_text));
+        }
+
+        let boosts: Vec<TokenBoostLatest> = response.json().await
+            .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+        Ok(boosts)
     }
 
     /// Get top tokens by volume in a specific time window
