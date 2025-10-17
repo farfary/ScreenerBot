@@ -340,11 +340,11 @@ pub struct FeatureVector {
     pub drop_acceleration: f64, // Change in drop velocity
 
     // Market Context Features
-    pub liquidity_tier: f64,      // Liquidity tier (0-1)
-    pub tx_activity_score: f64,   // Transaction activity score (0-1)
-    pub risk_score_norm: f64,     // Risk score normalized (0-1, higher = riskier)
-    pub holder_count_log: f64,    // Log of holder count
-    pub market_cap_tier: f64,     // Market cap tier (0-1)
+    pub liquidity_tier: f64,    // Liquidity tier (0-1)
+    pub tx_activity_score: f64, // Transaction activity score (0-1)
+    pub risk_score_norm: f64,   // Risk score normalized (0-1, higher = riskier)
+    pub holder_count_log: f64,  // Log of holder count
+    pub market_cap_tier: f64,   // Market cap tier (0-1)
 
     // ATH Proximity Features
     pub ath_prox_15m: f64,   // Proximity to 15m high (0-1)

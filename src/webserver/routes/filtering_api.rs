@@ -1,4 +1,9 @@
-use axum::{http::StatusCode, response::Response, routing::{get, post}, Router};
+use axum::{
+    http::StatusCode,
+    response::Response,
+    routing::{get, post},
+    Router,
+};
 use chrono::Utc;
 use serde::Serialize;
 use std::sync::Arc;
@@ -40,19 +45,17 @@ struct FilteringStatsResponse {
 /// Retrieve current filtering statistics including token counts and metrics
 async fn get_stats() -> Response {
     match filtering::fetch_stats().await {
-        Ok(stats) => {
-            success_response(FilteringStatsResponse {
-                total_tokens: stats.total_tokens,
-                with_pool_price: stats.with_pool_price,
-                open_positions: stats.open_positions,
-                blacklisted: stats.blacklisted,
-                secure_tokens: stats.secure_tokens,
-                with_ohlcv: stats.with_ohlcv,
-                passed_filtering: stats.passed_filtering,
-                updated_at: stats.updated_at.to_rfc3339(),
-                timestamp: Utc::now().to_rfc3339(),
-            })
-        }
+        Ok(stats) => success_response(FilteringStatsResponse {
+            total_tokens: stats.total_tokens,
+            with_pool_price: stats.with_pool_price,
+            open_positions: stats.open_positions,
+            blacklisted: stats.blacklisted,
+            secure_tokens: stats.secure_tokens,
+            with_ohlcv: stats.with_ohlcv,
+            passed_filtering: stats.passed_filtering,
+            updated_at: stats.updated_at.to_rfc3339(),
+            timestamp: Utc::now().to_rfc3339(),
+        }),
         Err(err) => {
             log(
                 LogTag::Filtering,

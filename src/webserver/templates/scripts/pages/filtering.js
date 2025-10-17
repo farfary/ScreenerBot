@@ -11,6 +11,7 @@ import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
+import * as AppState from "../core/app_state.js";
 
 // ============================================================================
 // STATE
@@ -24,6 +25,8 @@ const state = {
   isSaving: false,
   isRefreshing: false,
   lastSaved: null,
+  searchQuery: "",
+  activeTab: AppState.load("filtering_activeTab", "meta"),
 };
 
 // ============================================================================
@@ -31,220 +34,351 @@ const state = {
 // ============================================================================
 
 const CONFIG_CATEGORIES = {
-  Performance: [
-    {
-      key: "filter_cache_ttl_secs",
-      label: "Cache TTL",
-      type: "number",
-      unit: "seconds",
-      min: 5,
-      max: 300,
-      step: 5,
-      hint: "How long to cache filter results (lower = more current)",
-      impact: "critical",
-    },
-    {
-      key: "target_filtered_tokens",
-      label: "Target Filtered Tokens",
-      type: "number",
-      unit: "tokens",
-      min: 10,
-      max: 10000,
-      step: 100,
-      hint: "Bot processes up to this many qualified tokens",
-      impact: "medium",
-    },
-    {
-      key: "max_tokens_to_process",
-      label: "Max Tokens to Process",
-      type: "number",
-      unit: "tokens",
-      min: 100,
-      max: 50000,
-      step: 500,
-      hint: "Max tokens to evaluate before filtering",
-      impact: "medium",
-    },
-  ],
-  Requirements: [
-    {
-      key: "require_name_and_symbol",
-      label: "Require Name & Symbol",
-      type: "boolean",
-      hint: "Recommended: true. Filters incomplete tokens",
-      impact: "high",
-    },
-    {
-      key: "require_logo_url",
-      label: "Require Logo",
-      type: "boolean",
-      hint: "Optional. Logo may indicate legitimacy",
-      impact: "medium",
-    },
-    {
-      key: "require_website_url",
-      label: "Require Website",
-      type: "boolean",
-      hint: "Optional. Website may indicate serious project",
-      impact: "medium",
-    },
-  ],
-  Age: [
-    {
-      key: "min_token_age_minutes",
-      label: "Min Token Age",
-      type: "number",
-      unit: "minutes",
-      min: 0,
-      max: 10080,
-      step: 10,
-      hint: "60min avoids brand new tokens, lower for sniping",
-      impact: "critical",
-    },
-  ],
-  Activity: [
-    {
-      key: "min_transactions_5min",
-      label: "Min TX (5min)",
-      type: "number",
-      unit: "txs",
-      min: 0,
-      max: 1000,
-      step: 1,
-      hint: "Min transactions in last 5 minutes (1+ is minimal)",
-      impact: "medium",
-    },
-    {
-      key: "min_transactions_1h",
-      label: "Min TX (1h)",
-      type: "number",
-      unit: "txs",
-      min: 0,
-      max: 10000,
-      step: 5,
-      hint: "Min transactions in last hour (sustained activity)",
-      impact: "medium",
-    },
-  ],
-  Liquidity: [
-    {
-      key: "min_liquidity_usd",
-      label: "Min Liquidity",
-      type: "number",
-      unit: "USD",
-      min: 0,
-      max: 10000000,
-      step: 10,
-      hint: "$1 very low, $1000+ for serious trading",
-      impact: "critical",
-    },
-    {
-      key: "max_liquidity_usd",
-      label: "Max Liquidity",
-      type: "number",
-      unit: "USD",
-      min: 100,
-      max: 1000000000,
-      step: 100000,
-      hint: "High max to avoid filtering established tokens",
-      impact: "medium",
-    },
-  ],
-  "Market Cap": [
-    {
-      key: "min_market_cap_usd",
-      label: "Min Market Cap",
-      type: "number",
-      unit: "USD",
-      min: 0,
-      max: 10000000,
-      step: 100,
-      hint: "$1000 filters micro-cap tokens",
-      impact: "high",
-    },
-    {
-      key: "max_market_cap_usd",
-      label: "Max Market Cap",
-      type: "number",
-      unit: "USD",
-      min: 1000,
-      max: 1000000000,
-      step: 100000,
-      hint: "Filters out large-cap tokens",
-      impact: "high",
-    },
-  ],
-  Security: [
-    {
-      key: "max_risk_score",
-      label: "Max Risk Score",
-      type: "number",
-      unit: "score",
-      min: 0,
-      max: 100000,
-      step: 100,
-      hint: "Lower = safer. Max acceptable risk score (0 = safest, 100000+ = highest risk)",
-      impact: "critical",
-    },
-    {
-      key: "max_top_holder_pct",
-      label: "Max Top Holder %",
-      type: "number",
-      unit: "%",
-      min: 0,
-      max: 100,
-      step: 1,
-      hint: "15% means top holder can own max 15% supply",
-      impact: "critical",
-    },
-    {
-      key: "max_top_3_holders_pct",
-      label: "Max Top 3 Holders %",
-      type: "number",
-      unit: "%",
-      min: 0,
-      max: 100,
-      step: 1,
-      hint: "Combined max for top 3 holders (lower = more distributed)",
-      impact: "high",
-    },
-    {
-      key: "min_pumpfun_lp_lock_pct",
-      label: "Min PumpFun LP Lock",
-      type: "number",
-      unit: "%",
-      min: 0,
-      max: 100,
-      step: 5,
-      hint: "50%+ reduces rug risk for PumpFun tokens",
-      impact: "high",
-    },
-    {
-      key: "min_regular_lp_lock_pct",
-      label: "Min Regular LP Lock",
-      type: "number",
-      unit: "%",
-      min: 0,
-      max: 100,
-      step: 5,
-      hint: "50%+ indicates locked liquidity for regular tokens",
-      impact: "high",
-    },
-  ],
-  Community: [
-    {
-      key: "min_unique_holders",
-      label: "Min Unique Holders",
-      type: "number",
-      unit: "holders",
-      min: 0,
-      max: 1000000,
-      step: 50,
-      hint: "500+ indicates community adoption",
-      impact: "medium",
-    },
-  ],
+  Performance: {
+    source: "meta",
+    fields: [
+      {
+        key: "filter_cache_ttl_secs",
+        label: "Cache TTL",
+        type: "number",
+        unit: "seconds",
+        min: 5,
+        max: 300,
+        step: 5,
+        hint: "How long to cache filter results (lower = more current)",
+        impact: "critical",
+      },
+      {
+        key: "target_filtered_tokens",
+        label: "Target Filtered Tokens",
+        type: "number",
+        unit: "tokens",
+        min: 10,
+        max: 10000,
+        step: 100,
+        hint: "Bot processes up to this many qualified tokens",
+        impact: "medium",
+      },
+      {
+        key: "max_tokens_to_process",
+        label: "Max Tokens to Process",
+        type: "number",
+        unit: "tokens",
+        min: 100,
+        max: 100000,
+        step: 100,
+        hint: "Max tokens to evaluate before filtering",
+        impact: "medium",
+      },
+    ],
+  },
+  "Meta Requirements": {
+    source: "meta",
+    fields: [
+      {
+        key: "require_decimals_in_db",
+        label: "Require Decimals in Database",
+        type: "boolean",
+        hint: "Skip tokens without cached decimal data",
+        impact: "high",
+      },
+      {
+        key: "check_cooldown",
+        label: "Check Cooldown",
+        type: "boolean",
+        hint: "Skip tokens in cooldown period after exit",
+        impact: "high",
+      },
+      {
+        key: "min_token_age_minutes",
+        label: "Min Token Age",
+        type: "number",
+        unit: "minutes",
+        min: 0,
+        max: 10080,
+        step: 10,
+        hint: "60min avoids brand new tokens, lower for sniping",
+        impact: "critical",
+      },
+    ],
+  },
+  "DexScreener - Token Info": {
+    source: "dexscreener",
+    enableKey: "token_info_enabled",
+    fields: [
+      {
+        key: "require_name_and_symbol",
+        label: "Require Name & Symbol",
+        type: "boolean",
+        hint: "Recommended: true. Filters incomplete tokens",
+        impact: "high",
+      },
+      {
+        key: "require_logo_url",
+        label: "Require Logo",
+        type: "boolean",
+        hint: "Optional. Logo may indicate legitimacy",
+        impact: "medium",
+      },
+      {
+        key: "require_website_url",
+        label: "Require Website",
+        type: "boolean",
+        hint: "Optional. Website may indicate serious project",
+        impact: "medium",
+      },
+    ],
+  },
+  "DexScreener - Liquidity": {
+    source: "dexscreener",
+    enableKey: "liquidity_enabled",
+    fields: [
+      {
+        key: "min_liquidity_usd",
+        label: "Min Liquidity",
+        type: "number",
+        unit: "USD",
+        min: 0,
+        max: 10000000,
+        step: 10,
+        hint: "$1 very low, $1000+ for serious trading",
+        impact: "critical",
+      },
+      {
+        key: "max_liquidity_usd",
+        label: "Max Liquidity",
+        type: "number",
+        unit: "USD",
+        min: 100,
+        max: 1000000000,
+        step: 100000,
+        hint: "High max to avoid filtering established tokens",
+        impact: "medium",
+      },
+    ],
+  },
+  "DexScreener - Market Cap": {
+    source: "dexscreener",
+    enableKey: "market_cap_enabled",
+    fields: [
+      {
+        key: "min_market_cap_usd",
+        label: "Min Market Cap",
+        type: "number",
+        unit: "USD",
+        min: 0,
+        max: 10000000,
+        step: 100,
+        hint: "$1000 filters micro-cap tokens",
+        impact: "high",
+      },
+      {
+        key: "max_market_cap_usd",
+        label: "Max Market Cap",
+        type: "number",
+        unit: "USD",
+        min: 1000,
+        max: 1000000000,
+        step: 100000,
+        hint: "Filters out large-cap tokens",
+        impact: "high",
+      },
+    ],
+  },
+  "DexScreener - Activity": {
+    source: "dexscreener",
+    enableKey: "transactions_enabled",
+    fields: [
+      {
+        key: "min_transactions_5min",
+        label: "Min TX (5min)",
+        type: "number",
+        unit: "txs",
+        min: 0,
+        max: 1000,
+        step: 1,
+        hint: "Min transactions in last 5 minutes (1+ is minimal)",
+        impact: "medium",
+      },
+      {
+        key: "min_transactions_1h",
+        label: "Min TX (1h)",
+        type: "number",
+        unit: "txs",
+        min: 0,
+        max: 10000,
+        step: 5,
+        hint: "Min transactions in last hour (sustained activity)",
+        impact: "medium",
+      },
+    ],
+  },
+  "RugCheck - Risk Score": {
+    source: "rugcheck",
+    enableKey: "risk_score_enabled",
+    fields: [
+      {
+        key: "max_risk_score",
+        label: "Max Risk Score",
+        type: "number",
+        unit: "score",
+        min: 0,
+        max: 100000,
+        step: 100,
+        hint: "Lower = safer. Max acceptable risk score (0 = safest, 100000+ = highest risk)",
+        impact: "critical",
+      },
+    ],
+  },
+  "RugCheck - Holder Distribution": {
+    source: "rugcheck",
+    enableKey: "holder_distribution_enabled",
+    fields: [
+      {
+        key: "max_top_holder_pct",
+        label: "Max Top Holder %",
+        type: "number",
+        unit: "%",
+        min: 0,
+        max: 100,
+        step: 1,
+        hint: "15% means top holder can own max 15% supply",
+        impact: "critical",
+      },
+      {
+        key: "max_top_3_holders_pct",
+        label: "Max Top 3 Holders %",
+        type: "number",
+        unit: "%",
+        min: 0,
+        max: 100,
+        step: 1,
+        hint: "Combined max for top 3 holders (lower = more distributed)",
+        impact: "high",
+      },
+      {
+        key: "min_unique_holders",
+        label: "Min Unique Holders",
+        type: "number",
+        unit: "holders",
+        min: 0,
+        max: 1000000,
+        step: 50,
+        hint: "500+ indicates community adoption",
+        impact: "medium",
+      },
+    ],
+  },
+  "RugCheck - LP Lock": {
+    source: "rugcheck",
+    enableKey: "lp_lock_enabled",
+    fields: [
+      {
+        key: "min_pumpfun_lp_lock_pct",
+        label: "Min PumpFun LP Lock",
+        type: "number",
+        unit: "%",
+        min: 0,
+        max: 100,
+        step: 5,
+        hint: "50%+ reduces rug risk for PumpFun tokens",
+        impact: "high",
+      },
+      {
+        key: "min_regular_lp_lock_pct",
+        label: "Min Regular LP Lock",
+        type: "number",
+        unit: "%",
+        min: 0,
+        max: 100,
+        step: 5,
+        hint: "50%+ indicates locked liquidity for regular tokens",
+        impact: "high",
+      },
+    ],
+  },
 };
+
+// ============================================================================
+// NESTED CONFIG HELPERS
+// ============================================================================
+
+// Get value from nested config structure
+function getConfigValue(config, source, key) {
+  if (source === "meta") {
+    return config[key];
+  }
+  return config[source]?.[key];
+}
+
+// Set value in nested config structure
+function setConfigValue(config, source, key, value) {
+  if (source === "meta") {
+    config[key] = value;
+  } else {
+    if (!config[source]) {
+      config[source] = {};
+    }
+    config[source][key] = value;
+  }
+}
+
+// Get source enable status
+function getSourceEnabled(config, source) {
+  if (source === "meta") return true; // Meta is always enabled
+  return config[source]?.enabled !== false;
+}
+
+// Set source enable status
+function setSourceEnabled(config, source, enabled) {
+  if (source === "meta") return; // Meta cannot be disabled
+  if (!config[source]) {
+    config[source] = {};
+  }
+  config[source].enabled = enabled;
+}
+
+// Get category enable status (for categories with enableKey)
+function getCategoryEnabled(config, source, enableKey) {
+  if (!enableKey) return true; // No enable key means always enabled
+  if (source === "meta") return true;
+  return config[source]?.[enableKey] !== false;
+}
+
+// Set category enable status
+function setCategoryEnabled(config, source, enableKey, enabled) {
+  if (!enableKey || source === "meta") return;
+  if (!config[source]) {
+    config[source] = {};
+  }
+  config[source][enableKey] = enabled;
+}
+
+// Deep merge helper so imports keep nested source-level settings intact
+function deepMerge(target, source) {
+  const output = !target || typeof target !== "object" || Array.isArray(target) ? {} : target;
+  if (!source || typeof source !== "object" || Array.isArray(source)) {
+    return output;
+  }
+
+  for (const [key, value] of Object.entries(source)) {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const existing = output[key];
+      output[key] = deepMerge(existing, value);
+    } else {
+      output[key] = value;
+    }
+  }
+
+  return output;
+}
+
+// Compare configs for changes
+function configsEqual(config1, config2) {
+  const flat1 = JSON.stringify(config1);
+  const flat2 = JSON.stringify(config2);
+  return flat1 === flat2;
+}
 
 // ============================================================================
 // API CALLS
@@ -354,10 +488,12 @@ function renderStats() {
   `;
 }
 
-function renderConfigField(field) {
-  const value = state.draft[field.key];
-  const isChanged = state.config && value !== state.config[field.key];
+function renderConfigField(field, source) {
+  const value = getConfigValue(state.draft, source, field.key);
+  const originalValue = getConfigValue(state.config, source, field.key);
+  const isChanged = state.config && value !== originalValue;
   const fieldClass = isChanged ? "filtering-config-field changed" : "filtering-config-field";
+  const fieldId = `field-${source}-${field.key}`;
 
   if (field.type === "boolean") {
     return `
@@ -369,7 +505,9 @@ function renderConfigField(field) {
         <div>
           <input
             type="checkbox"
+            id="${fieldId}"
             data-field="${field.key}"
+            data-source="${source}"
             ${value ? "checked" : ""}
           />
           <div class="field-meta">
@@ -389,7 +527,9 @@ function renderConfigField(field) {
       <div>
         <input
           type="number"
+          id="${fieldId}"
           data-field="${field.key}"
+          data-source="${source}"
           value="${value}"
           min="${field.min}"
           max="${field.max}"
@@ -404,11 +544,67 @@ function renderConfigField(field) {
   `;
 }
 
-function renderConfigCategory(categoryName, fields) {
+function renderSourceToggle(source, _categoryName) {
+  if (source === "meta") return "";
+  
+  const enabled = getSourceEnabled(state.draft, source);
+  const sourceLabel = source === "dexscreener" ? "DexScreener" : "RugCheck";
+  const toggleId = `source-toggle-${source}`;
+  
   return `
-    <div class="filtering-config-category">
-      <h3>${Utils.escapeHtml(categoryName)}</h3>
-      ${fields.map(renderConfigField).join("")}
+    <label class="source-switch">
+      <input
+        type="checkbox"
+        id="${toggleId}"
+        data-source-toggle="${source}"
+        ${enabled ? "checked" : ""}
+      />
+      <span class="slider"></span>
+      <span class="label">${sourceLabel}</span>
+    </label>
+  `;
+}
+
+function renderCategoryToggle(source, enableKey, _categoryName) {
+  if (!enableKey || source === "meta") return "";
+  
+  const enabled = getCategoryEnabled(state.draft, source, enableKey);
+  const toggleId = `category-toggle-${source}-${enableKey}`;
+  
+  return `
+    <label class="category-switch">
+      <input
+        type="checkbox"
+        id="${toggleId}"
+        data-category-toggle="${source}"
+        data-enable-key="${enableKey}"
+        ${enabled ? "checked" : ""}
+      />
+      <span class="slider"></span>
+    </label>
+  `;
+}
+
+function renderConfigCategory(categoryName, categoryData) {
+  const { source, enableKey, fields } = categoryData;
+  const sourceEnabled = getSourceEnabled(state.draft, source);
+  const categoryEnabled = getCategoryEnabled(state.draft, source, enableKey);
+  const isDisabled = (source !== "meta" && !sourceEnabled) || (enableKey && !categoryEnabled);
+  const disabledClass = isDisabled ? "disabled" : "";
+  const matchesSearch = (field) =>
+    !state.searchQuery ||
+    field.label.toLowerCase().includes(state.searchQuery) ||
+    field.key.toLowerCase().includes(state.searchQuery);
+  
+  return `
+    <div class="filter-card ${disabledClass}" data-source="${source}">
+      <div class="card-header">
+        <h3>${Utils.escapeHtml(categoryName)}</h3>
+        ${renderCategoryToggle(source, enableKey, categoryName)}
+      </div>
+      <div class="card-body">
+        ${fields.filter(matchesSearch).map((field) => renderConfigField(field, source)).join("") || "<div class=\"no-matches\">No fields match</div>"}
+      </div>
     </div>
   `;
 }
@@ -418,11 +614,55 @@ function renderConfigEditor() {
     return '<div class="filtering-config-editor">Loading configuration...</div>';
   }
 
+  // Group categories by source
+  const metaCategories = [];
+  const dexCategories = [];
+  const rugCategories = [];
+
+  Object.entries(CONFIG_CATEGORIES).forEach(([name, data]) => {
+    const item = { name, data };
+    if (data.source === "meta") metaCategories.push(item);
+    else if (data.source === "dexscreener") dexCategories.push(item);
+    else if (data.source === "rugcheck") rugCategories.push(item);
+  });
+
   return `
-    <div class="filtering-config-editor">
-      ${Object.entries(CONFIG_CATEGORIES)
-        .map(([category, fields]) => renderConfigCategory(category, fields))
-        .join("")}
+    <div class="filtering-layout">
+      <div class="tabs-container">
+        <button class="tab ${state.activeTab === "meta" ? "active" : ""}" data-tab="meta">
+          ⚙️ Core Settings
+        </button>
+        <button class="tab ${state.activeTab === "dexscreener" ? "active" : ""}" data-tab="dexscreener">
+          📊 DexScreener
+          ${renderSourceToggle("dexscreener", "")}
+        </button>
+        <button class="tab ${state.activeTab === "rugcheck" ? "active" : ""}" data-tab="rugcheck">
+          🛡️ RugCheck
+          ${renderSourceToggle("rugcheck", "")}
+        </button>
+      </div>
+      
+      <div class="search-bar">
+        <input type="text" id="filtering-search" placeholder="🔍 Search settings..." value="${Utils.escapeHtml(state.searchQuery)}" />
+      </div>
+
+      <div class="tab-content">
+        <div class="tab-panel ${state.activeTab === "meta" ? "active" : ""}" data-panel="meta">
+          <div class="cards-grid">
+            ${metaCategories.map(({ name, data }) => renderConfigCategory(name, data)).join("")}
+          </div>
+        </div>
+        <div class="tab-panel ${state.activeTab === "dexscreener" ? "active" : ""}" data-panel="dexscreener">
+          <div class="cards-grid">
+            ${dexCategories.map(({ name, data }) => renderConfigCategory(name, data)).join("")}
+          </div>
+        </div>
+        <div class="tab-panel ${state.activeTab === "rugcheck" ? "active" : ""}" data-panel="rugcheck">
+          <div class="cards-grid">
+            ${rugCategories.map(({ name, data }) => renderConfigCategory(name, data)).join("")}
+          </div>
+        </div>
+      </div>
     </div>
   `;
 }
@@ -506,9 +746,31 @@ function updateStats() {
 // ============================================================================
 
 function attachEventListeners() {
-  // Input change handlers
+  // Field change handlers
   $$("[data-field]").forEach((input) => {
     input.addEventListener("input", handleFieldChange);
+  });
+
+  // Source toggle handlers
+  $$("[data-source-toggle]").forEach((input) => {
+    input.addEventListener("change", handleSourceToggle);
+  });
+
+  // Category toggle handlers
+  $$("[data-category-toggle]").forEach((input) => {
+    input.addEventListener("change", handleCategoryToggle);
+  });
+
+  // Tab navigation
+  $$(".tab").forEach((tab) => {
+    tab.addEventListener("click", (e) => {
+      const tabName = e.currentTarget.dataset.tab;
+      if (tabName && tabName !== state.activeTab) {
+        state.activeTab = tabName;
+        AppState.save("filtering_activeTab", state.activeTab);
+        render();
+      }
+    });
   });
 
   // Action buttons
@@ -523,40 +785,69 @@ function attachEventListeners() {
   if (refreshBtn) refreshBtn.addEventListener("click", handleRefreshSnapshot);
   if (exportBtn) exportBtn.addEventListener("click", handleExportConfig);
   if (importBtn) importBtn.addEventListener("click", handleImportConfig);
-}
 
-function handleFieldChange(e) {
-  const field = e.target.getAttribute("data-field");
-  const value = e.target.type === "checkbox" ? e.target.checked : parseFloat(e.target.value);
-
-  state.draft[field] = value;
-  checkForChanges();
-  updateSaveButton();
-}
-
-function updateSaveButton() {
-  const saveBtn = $("#save-config-btn");
-  if (saveBtn) {
-    saveBtn.disabled = !state.hasChanges || state.isSaving;
+  // Search
+  const searchInput = $("#filtering-search");
+  if (searchInput) {
+    searchInput.addEventListener("input", (e) => {
+      state.searchQuery = (e.target.value || "").toLowerCase();
+      render();
+    });
   }
 }
 
-function updateActionButtons() {
-  const actionsContainer = $(".filtering-actions");
-  if (actionsContainer) {
-    actionsContainer.innerHTML = renderActions();
-    // Re-attach event listeners for action buttons
-    const saveBtn = $("#save-config-btn");
-    const resetBtn = $("#reset-config-btn");
-    const refreshBtn = $("#refresh-snapshot-btn");
-    const exportBtn = $("#export-config-btn");
-    const importBtn = $("#import-config-btn");
+function handleFieldChange(event) {
+  const input = event.target;
+  const fieldKey = input.dataset.field;
+  const source = input.dataset.source;
 
-    if (saveBtn) saveBtn.addEventListener("click", handleSaveConfig);
-    if (resetBtn) resetBtn.addEventListener("click", handleResetConfig);
-    if (refreshBtn) refreshBtn.addEventListener("click", handleRefreshSnapshot);
-    if (exportBtn) exportBtn.addEventListener("click", handleExportConfig);
-    if (importBtn) importBtn.addEventListener("click", handleImportConfig);
+  if (!fieldKey || !source) return;
+
+  let value;
+  if (input.type === "checkbox") {
+    value = input.checked;
+  } else if (input.type === "number") {
+    value = parseFloat(input.value);
+    if (isNaN(value)) return;
+  } else {
+    value = input.value;
+  }
+
+  setConfigValue(state.draft, source, fieldKey, value);
+  checkForChanges();
+  updateActionButtons();
+}
+
+function handleSourceToggle(event) {
+  const input = event.target;
+  const source = input.dataset.sourceToggle;
+  const enabled = input.checked;
+
+  setSourceEnabled(state.draft, source, enabled);
+  checkForChanges();
+  render(); // Need full re-render to update disabled states
+}
+
+function handleCategoryToggle(event) {
+  const input = event.target;
+  const source = input.dataset.categoryToggle;
+  const enableKey = input.dataset.enableKey;
+  const enabled = input.checked;
+
+  setCategoryEnabled(state.draft, source, enableKey, enabled);
+  checkForChanges();
+  render(); // Need full re-render to update disabled states
+}
+
+function updateActionButtons() {
+  const saveBtn = $("#save-config-btn");
+  const resetBtn = $("#reset-config-btn");
+
+  if (saveBtn) {
+    saveBtn.disabled = !state.hasChanges || state.isSaving;
+  }
+  if (resetBtn) {
+    resetBtn.disabled = !state.hasChanges;
   }
 }
 
@@ -566,7 +857,7 @@ function checkForChanges() {
     return;
   }
 
-  state.hasChanges = Object.keys(state.draft).some((key) => state.draft[key] !== state.config[key]);
+  state.hasChanges = !configsEqual(state.config, state.draft);
 }
 
 async function handleSaveConfig() {
@@ -577,7 +868,7 @@ async function handleSaveConfig() {
 
   try {
     await saveConfig(state.draft);
-    state.config = { ...state.draft };
+    state.config = JSON.parse(JSON.stringify(state.draft)); // Deep clone
     state.hasChanges = false;
     state.lastSaved = new Date();
     Utils.showToast("Configuration saved successfully", "success");
@@ -593,7 +884,7 @@ async function handleSaveConfig() {
 function handleResetConfig() {
   if (!state.hasChanges) return;
 
-  state.draft = { ...state.config };
+  state.draft = JSON.parse(JSON.stringify(state.config)); // Deep clone
   state.hasChanges = false;
   render(); // Need full render to restore original values
   Utils.showToast("Changes reset", "info");
@@ -642,7 +933,8 @@ function handleImportConfig() {
     try {
       const text = await file.text();
       const imported = JSON.parse(text);
-      state.draft = { ...state.draft, ...imported };
+  const current = JSON.parse(JSON.stringify(state.draft ?? {}));
+      state.draft = deepMerge(current, imported);
       checkForChanges();
       render();
       Utils.showToast("Configuration imported", "success");
@@ -662,7 +954,7 @@ async function loadConfig() {
   try {
     const response = await fetchConfig();
     state.config = response.data || response;
-    state.draft = { ...state.config };
+    state.draft = JSON.parse(JSON.stringify(state.config)); // Deep clone for nested structures
     state.hasChanges = false;
   } catch (error) {
     console.error("Failed to load config:", error);

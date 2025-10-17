@@ -168,28 +168,34 @@ async fn apply_all_filters(
         return Err(reason);
     }
 
-    if let Some(reason) = check_security_requirements(&token.mint, config).await {
-        return Err(reason);
-    }
-
-    if check_cooldown_filter(&token.mint).await {
+    if config.check_cooldown && check_cooldown_filter(&token.mint).await {
         return Err(FilterRejectionReason::CooldownFiltered);
     }
 
-    if let Some(reason) = check_basic_token_info(token, config) {
-        return Err(reason);
+    // RugCheck security filters (if enabled)
+    if config.rugcheck.enabled {
+        if let Some(reason) = check_security_requirements(&token.mint, config).await {
+            return Err(reason);
+        }
     }
 
-    if let Some(reason) = check_transaction_activity(token, config) {
-        return Err(reason);
-    }
+    // DexScreener market data filters (if enabled)
+    if config.dexscreener.enabled {
+        if let Some(reason) = check_basic_token_info(token, config) {
+            return Err(reason);
+        }
 
-    if let Some(reason) = check_liquidity_requirements(token, config) {
-        return Err(reason);
-    }
+        if let Some(reason) = check_transaction_activity(token, config) {
+            return Err(reason);
+        }
 
-    if let Some(reason) = check_market_cap_requirements(token, config) {
-        return Err(reason);
+        if let Some(reason) = check_liquidity_requirements(token, config) {
+            return Err(reason);
+        }
+
+        if let Some(reason) = check_market_cap_requirements(token, config) {
+            return Err(reason);
+        }
     }
 
     Ok(())
@@ -218,7 +224,7 @@ async fn check_security_requirements(
 ) -> Option<FilterRejectionReason> {
     let analyzer = match get_security_analyzer() {
         Some(analyzer) => analyzer,
-        None => return Some(FilterRejectionReason::SecurityNoData),
+        None => return Some(FilterRejectionReason::RugCheck_SecurityNoData),
     };
 
     analyze_with_security_analyzer(&analyzer, mint, config).await
@@ -231,62 +237,75 @@ async fn analyze_with_security_analyzer(
 ) -> Option<FilterRejectionReason> {
     let analysis = match analyzer.analyze_token_any_cached(mint).await {
         Some(result) => result,
-        None => return Some(FilterRejectionReason::SecurityNoData),
+        None => return Some(FilterRejectionReason::RugCheck_SecurityNoData),
     };
 
-    // Raw score: lower = safer, higher = more risky
-    // max_risk_score sets the maximum acceptable risk score
-    if config.max_risk_score > 0 && analysis.score > config.max_risk_score {
-        return Some(FilterRejectionReason::RiskScoreTooHigh);
+    // Risk score check (if enabled)
+    if config.rugcheck.risk_score_enabled {
+        if config.rugcheck.max_risk_score > 0 && analysis.score > config.rugcheck.max_risk_score {
+            return Some(FilterRejectionReason::RugCheck_RiskScoreTooHigh);
+        }
     }
 
-    if !analysis.authorities_safe {
-        return Some(FilterRejectionReason::SecurityHighRisk);
+    // Authority checks (if enabled)
+    if config.rugcheck.authority_checks_enabled {
+        if !analysis.authorities_safe {
+            return Some(FilterRejectionReason::RugCheck_SecurityHighRisk);
+        }
     }
 
-    if matches!(analysis.risk_level, RiskLevel::Danger) {
-        return Some(FilterRejectionReason::SecurityHighRisk);
+    // Risk level check (if enabled)
+    if config.rugcheck.risk_level_enabled {
+        if matches!(analysis.risk_level, RiskLevel::Danger) {
+            return Some(FilterRejectionReason::RugCheck_SecurityHighRisk);
+        }
     }
 
-    if config.max_top_holder_pct > 0.0 {
-        if let Some(top_holder_pct) = analysis.top_holder_pct {
-            if top_holder_pct > config.max_top_holder_pct {
-                return Some(FilterRejectionReason::TopHolderConcentration);
+    // Holder distribution checks (if enabled)
+    if config.rugcheck.holder_distribution_enabled {
+        if config.rugcheck.max_top_holder_pct > 0.0 {
+            if let Some(top_holder_pct) = analysis.top_holder_pct {
+                if top_holder_pct > config.rugcheck.max_top_holder_pct {
+                    return Some(FilterRejectionReason::RugCheck_TopHolderConcentration);
+                }
+            }
+        }
+
+        if config.rugcheck.max_top_3_holders_pct > 0.0 {
+            if let Some(top_three_pct) = analysis.top_3_holder_pct {
+                if top_three_pct > config.rugcheck.max_top_3_holders_pct {
+                    return Some(FilterRejectionReason::RugCheck_TopThreeHolderConcentration);
+                }
+            }
+        }
+
+        match analyzer.get_cached_holder_count(mint).await {
+            Some(count) => {
+                if count < config.rugcheck.min_unique_holders {
+                    return Some(FilterRejectionReason::RugCheck_InsufficientHolders);
+                }
+            }
+            None => return Some(FilterRejectionReason::RugCheck_NoHolderData),
+        }
+    }
+
+    // LP lock checks (if enabled)
+    if config.rugcheck.lp_lock_enabled {
+        let required_lp_lock = if analysis.pump_fun_token {
+            config.rugcheck.min_pumpfun_lp_lock_pct
+        } else {
+            config.rugcheck.min_regular_lp_lock_pct
+        };
+
+        if required_lp_lock > 0.0 {
+            let actual_lp_lock = analysis.max_lp_locked_pct.unwrap_or(0.0);
+            if actual_lp_lock < required_lp_lock {
+                return Some(FilterRejectionReason::RugCheck_LpLockTooLow);
             }
         }
     }
 
-    if config.max_top_3_holders_pct > 0.0 {
-        if let Some(top_three_pct) = analysis.top_3_holder_pct {
-            if top_three_pct > config.max_top_3_holders_pct {
-                return Some(FilterRejectionReason::TopThreeHolderConcentration);
-            }
-        }
-    }
-
-    let required_lp_lock = if analysis.pump_fun_token {
-        config.min_pumpfun_lp_lock_pct
-    } else {
-        config.min_regular_lp_lock_pct
-    };
-
-    if required_lp_lock > 0.0 {
-        let actual_lp_lock = analysis.max_lp_locked_pct.unwrap_or(0.0);
-        if actual_lp_lock < required_lp_lock {
-            return Some(FilterRejectionReason::LpLockTooLow);
-        }
-    }
-
-    match analyzer.get_cached_holder_count(mint).await {
-        Some(count) => {
-            if count < config.min_unique_holders {
-                Some(FilterRejectionReason::InsufficientHolders)
-            } else {
-                None
-            }
-        }
-        None => Some(FilterRejectionReason::NoHolderData),
-    }
+    None
 }
 
 async fn check_cooldown_filter(mint: &str) -> bool {
@@ -297,33 +316,38 @@ fn check_basic_token_info(
     token: &Token,
     config: &FilteringConfig,
 ) -> Option<FilterRejectionReason> {
-    if config.require_name_and_symbol {
+    // Skip if token info checks are disabled
+    if !config.dexscreener.token_info_enabled {
+        return None;
+    }
+
+    if config.dexscreener.require_name_and_symbol {
         if token.name.trim().is_empty() {
-            return Some(FilterRejectionReason::EmptyName);
+            return Some(FilterRejectionReason::DexScreener_EmptyName);
         }
 
         if token.symbol.trim().is_empty() {
-            return Some(FilterRejectionReason::EmptySymbol);
+            return Some(FilterRejectionReason::DexScreener_EmptySymbol);
         }
     }
 
-    if config.require_logo_url {
+    if config.dexscreener.require_logo_url {
         if token
             .logo_url
             .as_ref()
             .map_or(true, |url| url.trim().is_empty())
         {
-            return Some(FilterRejectionReason::EmptyLogoUrl);
+            return Some(FilterRejectionReason::DexScreener_EmptyLogoUrl);
         }
     }
 
-    if config.require_website_url {
+    if config.dexscreener.require_website_url {
         if token
             .website
             .as_ref()
             .map_or(true, |url| url.trim().is_empty())
         {
-            return Some(FilterRejectionReason::EmptyWebsiteUrl);
+            return Some(FilterRejectionReason::DexScreener_EmptyWebsiteUrl);
         }
     }
 
@@ -334,24 +358,29 @@ fn check_transaction_activity(
     token: &Token,
     config: &FilteringConfig,
 ) -> Option<FilterRejectionReason> {
+    // Skip if transaction checks are disabled
+    if !config.dexscreener.transactions_enabled {
+        return None;
+    }
+
     let txns = token.txns.as_ref()?;
 
     if let Some(m5) = &txns.m5 {
         let total = m5.buys.unwrap_or(0) + m5.sells.unwrap_or(0);
-        if total < config.min_transactions_5min {
-            return Some(FilterRejectionReason::InsufficientTransactions5Min);
+        if total < config.dexscreener.min_transactions_5min {
+            return Some(FilterRejectionReason::DexScreener_InsufficientTransactions5Min);
         }
     } else {
-        return Some(FilterRejectionReason::NoTransactionData);
+        return Some(FilterRejectionReason::DexScreener_NoTransactionData);
     }
 
     if let Some(h1) = &txns.h1 {
         let total = h1.buys.unwrap_or(0) + h1.sells.unwrap_or(0);
-        if total < config.min_transactions_1h {
-            return Some(FilterRejectionReason::InsufficientTransactions1H);
+        if total < config.dexscreener.min_transactions_1h {
+            return Some(FilterRejectionReason::DexScreener_InsufficientTransactions1H);
         }
     } else {
-        return Some(FilterRejectionReason::NoTransactionData);
+        return Some(FilterRejectionReason::DexScreener_NoTransactionData);
     }
 
     None
@@ -361,19 +390,24 @@ fn check_liquidity_requirements(
     token: &Token,
     config: &FilteringConfig,
 ) -> Option<FilterRejectionReason> {
+    // Skip if liquidity checks are disabled
+    if !config.dexscreener.liquidity_enabled {
+        return None;
+    }
+
     let liquidity = token.liquidity.as_ref()?;
     let liquidity_usd = liquidity.usd?;
 
     if liquidity_usd <= 0.0 {
-        return Some(FilterRejectionReason::ZeroLiquidity);
+        return Some(FilterRejectionReason::DexScreener_ZeroLiquidity);
     }
 
-    if liquidity_usd < config.min_liquidity_usd {
-        return Some(FilterRejectionReason::InsufficientLiquidity);
+    if liquidity_usd < config.dexscreener.min_liquidity_usd {
+        return Some(FilterRejectionReason::DexScreener_InsufficientLiquidity);
     }
 
-    if liquidity_usd > config.max_liquidity_usd {
-        return Some(FilterRejectionReason::LiquidityTooHigh);
+    if liquidity_usd > config.dexscreener.max_liquidity_usd {
+        return Some(FilterRejectionReason::DexScreener_LiquidityTooHigh);
     }
 
     None
@@ -383,14 +417,19 @@ fn check_market_cap_requirements(
     token: &Token,
     config: &FilteringConfig,
 ) -> Option<FilterRejectionReason> {
-    let market_cap = token.market_cap?;
-
-    if market_cap < config.min_market_cap_usd {
-        return Some(FilterRejectionReason::MarketCapTooLow);
+    // Skip if market cap checks are disabled
+    if !config.dexscreener.market_cap_enabled {
+        return None;
     }
 
-    if market_cap > config.max_market_cap_usd {
-        return Some(FilterRejectionReason::MarketCapTooHigh);
+    let market_cap = token.market_cap?;
+
+    if market_cap < config.dexscreener.min_market_cap_usd {
+        return Some(FilterRejectionReason::DexScreener_MarketCapTooLow);
+    }
+
+    if market_cap > config.dexscreener.max_market_cap_usd {
+        return Some(FilterRejectionReason::DexScreener_MarketCapTooHigh);
     }
 
     None
@@ -406,61 +445,116 @@ fn has_decimals_in_database(mint: &str) -> bool {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum FilterRejectionReason {
+    // Meta requirements (apply before source-specific checks)
     NoDecimalsInDatabase,
-    SecurityHighRisk,
-    RiskScoreTooHigh,
-    SecurityNoData,
-    NoHolderData,
-    InsufficientHolders,
-    TopHolderConcentration,
-    TopThreeHolderConcentration,
-    LpLockTooLow,
-    EmptyName,
-    EmptySymbol,
-    EmptyLogoUrl,
-    EmptyWebsiteUrl,
-    NoTransactionData,
-    InsufficientTransactions5Min,
-    InsufficientTransactions1H,
-    ZeroLiquidity,
-    InsufficientLiquidity,
-    LiquidityTooHigh,
-    MarketCapTooLow,
-    MarketCapTooHigh,
     TokenTooNew,
     MissingCreationTimestamp,
     CooldownFiltered,
+
+    // DexScreener rejections
+    DexScreener_EmptyName,
+    DexScreener_EmptySymbol,
+    DexScreener_EmptyLogoUrl,
+    DexScreener_EmptyWebsiteUrl,
+    DexScreener_NoTransactionData,
+    DexScreener_InsufficientTransactions5Min,
+    DexScreener_InsufficientTransactions1H,
+    DexScreener_ZeroLiquidity,
+    DexScreener_InsufficientLiquidity,
+    DexScreener_LiquidityTooHigh,
+    DexScreener_MarketCapTooLow,
+    DexScreener_MarketCapTooHigh,
+
+    // RugCheck rejections
+    RugCheck_SecurityHighRisk,
+    RugCheck_RiskScoreTooHigh,
+    RugCheck_SecurityNoData,
+    RugCheck_NoHolderData,
+    RugCheck_InsufficientHolders,
+    RugCheck_TopHolderConcentration,
+    RugCheck_TopThreeHolderConcentration,
+    RugCheck_LpLockTooLow,
 }
 
 impl FilterRejectionReason {
     fn label(&self) -> &'static str {
         match self {
-            FilterRejectionReason::NoDecimalsInDatabase => "no_decimals",
-            FilterRejectionReason::SecurityHighRisk => "security_high_risk",
-            FilterRejectionReason::RiskScoreTooHigh => "risk_score_high",
-            FilterRejectionReason::SecurityNoData => "security_no_data",
-            FilterRejectionReason::NoHolderData => "holders_no_data",
-            FilterRejectionReason::InsufficientHolders => "holders_insufficient",
-            FilterRejectionReason::TopHolderConcentration => "top_holder_pct",
-            FilterRejectionReason::TopThreeHolderConcentration => "top3_holder_pct",
-            FilterRejectionReason::LpLockTooLow => "lp_lock_low",
-            FilterRejectionReason::EmptyName => "missing_name",
-            FilterRejectionReason::EmptySymbol => "missing_symbol",
-            FilterRejectionReason::EmptyLogoUrl => "missing_logo",
-            FilterRejectionReason::EmptyWebsiteUrl => "missing_website",
-            FilterRejectionReason::NoTransactionData => "tx_missing",
-            FilterRejectionReason::InsufficientTransactions5Min => "tx_5m_low",
-            FilterRejectionReason::InsufficientTransactions1H => "tx_1h_low",
-            FilterRejectionReason::ZeroLiquidity => "liquidity_zero",
-            FilterRejectionReason::InsufficientLiquidity => "liquidity_low",
-            FilterRejectionReason::LiquidityTooHigh => "liquidity_high",
-            FilterRejectionReason::MarketCapTooLow => "market_cap_low",
-            FilterRejectionReason::MarketCapTooHigh => "market_cap_high",
-            FilterRejectionReason::TokenTooNew => "token_new",
-            FilterRejectionReason::MissingCreationTimestamp => "missing_creation_ts",
-            FilterRejectionReason::CooldownFiltered => "cooldown",
+            // Meta
+            FilterRejectionReason::NoDecimalsInDatabase => "meta_no_decimals",
+            FilterRejectionReason::TokenTooNew => "meta_token_new",
+            FilterRejectionReason::MissingCreationTimestamp => "meta_missing_creation_ts",
+            FilterRejectionReason::CooldownFiltered => "meta_cooldown",
+
+            // DexScreener
+            FilterRejectionReason::DexScreener_EmptyName => "dexscreener_missing_name",
+            FilterRejectionReason::DexScreener_EmptySymbol => "dexscreener_missing_symbol",
+            FilterRejectionReason::DexScreener_EmptyLogoUrl => "dexscreener_missing_logo",
+            FilterRejectionReason::DexScreener_EmptyWebsiteUrl => "dexscreener_missing_website",
+            FilterRejectionReason::DexScreener_NoTransactionData => "dexscreener_tx_missing",
+            FilterRejectionReason::DexScreener_InsufficientTransactions5Min => {
+                "dexscreener_tx_5m_low"
+            }
+            FilterRejectionReason::DexScreener_InsufficientTransactions1H => {
+                "dexscreener_tx_1h_low"
+            }
+            FilterRejectionReason::DexScreener_ZeroLiquidity => "dexscreener_liquidity_zero",
+            FilterRejectionReason::DexScreener_InsufficientLiquidity => "dexscreener_liquidity_low",
+            FilterRejectionReason::DexScreener_LiquidityTooHigh => "dexscreener_liquidity_high",
+            FilterRejectionReason::DexScreener_MarketCapTooLow => "dexscreener_market_cap_low",
+            FilterRejectionReason::DexScreener_MarketCapTooHigh => "dexscreener_market_cap_high",
+
+            // RugCheck
+            FilterRejectionReason::RugCheck_SecurityHighRisk => "rugcheck_security_high_risk",
+            FilterRejectionReason::RugCheck_RiskScoreTooHigh => "rugcheck_risk_score_high",
+            FilterRejectionReason::RugCheck_SecurityNoData => "rugcheck_security_no_data",
+            FilterRejectionReason::RugCheck_NoHolderData => "rugcheck_holders_no_data",
+            FilterRejectionReason::RugCheck_InsufficientHolders => "rugcheck_holders_insufficient",
+            FilterRejectionReason::RugCheck_TopHolderConcentration => "rugcheck_top_holder_pct",
+            FilterRejectionReason::RugCheck_TopThreeHolderConcentration => {
+                "rugcheck_top3_holder_pct"
+            }
+            FilterRejectionReason::RugCheck_LpLockTooLow => "rugcheck_lp_lock_low",
         }
     }
+
+    /// Returns the source that caused the rejection
+    fn source(&self) -> FilterSource {
+        match self {
+            FilterRejectionReason::NoDecimalsInDatabase
+            | FilterRejectionReason::TokenTooNew
+            | FilterRejectionReason::MissingCreationTimestamp
+            | FilterRejectionReason::CooldownFiltered => FilterSource::Meta,
+
+            FilterRejectionReason::DexScreener_EmptyName
+            | FilterRejectionReason::DexScreener_EmptySymbol
+            | FilterRejectionReason::DexScreener_EmptyLogoUrl
+            | FilterRejectionReason::DexScreener_EmptyWebsiteUrl
+            | FilterRejectionReason::DexScreener_NoTransactionData
+            | FilterRejectionReason::DexScreener_InsufficientTransactions5Min
+            | FilterRejectionReason::DexScreener_InsufficientTransactions1H
+            | FilterRejectionReason::DexScreener_ZeroLiquidity
+            | FilterRejectionReason::DexScreener_InsufficientLiquidity
+            | FilterRejectionReason::DexScreener_LiquidityTooHigh
+            | FilterRejectionReason::DexScreener_MarketCapTooLow
+            | FilterRejectionReason::DexScreener_MarketCapTooHigh => FilterSource::DexScreener,
+
+            FilterRejectionReason::RugCheck_SecurityHighRisk
+            | FilterRejectionReason::RugCheck_RiskScoreTooHigh
+            | FilterRejectionReason::RugCheck_SecurityNoData
+            | FilterRejectionReason::RugCheck_NoHolderData
+            | FilterRejectionReason::RugCheck_InsufficientHolders
+            | FilterRejectionReason::RugCheck_TopHolderConcentration
+            | FilterRejectionReason::RugCheck_TopThreeHolderConcentration
+            | FilterRejectionReason::RugCheck_LpLockTooLow => FilterSource::RugCheck,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FilterSource {
+    Meta,
+    DexScreener,
+    RugCheck,
 }
 
 struct FilteringStats {

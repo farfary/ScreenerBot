@@ -277,7 +277,7 @@ impl LearningDatabase {
 
         let trade_id = conn
             .execute(
-            "INSERT INTO trades (
+                "INSERT INTO trades (
                 mint, entry_at_unix, entry_price, sol_balance_before, entry_size_sol,
                 liquidity_at_entry, sol_reserves_at_entry,
                 tx_activity_5m, tx_activity_1h, risk_score, holder_count,

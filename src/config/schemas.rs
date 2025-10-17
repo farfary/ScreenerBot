@@ -645,108 +645,59 @@ config_struct! {
 }
 
 // ============================================================================
-// FILTERING CONFIGURATION
+// DEXSCREENER FILTERING CONFIGURATION
 // ============================================================================
 
 config_struct! {
-    /// Token filtering configuration
-    pub struct FilteringConfig {
-        // Cache settings
+    /// DexScreener-specific filtering configuration
+    pub struct DexScreenerFilters {
+        // Enable/disable entire source
         #[metadata(field_metadata! {
-            label: "Cache TTL",
-            hint: "How long to cache filter results (lower = more current)",
-            min: 5,
-            max: 300,
-            step: 5,
-            unit: "seconds",
+            label: "Enable DexScreener Filters",
+            hint: "Master switch for all DexScreener-based filtering",
             impact: "critical",
-            category: "Performance",
+            category: "Source Control",
         })]
-        filter_cache_ttl_secs: u64 = 15,
-        #[metadata(field_metadata! {
-            label: "Target Filtered Tokens",
-            hint: "Bot processes up to this many qualified tokens",
-            min: 10,
-            max: 10000,
-            step: 100,
-            unit: "tokens",
-            impact: "medium",
-            category: "Performance",
-        })]
-        target_filtered_tokens: usize = 1000,
-        #[metadata(field_metadata! {
-            label: "Max Tokens to Process",
-            hint: "Max tokens to evaluate before filtering",
-            min: 100,
-            max: 50000,
-            step: 500,
-            unit: "tokens",
-            impact: "medium",
-            category: "Performance",
-        })]
-        max_tokens_to_process: usize = 5000,
+        enabled: bool = true,
 
-        // Basic requirements
+        // Token info checks
+        #[metadata(field_metadata! {
+            label: "Enable Token Info Checks",
+            hint: "Check for name, symbol, logo, website",
+            impact: "high",
+            category: "Token Info",
+        })]
+        token_info_enabled: bool = true,
         #[metadata(field_metadata! {
             label: "Require Name & Symbol",
             hint: "Recommended: true. Filters incomplete tokens",
             impact: "high",
-            category: "Requirements",
+            category: "Token Info",
         })]
         require_name_and_symbol: bool = true,
         #[metadata(field_metadata! {
             label: "Require Logo",
             hint: "Optional. Logo may indicate legitimacy",
             impact: "medium",
-            category: "Requirements",
+            category: "Token Info",
         })]
         require_logo_url: bool = false,
         #[metadata(field_metadata! {
             label: "Require Website",
             hint: "Optional. Website may indicate serious project",
             impact: "medium",
-            category: "Requirements",
+            category: "Token Info",
         })]
         require_website_url: bool = false,
 
-        // Token age
+        // Liquidity checks
         #[metadata(field_metadata! {
-            label: "Min Token Age",
-            hint: "60min avoids brand new tokens, lower for sniping",
-            min: 0,
-            max: 10080,
-            step: 10,
-            unit: "minutes",
+            label: "Enable Liquidity Checks",
+            hint: "Check min/max liquidity from DexScreener",
             impact: "critical",
-            category: "Age",
+            category: "Liquidity",
         })]
-        min_token_age_minutes: i64 = 60,
-
-        // Transaction activity
-        #[metadata(field_metadata! {
-            label: "Min TX (5min)",
-            hint: "Min transactions in last 5 minutes (1+ is minimal)",
-            min: 0,
-            max: 1000,
-            step: 1,
-            unit: "txs",
-            impact: "medium",
-            category: "Activity",
-        })]
-        min_transactions_5min: i64 = 1,
-        #[metadata(field_metadata! {
-            label: "Min TX (1h)",
-            hint: "Min transactions in last hour (sustained activity)",
-            min: 0,
-            max: 10000,
-            step: 5,
-            unit: "txs",
-            impact: "medium",
-            category: "Activity",
-        })]
-        min_transactions_1h: i64 = 5,
-
-        // Liquidity
+        liquidity_enabled: bool = true,
         #[metadata(field_metadata! {
             label: "Min Liquidity",
             hint: "$1 very low, $1000+ for serious trading",
@@ -770,7 +721,14 @@ config_struct! {
         })]
         max_liquidity_usd: f64 = 100_000_000.0,
 
-        // Market cap
+        // Market cap checks
+        #[metadata(field_metadata! {
+            label: "Enable Market Cap Checks",
+            hint: "Check min/max market cap from DexScreener",
+            impact: "high",
+            category: "Market Cap",
+        })]
+        market_cap_enabled: bool = true,
         #[metadata(field_metadata! {
             label: "Min Market Cap",
             hint: "$1000 filters micro-cap tokens",
@@ -794,7 +752,114 @@ config_struct! {
         })]
         max_market_cap_usd: f64 = 100_000_000.0,
 
-        // Security requirements
+        // Transaction activity checks
+        #[metadata(field_metadata! {
+            label: "Enable Transaction Checks",
+            hint: "Check transaction activity from DexScreener",
+            impact: "medium",
+            category: "Activity",
+        })]
+        transactions_enabled: bool = true,
+        #[metadata(field_metadata! {
+            label: "Min TX (5min)",
+            hint: "Min transactions in last 5 minutes (1+ is minimal)",
+            min: 0,
+            max: 1000,
+            step: 1,
+            unit: "txs",
+            impact: "medium",
+            category: "Activity",
+        })]
+        min_transactions_5min: i64 = 1,
+        #[metadata(field_metadata! {
+            label: "Min TX (1h)",
+            hint: "Min transactions in last hour (sustained activity)",
+            min: 0,
+            max: 10000,
+            step: 5,
+            unit: "txs",
+            impact: "medium",
+            category: "Activity",
+        })]
+        min_transactions_1h: i64 = 5,
+
+        // Volume checks (new feature)
+        #[metadata(field_metadata! {
+            label: "Enable Volume Checks",
+            hint: "Check 24h volume from DexScreener",
+            impact: "medium",
+            category: "Volume",
+        })]
+        volume_enabled: bool = false,
+        #[metadata(field_metadata! {
+            label: "Min Volume 24h",
+            hint: "Minimum 24h trading volume in USD",
+            min: 0,
+            max: 10000000,
+            step: 100,
+            unit: "USD",
+            impact: "medium",
+            category: "Volume",
+        })]
+        min_volume_24h: f64 = 0.0,
+
+        // Price change checks (new feature)
+        #[metadata(field_metadata! {
+            label: "Enable Price Change Checks",
+            hint: "Check price change from DexScreener",
+            impact: "low",
+            category: "Price Change",
+        })]
+        price_change_enabled: bool = false,
+        #[metadata(field_metadata! {
+            label: "Min Price Change 1h",
+            hint: "Minimum 1h price change % (negative = dump filter)",
+            min: -100,
+            max: 10000,
+            step: 5,
+            unit: "%",
+            impact: "low",
+            category: "Price Change",
+        })]
+        min_price_change_h1: f64 = -100.0,
+        #[metadata(field_metadata! {
+            label: "Max Price Change 1h",
+            hint: "Maximum 1h price change % (filter extreme pumps)",
+            min: 0,
+            max: 100000,
+            step: 50,
+            unit: "%",
+            impact: "low",
+            category: "Price Change",
+        })]
+        max_price_change_h1: f64 = 10000.0,
+    }
+}
+
+// ============================================================================
+// RUGCHECK FILTERING CONFIGURATION
+// ============================================================================
+
+config_struct! {
+    /// RugCheck-specific filtering configuration
+    pub struct RugCheckFilters {
+        // Enable/disable entire source
+        #[metadata(field_metadata! {
+            label: "Enable RugCheck Filters",
+            hint: "Master switch for all RugCheck-based filtering",
+            impact: "critical",
+            category: "Source Control",
+        })]
+        enabled: bool = true,
+
+        // Risk score check
+        #[metadata(field_metadata! {
+            label: "Enable Risk Score Check",
+            hint: "Check raw rugcheck risk score (0=safest, 100000+=highest risk)",
+            impact: "critical",
+            category: "Risk Score",
+        })]
+        risk_score_enabled: bool = true,
         #[metadata(field_metadata! {
             label: "Max Risk Score",
             hint: "Lower = safer. Max acceptable risk score (0 = safest, 100000+ = highest risk)",
@@ -803,9 +868,82 @@ config_struct! {
             step: 100,
             unit: "score",
             impact: "critical",
-            category: "Security",
+            category: "Risk Score",
         })]
         max_risk_score: i32 = 10000,
+
+        // Authority checks
+        #[metadata(field_metadata! {
+            label: "Enable Authority Checks",
+            hint: "Check if mint/freeze authorities are safe",
+            impact: "critical",
+            category: "Authorities",
+        })]
+        authority_checks_enabled: bool = true,
+        #[metadata(field_metadata! {
+            label: "Require Authorities Safe",
+            hint: "Reject if authorities are not safe (recommended: true)",
+            impact: "critical",
+            category: "Authorities",
+        })]
+        require_authorities_safe: bool = true,
+
+        // Mint authority check
+        #[metadata(field_metadata! {
+            label: "Enable Mint Authority Check",
+            hint: "Check for mint authority presence",
+            impact: "high",
+            category: "Authorities",
+        })]
+        mint_authority_enabled: bool = true,
+        #[metadata(field_metadata! {
+            label: "Allow Mint Authority",
+            hint: "Allow tokens with mint authority (false = reject if present)",
+            impact: "high",
+            category: "Authorities",
+        })]
+        allow_mint_authority: bool = false,
+
+        // Freeze authority check
+        #[metadata(field_metadata! {
+            label: "Enable Freeze Authority Check",
+            hint: "Check for freeze authority presence",
+            impact: "high",
+            category: "Authorities",
+        })]
+        freeze_authority_enabled: bool = true,
+        #[metadata(field_metadata! {
+            label: "Allow Freeze Authority",
+            hint: "Allow tokens with freeze authority (false = reject if present)",
+            impact: "high",
+            category: "Authorities",
+        })]
+        allow_freeze_authority: bool = false,
+
+        // Risk level check
+        #[metadata(field_metadata! {
+            label: "Enable Risk Level Check",
+            hint: "Check rugcheck risk level categorization",
+            impact: "high",
+            category: "Risk Level",
+        })]
+        risk_level_enabled: bool = true,
+        #[metadata(field_metadata! {
+            label: "Block High Risk Tokens",
+            hint: "Reject tokens with 'Danger' risk level",
+            impact: "high",
+            category: "Risk Level",
+        })]
+        block_danger_level: bool = true,
+
+        // Holder distribution checks
+        #[metadata(field_metadata! {
+            label: "Enable Holder Distribution Checks",
+            hint: "Check holder concentration from RugCheck",
+            impact: "high",
+            category: "Holder Distribution",
+        })]
+        holder_distribution_enabled: bool = true,
         #[metadata(field_metadata! {
             label: "Max Top Holder %",
             hint: "15% means top holder can own max 15% supply",
@@ -814,7 +952,7 @@ config_struct! {
             step: 1,
             unit: "%",
             impact: "critical",
-            category: "Security",
+            category: "Holder Distribution",
         })]
         max_top_holder_pct: f64 = 15.0,
         #[metadata(field_metadata! {
@@ -825,9 +963,29 @@ config_struct! {
             step: 1,
             unit: "%",
             impact: "high",
-            category: "Security",
+            category: "Holder Distribution",
         })]
         max_top_3_holders_pct: f64 = 35.0,
+        #[metadata(field_metadata! {
+            label: "Min Unique Holders",
+            hint: "500+ indicates community adoption",
+            min: 0,
+            max: 1000000,
+            step: 50,
+            unit: "holders",
+            impact: "medium",
+            category: "Holder Distribution",
+        })]
+        min_unique_holders: u32 = 500,
+
+        // LP lock checks
+        #[metadata(field_metadata! {
+            label: "Enable LP Lock Checks",
+            hint: "Check liquidity pool lock percentage",
+            impact: "high",
+            category: "LP Lock",
+        })]
+        lp_lock_enabled: bool = true,
         #[metadata(field_metadata! {
             label: "Min PumpFun LP Lock",
             hint: "50%+ reduces rug risk for PumpFun tokens",
@@ -836,7 +994,7 @@ config_struct! {
             step: 5,
             unit: "%",
             impact: "high",
-            category: "Security",
+            category: "LP Lock",
         })]
         min_pumpfun_lp_lock_pct: f64 = 50.0,
         #[metadata(field_metadata! {
@@ -847,20 +1005,101 @@ config_struct! {
             step: 5,
             unit: "%",
             impact: "high",
-            category: "Security",
+            category: "LP Lock",
         })]
         min_regular_lp_lock_pct: f64 = 50.0,
+    }
+}
+
+// ============================================================================
+// MAIN FILTERING CONFIGURATION (Orchestrates All Sources)
+// ============================================================================
+
+config_struct! {
+    /// Main filtering configuration - orchestrates all sources
+    pub struct FilteringConfig {
+        // Cache settings
         #[metadata(field_metadata! {
-            label: "Min Unique Holders",
-            hint: "500+ indicates community adoption",
-            min: 0,
-            max: 1000000,
-            step: 50,
-            unit: "holders",
-            impact: "medium",
-            category: "Community",
+            label: "Cache TTL",
+            hint: "How long to cache filter results (lower = more current)",
+            min: 5,
+            max: 300,
+            step: 5,
+            unit: "seconds",
+            impact: "critical",
+            category: "Performance",
         })]
-        min_unique_holders: u32 = 500,
+        filter_cache_ttl_secs: u64 = 15,
+
+        // Processing limits
+        #[metadata(field_metadata! {
+            label: "Max Tokens to Process",
+            hint: "Total tokens to evaluate per cycle (10000 = all)",
+            min: 100,
+            max: 100000,
+            step: 100,
+            unit: "tokens",
+            impact: "low",
+            category: "Processing",
+        })]
+        max_tokens_to_process: usize = 10000,
+        #[metadata(field_metadata! {
+            label: "Target Filtered Tokens",
+            hint: "Stop after N tokens pass (500 = good pool, 0 = no limit)",
+            min: 0,
+            max: 10000,
+            step: 10,
+            unit: "tokens",
+            impact: "medium",
+            category: "Processing",
+        })]
+        target_filtered_tokens: usize = 500,
+
+        // Meta requirements (apply across all sources)
+        #[metadata(field_metadata! {
+            label: "Require Decimals in Database",
+            hint: "Skip tokens without cached decimal data",
+            impact: "high",
+            category: "Meta Requirements",
+        })]
+        require_decimals_in_db: bool = true,
+        #[metadata(field_metadata! {
+            label: "Check Cooldown",
+            hint: "Skip tokens in cooldown period after exit",
+            impact: "high",
+            category: "Meta Requirements",
+        })]
+        check_cooldown: bool = true,
+
+        // Token age
+        #[metadata(field_metadata! {
+            label: "Min Token Age",
+            hint: "60min avoids brand new tokens, lower for sniping",
+            min: 0,
+            max: 10080,
+            step: 10,
+            unit: "minutes",
+            impact: "critical",
+            category: "Age",
+        })]
+        min_token_age_minutes: i64 = 60,
+
+        // Source-specific configs (nested)
+        #[metadata(field_metadata! {
+            label: "DexScreener Filters",
+            hint: "Market data filtering from DexScreener",
+            impact: "critical",
+            category: "Data Sources",
+        })]
+        dexscreener: DexScreenerFilters = DexScreenerFilters::default(),
+
+        #[metadata(field_metadata! {
+            label: "RugCheck Filters",
+            hint: "Security filtering from RugCheck",
+            impact: "critical",
+            category: "Data Sources",
+        })]
+        rugcheck: RugCheckFilters = RugCheckFilters::default(),
     }
 }
 

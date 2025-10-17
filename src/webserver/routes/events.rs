@@ -154,15 +154,7 @@ async fn get_events_since(Query(params): Query<SinceQuery>) -> Json<EventsListRe
         .expect("events DB not initialized")
         .clone();
     let events_vec = db
-        .get_events_since(
-            after_id,
-            limit,
-            category,
-            severity,
-            mint,
-            reference,
-            search,
-        )
+        .get_events_since(after_id, limit, category, severity, mint, reference, search)
         .await
         .unwrap_or_default();
 
@@ -230,13 +222,7 @@ async fn get_events_before(Query(params): Query<BeforeQuery>) -> Json<EventsList
         .clone();
     let events_vec = db
         .get_events_before(
-            before_id,
-            limit,
-            category,
-            severity,
-            mint,
-            reference,
-            search,
+            before_id, limit, category, severity, mint, reference, search,
         )
         .await
         .unwrap_or_default();
