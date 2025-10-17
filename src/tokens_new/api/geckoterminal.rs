@@ -37,8 +37,8 @@ const DEFAULT_NETWORK: &str = "solana";
 /// Maximum page number for trending pools pagination
 const MAX_TRENDING_PAGE: u32 = 10;
 
-/// Request timeout - GeckoTerminal can have latency spikes, 10s is safe
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
+/// Request timeout in seconds - GeckoTerminal can have latency spikes, 10s is safe
+const TIMEOUT_SECS: u64 = 10;
 
 // ============================================================================
 // CLIENT IMPLEMENTATION

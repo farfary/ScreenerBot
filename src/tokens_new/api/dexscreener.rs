@@ -33,8 +33,8 @@ const DEFAULT_CHAIN_ID: &str = "solana";
 /// Maximum tokens per batch request
 const MAX_TOKENS_PER_REQUEST: usize = 30;
 
-/// Request timeout - DexScreener is fast, 10s is sufficient
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
+/// Request timeout in seconds - DexScreener is fast, 10s is sufficient
+const TIMEOUT_SECS: u64 = 10;
 
 // ============================================================================
 // CLIENT IMPLEMENTATION
