@@ -3,7 +3,7 @@
 /// API Documentation: https://www.geckoterminal.com/dex-api
 /// 
 /// Endpoints implemented (verified working):
-/// 1. /networks/{network}/tokens/{token}/pools - PRIMARY: Get all pools for a token
+/// 1. /networks/{network}/tokens/{token}/pools - PRIMARY: Get all pools for a token (with advanced params)
 /// 2. /networks/{network}/trending_pools - Get trending pools by network
 /// 3. /networks/{network}/pools - Get top pools by network
 /// 4. /networks/{network}/pools/{address} - Get specific pool data by pool address
@@ -98,6 +98,87 @@ impl GeckoTerminalClient {
         let api_response: GeckoTerminalResponse = response.json().await.map_err(|e| format!("JSON parse error: {}", e))?;
 
         Ok(api_response.data.into_iter().map(|p| p.to_pool(mint)).collect())
+    }
+
+    /// Get top pools by token address with advanced filtering
+    /// Uses /networks/{network}/tokens/{token_address}/pools with query parameters
+    /// 
+    /// Returns top pools for a token with sorting and filtering options.
+    /// Same endpoint as fetch_pools_on_network but with additional query parameters.
+    /// 
+    /// # Arguments
+    /// * `token_address` - Token contract address
+    /// * `network` - Network identifier (e.g., "solana", "eth", "bsc")
+    /// * `include` - Optional comma-separated attributes to include (base_token, quote_token, dex)
+    /// * `page` - Optional page number for pagination (max: 10, default: 1)
+    /// * `sort` - Optional sort field (h24_volume_usd_desc, h24_tx_count_desc, h24_volume_usd_liquidity_desc)
+    /// 
+    /// # Returns
+    /// Vector of pools sorted by specified criteria
+    /// 
+    /// # Example
+    /// ```no_run
+    /// let pools = client.fetch_top_pools_by_token(
+    ///     "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    ///     "solana",
+    ///     Some("base_token,quote_token"),
+    ///     Some(1),
+    ///     Some("h24_volume_usd_desc")
+    /// ).await?;
+    /// ```
+    pub async fn fetch_top_pools_by_token(
+        &self,
+        token_address: &str,
+        network: &str,
+        include: Option<&str>,
+        page: Option<u32>,
+        sort: Option<&str>,
+    ) -> Result<Vec<GeckoTerminalPool>, String> {
+        let permit = self.rate_limiter.acquire().await.map_err(|e| format!("Rate limiter error: {}", e))?;
+
+        let mut url = format!(
+            "{}/networks/{}/tokens/{}/pools",
+            GECKOTERMINAL_BASE_URL, network, token_address
+        );
+
+        let mut params = Vec::new();
+
+        if let Some(inc) = include {
+            params.push(format!("include={}", inc));
+        }
+        if let Some(p) = page {
+            params.push(format!("page={}", p));
+        }
+        if let Some(s) = sort {
+            params.push(format!("sort={}", s));
+        }
+
+        if !params.is_empty() {
+            url.push_str(&format!("?{}", params.join("&")));
+        }
+
+        debug!("[GECKOTERMINAL] Fetching top pools by token: token={}, network={}, page={:?}, sort={:?}", 
+               token_address, network, page, sort);
+
+        let response = self.client
+            .get(&url)
+            .timeout(self.timeout)
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?;
+
+        drop(permit);
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(format!("HTTP {}: {}", status, error_text));
+        }
+
+        let api_response: GeckoTerminalResponse = response.json().await
+            .map_err(|e| format!("JSON parse error: {}", e))?;
+
+        Ok(api_response.data.into_iter().map(|p| p.to_pool(token_address)).collect())
     }
 
     /// Get trending pools by network

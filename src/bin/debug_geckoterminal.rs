@@ -20,6 +20,10 @@ struct Args {
     #[clap(long)]
     token_pools: bool,
 
+    /// Test top pools by token endpoint (with params)
+    #[clap(long)]
+    top_pools_token: bool,
+
     /// Test OHLCV endpoint
     #[clap(long)]
     ohlcv: bool,
@@ -92,10 +96,14 @@ async fn main() {
     println!("{}", "=".repeat(60).green());
     println!("Base URL: {}\n", BASE_URL.yellow());
 
-    let test_all = args.all || (!args.token_pools && !args.ohlcv && !args.trending && !args.pool_data && !args.multi_pools && !args.top_pools && !args.dexes && !args.new_pools);
+    let test_all = args.all || (!args.token_pools && !args.top_pools_token && !args.ohlcv && !args.trending && !args.pool_data && !args.multi_pools && !args.top_pools && !args.dexes && !args.new_pools);
 
     if test_all || args.token_pools {
         test_token_pools(&client, &args).await;
+    }
+
+    if test_all || args.top_pools_token {
+        test_top_pools_by_token(&client, &args).await;
     }
 
     if test_all || args.trending {
@@ -234,6 +242,199 @@ async fn test_token_pools(client: &Client, args: &Args) {
                                     if has_quote_token { "✓".green() } else { "✗".red() },
                                     if has_dex { "✓".green() } else { "✗".red() }
                                 );
+                            }
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+}
+
+async fn test_top_pools_by_token(client: &Client, args: &Args) {
+    // Test 1: Basic top pools by token (no params)
+    print_test_header(
+        &format!("Top Pools by Token ({}, basic)", args.network),
+        &format!("/networks/{}/tokens/{}/pools", args.network, args.token)
+    );
+
+    let url = format!("{}/networks/{}/tokens/{}/pools", BASE_URL, args.network, args.token);
+    
+    let start = Instant::now();
+    match client.get(&url).timeout(Duration::from_secs(10)).send().await {
+        Ok(response) => {
+            let elapsed = start.elapsed();
+            let status = response.status();
+            
+            println!("  {} {} ({:.2}ms)", "Status:".cyan(), status.as_u16().to_string().green(), elapsed.as_millis());
+
+            if status.is_success() {
+                let body = response.text().await.unwrap_or_default();
+
+                if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                        println!("  {} {} pools found", "✓".green(), data.len());
+                        
+                        println!("  → First 3 pools:");
+                        for (i, pool) in data.iter().take(3).enumerate() {
+                            if let Some(attrs) = pool.get("attributes") {
+                                let name = attrs.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown");
+                                let volume = attrs.get("volume_usd").and_then(|v| v.get("h24")).and_then(|h| h.as_str()).unwrap_or("N/A");
+                                println!("    {}. {} (24h vol: ${})", i+1, name, volume);
+                            }
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 2: With sorting (by volume)
+    print_test_header(
+        &format!("Top Pools by Token ({}, sorted by volume)", args.network),
+        &format!("/networks/{}/tokens/{}/pools?sort=h24_volume_usd_desc", args.network, args.token)
+    );
+
+    let url = format!("{}/networks/{}/tokens/{}/pools?sort=h24_volume_usd_desc", BASE_URL, args.network, args.token);
+    
+    let start = Instant::now();
+    match client.get(&url).timeout(Duration::from_secs(10)).send().await {
+        Ok(response) => {
+            let elapsed = start.elapsed();
+            let status = response.status();
+            
+            println!("  {} {} ({:.2}ms)", "Status:".cyan(), status.as_u16().to_string().green(), elapsed.as_millis());
+
+            if status.is_success() {
+                let body = response.text().await.unwrap_or_default();
+
+                if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                        println!("  {} {} pools sorted by 24h volume", "✓".green(), data.len());
+                        
+                        println!("  → Top 5 by volume:");
+                        for (i, pool) in data.iter().take(5).enumerate() {
+                            if let Some(attrs) = pool.get("attributes") {
+                                let name = attrs.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown");
+                                let volume = attrs.get("volume_usd").and_then(|v| v.get("h24")).and_then(|h| h.as_str()).unwrap_or("N/A");
+                                let txns = attrs.get("transactions").and_then(|t| t.get("h24")).and_then(|h| h.get("buys")).and_then(|b| b.as_u64()).unwrap_or(0);
+                                println!("    {}. {} - ${}vol, {} txns", i+1, name, volume, txns);
+                            }
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 3: With includes (base_token, quote_token, dex)
+    print_test_header(
+        &format!("Top Pools by Token ({}, with includes)", args.network),
+        &format!("/networks/{}/tokens/{}/pools?include=base_token,quote_token,dex", args.network, args.token)
+    );
+
+    let url = format!("{}/networks/{}/tokens/{}/pools?include=base_token,quote_token,dex", BASE_URL, args.network, args.token);
+    
+    let start = Instant::now();
+    match client.get(&url).timeout(Duration::from_secs(10)).send().await {
+        Ok(response) => {
+            let elapsed = start.elapsed();
+            let status = response.status();
+            
+            println!("  {} {} ({:.2}ms)", "Status:".cyan(), status.as_u16().to_string().green(), elapsed.as_millis());
+
+            if status.is_success() {
+                let body = response.text().await.unwrap_or_default();
+
+                if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                        println!("  {} {} pools with relationships", "✓".green(), data.len());
+                        
+                        if let Some(included) = json.get("included").and_then(|i| i.as_array()) {
+                            println!("  {} {} included relationships", "✓".green(), included.len());
+                        }
+
+                        if let Some(first) = data.first() {
+                            if let Some(rels) = first.get("relationships") {
+                                let has_base = rels.get("base_token").is_some();
+                                let has_quote = rels.get("quote_token").is_some();
+                                let has_dex = rels.get("dex").is_some();
+                                println!("  {} base_token: {}, quote_token: {}, dex: {}", 
+                                    "Relationships:".cyan(),
+                                    if has_base { "✓".green() } else { "✗".red() },
+                                    if has_quote { "✓".green() } else { "✗".red() },
+                                    if has_dex { "✓".green() } else { "✗".red() }
+                                );
+                            }
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 4: Sorted by transaction count
+    print_test_header(
+        &format!("Top Pools by Token ({}, sorted by tx count)", args.network),
+        &format!("/networks/{}/tokens/{}/pools?sort=h24_tx_count_desc", args.network, args.token)
+    );
+
+    let url = format!("{}/networks/{}/tokens/{}/pools?sort=h24_tx_count_desc", BASE_URL, args.network, args.token);
+    
+    let start = Instant::now();
+    match client.get(&url).timeout(Duration::from_secs(10)).send().await {
+        Ok(response) => {
+            let elapsed = start.elapsed();
+            let status = response.status();
+            
+            println!("  {} {} ({:.2}ms)", "Status:".cyan(), status.as_u16().to_string().green(), elapsed.as_millis());
+
+            if status.is_success() {
+                let body = response.text().await.unwrap_or_default();
+
+                if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                        println!("  {} {} pools sorted by transaction count", "✓".green(), data.len());
+                        
+                        println!("  → Top 3 by transaction count:");
+                        for (i, pool) in data.iter().take(3).enumerate() {
+                            if let Some(attrs) = pool.get("attributes") {
+                                let name = attrs.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown");
+                                let buys = attrs.get("transactions").and_then(|t| t.get("h24")).and_then(|h| h.get("buys")).and_then(|b| b.as_u64()).unwrap_or(0);
+                                let sells = attrs.get("transactions").and_then(|t| t.get("h24")).and_then(|h| h.get("sells")).and_then(|s| s.as_u64()).unwrap_or(0);
+                                println!("    {}. {} - {} buys, {} sells", i+1, name, buys, sells);
                             }
                         }
                     }
