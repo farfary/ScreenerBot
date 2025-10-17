@@ -27,14 +27,14 @@ const state = {
   isRefreshing: false,
   lastSaved: null,
   searchQuery: AppState.load("filtering_searchQuery", ""),
-  activeTab: AppState.load("filtering_activeTab", "meta"),
-  collapsedCategories: AppState.load("filtering_collapsedCategories", {}),
+  activeTab: AppState.load("filtering_activeTab", "status"),
   initialized: false,
 };
 
 const FILTER_TABS = [
+  { id: "status", label: "📊 Status" },
   { id: "meta", label: "⚙️ Core" },
-  { id: "dexscreener", label: "📊 DexScreener" },
+  { id: "dexscreener", label: "� DexScreener" },
   { id: "rugcheck", label: "🛡️ RugCheck" },
 ];
 
@@ -528,24 +528,6 @@ function setCategoryEnabled(config, source, enableKey, enabled) {
   config[source][enableKey] = enabled;
 }
 
-function isCategoryCollapsed(categoryName) {
-  if (!state.collapsedCategories || typeof state.collapsedCategories !== "object") {
-    state.collapsedCategories = {};
-  }
-  return Boolean(state.collapsedCategories[categoryName]);
-}
-
-function setCategoryCollapsed(categoryName, collapsed) {
-  if (!state.collapsedCategories || typeof state.collapsedCategories !== "object") {
-    state.collapsedCategories = {};
-  }
-  state.collapsedCategories = {
-    ...state.collapsedCategories,
-    [categoryName]: collapsed,
-  };
-  AppState.save("filtering_collapsedCategories", state.collapsedCategories);
-}
-
 // Deep merge helper so imports keep nested source-level settings intact
 function deepMerge(target, source) {
   const output = !target || typeof target !== "object" || Array.isArray(target) ? {} : target;
@@ -620,10 +602,58 @@ async function fetchStats() {
 // RENDERING
 // ============================================================================
 
-function renderStats() {
-  if (!state.stats) {
-    return '<div class="filtering-metrics loading">Loading metrics...</div>';
-  }
+// ============================================================================
+// RENDERING
+// ============================================================================
+
+function renderInfoBar() {
+  if (!state.stats) return "";
+
+  const {
+    total_tokens,
+    with_pool_price,
+    passed_filtering,
+    open_positions,
+    blacklisted,
+    updated_at,
+  } = state.stats;
+
+  const priceRate = total_tokens > 0 ? ((with_pool_price / total_tokens) * 100).toFixed(1) : 0;
+  const passedRate = total_tokens > 0 ? ((passed_filtering / total_tokens) * 100).toFixed(1) : 0;
+  const cacheAge = updated_at ? Utils.formatTimeAgo(new Date(updated_at)) : "Never";
+
+  return `
+    <div class="filtering-info-bar">
+      <div class="info-item highlight">
+        <span class="label">Total:</span>
+        <span class="value">${Utils.escapeHtml(Utils.formatNumber(total_tokens))}</span>
+      </div>
+      <div class="info-item">
+        <span class="label">Priced:</span>
+        <span class="value">${Utils.escapeHtml(Utils.formatNumber(with_pool_price))} (${Utils.escapeHtml(priceRate)}%)</span>
+      </div>
+      <div class="info-item highlight">
+        <span class="label">Passed:</span>
+        <span class="value">${Utils.escapeHtml(Utils.formatNumber(passed_filtering))} (${Utils.escapeHtml(passedRate)}%)</span>
+      </div>
+      <div class="info-item">
+        <span class="label">Positions:</span>
+        <span class="value">${Utils.escapeHtml(Utils.formatNumber(open_positions))}</span>
+      </div>
+      <div class="info-item warning">
+        <span class="label">Blacklisted:</span>
+        <span class="value">${Utils.escapeHtml(Utils.formatNumber(blacklisted))}</span>
+      </div>
+      <div class="info-item">
+        <span class="label">Cache:</span>
+        <span class="value">${Utils.escapeHtml(cacheAge)}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderStatusView() {
+  if (!state.stats) return '<div class="filtering-config-empty">Loading statistics...</div>';
 
   const {
     total_tokens,
@@ -638,49 +668,48 @@ function renderStats() {
 
   const priceRate = total_tokens > 0 ? ((with_pool_price / total_tokens) * 100).toFixed(1) : 0;
   const passedRate = total_tokens > 0 ? ((passed_filtering / total_tokens) * 100).toFixed(1) : 0;
-  const cacheAge = updated_at ? Utils.formatTimeAgo(new Date(updated_at)) : "Never";
 
   return `
-    <div class="filtering-metrics">
-      <div class="metric-chip dominant">
+    <div class="status-view">
+      <div class="status-card dominant">
         <span class="metric-label">Total Tokens</span>
         <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(total_tokens))}</span>
-        <span class="metric-meta">Filtering cache</span>
+        <span class="metric-meta">In filtering cache</span>
       </div>
-      <div class="metric-chip">
+      <div class="status-card">
         <span class="metric-label">With Price</span>
         <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(with_pool_price))}</span>
-        <span class="metric-meta">${Utils.escapeHtml(`${priceRate}% priced`)}</span>
+        <span class="metric-meta">${Utils.escapeHtml(`${priceRate}% have pricing`)}</span>
       </div>
-      <div class="metric-chip">
+      <div class="status-card dominant">
         <span class="metric-label">Passed Filters</span>
         <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(passed_filtering))}</span>
-        <span class="metric-meta">${Utils.escapeHtml(`${passedRate}% green`)}</span>
+        <span class="metric-meta">${Utils.escapeHtml(`${passedRate}% passed`)}</span>
       </div>
-      <div class="metric-chip">
+      <div class="status-card">
         <span class="metric-label">Open Positions</span>
         <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(open_positions))}</span>
         <span class="metric-meta">Active trades</span>
       </div>
-      <div class="metric-chip">
+      <div class="status-card">
         <span class="metric-label">Secure Tokens</span>
         <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(secure_tokens))}</span>
-        <span class="metric-meta">Security threshold</span>
+        <span class="metric-meta">Pass security checks</span>
       </div>
-      <div class="metric-chip warning">
+      <div class="status-card warning">
         <span class="metric-label">Blacklisted</span>
         <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(blacklisted))}</span>
         <span class="metric-meta">Flagged tokens</span>
       </div>
-      <div class="metric-chip">
+      <div class="status-card">
         <span class="metric-label">With OHLCV</span>
         <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(with_ohlcv))}</span>
-        <span class="metric-meta">Historical ready</span>
+        <span class="metric-meta">Historical data ready</span>
       </div>
-      <div class="metric-chip subtle">
-        <span class="metric-label">Cache Age</span>
-        <span class="metric-value">${Utils.escapeHtml(cacheAge)}</span>
-        <span class="metric-meta">${updated_at ? Utils.escapeHtml(new Date(updated_at).toLocaleString()) : "No refresh"}</span>
+      <div class="status-card">
+        <span class="metric-label">Last Updated</span>
+        <span class="metric-value">${updated_at ? Utils.escapeHtml(Utils.formatTimeAgo(new Date(updated_at))) : "Never"}</span>
+        <span class="metric-meta">${updated_at ? Utils.escapeHtml(new Date(updated_at).toLocaleString()) : "No refresh yet"}</span>
       </div>
     </div>
   `;
@@ -742,27 +771,6 @@ function renderConfigField(field, source) {
   `;
 }
 
-function renderSourceToggle(source, _categoryName) {
-  if (source === "meta") return "";
-
-  const enabled = getSourceEnabled(state.draft, source);
-  const sourceLabel = source === "dexscreener" ? "DexScreener" : "RugCheck";
-  const toggleId = `source-toggle-${source}`;
-
-  return `
-    <label class="source-switch">
-      <input
-        type="checkbox"
-        id="${toggleId}"
-        data-source-toggle="${source}"
-        ${enabled ? "checked" : ""}
-      />
-      <span class="slider"></span>
-      <span class="label">${sourceLabel}</span>
-    </label>
-  `;
-}
-
 function renderCategoryToggle(source, enableKey, _categoryName) {
   if (!enableKey || source === "meta") return "";
 
@@ -783,54 +791,6 @@ function renderCategoryToggle(source, enableKey, _categoryName) {
   `;
 }
 
-function formatFieldValue(value, field) {
-  if (field.type === "boolean") {
-    return value ? "On" : "Off";
-  }
-
-  if (typeof value === "number" && !Number.isNaN(value)) {
-    const formatter = new Intl.NumberFormat(undefined, {
-      maximumFractionDigits: field.step && field.step < 1 ? 4 : 0,
-    });
-    const formatted = formatter.format(value);
-    return field.unit ? `${formatted} ${field.unit}` : formatted;
-  }
-
-  return value;
-}
-
-function renderCategorySummary(categoryName, categoryData) {
-  const { source, fields, enableKey } = categoryData;
-  if (!state.draft) return "";
-
-  const sourceEnabled = getSourceEnabled(state.draft, source);
-  const categoryEnabled = getCategoryEnabled(state.draft, source, enableKey);
-
-  if ((source !== "meta" && !sourceEnabled) || (enableKey && !categoryEnabled)) {
-    return '<span class="summary-chip muted">Category disabled</span>';
-  }
-
-  const summaryItems = [];
-
-  for (const field of fields) {
-    if (summaryItems.length >= 3) break;
-    const value = getConfigValue(state.draft, source, field.key);
-    if (value === undefined || value === null) continue;
-
-    const display = formatFieldValue(value, field);
-    summaryItems.push(
-      `<span class="summary-chip ${field.type === "boolean" ? (value ? "on" : "off") : ""}">${Utils.escapeHtml(
-        field.label
-      )}: ${Utils.escapeHtml(String(display))}</span>`
-    );
-  }
-
-  if (summaryItems.length === 0) {
-    return '<span class="summary-chip muted">No active filters</span>';
-  }
-
-  return summaryItems.join("");
-}
 
 function renderConfigCategory(categoryName, categoryData) {
   const { source, enableKey, fields } = categoryData;
@@ -842,39 +802,17 @@ function renderConfigCategory(categoryName, categoryData) {
     field.label.toLowerCase().includes(state.searchQuery) ||
     field.key.toLowerCase().includes(state.searchQuery);
 
-  const collapsed = state.searchQuery ? false : isCategoryCollapsed(categoryName);
   const disabledClass = isDisabled ? "disabled" : "";
-  const collapsedClass = collapsed ? "collapsed" : "";
   const visibleFields = fields.filter(matchesSearch);
 
   if (state.searchQuery && visibleFields.length === 0) {
     return "";
   }
 
-  const collapseButton = `
-    <button
-      class="collapse-toggle"
-      type="button"
-      data-collapse-category="${Utils.escapeHtml(categoryName)}"
-      aria-expanded="${collapsed ? "false" : "true"}"
-      aria-label="Toggle ${Utils.escapeHtml(categoryName)}"
-    >
-      <span class="chevron">${collapsed ? "▶" : "▼"}</span>
-    </button>
-  `;
-
   return `
-    <div class="filter-card ${disabledClass} ${collapsedClass}" data-source="${source}" data-category="${Utils.escapeHtml(
-    categoryName
-  )}">
+    <div class="filter-card ${disabledClass}" data-source="${source}" data-category="${Utils.escapeHtml(categoryName)}">
       <div class="card-header">
-        <div class="card-header-main">
-          ${collapseButton}
-          <div class="card-title">
-            <h3>${Utils.escapeHtml(categoryName)}</h3>
-            <div class="card-summary">${renderCategorySummary(categoryName, categoryData)}</div>
-          </div>
-        </div>
+        <h3>${Utils.escapeHtml(categoryName)}</h3>
         ${renderCategoryToggle(source, enableKey, categoryName)}
       </div>
       <div class="card-body">
@@ -892,6 +830,11 @@ function renderConfigPanels() {
     return '<div class="filtering-config-empty">Loading configuration...</div>';
   }
 
+  // Status tab shows overview
+  if (state.activeTab === "status") {
+    return renderStatusView();
+  }
+
   const targetSource = state.activeTab || "meta";
   const categories = Object.entries(CONFIG_CATEGORIES).filter(([, data]) => {
     if (targetSource === "meta") return data.source === "meta";
@@ -904,16 +847,50 @@ function renderConfigPanels() {
     .join("");
 
   if (!cards) {
-    return '<div class="filtering-config-empty no-results">No filters match your criteria.</div>';
+    return '<div class="filtering-config-empty">No settings match your search</div>';
   }
 
   return `<div class="cards-grid">${cards}</div>`;
 }
 
-function renderSourceControls() {
+function renderSourceToggle(source) {
   if (!state.draft) return "";
 
-  return ["dexscreener", "rugcheck"].map((source) => renderSourceToggle(source)).join("");
+  const enabled = getSourceEnabled(state.draft, source);
+  const sourceLabel = source === "dexscreener" ? "DexScreener Enabled" : "RugCheck Enabled";
+  const toggleId = `source-toggle-${source}`;
+
+  return `
+    <div class="source-toggle-wrapper">
+      <span class="label">${sourceLabel}</span>
+      <label class="source-switch">
+        <input
+          type="checkbox"
+          id="${toggleId}"
+          data-source-toggle="${source}"
+          ${enabled ? "checked" : ""}
+        />
+        <span class="slider"></span>
+      </label>
+    </div>
+  `;
+}
+
+function renderSearchBar() {
+  const showSourceToggle = state.activeTab === "dexscreener" || state.activeTab === "rugcheck";
+  const sourceToggle = showSourceToggle ? renderSourceToggle(state.activeTab) : "";
+
+  return `
+    <div class="filtering-search-bar">
+      <input
+        type="text"
+        id="filtering-search"
+        placeholder="Search settings..."
+        value="${Utils.escapeHtml(state.searchQuery)}"
+      />
+      ${sourceToggle}
+    </div>
+  `;
 }
 
 function getStatusMessage() {
@@ -929,36 +906,13 @@ function renderShell() {
     <div class="filtering-page">
       <div class="filtering-shell">
         <header class="filtering-top">
-          <div class="filtering-top-main">
-            <div class="top-text">
-              <h1>🎯 Filtering Control Center</h1>
-              <p>Dial in discovery limits, DexScreener heuristics, and RugCheck defenses from a single pane.</p>
-            </div>
-          </div>
-          <div class="filtering-metrics-wrapper" id="filtering-metrics">
-            ${renderStats()}
-          </div>
+          <h1>🎯 Filtering Configuration</h1>
         </header>
-        <div class="filtering-main">
-          <div class="filtering-toolbar">
-            <div id="filtering-tab-bar" class="filtering-tab-bar"></div>
-            <div class="filtering-search-row">
-              <div class="search-field">
-                <input
-                  type="text"
-                  id="filtering-search"
-                  placeholder="Search settings..."
-                  value="${Utils.escapeHtml(state.searchQuery)}"
-                />
-              </div>
-              <div class="filtering-source-controls" id="filtering-source-controls">
-                ${renderSourceControls()}
-              </div>
-            </div>
-          </div>
-          <div class="filtering-content" id="filtering-config-panels">
-            ${renderConfigPanels()}
-          </div>
+        <div id="filtering-tab-bar" class="filtering-tab-bar"></div>
+        <div id="filtering-info-bar">${renderInfoBar()}</div>
+        <div id="filtering-search-bar">${renderSearchBar()}</div>
+        <div class="filtering-content" id="filtering-config-panels">
+          ${renderConfigPanels()}
         </div>
         <footer class="filtering-footer">
           <div class="footer-left">
@@ -966,10 +920,10 @@ function renderShell() {
           </div>
           <div class="footer-actions">
             <button class="ghost" id="reset-config-btn">↩️ Reset</button>
-            <button class="ghost" id="refresh-snapshot-btn">🔄 Refresh Snapshot</button>
+            <button class="ghost" id="refresh-snapshot-btn">🔄 Refresh</button>
             <button class="ghost" id="export-config-btn">📤 Export</button>
             <button class="ghost" id="import-config-btn">📥 Import</button>
-            <button class="primary" id="save-config-btn">💾 Save Changes</button>
+            <button class="primary" id="save-config-btn">💾 Save</button>
           </div>
         </footer>
       </div>
@@ -995,8 +949,8 @@ function initializeTabBar() {
     onChange: (tabId) => {
       state.activeTab = tabId;
       AppState.save("filtering_activeTab", tabId);
+      updateSearchBar();
       updateConfigPanels({ scrollTop: 0 });
-      updateSourceControls();
     },
   });
 
@@ -1013,15 +967,6 @@ let globalHandlersBound = false;
 
 function bindGlobalHandlers() {
   if (globalHandlersBound) return;
-
-  const searchInput = $("#filtering-search");
-  if (searchInput) {
-    searchInput.addEventListener("input", (event) => {
-      state.searchQuery = (event.target.value || "").toLowerCase();
-      AppState.save("filtering_searchQuery", state.searchQuery);
-      updateConfigPanels({ scrollTop: 0 });
-    });
-  }
 
   const saveBtn = $("#save-config-btn");
   const resetBtn = $("#reset-config-btn");
@@ -1058,38 +1003,32 @@ function bindConfigHandlers() {
   container.querySelectorAll("[data-category-toggle]").forEach((input) => {
     input.addEventListener("change", handleCategoryToggle);
   });
-
-  container.querySelectorAll("[data-collapse-category]").forEach((button) => {
-    button.addEventListener("click", handleCategoryCollapseToggle);
-  });
 }
 
-function updateMetricsSection() {
-  const container = $("#filtering-metrics");
+function updateInfoBar() {
+  const container = $("#filtering-info-bar");
   if (container) {
-    container.innerHTML = renderStats();
+    container.innerHTML = renderInfoBar();
   }
 }
 
-function updateSourceControls() {
-  const container = $("#filtering-source-controls");
+function updateSearchBar() {
+  const container = $("#filtering-search-bar");
   if (!container) return;
 
-  container.innerHTML = renderSourceControls();
+  container.innerHTML = renderSearchBar();
+  bindSearchHandler();
   bindSourceToggleHandlers();
 }
 
-function updateStatusMessage() {
-  const statusEl = $("#filtering-status-message");
-  if (statusEl) {
-    statusEl.textContent = getStatusMessage();
-  }
-}
-
-function updateSearchField() {
+function bindSearchHandler() {
   const searchInput = $("#filtering-search");
-  if (searchInput && searchInput.value !== state.searchQuery) {
-    searchInput.value = state.searchQuery;
+  if (searchInput) {
+    searchInput.addEventListener("input", (event) => {
+      state.searchQuery = (event.target.value || "").toLowerCase();
+      AppState.save("filtering_searchQuery", state.searchQuery);
+      updateConfigPanels({ scrollTop: 0 });
+    });
   }
 }
 
@@ -1108,6 +1047,13 @@ function updateConfigPanels(options = {}) {
   }
 }
 
+function updateStatusMessage() {
+  const statusEl = $("#filtering-status-message");
+  if (statusEl) {
+    statusEl.textContent = getStatusMessage();
+  }
+}
+
 function render() {
   const root = $("#filtering-root");
   if (!root) return;
@@ -1119,9 +1065,8 @@ function render() {
     bindGlobalHandlers();
   }
 
-  updateMetricsSection();
-  updateSearchField();
-  updateSourceControls();
+  updateInfoBar();
+  updateSearchBar();
   updateConfigPanels({ preserveScroll: true });
   updateStatusMessage();
   updateActionButtons();
@@ -1129,16 +1074,6 @@ function render() {
 // ============================================================================
 // EVENT HANDLERS
 // ============================================================================
-
-function handleCategoryCollapseToggle(event) {
-  const button = event.currentTarget;
-  const categoryName = button.dataset.collapseCategory;
-  if (!categoryName) return;
-
-  const currentlyCollapsed = isCategoryCollapsed(categoryName);
-  setCategoryCollapsed(categoryName, !currentlyCollapsed);
-  render();
-}
 
 function handleFieldChange(event) {
   const input = event.target;
@@ -1351,7 +1286,7 @@ export function createLifecycle() {
           new Poller(
             async () => {
               await loadStats();
-              updateMetricsSection();
+              updateInfoBar();
             },
             { label: "Filtering Stats" }
           )
