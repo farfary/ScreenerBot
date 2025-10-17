@@ -1008,6 +1008,111 @@ config_struct! {
             category: "LP Lock",
         })]
         min_regular_lp_lock_pct: f64 = 50.0,
+
+        // Rugged token check
+        #[metadata(field_metadata! {
+            label: "Block Rugged Tokens",
+            hint: "Reject tokens flagged as rugged by RugCheck",
+            impact: "critical",
+            category: "Security Flags",
+        })]
+        block_rugged_tokens: bool = true,
+
+        // Insider detection
+        #[metadata(field_metadata! {
+            label: "Max Graph Insiders",
+            hint: "Maximum detected insider wallets (0 = no limit)",
+            min: 0,
+            max: 20,
+            step: 1,
+            unit: "wallets",
+            impact: "high",
+            category: "Insider Detection",
+        })]
+        max_graph_insiders: i32 = 3,
+
+        #[metadata(field_metadata! {
+            label: "Enable Insider Holder Checks",
+            hint: "Check for insider wallets in top holders",
+            impact: "high",
+            category: "Insider Detection",
+        })]
+        insider_holder_checks_enabled: bool = true,
+        #[metadata(field_metadata! {
+            label: "Max Insider Holders in Top 10",
+            hint: "Maximum insider wallets allowed in top 10 holders",
+            min: 0,
+            max: 10,
+            step: 1,
+            unit: "holders",
+            impact: "high",
+            category: "Insider Detection",
+        })]
+        max_insider_holders_in_top_10: u32 = 2,
+        #[metadata(field_metadata! {
+            label: "Max Insider Total %",
+            hint: "Maximum combined % held by all insider wallets",
+            min: 0,
+            max: 100,
+            step: 5,
+            unit: "%",
+            impact: "high",
+            category: "Insider Detection",
+        })]
+        max_insider_total_pct: f64 = 20.0,
+
+        // Creator balance check
+        #[metadata(field_metadata! {
+            label: "Max Creator Balance %",
+            hint: "Maximum % creator can hold (0 = no limit)",
+            min: 0,
+            max: 100,
+            step: 5,
+            unit: "%",
+            impact: "medium",
+            category: "Creator Checks",
+        })]
+        max_creator_balance_pct: f64 = 10.0,
+
+        // LP provider check
+        #[metadata(field_metadata! {
+            label: "Min LP Providers",
+            hint: "Minimum LP providers required (0 = no limit)",
+            min: 0,
+            max: 100,
+            step: 1,
+            unit: "providers",
+            impact: "medium",
+            category: "LP Providers",
+        })]
+        min_lp_providers: i32 = 3,
+
+        // Transfer fee checks
+        #[metadata(field_metadata! {
+            label: "Enable Transfer Fee Checks",
+            hint: "Check for transfer fees (honeypot protection)",
+            impact: "critical",
+            category: "Transfer Fees",
+        })]
+        transfer_fee_enabled: bool = true,
+        #[metadata(field_metadata! {
+            label: "Max Transfer Fee %",
+            hint: "Maximum acceptable transfer fee percentage (5% recommended)",
+            min: 0,
+            max: 100,
+            step: 1,
+            unit: "%",
+            impact: "critical",
+            category: "Transfer Fees",
+        })]
+        max_transfer_fee_pct: f64 = 5.0,
+        #[metadata(field_metadata! {
+            label: "Block Any Transfer Fee",
+            hint: "Reject tokens with any transfer fee at all",
+            impact: "high",
+            category: "Transfer Fees",
+        })]
+        block_transfer_fee_tokens: bool = false,
     }
 }
 

@@ -297,6 +297,167 @@ const CONFIG_CATEGORIES = {
       },
     ],
   },
+  "RugCheck - Authorities": {
+    source: "rugcheck",
+    enableKey: "authority_checks_enabled",
+    fields: [
+      {
+        key: "require_authorities_safe",
+        label: "Require Authorities Safe",
+        type: "boolean",
+        hint: "Reject if authorities are not safe (recommended: true)",
+        impact: "critical",
+      },
+      {
+        key: "mint_authority_enabled",
+        label: "Enable Mint Authority Check",
+        type: "boolean",
+        hint: "Check for mint authority presence",
+        impact: "high",
+      },
+      {
+        key: "allow_mint_authority",
+        label: "Allow Mint Authority",
+        type: "boolean",
+        hint: "Allow tokens with mint authority (false = reject if present)",
+        impact: "high",
+      },
+      {
+        key: "freeze_authority_enabled",
+        label: "Enable Freeze Authority Check",
+        type: "boolean",
+        hint: "Check for freeze authority presence",
+        impact: "high",
+      },
+      {
+        key: "allow_freeze_authority",
+        label: "Allow Freeze Authority",
+        type: "boolean",
+        hint: "Allow tokens with freeze authority (false = reject if present)",
+        impact: "high",
+      },
+    ],
+  },
+  "RugCheck - Risk Level": {
+    source: "rugcheck",
+    enableKey: "risk_level_enabled",
+    fields: [
+      {
+        key: "block_danger_level",
+        label: "Block High Risk Tokens",
+        type: "boolean",
+        hint: "Reject tokens with 'Danger' risk level",
+        impact: "high",
+      },
+    ],
+  },
+  "RugCheck - Security Flags": {
+    source: "rugcheck",
+    fields: [
+      {
+        key: "block_rugged_tokens",
+        label: "Block Rugged Tokens",
+        type: "boolean",
+        hint: "Reject tokens flagged as rugged by RugCheck",
+        impact: "critical",
+      },
+    ],
+  },
+  "RugCheck - Insider Detection": {
+    source: "rugcheck",
+    enableKey: "insider_holder_checks_enabled",
+    fields: [
+      {
+        key: "max_graph_insiders",
+        label: "Max Graph Insiders",
+        type: "number",
+        unit: "wallets",
+        min: 0,
+        max: 20,
+        step: 1,
+        hint: "Maximum detected insider wallets (0 = no limit)",
+        impact: "high",
+      },
+      {
+        key: "max_insider_holders_in_top_10",
+        label: "Max Insider Holders in Top 10",
+        type: "number",
+        unit: "holders",
+        min: 0,
+        max: 10,
+        step: 1,
+        hint: "Maximum insider wallets allowed in top 10 holders",
+        impact: "high",
+      },
+      {
+        key: "max_insider_total_pct",
+        label: "Max Insider Total %",
+        type: "number",
+        unit: "%",
+        min: 0,
+        max: 100,
+        step: 5,
+        hint: "Maximum combined % held by all insider wallets",
+        impact: "high",
+      },
+    ],
+  },
+  "RugCheck - Creator Checks": {
+    source: "rugcheck",
+    fields: [
+      {
+        key: "max_creator_balance_pct",
+        label: "Max Creator Balance %",
+        type: "number",
+        unit: "%",
+        min: 0,
+        max: 100,
+        step: 5,
+        hint: "Maximum % creator can hold (0 = no limit)",
+        impact: "medium",
+      },
+    ],
+  },
+  "RugCheck - LP Providers": {
+    source: "rugcheck",
+    fields: [
+      {
+        key: "min_lp_providers",
+        label: "Min LP Providers",
+        type: "number",
+        unit: "providers",
+        min: 0,
+        max: 100,
+        step: 1,
+        hint: "Minimum LP providers required (0 = no limit)",
+        impact: "medium",
+      },
+    ],
+  },
+  "RugCheck - Transfer Fees": {
+    source: "rugcheck",
+    enableKey: "transfer_fee_enabled",
+    fields: [
+      {
+        key: "max_transfer_fee_pct",
+        label: "Max Transfer Fee %",
+        type: "number",
+        unit: "%",
+        min: 0,
+        max: 100,
+        step: 1,
+        hint: "Maximum acceptable transfer fee percentage (5% recommended)",
+        impact: "critical",
+      },
+      {
+        key: "block_transfer_fee_tokens",
+        label: "Block Any Transfer Fee",
+        type: "boolean",
+        hint: "Reject tokens with any transfer fee at all",
+        impact: "high",
+      },
+    ],
+  },
 };
 
 // ============================================================================
@@ -546,11 +707,11 @@ function renderConfigField(field, source) {
 
 function renderSourceToggle(source, _categoryName) {
   if (source === "meta") return "";
-  
+
   const enabled = getSourceEnabled(state.draft, source);
   const sourceLabel = source === "dexscreener" ? "DexScreener" : "RugCheck";
   const toggleId = `source-toggle-${source}`;
-  
+
   return `
     <label class="source-switch">
       <input
@@ -567,10 +728,10 @@ function renderSourceToggle(source, _categoryName) {
 
 function renderCategoryToggle(source, enableKey, _categoryName) {
   if (!enableKey || source === "meta") return "";
-  
+
   const enabled = getCategoryEnabled(state.draft, source, enableKey);
   const toggleId = `category-toggle-${source}-${enableKey}`;
-  
+
   return `
     <label class="category-switch">
       <input
@@ -595,7 +756,7 @@ function renderConfigCategory(categoryName, categoryData) {
     !state.searchQuery ||
     field.label.toLowerCase().includes(state.searchQuery) ||
     field.key.toLowerCase().includes(state.searchQuery);
-  
+
   return `
     <div class="filter-card ${disabledClass}" data-source="${source}">
       <div class="card-header">
@@ -603,7 +764,12 @@ function renderConfigCategory(categoryName, categoryData) {
         ${renderCategoryToggle(source, enableKey, categoryName)}
       </div>
       <div class="card-body">
-        ${fields.filter(matchesSearch).map((field) => renderConfigField(field, source)).join("") || "<div class=\"no-matches\">No fields match</div>"}
+        ${
+          fields
+            .filter(matchesSearch)
+            .map((field) => renderConfigField(field, source))
+            .join("") || '<div class="no-matches">No fields match</div>'
+        }
       </div>
     </div>
   `;
@@ -933,7 +1099,7 @@ function handleImportConfig() {
     try {
       const text = await file.text();
       const imported = JSON.parse(text);
-  const current = JSON.parse(JSON.stringify(state.draft ?? {}));
+      const current = JSON.parse(JSON.stringify(state.draft ?? {}));
       state.draft = deepMerge(current, imported);
       checkForChanges();
       render();

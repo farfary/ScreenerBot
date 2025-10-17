@@ -36,6 +36,11 @@ pub struct SecurityInfo {
     pub top_holders: Vec<HolderInfo>,
     pub graph_insiders_detected: i32,
 
+    // Transfer fee information
+    pub transfer_fee_pct: f64,
+    pub transfer_fee_max_amount: u64,
+    pub transfer_fee_authority: Option<String>,
+
     // Analysis timestamps
     pub detected_at: String,
     pub analyzed_at: String,
@@ -127,6 +132,11 @@ impl SecurityDatabase {
                 
                 -- Holder analysis
                 graph_insiders_detected INTEGER NOT NULL DEFAULT 0,
+                
+                -- Transfer fee information
+                transfer_fee_pct REAL NOT NULL DEFAULT 0.0,
+                transfer_fee_max_amount INTEGER NOT NULL DEFAULT 0,
+                transfer_fee_authority TEXT,
                 
                 -- Timestamps
                 detected_at TEXT NOT NULL,
@@ -226,6 +236,37 @@ impl SecurityDatabase {
             [],
         )?;
 
+        // Ensure newer columns exist when running against pre-migration databases
+        self.ensure_column(
+            "security_info",
+            "transfer_fee_pct",
+            "REAL NOT NULL DEFAULT 0.0",
+        )?;
+        self.ensure_column(
+            "security_info",
+            "transfer_fee_max_amount",
+            "INTEGER NOT NULL DEFAULT 0",
+        )?;
+        self.ensure_column(
+            "security_info",
+            "transfer_fee_authority",
+            "TEXT",
+        )?;
+
+        Ok(())
+    }
+
+    fn ensure_column(&self, table: &str, column: &str, definition: &str) -> SqliteResult<()> {
+        let query = format!(
+            "SELECT 1 FROM pragma_table_info('{}') WHERE name = ?1 LIMIT 1",
+            table
+        );
+        let mut stmt = self.conn.prepare(&query)?;
+        let exists = stmt.query_row([column], |_| Ok(())).optional()?.is_some();
+        if !exists {
+            let alter = format!("ALTER TABLE {} ADD COLUMN {} {}", table, column, definition);
+            self.conn.execute(&alter, [])?;
+        }
         Ok(())
     }
 
@@ -239,8 +280,9 @@ impl SecurityDatabase {
             (mint, token_program, creator, creator_balance, symbol, name, decimals, supply,
              mint_authority, freeze_authority, score, score_normalised, rugged,
              total_market_liquidity, total_stable_liquidity, total_lp_providers, total_holders,
-             price, graph_insiders_detected, detected_at, raw_response)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
+             price, graph_insiders_detected, transfer_fee_pct, transfer_fee_max_amount, 
+             transfer_fee_authority, detected_at, raw_response)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)
             "#,
             rusqlite::params![
                 info.mint,
@@ -262,6 +304,9 @@ impl SecurityDatabase {
                 info.total_holders,
                 info.price,
                 info.graph_insiders_detected,
+                info.transfer_fee_pct,
+                info.transfer_fee_max_amount,
+                info.transfer_fee_authority,
                 info.detected_at,
                 info.raw_response
             ]
@@ -357,6 +402,9 @@ impl SecurityDatabase {
                     total_holders: row.get("total_holders")?,
                     price: row.get("price")?,
                     graph_insiders_detected: row.get("graph_insiders_detected")?,
+                    transfer_fee_pct: row.get("transfer_fee_pct").unwrap_or(0.0),
+                    transfer_fee_max_amount: row.get("transfer_fee_max_amount").unwrap_or(0),
+                    transfer_fee_authority: row.get("transfer_fee_authority").ok(),
                     detected_at: row.get("detected_at")?,
                     analyzed_at: row.get("analyzed_at")?,
                     raw_response: row.get("raw_response")?,
@@ -670,6 +718,12 @@ pub fn parse_rugcheck_response(raw_json: &str) -> Result<SecurityInfo, serde_jso
         }
     }
 
+    // Parse transfer fee information
+    let transfer_fee = &response["transferFee"];
+    let transfer_fee_pct = transfer_fee["pct"].as_f64().unwrap_or(0.0);
+    let transfer_fee_max_amount = transfer_fee["maxAmount"].as_u64().unwrap_or(0);
+    let transfer_fee_authority = transfer_fee["authority"].as_str().map(|s| s.to_string());
+
     Ok(SecurityInfo {
         mint,
         token_program,
@@ -693,6 +747,9 @@ pub fn parse_rugcheck_response(raw_json: &str) -> Result<SecurityInfo, serde_jso
         price,
         top_holders,
         graph_insiders_detected,
+        transfer_fee_pct,
+        transfer_fee_max_amount,
+        transfer_fee_authority,
         detected_at,
         analyzed_at: chrono::Utc::now().to_rfc3339(),
         raw_response: raw_json.to_string(),

@@ -305,6 +305,89 @@ async fn analyze_with_security_analyzer(
         }
     }
 
+    // NEW: Advanced security checks requiring SecurityInfo
+    // Get SecurityInfo once for efficiency
+    let security_info = match analyzer.get_security_info(mint) {
+        Ok(Some(info)) => info,
+        Ok(None) => return Some(FilterRejectionReason::RugCheck_SecurityNoData),
+        Err(_) => return Some(FilterRejectionReason::RugCheck_SecurityNoData),
+    };
+
+    // NEW: Rugged token check
+    if config.rugcheck.block_rugged_tokens && security_info.rugged {
+        return Some(FilterRejectionReason::RugCheck_TokenRugged);
+    }
+
+    // NEW: Graph insiders check
+    if config.rugcheck.max_graph_insiders > 0
+        && security_info.graph_insiders_detected > config.rugcheck.max_graph_insiders
+    {
+        return Some(FilterRejectionReason::RugCheck_TooManyInsiders);
+    }
+
+    // NEW: Insider holder checks
+    if config.rugcheck.insider_holder_checks_enabled {
+        // Count insider holders in top 10
+        let insider_count = security_info
+            .top_holders
+            .iter()
+            .take(10)
+            .filter(|h| h.insider)
+            .count() as u32;
+
+        if insider_count > config.rugcheck.max_insider_holders_in_top_10 {
+            return Some(FilterRejectionReason::RugCheck_TooManyInsiderHolders);
+        }
+
+        // Calculate total percentage held by insiders
+        if config.rugcheck.max_insider_total_pct > 0.0 {
+            let insider_pct: f64 = security_info
+                .top_holders
+                .iter()
+                .filter(|h| h.insider)
+                .map(|h| h.pct)
+                .sum();
+
+            if insider_pct > config.rugcheck.max_insider_total_pct {
+                return Some(FilterRejectionReason::RugCheck_InsiderConcentration);
+            }
+        }
+    }
+
+    // NEW: Creator balance check
+    if config.rugcheck.max_creator_balance_pct > 0.0 {
+        if let Some(supply) = security_info.supply {
+            if supply > 0 {
+                let creator_pct = (security_info.creator_balance as f64 / supply as f64) * 100.0;
+                if creator_pct > config.rugcheck.max_creator_balance_pct {
+                    return Some(FilterRejectionReason::RugCheck_CreatorBalanceTooHigh);
+                }
+            }
+        }
+    }
+
+    // NEW: LP providers check
+    if config.rugcheck.min_lp_providers > 0
+        && security_info.total_lp_providers < config.rugcheck.min_lp_providers
+    {
+        return Some(FilterRejectionReason::RugCheck_InsufficientLpProviders);
+    }
+
+    // NEW: Transfer fee checks
+    if config.rugcheck.transfer_fee_enabled {
+        // Check if any transfer fee exists (if block_transfer_fee_tokens is enabled)
+        if config.rugcheck.block_transfer_fee_tokens && security_info.transfer_fee_pct > 0.0 {
+            return Some(FilterRejectionReason::RugCheck_HasTransferFee);
+        }
+
+        // Check if transfer fee exceeds threshold
+        if config.rugcheck.max_transfer_fee_pct > 0.0
+            && security_info.transfer_fee_pct > config.rugcheck.max_transfer_fee_pct
+        {
+            return Some(FilterRejectionReason::RugCheck_TransferFeeTooHigh);
+        }
+    }
+
     None
 }
 
@@ -474,6 +557,14 @@ enum FilterRejectionReason {
     RugCheck_TopHolderConcentration,
     RugCheck_TopThreeHolderConcentration,
     RugCheck_LpLockTooLow,
+    RugCheck_TokenRugged,
+    RugCheck_TooManyInsiders,
+    RugCheck_TooManyInsiderHolders,
+    RugCheck_InsiderConcentration,
+    RugCheck_CreatorBalanceTooHigh,
+    RugCheck_InsufficientLpProviders,
+    RugCheck_HasTransferFee,
+    RugCheck_TransferFeeTooHigh,
 }
 
 impl FilterRejectionReason {
@@ -514,6 +605,22 @@ impl FilterRejectionReason {
                 "rugcheck_top3_holder_pct"
             }
             FilterRejectionReason::RugCheck_LpLockTooLow => "rugcheck_lp_lock_low",
+            FilterRejectionReason::RugCheck_TokenRugged => "rugcheck_token_rugged",
+            FilterRejectionReason::RugCheck_TooManyInsiders => "rugcheck_too_many_insiders",
+            FilterRejectionReason::RugCheck_TooManyInsiderHolders => {
+                "rugcheck_too_many_insider_holders"
+            }
+            FilterRejectionReason::RugCheck_InsiderConcentration => {
+                "rugcheck_insider_concentration"
+            }
+            FilterRejectionReason::RugCheck_CreatorBalanceTooHigh => {
+                "rugcheck_creator_balance_high"
+            }
+            FilterRejectionReason::RugCheck_InsufficientLpProviders => {
+                "rugcheck_lp_providers_insufficient"
+            }
+            FilterRejectionReason::RugCheck_HasTransferFee => "rugcheck_has_transfer_fee",
+            FilterRejectionReason::RugCheck_TransferFeeTooHigh => "rugcheck_transfer_fee_high",
         }
     }
 
@@ -545,7 +652,15 @@ impl FilterRejectionReason {
             | FilterRejectionReason::RugCheck_InsufficientHolders
             | FilterRejectionReason::RugCheck_TopHolderConcentration
             | FilterRejectionReason::RugCheck_TopThreeHolderConcentration
-            | FilterRejectionReason::RugCheck_LpLockTooLow => FilterSource::RugCheck,
+            | FilterRejectionReason::RugCheck_LpLockTooLow
+            | FilterRejectionReason::RugCheck_TokenRugged
+            | FilterRejectionReason::RugCheck_TooManyInsiders
+            | FilterRejectionReason::RugCheck_TooManyInsiderHolders
+            | FilterRejectionReason::RugCheck_InsiderConcentration
+            | FilterRejectionReason::RugCheck_CreatorBalanceTooHigh
+            | FilterRejectionReason::RugCheck_InsufficientLpProviders
+            | FilterRejectionReason::RugCheck_HasTransferFee
+            | FilterRejectionReason::RugCheck_TransferFeeTooHigh => FilterSource::RugCheck,
         }
     }
 }
