@@ -29,7 +29,6 @@ pub struct RugcheckResponse {
     pub score_normalised: Option<i32>,
     pub rugged: Option<bool>,
     pub risks: Option<Vec<RugcheckRiskItem>>,
-    pub markets: Option<Vec<RugcheckMarket>>,
     #[serde(rename = "totalMarketLiquidity")]
     pub total_market_liquidity: Option<f64>,
     #[serde(rename = "totalStableLiquidity")]
@@ -82,24 +81,15 @@ pub struct RugcheckRiskItem {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RugcheckMarket {
-    pub pubkey: String,
-    #[serde(rename = "marketType")]
-    pub market_type: String,
-    pub lp: Option<RugcheckLpInfo>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RugcheckLpInfo {
-    #[serde(rename = "lpLockedPct")]
-    pub lp_locked_pct: Option<f64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RugcheckTopHolder {
     pub address: String,
     pub amount: u64,
+    pub decimals: Option<u8>,
     pub pct: f64,
+    #[serde(rename = "uiAmount")]
+    pub ui_amount: Option<f64>,
+    #[serde(rename = "uiAmountString")]
+    pub ui_amount_string: Option<String>,
     pub owner: Option<String>,
     pub insider: Option<bool>,
 }

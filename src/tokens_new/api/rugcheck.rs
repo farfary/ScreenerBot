@@ -136,7 +136,7 @@ impl RugcheckClient {
             score_normalised: api_response.score_normalised,
             rugged: api_response.rugged.unwrap_or(false),
             risks,
-            total_markets: api_response.markets.as_ref().map(|m| m.len() as i64),
+            total_markets: None, // Market data not included in API response
             total_market_liquidity: api_response.total_market_liquidity,
             total_stable_liquidity: api_response.total_stable_liquidity,
             total_lp_providers: api_response.total_lp_providers,
