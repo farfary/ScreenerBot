@@ -153,15 +153,74 @@ async fn test_token_pools(client: &Client, args: &Args) {
     }
 
     println!();
+
+    // Test with include parameter
+    print_test_header(
+        &format!("Trending Pools ({}, with includes)", args.network), 
+        &format!("/networks/{}/trending_pools?include=base_token,quote_token,dex", args.network)
+    );
+
+    let url = format!("{}/networks/{}/trending_pools?include=base_token,quote_token,dex", BASE_URL, args.network);
+    
+    let start = Instant::now();
+    match client.get(&url).send().await {
+        Ok(response) => {
+            let duration = start.elapsed();
+            let status = response.status();
+            
+            print_status(status.as_u16(), duration);
+
+            if status.is_success() {
+                if let Ok(body) = response.text().await {
+                    if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                        if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                            println!("  {} {}", "Pools with includes:".cyan(), data.len().to_string().green().bold());
+                            
+                            // Check if includes are present
+                            if let Some(first_pool) = data.get(0) {
+                                let has_base_token = first_pool.get("relationships")
+                                    .and_then(|r| r.get("base_token"))
+                                    .is_some();
+                                let has_quote_token = first_pool.get("relationships")
+                                    .and_then(|r| r.get("quote_token"))
+                                    .is_some();
+                                let has_dex = first_pool.get("relationships")
+                                    .and_then(|r| r.get("dex"))
+                                    .is_some();
+                                
+                                println!("  {} base_token: {}, quote_token: {}, dex: {}", 
+                                    "Includes present:".cyan(),
+                                    if has_base_token { "✓".green() } else { "✗".red() },
+                                    if has_quote_token { "✓".green() } else { "✗".red() },
+                                    if has_dex { "✓".green() } else { "✗".red() }
+                                );
+                            }
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
 }
 
-/// Test: GET /networks/trending_pools
-/// Get trending pools across all networks
+/// Test: GET /networks/{network}/trending_pools
+/// Get trending pools by network
 async fn test_trending_pools(client: &Client, args: &Args) {
-    // Test default (24h)
-    print_test_header("Trending Pools (24h)", "/networks/trending_pools");
+    // Test default (solana, 24h)
+    print_test_header(
+        &format!("Trending Pools ({}, 24h)", args.network),
+        &format!("/networks/{}/trending_pools", args.network)
+    );
 
-    let url = format!("{}/networks/trending_pools", BASE_URL);
+    let url = format!("{}/networks/{}/trending_pools", BASE_URL, args.network);
     
     let start = Instant::now();
     match client.get(&url).send().await {
@@ -184,19 +243,7 @@ async fn test_trending_pools(client: &Client, args: &Args) {
                                         for (i, pool) in data.iter().take(3).enumerate() {
                                             if let Some(attrs) = pool.get("attributes") {
                                                 let name = attrs.get("name").and_then(|n| n.as_str()).unwrap_or("?");
-                                                let volume = attrs.get("volume_usd")
-                                                    .and_then(|v| v.get("h24"))
-                                                    .and_then(|h| h.as_str())
-                                                    .and_then(|s| s.parse::<f64>().ok())
-                                                    .unwrap_or(0.0);
-                                                let price_change = attrs.get("price_change_percentage")
-                                                    .and_then(|p| p.get("h24"))
-                                                    .and_then(|h| h.as_str())
-                                                    .and_then(|s| s.parse::<f64>().ok())
-                                                    .unwrap_or(0.0);
-                                                
-                                                println!("    {}. {} - Vol: ${:.0}k, Change: {:.1}%", 
-                                                    i + 1, name, volume / 1000.0, price_change);
+                                                println!("    {}. {}", i + 1, name);
                                             }
                                         }
                                     }
@@ -208,9 +255,6 @@ async fn test_trending_pools(client: &Client, args: &Args) {
                             }
                             Err(e) => {
                                 println!("  {} Parse error: {}", "❌".red(), e);
-                                if args.verbose {
-                                    println!("  Body: {}", body);
-                                }
                             }
                         }
                     }
@@ -231,11 +275,11 @@ async fn test_trending_pools(client: &Client, args: &Args) {
     // Test different durations
     for duration in &["5m", "1h", "6h"] {
         print_test_header(
-            &format!("Trending Pools ({})", duration), 
-            &format!("/networks/trending_pools?duration={}", duration)
+            &format!("Trending Pools ({}, {})", args.network, duration), 
+            &format!("/networks/{}/trending_pools?duration={}", args.network, duration)
         );
 
-        let url = format!("{}/networks/trending_pools?duration={}", BASE_URL, duration);
+        let url = format!("{}/networks/{}/trending_pools?duration={}", BASE_URL, args.network, duration);
         
         let start = Instant::now();
         match client.get(&url).send().await {
@@ -267,9 +311,12 @@ async fn test_trending_pools(client: &Client, args: &Args) {
     }
 
     // Test pagination
-    print_test_header("Trending Pools (Page 2)", "/networks/trending_pools?page=2");
+    print_test_header(
+        &format!("Trending Pools ({}, Page 2)", args.network), 
+        &format!("/networks/{}/trending_pools?page=2", args.network)
+    );
 
-    let url = format!("{}/networks/trending_pools?page=2", BASE_URL);
+    let url = format!("{}/networks/{}/trending_pools?page=2", BASE_URL, args.network);
     
     let start = Instant::now();
     match client.get(&url).send().await {
@@ -284,6 +331,56 @@ async fn test_trending_pools(client: &Client, args: &Args) {
                     if let Ok(json) = serde_json::from_str::<Value>(&body) {
                         if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
                             println!("  {} {}", "Pools on page 2:".cyan(), data.len().to_string().green().bold());
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test with include parameter
+    print_test_header(
+        &format!("Trending Pools ({}, with include)", args.network), 
+        &format!("/networks/{}/trending_pools?include=base_token,quote_token,dex", args.network)
+    );
+
+    let url = format!("{}/networks/{}/trending_pools?include=base_token,quote_token,dex", BASE_URL, args.network);
+    
+    let start = Instant::now();
+    match client.get(&url).send().await {
+        Ok(response) => {
+            let duration = start.elapsed();
+            let status = response.status();
+            
+            print_status(status.as_u16(), duration);
+
+            if status.is_success() {
+                if let Ok(body) = response.text().await {
+                    if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                        if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                            println!("  {} {}", "Pools with include:".cyan(), data.len().to_string().green().bold());
+                            
+                            // Check if includes are present  
+                            if let Some(first_pool) = data.get(0) {
+                                let has_base = first_pool.get("relationships").and_then(|r| r.get("base_token")).is_some();
+                                let has_quote = first_pool.get("relationships").and_then(|r| r.get("quote_token")).is_some();
+                                let has_dex = first_pool.get("relationships").and_then(|r| r.get("dex")).is_some();
+                                
+                                println!("  {} base_token: {}, quote_token: {}, dex: {}", 
+                                    "Include fields:".cyan(),
+                                    if has_base { "✓".green() } else { "✗".red() },
+                                    if has_quote { "✓".green() } else { "✗".red() },
+                                    if has_dex { "✓".green() } else { "✗".red() }
+                                );
+                            }
                         }
                     }
                 }

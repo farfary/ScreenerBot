@@ -4,7 +4,7 @@
 /// 
 /// Endpoints implemented (verified working):
 /// 1. /networks/{network}/tokens/{token}/pools - PRIMARY: Get all pools for a token
-/// 2. /networks/trending_pools - Get trending pools across all networks
+/// 2. /networks/{network}/trending_pools - Get trending pools by network
 /// 3. /networks/{network}/pools/{pool}/ohlcv/{timeframe} - Get OHLCV candlestick data
 
 use super::types::GeckoTerminalResponse;
@@ -95,27 +95,30 @@ impl GeckoTerminalClient {
         Ok(api_response.data.into_iter().map(|p| p.to_pool(mint)).collect())
     }
 
-    /// Get trending pools across all networks
-    /// Uses /networks/trending_pools
+    /// Get trending pools by network
+    /// Uses /networks/{network}/trending_pools
     /// 
-    /// Returns trending pools from all chains with optional filtering by duration.
+    /// Returns trending pools for a specific network with optional filtering by duration.
     /// 
     /// # Arguments
+    /// * `network` - Network ID (e.g., "solana", "eth") - defaults to "solana"
     /// * `page` - Page number (1-10, default 1)
     /// * `duration` - Trending duration: "5m", "1h", "6h", "24h" (default "24h")
-    /// * `include_tokens` - Include base_token and quote_token data in response
+    /// * `include` - Attributes to include: Vec of "base_token", "quote_token", "dex"
     /// 
     /// # Returns
     /// Vec<GeckoTerminalPool> - 20 trending pools per page
-    pub async fn fetch_trending_pools(
+    pub async fn fetch_trending_pools_by_network(
         &self,
+        network: Option<&str>,
         page: Option<u32>,
         duration: Option<&str>,
-        include_tokens: bool,
+        include: Option<Vec<&str>>,
     ) -> Result<Vec<GeckoTerminalPool>, String> {
+        let network_id = network.unwrap_or(DEFAULT_NETWORK);
         let permit = self.rate_limiter.acquire().await.map_err(|e| format!("Rate limiter error: {}", e))?;
 
-        let mut url = format!("{}/networks/trending_pools", GECKOTERMINAL_BASE_URL);
+        let url = format!("{}/networks/{}/trending_pools", GECKOTERMINAL_BASE_URL, network_id);
         
         let mut params = Vec::new();
         
@@ -127,19 +130,22 @@ impl GeckoTerminalClient {
             params.push(format!("duration={}", d));
         }
         
-        if include_tokens {
-            params.push("include=base_token,quote_token,dex,network".to_string());
+        if let Some(includes) = include {
+            if !includes.is_empty() {
+                params.push(format!("include={}", includes.join(",")));
+            }
         }
 
-        if !params.is_empty() {
-            url.push('?');
-            url.push_str(&params.join("&"));
-        }
+        let final_url = if !params.is_empty() {
+            format!("{}?{}", url, params.join("&"))
+        } else {
+            url
+        };
 
-        debug!("[GECKOTERMINAL] Fetching trending pools: page={:?}, duration={:?}", page, duration);
+        debug!("[GECKOTERMINAL] Fetching trending pools: network={}, page={:?}, duration={:?}", network_id, page, duration);
 
         let response = self.client
-            .get(&url)
+            .get(&final_url)
             .timeout(self.timeout)
             .send()
             .await
