@@ -25,9 +25,18 @@
 .token-cell .token-logo {
   width: 28px;
   height: 28px;
+  min-width: 28px;
+  min-height: 28px;
   border-radius: 50%;
   object-fit: cover;
   background: var(--bg-secondary);
+  flex-shrink: 0;
+  display: inline-block;
+  font-size: 9px;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 28px;
+  font-weight: 600;
 }
 
 .token-cell .token-symbol {
