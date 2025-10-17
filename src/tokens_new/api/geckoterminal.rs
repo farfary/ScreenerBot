@@ -11,6 +11,7 @@
 /// 6. /networks/{network}/pools/{pool}/ohlcv/{timeframe} - Get OHLCV candlestick data
 /// 7. /networks/{network}/dexes - Get supported DEXes list by network
 /// 8. /networks/{network}/new_pools - Get latest new pools by network
+/// 9. /networks/{network}/tokens/multi/{addresses} - Get multiple tokens data (up to 30 addresses)
 
 use super::geckoterminal_types::*;
 use crate::tokens_new::types::GeckoTerminalPool;
@@ -673,6 +674,80 @@ impl GeckoTerminalClient {
             .map_err(|e| format!("JSON parse error: {}", e))?;
 
         Ok(api_response.data.into_iter().map(|p| p.to_pool("new_pools")).collect())
+    }
+
+    /// Get multiple tokens data by addresses
+    /// Uses /networks/{network}/tokens/multi/{addresses}
+    /// 
+    /// Returns data for multiple tokens including optional top pools and composition.
+    /// 
+    /// # Arguments
+    /// * `network` - Network identifier (e.g., "solana", "eth", "bsc")
+    /// * `addresses` - Comma-separated token addresses (up to 30)
+    /// * `include` - Optional attributes to include (top_pools)
+    /// * `include_composition` - Optional flag to include pool composition
+    /// 
+    /// # Returns
+    /// Result with tokens data
+    /// 
+    /// # Example
+    /// ```no_run
+    /// let tokens = client.fetch_tokens_multi(
+    ///     "eth",
+    ///     "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2,0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    ///     Some("top_pools"),
+    ///     Some(true)
+    /// ).await?;
+    /// ```
+    pub async fn fetch_tokens_multi(
+        &self,
+        network: &str,
+        addresses: &str,
+        include: Option<&str>,
+        include_composition: Option<bool>,
+    ) -> Result<GeckoTerminalTokensMultiResponse, String> {
+        let permit = self.rate_limiter.acquire().await.map_err(|e| format!("Rate limiter error: {}", e))?;
+
+        let mut url = format!(
+            "{}/networks/{}/tokens/multi/{}",
+            GECKOTERMINAL_BASE_URL, network, addresses
+        );
+
+        let mut params = Vec::new();
+
+        if let Some(inc) = include {
+            params.push(format!("include={}", inc));
+        }
+        if let Some(comp) = include_composition {
+            params.push(format!("include_composition={}", comp));
+        }
+
+        if !params.is_empty() {
+            url.push_str(&format!("?{}", params.join("&")));
+        }
+
+        debug!("[GECKOTERMINAL] Fetching tokens multi: network={}, addresses_count={}", 
+               network, addresses.split(',').count());
+
+        let response = self.client
+            .get(&url)
+            .timeout(self.timeout)
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?;
+
+        drop(permit);
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(format!("HTTP {}: {}", status, error_text));
+        }
+
+        let tokens_response: GeckoTerminalTokensMultiResponse = response.json().await
+            .map_err(|e| format!("JSON parse error: {}", e))?;
+
+        Ok(tokens_response)
     }
 }
 

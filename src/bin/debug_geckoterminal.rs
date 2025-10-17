@@ -52,6 +52,10 @@ struct Args {
     #[clap(long)]
     new_pools: bool,
 
+    /// Test tokens multi endpoint
+    #[clap(long)]
+    tokens_multi: bool,
+
     /// Verbose output (show response bodies)
     #[clap(short, long)]
     verbose: bool,
@@ -96,7 +100,7 @@ async fn main() {
     println!("{}", "=".repeat(60).green());
     println!("Base URL: {}\n", BASE_URL.yellow());
 
-    let test_all = args.all || (!args.token_pools && !args.top_pools_token && !args.ohlcv && !args.trending && !args.pool_data && !args.multi_pools && !args.top_pools && !args.dexes && !args.new_pools);
+    let test_all = args.all || (!args.token_pools && !args.top_pools_token && !args.ohlcv && !args.trending && !args.pool_data && !args.multi_pools && !args.top_pools && !args.dexes && !args.new_pools && !args.tokens_multi);
 
     if test_all || args.token_pools {
         test_token_pools(&client, &args).await;
@@ -120,6 +124,10 @@ async fn main() {
 
     if test_all || args.new_pools {
         test_new_pools(&client, &args).await;
+    }
+
+    if test_all || args.tokens_multi {
+        test_tokens_multi(&client, &args).await;
     }
 
     if test_all || args.pool_data {
@@ -1164,6 +1172,206 @@ async fn test_new_pools(client: &Client, args: &Args) {
                 if let Ok(json) = serde_json::from_str::<Value>(&body) {
                     if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
                         println!("  {} {} pools on page 2", "✓".green(), data.len());
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+}
+
+async fn test_tokens_multi(client: &Client, args: &Args) {
+    // Test 1: Fetch 2 tokens (WETH and USDC on Ethereum)
+    print_test_header(
+        "Tokens Multi (eth, WETH + USDC)",
+        "/networks/eth/tokens/multi/0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2,0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+    );
+
+    let addresses = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2,0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+    let url = format!("{}/networks/eth/tokens/multi/{}", BASE_URL, addresses);
+    
+    let start = Instant::now();
+    match client.get(&url).timeout(Duration::from_secs(10)).send().await {
+        Ok(response) => {
+            let elapsed = start.elapsed();
+            let status = response.status();
+            
+            println!("  {} {} ({:.2}ms)", "Status:".cyan(), status.as_u16().to_string().green(), elapsed.as_millis());
+
+            if status.is_success() {
+                let body = response.text().await.unwrap_or_default();
+                
+                if args.verbose {
+                    println!("  {}", "Response Body:".cyan());
+                    println!("{}", body);
+                }
+
+                if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                        println!("  {} {} tokens retrieved", "✓".green(), data.len());
+                        
+                        for token in data.iter() {
+                            if let Some(attrs) = token.get("attributes") {
+                                let symbol = attrs.get("symbol").and_then(|s| s.as_str()).unwrap_or("N/A");
+                                let name = attrs.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown");
+                                let price = attrs.get("price_usd").and_then(|p| p.as_str()).unwrap_or("N/A");
+                                let decimals = attrs.get("decimals").and_then(|d| d.as_u64()).unwrap_or(0);
+                                println!("    • {} ({}) - ${} - {} decimals", symbol, name, price, decimals);
+                            }
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 2: With top_pools include
+    print_test_header(
+        "Tokens Multi (eth, with top_pools)",
+        "/networks/eth/tokens/multi/0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2?include=top_pools"
+    );
+
+    let addresses = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+    let url = format!("{}/networks/eth/tokens/multi/{}?include=top_pools", BASE_URL, addresses);
+    
+    let start = Instant::now();
+    match client.get(&url).timeout(Duration::from_secs(10)).send().await {
+        Ok(response) => {
+            let elapsed = start.elapsed();
+            let status = response.status();
+            
+            println!("  {} {} ({:.2}ms)", "Status:".cyan(), status.as_u16().to_string().green(), elapsed.as_millis());
+
+            if status.is_success() {
+                let body = response.text().await.unwrap_or_default();
+
+                if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                        println!("  {} {} token retrieved", "✓".green(), data.len());
+                        
+                        if let Some(included) = json.get("included").and_then(|i| i.as_array()) {
+                            println!("  {} {} included items (top pools)", "✓".green(), included.len());
+                            
+                            println!("  → First 3 top pools:");
+                            for (i, pool) in included.iter().take(3).enumerate() {
+                                if let Some(attrs) = pool.get("attributes") {
+                                    let name = attrs.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown");
+                                    let volume = attrs.get("volume_usd").and_then(|v| v.get("h24")).and_then(|h| h.as_str()).unwrap_or("N/A");
+                                    println!("    {}. {} (24h vol: ${})", i+1, name, volume);
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 3: Solana tokens (SOL + USDC)
+    print_test_header(
+        "Tokens Multi (solana, SOL + USDC)",
+        "/networks/solana/tokens/multi/So11111111111111111111111111111111111111112,EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+    );
+
+    let addresses = "So11111111111111111111111111111111111111112,EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+    let url = format!("{}/networks/solana/tokens/multi/{}", BASE_URL, addresses);
+    
+    let start = Instant::now();
+    match client.get(&url).timeout(Duration::from_secs(10)).send().await {
+        Ok(response) => {
+            let elapsed = start.elapsed();
+            let status = response.status();
+            
+            println!("  {} {} ({:.2}ms)", "Status:".cyan(), status.as_u16().to_string().green(), elapsed.as_millis());
+
+            if status.is_success() {
+                let body = response.text().await.unwrap_or_default();
+
+                if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                        println!("  {} {} Solana tokens", "✓".green(), data.len());
+                        
+                        for token in data.iter() {
+                            if let Some(attrs) = token.get("attributes") {
+                                let symbol = attrs.get("symbol").and_then(|s| s.as_str()).unwrap_or("N/A");
+                                let name = attrs.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown");
+                                let price = attrs.get("price_usd").and_then(|p| p.as_str()).unwrap_or("N/A");
+                                let mcap = attrs.get("market_cap_usd").and_then(|m| m.as_str()).unwrap_or("N/A");
+                                println!("    • {} ({}) - ${} - MCap: ${}", symbol, name, price, mcap);
+                            }
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 4: With include_composition
+    print_test_header(
+        "Tokens Multi (eth, with composition)",
+        "/networks/eth/tokens/multi/0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2?include=top_pools&include_composition=true"
+    );
+
+    let addresses = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+    let url = format!("{}/networks/eth/tokens/multi/{}?include=top_pools&include_composition=true", BASE_URL, addresses);
+    
+    let start = Instant::now();
+    match client.get(&url).timeout(Duration::from_secs(10)).send().await {
+        Ok(response) => {
+            let elapsed = start.elapsed();
+            let status = response.status();
+            
+            println!("  {} {} ({:.2}ms)", "Status:".cyan(), status.as_u16().to_string().green(), elapsed.as_millis());
+
+            if status.is_success() {
+                let body = response.text().await.unwrap_or_default();
+
+                if let Ok(json) = serde_json::from_str::<Value>(&body) {
+                    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+                        println!("  {} Token data with composition", "✓".green());
+                        
+                        if let Some(first) = data.first() {
+                            if let Some(attrs) = first.get("attributes") {
+                                let symbol = attrs.get("symbol").and_then(|s| s.as_str()).unwrap_or("N/A");
+                                let volume_24h = attrs.get("volume_usd").and_then(|v| v.get("h24")).and_then(|h| h.as_str()).unwrap_or("N/A");
+                                println!("  {} {} - 24h volume: ${}", "Token:".cyan(), symbol, volume_24h);
+                            }
+                        }
+
+                        if let Some(included) = json.get("included").and_then(|i| i.as_array()) {
+                            println!("  {} {} included items with composition", "✓".green(), included.len());
+                        }
                     }
                 }
             } else {

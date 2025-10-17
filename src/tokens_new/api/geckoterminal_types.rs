@@ -205,3 +205,45 @@ pub struct GeckoTerminalDexInfo {
 pub struct GeckoTerminalDexAttributes {
     pub name: String,
 }
+
+// ===== Tokens Multi Response Types =====
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeckoTerminalTokensMultiResponse {
+    pub data: Vec<GeckoTerminalTokenInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub included: Option<Vec<serde_json::Value>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeckoTerminalTokenInfo {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub token_type: String,
+    pub attributes: GeckoTerminalTokenAttributes,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relationships: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeckoTerminalTokenAttributes {
+    pub address: String,
+    pub name: String,
+    pub symbol: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decimals: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_supply: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub coingecko_coin_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub price_usd: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fdv_usd: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_reserve_in_usd: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub volume_usd: Option<GeckoTerminalVolume>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub market_cap_usd: Option<String>,
+}
