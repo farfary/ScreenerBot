@@ -1,10 +1,12 @@
 /// API clients for external token data sources
 pub mod client;
 pub mod dexscreener;
+pub mod dexscreener_types;
 pub mod geckoterminal;
+pub mod geckoterminal_types;
 pub mod rugcheck;
+pub mod rugcheck_types;
 pub mod stats;
-pub mod types;
 
 pub use client::{HttpClient, RateLimiter};
 pub use dexscreener::DexScreenerClient;

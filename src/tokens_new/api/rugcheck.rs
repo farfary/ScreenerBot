@@ -1,7 +1,7 @@
 /// Rugcheck API client
 use super::client::{HttpClient, RateLimiter};
+use super::rugcheck_types::*;
 use super::stats::ApiStatsTracker;
-use super::types::RugcheckResponse;
 use crate::tokens_new::types::{ApiError, RugcheckHolder, RugcheckInfo, RugcheckRisk};
 use chrono::Utc;
 use std::sync::Arc;

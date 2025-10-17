@@ -9,7 +9,7 @@
 /// 4. /networks/{network}/pools/multi/{addresses} - Get multiple pools data (up to 30 addresses)
 /// 5. /networks/{network}/pools/{pool}/ohlcv/{timeframe} - Get OHLCV candlestick data
 
-use super::types::GeckoTerminalResponse;
+use super::geckoterminal_types::*;
 use crate::tokens_new::types::GeckoTerminalPool;
 use log::debug;
 use reqwest::Client;
