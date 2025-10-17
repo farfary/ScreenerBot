@@ -22,6 +22,7 @@ pub mod sol_price; // SOL price service
 pub mod summary;
 pub mod swaps;
 pub mod tokens;
+pub mod tokens_new; // New unified token data system
 pub mod trader;
 pub mod transactions; // New modular transactions system
 pub mod utils;

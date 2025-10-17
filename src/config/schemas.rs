@@ -1833,6 +1833,17 @@ config_struct! {
 }
 
 config_struct! {
+    /// Full API configuration for a data source
+    pub struct SourceApiConfig {
+        enabled: bool = true,
+        priority: i32 = 1,
+        rate_limit_per_minute: u32 = 60,
+        timeout_seconds: u64 = 10,
+        cache_ttl_seconds: u64 = 60,
+    }
+}
+
+config_struct! {
     /// Multi-source validation settings
     pub struct TokenSourcesConfig {
         #[metadata(field_metadata! {
@@ -1869,19 +1880,45 @@ config_struct! {
 
         #[metadata(field_metadata! {
             label: "DexScreener Source",
-            hint: "Enable and set priority for DexScreener",
+            hint: "DexScreener API configuration",
             impact: "critical",
             category: "Sources",
         })]
-        dexscreener: SourceToggleConfig = SourceToggleConfig { enabled: true, priority: 1 },
+        dexscreener: SourceApiConfig = SourceApiConfig {
+            enabled: true,
+            priority: 1,
+            rate_limit_per_minute: 60,
+            timeout_seconds: 10,
+            cache_ttl_seconds: 60,
+        },
 
         #[metadata(field_metadata! {
             label: "GeckoTerminal Source",
-            hint: "Enable and set priority for GeckoTerminal",
+            hint: "GeckoTerminal API configuration",
             impact: "high",
             category: "Sources",
         })]
-        geckoterminal: SourceToggleConfig = SourceToggleConfig { enabled: true, priority: 2 },
+        geckoterminal: SourceApiConfig = SourceApiConfig {
+            enabled: true,
+            priority: 2,
+            rate_limit_per_minute: 30,
+            timeout_seconds: 10,
+            cache_ttl_seconds: 300,
+        },
+
+        #[metadata(field_metadata! {
+            label: "Rugcheck Source",
+            hint: "Rugcheck API configuration",
+            impact: "high",
+            category: "Sources",
+        })]
+        rugcheck: SourceApiConfig = SourceApiConfig {
+            enabled: true,
+            priority: 3,
+            rate_limit_per_minute: 30,
+            timeout_seconds: 15,
+            cache_ttl_seconds: 86400,
+        },
     }
 }
 
