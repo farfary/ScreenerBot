@@ -46,7 +46,6 @@ body.dt-column-resizing .data-table col {
   border: 1px solid rgba(148, 163, 184, 0.3);
 }
 
-
 /* Column toggle */
 .dt-column-toggle {
   position: relative;
@@ -377,7 +376,9 @@ body.dt-column-resizing * {
   --dt-row-lines: var(--dt-row-lines, 2);
   --dt-row-padding-y: 16px; /* td padding top + bottom */
   height: calc((var(--dt-row-line-height) * 1em * var(--dt-row-lines)) + var(--dt-row-padding-y));
-  max-height: calc((var(--dt-row-line-height) * 1em * var(--dt-row-lines)) + var(--dt-row-padding-y));
+  max-height: calc(
+    (var(--dt-row-line-height) * 1em * var(--dt-row-lines)) + var(--dt-row-padding-y)
+  );
 }
 
 .data-table.compact.uniform-rows tbody tr {
@@ -417,7 +418,16 @@ body.dt-column-resizing * {
 }
 
 .data-table td .mono-text {
-  font-family: var(--font-mono, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
+  font-family: var(
+    --font-mono,
+    "SFMono-Regular",
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    "Courier New",
+    monospace
+  );
   word-break: break-all;
   display: inline;
 }

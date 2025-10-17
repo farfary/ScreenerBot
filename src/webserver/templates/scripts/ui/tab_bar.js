@@ -93,9 +93,7 @@ export class TabBar {
         : options.container;
 
     if (!this.container) {
-      throw new Error(
-        "[TabBar] Container not found: " + (options.container || "undefined")
-      );
+      throw new Error("[TabBar] Container not found: " + (options.container || "undefined"));
     }
 
     this.tabs = Array.isArray(options.tabs) ? options.tabs : [];
@@ -179,9 +177,7 @@ export class TabBar {
   }
 
   _handleKeyboard(event) {
-    const buttons = Array.from(
-      this.container.querySelectorAll("[data-tab-id]")
-    );
+    const buttons = Array.from(this.container.querySelectorAll("[data-tab-id]"));
     const currentIndex = buttons.findIndex(
       (btn) => btn.getAttribute("data-tab-id") === this.activeTab
     );
@@ -294,9 +290,7 @@ export class TabBar {
     // Run beforeChange validation (can be async)
     if (!skipValidation) {
       try {
-        const canChange = await Promise.resolve(
-          this.beforeChange(tabId, this.activeTab)
-        );
+        const canChange = await Promise.resolve(this.beforeChange(tabId, this.activeTab));
         if (!canChange) {
           return false;
         }

@@ -29,6 +29,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/tokens", axum::routing::get(tokens_page))
         .route("/events", axum::routing::get(events_page))
         .route("/transactions", axum::routing::get(transactions_page))
+        .route("/filtering", axum::routing::get(filtering_page))
         .route("/scripts/core/:file", axum::routing::get(get_core_script))
         .route("/scripts/pages/:file", axum::routing::get(get_page_script))
         .route("/scripts/ui/:file", axum::routing::get(get_ui_script))
@@ -64,6 +65,12 @@ async fn transactions_page() -> Html<String> {
     ))
 }
 
+/// Filtering page handler
+async fn filtering_page() -> Html<String> {
+    let content = templates::filtering_content();
+    Html(templates::base_template("Filtering", "filtering", &content))
+}
+
 fn api_routes() -> Router<Arc<AppState>> {
     Router::new()
         .merge(status::routes())
@@ -91,6 +98,7 @@ async fn get_page_content(axum::extract::Path(page): axum::extract::Path<String>
         "events" => templates::events_content(),
         "services" => templates::services_content(),
         "transactions" => templates::transactions_content(),
+        "filtering" => templates::filtering_content(),
         _ => {
             // Escape page name to prevent XSS
             let escaped_page = page
@@ -144,6 +152,7 @@ async fn get_page_script(axum::extract::Path(file): axum::extract::Path<String>)
         "transactions.js" => Some(templates::TRANSACTIONS_PAGE_SCRIPT),
         "events.js" => Some(templates::EVENTS_PAGE_SCRIPT),
         "tokens.js" => Some(templates::TOKENS_PAGE_SCRIPT),
+        "filtering.js" => Some(templates::FILTERING_PAGE_SCRIPT),
         _ => None,
     };
 

@@ -1,4 +1,4 @@
-use axum::{http::StatusCode, response::Response, routing::post, Router};
+use axum::{http::StatusCode, response::Response, routing::{get, post}, Router};
 use chrono::Utc;
 use serde::Serialize;
 use std::sync::Arc;
@@ -12,13 +12,62 @@ use crate::{
 
 /// Filtering management routes
 pub fn routes() -> Router<Arc<AppState>> {
-    Router::new().route("/filtering/refresh", post(trigger_refresh))
+    Router::new()
+        .route("/filtering/refresh", post(trigger_refresh))
+        .route("/filtering/stats", get(get_stats))
 }
 
 #[derive(Debug, Serialize)]
 struct RefreshResponse {
     message: String,
     timestamp: String,
+}
+
+#[derive(Debug, Serialize)]
+struct FilteringStatsResponse {
+    total_tokens: usize,
+    with_pool_price: usize,
+    open_positions: usize,
+    blacklisted: usize,
+    secure_tokens: usize,
+    with_ohlcv: usize,
+    passed_filtering: usize,
+    updated_at: String,
+    timestamp: String,
+}
+
+/// GET /api/filtering/stats
+/// Retrieve current filtering statistics including token counts and metrics
+async fn get_stats() -> Response {
+    match filtering::fetch_stats().await {
+        Ok(stats) => {
+            success_response(FilteringStatsResponse {
+                total_tokens: stats.total_tokens,
+                with_pool_price: stats.with_pool_price,
+                open_positions: stats.open_positions,
+                blacklisted: stats.blacklisted,
+                secure_tokens: stats.secure_tokens,
+                with_ohlcv: stats.with_ohlcv,
+                passed_filtering: stats.passed_filtering,
+                updated_at: stats.updated_at.to_rfc3339(),
+                timestamp: Utc::now().to_rfc3339(),
+            })
+        }
+        Err(err) => {
+            log(
+                LogTag::Filtering,
+                "STATS_FETCH_FAILED",
+                &format!("Failed to fetch filtering stats: {}", err),
+            );
+
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "STATS_FETCH_FAILED",
+                &format!("Failed to fetch filtering statistics: {}", err),
+                None,
+            )
+        }
+    }
 }
 
 /// POST /api/filtering/refresh

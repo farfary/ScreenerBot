@@ -427,6 +427,7 @@ fn build_stats(snapshot: &FilteringSnapshot, secure_threshold: i32) -> Filtering
         blacklisted,
         secure_tokens,
         with_ohlcv,
+        passed_filtering: snapshot.passed_tokens.len(),
         updated_at: snapshot.updated_at,
     }
 }

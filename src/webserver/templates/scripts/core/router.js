@@ -305,10 +305,7 @@ export function initRouter() {
         await import(`../pages/${initialPage}.js`);
         PageLifecycleRegistry.activate(initialPage);
       } catch (err) {
-        console.warn(
-          `[Router] No module for initial page ${initialPage}:`,
-          err.message
-        );
+        console.warn(`[Router] No module for initial page ${initialPage}:`, err.message);
       }
     })();
   } else {

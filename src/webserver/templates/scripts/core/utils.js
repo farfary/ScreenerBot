@@ -18,11 +18,7 @@
       decimals = options.decimals ?? 2;
     }
 
-    const {
-      fallback = "—",
-      useGrouping = true,
-      locale = "en-US",
-    } = options || {};
+    const { fallback = "—", useGrouping = true, locale = "en-US" } = options || {};
 
     const num = coerceNumber(value);
     if (!Number.isFinite(num)) {
@@ -94,10 +90,7 @@
     return formatted;
   }
 
-  function formatPercentValue(
-    value,
-    { fallback = "—", decimals = 2, includeSign = true } = {}
-  ) {
+  function formatPercentValue(value, { fallback = "—", decimals = 2, includeSign = true } = {}) {
     const num = coerceNumber(value);
     if (!Number.isFinite(num)) {
       return fallback;
@@ -113,10 +106,7 @@
     return `${magnitude}%`;
   }
 
-  function formatPercent(
-    value,
-    { style = "plain", decimals = 2, fallback = "-" } = {}
-  ) {
+  function formatPercent(value, { style = "plain", decimals = 2, fallback = "-" } = {}) {
     const num = coerceNumber(value);
     if (!Number.isFinite(num)) {
       if (style === "token") {
@@ -128,9 +118,7 @@
     if (style === "token") {
       const color = num > 0 ? "#16a34a" : num < 0 ? "#ef4444" : "inherit";
       const sign = num > 0 ? "+" : "";
-      return `<span style="color:${color};">${sign}${num.toFixed(
-        decimals
-      )}%</span>`;
+      return `<span style="color:${color};">${sign}${num.toFixed(decimals)}%</span>`;
     }
 
     if (style === "pnl") {
@@ -148,10 +136,7 @@
     return `${sign}${Math.abs(num).toFixed(decimals)}%`;
   }
 
-  function formatSol(
-    amount,
-    { decimals = 4, fallback = "-", suffix = " SOL" } = {}
-  ) {
+  function formatSol(amount, { decimals = 4, fallback = "-", suffix = " SOL" } = {}) {
     const num = coerceNumber(amount);
     if (!Number.isFinite(num)) {
       return fallback;
@@ -288,10 +273,7 @@
     if (style === "compact") {
       if (total < 60) return `${total}s`;
       if (total < 3600) return `${Math.floor(total / 60)}m`;
-      if (total < 86400)
-        return `${Math.floor(total / 3600)}h ${Math.floor(
-          (total % 3600) / 60
-        )}m`;
+      if (total < 86400) return `${Math.floor(total / 3600)}h ${Math.floor((total % 3600) / 60)}m`;
       return `${days}d ${hours}h`;
     }
 
@@ -397,8 +379,8 @@
       tableElement instanceof HTMLTableElement
         ? tableElement
         : tableElement && typeof tableElement.closest === "function"
-        ? tableElement.closest("table")
-        : null;
+          ? tableElement.closest("table")
+          : null;
 
     if (!(table instanceof HTMLTableElement)) {
       return () => {};
@@ -503,8 +485,7 @@
   function showToast(message, type = "success") {
     const container = ensureToastContainer();
     const toast = document.createElement("div");
-    toast.className =
-      "toast" + (type === "error" ? " error" : type === "info" ? " info" : "");
+    toast.className = "toast" + (type === "error" ? " error" : type === "info" ? " info" : "");
     toast.innerHTML = `<div class="toast-message">${message}</div>`;
     container.appendChild(toast);
     setTimeout(() => {
@@ -542,9 +523,7 @@
   async function copyDebugInfo(mint, type) {
     try {
       const endpoint =
-        type === "position"
-          ? `/api/positions/${mint}/debug`
-          : `/api/tokens/${mint}/debug`;
+        type === "position" ? `/api/positions/${mint}/debug` : `/api/tokens/${mint}/debug`;
       const res = await fetch(endpoint);
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
@@ -573,9 +552,7 @@
     lines.push(`Mint: ${data.mint || "N/A"}`);
     if (tokenInfo.symbol || tokenInfo.name) {
       lines.push(
-        `Token: ${tokenInfo.symbol || "N/A"} ${
-          tokenInfo.name ? "(" + tokenInfo.name + ")" : ""
-        }`
+        `Token: ${tokenInfo.symbol || "N/A"} ${tokenInfo.name ? "(" + tokenInfo.name + ")" : ""}`
       );
     }
     lines.push("");
@@ -586,9 +563,7 @@
     lines.push(`Decimals: ${tokenInfo.decimals ?? "N/A"}`);
     lines.push(`Website: ${tokenInfo.website ?? "N/A"}`);
     lines.push(`Verified: ${tokenInfo.is_verified ? "Yes" : "No"}`);
-    const tags = Array.isArray(tokenInfo.tags)
-      ? tokenInfo.tags.join(", ")
-      : "None";
+    const tags = Array.isArray(tokenInfo.tags) ? tokenInfo.tags.join(", ") : "None";
     lines.push(`Tags: ${tags}`);
     lines.push("");
 
@@ -602,42 +577,28 @@
     );
     lines.push(
       `Confidence: ${
-        price.confidence != null
-          ? (Number(price.confidence) * 100).toFixed(1) + "%"
-          : "N/A"
+        price.confidence != null ? (Number(price.confidence) * 100).toFixed(1) + "%" : "N/A"
       }`
     );
     lines.push(
       `Last Updated: ${
-        price.last_updated
-          ? new Date(price.last_updated * 1000).toISOString()
-          : "N/A"
+        price.last_updated ? new Date(price.last_updated * 1000).toISOString() : "N/A"
       }`
     );
     lines.push(
       `Market Cap: ${
-        market.market_cap != null
-          ? "$" + Number(market.market_cap).toLocaleString()
-          : "N/A"
+        market.market_cap != null ? "$" + Number(market.market_cap).toLocaleString() : "N/A"
       }`
     );
-    lines.push(
-      `FDV: ${
-        market.fdv != null ? "$" + Number(market.fdv).toLocaleString() : "N/A"
-      }`
-    );
+    lines.push(`FDV: ${market.fdv != null ? "$" + Number(market.fdv).toLocaleString() : "N/A"}`);
     lines.push(
       `Liquidity: ${
-        market.liquidity_usd != null
-          ? "$" + Number(market.liquidity_usd).toLocaleString()
-          : "N/A"
+        market.liquidity_usd != null ? "$" + Number(market.liquidity_usd).toLocaleString() : "N/A"
       }`
     );
     lines.push(
       `24h Volume: ${
-        market.volume_24h != null
-          ? "$" + Number(market.volume_24h).toLocaleString()
-          : "N/A"
+        market.volume_24h != null ? "$" + Number(market.volume_24h).toLocaleString() : "N/A"
       }`
     );
     lines.push("");
@@ -651,22 +612,16 @@
         lines.push(`  Address: ${p.pool_address ?? "N/A"}`);
         lines.push(`  DEX: ${p.dex_name ?? "N/A"}`);
         lines.push(
-          `  SOL Reserves: ${
-            p.sol_reserves != null ? Number(p.sol_reserves).toFixed(2) : "N/A"
-          }`
+          `  SOL Reserves: ${p.sol_reserves != null ? Number(p.sol_reserves).toFixed(2) : "N/A"}`
         );
         lines.push(
           `  Token Reserves: ${
-            p.token_reserves != null
-              ? Number(p.token_reserves).toFixed(2)
-              : "N/A"
+            p.token_reserves != null ? Number(p.token_reserves).toFixed(2) : "N/A"
           }`
         );
         lines.push(
           `  Price (SOL): ${
-            p.price_sol != null
-              ? formatPriceSol(p.price_sol, { fallback: "N/A" })
-              : "N/A"
+            p.price_sol != null ? formatPriceSol(p.price_sol, { fallback: "N/A" }) : "N/A"
           }`
         );
       });
@@ -690,11 +645,7 @@
     if (risks.length) {
       lines.push("Risks:");
       risks.forEach((r) =>
-        lines.push(
-          `  - ${r.name || "Unknown"}: ${r.level || "N/A"} (${
-            r.description || ""
-          })`
-        )
+        lines.push(`  - ${r.name || "Unknown"}: ${r.level || "N/A"} (${r.description || ""})`)
       );
     } else {
       lines.push("Risks: None");
@@ -707,46 +658,32 @@
         lines.push(`Open Positions: ${pos.open_position ? "1" : "0"}`);
         lines.push(`Closed Positions: ${pos.closed_positions_count ?? "0"}`);
         lines.push(
-          `Total P&L: ${
-            pos.total_pnl != null
-              ? Number(pos.total_pnl).toFixed(4) + " SOL"
-              : "N/A"
-          }`
+          `Total P&L: ${pos.total_pnl != null ? Number(pos.total_pnl).toFixed(4) + " SOL" : "N/A"}`
         );
         lines.push(
-          `Win Rate: ${
-            pos.win_rate != null ? Number(pos.win_rate).toFixed(1) + "%" : "N/A"
-          }`
+          `Win Rate: ${pos.win_rate != null ? Number(pos.win_rate).toFixed(1) + "%" : "N/A"}`
         );
         if (pos.open_position) {
           const o = pos.open_position;
           lines.push("Open Position:");
           lines.push(
             `  Entry Price: ${
-              o.entry_price != null
-                ? formatPriceSol(o.entry_price, { fallback: "N/A" })
-                : "N/A"
+              o.entry_price != null ? formatPriceSol(o.entry_price, { fallback: "N/A" }) : "N/A"
             }`
           );
           lines.push(
             `  Entry Size: ${
-              o.entry_size_sol != null
-                ? Number(o.entry_size_sol).toFixed(4) + " SOL"
-                : "N/A"
+              o.entry_size_sol != null ? Number(o.entry_size_sol).toFixed(4) + " SOL" : "N/A"
             }`
           );
           lines.push(
             `  Current Price: ${
-              o.current_price != null
-                ? formatPriceSol(o.current_price, { fallback: "N/A" })
-                : "N/A"
+              o.current_price != null ? formatPriceSol(o.current_price, { fallback: "N/A" }) : "N/A"
             }`
           );
           lines.push(
             `  Unrealized P&L: ${
-              o.unrealized_pnl != null
-                ? Number(o.unrealized_pnl).toFixed(4) + " SOL"
-                : "N/A"
+              o.unrealized_pnl != null ? Number(o.unrealized_pnl).toFixed(4) + " SOL" : "N/A"
             }`
           );
           lines.push(
@@ -772,13 +709,9 @@
         pd.price_history.slice(0, 10).forEach((p, i) => {
           const date = new Date(p.timestamp * 1000).toISOString();
           const historyPrice =
-            p.price_sol != null
-              ? formatPriceSol(p.price_sol, { fallback: "N/A" })
-              : "N/A";
+            p.price_sol != null ? formatPriceSol(p.price_sol, { fallback: "N/A" }) : "N/A";
           lines.push(
-            `  ${i + 1}. ${date} - ${historyPrice} SOL (conf: ${(
-              p.confidence * 100
-            ).toFixed(1)}%)`
+            `  ${i + 1}. ${date} - ${historyPrice} SOL (conf: ${(p.confidence * 100).toFixed(1)}%)`
           );
         });
       }
@@ -802,9 +735,7 @@
         lines.push(`Volatility: ${Number(ps.price_volatility).toFixed(2)}%`);
         lines.push(`Data Points: ${ps.data_points}`);
         lines.push(
-          `Time Span: ${ps.time_span_seconds}s (${(
-            ps.time_span_seconds / 60
-          ).toFixed(0)} min)`
+          `Time Span: ${ps.time_span_seconds}s (${(ps.time_span_seconds / 60).toFixed(0)} min)`
         );
       }
       if (pd.all_pools && pd.all_pools.length > 0) {
@@ -826,17 +757,11 @@
       const td = data.token_debug;
       lines.push("[Token Debug]");
       if (td.blacklist_status) {
-        lines.push(
-          `Blacklisted: ${td.blacklist_status.is_blacklisted ? "Yes" : "No"}`
-        );
+        lines.push(`Blacklisted: ${td.blacklist_status.is_blacklisted ? "Yes" : "No"}`);
         if (td.blacklist_status.is_blacklisted && td.blacklist_status.reason) {
           lines.push(`  Reason: ${td.blacklist_status.reason}`);
           lines.push(`  Occurrences: ${td.blacklist_status.occurrence_count}`);
-          lines.push(
-            `  First Occurrence: ${
-              td.blacklist_status.first_occurrence || "N/A"
-            }`
-          );
+          lines.push(`  First Occurrence: ${td.blacklist_status.first_occurrence || "N/A"}`);
         }
       }
       if (td.ohlcv_availability) {
@@ -846,14 +771,10 @@
         );
         lines.push(`Total Candles: ${oa.total_candles}`);
         if (oa.oldest_timestamp) {
-          lines.push(
-            `  Oldest: ${new Date(oa.oldest_timestamp * 1000).toISOString()}`
-          );
+          lines.push(`  Oldest: ${new Date(oa.oldest_timestamp * 1000).toISOString()}`);
         }
         if (oa.newest_timestamp) {
-          lines.push(
-            `  Newest: ${new Date(oa.newest_timestamp * 1000).toISOString()}`
-          );
+          lines.push(`  Newest: ${new Date(oa.newest_timestamp * 1000).toISOString()}`);
         }
       }
       if (td.decimals_info) {
@@ -885,9 +806,7 @@
           lines.push("  Synthetic Exit: Yes");
         }
         if (pd.transaction_details.closed_reason) {
-          lines.push(
-            `  Closed Reason: ${pd.transaction_details.closed_reason}`
-          );
+          lines.push(`  Closed Reason: ${pd.transaction_details.closed_reason}`);
         }
       }
       if (pd.fee_details) {
@@ -910,9 +829,7 @@
             pd.profit_targets.min_target_percent || "N/A"
           }%, Max ${pd.profit_targets.max_target_percent || "N/A"}%`
         );
-        lines.push(
-          `Liquidity Tier: ${pd.profit_targets.liquidity_tier || "N/A"}`
-        );
+        lines.push(`Liquidity Tier: ${pd.profit_targets.liquidity_tier || "N/A"}`);
       }
       if (pd.price_tracking) {
         lines.push("Price Tracking:");
@@ -920,24 +837,16 @@
         lines.push(`  Low: ${pd.price_tracking.price_lowest}`);
         lines.push(`  Current: ${pd.price_tracking.current_price || "N/A"}`);
         if (pd.price_tracking.drawdown_from_high) {
-          lines.push(
-            `  Drawdown from High: ${pd.price_tracking.drawdown_from_high.toFixed(
-              2
-            )}%`
-          );
+          lines.push(`  Drawdown from High: ${pd.price_tracking.drawdown_from_high.toFixed(2)}%`);
         }
         if (pd.price_tracking.gain_from_low) {
-          lines.push(
-            `  Gain from Low: ${pd.price_tracking.gain_from_low.toFixed(2)}%`
-          );
+          lines.push(`  Gain from Low: ${pd.price_tracking.gain_from_low.toFixed(2)}%`);
         }
       }
       if (pd.phantom_details) {
         lines.push("Phantom:");
         lines.push(`  Remove Flag: ${pd.phantom_details.phantom_remove}`);
-        lines.push(
-          `  Confirmations: ${pd.phantom_details.phantom_confirmations}`
-        );
+        lines.push(`  Confirmations: ${pd.phantom_details.phantom_confirmations}`);
         if (pd.phantom_details.phantom_first_seen) {
           lines.push(`  First Seen: ${pd.phantom_details.phantom_first_seen}`);
         }
@@ -949,9 +858,7 @@
           `  Accepted: ${pm.accepted_quotes} (${pm.accepted_profit_quotes} profit, ${pm.accepted_loss_quotes} loss)`
         );
         lines.push(`  Rejected: ${pm.rejected_quotes}`);
-        lines.push(
-          `  Avg Shortfall: ${pm.average_shortfall_bps.toFixed(2)} bps`
-        );
+        lines.push(`  Avg Shortfall: ${pm.average_shortfall_bps.toFixed(2)} bps`);
         lines.push(`  Worst Shortfall: ${pm.worst_shortfall_bps} bps`);
       }
       lines.push("");
@@ -993,11 +900,7 @@
   }
 
   function formatSecondsToTime(seconds, fallback = "-") {
-    if (
-      typeof seconds !== "number" ||
-      !Number.isFinite(seconds) ||
-      seconds < 0
-    ) {
+    if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 0) {
       return fallback;
     }
     const num = Math.round(seconds);

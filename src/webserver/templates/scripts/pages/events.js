@@ -37,9 +37,9 @@ function formatMint(mint) {
     return "—";
   }
   const short = `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
-  return `<span class="mono-text" title="${Utils.escapeHtml(trimmed)}">${
-    Utils.escapeHtml(short)
-  }</span>`;
+  return `<span class="mono-text" title="${Utils.escapeHtml(trimmed)}">${Utils.escapeHtml(
+    short
+  )}</span>`;
 }
 
 function formatMessagePreview(value) {
@@ -48,9 +48,7 @@ function formatMessagePreview(value) {
   }
   const text = String(value);
   const preview = text.length > 160 ? `${text.slice(0, 160)}...` : text;
-  return `<span title="${Utils.escapeHtml(text)}">${Utils.escapeHtml(
-    preview
-  )}</span>`;
+  return `<span title="${Utils.escapeHtml(text)}">${Utils.escapeHtml(preview)}</span>`;
 }
 
 function formatPayloadPreview(value) {
@@ -67,19 +65,14 @@ function formatPayloadPreview(value) {
 
   const previewParts = entries.slice(0, 3).map(([key, raw]) => {
     const val =
-      raw === null || raw === undefined
-        ? "null"
-  : typeof raw === "object"
-  ? "{...}"
-        : String(raw);
+      raw === null || raw === undefined ? "null" : typeof raw === "object" ? "{...}" : String(raw);
     const safeKey = Utils.escapeHtml(String(key));
-  const safeVal = Utils.escapeHtml(val.length > 32 ? `${val.slice(0, 32)}...` : val);
+    const safeVal = Utils.escapeHtml(val.length > 32 ? `${val.slice(0, 32)}...` : val);
     return `${safeKey}: ${safeVal}`;
   });
 
   const remaining = entries.length - previewParts.length;
-  const preview =
-    previewParts.join(", ") + (remaining > 0 ? `, +${remaining} more` : "");
+  const preview = previewParts.join(", ") + (remaining > 0 ? `, +${remaining} more` : "");
   const fullJson = Utils.escapeHtml(JSON.stringify(value, null, 2));
 
   return `<span class="mono-text" title="${fullJson}">${preview}</span>`;
@@ -219,11 +212,10 @@ function createLifecycle() {
     }
 
     const params = buildBaseParams();
-  const data = await fetchJson(`/api/events/head?${params.toString()}`);
-  const fresh = normaliseEvents(data?.events, "desc", false);
-    const cursorPrev = fresh.length > 0 ? fresh[0].id : cursor ?? null;
-    const cursorNext =
-      fresh.length > 0 ? fresh[fresh.length - 1].id : cursor ?? null;
+    const data = await fetchJson(`/api/events/head?${params.toString()}`);
+    const fresh = normaliseEvents(data?.events, "desc", false);
+    const cursorPrev = fresh.length > 0 ? fresh[0].id : (cursor ?? null);
+    const cursorNext = fresh.length > 0 ? fresh[fresh.length - 1].id : (cursor ?? null);
 
     return {
       rows: fresh,
@@ -502,11 +494,9 @@ function createLifecycle() {
 
       if (!poller) {
         poller = ctx.managePoller(
-          new Poller(
-            () =>
-              requestReload("poll", { silent: true, preserveScroll: true }),
-            { label: "Events" }
-          )
+          new Poller(() => requestReload("poll", { silent: true, preserveScroll: true }), {
+            label: "Events",
+          })
         );
       }
 

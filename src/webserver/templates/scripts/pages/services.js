@@ -21,21 +21,18 @@ function getHealthBadge(health) {
 }
 
 function getActivityBar(metrics) {
-  const total =
-    (metrics.total_poll_duration_ns || 0) +
-    (metrics.total_idle_duration_ns || 0);
-  const activity =
-    total > 0 ? ((metrics.total_poll_duration_ns || 0) / total) * 100 : 0;
+  const total = (metrics.total_poll_duration_ns || 0) + (metrics.total_idle_duration_ns || 0);
+  const activity = total > 0 ? ((metrics.total_poll_duration_ns || 0) / total) * 100 : 0;
   const color =
     activity > 80
       ? "#10b981"
       : activity > 50
-      ? "#3b82f6"
-      : activity > 20
-      ? "#f59e0b"
-      : activity > 5
-      ? "#6b7280"
-      : "#9ca3af";
+        ? "#3b82f6"
+        : activity > 20
+          ? "#f59e0b"
+          : activity > 5
+            ? "#6b7280"
+            : "#9ca3af";
 
   return `
     <div class="activity-cell" title="${activity.toFixed(1)}% busy">
@@ -68,9 +65,13 @@ function createLifecycle() {
     const rows = table.getData();
     const summary = state.summary;
 
-    const healthy = summary?.healthy_services ?? rows.filter((row) => row.health?.status === "healthy").length;
-    const degraded = summary?.degraded_services ?? rows.filter((row) => row.health?.status === "degraded").length;
-    const unhealthy = summary?.unhealthy_services ?? rows.filter((row) => row.health?.status === "unhealthy").length;
+    const healthy =
+      summary?.healthy_services ?? rows.filter((row) => row.health?.status === "healthy").length;
+    const degraded =
+      summary?.degraded_services ?? rows.filter((row) => row.health?.status === "degraded").length;
+    const unhealthy =
+      summary?.unhealthy_services ??
+      rows.filter((row) => row.health?.status === "unhealthy").length;
     const total = summary?.total_services ?? rows.length;
     const alerts = degraded + unhealthy;
 
@@ -159,7 +160,6 @@ function createLifecycle() {
 
   return {
     init(_ctx) {
-
       // Define table columns with custom renderers
       const columns = [
         {
@@ -175,8 +175,7 @@ function createLifecycle() {
           sortable: true,
           minWidth: 120,
           render: (v, row) => getHealthBadge(row.health),
-          sortFn: (a, b) =>
-            healthRank(a.health?.status) - healthRank(b.health?.status),
+          sortFn: (a, b) => healthRank(a.health?.status) - healthRank(b.health?.status),
         },
         {
           id: "priority",
@@ -197,8 +196,7 @@ function createLifecycle() {
           label: "Uptime",
           sortable: true,
           minWidth: 96,
-          render: (v, row) =>
-            Utils.formatUptime(row.uptime_seconds, { style: "compact" }),
+          render: (v, row) => Utils.formatUptime(row.uptime_seconds, { style: "compact" }),
           sortFn: (a, b) => (a.uptime_seconds || 0) - (b.uptime_seconds || 0),
         },
         {
@@ -210,15 +208,10 @@ function createLifecycle() {
           sortFn: (a, b) => {
             const calcActivity = (metrics) => {
               const total =
-                (metrics.total_poll_duration_ns || 0) +
-                (metrics.total_idle_duration_ns || 0);
-              return total > 0
-                ? (metrics.total_poll_duration_ns || 0) / total
-                : 0;
+                (metrics.total_poll_duration_ns || 0) + (metrics.total_idle_duration_ns || 0);
+              return total > 0 ? (metrics.total_poll_duration_ns || 0) / total : 0;
             };
-            return (
-              calcActivity(a.metrics || {}) - calcActivity(b.metrics || {})
-            );
+            return calcActivity(a.metrics || {}) - calcActivity(b.metrics || {});
           },
         },
         {
@@ -226,33 +219,27 @@ function createLifecycle() {
           label: "Last Cycle",
           sortable: true,
           minWidth: 96,
-          render: (v, row) =>
-            Utils.formatDuration(row.metrics?.last_cycle_duration_ns || 0),
+          render: (v, row) => Utils.formatDuration(row.metrics?.last_cycle_duration_ns || 0),
           sortFn: (a, b) =>
-            (a.metrics?.last_cycle_duration_ns || 0) -
-            (b.metrics?.last_cycle_duration_ns || 0),
+            (a.metrics?.last_cycle_duration_ns || 0) - (b.metrics?.last_cycle_duration_ns || 0),
         },
         {
           id: "avgCycle",
           label: "Avg Cycle",
           sortable: true,
           minWidth: 96,
-          render: (v, row) =>
-            Utils.formatDuration(row.metrics?.avg_cycle_duration_ns || 0),
+          render: (v, row) => Utils.formatDuration(row.metrics?.avg_cycle_duration_ns || 0),
           sortFn: (a, b) =>
-            (a.metrics?.avg_cycle_duration_ns || 0) -
-            (b.metrics?.avg_cycle_duration_ns || 0),
+            (a.metrics?.avg_cycle_duration_ns || 0) - (b.metrics?.avg_cycle_duration_ns || 0),
         },
         {
           id: "avgPoll",
           label: "Avg Poll",
           sortable: true,
           minWidth: 96,
-          render: (v, row) =>
-            Utils.formatDuration(row.metrics?.mean_poll_duration_ns || 0),
+          render: (v, row) => Utils.formatDuration(row.metrics?.mean_poll_duration_ns || 0),
           sortFn: (a, b) =>
-            (a.metrics?.mean_poll_duration_ns || 0) -
-            (b.metrics?.mean_poll_duration_ns || 0),
+            (a.metrics?.mean_poll_duration_ns || 0) - (b.metrics?.mean_poll_duration_ns || 0),
         },
         {
           id: "cycleRate",
@@ -264,8 +251,7 @@ function createLifecycle() {
             return Number.isFinite(rate) ? rate.toFixed(2) : "0.00";
           },
           sortFn: (a, b) =>
-            (a.metrics?.cycles_per_second || 0) -
-            (b.metrics?.cycles_per_second || 0),
+            (a.metrics?.cycles_per_second || 0) - (b.metrics?.cycles_per_second || 0),
         },
         {
           id: "tasks",
@@ -288,19 +274,16 @@ function createLifecycle() {
                 : "No instrumented tasks";
             return `<span title="${taskInfo}">${m.task_count || 0}</span>`;
           },
-          sortFn: (a, b) =>
-            (a.metrics?.task_count || 0) - (b.metrics?.task_count || 0),
+          sortFn: (a, b) => (a.metrics?.task_count || 0) - (b.metrics?.task_count || 0),
         },
         {
           id: "ops",
           label: "Ops/sec",
           sortable: true,
           minWidth: 90,
-          render: (v, row) =>
-            (row.metrics?.operations_per_second || 0).toFixed(2),
+          render: (v, row) => (row.metrics?.operations_per_second || 0).toFixed(2),
           sortFn: (a, b) =>
-            (a.metrics?.operations_per_second || 0) -
-            (b.metrics?.operations_per_second || 0),
+            (a.metrics?.operations_per_second || 0) - (b.metrics?.operations_per_second || 0),
         },
         {
           id: "errors",
@@ -308,8 +291,7 @@ function createLifecycle() {
           sortable: true,
           minWidth: 80,
           render: (v, row) => row.metrics?.errors_total || 0,
-          sortFn: (a, b) =>
-            (a.metrics?.errors_total || 0) - (b.metrics?.errors_total || 0),
+          sortFn: (a, b) => (a.metrics?.errors_total || 0) - (b.metrics?.errors_total || 0),
         },
         {
           id: "dependencies",
@@ -317,13 +299,9 @@ function createLifecycle() {
           sortable: false,
           minWidth: 160,
           render: (v, row) => {
-            const deps = Array.isArray(row.dependencies)
-              ? row.dependencies
-              : [];
+            const deps = Array.isArray(row.dependencies) ? row.dependencies : [];
             return deps.length > 0
-              ? deps
-                  .map((dep) => `<span class="dependency-badge">${dep}</span>`)
-                  .join(" ")
+              ? deps.map((dep) => `<span class="dependency-badge">${dep}</span>`).join(" ")
               : '<span class="detail-value">None</span>';
           },
         },
@@ -387,8 +365,7 @@ function createLifecycle() {
                 { value: "degraded", label: "Degraded" },
                 { value: "unhealthy", label: "Unhealthy" },
               ],
-              filterFn: (row, value) =>
-                value === "all" || row.health?.status === value,
+              filterFn: (row, value) => value === "all" || row.health?.status === value,
             },
             {
               id: "enabled",
@@ -430,11 +407,9 @@ function createLifecycle() {
       // Create and start poller
       if (!poller) {
         poller = ctx.managePoller(
-          new Poller(
-            () =>
-              requestReload("poll", { silent: true, preserveScroll: true }),
-            { label: "Services" }
-          )
+          new Poller(() => requestReload("poll", { silent: true, preserveScroll: true }), {
+            label: "Services",
+          })
         );
       }
 

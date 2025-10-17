@@ -154,8 +154,7 @@ export class DataTable {
           ? options.autoSizeSample
           : 25,
       autoSizePadding:
-        typeof options.autoSizePadding === "number" &&
-        Number.isFinite(options.autoSizePadding)
+        typeof options.autoSizePadding === "number" && Number.isFinite(options.autoSizePadding)
           ? Math.max(0, options.autoSizePadding)
           : 16,
       ...options,
@@ -272,14 +271,10 @@ export class DataTable {
       context,
       dedupe: paginationOptions.dedupe !== false,
       dedupeKey:
-        typeof paginationOptions.dedupeKey === "function"
-          ? paginationOptions.dedupeKey
-          : null,
+        typeof paginationOptions.dedupeKey === "function" ? paginationOptions.dedupeKey : null,
       rowIdField: paginationOptions.rowIdField || this.options.rowIdField,
-      preserveScrollOnAppend:
-        paginationOptions.preserveScrollOnAppend !== false,
-      preserveScrollOnPrepend:
-        paginationOptions.preserveScrollOnPrepend !== false,
+      preserveScrollOnAppend: paginationOptions.preserveScrollOnAppend !== false,
+      preserveScrollOnPrepend: paginationOptions.preserveScrollOnPrepend !== false,
       onPageLoaded:
         typeof paginationOptions.onPageLoaded === "function"
           ? paginationOptions.onPageLoaded
@@ -400,17 +395,17 @@ export class DataTable {
 
     container.innerHTML = `
       <div class="data-table-wrapper ${fixedHeightClass}" ${
-      typeof this.options.fixedHeight === "number"
-        ? `style="height: ${this.options.fixedHeight}px;"`
-        : ""
-    }>
+        typeof this.options.fixedHeight === "number"
+          ? `style="height: ${this.options.fixedHeight}px;"`
+          : ""
+      }>
         ${this._renderToolbar()}
         <div class="data-table-scroll-container">
           <table class="data-table ${this.options.compact ? "compact" : ""} ${
-      this.options.zebra ? "zebra" : ""
-    } ${uniformRowsLines ? "uniform-rows" : ""}" ${
-      uniformRowsLines ? `style="--dt-row-lines: ${uniformRowsLines};"` : ""
-    }>
+            this.options.zebra ? "zebra" : ""
+          } ${uniformRowsLines ? "uniform-rows" : ""}" ${
+            uniformRowsLines ? `style="--dt-row-lines: ${uniformRowsLines};"` : ""
+          }>
             ${this._renderColgroup()}
             <thead class="${this.options.stickyHeader ? "sticky" : ""}">
               ${this._renderHeader()}
@@ -425,19 +420,17 @@ export class DataTable {
 
     this.elements.wrapper = container.querySelector(".data-table-wrapper");
     this.elements.toolbar = container.querySelector(".data-table-toolbar");
-    this.elements.scrollContainer = container.querySelector(
-      ".data-table-scroll-container"
-    );
+    this.elements.scrollContainer = container.querySelector(".data-table-scroll-container");
     this.elements.table = container.querySelector(".data-table");
     this.elements.thead = container.querySelector("thead");
     this.elements.tbody = container.querySelector("tbody");
-    
+
     // Cache col elements for fast width updates
     this.elements.colgroup = container.querySelector("colgroup");
     this.elements.cols = {};
     if (this.elements.colgroup) {
       const cols = this.elements.colgroup.querySelectorAll("col[data-column-id]");
-      cols.forEach(col => {
+      cols.forEach((col) => {
         const columnId = col.dataset.columnId;
         if (columnId) {
           this.elements.cols[columnId] = col;
@@ -519,7 +512,7 @@ export class DataTable {
    */
   _renderColgroup() {
     const visibleColumns = this._getOrderedColumns();
-    
+
     return `
       <colgroup>
         ${visibleColumns
@@ -557,34 +550,20 @@ export class DataTable {
         ${visibleColumns
           .map((col) => {
             const isSorted = this.state.sortColumn === col.id;
-            const sortIcon = isSorted
-              ? this.state.sortDirection === "asc"
-                ? "▲"
-                : "▼"
-              : "";
+            const sortIcon = isSorted ? (this.state.sortDirection === "asc" ? "▲" : "▼") : "";
 
             return `
             <th 
               data-column-id="${col.id}"
-              class="dt-header-column ${col.sortable ? "sortable" : ""} ${
-              isSorted ? "sorted" : ""
-            }"
+              class="dt-header-column ${col.sortable ? "sortable" : ""} ${isSorted ? "sorted" : ""}"
             >
               <div class="dt-header-content">
                 <span class="dt-header-label">
                   ${col.label}
                 </span>
-                ${
-                  col.sortable
-                    ? `<span class="dt-sort-icon">${sortIcon}</span>`
-                    : ""
-                }
+                ${col.sortable ? `<span class="dt-sort-icon">${sortIcon}</span>` : ""}
               </div>
-              ${
-                col.resizable !== false
-                  ? '<div class="dt-resize-handle"></div>'
-                  : ""
-              }
+              ${col.resizable !== false ? '<div class="dt-resize-handle"></div>' : ""}
             </th>
           `;
           })
@@ -648,11 +627,7 @@ export class DataTable {
           try {
             cellContent = col.render(value, row);
           } catch (error) {
-            this._log(
-              "error",
-              `Render function failed for column ${col.id}`,
-              error
-            );
+            this._log("error", `Render function failed for column ${col.id}`, error);
             cellContent = `<span class="dt-render-error" title="${error.message}">Error</span>`;
           }
         } else {
@@ -665,11 +640,7 @@ export class DataTable {
         }
 
         // Add text wrapping class
-        const wrapClass = col.wrap
-          ? "wrap-text"
-          : col.wrap === false
-          ? "no-wrap"
-          : "";
+        const wrapClass = col.wrap ? "wrap-text" : col.wrap === false ? "no-wrap" : "";
 
         // Apply dt-cell-clamp for uniformRowHeight, but NOT for no-wrap columns
         // no-wrap columns handle truncation via CSS (white-space: nowrap + text-overflow: ellipsis)
@@ -701,11 +672,7 @@ export class DataTable {
       try {
         src = config.src(row);
       } catch (error) {
-        this._log(
-          "error",
-          `Image src function failed for column ${col.id}`,
-          error
-        );
+        this._log("error", `Image src function failed for column ${col.id}`, error);
         src = "";
       }
     } else {
@@ -766,16 +733,16 @@ export class DataTable {
           onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-flex';"
         />
         <span class="dt-image-fallback ${shapeClass}" style="display:none; width: ${size}px; height: ${size}px; font-size: ${
-        size * 0.6
-      }px;">
+          size * 0.6
+        }px;">
           ${fallback}
         </span>
       `;
     } else {
       imageHtml = `
         <span class="dt-image-fallback ${shapeClass}" style="display:inline-flex; width: ${size}px; height: ${size}px; font-size: ${
-        size * 0.6
-      }px;">
+          size * 0.6
+        }px;">
           ${fallback}
         </span>
       `;
@@ -789,15 +756,12 @@ export class DataTable {
     }
 
     // Wrap with click handler if provided
-    const hasClickHandler =
-      config.onClick && typeof config.onClick === "function";
+    const hasClickHandler = config.onClick && typeof config.onClick === "function";
     const clickClass = hasClickHandler ? "dt-image-clickable" : "";
     const clickAttr = hasClickHandler ? `data-image-click="${col.id}"` : "";
 
     return `
-      <div class="dt-image-container ${clickClass}" ${clickAttr} ${
-      title ? `title="${title}"` : ""
-    }>
+      <div class="dt-image-container ${clickClass}" ${clickAttr} ${title ? `title="${title}"` : ""}>
         ${imageHtml}
         ${textHtml}
       </div>
@@ -887,9 +851,7 @@ export class DataTable {
 
       return `
         <div class="dt-actions-container">
-          <div class="dt-actions-dropdown" data-row-id="${
-            row[this.options.rowIdField] || ""
-          }">
+          <div class="dt-actions-dropdown" data-row-id="${row[this.options.rowIdField] || ""}">
             <button class="dt-actions-dropdown-trigger" data-action="dropdown-toggle">
               ${icon}
             </button>
@@ -930,19 +892,14 @@ export class DataTable {
             .map((btn) => {
               const variant = btn.variant ? `dt-action-btn-${btn.variant}` : "";
               const size = btn.size === "sm" ? "dt-action-btn-sm" : "";
-              const iconOnly =
-                !btn.label && btn.icon ? "dt-action-btn-icon-only" : "";
+              const iconOnly = !btn.label && btn.icon ? "dt-action-btn-icon-only" : "";
               const disabled = btn.disabled ? "disabled" : "";
 
               return `
               <button class="dt-action-btn ${variant} ${size} ${iconOnly} ${disabled}" 
                       data-action-id="${btn.id}"
                       ${btn.tooltip ? `title="${btn.tooltip}"` : ""}>
-                ${
-                  btn.icon
-                    ? `<span class="dt-action-btn-icon">${btn.icon}</span>`
-                    : ""
-                }
+                ${btn.icon ? `<span class="dt-action-btn-icon">${btn.icon}</span>` : ""}
                 ${btn.label ? btn.label : ""}
               </button>
             `;
@@ -1007,23 +964,21 @@ export class DataTable {
 
     // Search input
     const searchInput = toolbarRoot?.querySelector(".dt-search-input");
-    const searchClear = toolbarRoot?.querySelector(
-      ".table-toolbar-search__clear"
-    );
+    const searchClear = toolbarRoot?.querySelector(".table-toolbar-search__clear");
     if (searchInput) {
       const searchConfig = this.options.toolbar?.search || {};
-      
+
       const handler = (e) => {
         this.state.searchQuery = e.target.value;
         if (searchClear) {
           searchClear.hidden = !(e.target.value || "").length;
         }
-        
+
         // Call custom onChange if provided
         if (typeof searchConfig.onChange === "function") {
           searchConfig.onChange(e.target.value, searchInput);
         }
-        
+
         // Only apply filters if not using custom onChange (server-side search)
         if (!searchConfig.onChange) {
           this._applyFilters();
@@ -1039,12 +994,12 @@ export class DataTable {
           if (searchClear) {
             searchClear.hidden = true;
           }
-          
+
           // Call custom onChange if provided
           if (typeof searchConfig.onChange === "function") {
             searchConfig.onChange("", searchInput);
           }
-          
+
           // Only apply filters if not using custom onChange
           if (!searchConfig.onChange) {
             this._applyFilters();
@@ -1070,12 +1025,12 @@ export class DataTable {
         }
         this.state.searchQuery = "";
         searchClear.hidden = true;
-        
+
         // Call custom onChange if provided
         if (typeof searchConfig.onChange === "function") {
           searchConfig.onChange("", searchInput);
         }
-        
+
         // Only apply filters if not using custom onChange
         if (!searchConfig.onChange) {
           this._applyFilters();
@@ -1100,9 +1055,7 @@ export class DataTable {
       const handler = (e) => {
         const value = e.target.value;
         this.state.filters[filterId] = value;
-        const filterConfig = this.options.toolbar.filters?.find(
-          (filter) => filter.id === filterId
-        );
+        const filterConfig = this.options.toolbar.filters?.find((filter) => filter.id === filterId);
 
         const autoApply = filterConfig?.autoApply !== false;
         if (autoApply) {
@@ -1119,9 +1072,7 @@ export class DataTable {
 
     // Custom controls (text inputs, etc.)
     const controlInputs =
-      toolbarRoot?.querySelectorAll(
-        ".table-toolbar-input[data-control-id]"
-      ) || [];
+      toolbarRoot?.querySelectorAll(".table-toolbar-input[data-control-id]") || [];
     controlInputs.forEach((input) => {
       const controlId = input.dataset.controlId;
       if (!controlId) {
@@ -1194,14 +1145,11 @@ export class DataTable {
     });
 
     // Toolbar buttons
-    const buttons =
-      toolbarRoot?.querySelectorAll(".table-toolbar-btn[data-btn-id]") || [];
+    const buttons = toolbarRoot?.querySelectorAll(".table-toolbar-btn[data-btn-id]") || [];
     buttons.forEach((btn) => {
       const handler = () => {
         const btnId = btn.dataset.btnId;
-        const btnConfig = this.options.toolbar.buttons?.find(
-          (b) => b.id === btnId
-        );
+        const btnConfig = this.options.toolbar.buttons?.find((b) => b.id === btnId);
         if (typeof btnConfig?.onClick === "function") {
           btnConfig.onClick(btn, this);
         }
@@ -1240,9 +1188,7 @@ export class DataTable {
             .forEach((dragItem) => dragItem.classList.remove("drag-over"));
         };
 
-        const checkboxes = columnMenu.querySelectorAll(
-          'input[type="checkbox"]'
-        );
+        const checkboxes = columnMenu.querySelectorAll('input[type="checkbox"]');
         checkboxes.forEach((cb) => {
           const handler = (e) => {
             const columnId = e.target.dataset.columnId;
@@ -1272,10 +1218,7 @@ export class DataTable {
             draggingMenuItem = item;
             item.classList.add("dragging");
             e.dataTransfer.effectAllowed = "move";
-            e.dataTransfer.setData(
-              "text/plain",
-              item.dataset.columnId || "column"
-            );
+            e.dataTransfer.setData("text/plain", item.dataset.columnId || "column");
           };
 
           const dragEndHandler = () => {
@@ -1354,8 +1297,7 @@ export class DataTable {
 
       const toggleColumnMenu = (shouldOpen) => {
         const isOpen = columnMenu.style.display === "block";
-        const nextState =
-          typeof shouldOpen === "boolean" ? shouldOpen : !isOpen;
+        const nextState = typeof shouldOpen === "boolean" ? shouldOpen : !isOpen;
         if (nextState) {
           buildColumnMenu();
           columnMenu.style.display = "block";
@@ -1424,7 +1366,8 @@ export class DataTable {
         }
 
         if (this._getSortingMode() === "server") {
-          const currentDirection = this.state.sortColumn === columnId ? this.state.sortDirection : null;
+          const currentDirection =
+            this.state.sortColumn === columnId ? this.state.sortDirection : null;
           const nextDirection = currentDirection === "asc" ? "desc" : "asc";
           this.state.sortColumn = columnId;
           this.state.sortDirection = nextDirection;
@@ -1443,8 +1386,7 @@ export class DataTable {
         }
 
         if (this.state.sortColumn === columnId) {
-          this.state.sortDirection =
-            this.state.sortDirection === "asc" ? "desc" : "asc";
+          this.state.sortDirection = this.state.sortDirection === "asc" ? "desc" : "asc";
         } else {
           this.state.sortColumn = columnId;
           this.state.sortDirection = "asc";
@@ -1458,8 +1400,7 @@ export class DataTable {
     });
 
     // Column resizing
-    const resizeHandles =
-      this.elements.thead.querySelectorAll(".dt-resize-handle");
+    const resizeHandles = this.elements.thead.querySelectorAll(".dt-resize-handle");
     resizeHandles.forEach((handle) => {
       const handler = (e) => {
         e.preventDefault();
@@ -1515,11 +1456,7 @@ export class DataTable {
               try {
                 column.image.onClick(row, e);
               } catch (error) {
-                this._log(
-                  "error",
-                  `Image click handler failed for column ${columnId}`,
-                  error
-                );
+                this._log("error", `Image click handler failed for column ${columnId}`, error);
               }
             }
           }
@@ -1529,9 +1466,7 @@ export class DataTable {
     });
 
     // Action button click handlers
-    const actionButtons = this.elements.tbody.querySelectorAll(
-      ".dt-action-btn[data-action-id]"
-    );
+    const actionButtons = this.elements.tbody.querySelectorAll(".dt-action-btn[data-action-id]");
     actionButtons.forEach((btn) => {
       const handler = (e) => {
         e.stopPropagation(); // Prevent row click
@@ -1546,18 +1481,12 @@ export class DataTable {
             const columnId = td.dataset.columnId;
             const column = this.options.columns.find((c) => c.id === columnId);
             if (column?.actions?.buttons) {
-              const action = column.actions.buttons.find(
-                (a) => a.id === actionId
-              );
+              const action = column.actions.buttons.find((a) => a.id === actionId);
               if (action?.onClick) {
                 try {
                   action.onClick(row, e);
                 } catch (error) {
-                  this._log(
-                    "error",
-                    `Action button handler failed for action ${actionId}`,
-                    error
-                  );
+                  this._log("error", `Action button handler failed for action ${actionId}`, error);
                 }
               }
             }
@@ -1578,9 +1507,7 @@ export class DataTable {
         const menu = dropdown.querySelector(".dt-actions-dropdown-menu");
 
         // Close all other dropdowns first
-        const allMenus = this.elements.tbody.querySelectorAll(
-          ".dt-actions-dropdown-menu"
-        );
+        const allMenus = this.elements.tbody.querySelectorAll(".dt-actions-dropdown-menu");
         allMenus.forEach((m) => {
           if (m !== menu) {
             m.style.display = "none";
@@ -1617,20 +1544,14 @@ export class DataTable {
             const columnId = td?.dataset.columnId;
             const column = this.options.columns.find((c) => c.id === columnId);
             if (column?.actions?.items) {
-              const action = column.actions.items.find(
-                (a) => a.id === actionId
-              );
+              const action = column.actions.items.find((a) => a.id === actionId);
               if (action?.onClick) {
                 try {
                   action.onClick(row, e);
 
                   // Close dropdown after action
-                  const menu = dropdown.querySelector(
-                    ".dt-actions-dropdown-menu"
-                  );
-                  const trigger = dropdown.querySelector(
-                    ".dt-actions-dropdown-trigger"
-                  );
+                  const menu = dropdown.querySelector(".dt-actions-dropdown-menu");
+                  const trigger = dropdown.querySelector(".dt-actions-dropdown-trigger");
                   if (menu) menu.style.display = "none";
                   if (trigger) trigger.classList.remove("active");
                 } catch (error) {
@@ -1651,12 +1572,8 @@ export class DataTable {
     // Close dropdowns when clicking outside
     const closeDropdownsHandler = (e) => {
       if (!e.target.closest(".dt-actions-dropdown")) {
-        const allMenus = this.elements.tbody.querySelectorAll(
-          ".dt-actions-dropdown-menu"
-        );
-        const allTriggers = this.elements.tbody.querySelectorAll(
-          ".dt-actions-dropdown-trigger"
-        );
+        const allMenus = this.elements.tbody.querySelectorAll(".dt-actions-dropdown-menu");
+        const allTriggers = this.elements.tbody.querySelectorAll(".dt-actions-dropdown-trigger");
         allMenus.forEach((menu) => (menu.style.display = "none"));
         allTriggers.forEach((trigger) => trigger.classList.remove("active"));
       }
@@ -1697,11 +1614,7 @@ export class DataTable {
         this.scrollThrottle = null;
       }, 500);
     };
-    this._addEventListener(
-      this.elements.scrollContainer,
-      "scroll",
-      scrollHandler
-    );
+    this._addEventListener(this.elements.scrollContainer, "scroll", scrollHandler);
   }
 
   /**
@@ -1713,9 +1626,7 @@ export class DataTable {
       return;
     }
 
-    const orderedIds = Array.from(
-      columnMenu.querySelectorAll(".dt-column-menu-item")
-    )
+    const orderedIds = Array.from(columnMenu.querySelectorAll(".dt-column-menu-item"))
       .map((item) => item.dataset.columnId)
       .filter(Boolean);
 
@@ -1782,9 +1693,9 @@ export class DataTable {
    */
   _applyColumnWidth(columnId, widthPx) {
     if (!columnId || !Number.isFinite(widthPx)) return;
-    
+
     const w = Math.max(0, Math.round(widthPx));
-    
+
     // Update <col> element (primary width control)
     const col = this.elements.cols?.[columnId];
     if (col) {
@@ -1792,7 +1703,7 @@ export class DataTable {
       col.style.minWidth = `${w}px`;
       col.style.maxWidth = `${w}px`;
     }
-    
+
     // Update header for proper pointer events hit-box
     const th = this.elements.thead?.querySelector(`th[data-column-id="${columnId}"]`);
     if (th) {
@@ -1848,13 +1759,8 @@ export class DataTable {
       }
     }
 
-    const allRows = Array.from(
-      this.elements.tbody.querySelectorAll("tr[data-row-id]")
-    );
-    const sampleSize = Math.min(
-      this.options.autoSizeSample,
-      allRows.length
-    );
+    const allRows = Array.from(this.elements.tbody.querySelectorAll("tr[data-row-id]"));
+    const sampleSize = Math.min(this.options.autoSizeSample, allRows.length);
     const sampleRows = sampleSize > 0 ? allRows.slice(0, sampleSize) : [];
     const padding = this.options.autoSizePadding;
 
@@ -1870,10 +1776,7 @@ export class DataTable {
         col.autoWidth !== true &&
         col.width !== undefined &&
         col.width !== null &&
-        !(
-          typeof col.width === "string" &&
-          col.width.trim().toLowerCase() === "auto"
-        );
+        !(typeof col.width === "string" && col.width.trim().toLowerCase() === "auto");
 
       if (hasFixedWidth) {
         if (
@@ -1892,13 +1795,9 @@ export class DataTable {
         return;
       }
 
-      const headerCell = this.elements.thead.querySelector(
-        `th[data-column-id="${columnId}"]`
-      );
+      const headerCell = this.elements.thead.querySelector(`th[data-column-id="${columnId}"]`);
 
-      let maxWidth = headerCell
-        ? Math.ceil(headerCell.scrollWidth)
-        : 0;
+      let maxWidth = headerCell ? Math.ceil(headerCell.scrollWidth) : 0;
 
       sampleRows.forEach((row) => {
         const cell = row.querySelector(`td[data-column-id="${columnId}"]`);
@@ -1935,10 +1834,7 @@ export class DataTable {
         return;
       }
 
-      if (
-        !Number.isFinite(previous) ||
-        Math.abs(previous - finalWidth) > 1
-      ) {
+      if (!Number.isFinite(previous) || Math.abs(previous - finalWidth) > 1) {
         this.state.columnWidths[columnId] = finalWidth;
         this._applyColumnWidth(columnId, finalWidth);
         didChange = true;
@@ -1975,18 +1871,18 @@ export class DataTable {
         if (w && !Number.isNaN(w)) this.state.columnWidths[id] = Math.round(w);
       }
     });
-    
+
     // Compute table width sum
     const sum = this._computeTableWidthFromState();
     if (typeof sum === "number") {
       this.state.tableWidth = sum;
-      
+
       // Auto-fit columns to container if they overflow (only on initial load)
       if (!this.state.hasAutoFitted && this.options.fitToContainer !== false) {
         this._fitColumnsToContainer();
         this.state.hasAutoFitted = true;
       }
-      
+
       this._applyTableWidth();
     }
   }
@@ -2081,7 +1977,7 @@ export class DataTable {
           break;
         }
       }
-      
+
       if (lastCol) {
         const currentWidth = this.state.columnWidths[lastCol.id];
         if (typeof currentWidth === "number" && !Number.isNaN(currentWidth)) {
@@ -2109,10 +2005,10 @@ export class DataTable {
 
     // Throttle updates with requestAnimationFrame
     if (this._pendingRAF) return;
-    
+
     this._pendingRAF = requestAnimationFrame(() => {
       this._pendingRAF = null;
-      
+
       if (!this.resizing) return;
 
       const { columnId, startX, startWidth, minWidth } = this.resizing;
@@ -2149,7 +2045,7 @@ export class DataTable {
       cancelAnimationFrame(this._pendingRAF);
       this._pendingRAF = null;
     }
-    
+
     if (this.resizing) {
       const { leftHeader, handle } = this.resizing;
       if (leftHeader) {
@@ -2214,9 +2110,7 @@ export class DataTable {
     }
     if (!this.state.sortColumn) return;
 
-    const column = this.options.columns.find(
-      (c) => c.id === this.state.sortColumn
-    );
+    const column = this.options.columns.find((c) => c.id === this.state.sortColumn);
     if (!column) return;
 
     this.state.filteredData.sort((a, b) => {
@@ -2250,20 +2144,20 @@ export class DataTable {
       typeof renderOptions.prevScrollTop === "number"
         ? renderOptions.prevScrollTop
         : scrollContainer
-        ? scrollContainer.scrollTop
-        : 0;
+          ? scrollContainer.scrollTop
+          : 0;
     const prevScrollLeft =
       typeof renderOptions.prevScrollLeft === "number"
         ? renderOptions.prevScrollLeft
         : scrollContainer
-        ? scrollContainer.scrollLeft
-        : 0;
+          ? scrollContainer.scrollLeft
+          : 0;
     const prevScrollHeight =
       typeof renderOptions.prevScrollHeight === "number"
         ? renderOptions.prevScrollHeight
         : scrollContainer
-        ? scrollContainer.scrollHeight
-        : 0;
+          ? scrollContainer.scrollHeight
+          : 0;
 
     if (this.options.lockColumnWidths) {
       const visibleColumns = this._getOrderedColumns();
@@ -2298,13 +2192,13 @@ export class DataTable {
     if (this.elements.container) {
       this.elements.thead = this.elements.container.querySelector("thead");
       this.elements.tbody = this.elements.container.querySelector("tbody");
-      
+
       // Re-cache col elements
       this.elements.colgroup = this.elements.container.querySelector("colgroup");
       this.elements.cols = {};
       if (this.elements.colgroup) {
         const cols = this.elements.colgroup.querySelectorAll("col[data-column-id]");
-        cols.forEach(col => {
+        cols.forEach((col) => {
           const columnId = col.dataset.columnId;
           if (columnId) {
             this.elements.cols[columnId] = col;
@@ -2321,10 +2215,7 @@ export class DataTable {
     this._attachEvents();
 
     if (scrollContainer) {
-      const maxScrollTop = Math.max(
-        0,
-        scrollContainer.scrollHeight - scrollContainer.clientHeight
-      );
+      const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
 
       let targetTop;
       if (renderOptions.preserveTopDistance && prevScrollHeight > 0) {
@@ -2451,10 +2342,10 @@ export class DataTable {
       options.cursor !== undefined
         ? options.cursor
         : normalizedDirection === "prev"
-        ? pagination.cursorPrev ?? null
-        : normalizedDirection === "next"
-        ? pagination.cursorNext ?? null
-        : pagination.cursorNext ?? null;
+          ? (pagination.cursorPrev ?? null)
+          : normalizedDirection === "next"
+            ? (pagination.cursorNext ?? null)
+            : (pagination.cursorNext ?? null);
 
     const loadArgs = {
       direction: normalizedDirection,
@@ -2498,11 +2389,7 @@ export class DataTable {
         if (error?.name === "AbortError") {
           return null;
         }
-        this._log(
-          "error",
-          `Pagination load failed (${normalizedDirection})`,
-          error
-        );
+        this._log("error", `Pagination load failed (${normalizedDirection})`, error);
         throw error;
       })
       .finally(() => {
@@ -2544,14 +2431,13 @@ export class DataTable {
       direction === "initial" && mode === "append"
         ? "next"
         : direction === "initial" && mode === "prepend"
-        ? "prev"
-        : direction;
+          ? "prev"
+          : direction;
 
     if (effectiveDirection === "prev" || mode === "prepend") {
       this._prependData(normalized.rows, {
         ...meta,
-        preserveScroll:
-          normalized.preserveScroll ?? options.preserveScroll ?? undefined,
+        preserveScroll: normalized.preserveScroll ?? options.preserveScroll ?? undefined,
       });
     } else if (effectiveDirection === "next" || mode === "append") {
       this._appendData(normalized.rows, meta);
@@ -2632,32 +2518,22 @@ export class DataTable {
     const rows = Array.isArray(result.rows)
       ? result.rows
       : Array.isArray(result.items)
-      ? result.items
-      : Array.isArray(result.data)
-      ? result.data
-      : [];
+        ? result.items
+        : Array.isArray(result.data)
+          ? result.data
+          : [];
 
     return {
       rows,
-      cursorNext:
-        result.cursorNext ??
-        result.cursor_next ??
-        result.next_cursor ??
-        undefined,
+      cursorNext: result.cursorNext ?? result.cursor_next ?? result.next_cursor ?? undefined,
       cursorPrev:
         result.cursorPrev ??
         result.cursor_prev ??
         result.prev_cursor ??
         result.previous_cursor ??
         undefined,
-      hasMoreNext:
-        result.hasMoreNext ??
-        result.has_more_next ??
-        undefined,
-      hasMorePrev:
-        result.hasMorePrev ??
-        result.has_more_prev ??
-        undefined,
+      hasMoreNext: result.hasMoreNext ?? result.has_more_next ?? undefined,
+      hasMorePrev: result.hasMorePrev ?? result.has_more_prev ?? undefined,
       total: result.total ?? result.count ?? undefined,
       meta: result.meta ?? undefined,
       mode: result.mode ?? undefined,
@@ -2790,8 +2666,7 @@ export class DataTable {
       pagination.hasMoreNext =
         meta.hasMoreNext !== undefined
           ? Boolean(meta.hasMoreNext)
-          : pagination.cursorNext !== null &&
-            pagination.cursorNext !== undefined;
+          : pagination.cursorNext !== null && pagination.cursorNext !== undefined;
     } else if (Object.prototype.hasOwnProperty.call(meta, "hasMoreNext")) {
       pagination.hasMoreNext = Boolean(meta.hasMoreNext);
     } else if (options.replace) {
@@ -2803,8 +2678,7 @@ export class DataTable {
       pagination.hasMorePrev =
         meta.hasMorePrev !== undefined
           ? Boolean(meta.hasMorePrev)
-          : pagination.cursorPrev !== null &&
-            pagination.cursorPrev !== undefined;
+          : pagination.cursorPrev !== null && pagination.cursorPrev !== undefined;
     } else if (Object.prototype.hasOwnProperty.call(meta, "hasMorePrev")) {
       pagination.hasMorePrev = Boolean(meta.hasMorePrev);
     } else if (options.replace) {
@@ -2880,9 +2754,7 @@ export class DataTable {
     }
 
     const seen = new Set(
-      this.state.data
-        .map((existing) => this._getRowKey(existing))
-        .filter((key) => key !== null)
+      this.state.data.map((existing) => this._getRowKey(existing)).filter((key) => key !== null)
     );
 
     const result = [];
@@ -2949,22 +2821,20 @@ export class DataTable {
 
     this._cancelPaginationRequest();
 
-    pagination.cursorNext =
-      options.cursor ?? pagination.initialCursor ?? null;
-    pagination.cursorPrev =
-      options.prevCursor ?? pagination.initialPrevCursor ?? null;
+    pagination.cursorNext = options.cursor ?? pagination.initialCursor ?? null;
+    pagination.cursorPrev = options.prevCursor ?? pagination.initialPrevCursor ?? null;
     pagination.hasMoreNext =
       options.hasMoreNext !== undefined
         ? Boolean(options.hasMoreNext)
         : pagination.initialHasMoreNext !== undefined
-        ? Boolean(pagination.initialHasMoreNext)
-        : true;
+          ? Boolean(pagination.initialHasMoreNext)
+          : true;
     pagination.hasMorePrev =
       options.hasMorePrev !== undefined
         ? Boolean(options.hasMorePrev)
         : pagination.initialHasMorePrev !== undefined
-        ? Boolean(pagination.initialHasMorePrev)
-        : Boolean(pagination.cursorPrev);
+          ? Boolean(pagination.initialHasMorePrev)
+          : Boolean(pagination.cursorPrev);
 
     pagination.total = null;
     pagination.meta = {};
@@ -3127,10 +2997,7 @@ export class DataTable {
       } else {
         this.state.customControls = {};
       }
-      if (
-        saved.userResizedColumns &&
-        typeof saved.userResizedColumns === "object"
-      ) {
+      if (saved.userResizedColumns && typeof saved.userResizedColumns === "object") {
         this.state.userResizedColumns = { ...saved.userResizedColumns };
       } else {
         this.state.userResizedColumns = {};
@@ -3189,9 +3056,7 @@ export class DataTable {
     // Restore server-side filters
     if (this.options.toolbar?.filters) {
       Object.entries(this.state.filters).forEach(([filterId, value]) => {
-        const filterConfig = this.options.toolbar.filters.find(
-          (f) => f.id === filterId
-        );
+        const filterConfig = this.options.toolbar.filters.find((f) => f.id === filterId);
         if (filterConfig && this._isServerFilter(filterConfig)) {
           if (typeof filterConfig.onChange === "function") {
             queueMicrotask(() => {
@@ -3254,31 +3119,22 @@ export class DataTable {
       const candidateRows = Array.isArray(payload.rows)
         ? payload.rows
         : Array.isArray(payload.items)
-        ? payload.items
-        : Array.isArray(payload.data)
-        ? payload.data
-        : [];
+          ? payload.items
+          : Array.isArray(payload.data)
+            ? payload.data
+            : [];
 
       const combinedMeta = {
         cursorNext:
-          payload.cursorNext ??
-          payload.cursor_next ??
-          payload.next_cursor ??
-          meta.cursorNext,
+          payload.cursorNext ?? payload.cursor_next ?? payload.next_cursor ?? meta.cursorNext,
         cursorPrev:
           payload.cursorPrev ??
           payload.cursor_prev ??
           payload.prev_cursor ??
           payload.previous_cursor ??
           meta.cursorPrev,
-        hasMoreNext:
-          payload.hasMoreNext ??
-          payload.has_more_next ??
-          meta.hasMoreNext,
-        hasMorePrev:
-          payload.hasMorePrev ??
-          payload.has_more_prev ??
-          meta.hasMorePrev,
+        hasMoreNext: payload.hasMoreNext ?? payload.has_more_next ?? meta.hasMoreNext,
+        hasMorePrev: payload.hasMorePrev ?? payload.has_more_prev ?? meta.hasMorePrev,
         total: payload.total ?? payload.count ?? meta.total,
         meta: payload.meta ?? meta.meta,
         renderOptions: payload.renderOptions ?? meta.renderOptions,
@@ -3339,8 +3195,8 @@ export class DataTable {
       typeof request === "string"
         ? { reason: request }
         : request && typeof request === "object"
-        ? { ...request }
-        : {};
+          ? { ...request }
+          : {};
 
     if (this._pagination?.enabled) {
       return this.reload({
@@ -3366,9 +3222,7 @@ export class DataTable {
       this._renderTable();
     }
 
-    const refreshPromise = Promise.resolve(
-      this.options.onRefresh(options)
-    )
+    const refreshPromise = Promise.resolve(this.options.onRefresh(options))
       .then(() => {
         this._setLoadingState(false);
         if (!hadRows && this.state.filteredData.length === 0) {
@@ -3419,11 +3273,7 @@ export class DataTable {
     }
     this.state.filters[filterId] = value;
     if (this.elements.toolbar) {
-      TableToolbarView.setFilterValue(
-        this.elements.toolbar,
-        filterId,
-        value
-      );
+      TableToolbarView.setFilterValue(this.elements.toolbar, filterId, value);
     }
     if (options.apply !== false) {
       this._applyFilters();
@@ -3438,11 +3288,7 @@ export class DataTable {
     const nextValue = value ?? "";
     this.state.customControls[controlId] = nextValue;
     if (this.elements.toolbar) {
-      TableToolbarView.setCustomControlValue(
-        this.elements.toolbar,
-        controlId,
-        nextValue
-      );
+      TableToolbarView.setCustomControlValue(this.elements.toolbar, controlId, nextValue);
     }
     if (options.apply) {
       this._applyFilters();

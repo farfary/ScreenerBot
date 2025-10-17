@@ -148,35 +148,23 @@ function createLifecycle() {
         ? null
         : state.totalEstimate;
     const totalValue =
-      typeof totalFromSummary === "number"
-        ? totalFromSummary
-        : totalEstimate ?? null;
+      typeof totalFromSummary === "number" ? totalFromSummary : (totalEstimate ?? null);
 
     const successCountGlobal =
-      typeof state.summary?.success_count === "number"
-        ? state.summary.success_count
-        : null;
+      typeof state.summary?.success_count === "number" ? state.summary.success_count : null;
     const failedCountGlobal =
-      typeof state.summary?.failed_count === "number"
-        ? state.summary.failed_count
-        : null;
+      typeof state.summary?.failed_count === "number" ? state.summary.failed_count : null;
 
     table.updateToolbarSummary([
       {
         id: "tx-total",
         label: "Total",
-        value:
-          totalValue === null
-            ? "—"
-            : Utils.formatNumber(totalValue, { decimals: 0 }),
+        value: totalValue === null ? "—" : Utils.formatNumber(totalValue, { decimals: 0 }),
       },
       {
         id: "tx-estimate",
         label: "Estimate",
-        value:
-          totalEstimate === null
-            ? "—"
-            : Utils.formatNumber(totalEstimate, { decimals: 0 }),
+        value: totalEstimate === null ? "—" : Utils.formatNumber(totalEstimate, { decimals: 0 }),
       },
       {
         id: "tx-success",
@@ -194,13 +182,9 @@ function createLifecycle() {
         id: "tx-failed",
         label: "Failed",
         value:
-          failedCountGlobal === null
-            ? "—"
-            : Utils.formatNumber(failedCountGlobal, { decimals: 0 }),
+          failedCountGlobal === null ? "—" : Utils.formatNumber(failedCountGlobal, { decimals: 0 }),
         variant:
-          typeof failedCountGlobal === "number" && failedCountGlobal > 0
-            ? "warning"
-            : "success",
+          typeof failedCountGlobal === "number" && failedCountGlobal > 0 ? "warning" : "success",
       },
     ]);
 
@@ -240,13 +224,8 @@ function createLifecycle() {
     }
   };
 
-  const loadTransactionsPage = async ({
-    direction,
-    cursor,
-    reason,
-    signal,
-  }) => {
-    const payloadCursor = direction === "prev" ? null : cursor ?? null;
+  const loadTransactionsPage = async ({ direction, cursor, reason, signal }) => {
+    const payloadCursor = direction === "prev" ? null : (cursor ?? null);
     const payload = buildRequestPayload(payloadCursor);
 
     try {
@@ -322,15 +301,11 @@ function createLifecycle() {
           });
 
           if (!nextResponse.ok) {
-            throw new Error(
-              `HTTP ${nextResponse.status}: ${nextResponse.statusText}`
-            );
+            throw new Error(`HTTP ${nextResponse.status}: ${nextResponse.statusText}`);
           }
 
           const nextData = await nextResponse.json();
-          const nextItems = Array.isArray(nextData?.items)
-            ? nextData.items
-            : [];
+          const nextItems = Array.isArray(nextData?.items) ? nextData.items : [];
 
           processBatch(nextItems);
           nextCursor = nextData?.next_cursor ?? null;
@@ -451,16 +426,14 @@ function createLifecycle() {
           label: "Δ SOL",
           minWidth: 140,
           sortable: true,
-          render: (value) =>
-            Utils.formatPnL(value, { decimals: 6, fallback: "—" }),
+          render: (value) => Utils.formatPnL(value, { decimals: 6, fallback: "—" }),
         },
         {
           id: "fee_sol",
           label: "Fees (SOL)",
           minWidth: 130,
           sortable: true,
-          render: (value) =>
-            Utils.formatSol(value, { decimals: 6, fallback: "—" }),
+          render: (value) => Utils.formatSol(value, { decimals: 6, fallback: "—" }),
         },
         {
           id: "token_mint",
@@ -479,8 +452,7 @@ function createLifecycle() {
           label: "Instr.",
           minWidth: 90,
           sortable: true,
-          render: (value) =>
-            Utils.formatNumber(value, { decimals: 0, fallback: "—" }),
+          render: (value) => Utils.formatNumber(value, { decimals: 0, fallback: "—" }),
         },
       ];
 
@@ -667,12 +639,7 @@ function createLifecycle() {
     activate(ctx) {
       ctxRef = ctx;
       if (!poller) {
-        poller = ctx.managePoller(
-          new Poller(
-            () => fetchSummary({}),
-            { label: "Transactions" }
-          )
-        );
+        poller = ctx.managePoller(new Poller(() => fetchSummary({}), { label: "Transactions" }));
       }
       poller.start();
       if ((table?.getData?.() ?? []).length === 0) {

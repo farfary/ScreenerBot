@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
@@ -14,30 +14,18 @@
     <div class="header">
       <h1>🤖 ScreenerBot Dashboard</h1>
       <div class="header-controls">
-        <button
-          class="control-btn trader-btn"
-          id="traderToggle"
-          aria-label="Toggle trader"
-        >
+        <button class="control-btn trader-btn" id="traderToggle" aria-label="Toggle trader">
           <span id="traderIcon">⏸️</span>
           <span id="traderText">Stop Trader</span>
         </button>
-        <button
-          class="control-btn reboot-btn"
-          id="rebootBtn"
-          aria-label="Reboot system"
-        >
+        <button class="control-btn reboot-btn" id="rebootBtn" aria-label="Reboot system">
           <span>🔄</span>
           <span>Reboot</span>
         </button>
         <div class="refresh-interval-control">
           <label
             for="refreshInterval"
-            style="
-              font-size: 0.85rem;
-              color: var(--text-secondary);
-              margin-right: 4px;
-            "
+            style="font-size: 0.85rem; color: var(--text-secondary); margin-right: 4px"
             >⏱️</label
           >
           <select
@@ -61,9 +49,7 @@
         </button>
         <div class="status-indicator">
           <div style="display: flex; gap: 8px; align-items: center">
-            <span id="botBadge" class="badge loading" title="Bot Status"
-              >🤖 BOT</span
-            >
+            <span id="botBadge" class="badge loading" title="Bot Status">🤖 BOT</span>
           </div>
         </div>
       </div>

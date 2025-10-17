@@ -85,7 +85,9 @@ body.events-dialog-open {
   cursor: pointer;
   color: var(--text-secondary, #cbd5f5);
   background: transparent;
-  transition: background 0.2s ease, color 0.2s ease;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
 }
 
 .events-dialog-close:hover,
@@ -207,7 +209,9 @@ body.events-dialog-open {
   font-size: 0.95rem;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.2s ease, border 0.2s ease;
+  transition:
+    background 0.2s ease,
+    border 0.2s ease;
 }
 
 .events-dialog-dismiss:hover,

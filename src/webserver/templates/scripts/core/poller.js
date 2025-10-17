@@ -9,11 +9,7 @@ const _state = {
 export function init() {
   // Load saved interval or default to 1000ms
   _state.interval = AppState.load("pollingInterval", 1000);
-  console.log(
-    "[PollingManager] Initialized with interval:",
-    _state.interval,
-    "ms"
-  );
+  console.log("[PollingManager] Initialized with interval:", _state.interval, "ms");
 }
 
 export function getInterval() {
@@ -27,13 +23,7 @@ export function setInterval(ms) {
   const oldInterval = _state.interval;
   _state.interval = ms;
   AppState.save("pollingInterval", ms);
-  console.log(
-    "[PollingManager] Interval changed from",
-    oldInterval,
-    "ms to",
-    ms,
-    "ms"
-  );
+  console.log("[PollingManager] Interval changed from", oldInterval, "ms to", ms, "ms");
 
   // Notify all listeners
   _state.listeners.forEach((callback) => {
@@ -87,10 +77,7 @@ export class Poller {
           return value;
         }
       } catch (err) {
-        console.warn(
-          `${this._logPrefix()} getInterval failed, falling back`,
-          err
-        );
+        console.warn(`${this._logPrefix()} getInterval failed, falling back`, err);
       }
     }
 
@@ -100,10 +87,7 @@ export class Poller {
         return value;
       }
     } catch (err) {
-      console.warn(
-        `${this._logPrefix()} PollingManager.getInterval failed, using default`,
-        err
-      );
+      console.warn(`${this._logPrefix()} PollingManager.getInterval failed, using default`, err);
     }
 
     return 1000;
@@ -143,9 +127,7 @@ export class Poller {
         return;
       }
       const interval = this.start({ silent: true });
-      console.log(
-        `${this._logPrefix()} Polling interval changed → ${interval} ms`
-      );
+      console.log(`${this._logPrefix()} Polling interval changed → ${interval} ms`);
     });
   }
 

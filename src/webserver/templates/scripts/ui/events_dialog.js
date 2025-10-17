@@ -129,7 +129,8 @@ export class EventDetailsDialog {
 
     this._ensureElements();
 
-    this._previousActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    this._previousActiveElement =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
     this._render(event);
 
@@ -138,7 +139,7 @@ export class EventDetailsDialog {
     document.body.classList.add("events-dialog-open");
     this._isOpen = true;
 
-  document.addEventListener("keydown", this._keyListener, true);
+    document.addEventListener("keydown", this._keyListener, true);
 
     requestAnimationFrame(() => {
       if (!this._isOpen) {
@@ -162,9 +163,13 @@ export class EventDetailsDialog {
     document.body.classList.remove("events-dialog-open");
     this._isOpen = false;
 
-  document.removeEventListener("keydown", this._keyListener, true);
+    document.removeEventListener("keydown", this._keyListener, true);
 
-    if (restoreFocus && this._previousActiveElement && typeof this._previousActiveElement.focus === "function") {
+    if (
+      restoreFocus &&
+      this._previousActiveElement &&
+      typeof this._previousActiveElement.focus === "function"
+    ) {
       try {
         this._previousActiveElement.focus();
       } catch (_error) {
@@ -212,7 +217,11 @@ export class EventDetailsDialog {
 
     const message = coerceText(event.message).trim();
     const fallback = event.category ? `${event.category} event` : "Event details";
-    const heading = message ? (message.length > 140 ? `${message.slice(0, 140)}...` : message) : fallback;
+    const heading = message
+      ? message.length > 140
+        ? `${message.slice(0, 140)}...`
+        : message
+      : fallback;
 
     this.titleEl.textContent = heading || "Event details";
     this.titleEl.title = message || fallback;
@@ -234,9 +243,10 @@ export class EventDetailsDialog {
       metaParts.push(Utils.escapeHtml(formatted));
     }
 
-    const metaHtml = metaParts.length > 0
-      ? `<span class="events-dialog-subtitle-meta">${metaParts.join(" &bull; ")}</span>`
-      : "";
+    const metaHtml =
+      metaParts.length > 0
+        ? `<span class="events-dialog-subtitle-meta">${metaParts.join(" &bull; ")}</span>`
+        : "";
     const pieces = [];
     if (severityBadge) {
       pieces.push(severityBadge);
@@ -295,7 +305,10 @@ export class EventDetailsDialog {
           fallback: "N/A",
         }),
       });
-      fields.push({ label: "Age", value: Utils.formatTimeAgo(event.event_time, { fallback: "-" }) });
+      fields.push({
+        label: "Age",
+        value: Utils.formatTimeAgo(event.event_time, { fallback: "-" }),
+      });
     }
     if (event.created_at) {
       fields.push({
@@ -307,9 +320,7 @@ export class EventDetailsDialog {
       });
     }
 
-    const html = fields
-      .map((field) => this._renderField(field))
-      .join("");
+    const html = fields.map((field) => this._renderField(field)).join("");
 
     this.fieldsEl.innerHTML = html;
   }

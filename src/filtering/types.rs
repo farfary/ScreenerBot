@@ -243,5 +243,6 @@ pub struct FilteringStatsSnapshot {
     pub blacklisted: usize,
     pub secure_tokens: usize,
     pub with_ohlcv: usize,
+    pub passed_filtering: usize,
     pub updated_at: DateTime<Utc>,
 }

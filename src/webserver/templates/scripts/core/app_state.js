@@ -18,13 +18,7 @@ export function load(key, defaultValue = null) {
       return JSON.parse(item);
     } catch (parseError) {
       localStorage.removeItem(`screenerbot_${key}`);
-      console.warn(
-        "Invalid stored state removed:",
-        key,
-        "value=",
-        item,
-        parseError
-      );
+      console.warn("Invalid stored state removed:", key, "value=", item, parseError);
       return defaultValue;
     }
   } catch (e) {

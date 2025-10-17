@@ -82,10 +82,7 @@ const createContext = (pageName) => {
         try {
           controller.abort();
         } catch (error) {
-          console.error(
-            "[PageLifecycle] Abort controller cleanup failed",
-            error
-          );
+          console.error("[PageLifecycle] Abort controller cleanup failed", error);
         }
       };
       this.onDeactivate(abort);

@@ -72,7 +72,7 @@ function renderButtons(buttons = []) {
 
   return buttons
     .map((btn) => {
-  const classes = ["dt-btn", "table-toolbar-btn"];
+      const classes = ["dt-btn", "table-toolbar-btn"];
       if (btn.variant) {
         classes.push(`table-toolbar-btn--${btn.variant}`);
       }
@@ -82,17 +82,13 @@ function renderButtons(buttons = []) {
       if (btn.classes) {
         classes.push(btn.classes);
       }
-      const icon = btn.icon
-        ? `<span class="dt-btn-icon">${escapeHtml(btn.icon)}</span>`
-        : "";
-      const label = btn.label
-        ? `<span class="dt-btn-label">${escapeHtml(btn.label)}</span>`
-        : "";
+      const icon = btn.icon ? `<span class="dt-btn-icon">${escapeHtml(btn.icon)}</span>` : "";
+      const label = btn.label ? `<span class="dt-btn-label">${escapeHtml(btn.label)}</span>` : "";
       const tooltip = btn.tooltip ? btn.tooltip : btn.label;
       const titleAttr = tooltip ? ` title="${escapeHtml(tooltip)}"` : "";
       const ariaLabel = !btn.label && tooltip ? ` aria-label="${escapeHtml(tooltip)}"` : "";
       const dataId = btn.id ? ` data-btn-id="${escapeHtml(btn.id)}"` : "";
-  return `<button class="${classNames(classes)}" type="button"${dataId}${titleAttr}${ariaLabel}>${icon}${label}</button>`;
+      return `<button class="${classNames(classes)}" type="button"${dataId}${titleAttr}${ariaLabel}>${icon}${label}</button>`;
     })
     .join("");
 }
@@ -126,7 +122,8 @@ function renderSearch(searchConfig = {}, state = {}) {
 }
 
 function renderFilter(filter, stateFilters = {}) {
-  const currentValue = stateFilters[filter.id] ?? filter.defaultValue ?? filter.options?.[0]?.value ?? "";
+  const currentValue =
+    stateFilters[filter.id] ?? filter.defaultValue ?? filter.options?.[0]?.value ?? "";
   const optionsMarkup = (filter.options || [])
     .map((opt) => {
       const selected = opt.value === currentValue ? " selected" : "";
@@ -146,7 +143,7 @@ function renderFilter(filter, stateFilters = {}) {
   const widthStyle = filter.minWidth ? ` style="min-width:${escapeHtml(filter.minWidth)};"` : "";
   const dataAttrs = [`data-filter-id="${escapeHtml(filter.id)}"`];
   if (filter.autoApply === false) {
-    dataAttrs.push("data-auto-apply=\"false\"");
+    dataAttrs.push('data-auto-apply="false"');
   }
   if (filter.defaultValue !== undefined) {
     dataAttrs.push(`data-default-value="${escapeHtml(filter.defaultValue)}"`);
@@ -182,7 +179,7 @@ function renderCustomControl(control, stateControls = {}) {
     dataAttrs.push(`data-default-value="${escapeHtml(control.defaultValue)}"`);
   }
   if (control.clearable) {
-    dataAttrs.push("data-clearable=\"true\"");
+    dataAttrs.push('data-clearable="true"');
   }
 
   const input = `
@@ -240,9 +237,10 @@ export class TableToolbarView {
       .join("");
     const buttonsSection = renderButtons(this.config.buttons);
 
-    const settingsButton = this.config.settings === false
-      ? ""
-      : `
+    const settingsButton =
+      this.config.settings === false
+        ? ""
+        : `
         <div class="dt-column-toggle table-toolbar-settings">
           <button class="dt-btn dt-btn-columns table-toolbar-btn table-toolbar-btn--icon" type="button" title="${escapeHtml(
             (this.config.settings && this.config.settings.tooltip) || "Table settings"
@@ -255,8 +253,7 @@ export class TableToolbarView {
         </div>
       `;
 
-    const controlsPresent =
-      searchSection || filtersSection || customControlsSection;
+    const controlsPresent = searchSection || filtersSection || customControlsSection;
 
     return `
       <div class="data-table-toolbar table-toolbar">
@@ -278,7 +275,9 @@ export class TableToolbarView {
             ${settingsButton}
           </div>
         </div>
-        ${controlsPresent ? `
+        ${
+          controlsPresent
+            ? `
           <div class="table-toolbar__row table-toolbar__row--controls">
             <div class="table-toolbar-controls">
               ${searchSection}
@@ -286,7 +285,9 @@ export class TableToolbarView {
               ${filtersSection}
             </div>
           </div>
-        ` : ""}
+        `
+            : ""
+        }
       </div>
     `;
   }
@@ -365,9 +366,7 @@ export class TableToolbarView {
 
   static setFilterValue(root, filterId, value) {
     if (!root || !filterId) return;
-    const select = root.querySelector(
-      `.dt-filter[data-filter-id="${escapeSelector(filterId)}"]`
-    );
+    const select = root.querySelector(`.dt-filter[data-filter-id="${escapeSelector(filterId)}"]`);
     if (select) {
       select.value = value ?? "";
     }

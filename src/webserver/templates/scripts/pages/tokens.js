@@ -35,13 +35,10 @@ const COLUMN_TO_SORT_KEY = {
   updated_at: "updated_at",
 };
 
-const SORT_KEY_TO_COLUMN = Object.entries(COLUMN_TO_SORT_KEY).reduce(
-  (acc, [columnId, sortKey]) => {
-    acc[sortKey] = columnId;
-    return acc;
-  },
-  {}
-);
+const SORT_KEY_TO_COLUMN = Object.entries(COLUMN_TO_SORT_KEY).reduce((acc, [columnId, sortKey]) => {
+  acc[sortKey] = columnId;
+  return acc;
+}, {});
 
 const PAGE_LIMIT = 100; // chunked fetch size for incremental scrolling
 
@@ -166,8 +163,7 @@ function createLifecycle() {
     });
 
     const loadedLabel = Utils.formatNumber(loaded, { decimals: 0 });
-    const hasTotalCount =
-      typeof state.totalCount === "number" && Number.isFinite(state.totalCount);
+    const hasTotalCount = typeof state.totalCount === "number" && Number.isFinite(state.totalCount);
     const totalLabel = hasTotalCount
       ? `Loaded ${loadedLabel} / ${Utils.formatNumber(state.totalCount, { decimals: 0 })}`
       : `Loaded ${loadedLabel}`;
@@ -208,9 +204,7 @@ function createLifecycle() {
     if (!table) return false;
 
     const paginationState =
-      typeof table.getPaginationState === "function"
-        ? table.getPaginationState()
-        : null;
+      typeof table.getPaginationState === "function" ? table.getPaginationState() : null;
     if (paginationState?.loadingNext || paginationState?.loadingPrev) {
       return true;
     }
@@ -220,8 +214,7 @@ function createLifecycle() {
       return false;
     }
 
-    const hasScrollableContent =
-      container.scrollHeight > container.clientHeight + 16;
+    const hasScrollableContent = container.scrollHeight > container.clientHeight + 16;
     if (!hasScrollableContent) {
       return false;
     }
@@ -262,7 +255,7 @@ function createLifecycle() {
     state.totalCount = null;
     state.lastUpdate = null;
     updateToolbar();
-    
+
     // For restored state, we still need to load data, but silently
     requestReload(restored ? "restored" : "sort", {
       silent: false,
@@ -321,9 +314,7 @@ function createLifecycle() {
 
       state.summary = {
         priced:
-          pricedTotal !== null
-            ? pricedTotal
-            : items.filter((row) => row.has_pool_price).length,
+          pricedTotal !== null ? pricedTotal : items.filter((row) => row.has_pool_price).length,
         positions:
           positionsTotal !== null
             ? positionsTotal
@@ -496,10 +487,10 @@ function createLifecycle() {
           wrap: false,
           render: (_v, row) => {
             const flags = [];
-            if (row.has_pool_price) flags.push("<span class=\"badge info\">Price</span>");
-            if (row.has_ohlcv) flags.push("<span class=\"badge\">OHLCV</span>");
-            if (row.has_open_position) flags.push("<span class=\"badge success\">Position</span>");
-            if (row.blacklisted) flags.push("<span class=\"badge warning\">Blacklisted</span>");
+            if (row.has_pool_price) flags.push('<span class="badge info">Price</span>');
+            if (row.has_ohlcv) flags.push('<span class="badge">OHLCV</span>');
+            if (row.has_open_position) flags.push('<span class="badge success">Position</span>');
+            if (row.blacklisted) flags.push('<span class="badge warning">Blacklisted</span>');
             return flags.join(" ") || "—";
           },
         },
@@ -642,7 +633,7 @@ function createLifecycle() {
       // Sync state from DataTable's restored server state
       const serverState = table.getServerState();
       let hasSortRestored = false;
-      
+
       if (serverState.sortColumn) {
         const sortKey = resolveSortKey(serverState.sortColumn);
         if (sortKey) {
