@@ -160,4 +160,188 @@ impl GeckoTerminalClient {
 
         Ok(pools)
     }
+
+    /// Fetch OHLCV (Open, High, Low, Close, Volume) data for a pool
+    /// 
+    /// # Arguments
+    /// * `network` - Network ID (e.g., "solana", "eth")
+    /// * `pool_address` - Pool contract address
+    /// * `timeframe` - Timeframe: "day", "hour", or "minute"
+    /// * `aggregate` - Time period to aggregate (day: 1, hour: 1/4/12, minute: 1/5/15)
+    /// * `limit` - Number of results (max 1000, default 100)
+    /// * `currency` - "usd" or "token"
+    /// * `before_timestamp` - Optional: return data before this timestamp
+    /// * `token` - Optional: "base", "quote", or token address to invert chart
+    /// 
+    /// # Returns
+    /// OhlcvResponse with list of [timestamp, open, high, low, close, volume]
+    pub async fn fetch_ohlcv(
+        &self,
+        network: &str,
+        pool_address: &str,
+        timeframe: &str,
+        aggregate: Option<u32>,
+        limit: Option<u32>,
+        currency: Option<&str>,
+        before_timestamp: Option<i64>,
+        token: Option<&str>,
+    ) -> Result<OhlcvResponse, ApiError> {
+        if !self.enabled {
+            return Err(ApiError::Disabled);
+        }
+
+        self.rate_limiter.acquire().await;
+        let start = Instant::now();
+
+        let mut url = format!(
+            "{}/networks/{}/pools/{}/ohlcv/{}",
+            GECKOTERMINAL_BASE_URL, network, pool_address, timeframe
+        );
+
+        // Build query parameters
+        let mut params = Vec::new();
+        
+        if let Some(agg) = aggregate {
+            params.push(format!("aggregate={}", agg));
+        }
+        
+        if let Some(lim) = limit {
+            params.push(format!("limit={}", lim.min(1000))); // Max 1000
+        }
+        
+        if let Some(curr) = currency {
+            params.push(format!("currency={}", curr));
+        }
+        
+        if let Some(ts) = before_timestamp {
+            params.push(format!("before_timestamp={}", ts));
+        }
+        
+        if let Some(tok) = token {
+            params.push(format!("token={}", tok));
+        }
+
+        if !params.is_empty() {
+            url.push('?');
+            url.push_str(&params.join("&"));
+        }
+
+        let response = self
+            .http_client
+            .client()
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| {
+                let error = ApiError::NetworkError(e.to_string());
+                self.stats.record_cache_miss();
+                error
+            })?;
+
+        let elapsed = start.elapsed().as_millis() as f64;
+
+        if !response.status().is_success() {
+            self.stats.record_request(false, elapsed).await;
+            if response.status() == 404 {
+                return Err(ApiError::NotFound);
+            }
+            return Err(ApiError::InvalidResponse(format!(
+                "HTTP {}",
+                response.status()
+            )));
+        }
+
+        let ohlcv_response: OhlcvResponseRaw = response.json().await.map_err(|e| {
+            self.stats.record_request(false, elapsed);
+            ApiError::InvalidResponse(e.to_string())
+        })?;
+
+        self.stats.record_request(true, elapsed).await;
+
+        Ok(OhlcvResponse {
+            ohlcv_list: ohlcv_response.data.attributes.ohlcv_list,
+            base_token: ohlcv_response.meta.base,
+            quote_token: ohlcv_response.meta.quote,
+        })
+    }
+}
+
+// ===== OHLCV Response Types =====
+
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+struct OhlcvResponseRaw {
+    data: OhlcvData,
+    meta: OhlcvMeta,
+}
+
+#[derive(Debug, Deserialize)]
+struct OhlcvData {
+    attributes: OhlcvAttributes,
+}
+
+#[derive(Debug, Deserialize)]
+struct OhlcvAttributes {
+    ohlcv_list: Vec<[f64; 6]>, // [timestamp, open, high, low, close, volume]
+}
+
+#[derive(Debug, Deserialize)]
+struct OhlcvMeta {
+    base: TokenInfo,
+    quote: TokenInfo,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TokenInfo {
+    pub address: String,
+    pub name: String,
+    pub symbol: String,
+    pub coingecko_coin_id: Option<String>,
+}
+
+/// OHLCV response containing candle data
+#[derive(Debug, Clone)]
+pub struct OhlcvResponse {
+    /// List of OHLCV candles: [timestamp, open, high, low, close, volume]
+    pub ohlcv_list: Vec<[f64; 6]>,
+    pub base_token: TokenInfo,
+    pub quote_token: TokenInfo,
+}
+
+impl OhlcvResponse {
+    /// Get the number of candles
+    pub fn len(&self) -> usize {
+        self.ohlcv_list.len()
+    }
+
+    /// Check if empty
+    pub fn is_empty(&self) -> bool {
+        self.ohlcv_list.is_empty()
+    }
+
+    /// Get a specific candle by index
+    pub fn get_candle(&self, index: usize) -> Option<&[f64; 6]> {
+        self.ohlcv_list.get(index)
+    }
+
+    /// Get the latest candle
+    pub fn latest(&self) -> Option<&[f64; 6]> {
+        self.ohlcv_list.first()
+    }
+
+    /// Get all timestamps
+    pub fn timestamps(&self) -> Vec<i64> {
+        self.ohlcv_list.iter().map(|c| c[0] as i64).collect()
+    }
+
+    /// Get all close prices
+    pub fn close_prices(&self) -> Vec<f64> {
+        self.ohlcv_list.iter().map(|c| c[4]).collect()
+    }
+
+    /// Get all volumes
+    pub fn volumes(&self) -> Vec<f64> {
+        self.ohlcv_list.iter().map(|c| c[5]).collect()
+    }
 }
