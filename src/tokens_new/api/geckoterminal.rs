@@ -6,7 +6,8 @@
 /// 1. /networks/{network}/tokens/{token}/pools - PRIMARY: Get all pools for a token
 /// 2. /networks/{network}/trending_pools - Get trending pools by network
 /// 3. /networks/{network}/pools/{address} - Get specific pool data by pool address
-/// 4. /networks/{network}/pools/{pool}/ohlcv/{timeframe} - Get OHLCV candlestick data
+/// 4. /networks/{network}/pools/multi/{addresses} - Get multiple pools data (up to 30 addresses)
+/// 5. /networks/{network}/pools/{pool}/ohlcv/{timeframe} - Get OHLCV candlestick data
 
 use super::types::GeckoTerminalResponse;
 use crate::tokens_new::types::GeckoTerminalPool;
@@ -238,6 +239,86 @@ impl GeckoTerminalClient {
             .next()
             .map(|p| p.to_pool(pool_address))
             .ok_or_else(|| "No pool data returned".to_string())
+    }
+
+    /// Get multiple pools data by pool addresses
+    /// Uses /networks/{network}/pools/multi/{addresses}
+    /// 
+    /// Returns detailed data for multiple pools (up to 30 addresses).
+    /// 
+    /// # Arguments
+    /// * `network` - Network ID (e.g., "solana", "eth") - defaults to "solana"
+    /// * `addresses` - Pool contract addresses (up to 30, comma-separated)
+    /// * `include` - Attributes to include: Vec of "base_token", "quote_token", "dex"
+    /// * `include_volume_breakdown` - Include volume breakdown (default false)
+    /// * `include_composition` - Include pool composition (default false)
+    /// 
+    /// # Returns
+    /// Vec<GeckoTerminalPool> - Multiple pool data
+    pub async fn fetch_pools_multi(
+        &self,
+        network: Option<&str>,
+        addresses: Vec<&str>,
+        include: Option<Vec<&str>>,
+        include_volume_breakdown: bool,
+        include_composition: bool,
+    ) -> Result<Vec<GeckoTerminalPool>, String> {
+        if addresses.is_empty() {
+            return Err("At least one address is required".to_string());
+        }
+        
+        if addresses.len() > 30 {
+            return Err("Maximum 30 addresses allowed".to_string());
+        }
+
+        let network_id = network.unwrap_or(DEFAULT_NETWORK);
+        let permit = self.rate_limiter.acquire().await.map_err(|e| format!("Rate limiter error: {}", e))?;
+
+        let addresses_str = addresses.join(",");
+        let url = format!("{}/networks/{}/pools/multi/{}", GECKOTERMINAL_BASE_URL, network_id, addresses_str);
+        
+        let mut params = Vec::new();
+        
+        if let Some(includes) = include {
+            if !includes.is_empty() {
+                params.push(format!("include={}", includes.join(",")));
+            }
+        }
+        
+        if include_volume_breakdown {
+            params.push("include_volume_breakdown=true".to_string());
+        }
+        
+        if include_composition {
+            params.push("include_composition=true".to_string());
+        }
+
+        let final_url = if !params.is_empty() {
+            format!("{}?{}", url, params.join("&"))
+        } else {
+            url
+        };
+
+        debug!("[GECKOTERMINAL] Fetching multi pools: network={}, count={}", network_id, addresses.len());
+
+        let response = self.client
+            .get(&final_url)
+            .timeout(self.timeout)
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?;
+
+        drop(permit);
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(format!("HTTP {}: {}", status, error_text));
+        }
+
+        let api_response: GeckoTerminalResponse = response.json().await.map_err(|e| format!("JSON parse error: {}", e))?;
+
+        Ok(api_response.data.into_iter().map(|p| p.to_pool("multi")).collect())
     }
 
     /// Get OHLCV (Open, High, Low, Close, Volume) candlestick data for a pool

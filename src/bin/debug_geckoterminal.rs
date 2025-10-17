@@ -32,6 +32,10 @@ struct Args {
     #[clap(long)]
     pool_data: bool,
 
+    /// Test multi-pool endpoint
+    #[clap(long)]
+    multi_pools: bool,
+
     /// Verbose output (show response bodies)
     #[clap(short, long)]
     verbose: bool,
@@ -76,7 +80,7 @@ async fn main() {
     println!("{}", "=".repeat(60).green());
     println!("Base URL: {}\n", BASE_URL.yellow());
 
-    let test_all = args.all || (!args.token_pools && !args.ohlcv && !args.trending && !args.pool_data);
+    let test_all = args.all || (!args.token_pools && !args.ohlcv && !args.trending && !args.pool_data && !args.multi_pools);
 
     if test_all || args.token_pools {
         test_token_pools(&client, &args).await;
@@ -88,6 +92,10 @@ async fn main() {
 
     if test_all || args.pool_data {
         test_pool_by_address(&client, &args).await;
+    }
+
+    if test_all || args.multi_pools {
+        test_multi_pools(&client, &args).await;
     }
 
     if test_all || args.ohlcv {
@@ -557,6 +565,229 @@ async fn test_pool_by_address(client: &Client, args: &Args) {
 
             if status.is_success() {
                 println!("  {} Pool composition data retrieved", "✓".green());
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+}
+
+/// Test: Multi-Pool endpoint
+/// Tests fetching multiple pools in a single request (up to 30 addresses)
+async fn test_multi_pools(client: &Client, args: &Args) {
+    print_test_header(
+        "Multi-Pool Data", 
+        &format!("/networks/{}/pools/multi/{{addresses}}", args.network)
+    );
+
+    // Test 1: Basic multi-pool request with 2 pools
+    println!("  {} Test 1: Basic multi-pool (2 pools)", "→".cyan());
+    
+    let pool1 = "8sLbNZoA1cfnvMJLPfp98ZLAnFSYCFApfJKMbiXNLwxj"; // SOL/USDC
+    let pool2 = "HJPjoWUrhoZzkNfRpHuieeFk9WcZWjwy6PBjZ81ngndJ"; // SOL/USDT
+    
+    let url = format!(
+        "{}/networks/{}/pools/multi/{},{}",
+        BASE_URL, args.network, pool1, pool2
+    );
+    
+    let start = Instant::now();
+    match client.get(&url).send().await {
+        Ok(response) => {
+            let duration = start.elapsed();
+            let status = response.status();
+            
+            print_status(status.as_u16(), duration);
+
+            if status.is_success() {
+                if let Ok(json) = response.json::<Value>().await {
+                    if let Some(data) = json["data"].as_array() {
+                        println!("  {} Pools returned: {}", "✓".green(), data.len());
+                        
+                        for pool in data {
+                            if let Some(attributes) = pool["attributes"].as_object() {
+                                let name = attributes.get("name").and_then(|v| v.as_str()).unwrap_or("Unknown");
+                                let address = attributes.get("address").and_then(|v| v.as_str()).unwrap_or("Unknown");
+                                println!("    - {} ({})", name.yellow(), address.bright_black());
+                            }
+                        }
+                        
+                        if args.verbose {
+                            println!("\n{}", serde_json::to_string_pretty(&json).unwrap_or_default());
+                        }
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 2: With include parameters
+    println!("  {} Test 2: With include parameters", "→".cyan());
+    
+    let url = format!(
+        "{}/networks/{}/pools/multi/{}?include=base_token,quote_token,dex",
+        BASE_URL, args.network, pool1
+    );
+    
+    let start = Instant::now();
+    match client.get(&url).send().await {
+        Ok(response) => {
+            let duration = start.elapsed();
+            let status = response.status();
+            
+            print_status(status.as_u16(), duration);
+
+            if status.is_success() {
+                if let Ok(json) = response.json::<Value>().await {
+                    let has_base_token = json["included"].as_array()
+                        .and_then(|arr| arr.iter().find(|item| item["type"] == "token"))
+                        .is_some();
+                    let has_quote_token = json["included"].as_array()
+                        .and_then(|arr| arr.iter().filter(|item| item["type"] == "token").nth(1))
+                        .is_some();
+                    let has_dex = json["included"].as_array()
+                        .and_then(|arr| arr.iter().find(|item| item["type"] == "dex"))
+                        .is_some();
+                    
+                    println!(
+                        "  {} Include fields: base_token: {}, quote_token: {}, dex: {}",
+                        "✓".green(),
+                        if has_base_token { "✓".green() } else { "✗".red() },
+                        if has_quote_token { "✓".green() } else { "✗".red() },
+                        if has_dex { "✓".green() } else { "✗".red() }
+                    );
+                    
+                    if args.verbose {
+                        println!("\n{}", serde_json::to_string_pretty(&json).unwrap_or_default());
+                    }
+                }
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 3: With volume breakdown
+    println!("  {} Test 3: With volume breakdown", "→".cyan());
+    
+    let url = format!(
+        "{}/networks/{}/pools/multi/{}?include_volume_breakdown=true",
+        BASE_URL, args.network, pool1
+    );
+    
+    let start = Instant::now();
+    match client.get(&url).send().await {
+        Ok(response) => {
+            let duration = start.elapsed();
+            let status = response.status();
+            
+            print_status(status.as_u16(), duration);
+
+            if status.is_success() {
+                println!("  {} Volume breakdown data retrieved", "✓".green());
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 4: With composition
+    println!("  {} Test 4: With composition", "→".cyan());
+    
+    let url = format!(
+        "{}/networks/{}/pools/multi/{}?include_composition=true",
+        BASE_URL, args.network, pool1
+    );
+    
+    let start = Instant::now();
+    match client.get(&url).send().await {
+        Ok(response) => {
+            let duration = start.elapsed();
+            let status = response.status();
+            
+            print_status(status.as_u16(), duration);
+
+            if status.is_success() {
+                println!("  {} Pool composition data retrieved", "✓".green());
+            } else {
+                let body = response.text().await.unwrap_or_default();
+                println!("  {} {}", "Error:".red(), body);
+            }
+        }
+        Err(e) => {
+            println!("  {} Request failed: {}", "❌".red(), e);
+        }
+    }
+
+    println!();
+
+    // Test 5: Multiple networks (Ethereum)
+    println!("  {} Test 5: Ethereum network (3 pools)", "→".cyan());
+    
+    let eth_pool1 = "0x60594a405d53811d3bc4766596efd80fd545a270"; // DAI/WETH
+    let eth_pool2 = "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"; // USDC/WETH
+    let eth_pool3 = "0x4e68ccd3e89f51c3074ca5072bbac773960dfa36"; // WETH/USDT
+    
+    let url = format!(
+        "{}/networks/eth/pools/multi/{},{},{}",
+        BASE_URL, eth_pool1, eth_pool2, eth_pool3
+    );
+    
+    let start = Instant::now();
+    match client.get(&url).send().await {
+        Ok(response) => {
+            let duration = start.elapsed();
+            let status = response.status();
+            
+            print_status(status.as_u16(), duration);
+
+            if status.is_success() {
+                if let Ok(json) = response.json::<Value>().await {
+                    if let Some(data) = json["data"].as_array() {
+                        println!("  {} Pools returned: {}", "✓".green(), data.len());
+                        
+                        for pool in data {
+                            if let Some(attributes) = pool["attributes"].as_object() {
+                                let name = attributes.get("name").and_then(|v| v.as_str()).unwrap_or("Unknown");
+                                let address = attributes.get("address").and_then(|v| v.as_str()).unwrap_or("Unknown");
+                                let price = attributes.get("base_token_price_usd")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("N/A");
+                                println!("    - {} ({}) - ${}", name.yellow(), address.bright_black(), price.cyan());
+                            }
+                        }
+                        
+                        if args.verbose {
+                            println!("\n{}", serde_json::to_string_pretty(&json).unwrap_or_default());
+                        }
+                    }
+                }
             } else {
                 let body = response.text().await.unwrap_or_default();
                 println!("  {} {}", "Error:".red(), body);
