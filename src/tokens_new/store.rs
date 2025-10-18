@@ -52,3 +52,19 @@ pub fn set_priority(mint: &str, priority: Priority) {
         }
     }
 }
+
+pub fn list_mints() -> Vec<String> {
+    STORE
+        .read()
+        .ok()
+        .map(|m| m.keys().cloned().collect())
+        .unwrap_or_default()
+}
+
+pub fn all_snapshots() -> Vec<Snapshot> {
+    STORE
+        .read()
+        .ok()
+        .map(|m| m.values().cloned().collect())
+        .unwrap_or_default()
+}

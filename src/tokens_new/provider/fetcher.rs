@@ -33,6 +33,11 @@ impl Fetcher {
         &self.database
     }
 
+    /// Expose API clients for read-only auxiliary operations (e.g., discovery)
+    pub fn api_clients(&self) -> Arc<ApiClients> {
+        Arc::clone(&self.api_clients)
+    }
+
     /// Upsert token metadata fields conveniently
     pub fn upsert_metadata(
         &self,

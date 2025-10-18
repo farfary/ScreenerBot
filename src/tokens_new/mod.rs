@@ -30,5 +30,5 @@ pub use types::{
 
 // Re-export common types from new modules
 pub use priorities::Priority;
-pub use store::{BestPoolSummary, Snapshot as TokenSnapshot, get_snapshot, set_priority};
+pub use store::{BestPoolSummary, Snapshot as TokenSnapshot, get_snapshot, set_priority, list_mints, all_snapshots};
 pub use events::{TokenEvent, subscribe as subscribe_events};

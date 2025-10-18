@@ -226,6 +226,16 @@ impl TokenDataProvider {
         self.query.get_all_mints()
     }
 
+    /// Get API clients bundle (read-only) for discovery flows
+    pub fn api(&self) -> Arc<ApiClients> {
+        self.fetcher.api_clients()
+    }
+
+    /// Upsert token metadata fields
+    pub fn upsert_token_metadata(&self, mint: &str, symbol: Option<&str>, name: Option<&str>, decimals: Option<u8>) -> Result<(), String> {
+        self.fetcher.upsert_metadata(mint, symbol, name, decimals)
+    }
+
     /// Get provider statistics
     pub fn get_stats(&self) -> ProviderStats {
         self.stats.lock().unwrap().clone()
