@@ -1,7 +1,10 @@
 // Database CRUD operations for all token data tables
 
+use crate::tokens::api::dexscreener_types::DexScreenerPool;
+use crate::tokens::api::geckoterminal_types::GeckoTerminalPool;
+use crate::tokens::api::rugcheck_types::RugcheckInfo;
 use crate::tokens::storage::database::Database;
-use crate::tokens::types::{DataSource, DexScreenerPool, GeckoTerminalPool, RugcheckInfo};
+use crate::tokens::types::{DataSource, TokenMetadata};
 use chrono::Utc;
 use log::{debug, error, warn};
 use rusqlite::{params, Result as SqliteResult, Row};
@@ -354,9 +357,6 @@ pub fn get_token_metadata(db: &Database, mint: &str) -> Result<Option<TokenMetad
         Err(e) => Err(format!("Failed to query token metadata: {}", e)),
     }
 }
-
-// TokenMetadata defined in query module, re-use that type
-use crate::tokens::provider::query::TokenMetadata;
 
 /// Get DexScreener pools for a token
 pub fn get_dexscreener_pools(db: &Database, mint: &str) -> Result<Vec<DexScreenerPool>, String> {

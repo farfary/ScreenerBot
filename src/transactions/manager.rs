@@ -11,7 +11,6 @@ use tokio::sync::{Mutex, Notify};
 
 use crate::global::is_debug_transactions_enabled;
 use crate::logger::{log, LogTag};
-use crate::tokens::TokenDatabase;
 use crate::transactions::{database::TransactionDatabase, types::*, utils::*};
 
 // =============================================================================
@@ -38,8 +37,7 @@ pub struct TransactionsManager {
     pub total_transactions: u64,
     pub new_transactions_count: u64,
 
-    // Database integrations
-    pub token_database: Option<Arc<Mutex<TokenDatabase>>>,
+    // Database integration
     pub transaction_database: Option<Arc<TransactionDatabase>>,
 
     // Retry management for network resilience
@@ -100,28 +98,6 @@ impl TransactionsManager {
                 }
             };
 
-        // Initialize token database integration
-        let token_database = match TokenDatabase::new() {
-            Ok(db) => {
-                if debug_enabled {
-                    log(
-                        LogTag::Transactions,
-                        "INFO",
-                        "Token database integration initialized",
-                    );
-                }
-                Some(Arc::new(Mutex::new(db)))
-            }
-            Err(e) => {
-                log(
-                    LogTag::Transactions,
-                    "WARN",
-                    &format!("Failed to initialize token database integration: {}", e),
-                );
-                None
-            }
-        };
-
         Ok(Self {
             wallet_pubkey,
             debug_enabled,
@@ -129,7 +105,6 @@ impl TransactionsManager {
             last_signature_check: None,
             total_transactions: 0,
             new_transactions_count: 0,
-            token_database,
             transaction_database,
             deferred_retries: HashMap::new(),
             websocket_receiver: None,
@@ -557,11 +532,6 @@ impl TransactionsManager {
     /// Get database connection if available
     pub fn get_transaction_database(&self) -> Option<Arc<TransactionDatabase>> {
         self.transaction_database.as_ref().map(Arc::clone)
-    }
-
-    /// Get token database connection if available
-    pub fn get_token_database(&self) -> Option<Arc<Mutex<TokenDatabase>>> {
-        self.token_database.as_ref().map(Arc::clone)
     }
 
     /// Check if database is available and connected

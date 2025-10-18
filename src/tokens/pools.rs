@@ -7,7 +7,8 @@ use crate::constants::SOL_MINT;
 
 use crate::tokens::provider::TokenDataProvider;
 use crate::tokens::store::{upsert_snapshot, BestPoolSummary, Snapshot};
-use crate::tokens::types::{DexScreenerPool, GeckoTerminalPool};
+use crate::tokens::api::dexscreener_types::DexScreenerPool;
+use crate::tokens::api::geckoterminal_types::GeckoTerminalPool;
 
 pub async fn refresh_for(provider: &TokenDataProvider, mint: &str) -> Result<(), String> {
     let data = provider.fetch_complete_data(mint, None).await?;

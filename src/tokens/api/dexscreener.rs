@@ -12,7 +12,8 @@
 /// 7. /token-boosts/top/v1 - Get top boosted tokens  
 /// 8. /orders/v1/{chainId}/{tokenAddress} - Get orders for a token
 use super::dexscreener_types::*;
-use crate::tokens::types::{ApiError, DexScreenerPool};
+use crate::tokens::api::dexscreener_types::DexScreenerPool;
+use crate::tokens::types::ApiError;
 use log::{debug, warn};
 use reqwest::Client;
 use std::collections::HashMap;

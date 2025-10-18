@@ -1,6 +1,127 @@
 /// DexScreener API response types
-use crate::tokens::types::DexScreenerPool;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+
+use crate::tokens::types::{SocialLink, WebsiteLink};
+
+// ============================================================================
+// POOL DATA STRUCTURE
+// ============================================================================
+
+/// DexScreener pool data - Used for API response parsing only
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DexScreenerPool {
+    pub mint: String,
+    pub pair_address: String,
+    pub chain_id: String,
+    pub dex_id: String,
+    pub url: Option<String>,
+
+    // Token info
+    pub base_token_address: String,
+    pub base_token_name: String,
+    pub base_token_symbol: String,
+    pub quote_token_address: String,
+    pub quote_token_name: String,
+    pub quote_token_symbol: String,
+
+    // Prices (high precision as strings)
+    pub price_native: String,
+    pub price_usd: String,
+
+    // Liquidity
+    pub liquidity_usd: Option<f64>,
+    pub liquidity_base: Option<f64>,
+    pub liquidity_quote: Option<f64>,
+
+    // Volume
+    pub volume_m5: Option<f64>,
+    pub volume_h1: Option<f64>,
+    pub volume_h6: Option<f64>,
+    pub volume_h24: Option<f64>,
+
+    // Transactions
+    pub txns_m5_buys: Option<i64>,
+    pub txns_m5_sells: Option<i64>,
+    pub txns_h1_buys: Option<i64>,
+    pub txns_h1_sells: Option<i64>,
+    pub txns_h6_buys: Option<i64>,
+    pub txns_h6_sells: Option<i64>,
+    pub txns_h24_buys: Option<i64>,
+    pub txns_h24_sells: Option<i64>,
+
+    // Price changes
+    pub price_change_m5: Option<f64>,
+    pub price_change_h1: Option<f64>,
+    pub price_change_h6: Option<f64>,
+    pub price_change_h24: Option<f64>,
+
+    // Market metrics
+    pub fdv: Option<f64>,
+    pub market_cap: Option<f64>,
+
+    // Metadata
+    pub pair_created_at: Option<i64>,
+    pub labels: Vec<String>,
+
+    // Info
+    pub info_image_url: Option<String>,
+    pub info_header: Option<String>,
+    pub info_open_graph: Option<String>,
+    pub info_websites: Vec<WebsiteLink>,
+    pub info_socials: Vec<SocialLink>,
+
+    pub fetched_at: DateTime<Utc>,
+}
+
+impl Default for DexScreenerPool {
+    fn default() -> Self {
+        Self {
+            mint: String::new(),
+            pair_address: String::new(),
+            chain_id: String::new(),
+            dex_id: String::new(),
+            url: None,
+            base_token_address: String::new(),
+            base_token_name: String::new(),
+            base_token_symbol: String::new(),
+            quote_token_address: String::new(),
+            quote_token_name: String::new(),
+            quote_token_symbol: String::new(),
+            price_native: String::new(),
+            price_usd: String::new(),
+            liquidity_usd: None,
+            liquidity_base: None,
+            liquidity_quote: None,
+            volume_m5: None,
+            volume_h1: None,
+            volume_h6: None,
+            volume_h24: None,
+            txns_m5_buys: None,
+            txns_m5_sells: None,
+            txns_h1_buys: None,
+            txns_h1_sells: None,
+            txns_h6_buys: None,
+            txns_h6_sells: None,
+            txns_h24_buys: None,
+            txns_h24_sells: None,
+            price_change_m5: None,
+            price_change_h1: None,
+            price_change_h6: None,
+            price_change_h24: None,
+            fdv: None,
+            market_cap: None,
+            pair_created_at: None,
+            labels: Vec::new(),
+            info_image_url: None,
+            info_header: None,
+            info_open_graph: None,
+            info_websites: Vec::new(),
+            info_socials: Vec::new(),
+            fetched_at: Utc::now(),
+        }
+    }
+}
 
 // ============================================================================
 // API RESPONSE STRUCTURES

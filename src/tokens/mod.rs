@@ -22,10 +22,17 @@ pub mod types;
 
 // Re-export main types for convenience
 pub use provider::{CacheStrategy, TokenDataProvider};
+
+// Domain types from types.rs
 pub use types::{
-    ApiError, DataSource, DexScreenerPool, GeckoTerminalPool, RugcheckHolder, RugcheckInfo,
-    RugcheckRisk, SocialLink, TokenMetadata, WebsiteLink,
+    ApiError, DataSource, PoolSummary, RugcheckHolder, RugcheckRisk, SocialLink, Token,
+    TokenMetadata, WebsiteLink,
 };
+
+// API parsing types from api modules
+pub use api::dexscreener_types::DexScreenerPool;
+pub use api::geckoterminal_types::GeckoTerminalPool;
+pub use api::rugcheck_types::RugcheckInfo;
 
 // Re-export common types from new modules
 pub use events::{subscribe as subscribe_events, TokenEvent};

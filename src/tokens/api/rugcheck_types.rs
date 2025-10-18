@@ -1,5 +1,109 @@
 /// Rugcheck API response types
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+
+use crate::tokens::types::{RugcheckHolder, RugcheckRisk};
+
+// ============================================================================
+// RUGCHECK DATA STRUCTURE
+// ============================================================================
+
+/// Rugcheck security data - Used for API response parsing only
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RugcheckInfo {
+    pub mint: String,
+
+    // Token program info
+    pub token_program: Option<String>,
+    pub token_type: Option<String>,
+
+    // Token metadata
+    pub token_name: Option<String>,
+    pub token_symbol: Option<String>,
+    pub token_decimals: Option<u8>,
+    pub token_supply: Option<String>,
+    pub token_uri: Option<String>,
+    pub token_mutable: Option<bool>,
+    pub token_update_authority: Option<String>,
+
+    // Authorities
+    pub mint_authority: Option<String>,
+    pub freeze_authority: Option<String>,
+
+    // Creator
+    pub creator: Option<String>,
+    pub creator_balance: Option<i64>,
+    pub creator_tokens: Option<String>,
+
+    // Scoring
+    pub score: Option<i32>,
+    pub score_normalised: Option<i32>,
+    pub rugged: bool,
+
+    // Risks
+    pub risks: Vec<RugcheckRisk>,
+
+    // Market data
+    pub total_markets: Option<i64>,
+    pub total_market_liquidity: Option<f64>,
+    pub total_stable_liquidity: Option<f64>,
+    pub total_lp_providers: Option<i64>,
+
+    // Holders
+    pub total_holders: Option<i64>,
+    pub top_holders: Vec<RugcheckHolder>,
+    pub graph_insiders_detected: Option<i64>,
+
+    // Transfer fee
+    pub transfer_fee_pct: Option<f64>,
+    pub transfer_fee_max_amount: Option<i64>,
+    pub transfer_fee_authority: Option<String>,
+
+    // Metadata
+    pub detected_at: Option<String>,
+    pub analyzed_at: Option<String>,
+
+    pub fetched_at: DateTime<Utc>,
+}
+
+impl Default for RugcheckInfo {
+    fn default() -> Self {
+        Self {
+            mint: String::new(),
+            token_program: None,
+            token_type: None,
+            token_name: None,
+            token_symbol: None,
+            token_decimals: None,
+            token_supply: None,
+            token_uri: None,
+            token_mutable: None,
+            token_update_authority: None,
+            mint_authority: None,
+            freeze_authority: None,
+            creator: None,
+            creator_balance: None,
+            creator_tokens: None,
+            score: None,
+            score_normalised: None,
+            rugged: false,
+            risks: Vec::new(),
+            total_markets: None,
+            total_market_liquidity: None,
+            total_stable_liquidity: None,
+            total_lp_providers: None,
+            total_holders: None,
+            top_holders: Vec::new(),
+            graph_insiders_detected: None,
+            transfer_fee_pct: None,
+            transfer_fee_max_amount: None,
+            transfer_fee_authority: None,
+            detected_at: None,
+            analyzed_at: None,
+            fetched_at: Utc::now(),
+        }
+    }
+}
 
 // ============================================================================
 // API RESPONSE STRUCTURES

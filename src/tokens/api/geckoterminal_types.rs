@@ -1,5 +1,145 @@
 /// GeckoTerminal API response types
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+
+// ============================================================================
+// POOL DATA STRUCTURE
+// ============================================================================
+
+/// GeckoTerminal pool data - Used for API response parsing only
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeckoTerminalPool {
+    pub mint: String,
+    pub pool_address: String,
+    pub pool_name: String,
+    pub dex_id: String,
+
+    // Token IDs
+    pub base_token_id: String,
+    pub quote_token_id: String,
+
+    // Prices (high precision)
+    pub base_token_price_usd: String,
+    pub base_token_price_native: String,
+    pub base_token_price_quote: String,
+    pub quote_token_price_usd: String,
+    pub quote_token_price_native: String,
+    pub quote_token_price_base: String,
+    pub token_price_usd: String,
+
+    // Market metrics
+    pub fdv_usd: Option<f64>,
+    pub market_cap_usd: Option<f64>,
+    pub reserve_usd: Option<f64>,
+
+    // Volume
+    pub volume_m5: Option<f64>,
+    pub volume_m15: Option<f64>,
+    pub volume_m30: Option<f64>,
+    pub volume_h1: Option<f64>,
+    pub volume_h6: Option<f64>,
+    pub volume_h24: Option<f64>,
+
+    // Price changes
+    pub price_change_m5: Option<f64>,
+    pub price_change_m15: Option<f64>,
+    pub price_change_m30: Option<f64>,
+    pub price_change_h1: Option<f64>,
+    pub price_change_h6: Option<f64>,
+    pub price_change_h24: Option<f64>,
+
+    // Transactions
+    pub txns_m5_buys: Option<i64>,
+    pub txns_m5_sells: Option<i64>,
+    pub txns_m5_buyers: Option<i64>,
+    pub txns_m5_sellers: Option<i64>,
+    pub txns_m15_buys: Option<i64>,
+    pub txns_m15_sells: Option<i64>,
+    pub txns_m15_buyers: Option<i64>,
+    pub txns_m15_sellers: Option<i64>,
+    pub txns_m30_buys: Option<i64>,
+    pub txns_m30_sells: Option<i64>,
+    pub txns_m30_buyers: Option<i64>,
+    pub txns_m30_sellers: Option<i64>,
+    pub txns_h1_buys: Option<i64>,
+    pub txns_h1_sells: Option<i64>,
+    pub txns_h1_buyers: Option<i64>,
+    pub txns_h1_sellers: Option<i64>,
+    pub txns_h6_buys: Option<i64>,
+    pub txns_h6_sells: Option<i64>,
+    pub txns_h6_buyers: Option<i64>,
+    pub txns_h6_sellers: Option<i64>,
+    pub txns_h24_buys: Option<i64>,
+    pub txns_h24_sells: Option<i64>,
+    pub txns_h24_buyers: Option<i64>,
+    pub txns_h24_sellers: Option<i64>,
+
+    // Metadata
+    pub pool_created_at: Option<String>,
+
+    pub fetched_at: DateTime<Utc>,
+}
+
+impl Default for GeckoTerminalPool {
+    fn default() -> Self {
+        Self {
+            mint: String::new(),
+            pool_address: String::new(),
+            pool_name: String::new(),
+            dex_id: String::new(),
+            base_token_id: String::new(),
+            quote_token_id: String::new(),
+            base_token_price_usd: String::new(),
+            base_token_price_native: String::new(),
+            base_token_price_quote: String::new(),
+            quote_token_price_usd: String::new(),
+            quote_token_price_native: String::new(),
+            quote_token_price_base: String::new(),
+            token_price_usd: String::new(),
+            fdv_usd: None,
+            market_cap_usd: None,
+            reserve_usd: None,
+            volume_m5: None,
+            volume_m15: None,
+            volume_m30: None,
+            volume_h1: None,
+            volume_h6: None,
+            volume_h24: None,
+            price_change_m5: None,
+            price_change_m15: None,
+            price_change_m30: None,
+            price_change_h1: None,
+            price_change_h6: None,
+            price_change_h24: None,
+            txns_m5_buys: None,
+            txns_m5_sells: None,
+            txns_m5_buyers: None,
+            txns_m5_sellers: None,
+            txns_m15_buys: None,
+            txns_m15_sells: None,
+            txns_m15_buyers: None,
+            txns_m15_sellers: None,
+            txns_m30_buys: None,
+            txns_m30_sells: None,
+            txns_m30_buyers: None,
+            txns_m30_sellers: None,
+            txns_h1_buys: None,
+            txns_h1_sells: None,
+            txns_h1_buyers: None,
+            txns_h1_sellers: None,
+            txns_h6_buys: None,
+            txns_h6_sells: None,
+            txns_h6_buyers: None,
+            txns_h6_sellers: None,
+            txns_h24_buys: None,
+            txns_h24_sells: None,
+            txns_h24_buyers: None,
+            txns_h24_sellers: None,
+            pool_created_at: None,
+            fetched_at: Utc::now(),
+        }
+    }
+}
 
 // ============================================================================
 // API RESPONSE STRUCTURES
@@ -113,7 +253,7 @@ pub struct GeckoTerminalDexData {
 // ============================================================================
 
 impl GeckoTerminalPoolData {
-    pub fn to_pool(&self, mint: &str) -> crate::tokens::types::GeckoTerminalPool {
+    pub fn to_pool(&self, mint: &str) -> GeckoTerminalPool {
         use chrono::Utc;
 
         let attrs = &self.attributes;
@@ -125,7 +265,7 @@ impl GeckoTerminalPoolData {
         let transactions = attrs.transactions.as_ref();
         let volume = attrs.volume_usd.as_ref();
 
-        crate::tokens::types::GeckoTerminalPool {
+        GeckoTerminalPool {
             mint: mint.to_string(),
             pool_address: attrs.address.clone(),
             pool_name: attrs.name.clone(),

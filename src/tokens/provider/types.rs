@@ -1,6 +1,9 @@
 // Provider module types: High-level data types for token information
 
-use crate::tokens::types::{DataSource, DexScreenerPool, GeckoTerminalPool, RugcheckInfo};
+use crate::tokens::api::dexscreener_types::DexScreenerPool;
+use crate::tokens::api::geckoterminal_types::GeckoTerminalPool;
+use crate::tokens::api::rugcheck_types::RugcheckInfo;
+use crate::tokens::types::{DataSource, TokenMetadata};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -16,15 +19,6 @@ pub struct CompleteTokenData {
     pub fetch_timestamp: DateTime<Utc>,
     pub cache_hits: Vec<DataSource>,
     pub cache_misses: Vec<DataSource>,
-}
-
-/// Token metadata (unified across sources)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TokenMetadata {
-    pub mint: String,
-    pub symbol: Option<String>,
-    pub name: Option<String>,
-    pub decimals: Option<u8>,
 }
 
 /// Options for fetching token data

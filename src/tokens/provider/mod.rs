@@ -9,11 +9,9 @@ use crate::tokens::api::ApiClients;
 use crate::tokens::cache::CacheManager;
 use crate::tokens::provider::fetcher::Fetcher;
 use crate::tokens::provider::query::Query;
-use crate::tokens::provider::types::{
-    CompleteTokenData, FetchOptions, ProviderStats, TokenMetadata,
-};
+use crate::tokens::provider::types::{CompleteTokenData, FetchOptions, ProviderStats};
 use crate::tokens::storage::Database;
-use crate::tokens::types::DataSource;
+use crate::tokens::types::{DataSource, TokenMetadata};
 use chrono::Utc;
 use log::{error, info};
 use std::sync::{Arc, Mutex};
@@ -222,17 +220,16 @@ impl TokenDataProvider {
         let metadata = self
             .query
             .get_token_metadata(mint)?
-            .map(|m| TokenMetadata {
-                mint: m.mint,
-                symbol: m.symbol,
-                name: m.name,
-                decimals: m.decimals,
-            })
-            .unwrap_or_else(|| TokenMetadata {
-                mint: mint.to_string(),
-                symbol: None,
-                name: None,
-                decimals: None,
+            .unwrap_or_else(|| {
+                let now = Utc::now().timestamp();
+                TokenMetadata {
+                    mint: mint.to_string(),
+                    symbol: None,
+                    name: None,
+                    decimals: None,
+                    created_at: now,
+                    updated_at: now,
+                }
             });
 
         // Update stats
@@ -266,7 +263,7 @@ impl TokenDataProvider {
     }
 
     /// Get token metadata from database (no API fetch)
-    pub fn get_token_metadata(&self, mint: &str) -> Result<Option<query::TokenMetadata>, String> {
+    pub fn get_token_metadata(&self, mint: &str) -> Result<Option<TokenMetadata>, String> {
         self.query.get_token_metadata(mint)
     }
 

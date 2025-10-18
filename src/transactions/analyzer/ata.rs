@@ -16,8 +16,8 @@ use std::collections::HashMap;
 
 use crate::global::is_debug_transactions_enabled;
 use crate::logger::{log, LogTag};
-use crate::tokens::decimals::lamports_to_sol;
 use crate::transactions::{types::*, utils::*};
+use crate::utils::lamports_to_sol;
 
 // =============================================================================
 // ATA ANALYSIS TYPES

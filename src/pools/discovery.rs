@@ -23,8 +23,9 @@ use crate::pools::service::{
 use crate::tokens::dexscreener::{
     get_batch_token_pools_from_dexscreener, get_token_pools_from_dexscreener, TokenPair,
 };
+use crate::tokens::api::geckoterminal_types::GeckoTerminalPool;
 use crate::tokens::geckoterminal::{
-    get_batch_token_pools_from_geckoterminal, get_token_pools_from_geckoterminal, GeckoTerminalPool,
+    get_batch_token_pools_from_geckoterminal, get_token_pools_from_geckoterminal,
 };
 use crate::tokens::raydium::{
     get_batch_token_pools_from_raydium, get_token_pools_from_raydium, RaydiumPool,

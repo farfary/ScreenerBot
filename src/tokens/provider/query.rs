@@ -1,9 +1,12 @@
 // Provider query: Query methods for accessing stored data
 
+use crate::tokens::api::dexscreener_types::DexScreenerPool;
+use crate::tokens::api::geckoterminal_types::GeckoTerminalPool;
+use crate::tokens::api::rugcheck_types::RugcheckInfo;
 use crate::tokens::storage::{
     get_dexscreener_pools, get_geckoterminal_pools, get_rugcheck_info, get_token_metadata, Database,
 };
-use crate::tokens::types::{DexScreenerPool, GeckoTerminalPool, RugcheckInfo};
+use crate::tokens::types::TokenMetadata;
 use log::debug;
 use std::sync::Arc;
 
@@ -65,15 +68,4 @@ impl Query {
 
         Ok(mints)
     }
-}
-
-/// Token metadata query result
-#[derive(Debug, Clone)]
-pub struct TokenMetadata {
-    pub mint: String,
-    pub symbol: Option<String>,
-    pub name: Option<String>,
-    pub decimals: Option<u8>,
-    pub created_at: i64,
-    pub updated_at: i64,
 }

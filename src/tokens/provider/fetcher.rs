@@ -7,7 +7,10 @@ use crate::tokens::storage::{
     log_api_fetch, save_dexscreener_pools, save_geckoterminal_pools, save_rugcheck_info,
     upsert_token_metadata, Database,
 };
-use crate::tokens::types::{DataSource, DexScreenerPool, GeckoTerminalPool, RugcheckInfo};
+use crate::tokens::api::dexscreener_types::DexScreenerPool;
+use crate::tokens::api::geckoterminal_types::GeckoTerminalPool;
+use crate::tokens::api::rugcheck_types::RugcheckInfo;
+use crate::tokens::types::DataSource;
 use log::{debug, error, info, warn};
 use std::sync::Arc;
 use std::time::Instant;
