@@ -5,9 +5,9 @@ use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 use chrono::Utc;
-use log::{info, warn};
 use solana_sdk::pubkey::Pubkey;
 
+use crate::logger::{log, LogTag};
 use crate::tokens::api::{coingecko::CoinGeckoClient, defillama::DefiLlamaClient};
 
 use crate::config::get_config_clone;
@@ -51,9 +51,10 @@ pub async fn discover_from_sources(
                         }
                     }
                 }
-                Err(err) => warn!(
-                    "[TOKENS] Discovery DexScreener latest_profiles failed: {}",
-                    err
+                Err(err) => log(
+                    LogTag::Tokens,
+                    "WARN",
+                    &format!("Discovery DexScreener latest_profiles failed: {}", err)
                 ),
             }
         }
@@ -69,9 +70,10 @@ pub async fn discover_from_sources(
                         }
                     }
                 }
-                Err(err) => warn!(
-                    "[TOKENS] Discovery DexScreener latest_boosts failed: {}",
-                    err
+                Err(err) => log(
+                    LogTag::Tokens,
+                    "WARN",
+                    &format!("Discovery DexScreener latest_boosts failed: {}", err)
                 ),
             }
         }
@@ -85,9 +87,10 @@ pub async fn discover_from_sources(
                         }
                     }
                 }
-                Err(err) => warn!(
-                    "[TOKENS] Discovery DexScreener top_boosts failed: {}",
-                    err
+                Err(err) => log(
+                    LogTag::Tokens,
+                    "WARN",
+                    &format!("Discovery DexScreener top_boosts failed: {}", err)
                 ),
             }
         }
@@ -111,7 +114,7 @@ pub async fn discover_from_sources(
                         }
                     }
                 }
-                Err(err) => warn!("[TOKENS] Discovery Gecko new_pools failed: {}", err),
+                Err(err) => log(LogTag::Tokens, "WARN", &format!("Discovery Gecko new_pools failed: {}", err)),
             }
         }
 
@@ -128,9 +131,10 @@ pub async fn discover_from_sources(
                         }
                     }
                 }
-                Err(err) => warn!(
-                    "[TOKENS] Discovery Gecko recently_updated failed: {}",
-                    err
+                Err(err) => log(
+                    LogTag::Tokens,
+                    "WARN",
+                    &format!("Discovery Gecko recently_updated failed: {}", err)
                 ),
             }
         }
@@ -159,9 +163,10 @@ pub async fn discover_from_sources(
                             }
                         }
                     }
-                    Err(err) => warn!(
-                        "[TOKENS] Discovery Gecko trending {} failed: {}",
-                        duration, err
+                    Err(err) => log(
+                        LogTag::Tokens,
+                        "WARN",
+                        &format!("Discovery Gecko trending {} failed: {}", duration, err)
                     ),
                 }
             }
@@ -180,7 +185,7 @@ pub async fn discover_from_sources(
                     }
                 }
                 Err(ApiError::Disabled) => {}
-                Err(err) => warn!("[TOKENS] Discovery Rugcheck new_tokens failed: {}", err),
+                Err(err) => log(LogTag::Tokens, "WARN", &format!("Discovery Rugcheck new_tokens failed: {}", err)),
             }
         }
 
@@ -194,7 +199,7 @@ pub async fn discover_from_sources(
                     }
                 }
                 Err(ApiError::Disabled) => {}
-                Err(err) => warn!("[TOKENS] Discovery Rugcheck recent failed: {}", err),
+                Err(err) => log(LogTag::Tokens, "WARN", &format!("Discovery Rugcheck recent failed: {}", err)),
             }
         }
 
@@ -208,7 +213,7 @@ pub async fn discover_from_sources(
                     }
                 }
                 Err(ApiError::Disabled) => {}
-                Err(err) => warn!("[TOKENS] Discovery Rugcheck trending failed: {}", err),
+                Err(err) => log(LogTag::Tokens, "WARN", &format!("Discovery Rugcheck trending failed: {}", err)),
             }
         }
 
@@ -222,7 +227,7 @@ pub async fn discover_from_sources(
                     }
                 }
                 Err(ApiError::Disabled) => {}
-                Err(err) => warn!("[TOKENS] Discovery Rugcheck verified failed: {}", err),
+                Err(err) => log(LogTag::Tokens, "WARN", &format!("Discovery Rugcheck verified failed: {}", err)),
             }
         }
     }
@@ -239,7 +244,7 @@ pub async fn discover_from_sources(
                     }
                 }
                 Err(ApiError::Disabled) => {}
-                Err(err) => warn!("[TOKENS] Discovery Jupiter recent failed: {}", err),
+                Err(err) => log(LogTag::Tokens, "WARN", &format!("Discovery Jupiter recent failed: {}", err)),
             }
         }
 
@@ -253,7 +258,7 @@ pub async fn discover_from_sources(
                     }
                 }
                 Err(ApiError::Disabled) => {}
-                Err(err) => warn!("[TOKENS] Discovery Jupiter top_organic failed: {}", err),
+                Err(err) => log(LogTag::Tokens, "WARN", &format!("Discovery Jupiter top_organic failed: {}", err)),
             }
         }
 
@@ -267,7 +272,7 @@ pub async fn discover_from_sources(
                     }
                 }
                 Err(ApiError::Disabled) => {}
-                Err(err) => warn!("[TOKENS] Discovery Jupiter top_traded failed: {}", err),
+                Err(err) => log(LogTag::Tokens, "WARN", &format!("Discovery Jupiter top_traded failed: {}", err)),
             }
         }
 
@@ -281,9 +286,10 @@ pub async fn discover_from_sources(
                     }
                 }
                 Err(ApiError::Disabled) => {}
-                Err(err) => warn!(
-                    "[TOKENS] Discovery Jupiter top_trending failed: {}",
-                    err
+                Err(err) => log(
+                    LogTag::Tokens,
+                    "WARN",
+                    &format!("Discovery Jupiter top_trending failed: {}", err)
                 ),
             }
         }
@@ -301,7 +307,7 @@ pub async fn discover_from_sources(
                 }
             }
             Err(ApiError::Disabled) => {}
-            Err(err) => warn!("[TOKENS] Discovery CoinGecko markets failed: {}", err),
+            Err(err) => log(LogTag::Tokens, "WARN", &format!("Discovery CoinGecko markets failed: {}", err)),
         }
     }
 
@@ -317,7 +323,7 @@ pub async fn discover_from_sources(
                 }
             }
             Err(ApiError::Disabled) => {}
-            Err(err) => warn!("[TOKENS] Discovery DeFiLlama protocols failed: {}", err),
+            Err(err) => log(LogTag::Tokens, "WARN", &format!("Discovery DeFiLlama protocols failed: {}", err)),
         }
     }
 
@@ -343,10 +349,10 @@ pub async fn discover_from_sources(
             .map(|(src, count)| format!("{}={}", src, count))
             .collect::<Vec<_>>()
             .join(", ");
-        info!(
-            "[TOKENS] Discovery aggregated {} unique mints ({})",
-            results.len(),
-            summary
+        log(
+            LogTag::Tokens,
+            "INFO",
+            &format!("Discovery aggregated {} unique mints ({})", results.len(), summary)
         );
     }
 
@@ -371,17 +377,19 @@ pub async fn process_new_mints(provider: &TokenDataProvider, entries: Vec<(Strin
             updated_at: Utc::now(),
             ..Default::default()
         }) {
-            warn!(
-                "[TOKENS] Failed to store discovered token: mint={} err={}",
-                mint, e
+            log(
+                LogTag::Tokens,
+                "WARN",
+                &format!("Failed to store discovered token: mint={} err={}", mint, e)
             );
         }
         
         // Fetch complete data to populate snapshot
         if let Err(err) = provider.fetch_complete_data(&mint, None).await {
-            warn!(
-                "[TOKENS] Discovery follow-up fetch failed: mint={} err={}",
-                mint, err
+            log(
+                LogTag::Tokens,
+                "WARN",
+                &format!("Discovery follow-up fetch failed: mint={} err={}", mint, err)
             );
         }
     }

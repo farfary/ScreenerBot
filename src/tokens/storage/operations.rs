@@ -1,10 +1,10 @@
 // Database CRUD operations for all token data tables
 
+use crate::logger::{log, LogTag};
 use crate::tokens::api::rugcheck_types::RugcheckInfo;
 use crate::tokens::storage::database::Database;
 use crate::tokens::types::{DataSource, TokenMetadata};
 use chrono::Utc;
-use log::{debug, error, warn};
 use rusqlite::{params, Result as SqliteResult, Row};
 use std::sync::Arc;
 
@@ -37,7 +37,7 @@ pub fn upsert_token_metadata(
     )
     .map_err(|e| format!("Failed to upsert token metadata: {}", e))?;
 
-    debug!("[TOKENS] Upserted token metadata: mint={}", mint);
+    log(LogTag::Tokens, "DEBUG", &format!("Upserted token metadata: mint={}", mint));
 
     Ok(())
 }
@@ -78,7 +78,7 @@ pub fn save_rugcheck_info(db: &Database, mint: &str, info: &RugcheckInfo) -> Res
     )
     .map_err(|e| format!("Failed to save Rugcheck info: {}", e))?;
 
-    debug!("[TOKENS] Saved Rugcheck info for mint={}", mint);
+    log(LogTag::Tokens, "DEBUG", &format!("Saved Rugcheck info for mint={}", mint));
 
     Ok(())
 }

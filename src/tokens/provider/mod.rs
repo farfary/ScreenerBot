@@ -10,10 +10,10 @@ use crate::tokens::cache::CacheManager;
 use crate::tokens::provider::fetcher::Fetcher;
 use crate::tokens::provider::query::Query;
 use crate::tokens::provider::types::{CompleteTokenData, FetchOptions, ProviderStats};
+use crate::logger::{log, LogTag};
 use crate::tokens::storage::Database;
 use crate::tokens::types::{DataSource, TokenMetadata};
 use chrono::Utc;
-use log::{error, info};
 use std::sync::{Arc, Mutex};
 
 const TOKENS_DB_PATH: &str = "data/tokens.db";
@@ -30,7 +30,7 @@ pub struct TokenDataProvider {
 impl TokenDataProvider {
     /// Create new provider instance
     pub async fn new() -> Result<Self, String> {
-        info!("[TOKENS] Initializing TokenDataProvider...");
+        log(LogTag::Tokens, "INFO", "Initializing TokenDataProvider...");
 
         // Get database path from config
         let db_path = TOKENS_DB_PATH;
@@ -59,7 +59,7 @@ impl TokenDataProvider {
         ));
         let query = Arc::new(Query::new(Arc::clone(&database)));
 
-        info!("[TOKENS] TokenDataProvider initialized successfully");
+        log(LogTag::Tokens, "INFO", "TokenDataProvider initialized successfully");
 
         Ok(Self {
             fetcher,
@@ -72,7 +72,7 @@ impl TokenDataProvider {
     fn hydrate_store_from_database(db: &Arc<Database>) -> Result<(), String> {
         use std::time::Instant;
         
-        info!("[TOKENS] Hydrating store from database...");
+        log(LogTag::Tokens, "INFO", "Hydrating store from database...");
         let start = Instant::now();
 
         let conn = db.get_connection();
@@ -111,11 +111,7 @@ impl TokenDataProvider {
         // Batch load into store (direct memory access, skip DB write)
         crate::tokens::store::hydrate_from_snapshots(snapshots)?;
 
-        info!(
-            "[TOKENS] Store hydrated: {} tokens loaded in {}ms",
-            count,
-            start.elapsed().as_millis()
-        );
+        log(LogTag::Tokens, "INFO", &format!("Store hydrated: {} tokens loaded in {}ms", count, start.elapsed().as_millis()));
 
         Ok(())
     }
@@ -129,7 +125,7 @@ impl TokenDataProvider {
         let options = options.unwrap_or_default();
         let fetch_start = Utc::now();
 
-        info!("[TOKENS] Fetching complete data for mint={}", mint);
+        log(LogTag::Tokens, "INFO", &format!("Fetching complete data for mint={}", mint));
 
         let mut rugcheck_info = None;
         let mut sources_used = Vec::new();
@@ -157,7 +153,7 @@ impl TokenDataProvider {
                     );
                 }
                 Err(e) => {
-                    error!("[TOKENS] Failed to fetch Rugcheck data: {}", e);
+                    log(LogTag::Tokens, "ERROR", &format!("Failed to fetch Rugcheck data: {}", e));
                     self.increment_errors();
                 }
             }
@@ -188,13 +184,7 @@ impl TokenDataProvider {
             self.increment_cache_misses();
         }
 
-        info!(
-            "[TOKENS] Fetched complete data for mint={}: {} sources, {} cache hits, {} cache misses",
-            mint,
-            sources_used.len(),
-            cache_hits.len(),
-            cache_misses.len()
-        );
+        log(LogTag::Tokens, "INFO", &format!("Fetched complete data for mint={}: {} sources, {} cache hits, {} cache misses", mint, sources_used.len(), cache_hits.len(), cache_misses.len()));
 
         Ok(CompleteTokenData {
             mint: mint.to_string(),

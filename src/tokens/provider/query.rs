@@ -1,9 +1,9 @@
 // Provider query: Query methods for accessing stored data
 
+use crate::logger::{log, LogTag};
 use crate::tokens::api::rugcheck_types::RugcheckInfo;
 use crate::tokens::storage::{get_rugcheck_info, get_token_metadata, Database};
 use crate::tokens::types::TokenMetadata;
-use log::debug;
 use std::sync::Arc;
 
 /// Query interface for accessing stored token data
@@ -18,13 +18,13 @@ impl Query {
 
     /// Get token metadata from database
     pub fn get_token_metadata(&self, mint: &str) -> Result<Option<TokenMetadata>, String> {
-        debug!("[TOKENS] Querying token metadata: mint={}", mint);
+        log(LogTag::Tokens, "DEBUG", &format!("Querying token metadata: mint={}", mint));
         get_token_metadata(&self.database, mint)
     }
 
     /// Get Rugcheck info from database
     pub fn get_rugcheck_info(&self, mint: &str) -> Result<Option<RugcheckInfo>, String> {
-        debug!("[TOKENS] Querying Rugcheck info: mint={}", mint);
+        log(LogTag::Tokens, "DEBUG", &format!("Querying Rugcheck info: mint={}", mint));
         get_rugcheck_info(&self.database, mint)
     }
 

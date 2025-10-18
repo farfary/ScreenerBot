@@ -12,9 +12,9 @@
 /// 7. /token-boosts/top/v1 - Get top boosted tokens  
 /// 8. /orders/v1/{chainId}/{tokenAddress} - Get orders for a token
 use super::dexscreener_types::*;
+use crate::logger::{log, LogTag};
 use crate::tokens::api::dexscreener_types::DexScreenerPool;
 use crate::tokens::types::ApiError;
-use log::{debug, warn};
 use reqwest::Client;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -88,9 +88,10 @@ impl DexScreenerClient {
             DEXSCREENER_BASE_URL, chain, token_address
         );
 
-        debug!(
-            "[DEXSCREENER] Fetching token pools: token={}, chain={}",
-            token_address, chain
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            &format!("[DEXSCREENER] Fetching token pools: token={}, chain={}", token_address, chain)
         );
 
         let response = self
@@ -159,10 +160,10 @@ impl DexScreenerClient {
             DEXSCREENER_BASE_URL, chain, address_list
         );
 
-        debug!(
-            "[DEXSCREENER] Fetching batch tokens: {} addresses, chain={}",
-            addresses.len(),
-            chain
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            &format!("[DEXSCREENER] Fetching batch tokens: {} addresses, chain={}", addresses.len(), chain)
         );
 
         let response = self
@@ -210,9 +211,10 @@ impl DexScreenerClient {
             DEXSCREENER_BASE_URL, chain_id, pair_address
         );
 
-        debug!(
-            "[DEXSCREENER] Fetching pair: {} on {}",
-            pair_address, chain_id
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            &format!("[DEXSCREENER] Fetching pair: pair={}, chain={}", pair_address, chain)
         );
 
         let response = self
@@ -259,7 +261,7 @@ impl DexScreenerClient {
 
         let url = format!("{}/latest/dex/search", DEXSCREENER_BASE_URL);
 
-        debug!("[DEXSCREENER] Searching pairs: query={}", query);
+        log(LogTag::Tokens, "DEBUG", &format!("[DEXSCREENER] Searching pairs: query={}", query));
 
         let response = self
             .client
@@ -296,7 +298,7 @@ impl DexScreenerClient {
 
         let url = format!("{}/token-profiles/latest/v1", DEXSCREENER_BASE_URL);
 
-        debug!("[DEXSCREENER] Fetching latest token profiles");
+        log(LogTag::Tokens, "DEBUG", "[DEXSCREENER] Fetching latest token profiles");
 
         let response = self
             .client
@@ -348,7 +350,7 @@ impl DexScreenerClient {
             url = format!("{}?chainId={}", url, chain);
         }
 
-        debug!("[DEXSCREENER] Fetching top boosted tokens");
+        log(LogTag::Tokens, "DEBUG", "[DEXSCREENER] Fetching top boosted tokens");
 
         let response = self
             .client
@@ -388,7 +390,7 @@ impl DexScreenerClient {
 
         let url = format!("{}/token-boosts/latest/v1", DEXSCREENER_BASE_URL);
 
-        debug!("[DEXSCREENER] Fetching latest boosted tokens");
+        log(LogTag::Tokens, "DEBUG", "[DEXSCREENER] Fetching latest boosted tokens");
 
         let response = self
             .client
@@ -449,9 +451,10 @@ impl DexScreenerClient {
             url = format!("{}?{}", url, params.join("&"));
         }
 
-        debug!(
-            "[DEXSCREENER] Fetching top tokens: chain={:?}, sort={:?}",
-            chain_id, sort_by
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            &format!("[DEXSCREENER] Fetching top tokens: chain={:?}, sort={:?}", chain_id, sort_by)
         );
 
         let response = self
@@ -492,7 +495,7 @@ impl DexScreenerClient {
 
         let url = format!("{}/token-profiles/{}", DEXSCREENER_BASE_URL, address);
 
-        debug!("[DEXSCREENER] Fetching token info: {}", address);
+        log(LogTag::Tokens, "DEBUG", &format!("[DEXSCREENER] Fetching token info: {}", address));
 
         let response = self
             .client
@@ -544,9 +547,10 @@ impl DexScreenerClient {
             DEXSCREENER_BASE_URL, chain, token_address
         );
 
-        debug!(
-            "[DEXSCREENER] Fetching token orders: token={}, chain={}",
-            token_address, chain
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            &format!("[DEXSCREENER] Fetching token orders: token={}, chain={}", token_address, chain)
         );
 
         let response = self
@@ -583,7 +587,7 @@ impl DexScreenerClient {
 
         let url = format!("{}/chains/v1", DEXSCREENER_BASE_URL);
 
-        debug!("[DEXSCREENER] Fetching supported chains");
+        log(LogTag::Tokens, "DEBUG", "[DEXSCREENER] Fetching supported chains");
 
         let response = self
             .client

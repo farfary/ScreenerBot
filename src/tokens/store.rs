@@ -6,9 +6,9 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use chrono::Utc;
-use log::warn;
 use once_cell::sync::OnceCell;
 
+use crate::logger::{log, LogTag};
 use crate::tokens::priorities::Priority;
 use crate::tokens::storage::Database;
 use crate::tokens::types::{DataSource, Token};
@@ -64,9 +64,10 @@ pub fn upsert_token(token: Token) -> Result<(), String> {
             Some(&token.name),
             Some(token.decimals),
         ) {
-            warn!(
-                "[TOKENS] Failed to persist token metadata to DB: mint={} err={}",
-                mint, e
+            log(
+                LogTag::Tokens,
+                "WARN",
+                &format!("Failed to persist token metadata to DB: mint={} err={}", mint, e)
             );
             // Don't fail - memory update succeeded
         }
@@ -223,9 +224,10 @@ pub fn set_decimals(mint: &str, decimals: u8) -> Result<(), String> {
             None,
             Some(decimals),
         ) {
-            warn!(
-                "[TOKENS] Failed to persist decimals to DB: mint={} err={}",
-                mint, e
+            log(
+                LogTag::Tokens,
+                "WARN",
+                &format!("Failed to persist decimals to DB: mint={} err={}", mint, e)
             );
         }
     }

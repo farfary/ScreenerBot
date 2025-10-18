@@ -16,8 +16,8 @@
 /// 11. /tokens/info_recently_updated - Get 100 most recently updated tokens (global endpoint)
 /// 12. /networks/{network}/pools/{pool_address}/trades - Get last 300 trades in past 24h by pool
 use super::geckoterminal_types::*;
+use crate::logger::{log, LogTag};
 use crate::tokens::api::geckoterminal_types::GeckoTerminalPool;
-use log::debug;
 use reqwest::Client;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -102,9 +102,10 @@ impl GeckoTerminalClient {
             GECKOTERMINAL_BASE_URL, network_id, mint
         );
 
-        debug!(
-            "[GECKOTERMINAL] Fetching pools: token={}, network={}",
-            mint, network_id
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            &format!("[GECKOTERMINAL] Fetching pools: token={}, network={}", mint, network_id)
         );
 
         let response = self
@@ -196,8 +197,8 @@ impl GeckoTerminalClient {
             url.push_str(&format!("?{}", params.join("&")));
         }
 
-        debug!("[GECKOTERMINAL] Fetching top pools by token: token={}, network={}, page={:?}, sort={:?}", 
-               token_address, network, page, sort);
+        log(LogTag::Tokens, "DEBUG", &format!("[GECKOTERMINAL] Fetching top pools by token: token={}, network={}, page={:?}, sort={:?}", 
+               token_address, network, page, sort));
 
         let response = self
             .client
@@ -281,9 +282,10 @@ impl GeckoTerminalClient {
             url
         };
 
-        debug!(
-            "[GECKOTERMINAL] Fetching trending pools: network={}, page={:?}, duration={:?}",
-            network_id, page, duration
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            &format!("[GECKOTERMINAL] Fetching trending pools: network={}, page={:?}, duration={:?}", network_id, page, duration)
         );
 
         let response = self
@@ -366,9 +368,10 @@ impl GeckoTerminalClient {
             url
         };
 
-        debug!(
-            "[GECKOTERMINAL] Fetching top pools: network={}, page={:?}, sort={:?}",
-            network_id, page, sort
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            &format!("[GECKOTERMINAL] Fetching top pools: network={}, page={:?}, sort={:?}", network_id, page, sort)
         );
 
         let response = self
@@ -455,9 +458,10 @@ impl GeckoTerminalClient {
             url
         };
 
-        debug!(
-            "[GECKOTERMINAL] Fetching pool: network={}, address={}",
-            network_id, pool_address
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            &format!("[GECKOTERMINAL] Fetching pool: network={}, address={}", network_id, pool_address)
         );
 
         let response = self
@@ -555,10 +559,10 @@ impl GeckoTerminalClient {
             url
         };
 
-        debug!(
-            "[GECKOTERMINAL] Fetching multi pools: network={}, count={}",
-            network_id,
-            addresses.len()
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            &format!("[GECKOTERMINAL] Fetching multi pools: network={}, count={}", network_id, addresses.len())
         );
 
         let response = self
@@ -623,9 +627,10 @@ impl GeckoTerminalClient {
             .await
             .map_err(|e| format!("Rate limiter error: {}", e))?;
 
-        debug!(
-            "[GECKOTERMINAL] Fetching OHLCV: network={}, pool={}, timeframe={}, aggregate={:?}, limit={:?}",
-            network, pool_address, timeframe, aggregate, limit
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            &format!("[GECKOTERMINAL] Fetching OHLCV: network={}, pool={}, timeframe={}, aggregate={:?}, limit={:?}", network, pool_address, timeframe, aggregate, limit)
         );
 
         let mut url = format!(
@@ -719,9 +724,10 @@ impl GeckoTerminalClient {
             url
         };
 
-        debug!(
-            "[GECKOTERMINAL] Fetching DEXes: network={}, page={:?}",
-            network, page
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            &format!("[GECKOTERMINAL] Fetching DEXes: network={}, page={:?}", network, page)
         );
 
         let response = self
@@ -796,9 +802,10 @@ impl GeckoTerminalClient {
             url.push_str(&format!("?{}", params.join("&")));
         }
 
-        debug!(
-            "[GECKOTERMINAL] Fetching new pools: network={}, page={:?}",
-            network_id, page
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            &format!("[GECKOTERMINAL] Fetching new pools: network={}, page={:?}", network_id, page)
         );
 
         let response = self
@@ -883,10 +890,10 @@ impl GeckoTerminalClient {
             url.push_str(&format!("?{}", params.join("&")));
         }
 
-        debug!(
-            "[GECKOTERMINAL] Fetching tokens multi: network={}, addresses_count={}",
-            network,
-            addresses.split(',').count()
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            &format!("[GECKOTERMINAL] Fetching tokens multi: network={}, addresses_count={}", network, addresses.split(',').count())
         );
 
         let response = self
@@ -946,9 +953,10 @@ impl GeckoTerminalClient {
             GECKOTERMINAL_BASE_URL, network, address
         );
 
-        debug!(
-            "[GECKOTERMINAL] Fetching token info: network={}, address={}",
-            network, address
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            &format!("[GECKOTERMINAL] Fetching token info: network={}, address={}", network, address)
         );
 
         let response = self
@@ -1017,9 +1025,10 @@ impl GeckoTerminalClient {
             url.push_str(&format!("?{}", params.join("&")));
         }
 
-        debug!(
-            "[GECKOTERMINAL] Fetching recently updated tokens: network={:?}",
-            network
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            &format!("[GECKOTERMINAL] Fetching recently updated tokens: network={:?}", network)
         );
 
         let response = self
@@ -1100,9 +1109,10 @@ impl GeckoTerminalClient {
             url.push_str(&format!("?{}", params.join("&")));
         }
 
-        debug!(
-            "[GECKOTERMINAL] Fetching pool trades: network={}, pool={}, min_volume={:?}",
-            network, pool_address, trade_volume_in_usd_greater_than
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            &format!("[GECKOTERMINAL] Fetching pool trades: network={}, pool={}, min_volume={:?}", network, pool_address, trade_volume_in_usd_greater_than)
         );
 
         let response = self

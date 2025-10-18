@@ -1,7 +1,7 @@
 // Database connection management and initialization
 
+use crate::logger::{log, LogTag};
 use crate::tokens::storage::schema::{PERFORMANCE_PRAGMAS, SCHEMA_STATEMENTS};
-use log::{error, info};
 use rusqlite::{Connection, Result as SqliteResult};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -17,7 +17,7 @@ impl Database {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, String> {
         let db_path = path.as_ref().to_string_lossy().to_string();
 
-        info!("[TOKENS] Opening database: {}", db_path);
+        log(LogTag::Tokens, "INFO", &format!("Opening database: {}", db_path));
 
         let conn =
             Connection::open(&path).map_err(|e| format!("Failed to open database: {}", e))?;
@@ -36,7 +36,7 @@ impl Database {
         // Initialize schema
         db.initialize_schema()?;
 
-        info!("[TOKENS] Database initialized: {}", db_path);
+        log(LogTag::Tokens, "INFO", &format!("Database initialized: {}", db_path));
 
         Ok(db)
     }
@@ -48,14 +48,14 @@ impl Database {
             .lock()
             .map_err(|e| format!("Failed to lock connection: {}", e))?;
 
-        info!("[TOKENS] Initializing database schema...");
+        log(LogTag::Tokens, "INFO", "Initializing database schema...");
 
         for (i, statement) in SCHEMA_STATEMENTS.iter().enumerate() {
             conn.execute(statement, [])
                 .map_err(|e| format!("Failed to execute schema statement {}: {}", i, e))?;
         }
 
-        info!("[TOKENS] Schema initialization complete");
+        log(LogTag::Tokens, "INFO", "Schema initialization complete");
 
         Ok(())
     }
@@ -114,7 +114,7 @@ impl Database {
 
     /// Vacuum database to reclaim space
     pub fn vacuum(&self) -> Result<(), String> {
-        info!("[TOKENS] Vacuuming database...");
+        log(LogTag::Tokens, "INFO", "Vacuuming database...");
 
         let conn = self
             .conn
@@ -124,7 +124,7 @@ impl Database {
         conn.execute("VACUUM", [])
             .map_err(|e| format!("Failed to vacuum database: {}", e))?;
 
-        info!("[TOKENS] Vacuum complete");
+        log(LogTag::Tokens, "INFO", "Vacuum complete");
 
         Ok(())
     }

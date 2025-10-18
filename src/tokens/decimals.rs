@@ -4,11 +4,11 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 
+use crate::logger::{log, LogTag};
 use crate::tokens::provider::types::{CacheStrategy, FetchOptions};
 use crate::tokens::provider::TokenDataProvider;
 use crate::tokens::store;
 use crate::tokens::types::DataSource;
-use log::warn;
 use tokio::sync::Mutex as AsyncMutex;
 
 // Simple in-memory cache (TTL can be layered later via tokens/cache)
@@ -111,18 +111,20 @@ async fn ensure_locked(provider: &TokenDataProvider, mint: &str) -> Result<u8, S
             {
                 cache_and_store(mint, d);
                 if let Err(e) = provider.upsert_token_metadata(mint, None, None, Some(d)) {
-                    warn!(
-                        "[TOKENS] Failed to persist decimals after Rugcheck fetch: mint={} err={}",
-                        mint, e
+                    log(
+                        LogTag::Tokens,
+                        "WARN",
+                        &format!("Failed to persist decimals after Rugcheck fetch: mint={} err={}", mint, e)
                     );
                 }
                 return Ok(d);
             }
         }
         Err(err) => {
-            warn!(
-                "[TOKENS] Rugcheck decimals fetch failed: mint={} err={}",
-                mint, err
+            log(
+                LogTag::Tokens,
+                "WARN",
+                &format!("Rugcheck decimals fetch failed: mint={} err={}", mint, err)
             );
         }
     }
@@ -132,9 +134,10 @@ async fn ensure_locked(provider: &TokenDataProvider, mint: &str) -> Result<u8, S
         Ok(d) => {
             cache_and_store(mint, d);
             if let Err(e) = provider.upsert_token_metadata(mint, None, None, Some(d)) {
-                warn!(
-                    "[TOKENS] Failed to persist decimals after chain fetch: mint={} err={}",
-                    mint, e
+                log(
+                    LogTag::Tokens,
+                    "WARN",
+                    &format!("Failed to persist decimals after chain fetch: mint={} err={}", mint, e)
                 );
             }
             Ok(d)
@@ -151,9 +154,10 @@ fn cache_and_store(mint: &str, decimals: u8) {
     
     // Update store (memory + DB synchronized)
     if let Err(e) = store::set_decimals(mint, decimals) {
-        warn!(
-            "[TOKENS] Failed to persist decimals via store: mint={} err={}",
-            mint, e
+        log(
+            LogTag::Tokens,
+            "WARN",
+            &format!("Failed to persist decimals via store: mint={} err={}", mint, e)
         );
     }
 }

@@ -4,11 +4,11 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use crate::logger::{log, LogTag};
 use crate::tokens::blacklist as bl;
 use crate::tokens::provider::TokenDataProvider;
 use crate::tokens::store;
 use crate::tokens::{decimals, discovery};
-use log::{info, warn};
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 use tokio_metrics::TaskMonitor;
@@ -28,8 +28,8 @@ impl TokensOrchestrator {
     pub fn initialize(&self) -> Result<(), String> {
         let db = self.provider.database();
         match bl::hydrate_from_db(&db) {
-            Ok(count) => info!("[TOKENS] Blacklist hydrated: {} entries", count),
-            Err(e) => warn!("[TOKENS] Blacklist hydrate failed: {}", e),
+            Ok(count) => log(LogTag::Tokens, "INFO", &format!("Blacklist hydrated: {} entries", count)),
+            Err(e) => log(LogTag::Tokens, "WARN", &format!("Blacklist hydrate failed: {}", e)),
         }
         Ok(())
     }
@@ -54,11 +54,11 @@ impl TokensOrchestrator {
                             match discovery::discover_from_sources(&provider).await {
                                 Ok(entries) => {
                                     if !entries.is_empty() {
-                                        info!("[TOKENS] Discovery dispatching {} mints", entries.len());
+                                        log(LogTag::Tokens, "INFO", &format!("Discovery dispatching {} mints", entries.len()));
                                         discovery::process_new_mints(&provider, entries).await;
                                     }
                                 }
-                                Err(e) => warn!("[TOKENS] Discovery error: {}", e),
+                                Err(e) => log(LogTag::Tokens, "WARN", &format!("Discovery error: {}", e)),
                             }
                         }
                     }
@@ -112,20 +112,28 @@ impl TokensOrchestrator {
                                         match determine_retry_backoff(state.attempts, &e) {
                                             RetryDisposition::RetryAfter(delay) => {
                                                 state.next_attempt = now + delay;
-                                                warn!(
-                                                    "[TOKENS] Decimals ensure failed: mint={} attempts={} next_retry_in={}s err={}",
-                                                    mint,
-                                                    state.attempts,
-                                                    delay.as_secs(),
-                                                    e
+                                                log(
+                                                    LogTag::Tokens,
+                                                    "WARN",
+                                                    &format!(
+                                                        "Decimals ensure failed: mint={} attempts={} next_retry_in={}s err={}",
+                                                        mint,
+                                                        state.attempts,
+                                                        delay.as_secs(),
+                                                        e
+                                                    )
                                                 );
                                             }
                                             RetryDisposition::GiveUp => {
-                                                warn!(
-                                                    "[TOKENS] Decimals ensure giving up: mint={} attempts={} err={}",
-                                                    mint,
-                                                    state.attempts,
-                                                    e
+                                                log(
+                                                    LogTag::Tokens,
+                                                    "WARN",
+                                                    &format!(
+                                                        "Decimals ensure giving up: mint={} attempts={} err={}",
+                                                        mint,
+                                                        state.attempts,
+                                                        e
+                                                    )
                                                 );
                                                 completed.insert(mint.clone());
                                                 retry_state.remove(&mint);
