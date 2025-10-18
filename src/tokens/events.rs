@@ -20,11 +20,6 @@ pub enum TokenEvent {
         decimals: u8,
         at: DateTime<Utc>,
     },
-    PoolsUpdated {
-        mint: String,
-        best_pool: Option<String>,
-        at: DateTime<Utc>,
-    },
     TokenBlacklisted {
         mint: String,
         reason: String,

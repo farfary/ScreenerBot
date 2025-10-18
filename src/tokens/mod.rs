@@ -12,7 +12,6 @@ pub mod cache;
 pub mod decimals;
 pub mod discovery;
 pub mod events;
-pub mod pools;
 pub mod priorities;
 pub mod provider;
 pub mod service;
@@ -25,7 +24,7 @@ pub use provider::{CacheStrategy, TokenDataProvider};
 
 // Domain types from types.rs
 pub use types::{
-    ApiError, DataSource, SecurityRisk, SocialLink, Token, TokenHolder, TokenMetadata, TokenPool,
+    ApiError, DataSource, SecurityRisk, SocialLink, Token, TokenHolder, TokenMetadata,
     WebsiteLink,
 };
 
@@ -38,9 +37,8 @@ pub use api::rugcheck_types::RugcheckInfo;
 pub use events::{subscribe as subscribe_events, TokenEvent};
 pub use priorities::Priority;
 pub use store::{
-    all_tokens, count_tokens, filter_blacklisted, get_by_min_liquidity, get_by_priority,
-    get_by_source, get_recently_updated, get_token, list_mints, search_tokens, set_priority,
-    token_exists,
+    all_tokens, count_tokens, filter_blacklisted, get_by_priority, get_by_source,
+    get_recently_updated, get_token, list_mints, search_tokens, set_priority, token_exists,
 };
 
 // Re-export decimals API

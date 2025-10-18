@@ -12,8 +12,6 @@ use serde::{Deserialize, Serialize};
 pub struct CompleteTokenData {
     pub mint: String,
     pub metadata: TokenMetadata,
-    pub dexscreener_pools: Vec<DexScreenerPool>,
-    pub geckoterminal_pools: Vec<GeckoTerminalPool>,
     pub rugcheck_info: Option<RugcheckInfo>,
     pub sources_used: Vec<DataSource>,
     pub fetch_timestamp: DateTime<Utc>,

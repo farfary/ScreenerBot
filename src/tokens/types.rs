@@ -121,20 +121,6 @@ pub struct Token {
     pub txns_h24_sells: Option<i64>,
 
     // ========================================================================
-    // Pools (NOT populated from API - see pools module)
-    // ========================================================================
-    /// Pool information - this is NOT fetched from DexScreener/GeckoTerminal APIs
-    /// 
-    /// Real-time pool data comes from the pools module (src/pools/) which:
-    /// - Fetches on-chain account data directly from Solana
-    /// - Decodes pool state from various DEXes (Raydium, Orca, etc.)
-    /// - Provides real-time pricing via pools::get_pool_price()
-    /// 
-    /// This field is for reference/display only and may be empty.
-    /// For trading, always use pools::get_pool_price() for current pricing.
-    pub all_pools: Vec<TokenPool>,
-
-    // ========================================================================
     // Social & Links (from chosen source)
     // ========================================================================
     pub websites: Vec<WebsiteLink>,
@@ -169,17 +155,6 @@ pub struct Token {
     pub priority: Priority,
     pub first_seen_at: DateTime<Utc>,
     pub last_price_update: DateTime<Utc>,
-}
-
-/// Token pool information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TokenPool {
-    pub pool_address: String,
-    pub dex_id: String,
-    pub liquidity_usd: f64,
-    pub liquidity_sol: f64,
-    pub volume_h24: Option<f64>,
-    pub price_usd: String,
 }
 
 /// Security risk item

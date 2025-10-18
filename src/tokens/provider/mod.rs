@@ -131,63 +131,10 @@ impl TokenDataProvider {
 
         info!("[TOKENS] Fetching complete data for mint={}", mint);
 
-        let mut dexscreener_pools = Vec::new();
-        let mut geckoterminal_pools = Vec::new();
         let mut rugcheck_info = None;
         let mut sources_used = Vec::new();
         let mut cache_hits = Vec::new();
         let mut cache_misses = Vec::new();
-
-        // Fetch DexScreener data
-        if options.sources.contains(&DataSource::DexScreener) {
-            match self.fetcher.fetch_dexscreener_pools(mint, &options).await {
-                Ok(result) => {
-                    dexscreener_pools = result.data;
-                    sources_used.push(DataSource::DexScreener);
-                    if result.from_cache {
-                        cache_hits.push(DataSource::DexScreener);
-                    } else {
-                        cache_misses.push(DataSource::DexScreener);
-                    }
-
-                    // Update metadata from DexScreener
-                    if let Some(pool) = dexscreener_pools.first() {
-                        self.fetcher.update_metadata(
-                            mint,
-                            Some(&pool.base_token_symbol),
-                            Some(&pool.base_token_name),
-                            None,
-                        );
-                    }
-                }
-                Err(e) => {
-                    error!("[TOKENS] Failed to fetch DexScreener data: {}", e);
-                    self.increment_errors();
-                }
-            }
-        }
-
-        // Fetch GeckoTerminal data
-        if options.sources.contains(&DataSource::GeckoTerminal) {
-            match self.fetcher.fetch_geckoterminal_pools(mint, &options).await {
-                Ok(result) => {
-                    geckoterminal_pools = result.data;
-                    sources_used.push(DataSource::GeckoTerminal);
-                    if result.from_cache {
-                        cache_hits.push(DataSource::GeckoTerminal);
-                    } else {
-                        cache_misses.push(DataSource::GeckoTerminal);
-                    }
-
-                    // Update metadata from GeckoTerminal - no name/symbol in pools
-                    // Metadata will come from Rugcheck or DexScreener
-                }
-                Err(e) => {
-                    error!("[TOKENS] Failed to fetch GeckoTerminal data: {}", e);
-                    self.increment_errors();
-                }
-            }
-        }
 
         // Fetch Rugcheck data
         if options.sources.contains(&DataSource::Rugcheck) {
@@ -252,8 +199,6 @@ impl TokenDataProvider {
         Ok(CompleteTokenData {
             mint: mint.to_string(),
             metadata,
-            dexscreener_pools,
-            geckoterminal_pools,
             rugcheck_info,
             sources_used,
             fetch_timestamp: fetch_start,

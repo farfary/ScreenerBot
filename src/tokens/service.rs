@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use crate::tokens::blacklist as bl;
 use crate::tokens::provider::TokenDataProvider;
 use crate::tokens::store;
-use crate::tokens::{decimals, discovery, pools};
+use crate::tokens::{decimals, discovery};
 use log::{info, warn};
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
@@ -59,44 +59,6 @@ impl TokensOrchestrator {
                                     }
                                 }
                                 Err(e) => warn!("[TOKENS] Discovery error: {}", e),
-                            }
-                        }
-                    }
-                }
-            };
-            handles.push(tokio::spawn(monitor.instrument(fut)));
-        }
-
-        // Pools refresh loop (priority-based TTL)
-        {
-            let provider = self.provider.clone();
-            let shutdown_c = shutdown.clone();
-            let fut = async move {
-                let mut last_refresh: HashMap<String, Instant> = HashMap::new();
-                loop {
-                    tokio::select! {
-                        _ = shutdown_c.notified() => break,
-                        _ = tokio::time::sleep(Duration::from_secs(5)) => {
-                            let snapshots = store::all_snapshots();
-                            for s in snapshots {
-                                if bl::is(&s.mint) { continue; }
-                                let ttl = Duration::from_secs(s.priority.pools_refresh_ttl_secs());
-                                let now = Instant::now();
-                                if let Some(prev) = last_refresh.get(&s.mint) {
-                                    if now.duration_since(*prev) < ttl {
-                                        continue;
-                                    }
-                                }
-
-                                match pools::refresh_for(&provider, &s.mint).await {
-                                    Ok(_) => {
-                                        last_refresh.insert(s.mint.clone(), now);
-                                    }
-                                    Err(e) => {
-                                        last_refresh.insert(s.mint.clone(), now);
-                                        warn!("[TOKENS] Pools refresh failed: mint={} err={}", s.mint, e);
-                                    }
-                                }
                             }
                         }
                     }

@@ -21,22 +21,6 @@ impl CacheKey {
         }
     }
 
-    pub fn dexscreener_pools(mint: &str) -> Self {
-        Self {
-            source: DataSource::DexScreener,
-            data_type: CacheDataType::Pools,
-            identifier: mint.to_string(),
-        }
-    }
-
-    pub fn geckoterminal_pools(mint: &str) -> Self {
-        Self {
-            source: DataSource::GeckoTerminal,
-            data_type: CacheDataType::Pools,
-            identifier: mint.to_string(),
-        }
-    }
-
     pub fn rugcheck_info(mint: &str) -> Self {
         Self {
             source: DataSource::Rugcheck,
@@ -49,7 +33,6 @@ impl CacheKey {
 /// Type of cached data
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CacheDataType {
-    Pools,
     Info,
 }
 
