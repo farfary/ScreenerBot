@@ -1,8 +1,6 @@
 use super::{lib::calculate_position_pnl, types::Position};
-use crate::{
-    logger::{log, LogTag},
-    tokens::blacklist::{add_to_blacklist_db, BlacklistReason},
-};
+use crate::logger::{log, LogTag};
+use crate::tokens::blacklist as bl;
 
 // =============================================================================
 // LOSS DETECTION CONFIGURATION
@@ -57,11 +55,12 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<(), 
 
         // Only blacklist for significant losses to avoid being too aggressive
         if should_blacklist_for_loss(net_pnl_percent) {
-            if add_to_blacklist_db(
-                &position.mint,
-                &position.symbol,
-                BlacklistReason::PoorPerformance,
-            ) {
+            // Add to in-memory blacklist and persist if possible
+            let added = bl::add(&position.mint);
+            if added {
+                if let Some(db) = crate::tokens::storage::database::get_global_database() {
+                    let _ = bl::persist_add(&db, &position.mint, Some("PoorPerformance"));
+                }
                 log(
                     LogTag::Positions,
                     "AUTO_BLACKLIST",

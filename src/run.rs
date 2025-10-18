@@ -120,7 +120,6 @@ fn register_all_services(manager: &mut ServiceManager) {
     manager.register(Box::new(WalletService));
     manager.register(Box::new(RpcStatsService));
     manager.register(Box::new(AtaCleanupService));
-    manager.register(Box::new(LearningService));
     manager.register(Box::new(TraderService));
     manager.register(Box::new(WebserverService));
 

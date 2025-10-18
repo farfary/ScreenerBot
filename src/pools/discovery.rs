@@ -20,15 +20,11 @@ use crate::logger::{log, LogTag};
 use crate::pools::service::{
     get_debug_token_override, get_pool_analyzer, is_single_pool_mode_enabled,
 };
-use crate::tokens::dexscreener::{
-    get_batch_token_pools_from_dexscreener, get_token_pools_from_dexscreener, TokenPair,
-};
-use crate::tokens::api::geckoterminal_types::GeckoTerminalPool;
-use crate::tokens::geckoterminal::{
-    get_batch_token_pools_from_geckoterminal, get_token_pools_from_geckoterminal,
-};
-use crate::tokens::raydium::{
-    get_batch_token_pools_from_raydium, get_token_pools_from_raydium, RaydiumPool,
+use crate::tokens::api::{
+    dexscreener::DexScreenerClient,
+    dexscreener_types::DexScreenerPool,
+    geckoterminal::GeckoTerminalClient,
+    geckoterminal_types::GeckoTerminalPool,
 };
 use dashmap::DashMap;
 use solana_sdk::pubkey::Pubkey;
@@ -40,6 +36,27 @@ use tokio::sync::Notify;
 
 // Timing constants
 const DISCOVERY_TICK_INTERVAL_SECS: u64 = 5;
+
+// Lightweight batch result structures for this module only
+struct DexsBatchResult {
+    pools: HashMap<String, Vec<DexScreenerPool>>, // mint -> pools
+}
+
+impl DexsBatchResult {
+    fn empty() -> Self {
+        Self { pools: HashMap::new() }
+    }
+}
+
+struct GeckoBatchResult {
+    pools: HashMap<String, Vec<GeckoTerminalPool>>, // mint -> pools
+}
+
+impl GeckoBatchResult {
+    fn empty() -> Self {
+        Self { pools: HashMap::new() }
+    }
+}
 
 /// Returns whether DexScreener discovery is enabled via configuration
 pub fn is_dexscreener_discovery_enabled() -> bool {
@@ -69,6 +86,78 @@ impl PoolDiscovery {
             known_pools: HashMap::new(),
             watched_tokens: Vec::new(),
         }
+    }
+
+    async fn fetch_dexscreener_batch(tokens: &[String]) -> DexsBatchResult {
+        // DexScreener has a batch endpoint returning one best pair per token.
+        // We'll chunk inputs by 30 and fetch sequentially to keep it simple.
+        let client = DexScreenerClient::new(
+            crate::tokens::api::dexscreener::RATE_LIMIT_PER_MINUTE,
+            crate::tokens::api::dexscreener::TIMEOUT_SECS,
+        );
+
+        let mut out: HashMap<String, Vec<DexScreenerPool>> = HashMap::new();
+        let mut i = 0;
+        while i < tokens.len() {
+            let end = (i + 30).min(tokens.len());
+            let batch = &tokens[i..end];
+            match client.fetch_token_batch(batch, Some("solana")).await {
+                Ok(pairs) => {
+                    for pool in pairs {
+                        // Determine which input mint this pair corresponds to
+                        // Prefer matching base, else quote
+                        let mut assigned = false;
+                        for mint in batch {
+                            if &pool.base_token_address == mint || &pool.quote_token_address == mint {
+                                out.entry(mint.clone()).or_default().push(pool.clone());
+                                assigned = true;
+                                break;
+                            }
+                        }
+                        if !assigned {
+                            // Fallback: group under base token
+                            out.entry(pool.base_token_address.clone()).or_default().push(pool.clone());
+                        }
+                    }
+                }
+                Err(e) => {
+                    if is_debug_pool_discovery_enabled() {
+                        log(
+                            LogTag::PoolDiscovery,
+                            "WARN",
+                            &format!("DexScreener batch failed ({}..{}): {}", i, end, e),
+                        );
+                    }
+                }
+            }
+            i = end;
+        }
+        DexsBatchResult { pools: out }
+    }
+
+    async fn fetch_geckoterminal_batch(tokens: &[String]) -> GeckoBatchResult {
+        let client = GeckoTerminalClient::new(
+            crate::tokens::api::geckoterminal::RATE_LIMIT_PER_MINUTE,
+            crate::tokens::api::geckoterminal::TIMEOUT_SECS,
+        );
+        let mut out: HashMap<String, Vec<GeckoTerminalPool>> = HashMap::new();
+        for mint in tokens {
+            match client.fetch_pools(mint).await {
+                Ok(mut pools) => {
+                    out.entry(mint.clone()).or_default().append(&mut pools);
+                }
+                Err(e) => {
+                    if is_debug_pool_discovery_enabled() {
+                        log(
+                            LogTag::PoolDiscovery,
+                            "WARN",
+                            &format!("GeckoTerminal fetch_pools failed for {}: {}", mint, e),
+                        );
+                    }
+                }
+            }
+        }
+        GeckoBatchResult { pools: out }
     }
 
     /// Get current discovery source configuration
@@ -379,41 +468,19 @@ impl PoolDiscovery {
         // Run batch fetches for all sources concurrently (each handles rate limiting internally)
         // Using tokio::join! to minimize total tick latency vs sequential awaits
         // Only fetch from enabled sources
-        let (dexs_batch, gecko_batch, raydium_batch) = tokio::join!(
+        let (dexs_batch, gecko_batch) = tokio::join!(
             async {
                 if dex_enabled {
-                    get_batch_token_pools_from_dexscreener(&tokens).await
+                    Self::fetch_dexscreener_batch(&tokens).await
                 } else {
-                    crate::tokens::dexscreener::DexScreenerBatchResult {
-                        pools: std::collections::HashMap::new(),
-                        errors: std::collections::HashMap::new(),
-                        successful_tokens: 0,
-                        failed_tokens: 0,
-                    }
+                    DexsBatchResult::empty()
                 }
             },
             async {
                 if gecko_enabled {
-                    get_batch_token_pools_from_geckoterminal(&tokens).await
+                    Self::fetch_geckoterminal_batch(&tokens).await
                 } else {
-                    crate::tokens::geckoterminal::GeckoTerminalBatchResult {
-                        pools: std::collections::HashMap::new(),
-                        errors: std::collections::HashMap::new(),
-                        successful_tokens: 0,
-                        failed_tokens: 0,
-                    }
-                }
-            },
-            async {
-                if raydium_enabled {
-                    get_batch_token_pools_from_raydium(&tokens).await
-                } else {
-                    crate::tokens::raydium::RaydiumBatchResult {
-                        pools: std::collections::HashMap::new(),
-                        errors: std::collections::HashMap::new(),
-                        successful_tokens: 0,
-                        failed_tokens: 0,
-                    }
+                    GeckoBatchResult::empty()
                 }
             }
         );
@@ -474,25 +541,13 @@ impl PoolDiscovery {
         }
 
         // Process Raydium results only if enabled
-        if is_raydium_discovery_enabled() {
-            for (mint, pools) in raydium_batch.pools.into_iter() {
-                let before = descriptors.len();
-                for pool in pools {
-                    if let Ok(desc) = Self::convert_raydium_pool_to_descriptor_static(&pool) {
-                        descriptors.push(desc);
-                    }
-                }
-                let added = descriptors.len().saturating_sub(before);
-                if is_debug_pool_discovery_enabled() {
-                    log(
-                        LogTag::PoolDiscovery,
-                        "DEBUG",
-                        &format!("Raydium batched pools for {mint}: added {added}"),
-                    );
-                }
-            }
-        } else if is_debug_pool_discovery_enabled() {
-            log(LogTag::PoolDiscovery, "DEBUG", "Raydium discovery disabled");
+        // Raydium discovery not implemented via direct API client in this module
+        if is_raydium_discovery_enabled() && is_debug_pool_discovery_enabled() {
+            log(
+                LogTag::PoolDiscovery,
+                "DEBUG",
+                "Raydium discovery is configured but not implemented in this path",
+            );
         }
 
         if descriptors.is_empty() {
@@ -678,12 +733,12 @@ impl PoolDiscovery {
     }
 
     fn convert_dexscreener_pair_to_descriptor_static(
-        pair: &TokenPair,
+        pair: &DexScreenerPool,
     ) -> Result<PoolDescriptor, String> {
         let pool_id = Pubkey::from_str(&pair.pair_address).map_err(|_| "Invalid pool address")?;
         let base_mint =
-            Pubkey::from_str(&pair.base_token.address).map_err(|_| "Invalid base token address")?;
-        let quote_mint = Pubkey::from_str(&pair.quote_token.address)
+            Pubkey::from_str(&pair.base_token_address).map_err(|_| "Invalid base token address")?;
+        let quote_mint = Pubkey::from_str(&pair.quote_token_address)
             .map_err(|_| "Invalid quote token address")?;
 
         // Ensure SOL on one side
@@ -692,8 +747,8 @@ impl PoolDiscovery {
             return Err("Pool does not contain SOL - skipping".to_string());
         }
 
-        let liquidity_usd = pair.liquidity.as_ref().map(|l| l.usd).unwrap_or(0.0);
-        let volume_h24_usd = pair.volume.h24.unwrap_or(0.0);
+        let liquidity_usd = pair.liquidity_usd.unwrap_or(0.0);
+        let volume_h24_usd = pair.volume_h24.unwrap_or(0.0);
         Ok(PoolDescriptor {
             pool_id,
             program_kind: ProgramKind::Unknown,
@@ -711,9 +766,9 @@ impl PoolDiscovery {
     ) -> Result<PoolDescriptor, String> {
         let pool_id = Pubkey::from_str(&pool.pool_address).map_err(|_| "Invalid pool address")?;
         let base_mint =
-            Pubkey::from_str(&pool.base_token).map_err(|_| "Invalid base token address")?;
+            Pubkey::from_str(&pool.base_token_id).map_err(|_| "Invalid base token address")?;
         let quote_mint =
-            Pubkey::from_str(&pool.quote_token).map_err(|_| "Invalid quote token address")?;
+            Pubkey::from_str(&pool.quote_token_id).map_err(|_| "Invalid quote token address")?;
         let sol_mint_pubkey = Pubkey::from_str(SOL_MINT).map_err(|_| "Invalid SOL mint")?;
         if base_mint != sol_mint_pubkey && quote_mint != sol_mint_pubkey {
             return Err("Pool does not contain SOL - skipping".to_string());
@@ -724,32 +779,8 @@ impl PoolDiscovery {
             base_mint,
             quote_mint,
             reserve_accounts: Vec::new(),
-            liquidity_usd: pool.liquidity_usd,
-            volume_h24_usd: pool.volume_24h,
-            last_updated: std::time::Instant::now(),
-        })
-    }
-
-    fn convert_raydium_pool_to_descriptor_static(
-        pool: &RaydiumPool,
-    ) -> Result<PoolDescriptor, String> {
-        let pool_id = Pubkey::from_str(&pool.pool_address).map_err(|_| "Invalid pool address")?;
-        let base_mint =
-            Pubkey::from_str(&pool.base_token).map_err(|_| "Invalid base token address")?;
-        let quote_mint =
-            Pubkey::from_str(&pool.quote_token).map_err(|_| "Invalid quote token address")?;
-        let sol_mint_pubkey = Pubkey::from_str(SOL_MINT).map_err(|_| "Invalid SOL mint")?;
-        if base_mint != sol_mint_pubkey && quote_mint != sol_mint_pubkey {
-            return Err("Pool does not contain SOL - skipping".to_string());
-        }
-        Ok(PoolDescriptor {
-            pool_id,
-            program_kind: ProgramKind::Unknown,
-            base_mint,
-            quote_mint,
-            reserve_accounts: Vec::new(),
-            liquidity_usd: pool.liquidity_usd,
-            volume_h24_usd: pool.volume_24h,
+            liquidity_usd: pool.reserve_usd.unwrap_or(0.0),
+            volume_h24_usd: pool.volume_h24.unwrap_or(0.0),
             last_updated: std::time::Instant::now(),
         })
     }
@@ -783,7 +814,13 @@ impl PoolDiscovery {
 
         // Discover from DexScreener API only if enabled
         if is_dexscreener_discovery_enabled() {
-            match get_token_pools_from_dexscreener(mint).await {
+            // Create DexScreener client for pool discovery
+            let client = DexScreenerClient::new(
+                crate::tokens::api::dexscreener::RATE_LIMIT_PER_MINUTE,
+                crate::tokens::api::dexscreener::TIMEOUT_SECS,
+            );
+            
+            match client.fetch_token_pools(mint, Some("solana")).await {
                 Ok(token_pairs) => {
                     let mut pools = Vec::new();
                     let mut filtered_count = 0;
@@ -870,36 +907,7 @@ impl PoolDiscovery {
             );
         }
 
-        // Discover from Raydium API only if enabled
-        if is_raydium_discovery_enabled() {
-            match self.discover_from_raydium(mint).await {
-                Ok(mut pools) => {
-                    if is_debug_pool_discovery_enabled() {
-                        log(
-                            LogTag::PoolDiscovery,
-                            "DEBUG",
-                            &format!("Raydium found {} pools for {mint}", pools.len()),
-                        );
-                    }
-                    discovered_pools.append(&mut pools);
-                }
-                Err(e) => {
-                    if is_debug_pool_discovery_enabled() {
-                        log(
-                            LogTag::PoolDiscovery,
-                            "WARN",
-                            &format!("Raydium discovery failed for {mint}: {}", e),
-                        );
-                    }
-                }
-            }
-        } else if is_debug_pool_discovery_enabled() {
-            log(
-                LogTag::PoolDiscovery,
-                "DEBUG",
-                &format!("Raydium discovery disabled for {mint}"),
-            );
-        }
+        // Raydium discovery path removed here (not implemented)
 
         // Deduplicate pools by pool address
         let deduplicated_pools = self.deduplicate_pools(discovered_pools);
@@ -910,7 +918,11 @@ impl PoolDiscovery {
 
     /// Discover pools from GeckoTerminal API
     async fn discover_from_geckoterminal(&self, mint: &str) -> Result<Vec<PoolDescriptor>, String> {
-        let gecko_pools = get_token_pools_from_geckoterminal(mint).await?;
+        let client = GeckoTerminalClient::new(
+            crate::tokens::api::geckoterminal::RATE_LIMIT_PER_MINUTE,
+            crate::tokens::api::geckoterminal::TIMEOUT_SECS,
+        );
+        let gecko_pools = client.fetch_pools(mint).await?;
 
         let mut pools = Vec::new();
         let mut filtered_count = 0;
@@ -943,40 +955,7 @@ impl PoolDiscovery {
         Ok(pools)
     }
 
-    /// Discover pools from Raydium API
-    async fn discover_from_raydium(&self, mint: &str) -> Result<Vec<PoolDescriptor>, String> {
-        let raydium_pools = get_token_pools_from_raydium(mint).await?;
-
-        let mut pools = Vec::new();
-        let mut filtered_count = 0;
-
-        for pool in raydium_pools {
-            match self.convert_raydium_pool_to_descriptor(&pool) {
-                Ok(pool_descriptor) => {
-                    pools.push(pool_descriptor);
-                }
-                Err(e) => {
-                    if e.contains("does not contain SOL") {
-                        filtered_count += 1;
-                    }
-                    // Skip logging individual errors to avoid spam
-                }
-            }
-        }
-
-        if is_debug_pool_discovery_enabled() && filtered_count > 0 {
-            log(
-                LogTag::PoolDiscovery,
-                "DEBUG",
-                &format!(
-                    "Raydium: Filtered out {} non-SOL pools for {mint}",
-                    filtered_count
-                ),
-            );
-        }
-
-        Ok(pools)
-    }
+    // Raydium path removed
 
     /// Convert GeckoTerminal pool to PoolDescriptor
     fn convert_geckoterminal_pool_to_descriptor(
@@ -986,10 +965,10 @@ impl PoolDiscovery {
         let pool_id = Pubkey::from_str(&pool.pool_address).map_err(|_| "Invalid pool address")?;
 
         let base_mint =
-            Pubkey::from_str(&pool.base_token).map_err(|_| "Invalid base token address")?;
+            Pubkey::from_str(&pool.base_token_id).map_err(|_| "Invalid base token address")?;
 
         let quote_mint =
-            Pubkey::from_str(&pool.quote_token).map_err(|_| "Invalid quote token address")?;
+            Pubkey::from_str(&pool.quote_token_id).map_err(|_| "Invalid quote token address")?;
 
         // Check if pool contains SOL - reject if neither side is SOL
         let sol_mint_pubkey = Pubkey::from_str(SOL_MINT).map_err(|_| "Invalid SOL mint")?;
@@ -1003,39 +982,8 @@ impl PoolDiscovery {
             base_mint,
             quote_mint,
             reserve_accounts: Vec::new(),
-            liquidity_usd: pool.liquidity_usd,
-            volume_h24_usd: 0.0,
-            last_updated: std::time::Instant::now(),
-        })
-    }
-
-    /// Convert Raydium pool to PoolDescriptor
-    fn convert_raydium_pool_to_descriptor(
-        &self,
-        pool: &RaydiumPool,
-    ) -> Result<PoolDescriptor, String> {
-        let pool_id = Pubkey::from_str(&pool.pool_address).map_err(|_| "Invalid pool address")?;
-
-        let base_mint =
-            Pubkey::from_str(&pool.base_token).map_err(|_| "Invalid base token address")?;
-
-        let quote_mint =
-            Pubkey::from_str(&pool.quote_token).map_err(|_| "Invalid quote token address")?;
-
-        // Check if pool contains SOL - reject if neither side is SOL
-        let sol_mint_pubkey = Pubkey::from_str(SOL_MINT).map_err(|_| "Invalid SOL mint")?;
-        if base_mint != sol_mint_pubkey && quote_mint != sol_mint_pubkey {
-            return Err("Pool does not contain SOL - skipping".to_string());
-        }
-
-        Ok(PoolDescriptor {
-            pool_id,
-            program_kind: ProgramKind::Unknown,
-            base_mint,
-            quote_mint,
-            reserve_accounts: Vec::new(),
-            liquidity_usd: pool.liquidity_usd,
-            volume_h24_usd: 0.0,
+            liquidity_usd: pool.reserve_usd.unwrap_or(0.0),
+            volume_h24_usd: pool.volume_h24.unwrap_or(0.0),
             last_updated: std::time::Instant::now(),
         })
     }

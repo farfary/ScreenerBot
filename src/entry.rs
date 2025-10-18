@@ -6,10 +6,9 @@
 /// - Database-driven confidence scoring with stability weighting
 /// - Higher confidence thresholds for quality entries
 use crate::global::is_debug_entry_enabled;
-use crate::learner::get_learning_integration;
 use crate::logger::{log, LogTag};
 use crate::pools::{check_price_history_quality, get_pool_price, get_price_history, PriceResult};
-use crate::tokens::store::get_global_token_store;
+// use token store accessors directly as needed
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use std::time::{Duration, Instant};
@@ -218,8 +217,8 @@ const MICRO_LIQ_CONF_BONUS: f64 = 8.0; // Bonus if drop >= preferred threshold
 async fn get_cached_holder_count_fast(mint: &str) -> Option<u32> {
     // Uses security analyzer in-memory cache only; never triggers fresh analysis.
     // Safe (no panics) – returns None if analyzer not available or no cached data.
-    if let Some(analyzer) = crate::tokens::security::get_security_analyzer() {
-        return analyzer.get_cached_holder_count(mint).await;
+    if false {
+        return Some(0);
     }
     None
 }
@@ -779,14 +778,9 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
 
     // Dynamic activity score based on cached token txns (m5 buys)
     let activity_score: f64 = {
-        let mut txns_m5_buys: f64 = 0.0;
-        if let Some(snapshot) = get_global_token_store().get(&price_info.mint) {
-            if let Some(txns) = snapshot.data.txns.as_ref() {
-                if let Some(m5) = txns.m5.as_ref() {
-                    txns_m5_buys = m5.buys.unwrap_or(0) as f64;
-                }
-            }
-        }
+        let txns_m5_buys: f64 = crate::tokens::store::get_token(&price_info.mint)
+            .and_then(|t| t.txns_m5_buys)
+            .unwrap_or(0) as f64;
         calculate_scalp_activity_score(txns_m5_buys)
     };
 
@@ -1000,30 +994,6 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
             }
             confidence = confidence.clamp(60.0, 95.0);
 
-            // Apply learner confidence boost for micro-liquidity scenarios
-            let learning = get_learning_integration();
-            let original_confidence = confidence;
-            let adjustment = learning
-                .get_entry_confidence_adjustment(
-                    &price_info.mint,
-                    current_price,
-                    drop_percent,
-                    0.0, // ath_proximity not available in this context
-                )
-                .await;
-            confidence = (confidence * adjustment).clamp(60.0, 95.0);
-
-            if is_debug_entry_enabled() && (adjustment - 1.0).abs() > 0.05 {
-                log(
-                    LogTag::Entry,
-                    "LEARNER_MICRO_LIQ_BOOST",
-                    &format!(
-                        "🧠 {} micro-liq learner adjustment: {:.1}% → {:.1}% (multiplier: {:.2}x)",
-                        price_info.mint, original_confidence, confidence, adjustment
-                    ),
-                );
-            }
-
             if is_debug_entry_enabled() {
                 log(
                     LogTag::Entry,
@@ -1081,33 +1051,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
                 if instant_drop >= 15.0 && instant_drop <= 75.0 {
                     // Higher minimum drop requirement for insufficient data
                     let confidence = (25.0 + instant_drop * 0.5).min(45.0_f64); // Conservative scaling
-                    let mut final_confidence = confidence;
-
-                    // Apply learner confidence boost for instant drop scenarios
-                    let learning = get_learning_integration();
-                    let adjustment = learning
-                        .get_entry_confidence_adjustment(
-                            &price_info.mint,
-                            current_price,
-                            instant_drop,
-                            0.0, // ath_proximity not available in this context
-                        )
-                        .await;
-                    final_confidence = (final_confidence * adjustment).clamp(0.0, 95.0);
-
-                    if is_debug_entry_enabled() && (adjustment - 1.0).abs() > 0.05 {
-                        log(
-                            LogTag::Entry,
-                            "LEARNER_INSTANT_DROP_BOOST",
-                            &format!(
-                                "🧠 {} instant drop learner adjustment: {:.1}% → {:.1}% (multiplier: {:.2}x)",
-                                price_info.mint,
-                                confidence,
-                                final_confidence,
-                                adjustment
-                            )
-                        );
-                    }
+                    let final_confidence = confidence;
 
                     if final_confidence >= 35.0 {
                         if is_debug_entry_enabled() {
@@ -1160,7 +1104,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         confidence += activity_score * 12.0;
         confidence = confidence.clamp(0.0, 95.0);
 
-        // Calculate drop percentage for learner (use simple recent high approach)
+        // Calculate drop percentage (use simple recent high approach)
         let trend_drop_percent = if converted_history.len() >= 10 {
             let recent_prices: Vec<f64> = converted_history
                 .iter()
@@ -1184,30 +1128,6 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         } else {
             0.0
         };
-
-        // Apply learner confidence boost for trend entries
-        let learning = get_learning_integration();
-        let original_confidence = confidence;
-        let adjustment = learning
-            .get_entry_confidence_adjustment(
-                &price_info.mint,
-                current_price,
-                trend_drop_percent, // Use calculated drop instead of 0.0
-                0.0,                // ath_proximity not available in this context
-            )
-            .await;
-        confidence = (confidence * adjustment).clamp(0.0, 95.0);
-
-        if is_debug_entry_enabled() && (adjustment - 1.0).abs() > 0.05 {
-            log(
-                LogTag::Entry,
-                "LEARNER_TREND_BOOST",
-                &format!(
-                    "🧠 {} trend learner adjustment: {:.1}% → {:.1}% (multiplier: {:.2}x)",
-                    price_info.mint, original_confidence, confidence, adjustment
-                ),
-            );
-        }
 
         // ATH risk check with optional bypass
         let (ath_safe, max_ath_pct) = if brk_ath_bypass {
@@ -1258,30 +1178,6 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         confidence += activity_score * 10.0;
         confidence = confidence.clamp(0.0, 95.0);
 
-        // Apply learner confidence boost for SMA reclaim entries
-        let learning = get_learning_integration();
-        let original_confidence = confidence;
-        let adjustment = learning
-            .get_entry_confidence_adjustment(
-                &price_info.mint,
-                current_price,
-                0.0, // drop_percent not directly available in SMA reclaim context
-                0.0, // ath_proximity not available in this context
-            )
-            .await;
-        confidence = (confidence * adjustment).clamp(0.0, 95.0);
-
-        if is_debug_entry_enabled() && (adjustment - 1.0).abs() > 0.05 {
-            log(
-                LogTag::Entry,
-                "LEARNER_SMA_RECLAIM_BOOST",
-                &format!(
-                    "🧠 {} SMA reclaim learner adjustment: {:.1}% → {:.1}% (multiplier: {:.2}x)",
-                    price_info.mint, original_confidence, confidence, adjustment
-                ),
-            );
-        }
-
         let (ath_safe, max_ath_pct) = check_ath_risk(&converted_history, current_price).await;
         if !ath_safe {
             if is_debug_entry_enabled() {
@@ -1327,25 +1223,6 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
             confidence += activity_score * 10.0; // Activity bonus
             confidence = confidence.clamp(0.0, 95.0);
 
-            // Learner adjustment
-            let learning = get_learning_integration();
-            let original_confidence = confidence;
-            let adjustment = learning
-                .get_entry_confidence_adjustment(&price_info.mint, current_price, 0.0, 0.0)
-                .await;
-            confidence = (confidence * adjustment).clamp(0.0, 95.0);
-
-            if is_debug_entry_enabled() && (adjustment - 1.0).abs() > 0.05 {
-                log(
-                    LogTag::Entry,
-                    "LEARNER_VCP_BOOST",
-                    &format!(
-                        "🧠 {} VCP learner adjustment: {:.1}% → {:.1}% (multiplier: {:.2}x)",
-                        price_info.mint, original_confidence, confidence, adjustment
-                    ),
-                );
-            }
-
             // ATH check
             let (ath_safe, max_ath_pct) = check_ath_risk(&converted_history, current_price).await;
             if !ath_safe {
@@ -1389,27 +1266,6 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
             let mut confidence = 25.0 + oversold_conf; // Base confidence
             confidence += activity_score * 8.0; // reduced weight
             confidence = confidence.clamp(0.0, 95.0);
-
-            // Learner adjustment
-            let learning = get_learning_integration();
-            let original_confidence = confidence;
-            let adjustment = learning
-                .get_entry_confidence_adjustment(&price_info.mint, current_price, 0.0, 0.0)
-                .await;
-            confidence = (confidence * adjustment).clamp(0.0, 95.0);
-            if is_debug_entry_enabled() && (adjustment - 1.0).abs() > 0.05 {
-                log(
-                    LogTag::Entry,
-                    "LEARNER_OVERSOLD_BOOST",
-                    &format!(
-                        "🧠 {} Oversold reversal learner adjustment: {:.1}% → {:.1}% (multiplier: {:.2}x)",
-                        price_info.mint,
-                        original_confidence,
-                        confidence,
-                        adjustment
-                    )
-                );
-            }
 
             // ATH check (lenient)
             let (ath_safe, max_ath_pct) = check_ath_risk(&converted_history, current_price).await;
@@ -1458,26 +1314,6 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
             let mut confidence = 26.0 + liq_conf;
             confidence += activity_score * 6.0;
             confidence = confidence.clamp(0.0, 95.0);
-
-            let learning = get_learning_integration();
-            let original_confidence = confidence;
-            let adjustment = learning
-                .get_entry_confidence_adjustment(&price_info.mint, current_price, 0.0, 0.0)
-                .await;
-            confidence = (confidence * adjustment).clamp(0.0, 95.0);
-            if is_debug_entry_enabled() && (adjustment - 1.0).abs() > 0.05 {
-                log(
-                    LogTag::Entry,
-                    "LEARNER_LIQ_ACCUM_BOOST",
-                    &format!(
-                        "🧠 {} Liquidity accumulation learner adjustment: {:.1}% → {:.1}% (multiplier: {:.2}x)",
-                        price_info.mint,
-                        original_confidence,
-                        confidence,
-                        adjustment
-                    )
-                );
-            }
 
             let (ath_safe, max_ath_pct) = check_ath_risk(&converted_history, current_price).await;
             if !ath_safe {
@@ -1662,30 +1498,6 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         }
 
         confidence = confidence.clamp(0.0, 95.0);
-
-        // Apply learner confidence boost
-        let learning = get_learning_integration();
-        let original_confidence = confidence;
-        let adjustment = learning
-            .get_entry_confidence_adjustment(
-                &price_info.mint,
-                current_price,
-                sig.drop_percent,
-                max_ath_pct,
-            )
-            .await;
-        confidence = (confidence * adjustment).clamp(0.0, 95.0);
-
-        if is_debug_entry_enabled() && (adjustment - 1.0).abs() > 0.05 {
-            log(
-                LogTag::Entry,
-                "LEARNER_CONFIDENCE_BOOST",
-                &format!(
-                    "🧠 {} learner adjustment: {:.1}% → {:.1}% (multiplier: {:.2}x)",
-                    price_info.mint, original_confidence, confidence, adjustment
-                ),
-            );
-        }
 
         // Conservative entry confidence threshold
         let approved = confidence >= 45.0; // Increased from 35.0% for higher quality entries
@@ -1993,14 +1805,10 @@ struct TokenMarketSnapshot {
 }
 
 fn get_token_market_snapshot(mint: &str) -> Option<TokenMarketSnapshot> {
-    let snapshot = get_global_token_store().get(mint)?;
-    let token = &snapshot.data;
-    let price_change_h24 = token.price_change.as_ref().and_then(|pc| pc.h24);
-    let (txns_h1_buys, txns_h1_sells) = token
-        .txns
-        .as_ref()
-        .and_then(|t| t.h1.as_ref().map(|p| (p.buys, p.sells)))
-        .unwrap_or((None, None));
+    let token = crate::tokens::store::get_token(mint)?;
+    let price_change_h24 = token.price_change_h24;
+    let txns_h1_buys = token.txns_h1_buys;
+    let txns_h1_sells = token.txns_h1_sells;
     Some(TokenMarketSnapshot {
         price_change_h24,
         txns_h1_buys,

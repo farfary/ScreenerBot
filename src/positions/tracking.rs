@@ -1,7 +1,7 @@
 use super::{
     apply::apply_transition, state::update_position_state, transitions::PositionTransition,
 };
-use crate::{arguments::is_debug_positions_enabled, tokens::PriceResult};
+use crate::{arguments::is_debug_positions_enabled, pools::PriceResult};
 use tokio::time::Duration;
 
 /// Update position price tracking

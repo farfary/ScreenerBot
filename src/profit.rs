@@ -14,7 +14,6 @@
 //! * `crate::logger::log` and `crate::global::is_debug_profit_enabled()` are available.
 
 use crate::global::*;
-use crate::learner::get_learning_integration;
 use crate::logger::{log, LogTag};
 use crate::positions::{calculate_position_pnl, Position};
 use chrono::Utc;
@@ -1137,39 +1136,6 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
                                    // ATH proximity adds a nudge to exit_score (risk of rejection) if adaptation allowed
     if ath_ctx.level != AthLevel::None {
         exit_score += ath_ctx.score_nudge;
-    }
-
-    // Apply learner exit urgency multiplier to exit score
-    let learning = get_learning_integration();
-    let original_exit_score = exit_score;
-    let raw_multiplier = learning
-        .get_exit_score_adjustment(&position.mint, current_price, entry, minutes_held as u32)
-        .await;
-    let urgency_multiplier = raw_multiplier.clamp(0.7, 1.5);
-    exit_score *= urgency_multiplier;
-
-    if is_debug_profit_enabled() && (urgency_multiplier - 1.0).abs() > 0.05 {
-        log(
-            LogTag::Profit,
-            "LEARNER_EXIT_URGENCY",
-            &format!(
-                "🧠 {} learner exit urgency: score {:.2} → {:.2} (multiplier: {:.2}x raw={:.2}x)",
-                position.symbol,
-                original_exit_score,
-                exit_score,
-                urgency_multiplier,
-                raw_multiplier
-            ),
-        );
-    } else if is_debug_profit_enabled() && (raw_multiplier - urgency_multiplier).abs() > 0.01 {
-        log(
-            LogTag::Profit,
-            "LEARNER_EXIT_URGENCY_CLAMP",
-            &format!(
-                "🧠 {} learner multiplier clamped from {:.2}x to {:.2}x",
-                position.symbol, raw_multiplier, urgency_multiplier
-            ),
-        );
     }
 
     // Lower threshold under high time pressure to favor exits as cap approaches

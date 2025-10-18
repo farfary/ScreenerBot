@@ -7,10 +7,13 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 /// Database wrapper with connection pooling
+#[derive(Debug)]
 pub struct Database {
     conn: Arc<Mutex<Connection>>,
     db_path: String,
 }
+
+static GLOBAL_DB: std::sync::OnceLock<Arc<Database>> = std::sync::OnceLock::new();
 
 impl Database {
     /// Create or open database at specified path and initialize schema
@@ -38,7 +41,9 @@ impl Database {
 
         log(LogTag::Tokens, "INFO", &format!("Database initialized: {}", db_path));
 
-        Ok(db)
+        let db_arc = Arc::new(db);
+        let _ = GLOBAL_DB.set(Arc::clone(&db_arc));
+        Ok(Arc::try_unwrap(db_arc).unwrap())
     }
 
     /// Initialize database schema (idempotent - safe to call multiple times)
@@ -128,6 +133,11 @@ impl Database {
 
         Ok(())
     }
+}
+
+/// Access global database instance if initialized
+pub fn get_global_database() -> Option<Arc<Database>> {
+    GLOBAL_DB.get().cloned()
 }
 
 /// Database table statistics

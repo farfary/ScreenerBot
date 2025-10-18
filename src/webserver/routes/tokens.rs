@@ -17,11 +17,12 @@ use crate::{
     global::is_debug_webserver_enabled,
     logger::{log, LogTag},
     pools, positions,
-    tokens::{blacklist, store::get_global_token_store, summary::TokenSummary, SecurityDatabase},
+    tokens::blacklist,
     webserver::{
         state::AppState,
         utils::{error_response, success_response},
     },
+    tokens::SecurityRisk,
 };
 
 // =============================================================================
@@ -31,7 +32,7 @@ use crate::{
 /// Token list response
 #[derive(Debug, Serialize)]
 pub struct TokenListResponse {
-    pub items: Vec<TokenSummary>,
+    pub items: Vec<crate::tokens::types::Token>,
     pub page: usize,
     pub page_size: usize,
     pub total: usize,
@@ -105,6 +106,104 @@ pub struct TokenPoolInfo {
     pub last_updated_unix: Option<i64>,
 }
 
+/// Token detail response with enriched data
+#[derive(Debug, Serialize)]
+pub struct TokenDetailResponse {
+    // Identity
+    pub mint: String,
+    pub symbol: String,
+    pub name: Option<String>,
+    pub tagline: Option<String>,
+    pub description: Option<String>,
+    pub decimals: Option<u8>,
+    
+    // Visuals
+    pub logo_url: Option<String>,
+    pub website: Option<String>,
+    
+    // Status flags
+    pub verified: bool,
+    pub tags: Vec<String>,
+    pub pair_labels: Vec<String>,
+    pub blacklisted: bool,
+    pub has_ohlcv: bool,
+    pub has_pool_price: bool,
+    pub has_open_position: bool,
+    
+    // Timestamps
+    pub created_at: Option<i64>,
+    pub last_updated: Option<i64>,
+    pub pair_created_at: Option<i64>,
+    pub pair_url: Option<String>,
+    pub boosts_active: Option<i64>,
+    
+    // Price data
+    pub price_sol: Option<f64>,
+    pub price_usd: Option<f64>,
+    pub price_confidence: Option<String>,
+    pub price_updated_at: Option<i64>,
+    pub price_change_h1: Option<f64>,
+    pub price_change_h24: Option<f64>,
+    pub price_change_periods: PeriodStats<f64>,
+    
+    // Liquidity
+    pub liquidity_usd: Option<f64>,
+    pub liquidity_base: Option<f64>,
+    pub liquidity_quote: Option<f64>,
+    
+    // Volume
+    pub volume_24h: Option<f64>,
+    pub volume_periods: PeriodStats<f64>,
+    
+    // Market metrics
+    pub fdv: Option<f64>,
+    pub market_cap: Option<f64>,
+    
+    // Pool info
+    pub pool_address: Option<String>,
+    pub pool_dex: Option<String>,
+    pub pool_reserves_sol: Option<f64>,
+    pub pool_reserves_token: Option<f64>,
+    
+    // Transactions
+    pub txn_periods: PeriodStats<TxnPeriodSummary>,
+    pub buys_24h: Option<i64>,
+    pub sells_24h: Option<i64>,
+    pub net_flow_24h: Option<i64>,
+    pub buy_sell_ratio_24h: Option<f64>,
+    
+    // Security
+    pub risk_score: Option<i32>,
+    pub rugged: Option<bool>,
+    pub mint_authority: Option<String>,
+    pub freeze_authority: Option<String>,
+    pub total_holders: Option<i64>,
+    pub top_10_concentration: Option<f64>,
+    pub security_risks: Vec<SecurityRisk>,
+    pub security_summary: Option<String>,
+    
+    // Social/Links
+    pub websites: Vec<TokenWebsiteLink>,
+    pub socials: Vec<TokenSocialLink>,
+    
+    // Pools
+    pub pools: Vec<TokenPoolInfo>,
+    
+    // Metadata
+    pub timestamp: String,
+}
+
+/// OHLCV data point for charting
+#[derive(Debug, Serialize, Clone)]
+pub struct OhlcvPoint {
+    pub timestamp: i64,
+    pub open: f64,
+    pub high: f64,
+    pub low: f64,
+    pub close: f64,
+    pub volume: f64,
+}
+
 fn normalize_optional_text(value: Option<String>) -> Option<String> {
     value.and_then(|raw| {
         let trimmed = raw.trim();
@@ -114,92 +213,6 @@ fn normalize_optional_text(value: Option<String>) -> Option<String> {
             Some(trimmed.to_string())
         }
     })
-}
-
-/// Token detail response
-#[derive(Debug, Serialize)]
-pub struct TokenDetailResponse {
-    pub mint: String,
-    pub symbol: String,
-    pub name: Option<String>,
-    pub tagline: Option<String>,
-    pub description: Option<String>,
-    pub logo_url: Option<String>,
-    pub website: Option<String>,
-    pub verified: bool,
-    pub tags: Vec<String>,
-    pub pair_labels: Vec<String>,
-    pub decimals: Option<u8>,
-    pub created_at: Option<i64>,
-    pub last_updated: Option<i64>,
-    pub pair_created_at: Option<i64>,
-    pub pair_url: Option<String>,
-    pub boosts_active: Option<i64>,
-    // Price info
-    pub price_sol: Option<f64>,
-    pub price_usd: Option<f64>,
-    pub price_confidence: Option<f32>,
-    pub price_updated_at: Option<i64>,
-    pub price_change_h1: Option<f64>,
-    pub price_change_h24: Option<f64>,
-    pub price_change_periods: PeriodStats<f64>,
-    // Market info
-    pub liquidity_usd: Option<f64>,
-    pub liquidity_base: Option<f64>,
-    pub liquidity_quote: Option<f64>,
-    pub volume_24h: Option<f64>,
-    pub volume_periods: PeriodStats<f64>,
-    pub fdv: Option<f64>,
-    pub market_cap: Option<f64>,
-    // Pool info
-    pub pool_address: Option<String>,
-    pub pool_dex: Option<String>,
-    pub pool_reserves_sol: Option<f64>,
-    pub pool_reserves_token: Option<f64>,
-    // Activity info
-    pub txn_periods: PeriodStats<TxnPeriodSummary>,
-    pub buys_24h: Option<i64>,
-    pub sells_24h: Option<i64>,
-    pub net_flow_24h: Option<i64>,
-    pub buy_sell_ratio_24h: Option<f64>,
-    // Security info
-    pub risk_score: Option<i32>,
-    pub rugged: Option<bool>,
-    pub mint_authority: Option<String>,
-    pub freeze_authority: Option<String>,
-    pub total_holders: Option<i32>,
-    pub top_10_concentration: Option<f64>,
-    pub security_risks: Vec<SecurityRisk>,
-    pub security_summary: Option<String>,
-    // External references
-    pub websites: Vec<TokenWebsiteLink>,
-    pub socials: Vec<TokenSocialLink>,
-    pub pools: Vec<TokenPoolInfo>,
-    // Status flags
-    pub has_ohlcv: bool,
-    pub has_pool_price: bool,
-    pub has_open_position: bool,
-    pub blacklisted: bool,
-    pub timestamp: String,
-}
-
-#[derive(Debug, Serialize, Clone)]
-pub struct SecurityRisk {
-    pub name: String,
-    pub level: String,
-    pub description: String,
-    pub score: i32,
-}
-
-/// OHLCV data point
-#[derive(Debug, Serialize)]
-pub struct OhlcvPoint {
-    pub timestamp: i64,
-    pub open: f64,
-    pub high: f64,
-    pub low: f64,
-    pub close: f64,
-    pub volume: f64,
 }
 
 /// Token statistics response
@@ -518,7 +531,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
 
     // Fetch token from in-memory store (instant lookup, no DB I/O)
     let lookup_start = std::time::Instant::now();
-    let snapshot = match get_global_token_store().get(&mint) {
+    let snapshot = match crate::tokens::store::get_token(&mint) {
         Some(snap) => {
             if is_debug_webserver_enabled() {
                 log(
@@ -605,7 +618,8 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         }
     };
 
-    let token = &snapshot.data; // ApiToken from cache
+    // Extract token from snapshot for processing
+    let token = &snapshot;
 
     let pool_descriptors = pools::get_token_pools(&mint);
     let canonical_pool_id = pool_descriptors.first().map(|pool| pool.pool_id);
@@ -692,7 +706,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
             .as_secs() as i64;
         (
             Some(price_result.price_sol),
-            Some(price_result.confidence),
+            Some(price_result.confidence.to_string()),
             Some(now_unix - (age_secs as i64)),
             Some(price_result.pool_address),
             price_result.source_pool,
@@ -726,35 +740,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         total_holders,
         top_10_concentration,
         security_risks,
-    ) = match SecurityDatabase::get_security_info_async(&mint).await {
-        Ok(Some(sec)) => {
-            let top_10_conc = if sec.top_holders.len() >= 10 {
-                Some(sec.top_holders.iter().take(10).map(|h| h.pct).sum::<f64>())
-            } else {
-                None
-            };
-            let risks = sec
-                .risks
-                .iter()
-                .map(|r| SecurityRisk {
-                    name: r.name.clone(),
-                    level: r.level.clone(),
-                    description: r.description.clone(),
-                    score: r.score,
-                })
-                .collect();
-            (
-                Some(sec.score),
-                Some(sec.rugged),
-                sec.mint_authority,
-                sec.freeze_authority,
-                Some(sec.total_holders),
-                top_10_conc,
-                risks,
-            )
-        }
-        Ok(None) | Err(_) => (None, None, None, None, None, None, vec![]),
-    };
+    ) = (None, None, None, None, None, None, Vec::<SecurityRisk>::new());
 
     if is_debug_webserver_enabled() {
         log(
@@ -797,7 +783,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     }
 
     let has_pool_price = price_sol.is_some();
-    let blacklisted = blacklist::is_token_blacklisted_db(&mint);
+    let blacklisted = blacklist::is(&mint);
 
     // Position check - this is the ONLY additional async, keep it last and simple
     let position_start = std::time::Instant::now();
@@ -868,61 +854,51 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         );
     }
 
-    let created_at_ts = token.created_at.map(|dt| dt.timestamp());
-    let last_updated_ts = Some(token.last_updated.timestamp());
+    let created_at_ts = Some(token.first_seen_at.timestamp());
+    let last_updated_ts = Some(token.updated_at.timestamp());
     let pair_created_at = created_at_ts;
-    let price_usd = token.price_pool_usd.or(token.price_dexscreener_usd);
-    let price_change_periods = token
-        .price_change
-        .as_ref()
-        .map(|changes| PeriodStats {
-            m5: changes.m5,
-            h1: changes.h1,
-            h6: changes.h6,
-            h24: changes.h24,
-        })
-        .unwrap_or_else(PeriodStats::empty);
-    let volume_periods = token
-        .volume
-        .as_ref()
-        .map(|vol| PeriodStats {
-            m5: vol.m5,
-            h1: vol.h1,
-            h6: vol.h6,
-            h24: vol.h24,
-        })
-        .unwrap_or_else(PeriodStats::empty);
-    let txn_periods = token
-        .txns
-        .as_ref()
-        .map(|stats| PeriodStats {
-            m5: stats.m5.as_ref().map(|p| TxnPeriodSummary {
-                buys: p.buys,
-                sells: p.sells,
-            }),
-            h1: stats.h1.as_ref().map(|p| TxnPeriodSummary {
-                buys: p.buys,
-                sells: p.sells,
-            }),
-            h6: stats.h6.as_ref().map(|p| TxnPeriodSummary {
-                buys: p.buys,
-                sells: p.sells,
-            }),
-            h24: stats.h24.as_ref().map(|p| TxnPeriodSummary {
-                buys: p.buys,
-                sells: p.sells,
-            }),
-        })
-        .unwrap_or_else(PeriodStats::empty);
-
-    let (buys_24h, sells_24h) = if let Some(txn) = token.txns.as_ref() {
-        (
-            txn.h24.as_ref().and_then(|p| p.buys),
-            txn.h24.as_ref().and_then(|p| p.sells),
-        )
-    } else {
-        (None, None)
+    
+    // Prefer pool price (real-time on-chain) over token cached price
+    let price_usd = price_sol.map(|p| p * 150.0); // Rough SOL/USD conversion; ideally fetch SOL price
+    
+    // Build price change periods from flat fields
+    let price_change_periods = PeriodStats {
+        m5: token.price_change_m5,
+        h1: token.price_change_h1,
+        h6: token.price_change_h6,
+        h24: token.price_change_h24,
     };
+    
+    // Build volume periods from flat fields
+    let volume_periods = PeriodStats {
+        m5: token.volume_m5,
+        h1: token.volume_h1,
+        h6: token.volume_h6,
+        h24: token.volume_h24,
+    };
+    
+    // Build transaction periods from flat fields
+    let txn_periods = PeriodStats {
+        m5: Some(TxnPeriodSummary {
+            buys: token.txns_m5_buys,
+            sells: token.txns_m5_sells,
+        }),
+        h1: Some(TxnPeriodSummary {
+            buys: token.txns_h1_buys,
+            sells: token.txns_h1_sells,
+        }),
+        h6: Some(TxnPeriodSummary {
+            buys: token.txns_h6_buys,
+            sells: token.txns_h6_sells,
+        }),
+        h24: Some(TxnPeriodSummary {
+            buys: token.txns_h24_buys,
+            sells: token.txns_h24_sells,
+        }),
+    };
+
+    let buys_24h = token.txns_h24_buys;
+    let sells_24h = token.txns_h24_sells;
 
     let net_flow_24h = match (buys_24h, sells_24h) {
         (Some(buys), Some(sells)) => Some(buys - sells),
@@ -934,53 +910,36 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         _ => None,
     };
 
-    let liquidity_base = token.liquidity.as_ref().and_then(|l| l.base);
-    let liquidity_quote = token.liquidity.as_ref().and_then(|l| l.quote);
+    // Liquidity base/quote not available in new unified Token - use None
+    let liquidity_base = None;
+    let liquidity_quote = None;
 
-    let mut websites: Vec<TokenWebsiteLink> = Vec::new();
-    if let Some(primary_site) = token.website.as_ref() {
-        if !primary_site.trim().is_empty() {
-            websites.push(TokenWebsiteLink {
-                label: Some("Website".to_string()),
-                url: primary_site.clone(),
-            });
-        }
-    }
+    // Build websites from token.websites vec
+    let mut websites: Vec<TokenWebsiteLink> = token
+        .websites
+        .iter()
+        .filter(|w| !w.url.trim().is_empty())
+        .map(|w| TokenWebsiteLink {
+            label: w.label.clone(),
+            url: w.url.clone(),
+        })
+        .collect();
 
-    let mut socials: Vec<TokenSocialLink> = Vec::new();
-    if let Some(info) = token.info.as_ref() {
-        for site in &info.websites {
-            if site.url.trim().is_empty() {
-                continue;
-            }
-            if websites.iter().any(|existing| existing.url == site.url) {
-                continue;
-            }
-            websites.push(TokenWebsiteLink {
-                label: site.label.clone(),
-                url: site.url.clone(),
-            });
-        }
+    // Build socials from token.socials vec
+    let socials: Vec<TokenSocialLink> = token
+        .socials
+        .iter()
+        .filter(|s| !s.url.trim().is_empty())
+        .map(|s| TokenSocialLink {
+            platform: s.link_type.clone(),
+            url: s.url.clone(),
+        })
+        .collect();
 
-        for social in &info.socials {
-            if social.url.trim().is_empty() {
-                continue;
-            }
-            socials.push(TokenSocialLink {
-                platform: social.link_type.clone(),
-                url: social.url.clone(),
-            });
-        }
-    }
+    // Tags - unified token doesn't have separate tags/labels, use empty vec
+    let combined_tags: Vec<String> = Vec::new();
 
-    let mut combined_tags = token.tags.clone();
-    for label in &token.labels {
-        if !combined_tags.contains(label) {
-            combined_tags.push(label.clone());
-        }
-    }
-
-    let logo_url = token.logo_url.clone();
+    let logo_url = token.image_url.clone();
     let primary_website = websites.first().map(|link| link.url.clone());
 
     let security_summary = match (rugged, security_score) {
@@ -1009,13 +968,9 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         _ => None,
     };
 
-    let info_header =
-        normalize_optional_text(token.info.as_ref().and_then(|info| info.header.clone()));
-    let info_summary =
-        normalize_optional_text(token.info.as_ref().and_then(|info| info.open_graph.clone()));
-    let tagline = info_header.clone().or_else(|| info_summary.clone());
-    let description =
-        normalize_optional_text(token.description.clone()).or_else(|| info_summary.clone());
+    // Use header image as tagline if available
+    let tagline = token.header_image_url.clone();
+    let description = normalize_optional_text(token.description.clone());
 
     Json(TokenDetailResponse {
         mint: token.mint.clone(),
@@ -1025,26 +980,26 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         description,
         logo_url,
         website: primary_website,
-        verified: token.is_verified,
+        verified: token.security_score.map(|s| s >= 500).unwrap_or(false),
         tags: combined_tags,
-        pair_labels: token.labels.clone(),
-        decimals: token.decimals,
+        pair_labels: Vec::new(), // Not available in unified Token
+        decimals: Some(token.decimals),
         created_at: created_at_ts,
         last_updated: last_updated_ts,
         pair_created_at,
-        pair_url: token.pair_url.clone(),
-        boosts_active: token.boosts.as_ref().and_then(|b| b.active),
+        pair_url: None, // Not available in unified Token
+        boosts_active: None, // Not available in unified Token
         price_sol,
         price_usd,
         price_confidence,
         price_updated_at,
-        price_change_h1: token.price_change.as_ref().and_then(|p| p.h1),
-        price_change_h24: token.price_change.as_ref().and_then(|p| p.h24),
+        price_change_h1: token.price_change_h1,
+        price_change_h24: token.price_change_h24,
         price_change_periods,
-        liquidity_usd: token.liquidity.as_ref().and_then(|l| l.usd),
+        liquidity_usd: token.liquidity_usd,
         liquidity_base,
         liquidity_quote,
-        volume_24h: token.volume.as_ref().and_then(|v| v.h24),
+        volume_24h: token.volume_h24,
         volume_periods,
         fdv: token.fdv,
         market_cap: token.market_cap,

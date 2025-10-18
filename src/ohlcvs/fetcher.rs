@@ -1,7 +1,6 @@
 // GeckoTerminal API fetcher with rate limiting and priority queue
 
 use crate::ohlcvs::types::{OhlcvDataPoint, OhlcvError, OhlcvResult, Priority, Timeframe};
-use crate::tokens::geckoterminal::acquire_gecko_api_permit;
 use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 use std::collections::{BinaryHeap, VecDeque};
@@ -116,10 +115,7 @@ impl OhlcvFetcher {
         before_timestamp: Option<i64>,
         limit: usize,
     ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
-        // Acquire shared GeckoTerminal rate limit permit
-        let _permit = acquire_gecko_api_permit().await.map_err(|e| {
-            OhlcvError::ApiError(format!("Failed to acquire rate limit permit: {}", e))
-        })?;
+        // Rate limiting: rely on internal request_history window to respect per-minute caps
 
         // Record request attempt for local metrics
         self.record_attempt();

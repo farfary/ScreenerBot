@@ -85,12 +85,10 @@ impl TokensOrchestrator {
                                     continue;
                                 }
 
-                                if let Some(snapshot) = store::get_snapshot(&mint) {
-                                    if snapshot.decimals.is_some() {
-                                        completed.insert(mint.clone());
-                                        retry_state.remove(&mint);
-                                        continue;
-                                    }
+                                if let Some(token) = store::get_token(&mint) {
+                                    completed.insert(mint.clone());
+                                    retry_state.remove(&mint);
+                                    continue;
                                 }
 
                                 let now = Instant::now();

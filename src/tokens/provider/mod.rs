@@ -81,35 +81,78 @@ impl TokenDataProvider {
             .map_err(|e| format!("Failed to lock connection: {}", e))?;
 
         let mut stmt = conn
-            .prepare("SELECT mint, symbol, name, decimals, updated_at FROM tokens ORDER BY updated_at DESC")
+            .prepare("SELECT mint, COALESCE(symbol, ''), COALESCE(name, ''), COALESCE(decimals, 6), updated_at FROM tokens ORDER BY updated_at DESC")
             .map_err(|e| format!("Failed to prepare hydration query: {}", e))?;
 
-        let snapshots: Vec<crate::tokens::store::Snapshot> = stmt
+        let tokens: Vec<crate::tokens::types::Token> = stmt
             .query_map([], |row| {
                 let updated_ts: i64 = row.get(4)?;
-                
-                Ok(crate::tokens::store::Snapshot {
-                    mint: row.get(0)?,
-                    symbol: row.get(1)?,
-                    name: row.get(2)?,
-                    decimals: row.get(3)?,
+                let updated_dt = chrono::DateTime::from_timestamp(updated_ts, 0)
+                    .unwrap_or_else(|| Utc::now());
+                let mint: String = row.get(0)?;
+                let symbol: String = row.get(1)?;
+                let name: String = row.get(2)?;
+                let decimals: u8 = row.get::<_, i64>(3)? as u8;
+
+                Ok(crate::tokens::types::Token {
+                    mint,
+                    symbol,
+                    name,
+                    decimals,
+                    description: None,
+                    image_url: None,
+                    header_image_url: None,
+                    supply: None,
+                    data_source: crate::tokens::types::DataSource::DexScreener,
+                    fetched_at: updated_dt,
+                    updated_at: updated_dt,
+                    price_usd: 0.0,
+                    price_sol: 0.0,
+                    price_native: "0".to_string(),
+                    price_change_m5: None,
+                    price_change_h1: None,
+                    price_change_h6: None,
+                    price_change_h24: None,
+                    market_cap: None,
+                    fdv: None,
+                    liquidity_usd: None,
+                    volume_m5: None,
+                    volume_h1: None,
+                    volume_h6: None,
+                    volume_h24: None,
+                    txns_m5_buys: None,
+                    txns_m5_sells: None,
+                    txns_h1_buys: None,
+                    txns_h1_sells: None,
+                    txns_h6_buys: None,
+                    txns_h6_sells: None,
+                    txns_h24_buys: None,
+                    txns_h24_sells: None,
+                    websites: Vec::new(),
+                    socials: Vec::new(),
+                    mint_authority: None,
+                    freeze_authority: None,
+                    security_score: None,
+                    is_rugged: false,
+                    security_risks: Vec::new(),
+                    total_holders: None,
+                    top_holders: Vec::new(),
+                    creator_balance_pct: None,
+                    transfer_fee_pct: None,
                     is_blacklisted: false,
-                    best_pool: None,
-                    sources: Vec::new(),
                     priority: crate::tokens::priorities::Priority::Medium,
-                    fetched_at: None,
-                    updated_at: chrono::DateTime::from_timestamp(updated_ts, 0)
-                        .unwrap_or_else(|| Utc::now()),
+                    first_seen_at: updated_dt,
+                    last_price_update: updated_dt,
                 })
             })
             .map_err(|e| format!("Failed to query tokens: {}", e))?
             .filter_map(|r| r.ok())
             .collect();
 
-        let count = snapshots.len();
+        let count = tokens.len();
 
         // Batch load into store (direct memory access, skip DB write)
-        crate::tokens::store::hydrate_from_snapshots(snapshots)?;
+        crate::tokens::store::hydrate_from_tokens(tokens)?;
 
         log(LogTag::Tokens, "INFO", &format!("Store hydrated: {} tokens loaded in {}ms", count, start.elapsed().as_millis()));
 

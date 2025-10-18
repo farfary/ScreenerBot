@@ -48,6 +48,7 @@ use crate::pools::{get_pool_price, PriceResult};
 use crate::positions::calculate_position_pnl;
 use crate::positions::is_open_position;
 use crate::tokens;
+use crate::tokens::types::Token;
 use crate::utils::{check_shutdown_or_delay, debug_trader_log, safe_read_lock, safe_write_lock};
 
 use crate::entry::get_profit_target;
@@ -1759,8 +1760,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     // Get current price for this position
                     if let Some(current_price) = price_map.get(&position.mint) {
                         // Fetch token from cache
-                        if let Some(snapshot) = get_global_token_store().get(&position.mint) {
-                            let full_token: Token = snapshot.data.clone().into();
+                        if let Some(full_token) = crate::tokens::store::get_token(&position.mint) {
 
                             log(
                                 LogTag::Trader,
@@ -1960,7 +1960,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                         .await;
 
                         // Fetch token from cache for immediate processing
-                        let Some(snapshot) = get_global_token_store().get(&position.mint) else {
+                        let Some(full_token) = crate::tokens::store::get_token(&position.mint) else {
                             // If token not found in cache, remove the cached decision since we can't trade it
                             remove_sell_decision(&position_id);
                             log(
@@ -1973,7 +1973,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                             );
                             continue;
                         };
-                        let full_token: Token = snapshot.data.clone().into();
+                        let full_token = full_token;
 
                         log(
                             LogTag::Trader,

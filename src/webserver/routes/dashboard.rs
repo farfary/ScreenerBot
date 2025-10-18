@@ -8,7 +8,7 @@ use crate::global::{
 };
 use crate::positions;
 use crate::rpc::get_global_rpc_stats;
-use crate::tokens::blacklist::{get_blacklist_summary, BlacklistSummary};
+use crate::tokens::blacklist::get_blacklist_summary;
 use crate::wallet::get_current_wallet_status;
 use crate::webserver::state::AppState;
 

@@ -28,7 +28,7 @@ use crate::config::with_config;
 use crate::global::is_debug_wallet_enabled;
 use crate::logger::{log, LogTag};
 use crate::rpc::{get_rpc_client, TokenAccountInfo};
-use crate::tokens::store::get_global_token_store;
+// Use tokens::store accessors directly when needed
 use crate::transactions::get_transaction_database;
 use crate::utils::get_wallet_address;
 
@@ -906,29 +906,23 @@ async fn enrich_token_overview(
     let metadata_map: HashMap<String, crate::tokens::types::Token> = if unique_mints.is_empty() {
         HashMap::new()
     } else {
-        // Fetch tokens from cache - instant memory access
-        let store = get_global_token_store();
         unique_mints
             .iter()
-            .filter_map(|mint| {
-                store
-                    .get(mint)
-                    .map(|snapshot| (mint.clone(), snapshot.data.clone()))
-            })
+            .filter_map(|mint| crate::tokens::store::get_token(mint).map(|t| (mint.clone(), t)))
             .collect()
     };
 
     for balance in balances {
         let token_meta = metadata_map.get(&balance.mint);
 
-        let (symbol, name, price_sol, price_usd, liquidity_usd, volume_24h, last_updated, dex_id) =
+    let (symbol, name, price_sol, price_usd, liquidity_usd, volume_24h, last_updated, dex_id) =
             if let Some(meta) = token_meta {
-                let price_sol = meta.price_dexscreener_sol.or(meta.price_pool_sol);
-                let price_usd = meta.price_dexscreener_usd.or(meta.price_pool_usd);
-                let liquidity_usd = meta.liquidity.as_ref().and_then(|l| l.usd);
-                let volume_24h = meta.volume.as_ref().and_then(|v| v.h24);
-                let last_updated = Some(meta.last_updated.to_rfc3339());
-                let dex_id = meta.dex_id.clone();
+        let price_sol = if meta.price_sol > 0.0 { Some(meta.price_sol) } else { None };
+        let price_usd = if meta.price_usd > 0.0 { Some(meta.price_usd) } else { None };
+        let liquidity_usd = meta.liquidity_usd;
+        let volume_24h = meta.volume_h24;
+        let last_updated = Some(meta.updated_at.to_rfc3339());
+        let dex_id = Some(meta.data_source.as_str().to_string());
 
                 let symbol = if meta.symbol.trim().is_empty() {
                     short_mint_label(&balance.mint)
@@ -2262,7 +2256,7 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
         }
 
         let balance_ui = if let Some(decimals) =
-            crate::tokens::decimals::get_cached_decimals(&account_info.mint)
+            crate::tokens::get_cached_decimals(&account_info.mint)
         {
             (account_info.balance as f64) / (10_f64).powi(decimals as i32)
         } else {
@@ -2275,7 +2269,7 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
             mint: account_info.mint.clone(),
             balance: account_info.balance,
             balance_ui,
-            decimals: crate::tokens::decimals::get_cached_decimals(&account_info.mint),
+            decimals: crate::tokens::get_cached_decimals(&account_info.mint),
             is_token_2022: account_info.is_token_2022,
         });
     }

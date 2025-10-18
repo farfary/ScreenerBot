@@ -835,129 +835,93 @@ async fn collect_token_discovery_snapshot() -> Option<TokenDiscoveryStatusSnapsh
     }
 
     // Get stats (may be empty if first cycle hasn't completed yet)
-    let stats = crate::tokens::discovery::get_discovery_stats().await;
+    // Token discovery service stats not available; hide section
+    return None;
 
     Some(TokenDiscoveryStatusSnapshot {
         running,
-        total_cycles: stats.total_cycles,
-        last_cycle_started: stats.last_cycle_started.map(|dt| dt.to_rfc3339()),
-        last_cycle_completed: stats.last_cycle_completed.map(|dt| dt.to_rfc3339()),
-        last_processed: stats.last_processed,
-        last_added: stats.last_added,
-        last_deduplicated_removed: stats.last_deduplicated_removed,
-        last_blacklist_removed: stats.last_blacklist_removed,
-        total_processed: stats.total_processed,
-        total_added: stats.total_added,
+    total_cycles: 0,
+    last_cycle_started: None,
+    last_cycle_completed: None,
+    last_processed: 0,
+    last_added: 0,
+    last_deduplicated_removed: 0,
+    last_blacklist_removed: 0,
+    total_processed: 0,
+    total_added: 0,
         sources: DiscoverySourceSnapshot {
-            profiles: stats.per_source.profiles,
-            boosted: stats.per_source.boosted,
-            top_boosts: stats.per_source.top_boosts,
-            rug_new: stats.per_source.rug_new,
-            rug_viewed: stats.per_source.rug_viewed,
-            rug_trending: stats.per_source.rug_trending,
-            rug_verified: stats.per_source.rug_verified,
-            gecko_updated: stats.per_source.gecko_updated,
-            gecko_trending: stats.per_source.gecko_trending,
-            jupiter_tokens: stats.per_source.jupiter_tokens,
-            jupiter_top_organic: stats.per_source.jupiter_top_organic,
-            jupiter_top_traded: stats.per_source.jupiter_top_traded,
-            jupiter_top_trending: stats.per_source.jupiter_top_trending,
-            coingecko_markets: stats.per_source.coingecko_markets,
-            defillama_protocols: stats.per_source.defillama_protocols,
+            profiles: 0,
+            boosted: 0,
+            top_boosts: 0,
+            rug_new: 0,
+            rug_viewed: 0,
+            rug_trending: 0,
+            rug_verified: 0,
+            gecko_updated: 0,
+            gecko_trending: 0,
+            jupiter_tokens: 0,
+            jupiter_top_organic: 0,
+            jupiter_top_traded: 0,
+            jupiter_top_trending: 0,
+            coingecko_markets: 0,
+            defillama_protocols: 0,
         },
-        last_error: stats.last_error,
+    last_error: None,
     })
 }
 
 async fn collect_dexscreener_status_snapshot() -> Option<DexscreenerStatusSnapshot> {
-    use crate::tokens::dexscreener;
-    use crate::tokens::types::ApiStats;
-
-    let enabled = config::with_config(|cfg| cfg.tokens.sources.dexscreener.enabled);
-
-    let (token_cache_stats, pool_cache_stats, stats_opt) = tokio::join!(
-        dexscreener::get_cache_stats(),
-        dexscreener::get_pool_cache_stats(),
-        dexscreener::get_dexscreener_api_stats(),
-    );
-
-    let (token_cache_entries, token_cache_fresh) = token_cache_stats;
-    let (pool_cache_entries, pool_cache_fresh) = pool_cache_stats;
-
-    let rate_limit_per_minute = dexscreener::get_dexscreener_rate_limit_per_minute();
-    let discovery_rate_limit_per_minute =
-        dexscreener::get_dexscreener_discovery_rate_limit_per_minute();
-    let max_tokens_per_call = dexscreener::get_dexscreener_max_tokens_per_api_call();
-
-    let (stats, initialized) = match stats_opt {
-        Some(s) => (s, true),
-        None => (ApiStats::new(), false),
-    };
-
-    Some(DexscreenerStatusSnapshot {
-        enabled,
-        initialized,
-        rate_limit_per_minute,
-        discovery_rate_limit_per_minute,
-        max_tokens_per_call,
-        token_cache_entries,
-        token_cache_fresh,
-        pool_cache_entries,
-        pool_cache_fresh,
-        price_cache_ttl_secs: dexscreener::PRICE_CACHE_TTL_SECONDS,
-        pool_cache_ttl_secs: dexscreener::POOL_CACHE_TTL_SECONDS,
-        api_total_requests: stats.total_requests,
-        api_successful_requests: stats.successful_requests,
-        api_failed_requests: stats.failed_requests,
-        api_success_rate: stats.get_success_rate(),
-        api_cache_hits: stats.cache_hits,
-        api_cache_misses: stats.cache_misses,
-        api_cache_hit_rate: stats.get_cache_hit_rate(),
-        api_average_response_ms: stats.average_response_time_ms,
-        last_request_time: stats.last_request_time,
+    // Placeholder snapshot shows disabled/zeroed metrics
+    return Some(DexscreenerStatusSnapshot {
+        enabled: config::with_config(|cfg| cfg.tokens.sources.dexscreener.enabled),
+        initialized: false,
+        rate_limit_per_minute: 0,
+        discovery_rate_limit_per_minute: 0,
+        max_tokens_per_call: 0,
+        token_cache_entries: 0,
+        token_cache_fresh: 0,
+        pool_cache_entries: 0,
+        pool_cache_fresh: 0,
+        price_cache_ttl_secs: 0,
+        pool_cache_ttl_secs: 0,
+        api_total_requests: 0,
+        api_successful_requests: 0,
+        api_failed_requests: 0,
+        api_success_rate: 0.0,
+        api_cache_hits: 0,
+        api_cache_misses: 0,
+        api_cache_hit_rate: 0.0,
+    api_average_response_ms: 0.0,
+        last_request_time: None,
     })
 }
 
 async fn collect_gecko_terminal_status_snapshot() -> Option<GeckoTerminalStatusSnapshot> {
-    use crate::tokens::geckoterminal;
-
+    // TODO: Rewire to new API stats trackers under tokens::api
     let enabled = config::with_config(|cfg| cfg.tokens.sources.geckoterminal.enabled);
-
-    let (pool_cache_stats, rate_limit_status, stats) = tokio::join!(
-        geckoterminal::get_pool_cache_stats(),
-        geckoterminal::get_current_rate_limit_status(),
-        geckoterminal::get_geckoterminal_api_stats(),
-    );
-
-    let (cache_entries, cache_fresh) = pool_cache_stats;
-    let (current_rate_limit_calls, current_rate_limit_max, rate_limit_resets_in_ms) =
-        rate_limit_status;
-
-    let initialized = stats.total_requests > 0;
-
     Some(GeckoTerminalStatusSnapshot {
         enabled,
-        initialized,
-        rate_limit_per_minute: geckoterminal::get_geckoterminal_rate_limit_per_minute(),
-        max_tokens_per_batch: geckoterminal::get_geckoterminal_max_tokens_per_batch(),
-        cache_entries,
-        cache_fresh,
-        cache_ttl_secs: geckoterminal::GECKO_POOL_CACHE_TTL_SECONDS,
-        api_total_requests: stats.total_requests,
-        api_successful_requests: stats.successful_requests,
-        api_failed_requests: stats.failed_requests,
-        api_success_rate: stats.success_rate(),
-        api_cache_hits: stats.cache_hits,
-        api_cache_misses: stats.cache_misses,
-        api_cache_hit_rate: stats.cache_hit_rate(),
-        api_average_response_ms: stats.average_response_time_ms,
-        last_request_time: stats.last_request_time,
-        last_success_time: stats.last_success_time,
-        last_error_time: stats.last_error_time,
-        last_error_message: stats.last_error_message.clone(),
-        current_rate_limit_calls,
-        current_rate_limit_max,
-        rate_limit_resets_in_ms,
+        initialized: false,
+        rate_limit_per_minute: 0,
+        max_tokens_per_batch: 0,
+        cache_entries: 0,
+        cache_fresh: 0,
+        cache_ttl_secs: 0,
+        api_total_requests: 0,
+        api_successful_requests: 0,
+        api_failed_requests: 0,
+        api_success_rate: 0.0,
+        api_cache_hits: 0,
+        api_cache_misses: 0,
+        api_cache_hit_rate: 0.0,
+    api_average_response_ms: 0.0,
+        last_request_time: None,
+        last_success_time: None,
+        last_error_time: None,
+        last_error_message: None,
+        current_rate_limit_calls: 0,
+        current_rate_limit_max: 0,
+    rate_limit_resets_in_ms: Some(0),
     })
 }
 

@@ -313,183 +313,84 @@ pub fn calculate_position_total_fees(position: &Position) -> f64 {
 
 // ==================== TOKEN SNAPSHOT FUNCTIONS ====================
 
-/// Fetch latest token data from APIs and create a snapshot
+/// Fetch latest token data from store and create a snapshot (no direct API calls)
 async fn fetch_and_create_token_snapshot(
     position_id: i64,
     mint: &str,
     snapshot_type: &str,
 ) -> Result<TokenSnapshot, String> {
-    let fetch_start = Utc::now();
+    // Read token from the unified tokens store
+    let token = crate::tokens::store::get_token(mint)
+        .ok_or_else(|| format!("Token not found in store: {}", mint))?;
 
-    if is_debug_positions_enabled() {
-        log(
-            LogTag::Positions,
-            "SNAPSHOT_FETCH",
-            &format!(
-                "Fetching latest token data for {} snapshot of {}",
-                snapshot_type, mint
-            ),
-        );
-    }
-
-    // Fetch latest data from DexScreener API
-    // Fetch latest data from DexScreener API (manual lock instead of global helper)
-    let dex_token = match get_global_dexscreener_api().await {
-        Ok(api) => {
-            match tokio::time::timeout(std::time::Duration::from_secs(5), api.lock()).await {
-                Ok(mut guard) => match guard.get_token_from_mint(mint).await {
-                    Ok(Some(token)) => Some(token),
-                    Ok(None) => {
-                        log(
-                            LogTag::Positions,
-                            "SNAPSHOT_NO_DEX_DATA",
-                            &format!("No DexScreener data found for {}", mint),
-                        );
-                        None
-                    }
-                    Err(e) => {
-                        log(
-                            LogTag::Positions,
-                            "SNAPSHOT_DEX_ERROR",
-                            &format!("Error fetching DexScreener data for {}: {}", mint, e),
-                        );
-                        None
-                    }
-                },
-                Err(_) => {
-                    log(
-                        LogTag::Positions,
-                        "SNAPSHOT_DEX_ERROR",
-                        &format!("DexScreener API lock timeout for {}", mint),
-                    );
-                    None
-                }
-            }
-        }
-        Err(e) => {
-            log(
-                LogTag::Positions,
-                "SNAPSHOT_DEX_ERROR",
-                &format!("Failed to acquire DexScreener API: {}", e),
-            );
-            None
-        }
-    };
-
-    // Calculate data freshness score (0-100)
-    let fetch_duration_ms = Utc::now()
-        .signed_duration_since(fetch_start)
+    // Compute freshness based on last price update vs now
+    let now = Utc::now();
+    let last_update = token.last_price_update;
+    let age_ms = now
+        .signed_duration_since(last_update)
         .num_milliseconds();
-    let freshness_score = if fetch_duration_ms < 1000 {
-        100 // Very fresh, under 1 second
-    } else if fetch_duration_ms < 5000 {
-        80 // Good, under 5 seconds
-    } else if fetch_duration_ms < 10000 {
-        60 // OK, under 10 seconds
-    } else if fetch_duration_ms < 30000 {
-        40 // Slow, under 30 seconds
+    let freshness_score = if age_ms < 30_000 {
+        100 // < 30s
+    } else if age_ms < 60_000 {
+        80 // < 60s
+    } else if age_ms < 300_000 {
+        60 // < 5m
+    } else if age_ms < 900_000 {
+        40 // < 15m
     } else {
-        20 // Very slow, over 30 seconds
+        20 // stale
     };
 
-    // Extract DexScreener data
-    let (
-        symbol,
-        name,
-        price_sol,
-        price_usd,
-        price_native,
-        dex_id,
-        pair_address,
-        pair_url,
-        fdv,
-        market_cap,
-        pair_created_at,
-        liquidity_usd,
-        liquidity_base,
-        liquidity_quote,
-        volume_h24,
-        volume_h6,
-        volume_h1,
-        volume_m5,
-        txns_h24_buys,
-        txns_h24_sells,
-        txns_h6_buys,
-        txns_h6_sells,
-        txns_h1_buys,
-        txns_h1_sells,
-        txns_m5_buys,
-        txns_m5_sells,
-        price_change_h24,
-        price_change_h6,
-        price_change_h1,
-        price_change_m5,
-    ) = if let Some(ref token) = dex_token {
-        (
-            Some(token.symbol.clone()),
-            Some(token.name.clone()),
-            token.price_dexscreener_sol,
-            token.price_dexscreener_usd,
-            token.price_dexscreener_sol, // Use SOL price as native
-            token.dex_id.clone(),
-            token.pair_address.clone(),
-            token.pair_url.clone(),
-            token.fdv,
-            token.market_cap,
-            token.created_at.map(|dt| dt.timestamp()),
-            token.liquidity.as_ref().and_then(|l| l.usd),
-            token.liquidity.as_ref().and_then(|l| l.base),
-            token.liquidity.as_ref().and_then(|l| l.quote),
-            token.volume.as_ref().and_then(|v| v.h24),
-            token.volume.as_ref().and_then(|v| v.h6),
-            token.volume.as_ref().and_then(|v| v.h1),
-            token.volume.as_ref().and_then(|v| v.m5),
-            token
-                .txns
-                .as_ref()
-                .and_then(|t| t.h24.as_ref().and_then(|h| h.buys)),
-            token
-                .txns
-                .as_ref()
-                .and_then(|t| t.h24.as_ref().and_then(|h| h.sells)),
-            token
-                .txns
-                .as_ref()
-                .and_then(|t| t.h6.as_ref().and_then(|h| h.buys)),
-            token
-                .txns
-                .as_ref()
-                .and_then(|t| t.h6.as_ref().and_then(|h| h.sells)),
-            token
-                .txns
-                .as_ref()
-                .and_then(|t| t.h1.as_ref().and_then(|h| h.buys)),
-            token
-                .txns
-                .as_ref()
-                .and_then(|t| t.h1.as_ref().and_then(|h| h.sells)),
-            token
-                .txns
-                .as_ref()
-                .and_then(|t| t.m5.as_ref().and_then(|h| h.buys)),
-            token
-                .txns
-                .as_ref()
-                .and_then(|t| t.m5.as_ref().and_then(|h| h.sells)),
-            token.price_change.as_ref().and_then(|pc| pc.h24),
-            token.price_change.as_ref().and_then(|pc| pc.h6),
-            token.price_change.as_ref().and_then(|pc| pc.h1),
-            token.price_change.as_ref().and_then(|pc| pc.m5),
-        )
-    } else {
-        (
-            None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-            None, None,
-        )
-    };
+    // Map Token -> TokenSnapshot (Dex-like fields best-effort)
+    let symbol = Some(token.symbol.clone());
+    let name = Some(token.name.clone());
+    let price_sol = Some(token.price_sol);
+    let price_usd = Some(token.price_usd);
+    let price_native = token.price_native.parse::<f64>().ok();
+    let dex_id = Some(token.data_source.as_str().to_string());
+    let pair_address = None;
+    let pair_url = None;
+    let fdv = token.fdv;
+    let market_cap = token.market_cap;
+    let pair_created_at = None;
+    let liquidity_usd = token.liquidity_usd;
+    let liquidity_base = None;
+    let liquidity_quote = None;
+    let volume_h24 = token.volume_h24;
+    let volume_h6 = token.volume_h6;
+    let volume_h1 = token.volume_h1;
+    let volume_m5 = token.volume_m5;
+    let txns_h24_buys = token.txns_h24_buys;
+    let txns_h24_sells = token.txns_h24_sells;
+    let txns_h6_buys = token.txns_h6_buys;
+    let txns_h6_sells = token.txns_h6_sells;
+    let txns_h1_buys = token.txns_h1_buys;
+    let txns_h1_sells = token.txns_h1_sells;
+    let txns_m5_buys = token.txns_m5_buys;
+    let txns_m5_sells = token.txns_m5_sells;
+    let price_change_h24 = token.price_change_h24;
+    let price_change_h6 = token.price_change_h6;
+    let price_change_h1 = token.price_change_h1;
+    let price_change_m5 = token.price_change_m5;
 
-    // Create snapshot
+    // Token meta links
+    let token_description = token.description.clone();
+    let token_image = token.image_url.clone();
+    let token_website = token
+        .websites
+        .get(0)
+        .map(|w| w.url.clone());
+    let token_twitter = token
+        .socials
+        .iter()
+        .find(|s| s.link_type.to_lowercase().contains("twitter"))
+        .map(|s| s.url.clone());
+    let token_telegram = token
+        .socials
+        .iter()
+        .find(|s| s.link_type.to_lowercase().contains("telegram"))
+        .map(|s| s.url.clone());
+
     let snapshot = TokenSnapshot {
         id: None,
         position_id,
@@ -526,13 +427,13 @@ async fn fetch_and_create_token_snapshot(
         price_change_h1,
         price_change_m5,
         token_uri: None,
-        token_description: None,
-        token_image: None,
-        token_website: None,
-        token_twitter: None,
-        token_telegram: None,
-        snapshot_time: Utc::now(),
-        api_fetch_time: fetch_start,
+        token_description,
+        token_image,
+        token_website,
+        token_twitter,
+        token_telegram,
+        snapshot_time: now,
+        api_fetch_time: token.updated_at,
         data_freshness_score: freshness_score,
     };
 
@@ -540,7 +441,7 @@ async fn fetch_and_create_token_snapshot(
         LogTag::Positions,
         "SNAPSHOT_CREATED",
         &format!(
-            "Created {} snapshot for {} - freshness: {}/100, price: {:?} SOL",
+            "Created {} snapshot for {} from store (freshness: {}/100, price_sol: {:?})",
             snapshot_type, mint, freshness_score, price_sol
         ),
     );

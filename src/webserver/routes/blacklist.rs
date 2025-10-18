@@ -2,7 +2,7 @@ use axum::{extract::State, response::Json, routing::get, Router};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::tokens::blacklist::{get_blacklist_summary, BlacklistSummary};
+use crate::tokens::blacklist::get_blacklist_summary;
 use crate::webserver::state::AppState;
 
 #[derive(Debug, Serialize, Deserialize)]

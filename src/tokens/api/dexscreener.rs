@@ -214,7 +214,7 @@ impl DexScreenerClient {
         log(
             LogTag::Tokens,
             "DEBUG",
-            &format!("[DEXSCREENER] Fetching pair: pair={}, chain={}", pair_address, chain)
+            &format!("[DEXSCREENER] Fetching pair: pair={}, chain={}", pair_address, chain_id)
         );
 
         let response = self

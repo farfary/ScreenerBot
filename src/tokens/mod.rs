@@ -17,6 +17,7 @@ pub mod provider;
 pub mod service;
 pub mod storage;
 pub mod store;
+pub mod security;
 pub mod types;
 
 // Re-export main types for convenience

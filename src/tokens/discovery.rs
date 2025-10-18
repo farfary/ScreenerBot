@@ -14,7 +14,7 @@ use crate::config::get_config_clone;
 use crate::tokens::blacklist;
 use crate::tokens::events::{emit, TokenEvent};
 use crate::tokens::provider::TokenDataProvider;
-use crate::tokens::store::{upsert_snapshot, Snapshot};
+// Legacy snapshot import removed; discovery publishes candidates and tokens are hydrated via provider/store
 use crate::tokens::types::ApiError;
 
 const GECKO_TRENDING_DURATIONS: &[&str] = &["5m", "1h", "6h", "24h"];
@@ -370,20 +370,8 @@ pub async fn process_new_mints(provider: &TokenDataProvider, entries: Vec<(Strin
             source: source.clone(),
             at: Utc::now(),
         });
-        
-        // Update store (memory + DB)
-        if let Err(e) = upsert_snapshot(Snapshot {
-            mint: mint.clone(),
-            updated_at: Utc::now(),
-            ..Default::default()
-        }) {
-            log(
-                LogTag::Tokens,
-                "WARN",
-                &format!("Failed to store discovered token: mint={} err={}", mint, e)
-            );
-        }
-        
+        // Store snapshot upsert removed (unified Token store is authoritative)
+
         // Fetch complete data to populate snapshot
         if let Err(err) = provider.fetch_complete_data(&mint, None).await {
             log(

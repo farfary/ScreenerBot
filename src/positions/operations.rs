@@ -17,7 +17,7 @@ use crate::{
     pools::get_pool_price,
     rpc::get_rpc_client,
     swaps::{execute_best_swap, get_best_quote, get_best_quote_for_opening},
-    tokens::{store::get_global_token_store, PriceResult, Token},
+    pools::PriceResult,
     utils::{get_token_balance, get_total_token_balance, get_wallet_address, sol_to_lamports},
 };
 use chrono::Utc;
@@ -27,11 +27,8 @@ const SOLANA_BLOCKHASH_VALIDITY_SLOTS: u64 = 150;
 
 /// Open a new position
 pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
-    let snapshot = get_global_token_store()
-        .get(token_mint)
+    let api_token = crate::tokens::store::get_token(token_mint)
         .ok_or_else(|| format!("Token not found: {}", token_mint))?;
-    let api_token = &snapshot.data;
-    let token: Token = api_token.clone().into();
 
     let price_info = get_pool_price(token_mint)
         .ok_or_else(|| format!("No price data for token: {}", token_mint))?;
@@ -175,7 +172,7 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
     .map_err(|e| format!("Quote failed: {}", e))?;
 
     let swap_result = execute_best_swap(
-        &token,
+        &api_token,
         SOL_MINT,
         &api_token.mint,
         sol_to_lamports(trade_size_sol),
@@ -295,7 +292,7 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
         "SUCCESS",
         &format!(
             "✅ Position opened: {} (ID: {}) | TX: {}",
-            token.symbol, position_id, transaction_signature
+            api_token.symbol, position_id, transaction_signature
         ),
     );
 
@@ -313,11 +310,8 @@ pub async fn close_position_direct(
     token_mint: &str,
     exit_reason: String,
 ) -> Result<String, String> {
-    let snapshot = get_global_token_store()
-        .get(token_mint)
+    let api_token = crate::tokens::store::get_token(token_mint)
         .ok_or_else(|| format!("Token not found: {}", token_mint))?;
-    let api_token = &snapshot.data;
-    let token: Token = api_token.clone().into();
 
     let price_info = get_pool_price(token_mint)
         .ok_or_else(|| format!("No price data for token: {}", token_mint))?;
@@ -453,7 +447,7 @@ pub async fn close_position_direct(
     .map_err(|e| format!("Quote failed: {}", e))?;
 
     let swap_result = execute_best_swap(
-        &token,
+        &api_token,
         token_mint,
         SOL_MINT,
         sell_amount,
@@ -485,7 +479,7 @@ pub async fn close_position_direct(
                 "PARTIAL_EXECUTION",
                 &format!(
                     "⚠️ PARTIAL SWAP DETECTED for {}: Requested {} tokens, executed {} tokens, shortfall: {}",
-                    token.symbol,
+                    api_token.symbol,
                     sell_amount,
                     executed_amount,
                     sell_amount - executed_amount
@@ -497,7 +491,7 @@ pub async fn close_position_direct(
                 "FULL_EXECUTION",
                 &format!(
                     "✅ Full swap executed for {}: {} tokens",
-                    token.symbol, executed_amount
+                    api_token.symbol, executed_amount
                 ),
             );
         }
@@ -507,7 +501,7 @@ pub async fn close_position_direct(
             "EXECUTION_PARSE_ERROR",
             &format!(
                 "⚠️ Could not parse executed amount '{}' for {}",
-                swap_result.input_amount, token.symbol
+                swap_result.input_amount, api_token.symbol
             ),
         );
     }
@@ -565,7 +559,7 @@ pub async fn close_position_direct(
         "SUCCESS",
         &format!(
             "✅ Position closing: {} | TX: {} | Reason: {}",
-            token.symbol, transaction_signature, exit_reason
+            api_token.symbol, transaction_signature, exit_reason
         ),
     );
 

@@ -22,9 +22,6 @@ pub enum EventCategory {
     /// Pool discovery, analysis, and price calculation events
     Pool,
 
-    /// Learning system events (pattern detection, model updates)
-    Learner,
-
     /// Token-related events (blacklist, metadata, decimals)
     Token,
 
@@ -60,7 +57,6 @@ impl EventCategory {
             EventCategory::Swap => "swap".to_string(),
             EventCategory::Transaction => "transaction".to_string(),
             EventCategory::Pool => "pool".to_string(),
-            EventCategory::Learner => "learner".to_string(),
             EventCategory::Token => "token".to_string(),
             EventCategory::System => "system".to_string(),
             EventCategory::Position => "position".to_string(),
@@ -79,7 +75,6 @@ impl EventCategory {
             "swap" => EventCategory::Swap,
             "transaction" => EventCategory::Transaction,
             "pool" => EventCategory::Pool,
-            "learner" => EventCategory::Learner,
             "token" => EventCategory::Token,
             "system" => EventCategory::System,
             "position" => EventCategory::Position,

@@ -454,68 +454,14 @@ async fn initialize_service_components() -> Result<(), String> {
     ))
     .await;
 
-    // Initialize external APIs required by discovery before starting background tasks
+    // DexScreener global init removed; discovery now uses internal API clients via tokens subsystem
     if dexscreener_enabled {
-        if let Err(e) = crate::tokens::init_dexscreener_api().await {
-            // Fail fast because discovery depends on this API when enabled
-
-            record_safe(Event::error(
-                EventCategory::System,
-                Some("dexscreener_api_init_failed".to_string()),
-                None,
-                None,
-                serde_json::json!({
-                    "error": e,
-                    "component": "dexscreener_api",
-                    "required": true
-                }),
-            ))
-            .await;
-
-            return Err(format!("Failed to initialize DexScreener API: {}", e));
-        }
-        // Verify global handle is available
-        match crate::tokens::get_global_dexscreener_api().await {
-            Ok(_) => {
-                if is_debug_pool_service_enabled() {
-                    log(
-                        LogTag::PoolService,
-                        "DEBUG",
-                        "DexScreener API initialized and global handle acquired",
-                    );
-                }
-
-                record_safe(Event::info(
-                    EventCategory::System,
-                    Some("dexscreener_api_initialized".to_string()),
-                    None,
-                    None,
-                    serde_json::json!({
-                        "component": "dexscreener_api",
-                        "status": "ready"
-                    }),
-                ))
-                .await;
-            }
-            Err(e) => {
-                record_safe(Event::error(
-                    EventCategory::System,
-                    Some("dexscreener_api_handle_unavailable".to_string()),
-                    None,
-                    None,
-                    serde_json::json!({
-                        "error": e,
-                        "component": "dexscreener_api",
-                        "stage": "handle_verification"
-                    }),
-                ))
-                .await;
-
-                return Err(format!(
-                    "DexScreener API global handle unavailable after init: {}",
-                    e
-                ));
-            }
+        if is_debug_pool_service_enabled() {
+            log(
+                LogTag::PoolService,
+                "DEBUG",
+                "DexScreener discovery enabled (no global init required)",
+            );
         }
     }
 

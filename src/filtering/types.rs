@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::tokens::summary::TokenSummary;
+use crate::tokens::types::Token;
 
 /// Maximum number of historical decisions to keep in memory per category
 pub const MAX_DECISION_HISTORY: usize = 1000;
@@ -182,7 +182,8 @@ impl FilteringQuery {
 
 #[derive(Debug, Clone)]
 pub struct FilteringQueryResult {
-    pub items: Vec<TokenSummary>,
+    // Core items come directly from the unified Token type
+    pub items: Vec<Token>,
     pub page: usize,
     pub page_size: usize,
     pub total: usize,
@@ -191,11 +192,19 @@ pub struct FilteringQueryResult {
     pub priced_total: usize,
     pub positions_total: usize,
     pub blacklisted_total: usize,
+    // Derived flag sets for downstream consumers (UI/routes) to compute per-item flags
+    // without duplicating summary structs. Kept as Vec<String> for easy JSON.
+    pub priced_mints: Vec<String>,
+    pub open_position_mints: Vec<String>,
+    pub ohlcv_mints: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct TokenEntry {
-    pub summary: TokenSummary,
+    pub token: Token,
+    pub has_pool_price: bool,
+    pub has_open_position: bool,
+    pub has_ohlcv: bool,
     pub pair_created_at: Option<i64>,
     pub last_updated: DateTime<Utc>,
 }

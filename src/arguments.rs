@@ -250,11 +250,6 @@ pub fn is_debug_blacklist_enabled() -> bool {
     has_arg("--debug-blacklist")
 }
 
-/// Learning system debug mode
-pub fn is_debug_learning_enabled() -> bool {
-    has_arg("--debug-learning")
-}
-
 /// System operations debug mode
 pub fn is_debug_system_enabled() -> bool {
     has_arg("--debug-system")

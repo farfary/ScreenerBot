@@ -8,12 +8,8 @@ use crate::global::is_debug_filtering_enabled;
 use crate::logger::{log, LogTag};
 use crate::positions;
 use crate::tokens::get_cached_decimals;
-use crate::tokens::security::{
-    get_security_analyzer, initialize_security_analyzer, RiskLevel, SecurityAnalyzer,
-};
-use crate::tokens::store::get_global_token_store;
-use crate::tokens::summary::{token_to_summary, TokenSummaryContext};
 use crate::tokens::types::Token;
+use crate::tokens::store::all_tokens;
 
 use super::types::{
     FilteringSnapshot, PassedToken, RejectedToken, TokenEntry, MAX_DECISION_HISTORY,
@@ -23,11 +19,10 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
     let debug_enabled = is_debug_filtering_enabled();
     let start = StdInstant::now();
 
-    // Use token store cache instead of direct database access
-    let store = get_global_token_store();
-    let snapshots = store.all();
+    // Use token store cache (unified Token) instead of legacy snapshot
+    let tokens = all_tokens();
 
-    if snapshots.is_empty() {
+    if tokens.is_empty() {
         if debug_enabled {
             log(
                 LogTag::Filtering,
@@ -38,10 +33,8 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
         return Ok(FilteringSnapshot::empty());
     }
 
-    // Convert TokenSnapshots to ApiTokens for filtering
-    let all_tokens: Vec<_> = snapshots.iter().map(|s| s.data.clone()).collect();
-
-    ensure_security_analyzer_initialized(debug_enabled);
+    // All tokens for filtering
+    let all_tokens: Vec<Token> = tokens;
 
     let mut filtered_mints: Vec<String> = Vec::new();
     let mut passed_tokens: Vec<PassedToken> = Vec::new();
@@ -95,18 +88,39 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
         }
     }
 
-    let mints: Vec<String> = all_tokens.iter().map(|token| token.mint.clone()).collect();
-    let summary_context = TokenSummaryContext::build(&mints).await;
+    // TODO: Replace placeholders with bulk helpers from pools/positions/ohlcvs
+    // Build derived flags maps for one-pass assignment
+    let priced_set: std::collections::HashSet<String> = {
+        // Preferred: pools::get_available_tokens() returns mints with price
+        crate::pools::get_available_tokens().into_iter().collect()
+    };
+    let open_pos_set: std::collections::HashSet<String> = {
+        // Preferred: positions::get_open_mints()
+        crate::positions::get_open_mints().await.into_iter().collect()
+    };
+    let ohlcv_set: std::collections::HashSet<String> = {
+        // Preferred: ohlcvs::get_mints_with_data(&mints)
+        let mints: Vec<String> = all_tokens.iter().map(|t| t.mint.clone()).collect();
+        match crate::ohlcvs::get_mints_with_data(&mints).await {
+            Ok(set) => set,
+            Err(_) => Default::default(),
+        }
+    };
 
     let mut token_entries: HashMap<String, TokenEntry> = HashMap::with_capacity(all_tokens.len());
-    for token_api in &all_tokens {
-        let summary = token_to_summary(token_api, &summary_context);
+    for token in &all_tokens {
+        let has_pool_price = priced_set.contains(&token.mint);
+        let has_open_position = open_pos_set.contains(&token.mint);
+        let has_ohlcv = ohlcv_set.contains(&token.mint);
         token_entries.insert(
-            token_api.mint.clone(),
+            token.mint.clone(),
             TokenEntry {
-                summary,
-                pair_created_at: token_api.created_at.map(|dt| dt.timestamp()),
-                last_updated: token_api.last_updated,
+                token: token.clone(),
+                has_pool_price,
+                has_open_position,
+                has_ohlcv,
+                pair_created_at: Some(token.first_seen_at.timestamp()),
+                last_updated: token.updated_at,
             },
         );
     }
@@ -134,26 +148,6 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
         rejected_tokens,
         tokens: token_entries,
     })
-}
-
-fn ensure_security_analyzer_initialized(debug_enabled: bool) {
-    if get_security_analyzer().is_some() {
-        return;
-    }
-
-    if let Err(err) = initialize_security_analyzer() {
-        log(
-            LogTag::Filtering,
-            "SECURITY_INIT_FAIL",
-            &format!("Failed to initialize security analyzer: {}", err),
-        );
-    } else if debug_enabled {
-        log(
-            LogTag::Filtering,
-            "SECURITY_INIT",
-            "Security analyzer initialized lazily for filtering",
-        );
-    }
 }
 
 async fn apply_all_filters(
@@ -202,10 +196,7 @@ async fn apply_all_filters(
 }
 
 fn check_minimum_age(token: &Token, config: &FilteringConfig) -> Option<FilterRejectionReason> {
-    let created_at = match token.created_at {
-        Some(value) => value,
-        None => return Some(FilterRejectionReason::MissingCreationTimestamp),
-    };
+    let created_at = token.first_seen_at;
     let age_minutes = Utc::now()
         .signed_duration_since(created_at)
         .num_minutes()
@@ -219,177 +210,19 @@ fn check_minimum_age(token: &Token, config: &FilteringConfig) -> Option<FilterRe
 }
 
 async fn check_security_requirements(
-    mint: &str,
+    _mint: &str,
     config: &FilteringConfig,
 ) -> Option<FilterRejectionReason> {
-    let analyzer = match get_security_analyzer() {
-        Some(analyzer) => analyzer,
-        None => return Some(FilterRejectionReason::RugCheck_SecurityNoData),
-    };
-
-    analyze_with_security_analyzer(&analyzer, mint, config).await
+    // Placeholder: Security checks will be implemented when tokens.security provider is wired.
+    // For now, honor the enable flag but do not reject tokens here.
+    if !config.rugcheck.enabled {
+        None
+    } else {
+        None
+    }
 }
 
-async fn analyze_with_security_analyzer(
-    analyzer: &SecurityAnalyzer,
-    mint: &str,
-    config: &FilteringConfig,
-) -> Option<FilterRejectionReason> {
-    let analysis = match analyzer.analyze_token_any_cached(mint).await {
-        Some(result) => result,
-        None => return Some(FilterRejectionReason::RugCheck_SecurityNoData),
-    };
-
-    // Risk score check (if enabled)
-    if config.rugcheck.risk_score_enabled {
-        if config.rugcheck.max_risk_score > 0 && analysis.score > config.rugcheck.max_risk_score {
-            return Some(FilterRejectionReason::RugCheck_RiskScoreTooHigh);
-        }
-    }
-
-    // Authority checks (if enabled)
-    if config.rugcheck.authority_checks_enabled {
-        if !analysis.authorities_safe {
-            return Some(FilterRejectionReason::RugCheck_SecurityHighRisk);
-        }
-    }
-
-    // Risk level check (if enabled)
-    if config.rugcheck.risk_level_enabled {
-        if matches!(analysis.risk_level, RiskLevel::Danger) {
-            return Some(FilterRejectionReason::RugCheck_SecurityHighRisk);
-        }
-    }
-
-    // Holder distribution checks (if enabled)
-    if config.rugcheck.holder_distribution_enabled {
-        if config.rugcheck.max_top_holder_pct > 0.0 {
-            if let Some(top_holder_pct) = analysis.top_holder_pct {
-                if top_holder_pct > config.rugcheck.max_top_holder_pct {
-                    return Some(FilterRejectionReason::RugCheck_TopHolderConcentration);
-                }
-            }
-        }
-
-        if config.rugcheck.max_top_3_holders_pct > 0.0 {
-            if let Some(top_three_pct) = analysis.top_3_holder_pct {
-                if top_three_pct > config.rugcheck.max_top_3_holders_pct {
-                    return Some(FilterRejectionReason::RugCheck_TopThreeHolderConcentration);
-                }
-            }
-        }
-
-        match analyzer.get_cached_holder_count(mint).await {
-            Some(count) => {
-                if count < config.rugcheck.min_unique_holders {
-                    return Some(FilterRejectionReason::RugCheck_InsufficientHolders);
-                }
-            }
-            None => return Some(FilterRejectionReason::RugCheck_NoHolderData),
-        }
-    }
-
-    // LP lock checks (if enabled)
-    if config.rugcheck.lp_lock_enabled {
-        let required_lp_lock = if analysis.pump_fun_token {
-            config.rugcheck.min_pumpfun_lp_lock_pct
-        } else {
-            config.rugcheck.min_regular_lp_lock_pct
-        };
-
-        if required_lp_lock > 0.0 {
-            let actual_lp_lock = analysis.max_lp_locked_pct.unwrap_or(0.0);
-            if actual_lp_lock < required_lp_lock {
-                return Some(FilterRejectionReason::RugCheck_LpLockTooLow);
-            }
-        }
-    }
-
-    // NEW: Advanced security checks requiring SecurityInfo
-    // Get SecurityInfo once for efficiency
-    let security_info = match analyzer.get_security_info(mint) {
-        Ok(Some(info)) => info,
-        Ok(None) => return Some(FilterRejectionReason::RugCheck_SecurityNoData),
-        Err(_) => return Some(FilterRejectionReason::RugCheck_SecurityNoData),
-    };
-
-    // NEW: Rugged token check
-    if config.rugcheck.block_rugged_tokens && security_info.rugged {
-        return Some(FilterRejectionReason::RugCheck_TokenRugged);
-    }
-
-    // NEW: Graph insiders check
-    if config.rugcheck.max_graph_insiders > 0
-        && security_info.graph_insiders_detected > config.rugcheck.max_graph_insiders
-    {
-        return Some(FilterRejectionReason::RugCheck_TooManyInsiders);
-    }
-
-    // NEW: Insider holder checks
-    if config.rugcheck.insider_holder_checks_enabled {
-        // Count insider holders in top 10
-        let insider_count = security_info
-            .top_holders
-            .iter()
-            .take(10)
-            .filter(|h| h.insider)
-            .count() as u32;
-
-        if insider_count > config.rugcheck.max_insider_holders_in_top_10 {
-            return Some(FilterRejectionReason::RugCheck_TooManyInsiderHolders);
-        }
-
-        // Calculate total percentage held by insiders
-        if config.rugcheck.max_insider_total_pct > 0.0 {
-            let insider_pct: f64 = security_info
-                .top_holders
-                .iter()
-                .filter(|h| h.insider)
-                .map(|h| h.pct)
-                .sum();
-
-            if insider_pct > config.rugcheck.max_insider_total_pct {
-                return Some(FilterRejectionReason::RugCheck_InsiderConcentration);
-            }
-        }
-    }
-
-    // NEW: Creator balance check
-    if config.rugcheck.max_creator_balance_pct > 0.0 {
-        if let Some(supply) = security_info.supply {
-            if supply > 0 {
-                let creator_pct = (security_info.creator_balance as f64 / supply as f64) * 100.0;
-                if creator_pct > config.rugcheck.max_creator_balance_pct {
-                    return Some(FilterRejectionReason::RugCheck_CreatorBalanceTooHigh);
-                }
-            }
-        }
-    }
-
-    // NEW: LP providers check
-    if config.rugcheck.min_lp_providers > 0
-        && security_info.total_lp_providers < config.rugcheck.min_lp_providers
-    {
-        return Some(FilterRejectionReason::RugCheck_InsufficientLpProviders);
-    }
-
-    // NEW: Transfer fee checks
-    if config.rugcheck.transfer_fee_enabled {
-        // Check if any transfer fee exists (if block_transfer_fee_tokens is enabled)
-        if config.rugcheck.block_transfer_fee_tokens && security_info.transfer_fee_pct > 0.0 {
-            return Some(FilterRejectionReason::RugCheck_HasTransferFee);
-        }
-
-        // Check if transfer fee exceeds threshold
-        if config.rugcheck.max_transfer_fee_pct > 0.0
-            && security_info.transfer_fee_pct > config.rugcheck.max_transfer_fee_pct
-        {
-            return Some(FilterRejectionReason::RugCheck_TransferFeeTooHigh);
-        }
-    }
-
-    None
-}
+// Analyzer-based checks removed; rely on Token fields populated by tokens provider.
 
 async fn check_cooldown_filter(mint: &str) -> bool {
     positions::is_token_in_cooldown(mint).await
@@ -415,8 +248,9 @@ fn check_basic_token_info(
     }
 
     if config.dexscreener.require_logo_url {
+        // Use image_url (from DexScreener info) when available
         if token
-            .logo_url
+            .image_url
             .as_ref()
             .map_or(true, |url| url.trim().is_empty())
         {
@@ -425,11 +259,12 @@ fn check_basic_token_info(
     }
 
     if config.dexscreener.require_website_url {
-        if token
-            .website
-            .as_ref()
-            .map_or(true, |url| url.trim().is_empty())
-        {
+        // Consider websites list (metadata) as presence of a website
+        let has_website = token
+            .websites
+            .iter()
+            .any(|w| !w.url.trim().is_empty());
+        if !has_website {
             return Some(FilterRejectionReason::DexScreener_EmptyWebsiteUrl);
         }
     }
@@ -446,24 +281,21 @@ fn check_transaction_activity(
         return None;
     }
 
-    let txns = token.txns.as_ref()?;
-
-    if let Some(m5) = &txns.m5 {
-        let total = m5.buys.unwrap_or(0) + m5.sells.unwrap_or(0);
-        if total < config.dexscreener.min_transactions_5min {
-            return Some(FilterRejectionReason::DexScreener_InsufficientTransactions5Min);
-        }
-    } else {
-        return Some(FilterRejectionReason::DexScreener_NoTransactionData);
+    // Check flat transaction counters on Token
+    let m5_total = token
+        .txns_m5_buys
+        .unwrap_or(0)
+        .saturating_add(token.txns_m5_sells.unwrap_or(0));
+    if m5_total < config.dexscreener.min_transactions_5min {
+        return Some(FilterRejectionReason::DexScreener_InsufficientTransactions5Min);
     }
 
-    if let Some(h1) = &txns.h1 {
-        let total = h1.buys.unwrap_or(0) + h1.sells.unwrap_or(0);
-        if total < config.dexscreener.min_transactions_1h {
-            return Some(FilterRejectionReason::DexScreener_InsufficientTransactions1H);
-        }
-    } else {
-        return Some(FilterRejectionReason::DexScreener_NoTransactionData);
+    let h1_total = token
+        .txns_h1_buys
+        .unwrap_or(0)
+        .saturating_add(token.txns_h1_sells.unwrap_or(0));
+    if h1_total < config.dexscreener.min_transactions_1h {
+        return Some(FilterRejectionReason::DexScreener_InsufficientTransactions1H);
     }
 
     None
@@ -478,8 +310,7 @@ fn check_liquidity_requirements(
         return None;
     }
 
-    let liquidity = token.liquidity.as_ref()?;
-    let liquidity_usd = liquidity.usd?;
+    let liquidity_usd = token.liquidity_usd?;
 
     if liquidity_usd <= 0.0 {
         return Some(FilterRejectionReason::DexScreener_ZeroLiquidity);

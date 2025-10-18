@@ -1,3 +1,4 @@
+use crate::logger::{log, LogTag};
 // tokens/blacklist.rs
 // Fast in-memory blacklist with DB persistence hooks (to be wired via storage layer later)
 
@@ -49,3 +50,34 @@ pub fn hydrate_from_db(db: &Database) -> Result<usize, String> {
         Err("blacklist cache poisoned".to_string())
     }
 }
+
+// ===== Compatibility helpers for existing routes/stats =====
+
+#[derive(Debug, Clone, Default)]
+pub struct BlacklistSummary {
+    pub total_count: usize,
+    pub low_liquidity_count: usize,
+    pub no_route_count: usize,
+    pub api_error_count: usize,
+    pub system_token_count: usize,
+    pub stable_token_count: usize,
+    pub manual_count: usize,
+    pub poor_performance_count: usize,
+}
+
+pub fn get_blacklist_summary() -> Result<BlacklistSummary, String> {
+    // We don't yet persist reasons breakdown; return counts based on in-memory set for now.
+    // Advanced reason-level stats can be added by querying storage when available.
+    let total = BLACKLIST.read().ok().map(|s| s.len()).unwrap_or(0);
+    Ok(BlacklistSummary {
+        total_count: total,
+        ..Default::default()
+    })
+}
+
+// Track a failed route for potential blacklist policies
+pub fn track_route_failure_db(mint: &str, _symbol: &str, reason: &str) {
+    // Persisting route failures is currently disabled until storage operation is restored
+    log(LogTag::Tokens, "ROUTE_FAILURE", &format!("mint={} reason={}", mint, reason));
+}
+

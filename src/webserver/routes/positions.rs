@@ -11,8 +11,8 @@ use std::sync::Arc;
 
 use crate::logger::{log, LogTag};
 use crate::positions;
-use crate::tokens::security_db::SecurityDatabase;
-use crate::tokens::store::get_global_token_store;
+// Security database deprecated; security info is on Token when available
+// Use crate::tokens::store accessors for token data
 use crate::transactions::{
     get_transaction, TokenTransfer, Transaction, TransactionDirection, TransactionStatus,
     TransactionType,
@@ -917,21 +917,17 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
     });
 
     // 2. Get token info from in-memory store (instant lookup)
-    let snapshot = get_global_token_store().get(&mint);
-    let api_token = snapshot.as_ref().map(|s| &s.data);
+    let snapshot = crate::tokens::store::get_token(&mint);
+    let api_token = snapshot.as_ref();
 
     let token_info = api_token.map(|token| TokenInfo {
         symbol: token.symbol.clone(),
         name: token.name.clone(),
         decimals,
-        logo_url: token.logo_url.clone(),
-        website: token
-            .info
-            .as_ref()
-            .and_then(|i| i.websites.first())
-            .map(|w| w.url.clone()),
-        tags: token.labels.clone(),
-        is_verified: token.is_verified,
+        logo_url: token.image_url.clone(),
+        website: token.websites.first().map(|w| w.url.clone()),
+        tags: Vec::new(), // Tags not available in unified Token
+        is_verified: token.security_score.map(|s| s >= 500).unwrap_or(false),
     });
 
     // 3. Get current price from pool service
@@ -955,8 +951,8 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
     let market_data = api_token.as_ref().map(|token| MarketData {
         market_cap: token.market_cap,
         fdv: token.fdv,
-        liquidity_usd: token.liquidity.as_ref().and_then(|l| l.usd),
-        volume_24h: token.volume.as_ref().and_then(|v| v.h24),
+        liquidity_usd: token.liquidity_usd,
+        volume_24h: token.volume_h24,
     });
 
     // 5. Get pool info
@@ -991,55 +987,24 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
         });
     }
 
-    // 6. Get security info from security database
-    let security = SecurityDatabase::new("data/security.db")
-        .ok()
-        .and_then(|db| db.get_security_info(&mint).ok().flatten())
-        .map(|sec| {
-            let top_10_concentration = if sec.top_holders.len() >= 10 {
-                Some(sec.top_holders.iter().take(10).map(|h| h.pct).sum::<f64>())
-            } else {
-                None
-            };
-
-            SecurityInfo {
-                score: sec.score,
-                score_normalised: sec.score_normalised,
-                rugged: sec.rugged,
-                mint_authority: sec.mint_authority,
-                freeze_authority: sec.freeze_authority,
-                creator: sec.creator,
-                total_holders: sec.total_holders,
-                top_10_concentration,
-                risks: sec
-                    .risks
-                    .iter()
-                    .map(|r| RiskInfo {
-                        name: r.name.clone(),
-                        level: r.level.clone(),
-                        description: r.description.clone(),
-                        score: r.score,
-                    })
-                    .collect(),
-                analyzed_at: sec.analyzed_at,
-            }
-        });
+    // 6. Get security info (temporarily unavailable until SecurityProvider integration)
+    let security = None::<SecurityInfo>;
 
     // 7. Get social info from token database
-    let social = api_token.as_ref().and_then(|token| {
-        token.info.as_ref().map(|info| SocialInfo {
-            website: info.websites.first().map(|w| w.url.clone()),
-            twitter: info
+    let social = api_token.as_ref().map(|token| {
+        SocialInfo {
+            website: token.websites.first().map(|w| w.url.clone()),
+            twitter: token
                 .socials
                 .iter()
                 .find(|s| s.link_type.to_lowercase().contains("twitter"))
-                .map(|s| format!("https://twitter.com/{}", s.url)),
-            telegram: info
+                .map(|s| s.url.clone()),
+            telegram: token
                 .socials
                 .iter()
                 .find(|s| s.link_type.to_lowercase().contains("telegram"))
-                .map(|s| format!("https://t.me/{}", s.url)),
-        })
+                .map(|s| s.url.clone()),
+        }
     });
 
     // 8. Get position debug data
