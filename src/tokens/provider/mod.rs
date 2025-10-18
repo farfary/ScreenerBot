@@ -40,6 +40,9 @@ impl TokenDataProvider {
         // Initialize database
         let database = Arc::new(Database::new(db_path)?);
 
+        // Initialize store with database handle (single source of truth)
+        crate::tokens::store::initialize_with_database(Arc::clone(&database))?;
+
         // Initialize cache
         let cache_config = crate::tokens::cache::CacheConfig::from_global();
         let cache = Arc::new(CacheManager::new(cache_config));
@@ -244,12 +247,13 @@ impl TokenDataProvider {
     }
 
     /// Expose database for auxiliary modules (e.g., blacklist hydrate)
-    pub fn database(&self) -> Arc<Database> {
+    /// Internal: Get database reference for service initialization only
+    /// External modules should NEVER access database directly - use store API
+    pub(crate) fn database(&self) -> Arc<Database> {
         // Query holds Arc<Database>, fetcher also holds Arc<Database>
         // Prefer returning the fetcher's db to keep a single source
         // SAFETY: both point to same Arc in new()
-        // We can extend Fetcher API to expose DB as needed; for now, clone from fetcher via helper
-        // Here we reconstruct by cloning from query (same Arc instance)
+        // We can extend Fetcher API to expose DB as needed; for now, clone from query (same Arc instance)
         self.query.database.clone()
     }
 

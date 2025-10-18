@@ -60,7 +60,8 @@ pub async fn refresh_for(provider: &TokenDataProvider, mint: &str) -> Result<(),
         updated_at: Utc::now(),
     };
 
-    upsert_snapshot(snapshot);
+    // Update both memory and database through unified store
+    upsert_snapshot(snapshot)?;
     Ok(())
 }
 

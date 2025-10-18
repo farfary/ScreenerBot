@@ -100,10 +100,18 @@ async fn ensure_locked(provider: &TokenDataProvider, mint: &str) -> Result<u8, S
 }
 
 fn cache_and_store(mint: &str, decimals: u8) {
+    // Update in-memory cache
     if let Ok(mut w) = DECIMALS_CACHE.write() {
         w.insert(mint.to_string(), decimals);
     }
-    store::set_decimals(mint, decimals);
+    
+    // Update store (memory + DB synchronized)
+    if let Err(e) = store::set_decimals(mint, decimals) {
+        warn!(
+            "[TOKENS] Failed to persist decimals via store: mint={} err={}",
+            mint, e
+        );
+    }
 }
 
 fn fetch_lock_for(mint: &str) -> Arc<AsyncMutex<()>> {

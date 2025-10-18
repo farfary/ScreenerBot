@@ -364,11 +364,20 @@ pub async fn process_new_mints(provider: &TokenDataProvider, entries: Vec<(Strin
             source: source.clone(),
             at: Utc::now(),
         });
-        upsert_snapshot(Snapshot {
+        
+        // Update store (memory + DB)
+        if let Err(e) = upsert_snapshot(Snapshot {
             mint: mint.clone(),
             updated_at: Utc::now(),
             ..Default::default()
-        });
+        }) {
+            warn!(
+                "[TOKENS] Failed to store discovered token: mint={} err={}",
+                mint, e
+            );
+        }
+        
+        // Fetch complete data to populate snapshot
         if let Err(err) = provider.fetch_complete_data(&mint, None).await {
             warn!(
                 "[TOKENS] Discovery follow-up fetch failed: mint={} err={}",
