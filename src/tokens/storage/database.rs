@@ -100,34 +100,15 @@ impl Database {
             .query_row("SELECT COUNT(*) FROM tokens", [], |row| row.get(0))
             .unwrap_or(0);
 
-        let count_dexscreener: i64 = conn
-            .query_row("SELECT COUNT(*) FROM data_dexscreener_pools", [], |row| {
-                row.get(0)
-            })
-            .unwrap_or(0);
-
-        let count_geckoterminal: i64 = conn
-            .query_row("SELECT COUNT(*) FROM data_geckoterminal_pools", [], |row| {
-                row.get(0)
-            })
-            .unwrap_or(0);
-
         let count_rugcheck: i64 = conn
             .query_row("SELECT COUNT(*) FROM data_rugcheck_info", [], |row| {
                 row.get(0)
             })
             .unwrap_or(0);
 
-        let count_fetch_log: i64 = conn
-            .query_row("SELECT COUNT(*) FROM api_fetch_log", [], |row| row.get(0))
-            .unwrap_or(0);
-
         Ok(TableStats {
             tokens: count_tokens as usize,
-            dexscreener_pools: count_dexscreener as usize,
-            geckoterminal_pools: count_geckoterminal as usize,
             rugcheck_info: count_rugcheck as usize,
-            fetch_log: count_fetch_log as usize,
         })
     }
 
@@ -153,18 +134,11 @@ impl Database {
 #[derive(Debug, Clone)]
 pub struct TableStats {
     pub tokens: usize,
-    pub dexscreener_pools: usize,
-    pub geckoterminal_pools: usize,
     pub rugcheck_info: usize,
-    pub fetch_log: usize,
 }
 
 impl TableStats {
     pub fn total_rows(&self) -> usize {
-        self.tokens
-            + self.dexscreener_pools
-            + self.geckoterminal_pools
-            + self.rugcheck_info
-            + self.fetch_log
+        self.tokens + self.rugcheck_info
     }
 }

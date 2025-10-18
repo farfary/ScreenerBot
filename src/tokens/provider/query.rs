@@ -1,11 +1,7 @@
 // Provider query: Query methods for accessing stored data
 
-use crate::tokens::api::dexscreener_types::DexScreenerPool;
-use crate::tokens::api::geckoterminal_types::GeckoTerminalPool;
 use crate::tokens::api::rugcheck_types::RugcheckInfo;
-use crate::tokens::storage::{
-    get_dexscreener_pools, get_geckoterminal_pools, get_rugcheck_info, get_token_metadata, Database,
-};
+use crate::tokens::storage::{get_rugcheck_info, get_token_metadata, Database};
 use crate::tokens::types::TokenMetadata;
 use log::debug;
 use std::sync::Arc;
@@ -24,18 +20,6 @@ impl Query {
     pub fn get_token_metadata(&self, mint: &str) -> Result<Option<TokenMetadata>, String> {
         debug!("[TOKENS] Querying token metadata: mint={}", mint);
         get_token_metadata(&self.database, mint)
-    }
-
-    /// Get DexScreener pools from database
-    pub fn get_dexscreener_pools(&self, mint: &str) -> Result<Vec<DexScreenerPool>, String> {
-        debug!("[TOKENS] Querying DexScreener pools: mint={}", mint);
-        get_dexscreener_pools(&self.database, mint)
-    }
-
-    /// Get GeckoTerminal pools from database
-    pub fn get_geckoterminal_pools(&self, mint: &str) -> Result<Vec<GeckoTerminalPool>, String> {
-        debug!("[TOKENS] Querying GeckoTerminal pools: mint={}", mint);
-        get_geckoterminal_pools(&self.database, mint)
     }
 
     /// Get Rugcheck info from database

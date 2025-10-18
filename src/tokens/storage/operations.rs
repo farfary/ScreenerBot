@@ -83,40 +83,6 @@ pub fn save_rugcheck_info(db: &Database, mint: &str, info: &RugcheckInfo) -> Res
     Ok(())
 }
 
-/// Log an API fetch attempt
-pub fn log_api_fetch(
-    db: &Database,
-    mint: &str,
-    source: DataSource,
-    success: bool,
-    error_message: Option<&str>,
-    records_fetched: Option<usize>,
-) -> Result<(), String> {
-    let now = Utc::now().timestamp();
-
-    let conn = db.get_connection();
-    let conn = conn
-        .lock()
-        .map_err(|e| format!("Failed to lock connection: {}", e))?;
-
-    conn.execute(
-        r#"
-        INSERT INTO api_fetch_log (mint, source, success, error_message, records_fetched, fetched_at)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-        "#,
-        params![
-            mint,
-            source.as_str(),
-            if success { 1 } else { 0 },
-            error_message,
-            records_fetched.map(|n| n as i64),
-            now
-        ],
-    ).map_err(|e| format!("Failed to log API fetch: {}", e))?;
-
-    Ok(())
-}
-
 /// Get token metadata from database
 pub fn get_token_metadata(db: &Database, mint: &str) -> Result<Option<TokenMetadata>, String> {
     let conn = db.get_connection();

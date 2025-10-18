@@ -47,8 +47,8 @@ pub struct TokenMetadata {
 /// - Market data (price, volume, liquidity, transactions): From config.tokens.preferred_market_data_source
 ///   (either "dexscreener" or "geckoterminal")
 /// - Security data (authorities, risks, holders): Always from Rugcheck API
-/// - Pool data (all_pools): NOT fetched here - populated by pools module (src/pools/)
-///   which provides real-time on-chain pricing via get_pool_price()
+/// - Real-time pricing: Use pools module (src/pools/) which fetches on-chain pool data
+///   and provides current pricing via pools::get_pool_price()
 /// 
 /// The `data_source` field indicates which API was used for market data.
 /// Rugcheck is always fetched separately for security information.

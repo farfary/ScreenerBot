@@ -3,7 +3,7 @@
 use crate::tokens::api::ApiClients;
 use crate::tokens::cache::{CacheKey, CacheManager, DataType};
 use crate::tokens::provider::types::{CacheStrategy, FetchOptions, FetchResult};
-use crate::tokens::storage::{log_api_fetch, save_rugcheck_info, upsert_token_metadata, Database};
+use crate::tokens::storage::{save_rugcheck_info, upsert_token_metadata, Database};
 use crate::tokens::api::rugcheck_types::RugcheckInfo;
 use crate::tokens::types::DataSource;
 use log::{debug, error, info, warn};
@@ -100,16 +100,6 @@ impl Fetcher {
                 error!("[TOKENS] Failed to save Rugcheck info to DB: {}", e);
             }
         }
-
-        // Log fetch
-        let _ = log_api_fetch(
-            &self.database,
-            mint,
-            DataSource::Rugcheck,
-            true,
-            None,
-            Some(1),
-        );
 
         info!(
             "[TOKENS] Fetched Rugcheck info for mint={} in {}ms",

@@ -50,27 +50,6 @@ pub const SCHEMA_STATEMENTS: &[&str] = &[
     r#"
     CREATE INDEX IF NOT EXISTS idx_rugcheck_score ON data_rugcheck_info(rugcheck_score)
     "#,
-    // API fetch log for tracking data freshness and debugging
-    r#"
-    CREATE TABLE IF NOT EXISTS api_fetch_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        mint TEXT NOT NULL,
-        source TEXT NOT NULL,
-        success INTEGER NOT NULL,
-        error_message TEXT,
-        records_fetched INTEGER,
-        fetched_at INTEGER NOT NULL
-    )
-    "#,
-    r#"
-    CREATE INDEX IF NOT EXISTS idx_fetch_log_mint ON api_fetch_log(mint)
-    "#,
-    r#"
-    CREATE INDEX IF NOT EXISTS idx_fetch_log_source ON api_fetch_log(source)
-    "#,
-    r#"
-    CREATE INDEX IF NOT EXISTS idx_fetch_log_time ON api_fetch_log(fetched_at)
-    "#,
 ];
 
 /// Pragmas for optimal SQLite performance
