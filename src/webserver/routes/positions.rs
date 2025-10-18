@@ -852,7 +852,7 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
     let timestamp = chrono::Utc::now().to_rfc3339();
 
     // Load decimals from cache
-    let decimals = crate::tokens::get_token_decimals(&mint).await;
+    let decimals = crate::tokens::get_decimals(&mint).await;
 
     // 1. Get position data
     let open_position = positions::db::get_open_positions()

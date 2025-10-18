@@ -6,8 +6,8 @@ use crate::constants::SOL_MINT;
 use crate::errors::ScreenerBotError;
 use crate::global::is_debug_swaps_enabled;
 use crate::logger::{log, LogTag};
-use crate::rpc::lamports_to_sol;
 use crate::tokens::Token;
+use crate::utils::lamports_to_sol;
 
 use reqwest;
 use serde_json::Value;

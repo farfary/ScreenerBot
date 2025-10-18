@@ -19,7 +19,8 @@ use crate::arguments::is_debug_pool_decoders_enabled;
 use crate::logger::{log, LogTag};
 use crate::pools::types::{PriceResult, ProgramKind, METEORA_DBC_PROGRAM_ID, SOL_MINT};
 use crate::pools::utils::{read_pubkey_at, read_token_account_amount};
-use crate::tokens::{decimals::SOL_DECIMALS, get_token_decimals_sync};
+use crate::constants::SOL_DECIMALS;
+use crate::tokens::get_cached_decimals;
 use std::collections::HashMap;
 
 pub struct MeteoraDbcDecoder;
@@ -104,7 +105,7 @@ impl PoolDecoder for MeteoraDbcDecoder {
         let sqrt_price = extract_sqrt_price_from_pool_data(&pool_acc.data)?;
 
         // Decimals
-        let token_decimals = match get_token_decimals_sync(&token_mint) {
+        let token_decimals = match get_cached_decimals(&token_mint) {
             Some(d) => d,
             None => {
                 return None;

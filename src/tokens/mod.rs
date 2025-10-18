@@ -31,6 +31,10 @@ pub use types::{
 pub use events::{subscribe as subscribe_events, TokenEvent};
 pub use priorities::Priority;
 pub use store::{
-    all_snapshots, get_snapshot, list_mints, set_priority, BestPoolSummary,
+    all_snapshots, count_tokens, filter_blacklisted, get_by_min_liquidity, get_by_priority,
+    get_recently_updated, get_snapshot, list_mints, search_tokens, set_priority, BestPoolSummary,
     Snapshot as TokenSnapshot,
 };
+
+// Re-export decimals API
+pub use decimals::{get as get_decimals, get_cached as get_cached_decimals};

@@ -12,10 +12,11 @@ use std::time::{Duration, Instant};
 use crate::global::is_debug_transactions_enabled;
 use crate::logger::{log, LogTag};
 use crate::pools::types::SOL_MINT;
-use crate::tokens::{decimals::lamports_to_sol, get_token_decimals};
+use crate::tokens::get_decimals;
 use crate::transactions::{
     analyzer::TransactionAnalyzer, fetcher::TransactionFetcher, program_ids::*, types::*, utils::*,
 };
+use crate::utils::lamports_to_sol;
 
 // =============================================================================
 // TRANSACTION PROCESSOR
@@ -643,7 +644,7 @@ impl TransactionProcessor {
                         // Fallback to DB lookup only if RPC doesn't have it
                         tokio::task::block_in_place(|| {
                             tokio::runtime::Handle::current().block_on(async {
-                                crate::tokens::get_token_decimals(primary_mint)
+                                get_decimals(primary_mint)
                                     .await
                                     .unwrap_or(9)
                             })

@@ -35,7 +35,8 @@ use crate::global::{
     is_debug_rpc_enabled, is_debug_transactions_enabled, is_debug_wallet_enabled, RPC_STATS,
 };
 use crate::logger::{log, LogTag};
-use crate::tokens::decimals::LAMPORTS_PER_SOL;
+use crate::constants::LAMPORTS_PER_SOL;
+use crate::utils::lamports_to_sol;
 use base64::Engine as _;
 use bincode;
 use bs58;
@@ -472,11 +473,6 @@ pub fn logs_contains_initialize_mint(logs: &[String]) -> bool {
 pub fn logs_contains_initialize_account(logs: &[String]) -> bool {
     logs.iter().any(|l| l.contains("InitializeAccount"))
         || logs.iter().any(|l| l.contains("InitializeAccount3"))
-}
-
-/// Converts lamports to SOL amount
-pub fn lamports_to_sol(lamports: u64) -> f64 {
-    (lamports as f64) / (LAMPORTS_PER_SOL as f64)
 }
 
 /// Converts SOL amount to lamports (1 SOL = 1,000,000,000 lamports)

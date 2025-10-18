@@ -7,9 +7,9 @@ use crate::{
         update_position, Position, TokenSnapshot, MINT_TO_POSITION_INDEX, POSITIONS,
         SIG_TO_MINT_INDEX,
     },
-    rpc::lamports_to_sol,
-    // Pool priority functions removed - no longer needed
-    tokens::{get_global_dexscreener_api, get_token_decimals},
+    rpc::get_rpc_client,
+    tokens::get_decimals,
+    utils::lamports_to_sol,
 };
 use chrono::Utc;
 
@@ -113,7 +113,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
 
             // Calculate estimated P&L based on current price (closing in progress)
             if let Some(token_amount) = position.token_amount {
-                let token_decimals_opt = get_token_decimals(&position.mint).await;
+                let token_decimals_opt = get_decimals(&position.mint).await;
                 if let Some(token_decimals) = token_decimals_opt {
                     let ui_token_amount =
                         (token_amount as f64) / (10_f64).powi(token_decimals as i32);
@@ -186,7 +186,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
         // For closed positions: actual transaction-based calculation
         if let Some(token_amount) = position.token_amount {
             // Get token decimals from cache (async)
-            let token_decimals_opt = get_token_decimals(&position.mint).await;
+            let token_decimals_opt = get_decimals(&position.mint).await;
 
             // CRITICAL: Skip P&L calculation if decimals are not available
             let token_decimals = match token_decimals_opt {
@@ -249,7 +249,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
         // For open positions: current value vs entry cost
         if let Some(token_amount) = position.token_amount {
             // Get token decimals from cache (async)
-            let token_decimals_opt = get_token_decimals(&position.mint).await;
+            let token_decimals_opt = get_decimals(&position.mint).await;
 
             // CRITICAL: Skip P&L calculation if decimals are not available
             let token_decimals = match token_decimals_opt {

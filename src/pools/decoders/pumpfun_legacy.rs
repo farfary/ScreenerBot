@@ -2,7 +2,8 @@ use super::{AccountData, PoolDecoder};
 use crate::arguments::is_debug_pool_decoders_enabled;
 use crate::logger::{log, LogTag};
 use crate::pools::types::{PriceResult, ProgramKind, SOL_MINT};
-use crate::tokens::{decimals::SOL_DECIMALS, get_token_decimals_sync};
+use crate::constants::SOL_DECIMALS;
+use crate::tokens::get_cached_decimals;
 use solana_sdk::pubkey::Pubkey;
 /// PumpFun Legacy decoder for the original PumpFun program
 /// Handles pool decoding and price calculation for the legacy PumpFun program (6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P)
@@ -289,7 +290,7 @@ impl PumpFunLegacyDecoder {
         }
 
         // Get decimals for the target token
-        let target_decimals = get_token_decimals_sync(target_mint)? as u32;
+        let target_decimals = get_cached_decimals(target_mint)? as u32;
 
         if is_debug_pool_decoders_enabled() {
             log(

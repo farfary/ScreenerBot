@@ -6,12 +6,11 @@ use super::{
 use crate::{
     arguments::is_debug_positions_enabled,
     logger::{log, LogTag},
-    rpc::sol_to_lamports,
-    tokens::get_token_decimals,
+    tokens::get_decimals,
     transactions::{
         get_global_transaction_manager, get_transaction, Transaction, TransactionStatus,
     },
-    utils::{get_token_balance, get_total_token_balance, get_wallet_address},
+    utils::{get_token_balance, get_total_token_balance, get_wallet_address, sol_to_lamports},
 };
 use chrono::Utc;
 use std::collections::HashMap;
@@ -508,7 +507,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
 
             // Convert token amount to integer units with rounding
             let (mut token_amount_units, decimals_opt) =
-                if let Some(decimals) = get_token_decimals(&item.mint).await {
+                if let Some(decimals) = get_decimals(&item.mint).await {
                     let scale = (10_f64).powi(decimals as i32);
                     let units = (swap_info.token_amount.abs() * scale).round();
                     (units.max(0.0) as u64, Some(decimals))

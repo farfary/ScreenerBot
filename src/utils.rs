@@ -80,9 +80,9 @@ pub fn read_u32_from_data(data: &[u8], offset: usize) -> Option<u32> {
 }
 
 /// SOL lamports conversion functions
-/// Uses the existing LAMPORTS_PER_SOL constant from decimals.rs
+/// Uses the existing LAMPORTS_PER_SOL constant from constants.rs
 /// Consolidates 20+ hardcoded 1_000_000_000 values across the codebase
-use crate::tokens::decimals::LAMPORTS_PER_SOL;
+use crate::constants::LAMPORTS_PER_SOL;
 
 /// Convert lamports to SOL with consistent precision
 pub fn lamports_to_sol(lamports: u64) -> f64 {

@@ -48,6 +48,18 @@ pub fn initialize_with_database(db: Arc<Database>) -> Result<(), String> {
         .map_err(|_| "Store database already initialized".to_string())
 }
 
+/// Hydrate store from snapshots (used during startup, skips DB write)
+pub fn hydrate_from_snapshots(snapshots: Vec<Snapshot>) -> Result<(), String> {
+    if let Ok(mut m) = STORE.write() {
+        for snapshot in snapshots {
+            m.insert(snapshot.mint.clone(), snapshot);
+        }
+        Ok(())
+    } else {
+        Err("Failed to acquire write lock for hydration".to_string())
+    }
+}
+
 /// Read-only: Get snapshot from memory
 pub fn get_snapshot(mint: &str) -> Option<Snapshot> {
     STORE.read().ok().and_then(|m| m.get(mint).cloned())
@@ -113,6 +125,97 @@ pub fn all_snapshots() -> Vec<Snapshot> {
         .read()
         .ok()
         .map(|m| m.values().cloned().collect())
+        .unwrap_or_default()
+}
+
+/// Read-only: Get tokens by priority
+pub fn get_by_priority(priority: Priority) -> Vec<Snapshot> {
+    STORE
+        .read()
+        .ok()
+        .map(|m| {
+            m.values()
+                .filter(|s| s.priority == priority)
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Read-only: Get tokens with minimum liquidity
+pub fn get_by_min_liquidity(min_liquidity_sol: f64) -> Vec<Snapshot> {
+    STORE
+        .read()
+        .ok()
+        .map(|m| {
+            m.values()
+                .filter(|s| {
+                    s.best_pool
+                        .as_ref()
+                        .and_then(|p| p.liquidity_sol)
+                        .map(|liq| liq >= min_liquidity_sol)
+                        .unwrap_or(false)
+                })
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Read-only: Search tokens by symbol or name
+pub fn search_tokens(query: &str) -> Vec<Snapshot> {
+    let query_lower = query.to_lowercase();
+    STORE
+        .read()
+        .ok()
+        .map(|m| {
+            m.values()
+                .filter(|s| {
+                    s.symbol
+                        .as_ref()
+                        .map(|sym| sym.to_lowercase().contains(&query_lower))
+                        .unwrap_or(false)
+                        || s.name
+                            .as_ref()
+                            .map(|name| name.to_lowercase().contains(&query_lower))
+                            .unwrap_or(false)
+                })
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Read-only: Get recently updated tokens
+pub fn get_recently_updated(limit: usize) -> Vec<Snapshot> {
+    STORE
+        .read()
+        .ok()
+        .map(|m| {
+            let mut snapshots: Vec<_> = m.values().cloned().collect();
+            snapshots.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+            snapshots.truncate(limit);
+            snapshots
+        })
+        .unwrap_or_default()
+}
+
+/// Read-only: Count total tokens
+pub fn count_tokens() -> usize {
+    STORE.read().ok().map(|m| m.len()).unwrap_or(0)
+}
+
+/// Read-only: Filter blacklisted tokens
+pub fn filter_blacklisted(include_blacklisted: bool) -> Vec<Snapshot> {
+    STORE
+        .read()
+        .ok()
+        .map(|m| {
+            m.values()
+                .filter(|s| s.is_blacklisted == include_blacklisted)
+                .cloned()
+                .collect()
+        })
         .unwrap_or_default()
 }
 

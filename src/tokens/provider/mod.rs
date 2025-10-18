@@ -43,6 +43,9 @@ impl TokenDataProvider {
         // Initialize store with database handle (single source of truth)
         crate::tokens::store::initialize_with_database(Arc::clone(&database))?;
 
+        // Hydrate store from database (load existing tokens into memory)
+        Self::hydrate_store_from_database(&database)?;
+
         // Initialize cache
         let cache_config = crate::tokens::cache::CacheConfig::from_global();
         let cache = Arc::new(CacheManager::new(cache_config));
@@ -65,6 +68,58 @@ impl TokenDataProvider {
             query,
             stats: Arc::new(Mutex::new(ProviderStats::default())),
         })
+    }
+
+    /// Hydrate store from database on startup
+    fn hydrate_store_from_database(db: &Arc<Database>) -> Result<(), String> {
+        use std::time::Instant;
+        
+        info!("[TOKENS] Hydrating store from database...");
+        let start = Instant::now();
+
+        let conn = db.get_connection();
+        let conn = conn
+            .lock()
+            .map_err(|e| format!("Failed to lock connection: {}", e))?;
+
+        let mut stmt = conn
+            .prepare("SELECT mint, symbol, name, decimals, updated_at FROM tokens ORDER BY updated_at DESC")
+            .map_err(|e| format!("Failed to prepare hydration query: {}", e))?;
+
+        let snapshots: Vec<crate::tokens::store::Snapshot> = stmt
+            .query_map([], |row| {
+                let updated_ts: i64 = row.get(4)?;
+                
+                Ok(crate::tokens::store::Snapshot {
+                    mint: row.get(0)?,
+                    symbol: row.get(1)?,
+                    name: row.get(2)?,
+                    decimals: row.get(3)?,
+                    is_blacklisted: false,
+                    best_pool: None,
+                    sources: Vec::new(),
+                    priority: crate::tokens::priorities::Priority::Medium,
+                    fetched_at: None,
+                    updated_at: chrono::DateTime::from_timestamp(updated_ts, 0)
+                        .unwrap_or_else(|| Utc::now()),
+                })
+            })
+            .map_err(|e| format!("Failed to query tokens: {}", e))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let count = snapshots.len();
+
+        // Batch load into store (direct memory access, skip DB write)
+        crate::tokens::store::hydrate_from_snapshots(snapshots)?;
+
+        info!(
+            "[TOKENS] Store hydrated: {} tokens loaded in {}ms",
+            count,
+            start.elapsed().as_millis()
+        );
+
+        Ok(())
     }
 
     /// Fetch complete token data from all configured sources

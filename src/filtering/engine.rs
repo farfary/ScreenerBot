@@ -7,7 +7,7 @@ use crate::config::FilteringConfig;
 use crate::global::is_debug_filtering_enabled;
 use crate::logger::{log, LogTag};
 use crate::positions;
-use crate::tokens::decimals::get_cached_decimals;
+use crate::tokens::get_cached_decimals;
 use crate::tokens::security::{
     get_security_analyzer, initialize_security_analyzer, RiskLevel, SecurityAnalyzer,
 };

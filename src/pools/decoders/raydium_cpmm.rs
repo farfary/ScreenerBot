@@ -7,13 +7,11 @@ use super::{AccountData, PoolDecoder};
 use crate::arguments::is_debug_pool_decoders_enabled;
 use crate::logger::{log, LogTag};
 use crate::pools::types::{PriceResult, ProgramKind, RAYDIUM_CPMM_PROGRAM_ID, SOL_MINT};
+use crate::constants::SOL_DECIMALS;
 use crate::pools::utils::{
     read_bool_at_offset, read_pubkey_at_offset, read_u64_at_offset, read_u8_at_offset,
 };
-use crate::tokens::{
-    decimals::{raw_to_ui_amount, SOL_DECIMALS},
-    get_token_decimals_sync,
-};
+use crate::tokens::get_cached_decimals;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -160,7 +158,7 @@ impl RaydiumCpmmDecoder {
         let creator_fees_token_1 = read_u64_at_offset(data, &mut offset).ok()?;
 
         // Get token decimals - CRITICAL: must be available, no fallback to pool defaults
-        let mint_0_decimals = match get_token_decimals_sync(&token_0_mint) {
+        let mint_0_decimals = match get_cached_decimals(&token_0_mint) {
             Some(decimals) => decimals,
             None => {
                 if is_debug_pool_decoders_enabled() {
@@ -177,7 +175,7 @@ impl RaydiumCpmmDecoder {
             }
         };
 
-        let mint_1_decimals = match get_token_decimals_sync(&token_1_mint) {
+        let mint_1_decimals = match get_cached_decimals(&token_1_mint) {
             Some(decimals) => decimals,
             None => {
                 if is_debug_pool_decoders_enabled() {

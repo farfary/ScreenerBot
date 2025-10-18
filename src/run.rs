@@ -100,7 +100,6 @@ fn register_all_services(manager: &mut ServiceManager) {
 
     // Core infrastructure services
     manager.register(Box::new(EventsService));
-    manager.register(Box::new(TokenStoreService::new()));
     manager.register(Box::new(TransactionsService));
     manager.register(Box::new(SolPriceService));
 

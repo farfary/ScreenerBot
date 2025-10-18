@@ -11,7 +11,8 @@ use crate::pools::swap::types::{
 };
 use crate::pools::types::RAYDIUM_CPMM_PROGRAM_ID;
 use crate::pools::AccountData;
-use crate::rpc::{get_rpc_client, sol_to_lamports};
+use crate::rpc::get_rpc_client;
+use crate::utils::sol_to_lamports;
 
 use solana_sdk::{
     instruction::{AccountMeta, Instruction},

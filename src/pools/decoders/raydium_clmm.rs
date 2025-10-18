@@ -7,7 +7,8 @@ use super::{AccountData, PoolDecoder};
 use crate::arguments::is_debug_pool_decoders_enabled;
 use crate::logger::{log, LogTag};
 use crate::pools::types::{PriceResult, ProgramKind, RAYDIUM_CLMM_PROGRAM_ID, SOL_MINT};
-use crate::tokens::{decimals::SOL_DECIMALS, get_token_decimals_sync};
+use crate::constants::SOL_DECIMALS;
+use crate::tokens::get_cached_decimals;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::time::Instant;
@@ -148,7 +149,7 @@ impl PoolDecoder for RaydiumClmmDecoder {
         }
 
         // Get token decimals - CRITICAL: must be available, no fallback to defaults
-        let token_decimals = match get_token_decimals_sync(&token_mint) {
+        let token_decimals = match get_cached_decimals(&token_mint) {
             Some(decimals) => decimals,
             None => {
                 if is_debug_pool_decoders_enabled() {

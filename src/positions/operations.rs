@@ -15,10 +15,10 @@ use crate::{
     constants::SOL_MINT,
     logger::{log, LogTag},
     pools::get_pool_price,
-    rpc::{get_rpc_client, sol_to_lamports},
+    rpc::get_rpc_client,
     swaps::{execute_best_swap, get_best_quote, get_best_quote_for_opening},
     tokens::{store::get_global_token_store, PriceResult, Token},
-    utils::{get_token_balance, get_total_token_balance, get_wallet_address},
+    utils::{get_token_balance, get_total_token_balance, get_wallet_address, sol_to_lamports},
 };
 use chrono::Utc;
 use serde_json::json;

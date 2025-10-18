@@ -10,7 +10,8 @@ use super::{AccountData, PoolDecoder};
 use crate::arguments::is_debug_pool_decoders_enabled;
 use crate::logger::{log, LogTag};
 use crate::pools::types::{PriceResult, ProgramKind};
-use crate::tokens::{decimals::SOL_DECIMALS, get_token_decimals_sync};
+use crate::constants::SOL_DECIMALS;
+use crate::tokens::get_cached_decimals;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -237,7 +238,7 @@ impl MoonitAmmDecoder {
         }
 
         // Get token decimals
-        let token_decimals = match get_token_decimals_sync(base_mint) {
+        let token_decimals = match get_cached_decimals(base_mint) {
             Some(decimals) => decimals,
             None => {
                 if is_debug_pool_decoders_enabled() {

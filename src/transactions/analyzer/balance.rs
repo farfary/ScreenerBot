@@ -17,9 +17,9 @@ use std::collections::HashMap;
 
 use crate::global::is_debug_transactions_enabled;
 use crate::logger::{log, LogTag};
-use crate::tokens::{decimals::lamports_to_sol, get_token_decimals_sync};
+use crate::tokens::get_cached_decimals;
 use crate::transactions::{program_ids, types::*, utils::*};
-use crate::utils::sol_to_lamports;
+use crate::utils::{lamports_to_sol, sol_to_lamports};
 
 // =============================================================================
 // BALANCE ANALYSIS TYPES
@@ -343,7 +343,7 @@ async fn extract_token_balance_changes(
             let decimals = post_amount
                 .map(|a| a.decimals)
                 .or_else(|| pre_amount.map(|a| a.decimals))
-                .unwrap_or_else(|| get_token_decimals_sync(&mint).unwrap_or(9));
+                .unwrap_or_else(|| get_cached_decimals(&mint).unwrap_or(9));
 
             let token_change = TokenBalanceChange {
                 mint: mint.clone(),

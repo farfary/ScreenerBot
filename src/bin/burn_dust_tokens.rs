@@ -16,7 +16,7 @@ use screenerbot::{
     logger::{init_file_logging, log, LogTag},
     rpc::TokenAccountInfo,
     swaps::{execute_best_swap, get_best_quote},
-    tokens::{get_token_decimals, Token},
+    tokens::get_decimals,
     utils::{close_single_ata, get_all_token_accounts, get_wallet_address},
 };
 use tokio;
@@ -228,7 +228,7 @@ async fn identify_dust_tokens(
         }
 
         // Get decimals for UI calculation
-        let decimals = match get_token_decimals(&account.mint).await {
+        let decimals = match get_decimals(&account.mint).await {
             Some(dec) => dec,
             None => {
                 log(

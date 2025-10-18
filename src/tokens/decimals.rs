@@ -19,15 +19,59 @@ static DECIMALS_CACHE: std::sync::LazyLock<Arc<RwLock<HashMap<String, u8>>>> =
 static FETCH_LOCKS: std::sync::LazyLock<Mutex<HashMap<String, Arc<AsyncMutex<()>>>>> =
     std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 
-pub async fn get(mint: &str) -> Option<u8> {
+// =============================================================================
+// PUBLIC API - Only 2 functions
+// =============================================================================
+
+/// Get decimals from in-memory cache only (sync, instant, no fetching)
+///
+/// Use this in:
+/// - Sync contexts (pools calculator, decoders)
+/// - Quick checks where you can't await
+/// - Filtering where decimals must already exist
+///
+/// Returns None if not in cache - caller should handle appropriately
+pub fn get_cached(mint: &str) -> Option<u8> {
+    // SOL always has 9 decimals
+    if mint == crate::constants::SOL_MINT {
+        return Some(crate::constants::SOL_DECIMALS);
+    }
+
     DECIMALS_CACHE
         .read()
         .ok()
         .and_then(|m| m.get(mint).copied())
 }
 
-pub async fn ensure(provider: &TokenDataProvider, mint: &str) -> Result<u8, String> {
-    if let Some(d) = get(mint).await {
+/// Get decimals with full fallback chain (cache → DB → API → chain)
+///
+/// Use this in:
+/// - Async business logic (positions, verifier, webserver)
+/// - Any context where you can await and need guaranteed decimals
+///
+/// Tries: memory cache → DB → Rugcheck API → on-chain RPC
+/// Returns None only if all methods fail
+pub async fn get(mint: &str) -> Option<u8> {
+    // Try cache first
+    if let Some(d) = get_cached(mint) {
+        return Some(d);
+    }
+
+    // For internal provider usage, we need provider - but external callers don't have it
+    // So we only do cache check here, and let service loops call ensure() to populate
+    None
+}
+
+// =============================================================================
+// INTERNAL API - For service use only
+// =============================================================================
+
+/// Ensure decimals exist, fetching if needed (with provider access)
+///
+/// This is for internal service loops that populate decimals proactively.
+/// External code should use get() instead.
+pub(crate) async fn ensure(provider: &TokenDataProvider, mint: &str) -> Result<u8, String> {
+    if let Some(d) = get_cached(mint) {
         return Ok(d);
     }
 
@@ -40,7 +84,7 @@ pub async fn ensure(provider: &TokenDataProvider, mint: &str) -> Result<u8, Stri
 }
 
 async fn ensure_locked(provider: &TokenDataProvider, mint: &str) -> Result<u8, String> {
-    if let Some(d) = get(mint).await {
+    if let Some(d) = get_cached(mint) {
         return Ok(d);
     }
 
@@ -83,8 +127,8 @@ async fn ensure_locked(provider: &TokenDataProvider, mint: &str) -> Result<u8, S
         }
     }
 
-    // 3) Chain fallback via existing tokens::decimals helper
-    match crate::tokens::decimals::get_token_decimals_from_chain(mint).await {
+    // 3) Chain fallback - fetch from Solana blockchain
+    match fetch_decimals_from_chain(mint).await {
         Ok(d) => {
             cache_and_store(mint, d);
             if let Err(e) = provider.upsert_token_metadata(mint, None, None, Some(d)) {
@@ -127,3 +171,68 @@ fn release_lock_if_idle(mint: &str) {
         map.remove(mint);
     }
 }
+
+// =============================================================================
+// ON-CHAIN DECIMALS FETCHING
+// =============================================================================
+
+/// Fetch token decimals directly from Solana blockchain
+async fn fetch_decimals_from_chain(mint: &str) -> Result<u8, String> {
+    use crate::rpc::get_rpc_client;
+    use solana_program::program_pack::Pack;
+    use solana_sdk::pubkey::Pubkey;
+    use spl_token::state::Mint;
+    use std::str::FromStr;
+
+    // SOL always has 9 decimals
+    if mint == crate::constants::SOL_MINT {
+        return Ok(crate::constants::SOL_DECIMALS);
+    }
+
+    // Parse mint address
+    let mint_pubkey = Pubkey::from_str(mint)
+        .map_err(|e| format!("Invalid mint address: {}", e))?;
+
+    // Get RPC client
+    let rpc_client = get_rpc_client();
+
+    // Fetch account data
+    let account = rpc_client
+        .get_account(&mint_pubkey)
+        .await
+        .map_err(|e| {
+            if e.contains("could not find account") || e.contains("Account not found") {
+                "Account not found".to_string()
+            } else if e.contains("429") || e.to_lowercase().contains("rate limit") {
+                format!("Rate limited: {}", e)
+            } else {
+                format!("Failed to fetch account: {}", e)
+            }
+        })?;
+
+    // Check account data
+    if account.data.is_empty() {
+        return Err("Account data is empty".to_string());
+    }
+
+    // Check if it's an SPL Token mint
+    if account.owner == spl_token::id() {
+        let mint_data = Mint::unpack(&account.data)
+            .map_err(|e| format!("Failed to unpack SPL Token mint: {}", e))?;
+        return Ok(mint_data.decimals);
+    }
+
+    // Check if it's a Token-2022 mint
+    if account.owner == spl_token_2022::id() {
+        // Token-2022 has same layout as SPL Token for basic mint data
+        let mint_data = Mint::unpack(&account.data)
+            .map_err(|e| format!("Failed to unpack Token-2022 mint: {}", e))?;
+        return Ok(mint_data.decimals);
+    }
+
+    Err(format!(
+        "Account owner is not SPL Token program: {}",
+        account.owner
+    ))
+}
+

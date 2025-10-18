@@ -9,7 +9,8 @@ use crate::logger::{log, LogTag};
 use crate::swaps::types::{
     JupiterQuoteResponse, JupiterSwapResponse, RawTransaction, SwapData, SwapQuote,
 };
-use crate::tokens::decimals::{get_token_decimals_from_chain, SOL_DECIMALS};
+use crate::constants::SOL_DECIMALS;
+use crate::tokens::get_decimals;
 use crate::tokens::Token;
 
 use reqwest;
@@ -597,11 +598,11 @@ async fn convert_jupiter_quote_to_swap_data(
     jupiter_quote: JupiterQuoteResponse,
 ) -> Result<SwapData, ScreenerBotError> {
     // Create SwapQuote from Jupiter response
-    // CRITICAL FIX: Get actual token decimals instead of hardcoding to 9
+    // Get token decimals from cache
     let input_decimals = if jupiter_quote.input_mint == SOL_MINT {
         SOL_DECIMALS
     } else {
-        get_token_decimals_from_chain(&jupiter_quote.input_mint)
+        get_decimals(&jupiter_quote.input_mint)
             .await
             .unwrap_or(SOL_DECIMALS)
     };
@@ -609,7 +610,7 @@ async fn convert_jupiter_quote_to_swap_data(
     let output_decimals = if jupiter_quote.output_mint == SOL_MINT {
         SOL_DECIMALS
     } else {
-        get_token_decimals_from_chain(&jupiter_quote.output_mint)
+        get_decimals(&jupiter_quote.output_mint)
             .await
             .unwrap_or(SOL_DECIMALS)
     };
