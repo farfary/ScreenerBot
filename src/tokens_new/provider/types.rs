@@ -43,7 +43,11 @@ pub struct FetchOptions {
 impl Default for FetchOptions {
     fn default() -> Self {
         Self {
-            sources: vec![DataSource::DexScreener, DataSource::GeckoTerminal, DataSource::Rugcheck],
+            sources: vec![
+                DataSource::DexScreener,
+                DataSource::GeckoTerminal,
+                DataSource::Rugcheck,
+            ],
             cache_strategy: CacheStrategy::CacheFirst,
             max_age_seconds: None,
             persist: true,

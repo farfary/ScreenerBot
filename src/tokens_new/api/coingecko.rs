@@ -1,10 +1,9 @@
 /// CoinGecko API client
-/// 
+///
 /// API Documentation: https://docs.coingecko.com/reference/introduction
-/// 
+///
 /// Endpoints implemented:
 /// 1. /api/v3/coins/list?include_platform=true - Get all coins with platform addresses
-
 use super::client::HttpClient;
 use super::coingecko_types::*;
 use super::stats::ApiStatsTracker;
@@ -117,9 +116,7 @@ impl CoinGeckoClient {
     }
 
     /// Extract Solana token addresses with names
-    pub fn extract_solana_addresses_with_names(
-        coins: &[CoinGeckoCoin],
-    ) -> Vec<(String, String)> {
+    pub fn extract_solana_addresses_with_names(coins: &[CoinGeckoCoin]) -> Vec<(String, String)> {
         coins
             .iter()
             .filter_map(|coin| {

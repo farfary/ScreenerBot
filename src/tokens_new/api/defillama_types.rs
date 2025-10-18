@@ -15,7 +15,7 @@ pub struct DefiLlamaProtocol {
     pub symbol: String,
     pub url: Option<String>,
     pub description: Option<String>,
-    pub chain: Option<String>,  // Made optional - can be missing in some responses
+    pub chain: Option<String>, // Made optional - can be missing in some responses
     pub logo: Option<String>,
     #[serde(default)]
     pub chains: Option<Vec<String>>,

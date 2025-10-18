@@ -5,7 +5,6 @@ pub mod fetcher;
 pub mod query;
 pub mod types;
 
-use crate::config::get_config_clone;
 use crate::tokens_new::api::ApiClients;
 use crate::tokens_new::cache::CacheManager;
 use crate::tokens_new::provider::fetcher::Fetcher;
@@ -18,6 +17,8 @@ use crate::tokens_new::types::DataSource;
 use chrono::Utc;
 use log::{error, info};
 use std::sync::{Arc, Mutex};
+
+const TOKENS_DB_PATH: &str = "data/tokens_new.db";
 
 pub use types::{CacheStrategy, FetchResult};
 
@@ -34,8 +35,7 @@ impl TokenDataProvider {
         info!("[TOKENS_NEW] Initializing TokenDataProvider...");
 
         // Get database path from config
-        let config = get_config_clone();
-        let db_path = "data/tokens_new.db"; // TODO: Add to config
+    let db_path = TOKENS_DB_PATH;
 
         // Initialize database
         let database = Arc::new(Database::new(db_path)?);
@@ -113,11 +113,7 @@ impl TokenDataProvider {
 
         // Fetch GeckoTerminal data
         if options.sources.contains(&DataSource::GeckoTerminal) {
-            match self
-                .fetcher
-                .fetch_geckoterminal_pools(mint, &options)
-                .await
-            {
+            match self.fetcher.fetch_geckoterminal_pools(mint, &options).await {
                 Ok(result) => {
                     geckoterminal_pools = result.data;
                     sources_used.push(DataSource::GeckoTerminal);
@@ -232,7 +228,13 @@ impl TokenDataProvider {
     }
 
     /// Upsert token metadata fields
-    pub fn upsert_token_metadata(&self, mint: &str, symbol: Option<&str>, name: Option<&str>, decimals: Option<u8>) -> Result<(), String> {
+    pub fn upsert_token_metadata(
+        &self,
+        mint: &str,
+        symbol: Option<&str>,
+        name: Option<&str>,
+        decimals: Option<u8>,
+    ) -> Result<(), String> {
         self.fetcher.upsert_metadata(mint, symbol, name, decimals)
     }
 

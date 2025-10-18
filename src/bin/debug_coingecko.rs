@@ -43,7 +43,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
 
                 if solana_coins.len() > args.limit {
-                    println!("  ... and {} more Solana tokens", solana_coins.len() - args.limit);
+                    println!(
+                        "  ... and {} more Solana tokens",
+                        solana_coins.len() - args.limit
+                    );
                 }
             } else {
                 println!("\n[FIRST {} SOLANA TOKENS]", args.limit);
@@ -66,7 +69,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("  Failed: {}", stats.failed_requests);
     println!("  Cache Hits: {}", stats.cache_hits);
     println!("  Cache Misses: {}", stats.cache_misses);
-    println!("  Avg Response Time: {:.2}ms", stats.average_response_time_ms);
+    println!(
+        "  Avg Response Time: {:.2}ms",
+        stats.average_response_time_ms
+    );
 
     println!("\n{}", "=".repeat(80));
     println!("\nTest completed!");

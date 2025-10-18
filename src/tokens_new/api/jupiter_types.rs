@@ -97,7 +97,7 @@ pub struct JupiterApy {
 #[serde(rename_all = "camelCase")]
 pub struct JupiterStats {
     #[serde(default)]
-    pub holder_change: Option<f64>,  // Can be float like -95.76719576719576
+    pub holder_change: Option<f64>, // Can be float like -95.76719576719576
     #[serde(default)]
     pub price_change: Option<f64>,
     #[serde(default)]

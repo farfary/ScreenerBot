@@ -1,8 +1,7 @@
 // Provider query: Query methods for accessing stored data
 
 use crate::tokens_new::storage::{
-    get_dexscreener_pools, get_geckoterminal_pools, get_rugcheck_info, get_token_metadata,
-    Database,
+    get_dexscreener_pools, get_geckoterminal_pools, get_rugcheck_info, get_token_metadata, Database,
 };
 use crate::tokens_new::types::{DexScreenerPool, GeckoTerminalPool, RugcheckInfo};
 use log::debug;

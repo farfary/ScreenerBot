@@ -115,7 +115,7 @@ pub struct GeckoTerminalDexData {
 impl GeckoTerminalPoolData {
     pub fn to_pool(&self, mint: &str) -> crate::tokens_new::types::GeckoTerminalPool {
         use chrono::Utc;
-        
+
         let attrs = &self.attributes;
         let rels = &self.relationships;
 
@@ -138,7 +138,10 @@ impl GeckoTerminalPoolData {
             quote_token_price_usd: attrs.quote_token_price_usd.clone(),
             quote_token_price_native: attrs.quote_token_price_native_currency.clone(),
             quote_token_price_base: attrs.quote_token_price_base_token.clone(),
-            token_price_usd: attrs.token_price_usd.clone().unwrap_or_else(|| attrs.base_token_price_usd.clone()),
+            token_price_usd: attrs
+                .token_price_usd
+                .clone()
+                .unwrap_or_else(|| attrs.base_token_price_usd.clone()),
             fdv_usd: attrs.fdv_usd.as_ref().and_then(|s| parse_f64(s)),
             market_cap_usd: attrs.market_cap_usd.as_ref().and_then(|s| parse_f64(s)),
             reserve_usd: attrs.reserve_in_usd.as_ref().and_then(|s| parse_f64(s)),
@@ -149,11 +152,14 @@ impl GeckoTerminalPoolData {
             volume_h6: volume.and_then(|v| v.h6.as_ref().and_then(|s| parse_f64(s))),
             volume_h24: volume.and_then(|v| v.h24.as_ref().and_then(|s| parse_f64(s))),
             price_change_m5: price_change.and_then(|pc| pc.m5.as_ref().and_then(|s| parse_f64(s))),
-            price_change_m15: price_change.and_then(|pc| pc.m15.as_ref().and_then(|s| parse_f64(s))),
-            price_change_m30: price_change.and_then(|pc| pc.m30.as_ref().and_then(|s| parse_f64(s))),
+            price_change_m15: price_change
+                .and_then(|pc| pc.m15.as_ref().and_then(|s| parse_f64(s))),
+            price_change_m30: price_change
+                .and_then(|pc| pc.m30.as_ref().and_then(|s| parse_f64(s))),
             price_change_h1: price_change.and_then(|pc| pc.h1.as_ref().and_then(|s| parse_f64(s))),
             price_change_h6: price_change.and_then(|pc| pc.h6.as_ref().and_then(|s| parse_f64(s))),
-            price_change_h24: price_change.and_then(|pc| pc.h24.as_ref().and_then(|s| parse_f64(s))),
+            price_change_h24: price_change
+                .and_then(|pc| pc.h24.as_ref().and_then(|s| parse_f64(s))),
             txns_m5_buys: transactions.and_then(|t| t.m5.as_ref().and_then(|p| p.buys)),
             txns_m5_sells: transactions.and_then(|t| t.m5.as_ref().and_then(|p| p.sells)),
             txns_m5_buyers: transactions.and_then(|t| t.m5.as_ref().and_then(|p| p.buyers)),

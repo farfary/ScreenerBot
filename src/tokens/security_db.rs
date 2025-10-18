@@ -247,11 +247,7 @@ impl SecurityDatabase {
             "transfer_fee_max_amount",
             "INTEGER NOT NULL DEFAULT 0",
         )?;
-        self.ensure_column(
-            "security_info",
-            "transfer_fee_authority",
-            "TEXT",
-        )?;
+        self.ensure_column("security_info", "transfer_fee_authority", "TEXT")?;
 
         Ok(())
     }

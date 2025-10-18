@@ -23,7 +23,7 @@ pub use jupiter::JupiterClient;
 pub use rugcheck::RugcheckClient;
 pub use stats::{ApiStats, ApiStatsTracker};
 
-use crate::config::with_config;
+use crate::config::get_config_clone;
 
 /// All API clients bundled together
 pub struct ApiClients {
@@ -37,29 +37,32 @@ pub struct ApiClients {
 
 impl ApiClients {
     pub fn new() -> Result<Self, String> {
-        let dex_enabled = with_config(|cfg| cfg.tokens.sources.dexscreener.enabled);
-        let gecko_enabled = with_config(|cfg| cfg.tokens.sources.geckoterminal.enabled);
-        let rug_enabled = with_config(|cfg| cfg.tokens.sources.rugcheck.enabled);
+        let cfg = get_config_clone();
+        let sources_cfg = &cfg.tokens.sources;
+        let discovery_cfg = &cfg.tokens.discovery;
+        let discovery_enabled = discovery_cfg.enabled;
 
-        // Jupiter, CoinGecko, DeFiLlama, DexScreener, GeckoTerminal, Rugcheck
-        // all have hardcoded timing params optimized per API
-        let jup_enabled = true;
-        let coingecko_enabled = true;
-        let defillama_enabled = true;
+    let _dex_enabled = sources_cfg.dexscreener.enabled;
+    let _gecko_enabled = sources_cfg.geckoterminal.enabled;
+        let rug_enabled = sources_cfg.rugcheck.enabled && discovery_enabled && discovery_cfg.rugcheck.enabled;
+
+        let jup_enabled = discovery_enabled && discovery_cfg.jupiter.enabled;
+        let coingecko_enabled = discovery_enabled && discovery_cfg.coingecko.enabled && discovery_cfg.coingecko.markets_enabled;
+        let defillama_enabled = discovery_enabled && discovery_cfg.defillama.enabled && discovery_cfg.defillama.protocols_enabled;
 
         Ok(Self {
             dexscreener: DexScreenerClient::new(
                 dexscreener::RATE_LIMIT_PER_MINUTE,
-                dexscreener::TIMEOUT_SECS
+                dexscreener::TIMEOUT_SECS,
             ),
             geckoterminal: GeckoTerminalClient::new(
                 geckoterminal::RATE_LIMIT_PER_MINUTE,
-                geckoterminal::TIMEOUT_SECS
+                geckoterminal::TIMEOUT_SECS,
             ),
             rugcheck: RugcheckClient::new(
                 rug_enabled,
                 rugcheck::RATE_LIMIT_PER_MINUTE,
-                rugcheck::TIMEOUT_SECS
+                rugcheck::TIMEOUT_SECS,
             )?,
             jupiter: JupiterClient::new(jup_enabled)?,
             coingecko: CoinGeckoClient::new(coingecko_enabled)?,

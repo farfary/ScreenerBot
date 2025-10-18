@@ -1,8 +1,7 @@
 /// Comprehensive DexScreener API debug tool
-/// 
+///
 /// Tests ALL documented endpoints from https://docs.dexscreener.com/api/reference
 /// and validates the implementation against actual API behavior.
-
 use clap::Parser;
 use colored::Colorize;
 use reqwest::Client;
@@ -73,8 +72,14 @@ async fn main() {
     println!("{}", "=".repeat(60).cyan());
     println!("Base URL: {}\n", BASE_URL.yellow());
 
-    let test_all = args.all || (!args.token_pools && !args.single_pair && !args.search 
-        && !args.profiles && !args.boosts && !args.orders && !args.batch_tokens);
+    let test_all = args.all
+        || (!args.token_pools
+            && !args.single_pair
+            && !args.search
+            && !args.profiles
+            && !args.boosts
+            && !args.orders
+            && !args.batch_tokens);
 
     if test_all || args.token_pools {
         test_token_pools(&client, &args).await;
@@ -110,16 +115,19 @@ async fn main() {
 /// Test: GET /token-pairs/v1/{chainId}/{tokenAddress}
 /// This is the PRIMARY endpoint for getting all pools for a token
 async fn test_token_pools(client: &Client, args: &Args) {
-    print_test_header("Token Pools (Primary Endpoint)", "/token-pairs/v1/{chainId}/{tokenAddress}");
+    print_test_header(
+        "Token Pools (Primary Endpoint)",
+        "/token-pairs/v1/{chainId}/{tokenAddress}",
+    );
 
     let url = format!("{}/token-pairs/v1/{}/{}", BASE_URL, args.chain, args.token);
-    
+
     let start = Instant::now();
     match client.get(&url).send().await {
         Ok(response) => {
             let duration = start.elapsed();
             let status = response.status();
-            
+
             print_status(status.as_u16(), duration);
 
             if status.is_success() {
@@ -128,8 +136,12 @@ async fn test_token_pools(client: &Client, args: &Args) {
                         match serde_json::from_str::<Value>(&body) {
                             Ok(json) => {
                                 if let Some(arr) = json.as_array() {
-                                    println!("  {} {}", "Pools found:".cyan(), arr.len().to_string().green().bold());
-                                    
+                                    println!(
+                                        "  {} {}",
+                                        "Pools found:".cyan(),
+                                        arr.len().to_string().green().bold()
+                                    );
+
                                     if args.verbose && !arr.is_empty() {
                                         println!("\n  {}", "First pool structure:".cyan());
                                         if let Some(first) = arr.first() {
@@ -174,44 +186,49 @@ async fn test_single_pair(client: &Client, args: &Args) {
     print_test_header("Single Pair", "/latest/dex/pairs/{chainId}/{pairId}");
 
     let url = format!("{}/latest/dex/pairs/{}/{}", BASE_URL, args.chain, args.pair);
-    
+
     let start = Instant::now();
     match client.get(&url).send().await {
         Ok(response) => {
             let duration = start.elapsed();
             let status = response.status();
-            
+
             print_status(status.as_u16(), duration);
 
             if status.is_success() {
                 match response.text().await {
-                    Ok(body) => {
-                        match serde_json::from_str::<Value>(&body) {
-                            Ok(json) => {
-                                if let Some(pairs) = json.get("pairs").and_then(|p| p.as_array()) {
-                                    println!("  {} {}", "Pairs in response:".cyan(), pairs.len().to_string().green().bold());
-                                    
-                                    if args.verbose && !pairs.is_empty() {
-                                        println!("\n  {}", "Pair structure:".cyan());
-                                        if let Some(first) = pairs.first() {
-                                            print_json_structure(first, 2);
-                                        }
-                                    }
-                                } else {
-                                    println!("  {} No pairs array in response", "⚠️".yellow());
-                                    if args.verbose {
-                                        println!("  Response: {}", serde_json::to_string_pretty(&json).unwrap_or_default());
+                    Ok(body) => match serde_json::from_str::<Value>(&body) {
+                        Ok(json) => {
+                            if let Some(pairs) = json.get("pairs").and_then(|p| p.as_array()) {
+                                println!(
+                                    "  {} {}",
+                                    "Pairs in response:".cyan(),
+                                    pairs.len().to_string().green().bold()
+                                );
+
+                                if args.verbose && !pairs.is_empty() {
+                                    println!("\n  {}", "Pair structure:".cyan());
+                                    if let Some(first) = pairs.first() {
+                                        print_json_structure(first, 2);
                                     }
                                 }
-                            }
-                            Err(e) => {
-                                println!("  {} Parse error: {}", "❌".red(), e);
+                            } else {
+                                println!("  {} No pairs array in response", "⚠️".yellow());
                                 if args.verbose {
-                                    println!("  Body: {}", body);
+                                    println!(
+                                        "  Response: {}",
+                                        serde_json::to_string_pretty(&json).unwrap_or_default()
+                                    );
                                 }
                             }
                         }
-                    }
+                        Err(e) => {
+                            println!("  {} Parse error: {}", "❌".red(), e);
+                            if args.verbose {
+                                println!("  Body: {}", body);
+                            }
+                        }
+                    },
                     Err(e) => println!("  {} Body read error: {}", "❌".red(), e),
                 }
             } else {
@@ -233,41 +250,44 @@ async fn test_search(client: &Client, args: &Args) {
 
     let query = "SOL/USDC";
     let url = format!("{}/latest/dex/search?q={}", BASE_URL, query);
-    
+
     let start = Instant::now();
     match client.get(&url).send().await {
         Ok(response) => {
             let duration = start.elapsed();
             let status = response.status();
-            
+
             print_status(status.as_u16(), duration);
 
             if status.is_success() {
                 match response.text().await {
-                    Ok(body) => {
-                        match serde_json::from_str::<Value>(&body) {
-                            Ok(json) => {
-                                if let Some(pairs) = json.get("pairs").and_then(|p| p.as_array()) {
-                                    println!("  {} {} for '{}'", "Results:".cyan(), pairs.len().to_string().green().bold(), query);
-                                    
-                                    if args.verbose && !pairs.is_empty() {
-                                        println!("\n  {}", "First result:".cyan());
-                                        if let Some(first) = pairs.first() {
-                                            print_json_structure(first, 2);
-                                        }
+                    Ok(body) => match serde_json::from_str::<Value>(&body) {
+                        Ok(json) => {
+                            if let Some(pairs) = json.get("pairs").and_then(|p| p.as_array()) {
+                                println!(
+                                    "  {} {} for '{}'",
+                                    "Results:".cyan(),
+                                    pairs.len().to_string().green().bold(),
+                                    query
+                                );
+
+                                if args.verbose && !pairs.is_empty() {
+                                    println!("\n  {}", "First result:".cyan());
+                                    if let Some(first) = pairs.first() {
+                                        print_json_structure(first, 2);
                                     }
-                                } else {
-                                    println!("  {} No pairs in response", "⚠️".yellow());
                                 }
-                            }
-                            Err(e) => {
-                                println!("  {} Parse error: {}", "❌".red(), e);
-                                if args.verbose {
-                                    println!("  Body: {}", body);
-                                }
+                            } else {
+                                println!("  {} No pairs in response", "⚠️".yellow());
                             }
                         }
-                    }
+                        Err(e) => {
+                            println!("  {} Parse error: {}", "❌".red(), e);
+                            if args.verbose {
+                                println!("  Body: {}", body);
+                            }
+                        }
+                    },
                     Err(e) => println!("  {} Body read error: {}", "❌".red(), e),
                 }
             } else {
@@ -289,15 +309,16 @@ async fn test_batch_tokens(client: &Client, args: &Args) {
     print_test_header("Batch Tokens", "/tokens/v1/{chainId}/{tokenAddresses}");
 
     // Test with SOL and USDC
-    let tokens = "So11111111111111111111111111111111111111112,EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+    let tokens =
+        "So11111111111111111111111111111111111111112,EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
     let url = format!("{}/tokens/v1/{}/{}", BASE_URL, args.chain, tokens);
-    
+
     let start = Instant::now();
     match client.get(&url).send().await {
         Ok(response) => {
             let duration = start.elapsed();
             let status = response.status();
-            
+
             print_status(status.as_u16(), duration);
 
             if status.is_success() {
@@ -306,19 +327,39 @@ async fn test_batch_tokens(client: &Client, args: &Args) {
                         match serde_json::from_str::<Value>(&body) {
                             Ok(json) => {
                                 if let Some(arr) = json.as_array() {
-                                    println!("  {} {}", "Pools found:".cyan(), arr.len().to_string().green().bold());
-                                    
+                                    println!(
+                                        "  {} {}",
+                                        "Pools found:".cyan(),
+                                        arr.len().to_string().green().bold()
+                                    );
+
                                     // Group by token
                                     let mut token_counts = std::collections::HashMap::new();
                                     for item in arr {
-                                        if let Some(base) = item.get("baseToken").and_then(|t| t.get("address")).and_then(|a| a.as_str()) {
+                                        if let Some(base) = item
+                                            .get("baseToken")
+                                            .and_then(|t| t.get("address"))
+                                            .and_then(|a| a.as_str())
+                                        {
                                             *token_counts.entry(base).or_insert(0) += 1;
                                         }
                                     }
-                                    
-                                    println!("  {} {}", "Tokens with pools:".cyan(), token_counts.len());
+
+                                    println!(
+                                        "  {} {}",
+                                        "Tokens with pools:".cyan(),
+                                        token_counts.len()
+                                    );
                                     for (token, count) in token_counts {
-                                        println!("    {} {} pools", token.trim_start_matches("0x").chars().take(8).collect::<String>(), count);
+                                        println!(
+                                            "    {} {} pools",
+                                            token
+                                                .trim_start_matches("0x")
+                                                .chars()
+                                                .take(8)
+                                                .collect::<String>(),
+                                            count
+                                        );
                                     }
 
                                     if args.verbose && !arr.is_empty() {
@@ -359,44 +400,49 @@ async fn test_profiles(client: &Client, args: &Args) {
     print_test_header("Latest Token Profiles", "/token-profiles/latest/v1");
 
     let url = format!("{}/token-profiles/latest/v1", BASE_URL);
-    
+
     let start = Instant::now();
     match client.get(&url).send().await {
         Ok(response) => {
             let duration = start.elapsed();
             let status = response.status();
-            
+
             print_status(status.as_u16(), duration);
 
             if status.is_success() {
                 match response.text().await {
-                    Ok(body) => {
-                        match serde_json::from_str::<Value>(&body) {
-                            Ok(json) => {
-                                if let Some(arr) = json.as_array() {
-                                    println!("  {} {}", "Profiles:".cyan(), arr.len().to_string().green().bold());
-                                    
-                                    if args.verbose && !arr.is_empty() {
-                                        println!("\n  {}", "First profile:".cyan());
-                                        if let Some(first) = arr.first() {
-                                            print_json_structure(first, 2);
-                                        }
-                                    }
-                                } else {
-                                    println!("  {} Unexpected response format", "⚠️".yellow());
-                                    if args.verbose {
-                                        println!("  {}", serde_json::to_string_pretty(&json).unwrap_or_default());
+                    Ok(body) => match serde_json::from_str::<Value>(&body) {
+                        Ok(json) => {
+                            if let Some(arr) = json.as_array() {
+                                println!(
+                                    "  {} {}",
+                                    "Profiles:".cyan(),
+                                    arr.len().to_string().green().bold()
+                                );
+
+                                if args.verbose && !arr.is_empty() {
+                                    println!("\n  {}", "First profile:".cyan());
+                                    if let Some(first) = arr.first() {
+                                        print_json_structure(first, 2);
                                     }
                                 }
-                            }
-                            Err(e) => {
-                                println!("  {} Parse error: {}", "❌".red(), e);
+                            } else {
+                                println!("  {} Unexpected response format", "⚠️".yellow());
                                 if args.verbose {
-                                    println!("  Body: {}", body);
+                                    println!(
+                                        "  {}",
+                                        serde_json::to_string_pretty(&json).unwrap_or_default()
+                                    );
                                 }
                             }
                         }
-                    }
+                        Err(e) => {
+                            println!("  {} Parse error: {}", "❌".red(), e);
+                            if args.verbose {
+                                println!("  Body: {}", body);
+                            }
+                        }
+                    },
                     Err(e) => println!("  {} Body read error: {}", "❌".red(), e),
                 }
             } else {
@@ -418,31 +464,33 @@ async fn test_boosts(client: &Client, args: &Args) {
     print_test_header("Latest Boosted Tokens", "/token-boosts/latest/v1");
 
     let url = format!("{}/token-boosts/latest/v1", BASE_URL);
-    
+
     let start = Instant::now();
     match client.get(&url).send().await {
         Ok(response) => {
             let duration = start.elapsed();
             let status = response.status();
-            
+
             print_status(status.as_u16(), duration);
 
             if status.is_success() {
                 match response.text().await {
-                    Ok(body) => {
-                        match serde_json::from_str::<Value>(&body) {
-                            Ok(json) => {
-                                if let Some(arr) = json.as_array() {
-                                    println!("  {} {}", "Boosted tokens:".cyan(), arr.len().to_string().green().bold());
-                                } else {
-                                    println!("  {} Unexpected format", "⚠️".yellow());
-                                }
-                            }
-                            Err(e) => {
-                                println!("  {} Parse error: {}", "❌".red(), e);
+                    Ok(body) => match serde_json::from_str::<Value>(&body) {
+                        Ok(json) => {
+                            if let Some(arr) = json.as_array() {
+                                println!(
+                                    "  {} {}",
+                                    "Boosted tokens:".cyan(),
+                                    arr.len().to_string().green().bold()
+                                );
+                            } else {
+                                println!("  {} Unexpected format", "⚠️".yellow());
                             }
                         }
-                    }
+                        Err(e) => {
+                            println!("  {} Parse error: {}", "❌".red(), e);
+                        }
+                    },
                     Err(e) => println!("  {} Body read error: {}", "❌".red(), e),
                 }
             } else {
@@ -461,38 +509,40 @@ async fn test_boosts(client: &Client, args: &Args) {
     print_test_header("Top Boosted Tokens", "/token-boosts/top/v1");
 
     let url = format!("{}/token-boosts/top/v1", BASE_URL);
-    
+
     let start = Instant::now();
     match client.get(&url).send().await {
         Ok(response) => {
             let duration = start.elapsed();
             let status = response.status();
-            
+
             print_status(status.as_u16(), duration);
 
             if status.is_success() {
                 match response.text().await {
-                    Ok(body) => {
-                        match serde_json::from_str::<Value>(&body) {
-                            Ok(json) => {
-                                if let Some(arr) = json.as_array() {
-                                    println!("  {} {}", "Top boosts:".cyan(), arr.len().to_string().green().bold());
-                                    
-                                    if args.verbose && !arr.is_empty() {
-                                        println!("\n  {}", "First boost:".cyan());
-                                        if let Some(first) = arr.first() {
-                                            print_json_structure(first, 2);
-                                        }
+                    Ok(body) => match serde_json::from_str::<Value>(&body) {
+                        Ok(json) => {
+                            if let Some(arr) = json.as_array() {
+                                println!(
+                                    "  {} {}",
+                                    "Top boosts:".cyan(),
+                                    arr.len().to_string().green().bold()
+                                );
+
+                                if args.verbose && !arr.is_empty() {
+                                    println!("\n  {}", "First boost:".cyan());
+                                    if let Some(first) = arr.first() {
+                                        print_json_structure(first, 2);
                                     }
-                                } else {
-                                    println!("  {} Unexpected format", "⚠️".yellow());
                                 }
-                            }
-                            Err(e) => {
-                                println!("  {} Parse error: {}", "❌".red(), e);
+                            } else {
+                                println!("  {} Unexpected format", "⚠️".yellow());
                             }
                         }
-                    }
+                        Err(e) => {
+                            println!("  {} Parse error: {}", "❌".red(), e);
+                        }
+                    },
                     Err(e) => println!("  {} Body read error: {}", "❌".red(), e),
                 }
             } else {
@@ -513,44 +563,49 @@ async fn test_orders(client: &Client, args: &Args) {
     print_test_header("Token Orders", "/orders/v1/{chainId}/{tokenAddress}");
 
     let url = format!("{}/orders/v1/{}/{}", BASE_URL, args.chain, args.token);
-    
+
     let start = Instant::now();
     match client.get(&url).send().await {
         Ok(response) => {
             let duration = start.elapsed();
             let status = response.status();
-            
+
             print_status(status.as_u16(), duration);
 
             if status.is_success() {
                 match response.text().await {
-                    Ok(body) => {
-                        match serde_json::from_str::<Value>(&body) {
-                            Ok(json) => {
-                                if let Some(arr) = json.as_array() {
-                                    println!("  {} {}", "Orders:".cyan(), arr.len().to_string().green().bold());
-                                    
-                                    if args.verbose && !arr.is_empty() {
-                                        println!("\n  {}", "First order:".cyan());
-                                        if let Some(first) = arr.first() {
-                                            print_json_structure(first, 2);
-                                        }
-                                    }
-                                } else {
-                                    println!("  {} Unexpected format", "⚠️".yellow());
-                                    if args.verbose {
-                                        println!("  {}", serde_json::to_string_pretty(&json).unwrap_or_default());
+                    Ok(body) => match serde_json::from_str::<Value>(&body) {
+                        Ok(json) => {
+                            if let Some(arr) = json.as_array() {
+                                println!(
+                                    "  {} {}",
+                                    "Orders:".cyan(),
+                                    arr.len().to_string().green().bold()
+                                );
+
+                                if args.verbose && !arr.is_empty() {
+                                    println!("\n  {}", "First order:".cyan());
+                                    if let Some(first) = arr.first() {
+                                        print_json_structure(first, 2);
                                     }
                                 }
-                            }
-                            Err(e) => {
-                                println!("  {} Parse error: {}", "❌".red(), e);
+                            } else {
+                                println!("  {} Unexpected format", "⚠️".yellow());
                                 if args.verbose {
-                                    println!("  Body: {}", body);
+                                    println!(
+                                        "  {}",
+                                        serde_json::to_string_pretty(&json).unwrap_or_default()
+                                    );
                                 }
                             }
                         }
-                    }
+                        Err(e) => {
+                            println!("  {} Parse error: {}", "❌".red(), e);
+                            if args.verbose {
+                                println!("  Body: {}", body);
+                            }
+                        }
+                    },
                     Err(e) => println!("  {} Body read error: {}", "❌".red(), e),
                 }
             } else {
@@ -584,12 +639,17 @@ fn print_status(status: u16, duration: std::time::Duration) {
         status_str.yellow()
     };
 
-    println!("  {} {} ({:.2}ms)", "Status:".cyan(), colored_status.bold(), duration.as_secs_f64() * 1000.0);
+    println!(
+        "  {} {} ({:.2}ms)",
+        "Status:".cyan(),
+        colored_status.bold(),
+        duration.as_secs_f64() * 1000.0
+    );
 }
 
 fn print_json_structure(value: &Value, indent: usize) {
     let prefix = " ".repeat(indent);
-    
+
     match value {
         Value::Object(map) => {
             for (key, val) in map.iter().take(10) {
@@ -601,7 +661,7 @@ fn print_json_structure(value: &Value, indent: usize) {
                     Value::Array(_) => "array",
                     Value::Object(_) => "object",
                 };
-                
+
                 let preview = match val {
                     Value::String(s) => format!(": \"{}\"", s.chars().take(50).collect::<String>()),
                     Value::Number(n) => format!(": {}", n),
@@ -611,9 +671,15 @@ fn print_json_structure(value: &Value, indent: usize) {
                     Value::Null => String::new(),
                 };
 
-                println!("{}  {} ({}){}", prefix, key.cyan(), type_str.bright_black(), preview);
+                println!(
+                    "{}  {} ({}){}",
+                    prefix,
+                    key.cyan(),
+                    type_str.bright_black(),
+                    preview
+                );
             }
-            
+
             if map.len() > 10 {
                 println!("{}  ... {} more fields", prefix, map.len() - 10);
             }
@@ -626,10 +692,16 @@ fn print_json_structure(value: &Value, indent: usize) {
 
 fn validate_pool_structure(pool: &Value) {
     println!("\n  {}", "Structure Validation:".cyan().bold());
-    
+
     let required_fields = vec![
-        "chainId", "dexId", "pairAddress", "baseToken", "quoteToken",
-        "priceNative", "priceUsd", "liquidity"
+        "chainId",
+        "dexId",
+        "pairAddress",
+        "baseToken",
+        "quoteToken",
+        "priceNative",
+        "priceUsd",
+        "liquidity",
     ];
 
     let mut missing = Vec::new();
@@ -643,8 +715,13 @@ fn validate_pool_structure(pool: &Value) {
         }
     }
 
-    println!("    {} {}/{}", "Fields:".cyan(), present.len().to_string().green(), required_fields.len());
-    
+    println!(
+        "    {} {}/{}",
+        "Fields:".cyan(),
+        present.len().to_string().green(),
+        required_fields.len()
+    );
+
     if !missing.is_empty() {
         println!("    {} {:?}", "Missing:".red(), missing);
     } else {

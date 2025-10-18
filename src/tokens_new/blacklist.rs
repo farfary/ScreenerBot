@@ -4,8 +4,8 @@
 use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
 
-use crate::tokens_new::storage::operations::{list_blacklist, remove_blacklist, upsert_blacklist};
 use crate::tokens_new::storage::database::Database;
+use crate::tokens_new::storage::operations::{list_blacklist, remove_blacklist, upsert_blacklist};
 
 static BLACKLIST: std::sync::LazyLock<Arc<RwLock<HashSet<String>>>> =
     std::sync::LazyLock::new(|| Arc::new(RwLock::new(HashSet::new())));
@@ -15,11 +15,19 @@ pub fn is(mint: &str) -> bool {
 }
 
 pub fn add(mint: &str) -> bool {
-    if let Ok(mut s) = BLACKLIST.write() { s.insert(mint.to_string()) } else { false }
+    if let Ok(mut s) = BLACKLIST.write() {
+        s.insert(mint.to_string())
+    } else {
+        false
+    }
 }
 
 pub fn remove(mint: &str) -> bool {
-    if let Ok(mut s) = BLACKLIST.write() { s.remove(mint) } else { false }
+    if let Ok(mut s) = BLACKLIST.write() {
+        s.remove(mint)
+    } else {
+        false
+    }
 }
 
 pub fn persist_add(db: &Database, mint: &str, reason: Option<&str>) -> Result<(), String> {
@@ -33,7 +41,9 @@ pub fn persist_remove(db: &Database, mint: &str) -> Result<(), String> {
 pub fn hydrate_from_db(db: &Database) -> Result<usize, String> {
     let items = list_blacklist(db)?;
     if let Ok(mut s) = BLACKLIST.write() {
-        for (mint, _reason) in items.into_iter() { s.insert(mint); }
+        for (mint, _reason) in items.into_iter() {
+            s.insert(mint);
+        }
         Ok(s.len())
     } else {
         Err("blacklist cache poisoned".to_string())

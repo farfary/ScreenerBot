@@ -1,13 +1,12 @@
 /// Jupiter API client for token discovery
-/// 
+///
 /// API Documentation: https://station.jup.ag/docs/apis/general-api
-/// 
+///
 /// Endpoints implemented:
 /// 1. /tokens/v2/recent - Recent tokens
 /// 2. /tokens/v2/toporganicscore/{interval} - Top organic score tokens
 /// 3. /tokens/v2/toptraded/{interval} - Top traded tokens
 /// 4. /tokens/v2/toptrending/{interval} - Top trending tokens
-
 use super::client::HttpClient;
 use super::jupiter_types::*;
 use super::stats::ApiStatsTracker;
@@ -100,7 +99,7 @@ impl JupiterClient {
     }
 
     /// Fetch top organic score tokens for given interval
-    /// 
+    ///
     /// # Arguments
     /// * `interval` - Time interval: "5m", "1h", "6h", "24h"
     /// * `limit` - Number of results (default: 100)
@@ -154,7 +153,7 @@ impl JupiterClient {
     }
 
     /// Fetch top traded tokens for given interval
-    /// 
+    ///
     /// # Arguments
     /// * `interval` - Time interval: "5m", "1h", "6h", "24h"
     /// * `limit` - Number of results (default: 100)
@@ -208,7 +207,7 @@ impl JupiterClient {
     }
 
     /// Fetch top trending tokens for given interval
-    /// 
+    ///
     /// # Arguments
     /// * `interval` - Time interval: "5m", "1h", "6h", "24h"
     /// * `limit` - Number of results (default: 100)

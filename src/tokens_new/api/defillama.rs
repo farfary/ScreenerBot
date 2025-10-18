@@ -1,11 +1,10 @@
 /// DeFiLlama API client
-/// 
+///
 /// API Documentation: https://defillama.com/docs/api
-/// 
+///
 /// Endpoints implemented:
 /// 1. /protocols - Get all DeFi protocols
 /// 2. /prices/current/solana:{mint} - Get current token price
-
 use super::client::HttpClient;
 use super::defillama_types::*;
 use super::stats::ApiStatsTracker;
@@ -96,7 +95,7 @@ impl DefiLlamaClient {
     }
 
     /// Fetch current price for a Solana token
-    /// 
+    ///
     /// # Arguments
     /// * `mint` - Solana token mint address
     pub async fn fetch_token_price(&self, mint: &str) -> Result<f64, ApiError> {

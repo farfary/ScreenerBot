@@ -17,8 +17,19 @@ impl Priority {
             Priority::Low => 900,
         }
     }
+
+    pub fn decimals_refresh_ttl_secs(self) -> u64 {
+        match self {
+            Priority::Critical => 120,
+            Priority::High => 300,
+            Priority::Medium => 900,
+            Priority::Low => 3600,
+        }
+    }
 }
 
 impl Default for Priority {
-    fn default() -> Self { Priority::Medium }
+    fn default() -> Self {
+        Priority::Medium
+    }
 }

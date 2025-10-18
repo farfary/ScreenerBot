@@ -1,7 +1,7 @@
 // Database CRUD operations for all token data tables
 
 use crate::tokens_new::storage::database::Database;
-use crate::tokens_new::types::{DexScreenerPool, GeckoTerminalPool, RugcheckInfo, DataSource};
+use crate::tokens_new::types::{DataSource, DexScreenerPool, GeckoTerminalPool, RugcheckInfo};
 use chrono::Utc;
 use log::{debug, error, warn};
 use rusqlite::{params, Result as SqliteResult, Row};
@@ -16,11 +16,12 @@ pub fn upsert_token_metadata(
     decimals: Option<u8>,
 ) -> Result<(), String> {
     let now = Utc::now().timestamp();
-    
+
     let conn = db.get_connection();
-    let conn = conn.lock()
+    let conn = conn
+        .lock()
         .map_err(|e| format!("Failed to lock connection: {}", e))?;
-    
+
     conn.execute(
         r#"
         INSERT INTO tokens (mint, symbol, name, decimals, created_at, updated_at)
@@ -32,10 +33,11 @@ pub fn upsert_token_metadata(
             updated_at = ?6
         "#,
         params![mint, symbol, name, decimals, now, now],
-    ).map_err(|e| format!("Failed to upsert token metadata: {}", e))?;
-    
+    )
+    .map_err(|e| format!("Failed to upsert token metadata: {}", e))?;
+
     debug!("[TOKENS_NEW] Upserted token metadata: mint={}", mint);
-    
+
     Ok(())
 }
 
@@ -46,17 +48,19 @@ pub fn save_dexscreener_pools(
     pools: &[DexScreenerPool],
 ) -> Result<(), String> {
     let now = Utc::now().timestamp();
-    
+
     let conn = db.get_connection();
-    let conn = conn.lock()
+    let conn = conn
+        .lock()
         .map_err(|e| format!("Failed to lock connection: {}", e))?;
-    
+
     // Delete existing pools for this mint
     conn.execute(
         "DELETE FROM data_dexscreener_pools WHERE mint = ?1",
         params![mint],
-    ).map_err(|e| format!("Failed to delete old DexScreener pools: {}", e))?;
-    
+    )
+    .map_err(|e| format!("Failed to delete old DexScreener pools: {}", e))?;
+
     // Insert new pools
     for pool in pools {
         conn.execute(
@@ -83,29 +87,60 @@ pub fn save_dexscreener_pools(
             )
             "#,
             params![
-                mint, pool.chain_id, pool.dex_id, pool.pair_address,
-                pool.base_token_address, pool.base_token_name, pool.base_token_symbol,
-                pool.quote_token_address, pool.quote_token_name, pool.quote_token_symbol,
-                pool.price_native, pool.price_usd, pool.liquidity_usd, pool.liquidity_base, pool.liquidity_quote,
-                pool.fdv, pool.market_cap,
-                pool.price_change_m5, pool.price_change_h1, pool.price_change_h6, pool.price_change_h24,
-                pool.volume_m5, pool.volume_h1, pool.volume_h6, pool.volume_h24,
-                pool.txns_m5_buys, pool.txns_m5_sells, pool.txns_h1_buys, pool.txns_h1_sells,
-                pool.txns_h6_buys, pool.txns_h6_sells, pool.txns_h24_buys, pool.txns_h24_sells,
+                mint,
+                pool.chain_id,
+                pool.dex_id,
+                pool.pair_address,
+                pool.base_token_address,
+                pool.base_token_name,
+                pool.base_token_symbol,
+                pool.quote_token_address,
+                pool.quote_token_name,
+                pool.quote_token_symbol,
+                pool.price_native,
+                pool.price_usd,
+                pool.liquidity_usd,
+                pool.liquidity_base,
+                pool.liquidity_quote,
+                pool.fdv,
+                pool.market_cap,
+                pool.price_change_m5,
+                pool.price_change_h1,
+                pool.price_change_h6,
+                pool.price_change_h24,
+                pool.volume_m5,
+                pool.volume_h1,
+                pool.volume_h6,
+                pool.volume_h24,
+                pool.txns_m5_buys,
+                pool.txns_m5_sells,
+                pool.txns_h1_buys,
+                pool.txns_h1_sells,
+                pool.txns_h6_buys,
+                pool.txns_h6_sells,
+                pool.txns_h24_buys,
+                pool.txns_h24_sells,
                 pool.pair_created_at,
                 serde_json::to_string(&pool.labels).ok(),
                 pool.url,
-                pool.info_image_url, pool.info_header, pool.info_open_graph,
+                pool.info_image_url,
+                pool.info_header,
+                pool.info_open_graph,
                 serde_json::to_string(&pool.info_websites).ok(),
                 serde_json::to_string(&pool.info_socials).ok(),
                 None::<i64>, // boosts_active - not in current schema
                 now
             ],
-        ).map_err(|e| format!("Failed to insert DexScreener pool: {}", e))?;
+        )
+        .map_err(|e| format!("Failed to insert DexScreener pool: {}", e))?;
     }
-    
-    debug!("[TOKENS_NEW] Saved {} DexScreener pools for mint={}", pools.len(), mint);
-    
+
+    debug!(
+        "[TOKENS_NEW] Saved {} DexScreener pools for mint={}",
+        pools.len(),
+        mint
+    );
+
     Ok(())
 }
 
@@ -116,17 +151,19 @@ pub fn save_geckoterminal_pools(
     pools: &[GeckoTerminalPool],
 ) -> Result<(), String> {
     let now = Utc::now().timestamp();
-    
+
     let conn = db.get_connection();
-    let conn = conn.lock()
+    let conn = conn
+        .lock()
         .map_err(|e| format!("Failed to lock connection: {}", e))?;
-    
+
     // Delete existing pools for this mint
     conn.execute(
         "DELETE FROM data_geckoterminal_pools WHERE mint = ?1",
         params![mint],
-    ).map_err(|e| format!("Failed to delete old GeckoTerminal pools: {}", e))?;
-    
+    )
+    .map_err(|e| format!("Failed to delete old GeckoTerminal pools: {}", e))?;
+
     // Insert new pools
     for pool in pools {
         conn.execute(
@@ -158,45 +195,71 @@ pub fn save_geckoterminal_pools(
             )
             "#,
             params![
-                mint, pool.pool_address, pool.pool_name, pool.dex_id,
-                pool.base_token_id, pool.quote_token_id,
-                pool.base_token_price_usd, pool.base_token_price_native, pool.base_token_price_quote,
-                pool.quote_token_price_usd, pool.quote_token_price_native, pool.quote_token_price_base,
+                mint,
+                pool.pool_address,
+                pool.pool_name,
+                pool.dex_id,
+                pool.base_token_id,
+                pool.quote_token_id,
+                pool.base_token_price_usd,
+                pool.base_token_price_native,
+                pool.base_token_price_quote,
+                pool.quote_token_price_usd,
+                pool.quote_token_price_native,
+                pool.quote_token_price_base,
                 pool.token_price_usd,
-                pool.fdv_usd, pool.market_cap_usd, pool.reserve_usd,
-                pool.volume_m5, pool.volume_m15, pool.volume_m30,
-                pool.volume_h1, pool.volume_h6, pool.volume_h24,
-                pool.price_change_m5, pool.price_change_m15, pool.price_change_m30,
-                pool.price_change_h1, pool.price_change_h6, pool.price_change_h24,
-                pool.txns_m5_buys, pool.txns_m5_sells,
-                pool.txns_m15_buys, pool.txns_m15_sells,
-                pool.txns_m30_buys, pool.txns_m30_sells,
-                pool.txns_h1_buys, pool.txns_h1_sells,
-                pool.txns_h6_buys, pool.txns_h6_sells,
-                pool.txns_h24_buys, pool.txns_h24_sells,
+                pool.fdv_usd,
+                pool.market_cap_usd,
+                pool.reserve_usd,
+                pool.volume_m5,
+                pool.volume_m15,
+                pool.volume_m30,
+                pool.volume_h1,
+                pool.volume_h6,
+                pool.volume_h24,
+                pool.price_change_m5,
+                pool.price_change_m15,
+                pool.price_change_m30,
+                pool.price_change_h1,
+                pool.price_change_h6,
+                pool.price_change_h24,
+                pool.txns_m5_buys,
+                pool.txns_m5_sells,
+                pool.txns_m15_buys,
+                pool.txns_m15_sells,
+                pool.txns_m30_buys,
+                pool.txns_m30_sells,
+                pool.txns_h1_buys,
+                pool.txns_h1_sells,
+                pool.txns_h6_buys,
+                pool.txns_h6_sells,
+                pool.txns_h24_buys,
+                pool.txns_h24_sells,
                 pool.pool_created_at,
                 now
             ],
-        ).map_err(|e| format!("Failed to insert GeckoTerminal pool: {}", e))?;
+        )
+        .map_err(|e| format!("Failed to insert GeckoTerminal pool: {}", e))?;
     }
-    
-    debug!("[TOKENS_NEW] Saved {} GeckoTerminal pools for mint={}", pools.len(), mint);
-    
+
+    debug!(
+        "[TOKENS_NEW] Saved {} GeckoTerminal pools for mint={}",
+        pools.len(),
+        mint
+    );
+
     Ok(())
 }
 
 /// Save Rugcheck info (replaces existing data for this mint)
-pub fn save_rugcheck_info(
-    db: &Database,
-    mint: &str,
-    info: &RugcheckInfo,
-) -> Result<(), String> {
+pub fn save_rugcheck_info(db: &Database, mint: &str, info: &RugcheckInfo) -> Result<(), String> {
     let now = Utc::now().timestamp();
-    
+
     let conn = db.get_connection();
-    let conn = conn.lock()
+    let conn = conn
+        .lock()
         .map_err(|e| format!("Failed to lock connection: {}", e))?;
-    
+
     conn.execute(
         r#"
         INSERT OR REPLACE INTO data_rugcheck_info (
@@ -216,15 +279,16 @@ pub fn save_rugcheck_info(
             info.score,
             info.score.map(|s| format!("Score: {}", s)),
             None::<String>, // market_solscan_tags - not in current schema
-            None::<f64>, // market_top_holders_percentage - not in current schema
+            None::<f64>,    // market_top_holders_percentage - not in current schema
             serde_json::to_string(&info.risks).ok(),
             serde_json::to_string(&info.top_holders).ok(),
             now
         ],
-    ).map_err(|e| format!("Failed to save Rugcheck info: {}", e))?;
-    
+    )
+    .map_err(|e| format!("Failed to save Rugcheck info: {}", e))?;
+
     debug!("[TOKENS_NEW] Saved Rugcheck info for mint={}", mint);
-    
+
     Ok(())
 }
 
@@ -238,11 +302,12 @@ pub fn log_api_fetch(
     records_fetched: Option<usize>,
 ) -> Result<(), String> {
     let now = Utc::now().timestamp();
-    
+
     let conn = db.get_connection();
-    let conn = conn.lock()
+    let conn = conn
+        .lock()
         .map_err(|e| format!("Failed to lock connection: {}", e))?;
-    
+
     conn.execute(
         r#"
         INSERT INTO api_fetch_log (mint, source, success, error_message, records_fetched, fetched_at)
@@ -257,16 +322,17 @@ pub fn log_api_fetch(
             now
         ],
     ).map_err(|e| format!("Failed to log API fetch: {}", e))?;
-    
+
     Ok(())
 }
 
 /// Get token metadata from database
 pub fn get_token_metadata(db: &Database, mint: &str) -> Result<Option<TokenMetadata>, String> {
     let conn = db.get_connection();
-    let conn = conn.lock()
+    let conn = conn
+        .lock()
         .map_err(|e| format!("Failed to lock connection: {}", e))?;
-    
+
     let result = conn.query_row(
         "SELECT mint, symbol, name, decimals, created_at, updated_at FROM tokens WHERE mint = ?1",
         params![mint],
@@ -281,7 +347,7 @@ pub fn get_token_metadata(db: &Database, mint: &str) -> Result<Option<TokenMetad
             })
         },
     );
-    
+
     match result {
         Ok(metadata) => Ok(Some(metadata)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
@@ -295,17 +361,18 @@ use crate::tokens_new::provider::query::TokenMetadata;
 /// Get DexScreener pools for a token
 pub fn get_dexscreener_pools(db: &Database, mint: &str) -> Result<Vec<DexScreenerPool>, String> {
     let conn = db.get_connection();
-    let conn = conn.lock()
+    let conn = conn
+        .lock()
         .map_err(|e| format!("Failed to lock connection: {}", e))?;
-    
-    let mut stmt = conn.prepare(
-        "SELECT * FROM data_dexscreener_pools WHERE mint = ?1 ORDER BY liquidity_usd DESC"
-    ).map_err(|e| format!("Failed to prepare statement: {}", e))?;
-    
-    let rows = stmt.query_map(params![mint], |row| {
-        parse_dexscreener_row(row)
-    }).map_err(|e| format!("Failed to query DexScreener pools: {}", e))?;
-    
+
+    let mut stmt = conn
+        .prepare("SELECT * FROM data_dexscreener_pools WHERE mint = ?1 ORDER BY liquidity_usd DESC")
+        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+
+    let rows = stmt
+        .query_map(params![mint], |row| parse_dexscreener_row(row))
+        .map_err(|e| format!("Failed to query DexScreener pools: {}", e))?;
+
     let mut pools = Vec::new();
     for row_result in rows {
         match row_result {
@@ -313,24 +380,30 @@ pub fn get_dexscreener_pools(db: &Database, mint: &str) -> Result<Vec<DexScreene
             Err(e) => warn!("[TOKENS_NEW] Failed to parse DexScreener pool row: {}", e),
         }
     }
-    
+
     Ok(pools)
 }
 
 /// Get GeckoTerminal pools for a token
-pub fn get_geckoterminal_pools(db: &Database, mint: &str) -> Result<Vec<GeckoTerminalPool>, String> {
+pub fn get_geckoterminal_pools(
+    db: &Database,
+    mint: &str,
+) -> Result<Vec<GeckoTerminalPool>, String> {
     let conn = db.get_connection();
-    let conn = conn.lock()
+    let conn = conn
+        .lock()
         .map_err(|e| format!("Failed to lock connection: {}", e))?;
-    
-    let mut stmt = conn.prepare(
-        "SELECT * FROM data_geckoterminal_pools WHERE mint = ?1 ORDER BY reserve_in_usd DESC"
-    ).map_err(|e| format!("Failed to prepare statement: {}", e))?;
-    
-    let rows = stmt.query_map(params![mint], |row| {
-        parse_geckoterminal_row(row)
-    }).map_err(|e| format!("Failed to query GeckoTerminal pools: {}", e))?;
-    
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT * FROM data_geckoterminal_pools WHERE mint = ?1 ORDER BY reserve_in_usd DESC",
+        )
+        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+
+    let rows = stmt
+        .query_map(params![mint], |row| parse_geckoterminal_row(row))
+        .map_err(|e| format!("Failed to query GeckoTerminal pools: {}", e))?;
+
     let mut pools = Vec::new();
     for row_result in rows {
         match row_result {
@@ -338,22 +411,23 @@ pub fn get_geckoterminal_pools(db: &Database, mint: &str) -> Result<Vec<GeckoTer
             Err(e) => warn!("[TOKENS_NEW] Failed to parse GeckoTerminal pool row: {}", e),
         }
     }
-    
+
     Ok(pools)
 }
 
 /// Get Rugcheck info for a token
 pub fn get_rugcheck_info(db: &Database, mint: &str) -> Result<Option<RugcheckInfo>, String> {
     let conn = db.get_connection();
-    let conn = conn.lock()
+    let conn = conn
+        .lock()
         .map_err(|e| format!("Failed to lock connection: {}", e))?;
-    
+
     let result = conn.query_row(
         "SELECT * FROM data_rugcheck_info WHERE mint = ?1",
         params![mint],
         |row| parse_rugcheck_row(row),
     );
-    
+
     match result {
         Ok(info) => Ok(Some(info)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
@@ -439,10 +513,14 @@ pub fn list_blacklist(db: &Database) -> Result<Vec<(String, Option<String>)>, St
         .prepare("SELECT mint, reason FROM blacklist")
         .map_err(|e| format!("Failed to prepare blacklist query: {}", e))?;
     let rows = stmt
-        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)))
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+        })
         .map_err(|e| format!("Failed to query blacklist: {}", e))?;
     let mut out = Vec::new();
-    for r in rows { out.push(r.map_err(|e| e.to_string())?); }
+    for r in rows {
+        out.push(r.map_err(|e| e.to_string())?);
+    }
     Ok(out)
 }
 
@@ -457,10 +535,12 @@ fn parse_rugcheck_row(row: &Row) -> SqliteResult<RugcheckInfo> {
         score: row.get(6)?,
         score_normalised: row.get(7)?,
         // Parse JSON fields
-        risks: row.get::<_, Option<String>>(10)?
+        risks: row
+            .get::<_, Option<String>>(10)?
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default(),
-        top_holders: row.get::<_, Option<String>>(11)?
+        top_holders: row
+            .get::<_, Option<String>>(11)?
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default(),
         // Use defaults for unparsed fields

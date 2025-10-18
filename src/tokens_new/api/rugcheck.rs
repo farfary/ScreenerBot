@@ -1,13 +1,12 @@
 /// Rugcheck API client for token security analysis
-/// 
+///
 /// API Documentation: https://api.rugcheck.xyz/
-/// 
+///
 /// Endpoints implemented:
 /// 1. /v1/tokens/{mint}/report - Get security report for a token
 /// 2. /v1/tokens/{mint}/report/summary - Get summary security report
 /// 3. /v1/stats/summary - Get global platform statistics
 /// 4. /v1/tokens/{mints}/batch - Get multiple token reports (batch)
-
 use super::client::{HttpClient, RateLimiter};
 use super::rugcheck_types::*;
 use super::stats::ApiStatsTracker;
@@ -41,7 +40,11 @@ pub struct RugcheckClient {
 }
 
 impl RugcheckClient {
-    pub fn new(enabled: bool, rate_limit_per_minute: usize, timeout_secs: u64) -> Result<Self, String> {
+    pub fn new(
+        enabled: bool,
+        rate_limit_per_minute: usize,
+        timeout_secs: u64,
+    ) -> Result<Self, String> {
         let http_client = HttpClient::new(timeout_secs)?;
         let rate_limiter = RateLimiter::new(rate_limit_per_minute);
         let stats = Arc::new(ApiStatsTracker::new());
@@ -143,14 +146,10 @@ impl RugcheckClient {
             token_name: token_meta.as_ref().and_then(|t| t.name.clone()),
             token_symbol: token_meta.as_ref().and_then(|t| t.symbol.clone()),
             token_decimals: token.as_ref().and_then(|t| t.decimals),
-            token_supply: token
-                .as_ref()
-                .and_then(|t| t.supply.map(|s| s.to_string())),
+            token_supply: token.as_ref().and_then(|t| t.supply.map(|s| s.to_string())),
             token_uri: token_meta.as_ref().and_then(|t| t.uri.clone()),
             token_mutable: token_meta.as_ref().and_then(|t| t.mutable),
-            token_update_authority: token_meta
-                .as_ref()
-                .and_then(|t| t.update_authority.clone()),
+            token_update_authority: token_meta.as_ref().and_then(|t| t.update_authority.clone()),
             mint_authority: api_response.mint_authority,
             freeze_authority: api_response.freeze_authority,
             creator: api_response.creator,
@@ -168,7 +167,9 @@ impl RugcheckClient {
             top_holders,
             graph_insiders_detected: api_response.graph_insiders_detected,
             transfer_fee_pct: transfer_fee.as_ref().and_then(|t| t.pct),
-            transfer_fee_max_amount: transfer_fee.as_ref().and_then(|t| t.max_amount.map(|a| a as i64)),
+            transfer_fee_max_amount: transfer_fee
+                .as_ref()
+                .and_then(|t| t.max_amount.map(|a| a as i64)),
             transfer_fee_authority: transfer_fee.and_then(|t| t.authority),
             detected_at: api_response.detected_at,
             analyzed_at: api_response.analyzed_at,

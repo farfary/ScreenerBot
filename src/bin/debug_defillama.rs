@@ -48,7 +48,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         match client.fetch_protocols().await {
             Ok(protocols) => {
-                let solana_protocols = DefiLlamaClient::extract_solana_addresses_with_names(&protocols);
+                let solana_protocols =
+                    DefiLlamaClient::extract_solana_addresses_with_names(&protocols);
 
                 println!("✓ Successfully fetched {} total protocols", protocols.len());
                 println!("✓ Found {} Solana protocols", solana_protocols.len());
@@ -119,7 +120,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("  Failed: {}", stats.failed_requests);
     println!("  Cache Hits: {}", stats.cache_hits);
     println!("  Cache Misses: {}", stats.cache_misses);
-    println!("  Avg Response Time: {:.2}ms", stats.average_response_time_ms);
+    println!(
+        "  Avg Response Time: {:.2}ms",
+        stats.average_response_time_ms
+    );
 
     println!("\n{}", "=".repeat(80));
     println!("\nTest completed!");

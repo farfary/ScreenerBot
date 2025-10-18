@@ -1293,6 +1293,14 @@ config_struct! {
             category: "Sources",
         })]
         sources: TokenSourcesConfig = TokenSourcesConfig::default(),
+
+        #[metadata(field_metadata! {
+            label: "Token Discovery",
+            hint: "Configure discovery endpoints per provider",
+            impact: "high",
+            category: "Discovery",
+        })]
+        discovery: TokenDiscoveryConfig = TokenDiscoveryConfig::default(),
     }
 }
 
@@ -1395,6 +1403,122 @@ config_struct! {
             timeout_seconds: 15,
             cache_ttl_seconds: 86400,
         },
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TOKEN DISCOVERY CONFIGURATION
+// ----------------------------------------------------------------------------
+
+config_struct! {
+    pub struct TokenDiscoveryConfig {
+        #[metadata(field_metadata! {
+            label: "Discovery Enabled",
+            hint: "Master toggle for token discovery endpoints",
+            impact: "critical",
+            category: "Discovery",
+        })]
+        enabled: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "DexScreener Discovery",
+            hint: "Per-endpoint toggles for DexScreener discovery",
+            impact: "high",
+            category: "Discovery",
+        })]
+        dexscreener: DexscreenerDiscoveryConfig = DexscreenerDiscoveryConfig::default(),
+
+        #[metadata(field_metadata! {
+            label: "GeckoTerminal Discovery",
+            hint: "Per-endpoint toggles for GeckoTerminal discovery",
+            impact: "high",
+            category: "Discovery",
+        })]
+        geckoterminal: GeckoDiscoveryConfig = GeckoDiscoveryConfig::default(),
+
+        #[metadata(field_metadata! {
+            label: "Rugcheck Discovery",
+            hint: "Per-endpoint toggles for Rugcheck discovery",
+            impact: "high",
+            category: "Discovery",
+        })]
+        rugcheck: RugcheckDiscoveryConfig = RugcheckDiscoveryConfig::default(),
+
+        #[metadata(field_metadata! {
+            label: "Jupiter Discovery",
+            hint: "Per-endpoint toggles for Jupiter discovery",
+            impact: "medium",
+            category: "Discovery",
+        })]
+        jupiter: JupiterDiscoveryConfig = JupiterDiscoveryConfig::default(),
+
+        #[metadata(field_metadata! {
+            label: "CoinGecko Discovery",
+            hint: "Toggle CoinGecko Solana markets discovery",
+            impact: "low",
+            category: "Discovery",
+        })]
+        coingecko: CoingeckoDiscoveryConfig = CoingeckoDiscoveryConfig::default(),
+
+        #[metadata(field_metadata! {
+            label: "DeFiLlama Discovery",
+            hint: "Toggle DeFiLlama protocol discovery",
+            impact: "low",
+            category: "Discovery",
+        })]
+        defillama: DefillamaDiscoveryConfig = DefillamaDiscoveryConfig::default(),
+    }
+}
+
+config_struct! {
+    pub struct DexscreenerDiscoveryConfig {
+        enabled: bool = true,
+        latest_profiles_enabled: bool = true,
+        latest_boosts_enabled: bool = true,
+        top_boosts_enabled: bool = true,
+    }
+}
+
+config_struct! {
+    pub struct GeckoDiscoveryConfig {
+        enabled: bool = true,
+        new_pools_enabled: bool = true,
+        recently_updated_enabled: bool = true,
+        trending_enabled: bool = true,
+    }
+}
+
+config_struct! {
+    pub struct RugcheckDiscoveryConfig {
+        enabled: bool = true,
+        new_tokens_enabled: bool = true,
+        recent_enabled: bool = true,
+        trending_enabled: bool = true,
+        verified_enabled: bool = true,
+    }
+}
+
+config_struct! {
+    pub struct JupiterDiscoveryConfig {
+        enabled: bool = true,
+        recent_enabled: bool = true,
+        top_organic_enabled: bool = true,
+        top_traded_enabled: bool = true,
+        top_trending_enabled: bool = true,
+    }
+}
+
+config_struct! {
+    pub struct CoingeckoDiscoveryConfig {
+        enabled: bool = false,
+        markets_enabled: bool = false,
+    }
+}
+
+config_struct! {
+    pub struct DefillamaDiscoveryConfig {
+        enabled: bool = false,
+        protocols_enabled: bool = false,
     }
 }
 

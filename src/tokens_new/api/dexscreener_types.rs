@@ -167,7 +167,7 @@ pub struct TokenBoostTop {
 impl DexScreenerPairRaw {
     pub fn to_pool(&self) -> DexScreenerPool {
         let mut pool = DexScreenerPool::default();
-        
+
         if let Some(ref base) = self.base_token {
             pool.base_token_address = base.address.clone().unwrap_or_default();
             pool.base_token_name = base.name.clone().unwrap_or_default();
@@ -226,11 +226,15 @@ impl DexScreenerPairRaw {
             pool.info_image_url = info.image_url.clone();
             pool.info_header = info.header.clone();
             pool.info_open_graph = info.open_graph.clone();
-            
-            pool.info_websites = info.websites.as_ref()
+
+            pool.info_websites = info
+                .websites
+                .as_ref()
                 .and_then(|v| serde_json::from_value(serde_json::Value::Array(v.clone())).ok())
                 .unwrap_or_default();
-            pool.info_socials = info.socials.as_ref()
+            pool.info_socials = info
+                .socials
+                .as_ref()
                 .and_then(|v| serde_json::from_value(serde_json::Value::Array(v.clone())).ok())
                 .unwrap_or_default();
         }

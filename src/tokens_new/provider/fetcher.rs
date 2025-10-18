@@ -20,7 +20,11 @@ pub struct Fetcher {
 }
 
 impl Fetcher {
-    pub fn new(api_clients: Arc<ApiClients>, cache: Arc<CacheManager>, database: Arc<Database>) -> Self {
+    pub fn new(
+        api_clients: Arc<ApiClients>,
+        cache: Arc<CacheManager>,
+        database: Arc<Database>,
+    ) -> Self {
         Self {
             api_clients,
             cache,
@@ -83,7 +87,10 @@ impl Fetcher {
         }
 
         // Fetch from API
-        debug!("[TOKENS_NEW] Fetching DexScreener pools from API: mint={}", mint);
+        debug!(
+            "[TOKENS_NEW] Fetching DexScreener pools from API: mint={}",
+            mint
+        );
         let pools = self.api_clients.dexscreener.fetch_pools(mint).await?;
 
         // Save to cache
@@ -155,7 +162,10 @@ impl Fetcher {
         }
 
         // Fetch from API
-        debug!("[TOKENS_NEW] Fetching GeckoTerminal pools from API: mint={}", mint);
+        debug!(
+            "[TOKENS_NEW] Fetching GeckoTerminal pools from API: mint={}",
+            mint
+        );
         let pools = self.api_clients.geckoterminal.fetch_pools(mint).await?;
 
         // Save to cache
@@ -164,7 +174,10 @@ impl Fetcher {
         // Save to database if persist enabled
         if options.persist {
             if let Err(e) = save_geckoterminal_pools(&self.database, mint, &pools) {
-                error!("[TOKENS_NEW] Failed to save GeckoTerminal pools to DB: {}", e);
+                error!(
+                    "[TOKENS_NEW] Failed to save GeckoTerminal pools to DB: {}",
+                    e
+                );
             }
         }
 
@@ -227,7 +240,10 @@ impl Fetcher {
         }
 
         // Fetch from API
-        debug!("[TOKENS_NEW] Fetching Rugcheck info from API: mint={}", mint);
+        debug!(
+            "[TOKENS_NEW] Fetching Rugcheck info from API: mint={}",
+            mint
+        );
         let info = self.api_clients.rugcheck.fetch_report(mint).await?;
 
         // Save to cache
@@ -241,7 +257,14 @@ impl Fetcher {
         }
 
         // Log fetch
-        let _ = log_api_fetch(&self.database, mint, DataSource::Rugcheck, true, None, Some(1));
+        let _ = log_api_fetch(
+            &self.database,
+            mint,
+            DataSource::Rugcheck,
+            true,
+            None,
+            Some(1),
+        );
 
         info!(
             "[TOKENS_NEW] Fetched Rugcheck info for mint={} in {}ms",
@@ -258,7 +281,13 @@ impl Fetcher {
     }
 
     /// Update token metadata from fetched data
-    pub fn update_metadata(&self, mint: &str, symbol: Option<&str>, name: Option<&str>, decimals: Option<u8>) {
+    pub fn update_metadata(
+        &self,
+        mint: &str,
+        symbol: Option<&str>,
+        name: Option<&str>,
+        decimals: Option<u8>,
+    ) {
         if let Err(e) = upsert_token_metadata(&self.database, mint, symbol, name, decimals) {
             warn!("[TOKENS_NEW] Failed to update token metadata: {}", e);
         }

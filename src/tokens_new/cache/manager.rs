@@ -61,8 +61,8 @@ impl CacheManager {
     where
         T: Serialize,
     {
-        let json_data = serde_json::to_value(data)
-            .map_err(|e| format!("Failed to serialize data: {}", e))?;
+        let json_data =
+            serde_json::to_value(data).map_err(|e| format!("Failed to serialize data: {}", e))?;
 
         let ttl = self.config.get_ttl(key.source);
         let entry = CacheEntry::new(json_data, ttl, key.source);
