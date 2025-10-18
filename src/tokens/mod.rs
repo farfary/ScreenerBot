@@ -1,12 +1,12 @@
 /// New unified token data system
 ///
 /// Architecture:
-/// - api/: Pure API clients for external data sources
 /// - cache/: Unified caching with configurable TTLs
 /// - storage/: Database layer with separate tables per source
 /// - provider/: High-level data access interface
 /// - types.rs: Core domain types
-pub mod api;
+/// 
+/// Note: API clients moved to crate::apis module
 pub mod blacklist;
 pub mod cache;
 pub mod decimals;
@@ -29,10 +29,10 @@ pub use types::{
     WebsiteLink,
 };
 
-// API parsing types from api modules
-pub use api::dexscreener_types::DexScreenerPool;
-pub use api::geckoterminal_types::GeckoTerminalPool;
-pub use api::rugcheck_types::RugcheckInfo;
+// API parsing types from api modules (now in crate::apis)
+pub use crate::apis::dexscreener_types::DexScreenerPool;
+pub use crate::apis::geckoterminal_types::GeckoTerminalPool;
+pub use crate::apis::rugcheck_types::RugcheckInfo;
 
 // Re-export common types from new modules
 pub use events::{subscribe as subscribe_events, TokenEvent};

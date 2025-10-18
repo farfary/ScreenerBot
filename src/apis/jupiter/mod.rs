@@ -7,9 +7,12 @@
 /// 2. /tokens/v2/toporganicscore/{interval} - Top organic score tokens
 /// 3. /tokens/v2/toptraded/{interval} - Top traded tokens
 /// 4. /tokens/v2/toptrending/{interval} - Top trending tokens
-use super::client::HttpClient;
-use super::jupiter_types::*;
-use super::stats::ApiStatsTracker;
+
+pub mod types;
+
+use crate::apis::client::HttpClient;
+use crate::apis::stats::ApiStatsTracker;
+use self::types::JupiterToken;
 use crate::tokens::types::ApiError;
 use std::sync::Arc;
 use std::time::Instant;

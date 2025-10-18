@@ -1,7 +1,7 @@
 // Database CRUD operations for all token data tables
 
 use crate::logger::{log, LogTag};
-use crate::tokens::api::rugcheck_types::RugcheckInfo;
+use crate::apis::rugcheck_types::RugcheckInfo;
 use crate::tokens::storage::database::Database;
 use crate::tokens::types::{DataSource, TokenMetadata};
 use chrono::Utc;

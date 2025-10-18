@@ -11,9 +11,14 @@
 /// 6. /token-boosts/latest/v1 - Get latest boosted tokens
 /// 7. /token-boosts/top/v1 - Get top boosted tokens  
 /// 8. /orders/v1/{chainId}/{tokenAddress} - Get orders for a token
-use super::dexscreener_types::*;
+
+pub mod types;
+
+use self::types::{
+    DexScreenerPool, DexScreenerPairRaw, PairResponse, PairsResponse,
+    TokenProfile, TokenBoostTop, TokenBoostLatest, TokenInfo, TokenOrder, ChainInfo
+};
 use crate::logger::{log, LogTag};
-use crate::tokens::api::dexscreener_types::DexScreenerPool;
 use crate::tokens::types::ApiError;
 use reqwest::Client;
 use std::collections::HashMap;
@@ -57,6 +62,11 @@ impl DexScreenerClient {
             rate_limiter: Arc::new(Semaphore::new(rate_limit)),
             timeout: Duration::from_secs(timeout_seconds),
         }
+    }
+
+    /// Get API stats (placeholder - DexScreener uses direct HTTP without stats tracking)
+    pub async fn get_stats(&self) -> crate::apis::stats::ApiStats {
+        crate::apis::stats::ApiStats::default()
     }
 
     /// PRIMARY METHOD: Fetch ALL pools for a single token address

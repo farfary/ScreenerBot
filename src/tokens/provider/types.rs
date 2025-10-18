@@ -1,8 +1,8 @@
 // Provider module types: High-level data types for token information
 
-use crate::tokens::api::dexscreener_types::DexScreenerPool;
-use crate::tokens::api::geckoterminal_types::GeckoTerminalPool;
-use crate::tokens::api::rugcheck_types::RugcheckInfo;
+use crate::apis::dexscreener_types::DexScreenerPool;
+use crate::apis::geckoterminal_types::GeckoTerminalPool;
+use crate::apis::rugcheck_types::RugcheckInfo;
 use crate::tokens::types::{DataSource, TokenMetadata};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

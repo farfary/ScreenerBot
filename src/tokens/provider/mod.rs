@@ -5,7 +5,7 @@ pub mod fetcher;
 pub mod query;
 pub mod types;
 
-use crate::tokens::api::ApiClients;
+use crate::apis::get_api_manager;
 use crate::tokens::cache::CacheManager;
 use crate::tokens::provider::fetcher::Fetcher;
 use crate::tokens::provider::query::Query;
@@ -48,12 +48,12 @@ impl TokenDataProvider {
         let cache_config = crate::tokens::cache::CacheConfig::from_global();
         let cache = Arc::new(CacheManager::new(cache_config));
 
-        // Initialize API clients
-        let api_clients = Arc::new(ApiClients::new()?);
+        // Get global API manager (singleton)
+        let api_manager = get_api_manager();
 
         // Create fetcher and query
         let fetcher = Arc::new(Fetcher::new(
-            Arc::clone(&api_clients),
+            api_manager,
             Arc::clone(&cache),
             Arc::clone(&database),
         ));
@@ -255,9 +255,9 @@ impl TokenDataProvider {
         self.query.get_all_mints()
     }
 
-    /// Get API clients bundle (read-only) for discovery flows
-    pub fn api(&self) -> Arc<ApiClients> {
-        self.fetcher.api_clients()
+    /// Get API manager (read-only) for discovery flows
+    pub fn api(&self) -> Arc<crate::apis::ApiManager> {
+        self.fetcher.api_manager()
     }
 
     /// Upsert token metadata fields

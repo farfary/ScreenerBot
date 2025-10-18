@@ -1,10 +1,10 @@
 // Provider fetcher: Orchestrates data fetching from API → Cache → DB
 
-use crate::tokens::api::ApiClients;
+use crate::apis::ApiManager;
 use crate::tokens::cache::{CacheKey, CacheManager, DataType};
 use crate::tokens::provider::types::{CacheStrategy, FetchOptions, FetchResult};
 use crate::logger::{log, LogTag};
-use crate::tokens::api::rugcheck_types::RugcheckInfo;
+use crate::apis::rugcheck_types::RugcheckInfo;
 use crate::tokens::storage::{save_rugcheck_info, upsert_token_metadata, Database};
 use crate::tokens::types::DataSource;
 use std::sync::Arc;
@@ -12,19 +12,19 @@ use std::time::Instant;
 
 /// Fetcher orchestrates data retrieval from multiple sources
 pub struct Fetcher {
-    api_clients: Arc<ApiClients>,
+    api_manager: Arc<ApiManager>,
     cache: Arc<CacheManager>,
     database: Arc<Database>,
 }
 
 impl Fetcher {
     pub fn new(
-        api_clients: Arc<ApiClients>,
+        api_manager: Arc<ApiManager>,
         cache: Arc<CacheManager>,
         database: Arc<Database>,
     ) -> Self {
         Self {
-            api_clients,
+            api_manager,
             cache,
             database,
         }
@@ -35,9 +35,9 @@ impl Fetcher {
         &self.database
     }
 
-    /// Expose API clients for read-only auxiliary operations (e.g., discovery)
-    pub fn api_clients(&self) -> Arc<ApiClients> {
-        Arc::clone(&self.api_clients)
+    /// Expose API manager for read-only auxiliary operations (e.g., discovery)
+    pub fn api_manager(&self) -> Arc<ApiManager> {
+        Arc::clone(&self.api_manager)
     }
 
     /// Upsert token metadata fields conveniently
@@ -86,7 +86,7 @@ impl Fetcher {
 
         // Fetch from API
         log(LogTag::Tokens, "DEBUG", &format!("Fetching Rugcheck info from API: mint={}", mint));
-        let info = self.api_clients.rugcheck.fetch_report(mint).await?;
+        let info = self.api_manager.rugcheck.fetch_report(mint).await?;
 
         // Save to cache
         self.cache.set(cache_key, &info)?;

@@ -15,9 +15,15 @@
 /// 10. /networks/{network}/tokens/{address}/info - Get token metadata (name, symbol, socials, etc.)
 /// 11. /tokens/info_recently_updated - Get 100 most recently updated tokens (global endpoint)
 /// 12. /networks/{network}/pools/{pool_address}/trades - Get last 300 trades in past 24h by pool
-use super::geckoterminal_types::*;
+
+pub mod types;
+
+use self::types::{
+    GeckoTerminalPool, GeckoTerminalResponse, GeckoTerminalDexesResponse,
+    GeckoTerminalTokensMultiResponse, GeckoTerminalTokenInfoResponse,
+    GeckoTerminalRecentlyUpdatedResponse, GeckoTerminalTradesResponse
+};
 use crate::logger::{log, LogTag};
-use crate::tokens::api::geckoterminal_types::GeckoTerminalPool;
 use reqwest::Client;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -60,6 +66,11 @@ impl GeckoTerminalClient {
             rate_limiter: Arc::new(Semaphore::new(rate_limit)),
             timeout: Duration::from_secs(timeout_seconds),
         }
+    }
+
+    /// Get API stats (placeholder - GeckoTerminal uses direct HTTP without stats tracking)
+    pub async fn get_stats(&self) -> crate::apis::stats::ApiStats {
+        crate::apis::stats::ApiStats::default()
     }
 
     /// PRIMARY METHOD: Fetch ALL pools for a single token address

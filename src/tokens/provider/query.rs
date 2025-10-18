@@ -1,7 +1,7 @@
 // Provider query: Query methods for accessing stored data
 
 use crate::logger::{log, LogTag};
-use crate::tokens::api::rugcheck_types::RugcheckInfo;
+use crate::apis::rugcheck_types::RugcheckInfo;
 use crate::tokens::storage::{get_rugcheck_info, get_token_metadata, Database};
 use crate::tokens::types::TokenMetadata;
 use std::sync::Arc;

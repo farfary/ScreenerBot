@@ -5,9 +5,12 @@
 /// Endpoints implemented:
 /// 1. /protocols - Get all DeFi protocols
 /// 2. /prices/current/solana:{mint} - Get current token price
-use super::client::HttpClient;
-use super::defillama_types::*;
-use super::stats::ApiStatsTracker;
+
+pub mod types;
+
+use crate::apis::client::HttpClient;
+use crate::apis::stats::ApiStatsTracker;
+use self::types::{DefiLlamaProtocol, DefiLlamaPriceResponse};
 use crate::tokens::types::ApiError;
 use std::sync::Arc;
 use std::time::Instant;

@@ -365,7 +365,7 @@ impl OhlcvMonitor {
 
         // Calculate delay based on configured rate limit to respect API limits
         // Formula: (60,000ms / rate_limit_per_minute) + buffer
-    use crate::tokens::api::geckoterminal;
+    use crate::apis::geckoterminal;
     let rate_limit = geckoterminal::RATE_LIMIT_PER_MINUTE;
         let delay_ms: u64 = if rate_limit > 0 {
             ((60_000 / rate_limit) + 100) as u64 // Add 100ms buffer for safety

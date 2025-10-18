@@ -8,7 +8,7 @@ use chrono::Utc;
 use solana_sdk::pubkey::Pubkey;
 
 use crate::logger::{log, LogTag};
-use crate::tokens::api::{coingecko::CoinGeckoClient, defillama::DefiLlamaClient};
+use crate::apis::{CoinGeckoClient, DefiLlamaClient};
 
 use crate::config::get_config_clone;
 use crate::tokens::blacklist;

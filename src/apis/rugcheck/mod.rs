@@ -7,10 +7,15 @@
 /// 2. /v1/tokens/{mint}/report/summary - Get summary security report
 /// 3. /v1/stats/summary - Get global platform statistics
 /// 4. /v1/tokens/{mints}/batch - Get multiple token reports (batch)
-use super::client::{HttpClient, RateLimiter};
-use super::rugcheck_types::*;
-use super::stats::ApiStatsTracker;
-use crate::tokens::api::rugcheck_types::RugcheckInfo;
+
+pub mod types;
+
+use crate::apis::client::{HttpClient, RateLimiter};
+use crate::apis::stats::ApiStatsTracker;
+use self::types::{
+    RugcheckInfo, RugcheckResponse, RugcheckNewToken, RugcheckRecentToken,
+    RugcheckTrendingToken, RugcheckVerifiedToken
+};
 use crate::tokens::types::{ApiError, SecurityRisk, TokenHolder};
 use chrono::Utc;
 use std::sync::Arc;

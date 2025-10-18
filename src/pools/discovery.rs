@@ -20,10 +20,11 @@ use crate::logger::{log, LogTag};
 use crate::pools::service::{
     get_debug_token_override, get_pool_analyzer, is_single_pool_mode_enabled,
 };
-use crate::tokens::api::{
-    dexscreener::DexScreenerClient,
+use crate::apis::{
+    get_api_manager,
+    DexScreenerClient,
     dexscreener_types::DexScreenerPool,
-    geckoterminal::GeckoTerminalClient,
+    GeckoTerminalClient,
     geckoterminal_types::GeckoTerminalPool,
 };
 use dashmap::DashMap;
@@ -91,10 +92,8 @@ impl PoolDiscovery {
     async fn fetch_dexscreener_batch(tokens: &[String]) -> DexsBatchResult {
         // DexScreener has a batch endpoint returning one best pair per token.
         // We'll chunk inputs by 30 and fetch sequentially to keep it simple.
-        let client = DexScreenerClient::new(
-            crate::tokens::api::dexscreener::RATE_LIMIT_PER_MINUTE,
-            crate::tokens::api::dexscreener::TIMEOUT_SECS,
-        );
+        let apis = get_api_manager();
+        let client = &apis.dexscreener;
 
         let mut out: HashMap<String, Vec<DexScreenerPool>> = HashMap::new();
         let mut i = 0;
@@ -136,10 +135,8 @@ impl PoolDiscovery {
     }
 
     async fn fetch_geckoterminal_batch(tokens: &[String]) -> GeckoBatchResult {
-        let client = GeckoTerminalClient::new(
-            crate::tokens::api::geckoterminal::RATE_LIMIT_PER_MINUTE,
-            crate::tokens::api::geckoterminal::TIMEOUT_SECS,
-        );
+        let apis = get_api_manager();
+        let client = &apis.geckoterminal;
         let mut out: HashMap<String, Vec<GeckoTerminalPool>> = HashMap::new();
         for mint in tokens {
             match client.fetch_pools(mint).await {
@@ -814,11 +811,9 @@ impl PoolDiscovery {
 
         // Discover from DexScreener API only if enabled
         if is_dexscreener_discovery_enabled() {
-            // Create DexScreener client for pool discovery
-            let client = DexScreenerClient::new(
-                crate::tokens::api::dexscreener::RATE_LIMIT_PER_MINUTE,
-                crate::tokens::api::dexscreener::TIMEOUT_SECS,
-            );
+            // Use global API manager
+            let apis = get_api_manager();
+            let client = &apis.dexscreener;
             
             match client.fetch_token_pools(mint, Some("solana")).await {
                 Ok(token_pairs) => {
@@ -918,10 +913,8 @@ impl PoolDiscovery {
 
     /// Discover pools from GeckoTerminal API
     async fn discover_from_geckoterminal(&self, mint: &str) -> Result<Vec<PoolDescriptor>, String> {
-        let client = GeckoTerminalClient::new(
-            crate::tokens::api::geckoterminal::RATE_LIMIT_PER_MINUTE,
-            crate::tokens::api::geckoterminal::TIMEOUT_SECS,
-        );
+        let apis = get_api_manager();
+        let client = &apis.geckoterminal;
         let gecko_pools = client.fetch_pools(mint).await?;
 
         let mut pools = Vec::new();

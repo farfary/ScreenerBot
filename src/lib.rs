@@ -1,5 +1,6 @@
 #![allow(warnings)]
 
+pub mod apis;
 pub mod arguments;
 pub mod ata_cleanup;
 pub mod config;

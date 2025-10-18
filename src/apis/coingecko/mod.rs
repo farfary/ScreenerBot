@@ -4,9 +4,12 @@
 ///
 /// Endpoints implemented:
 /// 1. /api/v3/coins/list?include_platform=true - Get all coins with platform addresses
-use super::client::HttpClient;
-use super::coingecko_types::*;
-use super::stats::ApiStatsTracker;
+
+pub mod types;
+
+use crate::apis::client::HttpClient;
+use crate::apis::stats::ApiStatsTracker;
+use self::types::CoinGeckoCoin;
 use crate::tokens::types::ApiError;
 use std::sync::Arc;
 use std::time::Instant;
