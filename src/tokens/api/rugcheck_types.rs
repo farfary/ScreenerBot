@@ -2,7 +2,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::tokens::types::{RugcheckHolder, RugcheckRisk};
+use crate::tokens::types::{SecurityRisk, TokenHolder};
 
 // ============================================================================
 // RUGCHECK DATA STRUCTURE
@@ -41,7 +41,7 @@ pub struct RugcheckInfo {
     pub rugged: bool,
 
     // Risks
-    pub risks: Vec<RugcheckRisk>,
+    pub risks: Vec<SecurityRisk>,
 
     // Market data
     pub total_markets: Option<i64>,
@@ -51,7 +51,7 @@ pub struct RugcheckInfo {
 
     // Holders
     pub total_holders: Option<i64>,
-    pub top_holders: Vec<RugcheckHolder>,
+    pub top_holders: Vec<TokenHolder>,
     pub graph_insiders_detected: Option<i64>,
 
     // Transfer fee

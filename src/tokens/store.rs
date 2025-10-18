@@ -1,41 +1,20 @@
 // tokens/store.rs
-// In-memory token snapshots with synchronized database persistence
+// In-memory token store with synchronized database persistence
 // SINGLE SOURCE OF TRUTH for token data - all updates go through this module
 
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use log::warn;
 use once_cell::sync::OnceCell;
 
 use crate::tokens::priorities::Priority;
 use crate::tokens::storage::Database;
-use crate::tokens::types::DataSource;
+use crate::tokens::types::{DataSource, Token};
 
-#[derive(Debug, Clone, Default)]
-pub struct BestPoolSummary {
-    pub program_id: Option<String>,
-    pub pool_address: Option<String>,
-    pub dex: Option<String>,
-    pub liquidity_sol: Option<f64>,
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct Snapshot {
-    pub mint: String,
-    pub symbol: Option<String>,
-    pub name: Option<String>,
-    pub decimals: Option<u8>,
-    pub is_blacklisted: bool,
-    pub best_pool: Option<BestPoolSummary>,
-    pub sources: Vec<DataSource>,
-    pub priority: Priority,
-    pub fetched_at: Option<DateTime<Utc>>,
-    pub updated_at: DateTime<Utc>,
-}
-
-static STORE: std::sync::LazyLock<RwLock<HashMap<String, Snapshot>>> =
+/// Global token store - holds full Token objects
+static STORE: std::sync::LazyLock<RwLock<HashMap<String, Token>>> =
     std::sync::LazyLock::new(|| RwLock::new(HashMap::new()));
 
 // Database handle for synchronized persistence
@@ -48,11 +27,11 @@ pub fn initialize_with_database(db: Arc<Database>) -> Result<(), String> {
         .map_err(|_| "Store database already initialized".to_string())
 }
 
-/// Hydrate store from snapshots (used during startup, skips DB write)
-pub fn hydrate_from_snapshots(snapshots: Vec<Snapshot>) -> Result<(), String> {
+/// Hydrate store from tokens (used during startup, skips DB write)
+pub fn hydrate_from_tokens(tokens: Vec<Token>) -> Result<(), String> {
     if let Ok(mut m) = STORE.write() {
-        for snapshot in snapshots {
-            m.insert(snapshot.mint.clone(), snapshot);
+        for token in tokens {
+            m.insert(token.mint.clone(), token);
         }
         Ok(())
     } else {
@@ -60,19 +39,19 @@ pub fn hydrate_from_snapshots(snapshots: Vec<Snapshot>) -> Result<(), String> {
     }
 }
 
-/// Read-only: Get snapshot from memory
-pub fn get_snapshot(mint: &str) -> Option<Snapshot> {
+/// Read-only: Get token from memory
+pub fn get_token(mint: &str) -> Option<Token> {
     STORE.read().ok().and_then(|m| m.get(mint).cloned())
 }
 
 /// UNIFIED UPDATE: Memory + Database synchronized
 /// This is the ONLY way to update token data - ensures consistency
-pub fn upsert_snapshot(snapshot: Snapshot) -> Result<(), String> {
-    let mint = snapshot.mint.clone();
+pub fn upsert_token(token: Token) -> Result<(), String> {
+    let mint = token.mint.clone();
 
     // 1. Update memory store (fast, always succeeds)
     if let Ok(mut m) = STORE.write() {
-        m.insert(mint.clone(), snapshot.clone());
+        m.insert(mint.clone(), token.clone());
     }
 
     // 2. Persist to database (if initialized)
@@ -81,9 +60,9 @@ pub fn upsert_snapshot(snapshot: Snapshot) -> Result<(), String> {
         if let Err(e) = crate::tokens::storage::operations::upsert_token_metadata(
             db,
             &mint,
-            snapshot.symbol.as_deref(),
-            snapshot.name.as_deref(),
-            snapshot.decimals,
+            Some(&token.symbol),
+            Some(&token.name),
+            Some(token.decimals),
         ) {
             warn!(
                 "[TOKENS] Failed to persist token metadata to DB: mint={} err={}",
@@ -100,9 +79,9 @@ pub fn upsert_snapshot(snapshot: Snapshot) -> Result<(), String> {
 pub fn set_priority(mint: &str, priority: Priority) -> Result<(), String> {
     // Update memory
     if let Ok(mut m) = STORE.write() {
-        if let Some(s) = m.get_mut(mint) {
-            s.priority = priority;
-            s.updated_at = Utc::now();
+        if let Some(token) = m.get_mut(mint) {
+            token.priority = priority;
+            token.updated_at = Utc::now();
         }
     }
 
@@ -119,8 +98,8 @@ pub fn list_mints() -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Read-only: Get all snapshots
-pub fn all_snapshots() -> Vec<Snapshot> {
+/// Read-only: Get all tokens
+pub fn all_tokens() -> Vec<Token> {
     STORE
         .read()
         .ok()
@@ -129,33 +108,27 @@ pub fn all_snapshots() -> Vec<Snapshot> {
 }
 
 /// Read-only: Get tokens by priority
-pub fn get_by_priority(priority: Priority) -> Vec<Snapshot> {
+pub fn get_by_priority(priority: Priority) -> Vec<Token> {
     STORE
         .read()
         .ok()
         .map(|m| {
             m.values()
-                .filter(|s| s.priority == priority)
+                .filter(|t| t.priority == priority)
                 .cloned()
                 .collect()
         })
         .unwrap_or_default()
 }
 
-/// Read-only: Get tokens with minimum liquidity
-pub fn get_by_min_liquidity(min_liquidity_sol: f64) -> Vec<Snapshot> {
+/// Read-only: Get tokens by data source
+pub fn get_by_source(source: DataSource) -> Vec<Token> {
     STORE
         .read()
         .ok()
         .map(|m| {
             m.values()
-                .filter(|s| {
-                    s.best_pool
-                        .as_ref()
-                        .and_then(|p| p.liquidity_sol)
-                        .map(|liq| liq >= min_liquidity_sol)
-                        .unwrap_or(false)
-                })
+                .filter(|t| t.data_source == source)
                 .cloned()
                 .collect()
         })
@@ -163,22 +136,16 @@ pub fn get_by_min_liquidity(min_liquidity_sol: f64) -> Vec<Snapshot> {
 }
 
 /// Read-only: Search tokens by symbol or name
-pub fn search_tokens(query: &str) -> Vec<Snapshot> {
+pub fn search_tokens(query: &str) -> Vec<Token> {
     let query_lower = query.to_lowercase();
     STORE
         .read()
         .ok()
         .map(|m| {
             m.values()
-                .filter(|s| {
-                    s.symbol
-                        .as_ref()
-                        .map(|sym| sym.to_lowercase().contains(&query_lower))
-                        .unwrap_or(false)
-                        || s.name
-                            .as_ref()
-                            .map(|name| name.to_lowercase().contains(&query_lower))
-                            .unwrap_or(false)
+                .filter(|t| {
+                    t.symbol.to_lowercase().contains(&query_lower)
+                        || t.name.to_lowercase().contains(&query_lower)
                 })
                 .cloned()
                 .collect()
@@ -187,15 +154,15 @@ pub fn search_tokens(query: &str) -> Vec<Snapshot> {
 }
 
 /// Read-only: Get recently updated tokens
-pub fn get_recently_updated(limit: usize) -> Vec<Snapshot> {
+pub fn get_recently_updated(limit: usize) -> Vec<Token> {
     STORE
         .read()
         .ok()
         .map(|m| {
-            let mut snapshots: Vec<_> = m.values().cloned().collect();
-            snapshots.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-            snapshots.truncate(limit);
-            snapshots
+            let mut tokens: Vec<_> = m.values().cloned().collect();
+            tokens.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+            tokens.truncate(limit);
+            tokens
         })
         .unwrap_or_default()
 }
@@ -206,13 +173,31 @@ pub fn count_tokens() -> usize {
 }
 
 /// Read-only: Filter blacklisted tokens
-pub fn filter_blacklisted(include_blacklisted: bool) -> Vec<Snapshot> {
+pub fn filter_blacklisted(include_blacklisted: bool) -> Vec<Token> {
     STORE
         .read()
         .ok()
         .map(|m| {
             m.values()
-                .filter(|s| s.is_blacklisted == include_blacklisted)
+                .filter(|t| t.is_blacklisted == include_blacklisted)
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Read-only: Get tokens with minimum liquidity
+pub fn get_by_min_liquidity(min_liquidity_usd: f64) -> Vec<Token> {
+    STORE
+        .read()
+        .ok()
+        .map(|m| {
+            m.values()
+                .filter(|t| {
+                    t.liquidity_usd
+                        .map(|liq| liq >= min_liquidity_usd)
+                        .unwrap_or(false)
+                })
                 .cloned()
                 .collect()
         })
@@ -223,20 +208,9 @@ pub fn filter_blacklisted(include_blacklisted: bool) -> Vec<Snapshot> {
 pub fn set_decimals(mint: &str, decimals: u8) -> Result<(), String> {
     // Update memory
     if let Ok(mut m) = STORE.write() {
-        if let Some(snapshot) = m.get_mut(mint) {
-            snapshot.decimals = Some(decimals);
-            snapshot.updated_at = Utc::now();
-        } else {
-            // Create new snapshot if doesn't exist
-            m.insert(
-                mint.to_string(),
-                Snapshot {
-                    mint: mint.to_string(),
-                    decimals: Some(decimals),
-                    updated_at: Utc::now(),
-                    ..Default::default()
-                },
-            );
+        if let Some(token) = m.get_mut(mint) {
+            token.decimals = decimals;
+            token.updated_at = Utc::now();
         }
     }
 
@@ -257,4 +231,13 @@ pub fn set_decimals(mint: &str, decimals: u8) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+/// Check if token exists in store
+pub fn token_exists(mint: &str) -> bool {
+    STORE
+        .read()
+        .ok()
+        .map(|m| m.contains_key(mint))
+        .unwrap_or(false)
 }

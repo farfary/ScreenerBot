@@ -6,47 +6,15 @@ use chrono::Utc;
 use crate::constants::SOL_MINT;
 
 use crate::tokens::provider::TokenDataProvider;
-use crate::tokens::store::{upsert_snapshot, BestPoolSummary, Snapshot};
+use crate::tokens::store::{upsert_snapshot, Snapshot};
 use crate::tokens::api::dexscreener_types::DexScreenerPool;
 use crate::tokens::api::geckoterminal_types::GeckoTerminalPool;
 
 pub async fn refresh_for(provider: &TokenDataProvider, mint: &str) -> Result<(), String> {
     let data = provider.fetch_complete_data(mint, None).await?;
 
-    // Select best SOL pool by highest liquidity from dexscreener first, then gecko
-    let best = data
-        .dexscreener_pools
-        .iter()
-        .filter(|p| {
-            p.quote_token_symbol.to_uppercase().contains("SOL")
-                || p.base_token_symbol.to_uppercase().contains("SOL")
-        })
-        .max_by(|a, b| {
-            a.liquidity_usd
-                .partial_cmp(&b.liquidity_usd)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        })
-        .map(|p| BestPoolSummary {
-            program_id: Some(p.dex_id.clone()),
-            pool_address: Some(p.pair_address.clone()),
-            dex: Some("dexscreener".to_string()),
-            liquidity_sol: compute_liquidity_sol_from_dex(p),
-        })
-        .or_else(|| {
-            data.geckoterminal_pools
-                .iter()
-                .max_by(|a, b| {
-                    a.reserve_usd
-                        .partial_cmp(&b.reserve_usd)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                })
-                .map(|p| BestPoolSummary {
-                    program_id: Some(p.dex_id.clone()),
-                    pool_address: Some(p.pool_address.clone()),
-                    dex: Some("geckoterminal".to_string()),
-                    liquidity_sol: compute_liquidity_sol_from_gecko(p),
-                })
-        });
+    // Note: Pool information is available through the pools module via get_pool_price()
+    // Snapshots only store lightweight metadata, not pool details
 
     let snapshot = Snapshot {
         mint: mint.to_string(),
@@ -54,7 +22,6 @@ pub async fn refresh_for(provider: &TokenDataProvider, mint: &str) -> Result<(),
         name: data.metadata.name.clone(),
         decimals: data.metadata.decimals,
         is_blacklisted: false,
-        best_pool: best,
         sources: data.sources_used.clone(),
         priority: crate::tokens::priorities::Priority::Medium,
         fetched_at: Some(data.fetch_timestamp),

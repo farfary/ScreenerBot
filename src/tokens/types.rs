@@ -43,11 +43,15 @@ pub struct TokenMetadata {
 
 /// Complete token information - THE primary token type used everywhere in the bot
 /// 
-/// This structure is populated from either DexScreener OR GeckoTerminal based on
-/// the `data_source` field, which is determined by config.tokens.preferred_data_source.
+/// **DATA SOURCE STRATEGY:**
+/// - Market data (price, volume, liquidity, transactions): From config.tokens.preferred_market_data_source
+///   (either "dexscreener" or "geckoterminal")
+/// - Security data (authorities, risks, holders): Always from Rugcheck API
+/// - Pool data (all_pools): NOT fetched here - populated by pools module (src/pools/)
+///   which provides real-time on-chain pricing via get_pool_price()
 /// 
-/// All pool information, pricing, volume, and transaction data comes from the chosen source.
-/// Security data (Rugcheck) is fetched independently and merged into this structure.
+/// The `data_source` field indicates which API was used for market data.
+/// Rugcheck is always fetched separately for security information.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Token {
     // ========================================================================
@@ -117,11 +121,18 @@ pub struct Token {
     pub txns_h24_sells: Option<i64>,
 
     // ========================================================================
-    // All Pools (from chosen source)
+    // Pools (NOT populated from API - see pools module)
     // ========================================================================
-    /// All available pools for this token from the chosen data source
-    /// Sorted by liquidity (highest first)
-    pub all_pools: Vec<PoolSummary>,
+    /// Pool information - this is NOT fetched from DexScreener/GeckoTerminal APIs
+    /// 
+    /// Real-time pool data comes from the pools module (src/pools/) which:
+    /// - Fetches on-chain account data directly from Solana
+    /// - Decodes pool state from various DEXes (Raydium, Orca, etc.)
+    /// - Provides real-time pricing via pools::get_pool_price()
+    /// 
+    /// This field is for reference/display only and may be empty.
+    /// For trading, always use pools::get_pool_price() for current pricing.
+    pub all_pools: Vec<TokenPool>,
 
     // ========================================================================
     // Social & Links (from chosen source)
@@ -130,26 +141,25 @@ pub struct Token {
     pub socials: Vec<SocialLink>,
 
     // ========================================================================
-    // Security Information (from Rugcheck - independent of price source)
+    // Security Information (from various sources - typically Rugcheck)
     // ========================================================================
-    // Authorities
+    // Token authorities
     pub mint_authority: Option<String>,
     pub freeze_authority: Option<String>,
 
-    // Security scoring
-    pub rugcheck_score: Option<i32>,
-    pub rugcheck_score_normalized: Option<i32>,
+    // Security assessment
+    pub security_score: Option<i32>,
     pub is_rugged: bool,
 
-    // Risks
-    pub security_risks: Vec<RugcheckRisk>,
+    // Security risks
+    pub security_risks: Vec<SecurityRisk>,
 
-    // Holder data
+    // Holder distribution
     pub total_holders: Option<i64>,
-    pub top_holders: Vec<RugcheckHolder>,
+    pub top_holders: Vec<TokenHolder>,
     pub creator_balance_pct: Option<f64>,
 
-    // Transfer fee (Token-2022)
+    // Token-2022 transfer fee
     pub transfer_fee_pct: Option<f64>,
 
     // ========================================================================
@@ -161,9 +171,9 @@ pub struct Token {
     pub last_price_update: DateTime<Utc>,
 }
 
-/// Pool summary for token's all_pools field
+/// Token pool information
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PoolSummary {
+pub struct TokenPool {
     pub pool_address: String,
     pub dex_id: String,
     pub liquidity_usd: f64,
@@ -172,9 +182,9 @@ pub struct PoolSummary {
     pub price_usd: String,
 }
 
-/// Rugcheck risk item
+/// Security risk item
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RugcheckRisk {
+pub struct SecurityRisk {
     pub name: String,
     pub value: String,
     pub description: String,
@@ -182,9 +192,9 @@ pub struct RugcheckRisk {
     pub level: String,
 }
 
-/// Rugcheck holder information
+/// Token holder information
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RugcheckHolder {
+pub struct TokenHolder {
     pub address: String,
     pub amount: String,
     pub pct: f64,

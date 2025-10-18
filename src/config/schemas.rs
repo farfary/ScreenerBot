@@ -1075,6 +1075,15 @@ config_struct! {
 config_struct! {
     /// Token management configuration
     pub struct TokensConfig {
+        // Market data source selection
+        #[metadata(field_metadata! {
+            label: "Preferred Market Data Source",
+            hint: "Choose DexScreener or GeckoTerminal for price/volume/market data. Rugcheck always fetched for security.",
+            impact: "critical",
+            category: "Data Sources",
+        })]
+        preferred_market_data_source: String = "dexscreener".to_string(), // "dexscreener" or "geckoterminal"
+
         // API rate limits
         #[metadata(field_metadata! {
             label: "DexScreener Rate Limit",

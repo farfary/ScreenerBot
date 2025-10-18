@@ -11,7 +11,7 @@ use super::client::{HttpClient, RateLimiter};
 use super::rugcheck_types::*;
 use super::stats::ApiStatsTracker;
 use crate::tokens::api::rugcheck_types::RugcheckInfo;
-use crate::tokens::types::{ApiError, RugcheckHolder, RugcheckRisk};
+use crate::tokens::types::{ApiError, SecurityRisk, TokenHolder};
 use chrono::Utc;
 use std::sync::Arc;
 use std::time::Instant;
@@ -114,7 +114,7 @@ impl RugcheckClient {
             .risks
             .unwrap_or_default()
             .into_iter()
-            .map(|r| RugcheckRisk {
+            .map(|r| SecurityRisk {
                 name: r.name,
                 value: r.value,
                 description: r.description,
@@ -127,7 +127,7 @@ impl RugcheckClient {
             .top_holders
             .unwrap_or_default()
             .into_iter()
-            .map(|h| RugcheckHolder {
+            .map(|h| TokenHolder {
                 address: h.address,
                 amount: h.amount.to_string(),
                 pct: h.pct,
