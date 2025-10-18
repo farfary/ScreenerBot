@@ -398,6 +398,54 @@ fn parse_geckoterminal_row(row: &Row) -> SqliteResult<GeckoTerminalPool> {
     })
 }
 
+// ===================== BLACKLIST OPS =====================
+
+pub fn upsert_blacklist(db: &Database, mint: &str, reason: Option<&str>) -> Result<(), String> {
+    let now = Utc::now().timestamp();
+    let conn = db.get_connection();
+    let conn = conn
+        .lock()
+        .map_err(|e| format!("Failed to lock connection: {}", e))?;
+    conn.execute(
+        r#"
+        INSERT INTO blacklist (mint, reason, added_at)
+        VALUES (?1, ?2, ?3)
+        ON CONFLICT(mint) DO UPDATE SET
+            reason = COALESCE(?2, reason),
+            added_at = ?3
+        "#,
+        params![mint, reason, now],
+    )
+    .map_err(|e| format!("Failed to upsert blacklist: {}", e))?;
+    Ok(())
+}
+
+pub fn remove_blacklist(db: &Database, mint: &str) -> Result<(), String> {
+    let conn = db.get_connection();
+    let conn = conn
+        .lock()
+        .map_err(|e| format!("Failed to lock connection: {}", e))?;
+    conn.execute("DELETE FROM blacklist WHERE mint = ?1", params![mint])
+        .map_err(|e| format!("Failed to delete from blacklist: {}", e))?;
+    Ok(())
+}
+
+pub fn list_blacklist(db: &Database) -> Result<Vec<(String, Option<String>)>, String> {
+    let conn = db.get_connection();
+    let conn = conn
+        .lock()
+        .map_err(|e| format!("Failed to lock connection: {}", e))?;
+    let mut stmt = conn
+        .prepare("SELECT mint, reason FROM blacklist")
+        .map_err(|e| format!("Failed to prepare blacklist query: {}", e))?;
+    let rows = stmt
+        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)))
+        .map_err(|e| format!("Failed to query blacklist: {}", e))?;
+    let mut out = Vec::new();
+    for r in rows { out.push(r.map_err(|e| e.to_string())?); }
+    Ok(out)
+}
+
 fn parse_rugcheck_row(row: &Row) -> SqliteResult<RugcheckInfo> {
     Ok(RugcheckInfo {
         mint: row.get(0)?,

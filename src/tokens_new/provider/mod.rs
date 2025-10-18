@@ -231,6 +231,16 @@ impl TokenDataProvider {
         self.stats.lock().unwrap().clone()
     }
 
+    /// Expose database for auxiliary modules (e.g., blacklist hydrate)
+    pub fn database(&self) -> Arc<Database> {
+        // Query holds Arc<Database>, fetcher also holds Arc<Database>
+        // Prefer returning the fetcher's db to keep a single source
+        // SAFETY: both point to same Arc in new()
+        // We can extend Fetcher API to expose DB as needed; for now, clone from fetcher via helper
+        // Here we reconstruct by cloning from query (same Arc instance)
+        self.query.database.clone()
+    }
+
     // Stats helpers
     fn increment_fetches(&self) {
         if let Ok(mut stats) = self.stats.lock() {

@@ -89,10 +89,10 @@ pub const SCHEMA_STATEMENTS: &[&str] = &[
         quote_token_price_usd TEXT,
         quote_token_price_native TEXT,
         quote_token_price_base TEXT,
-        token_price_usd TEXT,
-        fdv_usd REAL,
-        market_cap_usd REAL,
-        reserve_usd REAL,
+    token_price_usd TEXT,
+    fdv_usd REAL,
+    market_cap_usd REAL,
+    reserve_usd REAL,
         price_change_percentage_m5 TEXT,
         price_change_percentage_m15 TEXT,
         price_change_percentage_m30 TEXT,
@@ -117,10 +117,7 @@ pub const SCHEMA_STATEMENTS: &[&str] = &[
         transactions_h6_sells INTEGER,
         transactions_h24_buys INTEGER,
         transactions_h24_sells INTEGER,
-        fdv_usd TEXT,
-        market_cap_usd TEXT,
         pool_created_at TEXT,
-        dex_id TEXT,
         fetched_at INTEGER NOT NULL,
         FOREIGN KEY (mint) REFERENCES tokens(mint) ON DELETE CASCADE
     )
@@ -133,6 +130,17 @@ pub const SCHEMA_STATEMENTS: &[&str] = &[
     "#,
     r#"
     CREATE INDEX IF NOT EXISTS idx_geckoterminal_fetched ON data_geckoterminal_pools(fetched_at)
+    "#,
+    // Blacklist table
+    r#"
+    CREATE TABLE IF NOT EXISTS blacklist (
+        mint TEXT PRIMARY KEY,
+        reason TEXT,
+        added_at INTEGER NOT NULL
+    )
+    "#,
+    r#"
+    CREATE INDEX IF NOT EXISTS idx_blacklist_added ON blacklist(added_at)
     "#,
     // Rugcheck security data (one row per token)
     r#"

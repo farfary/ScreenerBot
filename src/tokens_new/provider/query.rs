@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 /// Query interface for accessing stored token data
 pub struct Query {
-    database: Arc<Database>,
+    pub(crate) database: Arc<Database>,
 }
 
 impl Query {

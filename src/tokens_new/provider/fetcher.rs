@@ -28,6 +28,22 @@ impl Fetcher {
         }
     }
 
+    /// Expose database reference for provider-level helpers
+    pub fn database(&self) -> &Arc<Database> {
+        &self.database
+    }
+
+    /// Upsert token metadata fields conveniently
+    pub fn upsert_metadata(
+        &self,
+        mint: &str,
+        symbol: Option<&str>,
+        name: Option<&str>,
+        decimals: Option<u8>,
+    ) -> Result<(), String> {
+        upsert_token_metadata(&self.database, mint, symbol, name, decimals)
+    }
+
     /// Fetch DexScreener pools for a token
     pub async fn fetch_dexscreener_pools(
         &self,
