@@ -1,338 +1,463 @@
+/// Core types for the unified token data system
 use chrono::{DateTime, Utc};
-/// Data types for the centralized pricing system
 use serde::{Deserialize, Serialize};
 
-// ApiToken deleted - Token is now the only type (Phase 10: ApiToken elimination complete)
-
-/// Transaction data for different time periods
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct TxnPeriod {
-    pub buys: Option<i64>,
-    pub sells: Option<i64>,
+/// Data source identifier
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum DataSource {
+    DexScreener,
+    GeckoTerminal,
+    Rugcheck,
 }
 
-/// Transaction statistics
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct TxnStats {
-    pub m5: Option<TxnPeriod>,
-    pub h1: Option<TxnPeriod>,
-    pub h6: Option<TxnPeriod>,
-    pub h24: Option<TxnPeriod>,
+impl DataSource {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            DataSource::DexScreener => "dexscreener",
+            DataSource::GeckoTerminal => "geckoterminal",
+            DataSource::Rugcheck => "rugcheck",
+        }
+    }
 }
 
-/// Liquidity information
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct LiquidityInfo {
-    pub usd: Option<f64>,
-    pub base: Option<f64>,
-    pub quote: Option<f64>,
-}
-
-/// Volume statistics
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct VolumeStats {
-    pub h24: Option<f64>,
-    pub h6: Option<f64>,
-    pub h1: Option<f64>,
-    pub m5: Option<f64>,
-}
-
-/// Transaction detail
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct TxnDetail {
-    pub buys: Option<i64>,
-    pub sells: Option<i64>,
-}
-
-/// Price change statistics
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct PriceChangeStats {
-    pub h24: Option<f64>,
-    pub h6: Option<f64>,
-    pub h1: Option<f64>,
-    pub m5: Option<f64>,
-}
-
-/// Boost information
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct BoostInfo {
-    pub active: Option<i64>,
-}
-
-/// Token information
+/// Core token metadata (chain-sourced)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TokenInfo {
-    pub address: String,
-    pub name: String,
-    pub symbol: String,
-    pub image_url: Option<String>,
-    pub websites: Option<Vec<WebsiteInfo>>,
-    pub socials: Option<Vec<SocialInfo>>,
-}
-
-/// Website information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WebsiteInfo {
-    pub url: String,
-}
-
-/// Social media information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SocialInfo {
-    pub platform: String,
-    pub handle: String,
-}
-
-/// Token struct with cached decimal data for fast filtering
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Token {
+pub struct TokenMetadata {
     pub mint: String,
-    pub symbol: String,
-    pub name: String,
-    pub chain: String,
-
-    // Cached data for fast filtering (no API calls needed)
+    pub symbol: Option<String>,
+    pub name: Option<String>,
     pub decimals: Option<u8>,
+    pub supply: Option<String>,
+    pub first_seen_at: DateTime<Utc>,
+    pub last_updated_at: DateTime<Utc>,
+}
 
-    // Existing fields we need to keep
-    pub logo_url: Option<String>,
-    pub coingecko_id: Option<String>,
-    pub website: Option<String>,
-    pub description: Option<String>,
-    pub tags: Vec<String>,
-    pub is_verified: bool,
-    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub last_updated: chrono::DateTime<chrono::Utc>,
+/// DexScreener pool data (per pair)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DexScreenerPool {
+    pub mint: String,
+    pub pair_address: String,
+    pub chain_id: String,
+    pub dex_id: String,
+    pub url: Option<String>,
 
-    // Price data from various sources
-    pub price_dexscreener_sol: Option<f64>,
-    pub price_dexscreener_usd: Option<f64>,
-    pub price_pool_sol: Option<f64>,
-    pub price_pool_usd: Option<f64>,
+    // Base and quote tokens
+    pub base_token_address: String,
+    pub base_token_name: String,
+    pub base_token_symbol: String,
+    pub quote_token_address: String,
+    pub quote_token_name: String,
+    pub quote_token_symbol: String,
 
-    // New fields from DexScreener API
-    pub dex_id: Option<String>,
-    pub pair_address: Option<String>,
-    pub pair_url: Option<String>,
-    pub labels: Vec<String>,
-    pub fdv: Option<f64>, // Fully Diluted Valuation
+    // Prices (high precision as strings)
+    pub price_native: String,
+    pub price_usd: String,
+
+    // Liquidity
+    pub liquidity_usd: Option<f64>,
+    pub liquidity_base: Option<f64>,
+    pub liquidity_quote: Option<f64>,
+
+    // Volume
+    pub volume_m5: Option<f64>,
+    pub volume_h1: Option<f64>,
+    pub volume_h6: Option<f64>,
+    pub volume_h24: Option<f64>,
+
+    // Transactions
+    pub txns_m5_buys: Option<i64>,
+    pub txns_m5_sells: Option<i64>,
+    pub txns_h1_buys: Option<i64>,
+    pub txns_h1_sells: Option<i64>,
+    pub txns_h6_buys: Option<i64>,
+    pub txns_h6_sells: Option<i64>,
+    pub txns_h24_buys: Option<i64>,
+    pub txns_h24_sells: Option<i64>,
+
+    // Price changes
+    pub price_change_m5: Option<f64>,
+    pub price_change_h1: Option<f64>,
+    pub price_change_h6: Option<f64>,
+    pub price_change_h24: Option<f64>,
+
+    // Market metrics
+    pub fdv: Option<f64>,
     pub market_cap: Option<f64>,
-    pub txns: Option<TxnStats>,
-    pub volume: Option<VolumeStats>,
-    pub price_change: Option<PriceChangeStats>,
-    pub liquidity: Option<LiquidityInfo>,
-    pub info: Option<TokenInfoCompat>,
-    pub boosts: Option<BoostInfo>,
+
+    // Metadata
+    pub pair_created_at: Option<i64>,
+    pub labels: Vec<String>,
+
+    // Info
+    pub info_image_url: Option<String>,
+    pub info_header: Option<String>,
+    pub info_open_graph: Option<String>,
+    pub info_websites: Vec<WebsiteLink>,
+    pub info_socials: Vec<SocialLink>,
+
+    pub fetched_at: DateTime<Utc>,
 }
 
-/// Compatible token info struct for backward compatibility
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct TokenInfoCompat {
-    pub image_url: Option<String>,
-    pub header: Option<String>,
-    pub open_graph: Option<String>,
-    pub websites: Vec<WebsiteLink>,
-    pub socials: Vec<SocialLink>,
+/// GeckoTerminal pool data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeckoTerminalPool {
+    pub mint: String,
+    pub pool_address: String,
+    pub pool_name: String,
+    pub dex_id: String,
+
+    // Token IDs
+    pub base_token_id: String,
+    pub quote_token_id: String,
+
+    // Prices (high precision)
+    pub base_token_price_usd: String,
+    pub base_token_price_native: String,
+    pub base_token_price_quote: String,
+    pub quote_token_price_usd: String,
+    pub quote_token_price_native: String,
+    pub quote_token_price_base: String,
+    pub token_price_usd: String,
+
+    // Market metrics
+    pub fdv_usd: Option<f64>,
+    pub market_cap_usd: Option<f64>,
+    pub reserve_usd: Option<f64>,
+
+    // Volume
+    pub volume_m5: Option<f64>,
+    pub volume_m15: Option<f64>,
+    pub volume_m30: Option<f64>,
+    pub volume_h1: Option<f64>,
+    pub volume_h6: Option<f64>,
+    pub volume_h24: Option<f64>,
+
+    // Price changes
+    pub price_change_m5: Option<f64>,
+    pub price_change_m15: Option<f64>,
+    pub price_change_m30: Option<f64>,
+    pub price_change_h1: Option<f64>,
+    pub price_change_h6: Option<f64>,
+    pub price_change_h24: Option<f64>,
+
+    // Transactions
+    pub txns_m5_buys: Option<i64>,
+    pub txns_m5_sells: Option<i64>,
+    pub txns_m5_buyers: Option<i64>,
+    pub txns_m5_sellers: Option<i64>,
+    pub txns_m15_buys: Option<i64>,
+    pub txns_m15_sells: Option<i64>,
+    pub txns_m15_buyers: Option<i64>,
+    pub txns_m15_sellers: Option<i64>,
+    pub txns_m30_buys: Option<i64>,
+    pub txns_m30_sells: Option<i64>,
+    pub txns_m30_buyers: Option<i64>,
+    pub txns_m30_sellers: Option<i64>,
+    pub txns_h1_buys: Option<i64>,
+    pub txns_h1_sells: Option<i64>,
+    pub txns_h1_buyers: Option<i64>,
+    pub txns_h1_sellers: Option<i64>,
+    pub txns_h6_buys: Option<i64>,
+    pub txns_h6_sells: Option<i64>,
+    pub txns_h6_buyers: Option<i64>,
+    pub txns_h6_sellers: Option<i64>,
+    pub txns_h24_buys: Option<i64>,
+    pub txns_h24_sells: Option<i64>,
+    pub txns_h24_buyers: Option<i64>,
+    pub txns_h24_sellers: Option<i64>,
+
+    // Metadata
+    pub pool_created_at: Option<String>,
+
+    pub fetched_at: DateTime<Utc>,
 }
 
-/// Social media links
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SocialLink {
-    pub link_type: String, // "twitter", "telegram", etc.
-    pub url: String,
+/// Rugcheck security data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RugcheckInfo {
+    pub mint: String,
+
+    // Token program info
+    pub token_program: Option<String>,
+    pub token_type: Option<String>,
+
+    // Token metadata
+    pub token_name: Option<String>,
+    pub token_symbol: Option<String>,
+    pub token_decimals: Option<u8>,
+    pub token_supply: Option<String>,
+    pub token_uri: Option<String>,
+    pub token_mutable: Option<bool>,
+    pub token_update_authority: Option<String>,
+
+    // Authorities
+    pub mint_authority: Option<String>,
+    pub freeze_authority: Option<String>,
+
+    // Creator
+    pub creator: Option<String>,
+    pub creator_balance: Option<i64>,
+    pub creator_tokens: Option<String>,
+
+    // Scoring
+    pub score: Option<i32>,
+    pub score_normalised: Option<i32>,
+    pub rugged: bool,
+
+    // Risks
+    pub risks: Vec<RugcheckRisk>,
+
+    // Market data
+    pub total_markets: Option<i64>,
+    pub total_market_liquidity: Option<f64>,
+    pub total_stable_liquidity: Option<f64>,
+    pub total_lp_providers: Option<i64>,
+
+    // Holders
+    pub total_holders: Option<i64>,
+    pub top_holders: Vec<RugcheckHolder>,
+    pub graph_insiders_detected: Option<i64>,
+
+    // Transfer fee
+    pub transfer_fee_pct: Option<f64>,
+    pub transfer_fee_max_amount: Option<i64>,
+    pub transfer_fee_authority: Option<String>,
+
+    // Metadata
+    pub detected_at: Option<String>,
+    pub analyzed_at: Option<String>,
+
+    pub fetched_at: DateTime<Utc>,
 }
 
-/// Website links
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// Rugcheck risk item
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RugcheckRisk {
+    pub name: String,
+    pub value: String,
+    pub description: String,
+    pub score: i32,
+    pub level: String,
+}
+
+/// Rugcheck holder information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RugcheckHolder {
+    pub address: String,
+    pub amount: String,
+    pub pct: f64,
+    pub owner: Option<String>,
+    pub insider: bool,
+}
+
+/// Website link
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WebsiteLink {
     pub label: Option<String>,
     pub url: String,
 }
 
-// =============================================================================
-// TOKEN DATABASE TYPES
-// =============================================================================
-
-/// Database schema for tokens
-#[derive(Debug, Clone)]
-pub struct TokenRecord {
-    pub mint: String,
-    pub symbol: String,
-    pub name: String,
-    pub chain_id: String,
-    pub liquidity_usd: Option<f64>,
-    pub price_usd: f64,
-    pub price_sol: Option<f64>,
-    pub last_updated: DateTime<Utc>,
-}
-
-// Conversion implementations deleted - Token is the only type, no conversions needed
-
-/// Token discovery source information
+/// Social link
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DiscoverySource {
-    pub source_type: DiscoverySourceType,
-    pub discovered_at: DateTime<Utc>,
+pub struct SocialLink {
+    pub link_type: String,
     pub url: String,
 }
 
-/// Types of discovery sources
+/// Complete token data from all sources
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum DiscoverySourceType {
-    DexScreenerBoosts,
-    DexScreenerBoostsTop,
-    DexScreenerProfiles,
+pub struct CompleteTokenData {
+    pub mint: String,
+    pub metadata: TokenMetadata,
+
+    // Separate data per source
+    pub dexscreener_pools: Vec<DexScreenerPool>,
+    pub geckoterminal_pools: Vec<GeckoTerminalPool>,
+    pub rugcheck_info: Option<RugcheckInfo>,
+
+    // Fetch metadata
+    pub sources_fetched: Vec<DataSource>,
+    pub fetched_at: DateTime<Utc>,
 }
 
-/// Price source information
+/// API error types
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PriceSource {
-    pub source_type: PriceSourceType,
-    pub price: f64,
-    pub timestamp: DateTime<Utc>,
-    pub confidence: f64, // 0.0 to 1.0
+pub enum ApiError {
+    NetworkError(String),
+    RateLimitExceeded,
+    InvalidResponse(String),
+    NotFound,
+    Timeout,
+    Disabled,
 }
 
-/// Types of price sources
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum PriceSourceType {
-    DexScreenerApi,
-    PoolCalculation,
-    CachedPrice,
-}
-
-/// API response wrapper for DexScreener
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DexScreenerResponse {
-    pub schema_version: Option<String>,
-    pub pairs: Option<Vec<DexScreenerPair>>,
-}
-
-/// DexScreener pair data structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DexScreenerPair {
-    #[serde(rename = "chainId")]
-    pub chain_id: String,
-    #[serde(rename = "dexId")]
-    pub dex_id: String,
-    pub url: Option<String>,
-    #[serde(rename = "pairAddress")]
-    pub pair_address: String,
-    pub labels: Option<Vec<String>>,
-    #[serde(rename = "baseToken")]
-    pub base_token: BaseToken,
-    #[serde(rename = "quoteToken")]
-    pub quote_token: QuoteToken,
-    #[serde(rename = "priceNative")]
-    pub price_native: String,
-    #[serde(rename = "priceUsd")]
-    pub price_usd: Option<String>,
-    pub txns: Option<serde_json::Value>,
-    pub volume: Option<serde_json::Value>,
-    #[serde(rename = "priceChange")]
-    pub price_change: Option<serde_json::Value>,
-    pub liquidity: Option<serde_json::Value>,
-    pub fdv: Option<f64>,
-    #[serde(rename = "marketCap")]
-    pub market_cap: Option<f64>,
-    #[serde(rename = "pairCreatedAt")]
-    pub pair_created_at: Option<i64>,
-    pub info: Option<serde_json::Value>,
-    pub boosts: Option<serde_json::Value>,
-}
-
-/// Base token information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BaseToken {
-    pub address: String,
-    pub name: String,
-    pub symbol: String,
-}
-
-/// Quote token information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QuoteToken {
-    pub address: String,
-    pub name: String,
-    pub symbol: String,
-}
-
-/// Statistics for API calls
-#[derive(Debug, Clone)]
-pub struct ApiStats {
-    pub total_requests: u64,
-    pub successful_requests: u64,
-    pub failed_requests: u64,
-    pub cache_hits: u64,
-    pub cache_misses: u64,
-    pub last_request_time: Option<DateTime<Utc>>,
-    pub average_response_time_ms: f64,
-}
-
-impl ApiStats {
-    pub fn new() -> Self {
-        Self {
-            total_requests: 0,
-            successful_requests: 0,
-            failed_requests: 0,
-            cache_hits: 0,
-            cache_misses: 0,
-            last_request_time: None,
-            average_response_time_ms: 0.0,
-        }
-    }
-
-    pub fn record_request(&mut self, success: bool, response_time_ms: f64) {
-        self.total_requests += 1;
-        if success {
-            self.successful_requests += 1;
-        } else {
-            self.failed_requests += 1;
-        }
-
-        // Update average response time
-        let total_time = self.average_response_time_ms * ((self.total_requests - 1) as f64);
-        self.average_response_time_ms =
-            (total_time + response_time_ms) / (self.total_requests as f64);
-
-        self.last_request_time = Some(Utc::now());
-    }
-
-    pub fn record_cache_hit(&mut self) {
-        self.cache_hits += 1;
-    }
-
-    pub fn record_cache_miss(&mut self) {
-        self.cache_misses += 1;
-    }
-
-    pub fn get_success_rate(&self) -> f64 {
-        if self.total_requests == 0 {
-            0.0
-        } else {
-            ((self.successful_requests as f64) / (self.total_requests as f64)) * 100.0
-        }
-    }
-
-    pub fn get_cache_hit_rate(&self) -> f64 {
-        let total_cache_requests = self.cache_hits + self.cache_misses;
-        if total_cache_requests == 0 {
-            0.0
-        } else {
-            ((self.cache_hits as f64) / (total_cache_requests as f64)) * 100.0
-        }
-    }
-}
-
-impl std::fmt::Display for ApiStats {
+impl std::fmt::Display for ApiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Total: {}, Success: {:.1}%, Cache Hit: {:.1}%, Avg Response: {:.1}ms",
-            self.total_requests,
-            self.get_success_rate(),
-            self.get_cache_hit_rate(),
-            self.average_response_time_ms
-        )
+        match self {
+            ApiError::NetworkError(msg) => write!(f, "Network error: {}", msg),
+            ApiError::RateLimitExceeded => write!(f, "Rate limit exceeded"),
+            ApiError::InvalidResponse(msg) => write!(f, "Invalid response: {}", msg),
+            ApiError::NotFound => write!(f, "Not found"),
+            ApiError::Timeout => write!(f, "Request timeout"),
+            ApiError::Disabled => write!(f, "API disabled"),
+        }
+    }
+}
+
+impl std::error::Error for ApiError {}
+
+impl From<ApiError> for String {
+    fn from(err: ApiError) -> String {
+        err.to_string()
+    }
+}
+
+// Default implementations for database row parsing
+impl Default for DexScreenerPool {
+    fn default() -> Self {
+        Self {
+            mint: String::new(),
+            pair_address: String::new(),
+            chain_id: String::new(),
+            dex_id: String::new(),
+            url: None,
+            base_token_address: String::new(),
+            base_token_name: String::new(),
+            base_token_symbol: String::new(),
+            quote_token_address: String::new(),
+            quote_token_name: String::new(),
+            quote_token_symbol: String::new(),
+            price_native: String::new(),
+            price_usd: String::new(),
+            liquidity_usd: None,
+            liquidity_base: None,
+            liquidity_quote: None,
+            volume_m5: None,
+            volume_h1: None,
+            volume_h6: None,
+            volume_h24: None,
+            txns_m5_buys: None,
+            txns_m5_sells: None,
+            txns_h1_buys: None,
+            txns_h1_sells: None,
+            txns_h6_buys: None,
+            txns_h6_sells: None,
+            txns_h24_buys: None,
+            txns_h24_sells: None,
+            price_change_m5: None,
+            price_change_h1: None,
+            price_change_h6: None,
+            price_change_h24: None,
+            fdv: None,
+            market_cap: None,
+            pair_created_at: None,
+            labels: Vec::new(),
+            info_image_url: None,
+            info_header: None,
+            info_open_graph: None,
+            info_websites: Vec::new(),
+            info_socials: Vec::new(),
+            fetched_at: Utc::now(),
+        }
+    }
+}
+
+impl Default for GeckoTerminalPool {
+    fn default() -> Self {
+        Self {
+            mint: String::new(),
+            pool_address: String::new(),
+            pool_name: String::new(),
+            dex_id: String::new(),
+            base_token_id: String::new(),
+            quote_token_id: String::new(),
+            base_token_price_usd: String::new(),
+            base_token_price_native: String::new(),
+            base_token_price_quote: String::new(),
+            quote_token_price_usd: String::new(),
+            quote_token_price_native: String::new(),
+            quote_token_price_base: String::new(),
+            token_price_usd: String::new(),
+            fdv_usd: None,
+            market_cap_usd: None,
+            reserve_usd: None,
+            volume_m5: None,
+            volume_m15: None,
+            volume_m30: None,
+            volume_h1: None,
+            volume_h6: None,
+            volume_h24: None,
+            price_change_m5: None,
+            price_change_m15: None,
+            price_change_m30: None,
+            price_change_h1: None,
+            price_change_h6: None,
+            price_change_h24: None,
+            txns_m5_buys: None,
+            txns_m5_sells: None,
+            txns_m5_buyers: None,
+            txns_m5_sellers: None,
+            txns_m15_buys: None,
+            txns_m15_sells: None,
+            txns_m15_buyers: None,
+            txns_m15_sellers: None,
+            txns_m30_buys: None,
+            txns_m30_sells: None,
+            txns_m30_buyers: None,
+            txns_m30_sellers: None,
+            txns_h1_buys: None,
+            txns_h1_sells: None,
+            txns_h1_buyers: None,
+            txns_h1_sellers: None,
+            txns_h6_buys: None,
+            txns_h6_sells: None,
+            txns_h6_buyers: None,
+            txns_h6_sellers: None,
+            txns_h24_buys: None,
+            txns_h24_sells: None,
+            txns_h24_buyers: None,
+            txns_h24_sellers: None,
+            pool_created_at: None,
+            fetched_at: Utc::now(),
+        }
+    }
+}
+
+impl Default for RugcheckInfo {
+    fn default() -> Self {
+        Self {
+            mint: String::new(),
+            token_program: None,
+            token_type: None,
+            token_name: None,
+            token_symbol: None,
+            token_decimals: None,
+            token_supply: None,
+            token_uri: None,
+            token_mutable: None,
+            token_update_authority: None,
+            mint_authority: None,
+            freeze_authority: None,
+            creator: None,
+            creator_balance: None,
+            creator_tokens: None,
+            score: None,
+            score_normalised: None,
+            rugged: false,
+            risks: Vec::new(),
+            total_markets: None,
+            total_market_liquidity: None,
+            total_stable_liquidity: None,
+            total_lp_providers: None,
+            total_holders: None,
+            top_holders: Vec::new(),
+            graph_insiders_detected: None,
+            transfer_fee_pct: None,
+            transfer_fee_max_amount: None,
+            transfer_fee_authority: None,
+            detected_at: None,
+            analyzed_at: None,
+            fetched_at: Utc::now(),
+        }
     }
 }

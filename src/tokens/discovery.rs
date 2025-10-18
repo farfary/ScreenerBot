@@ -1,2348 +1,393 @@
-use crate::global::is_debug_discovery_enabled;
-/// Base token discovery system structure
-use crate::logger::{log, LogTag};
-use crate::tokens::database::TokenDatabase;
-use crate::tokens::dexscreener::{get_global_dexscreener_api, wait_for_discovery_rate_limit};
-use crate::tokens::geckoterminal::try_acquire_gecko_api_permit;
-use crate::tokens::is_token_excluded_from_trading;
-use crate::tokens::store::{get_global_token_store, TokenUpdateSource};
-use chrono::{DateTime, Utc};
-use futures::FutureExt;
-use reqwest::Client;
-use std::sync::{Arc, OnceLock};
-use tokio::sync::{Mutex, RwLock};
-use tokio::time::{sleep, Duration}; // for now_or_never on shutdown future
+// tokens_new/discovery.rs
+// Token discovery from multiple sources driven by configuration
 
-// =============================================================================
-// NETWORK CONSTANTS / HELPERS
-// =============================================================================
-// =============================================================================
-/// Per-endpoint HTTP timeout for discovery API calls (seconds)
-/// Increased to 15s to accommodate RugCheck new_tokens endpoint (~10s response time)
-const DISCOVERY_HTTP_TIMEOUT_SECS: u64 = 15;
+use std::collections::{HashMap, HashSet};
+use std::str::FromStr;
 
-/// Delay between API calls in discovery cycle (seconds)
-/// Prevents overwhelming external APIs with rapid consecutive requests
-const DISCOVERY_API_DELAY_SECS: u64 = 3;
+use chrono::Utc;
+use log::{info, warn};
+use solana_sdk::pubkey::Pubkey;
 
-/// Maximum time discovery is willing to wait for a shared GeckoTerminal permit (milliseconds)
-const GECKO_DISCOVERY_PERMIT_WAIT_MS: u64 = 2_500;
+use crate::tokens_new::api::{coingecko::CoinGeckoClient, defillama::DefiLlamaClient};
 
-/// Maximum GeckoTerminal trending requests the discovery cycle will execute per run
-const GECKO_TRENDING_MAX_REQUESTS_PER_CYCLE: usize = 5;
+use crate::config::get_config_clone;
+use crate::tokens_new::blacklist;
+use crate::tokens_new::events::{emit, TokenEvent};
+use crate::tokens_new::provider::TokenDataProvider;
+use crate::tokens_new::store::{upsert_snapshot, Snapshot};
+use crate::tokens_new::types::ApiError;
 
-/// GeckoTerminal trending pagination limits
-const GECKO_TRENDING_PAGE_LIMIT: usize = 10;
-const GECKO_TRENDING_DURATIONS: [&str; 4] = ["5m", "1h", "6h", "24h"];
+const GECKO_TRENDING_DURATIONS: &[&str] = &["5m", "1h", "6h", "24h"];
 
-#[derive(Debug, Clone)]
-struct GeckoTrendingCursor {
-    duration_index: usize,
-    page: usize,
-}
-
-impl Default for GeckoTrendingCursor {
-    fn default() -> Self {
-        Self {
-            duration_index: 0,
-            page: 1,
-        }
-    }
-}
-
-static GECKO_TRENDING_CURSOR: OnceLock<Arc<Mutex<GeckoTrendingCursor>>> = OnceLock::new();
-
-fn gecko_trending_cursor_handle() -> Arc<Mutex<GeckoTrendingCursor>> {
-    GECKO_TRENDING_CURSOR
-        .get_or_init(|| Arc::new(Mutex::new(GeckoTrendingCursor::default())))
-        .clone()
-}
-
-fn advance_gecko_trending_cursor(cursor: &mut GeckoTrendingCursor, saw_results: bool) {
-    if saw_results && cursor.page < GECKO_TRENDING_PAGE_LIMIT {
-        cursor.page += 1;
-    } else {
-        cursor.page = 1;
-        cursor.duration_index = (cursor.duration_index + 1) % GECKO_TRENDING_DURATIONS.len();
-    }
-}
-
-/// Build a reqwest client with a short timeout suitable for discovery endpoints.
-fn build_discovery_client() -> Result<Client, String> {
-    reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(DISCOVERY_HTTP_TIMEOUT_SECS))
-        .build()
-        .map_err(|e| format!("Failed to build HTTP client: {}", e))
-}
-
-// =============================================================================
-// API FUNCTIONS
-// =============================================================================
-
-/// Fetch latest token profiles from DexScreener API and extract Solana mint addresses
-pub async fn fetch_dexscreener_latest_token_profiles() -> Result<Vec<String>, String> {
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "DEBUG",
-            "ENTERED fetch_dexscreener_latest_token_profiles function",
-        );
-        log(
-            LogTag::Discovery,
-            "API",
-            "Fetching latest token profiles from DexScreener",
-        );
-        log(LogTag::Discovery, "DEBUG", "Building HTTP client...");
-    }
-    let client = build_discovery_client()?;
-
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "DEBUG",
-            "Making HTTP request to profiles API...",
-        );
-    }
-    wait_for_discovery_rate_limit("dexscreener_profiles_latest").await;
-
-    let response = client
-        .get("https://api.dexscreener.com/token-profiles/latest/v1")
-        .header("Accept", "*/*")
-        .send()
-        .await
-        .map_err(|e| format!("HTTP request failed (profiles): {}", e))?;
-
-    if !response.status().is_success() {
-        return Err(format!("API returned status: {}", response.status()));
+/// Collect candidate mints from multiple discovery sources using config toggles.
+/// Returns unique mint/source pairs.
+pub async fn discover_from_sources(
+    provider: &TokenDataProvider,
+) -> Result<Vec<(String, String)>, String> {
+    let cfg = get_config_clone();
+    let discovery_cfg = cfg.tokens.discovery.clone();
+    if !discovery_cfg.enabled {
+        return Ok(Vec::new());
     }
 
-    let text = response
-        .text()
-        .await
-        .map_err(|e| format!("Failed to read response: {}", e))?;
+    let api = provider.api();
+    let mut candidates: Vec<(String, String)> = Vec::new();
 
-    let json: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| format!("Failed to parse JSON: {}", e))?;
-
-    let mut mints = Vec::new();
-
-    if let Some(array) = json.as_array() {
-        for item in array {
-            if let (Some(chain_id), Some(token_address)) = (
-                item.get("chainId").and_then(|v| v.as_str()),
-                item.get("tokenAddress").and_then(|v| v.as_str()),
-            ) {
-                if chain_id == "solana" {
-                    mints.push(token_address.to_string());
+    // DexScreener endpoints
+    if discovery_cfg.dexscreener.enabled {
+        if discovery_cfg.dexscreener.latest_profiles_enabled {
+            match api.dexscreener.get_latest_profiles().await {
+                Ok(profiles) => {
+                    for profile in profiles {
+                        if profile
+                            .chain_id
+                            .as_deref()
+                            .map(|c| c.eq_ignore_ascii_case("solana"))
+                            .unwrap_or(false)
+                        {
+                            if let Some(mint) = normalize_mint(&profile.address) {
+                                candidates.push((mint, "dexscreener.latest_profiles".into()));
+                            }
+                        }
+                    }
                 }
-            }
-        }
-    }
-
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "EXTRACTED",
-            &format!("Found {} Solana mints", mints.len()),
-        );
-    }
-    Ok(mints)
-}
-
-/// Fetch latest boosted tokens from DexScreener API and extract Solana mint addresses
-pub async fn fetch_dexscreener_latest_boosted_tokens() -> Result<Vec<String>, String> {
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "API",
-            "Fetching latest boosted tokens from DexScreener",
-        );
-    }
-
-    let client = build_discovery_client()?;
-    wait_for_discovery_rate_limit("dexscreener_boosts_latest").await;
-
-    let response = client
-        .get("https://api.dexscreener.com/token-boosts/latest/v1")
-        .header("Accept", "*/*")
-        .send()
-        .await
-        .map_err(|e| format!("HTTP request failed (boosted): {}", e))?;
-
-    if !response.status().is_success() {
-        return Err(format!("API returned status: {}", response.status()));
-    }
-
-    let text = response
-        .text()
-        .await
-        .map_err(|e| format!("Failed to read response: {}", e))?;
-
-    let json: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| format!("Failed to parse JSON: {}", e))?;
-
-    let mut mints = Vec::new();
-
-    if let Some(array) = json.as_array() {
-        for item in array {
-            if let (Some(chain_id), Some(token_address)) = (
-                item.get("chainId").and_then(|v| v.as_str()),
-                item.get("tokenAddress").and_then(|v| v.as_str()),
-            ) {
-                if chain_id == "solana" {
-                    mints.push(token_address.to_string());
-                }
-            }
-        }
-    }
-
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "EXTRACTED",
-            &format!("Found {} Solana boosted mints", mints.len()),
-        );
-    }
-    Ok(mints)
-}
-
-/// Fetch tokens with most active boosts from DexScreener API and extract Solana mint addresses
-pub async fn fetch_dexscreener_tokens_with_most_active_boosts() -> Result<Vec<String>, String> {
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "API",
-            "Fetching tokens with most active boosts from DexScreener",
-        );
-    }
-
-    let client = build_discovery_client()?;
-    wait_for_discovery_rate_limit("dexscreener_boosts_top").await;
-
-    let response = client
-        .get("https://api.dexscreener.com/token-boosts/top/v1")
-        .header("Accept", "*/*")
-        .send()
-        .await
-        .map_err(|e| format!("HTTP request failed (top boosts): {}", e))?;
-
-    if !response.status().is_success() {
-        return Err(format!("API returned status: {}", response.status()));
-    }
-
-    let text = response
-        .text()
-        .await
-        .map_err(|e| format!("Failed to read response: {}", e))?;
-
-    let json: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| format!("Failed to parse JSON: {}", e))?;
-
-    let mut mints = Vec::new();
-
-    if let Some(array) = json.as_array() {
-        for item in array {
-            if let (Some(chain_id), Some(token_address)) = (
-                item.get("chainId").and_then(|v| v.as_str()),
-                item.get("tokenAddress").and_then(|v| v.as_str()),
-            ) {
-                if chain_id == "solana" {
-                    mints.push(token_address.to_string());
-                }
-            }
-        }
-    }
-
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "EXTRACTED",
-            &format!("Found {} Solana top boosted mints", mints.len()),
-        );
-    }
-    Ok(mints)
-}
-
-/// Fetch new tokens from RugCheck API and extract Solana mint addresses
-pub async fn fetch_rugcheck_new_tokens() -> Result<Vec<String>, String> {
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "API",
-            "Fetching new tokens from RugCheck",
-        );
-    }
-
-    let client = build_discovery_client()?;
-    let response = client
-        .get("https://api.rugcheck.xyz/v1/stats/new_tokens")
-        .header("accept", "application/json")
-        .send()
-        .await
-        .map_err(|e| format!("HTTP request failed (rug_new): {}", e))?;
-
-    if !response.status().is_success() {
-        return Err(format!("API returned status: {}", response.status()));
-    }
-
-    let text = response
-        .text()
-        .await
-        .map_err(|e| format!("Failed to read response: {}", e))?;
-
-    let json: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| format!("Failed to parse JSON: {}", e))?;
-
-    let mut mints = Vec::new();
-
-    if let Some(array) = json.as_array() {
-        for item in array {
-            if let Some(mint) = item.get("mint").and_then(|v| v.as_str()) {
-                mints.push(mint.to_string());
-            }
-        }
-    }
-
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "EXTRACTED",
-            &format!("Found {} Solana new token mints from RugCheck", mints.len()),
-        );
-    }
-    Ok(mints)
-}
-
-/// Fetch most viewed tokens from RugCheck API and extract Solana mint addresses
-pub async fn fetch_rugcheck_most_viewed() -> Result<Vec<String>, String> {
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "API",
-            "Fetching most viewed tokens from RugCheck",
-        );
-    }
-
-    let client = reqwest::Client::new();
-    let response = client
-        .get("https://api.rugcheck.xyz/v1/stats/recent")
-        .header("accept", "application/json")
-        .send()
-        .await
-        .map_err(|e| format!("HTTP request failed: {}", e))?;
-
-    if !response.status().is_success() {
-        return Err(format!("API returned status: {}", response.status()));
-    }
-
-    let text = response
-        .text()
-        .await
-        .map_err(|e| format!("Failed to read response: {}", e))?;
-
-    let json: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| format!("Failed to parse JSON: {}", e))?;
-
-    let mut mints = Vec::new();
-
-    if let Some(array) = json.as_array() {
-        for item in array {
-            if let Some(mint) = item.get("mint").and_then(|v| v.as_str()) {
-                mints.push(mint.to_string());
-            }
-        }
-    }
-
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "EXTRACTED",
-            &format!(
-                "Found {} Solana most viewed token mints from RugCheck",
-                mints.len()
-            ),
-        );
-    }
-    Ok(mints)
-}
-
-/// Fetch trending tokens from RugCheck API and extract Solana mint addresses
-pub async fn fetch_rugcheck_trending() -> Result<Vec<String>, String> {
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "API",
-            "Fetching trending tokens from RugCheck",
-        );
-    }
-
-    let client = reqwest::Client::new();
-    let response = client
-        .get("https://api.rugcheck.xyz/v1/stats/trending")
-        .header("accept", "application/json")
-        .send()
-        .await
-        .map_err(|e| format!("HTTP request failed: {}", e))?;
-
-    if !response.status().is_success() {
-        return Err(format!("API returned status: {}", response.status()));
-    }
-
-    let text = response
-        .text()
-        .await
-        .map_err(|e| format!("Failed to read response: {}", e))?;
-
-    let json: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| format!("Failed to parse JSON: {}", e))?;
-
-    let mut mints = Vec::new();
-
-    if let Some(array) = json.as_array() {
-        for item in array {
-            if let Some(mint) = item.get("mint").and_then(|v| v.as_str()) {
-                mints.push(mint.to_string());
-            }
-        }
-    }
-
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "EXTRACTED",
-            &format!(
-                "Found {} Solana trending token mints from RugCheck",
-                mints.len()
-            ),
-        );
-    }
-    Ok(mints)
-}
-
-/// Fetch verified tokens from RugCheck API and extract Solana mint addresses
-pub async fn fetch_rugcheck_verified() -> Result<Vec<String>, String> {
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "API",
-            "Fetching verified tokens from RugCheck",
-        );
-    }
-
-    let client = reqwest::Client::new();
-    let response = client
-        .get("https://api.rugcheck.xyz/v1/stats/verified")
-        .header("accept", "application/json")
-        .send()
-        .await
-        .map_err(|e| format!("HTTP request failed: {}", e))?;
-
-    if !response.status().is_success() {
-        return Err(format!("API returned status: {}", response.status()));
-    }
-
-    let text = response
-        .text()
-        .await
-        .map_err(|e| format!("Failed to read response: {}", e))?;
-
-    let json: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| format!("Failed to parse JSON: {}", e))?;
-
-    let mut mints = Vec::new();
-
-    if let Some(array) = json.as_array() {
-        for item in array {
-            if let Some(mint) = item.get("mint").and_then(|v| v.as_str()) {
-                mints.push(mint.to_string());
-            }
-        }
-    }
-
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "EXTRACTED",
-            &format!(
-                "Found {} Solana verified token mints from RugCheck",
-                mints.len()
-            ),
-        );
-    }
-    Ok(mints)
-}
-
-/// Fetch recently updated tokens from GeckoTerminal API and extract Solana mint addresses
-pub async fn fetch_geckoterminal_recently_updated() -> Result<Vec<String>, String> {
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "API",
-            "Fetching recently updated tokens from GeckoTerminal",
-        );
-    }
-
-    let client = build_discovery_client()?;
-    let permit_wait = Duration::from_millis(GECKO_DISCOVERY_PERMIT_WAIT_MS);
-    let permit = match try_acquire_gecko_api_permit(permit_wait, "discovery:gecko_recently_updated")
-        .await?
-    {
-        Some(permit) => permit,
-        None => {
-            if is_debug_discovery_enabled() {
-                log(
-                    LogTag::Discovery,
-                    "SKIP",
-                    &format!(
-                        "Shared GeckoTerminal permit busy, deferring recently updated request (waited {}ms)",
-                        permit_wait.as_millis()
-                    ),
-                );
-            }
-            return Ok(Vec::new());
-        }
-    };
-
-    let response_result = client
-        .get(
-            "https://api.geckoterminal.com/api/v2/tokens/info_recently_updated?include=network&network=solana"
-        )
-        .header("accept", "application/json")
-        .send()
-        .await;
-
-    drop(permit);
-
-    let response =
-        response_result.map_err(|e| format!("HTTP request failed (gecko_updated): {}", e))?;
-
-    if !response.status().is_success() {
-        return Err(format!("API returned status: {}", response.status()));
-    }
-
-    let text = response
-        .text()
-        .await
-        .map_err(|e| format!("Failed to read response: {}", e))?;
-
-    let json: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| format!("Failed to parse JSON: {}", e))?;
-
-    let mut mints = Vec::new();
-
-    if let Some(data) = json.get("data").and_then(|v| v.as_array()) {
-        for item in data {
-            if let Some(attributes) = item.get("attributes") {
-                if let Some(address) = attributes.get("address").and_then(|v| v.as_str()) {
-                    mints.push(address.to_string());
-                }
-            }
-        }
-    }
-
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "EXTRACTED",
-            &format!(
-                "Found {} Solana recently updated token mints from GeckoTerminal",
-                mints.len()
-            ),
-        );
-    }
-    Ok(mints)
-}
-
-/// Fetch tokens from GeckoTerminal trending pools API across all pages and durations
-pub async fn fetch_geckoterminal_trending_pools() -> Result<Vec<String>, String> {
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "API",
-            "Fetching trending pools tokens from GeckoTerminal (rotating pagination)",
-        );
-    }
-
-    let client = build_discovery_client()?;
-    let permit_wait = Duration::from_millis(GECKO_DISCOVERY_PERMIT_WAIT_MS);
-    let mut all_mints = Vec::new();
-    let cursor_handle = gecko_trending_cursor_handle();
-    let mut cursor = {
-        let guard = cursor_handle.lock().await;
-        guard.clone()
-    };
-
-    let mut requests_used = 0usize;
-
-    while requests_used < GECKO_TRENDING_MAX_REQUESTS_PER_CYCLE {
-        let duration = GECKO_TRENDING_DURATIONS[cursor.duration_index];
-        let page = cursor.page;
-
-        if is_debug_discovery_enabled() {
-            log(
-                LogTag::Discovery,
-                "PAGE",
-                &format!(
-                    "GeckoTerminal trending request {} of {} → duration {} page {}",
-                    requests_used + 1,
-                    GECKO_TRENDING_MAX_REQUESTS_PER_CYCLE,
-                    duration,
-                    page
+                Err(err) => warn!(
+                    "[TOKENS_NEW] Discovery DexScreener latest_profiles failed: {}",
+                    err
                 ),
-            );
+            }
         }
 
-        let permit = match try_acquire_gecko_api_permit(permit_wait, "discovery:gecko_trending")
-            .await?
-        {
-            Some(permit) => permit,
-            None => {
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "SKIP",
-                        &format!(
-                            "Deferring GeckoTerminal trending fetch – shared permit busy (waited {}ms)",
-                            permit_wait.as_millis()
-                        ),
-                    );
+        if discovery_cfg.dexscreener.latest_boosts_enabled {
+            match api.dexscreener.get_latest_boosted_tokens().await {
+                Ok(tokens) => {
+                    for token in tokens {
+                        if token.chain_id.eq_ignore_ascii_case("solana") {
+                            if let Some(mint) = normalize_mint(&token.token_address) {
+                                candidates.push((mint, "dexscreener.latest_boosts".into()));
+                            }
+                        }
+                    }
                 }
-                break;
+                Err(err) => warn!(
+                    "[TOKENS_NEW] Discovery DexScreener latest_boosts failed: {}",
+                    err
+                ),
             }
-        };
+        }
 
-        let url = format!(
-            "https://api.geckoterminal.com/api/v2/networks/solana/trending_pools?include=base_token%2Cquote_token%2Cdex&page={}&duration={}",
-            page, duration
-        );
+        if discovery_cfg.dexscreener.top_boosts_enabled {
+            match api.dexscreener.get_top_boosted_tokens(Some("solana")).await {
+                Ok(tokens) => {
+                    for token in tokens {
+                        if let Some(mint) = normalize_mint(&token.token_address) {
+                            candidates.push((mint, "dexscreener.top_boosts".into()));
+                        }
+                    }
+                }
+                Err(err) => warn!(
+                    "[TOKENS_NEW] Discovery DexScreener top_boosts failed: {}",
+                    err
+                ),
+            }
+        }
+    }
 
-        let response_result = client
-            .get(&url)
-            .header("accept", "application/json")
-            .send()
-            .await;
+    // GeckoTerminal endpoints
+    if discovery_cfg.geckoterminal.enabled {
+        if discovery_cfg.geckoterminal.new_pools_enabled {
+            match api
+                .geckoterminal
+                .fetch_new_pools_by_network("solana", Some("base_token,quote_token,dex"), Some(1))
+                .await
+            {
+                Ok(pools) => {
+                    for pool in pools {
+                        if let Some(mint) = normalize_mint(&pool.base_token_id) {
+                            candidates.push((mint, "gecko.new_pools".into()));
+                        }
+                        if let Some(mint) = normalize_mint(&pool.quote_token_id) {
+                            candidates.push((mint, "gecko.new_pools".into()));
+                        }
+                    }
+                }
+                Err(err) => warn!("[TOKENS_NEW] Discovery Gecko new_pools failed: {}", err),
+            }
+        }
 
-        drop(permit);
-        requests_used += 1;
+        if discovery_cfg.geckoterminal.recently_updated_enabled {
+            match api
+                .geckoterminal
+                .fetch_recently_updated_tokens(Some("network"), Some("solana"))
+                .await
+            {
+                Ok(response) => {
+                    for entry in response.data {
+                        if let Some(mint) = normalize_mint(&entry.attributes.address) {
+                            candidates.push((mint, "gecko.recently_updated".into()));
+                        }
+                    }
+                }
+                Err(err) => warn!(
+                    "[TOKENS_NEW] Discovery Gecko recently_updated failed: {}",
+                    err
+                ),
+            }
+        }
 
-        let response = response_result.map_err(|e| {
-            format!(
-                "HTTP request failed (gecko_trending page {} duration {}): {}",
-                page, duration, e
-            )
-        })?;
-
-        if !response.status().is_success() {
-            if is_debug_discovery_enabled() {
-                log(
-                    LogTag::Discovery,
-                    "WARN",
-                    &format!(
-                        "GeckoTerminal trending duration {} page {} returned status {}",
-                        duration,
-                        page,
-                        response.status()
+        if discovery_cfg.geckoterminal.trending_enabled {
+            for duration in GECKO_TRENDING_DURATIONS {
+                match api
+                    .geckoterminal
+                    .fetch_trending_pools_by_network(
+                        Some("solana"),
+                        Some(1),
+                        Some(duration),
+                        Some(vec!["base_token", "quote_token"]),
+                    )
+                    .await
+                {
+                    Ok(pools) => {
+                        for pool in pools {
+                            if let Some(mint) = normalize_mint(&pool.base_token_id) {
+                                candidates
+                                    .push((mint.clone(), format!("gecko.trending.{}", duration)));
+                            }
+                            if let Some(mint) = normalize_mint(&pool.quote_token_id) {
+                                candidates
+                                    .push((mint.clone(), format!("gecko.trending.{}", duration)));
+                            }
+                        }
+                    }
+                    Err(err) => warn!(
+                        "[TOKENS_NEW] Discovery Gecko trending {} failed: {}",
+                        duration, err
                     ),
-                );
+                }
             }
-            advance_gecko_trending_cursor(&mut cursor, false);
+        }
+    }
+
+    // Rugcheck endpoints
+    if discovery_cfg.rugcheck.enabled {
+        if discovery_cfg.rugcheck.new_tokens_enabled {
+            match api.rugcheck.fetch_new_tokens().await {
+                Ok(tokens) => {
+                    for token in tokens {
+                        if let Some(mint) = normalize_mint(&token.mint) {
+                            candidates.push((mint, "rugcheck.new_tokens".into()));
+                        }
+                    }
+                }
+                Err(ApiError::Disabled) => {}
+                Err(err) => warn!("[TOKENS_NEW] Discovery Rugcheck new_tokens failed: {}", err),
+            }
+        }
+
+        if discovery_cfg.rugcheck.recent_enabled {
+            match api.rugcheck.fetch_recent_tokens().await {
+                Ok(tokens) => {
+                    for token in tokens {
+                        if let Some(mint) = normalize_mint(&token.mint) {
+                            candidates.push((mint, "rugcheck.recent".into()));
+                        }
+                    }
+                }
+                Err(ApiError::Disabled) => {}
+                Err(err) => warn!("[TOKENS_NEW] Discovery Rugcheck recent failed: {}", err),
+            }
+        }
+
+        if discovery_cfg.rugcheck.trending_enabled {
+            match api.rugcheck.fetch_trending_tokens().await {
+                Ok(tokens) => {
+                    for token in tokens {
+                        if let Some(mint) = normalize_mint(&token.mint) {
+                            candidates.push((mint, "rugcheck.trending".into()));
+                        }
+                    }
+                }
+                Err(ApiError::Disabled) => {}
+                Err(err) => warn!("[TOKENS_NEW] Discovery Rugcheck trending failed: {}", err),
+            }
+        }
+
+        if discovery_cfg.rugcheck.verified_enabled {
+            match api.rugcheck.fetch_verified_tokens().await {
+                Ok(tokens) => {
+                    for token in tokens {
+                        if let Some(mint) = normalize_mint(&token.mint) {
+                            candidates.push((mint, "rugcheck.verified".into()));
+                        }
+                    }
+                }
+                Err(ApiError::Disabled) => {}
+                Err(err) => warn!("[TOKENS_NEW] Discovery Rugcheck verified failed: {}", err),
+            }
+        }
+    }
+
+    // Jupiter endpoints
+    if discovery_cfg.jupiter.enabled {
+        if discovery_cfg.jupiter.recent_enabled {
+            match api.jupiter.fetch_recent_tokens().await {
+                Ok(tokens) => {
+                    for token in tokens {
+                        if let Some(mint) = normalize_mint(&token.id) {
+                            candidates.push((mint, "jupiter.recent".into()));
+                        }
+                    }
+                }
+                Err(ApiError::Disabled) => {}
+                Err(err) => warn!("[TOKENS_NEW] Discovery Jupiter recent failed: {}", err),
+            }
+        }
+
+        if discovery_cfg.jupiter.top_organic_enabled {
+            match api.jupiter.fetch_top_organic_score("24h", Some(100)).await {
+                Ok(tokens) => {
+                    for token in tokens {
+                        if let Some(mint) = normalize_mint(&token.id) {
+                            candidates.push((mint, "jupiter.top_organic".into()));
+                        }
+                    }
+                }
+                Err(ApiError::Disabled) => {}
+                Err(err) => warn!("[TOKENS_NEW] Discovery Jupiter top_organic failed: {}", err),
+            }
+        }
+
+        if discovery_cfg.jupiter.top_traded_enabled {
+            match api.jupiter.fetch_top_traded("24h", Some(100)).await {
+                Ok(tokens) => {
+                    for token in tokens {
+                        if let Some(mint) = normalize_mint(&token.id) {
+                            candidates.push((mint, "jupiter.top_traded".into()));
+                        }
+                    }
+                }
+                Err(ApiError::Disabled) => {}
+                Err(err) => warn!("[TOKENS_NEW] Discovery Jupiter top_traded failed: {}", err),
+            }
+        }
+
+        if discovery_cfg.jupiter.top_trending_enabled {
+            match api.jupiter.fetch_top_trending("24h", Some(100)).await {
+                Ok(tokens) => {
+                    for token in tokens {
+                        if let Some(mint) = normalize_mint(&token.id) {
+                            candidates.push((mint, "jupiter.top_trending".into()));
+                        }
+                    }
+                }
+                Err(ApiError::Disabled) => {}
+                Err(err) => warn!(
+                    "[TOKENS_NEW] Discovery Jupiter top_trending failed: {}",
+                    err
+                ),
+            }
+        }
+    }
+
+    // CoinGecko (heavy) endpoint
+    if discovery_cfg.coingecko.enabled && discovery_cfg.coingecko.markets_enabled {
+        match api.coingecko.fetch_coins_list().await {
+            Ok(coins) => {
+                let addresses = CoinGeckoClient::extract_solana_addresses(&coins);
+                for address in addresses.into_iter().take(300) {
+                    if let Some(mint) = normalize_mint(&address) {
+                        candidates.push((mint, "coingecko.markets".into()));
+                    }
+                }
+            }
+            Err(ApiError::Disabled) => {}
+            Err(err) => warn!("[TOKENS_NEW] Discovery CoinGecko markets failed: {}", err),
+        }
+    }
+
+    // DeFiLlama (heavy) endpoint
+    if discovery_cfg.defillama.enabled && discovery_cfg.defillama.protocols_enabled {
+        match api.defillama.fetch_protocols().await {
+            Ok(protocols) => {
+                let addresses = DefiLlamaClient::extract_solana_addresses(&protocols);
+                for address in addresses.into_iter().take(300) {
+                    if let Some(mint) = normalize_mint(&address) {
+                        candidates.push((mint, "defillama.protocols".into()));
+                    }
+                }
+            }
+            Err(ApiError::Disabled) => {}
+            Err(err) => warn!("[TOKENS_NEW] Discovery DeFiLlama protocols failed: {}", err),
+        }
+    }
+
+    let mut unique: HashMap<String, String> = HashMap::new();
+    for (mint, source) in candidates {
+        if blacklist::is(&mint) {
             continue;
         }
+        unique.entry(mint).or_insert(source);
+    }
 
-        let text = response
-            .text()
-            .await
-            .map_err(|e| format!("Failed to read response: {}", e))?;
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    let mut results: Vec<(String, String)> = Vec::new();
+    for (mint, source) in unique.into_iter() {
+        *counts.entry(source.clone()).or_insert(0) += 1;
+        results.push((mint, source));
+    }
 
-        let json: serde_json::Value =
-            serde_json::from_str(&text).map_err(|e| format!("Failed to parse JSON: {}", e))?;
+    if !results.is_empty() {
+        results.sort_by(|a, b| a.0.cmp(&b.0));
+        let summary = counts
+            .iter()
+            .map(|(src, count)| format!("{}={}", src, count))
+            .collect::<Vec<_>>()
+            .join(", ");
+        info!(
+            "[TOKENS_NEW] Discovery aggregated {} unique mints ({})",
+            results.len(),
+            summary
+        );
+    }
 
-        let mut page_mints = Vec::new();
+    Ok(results)
+}
 
-        if let Some(data) = json.get("data").and_then(|v| v.as_array()) {
-            if data.is_empty() {
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "END",
-                        &format!(
-                            "No results at duration {} page {} – advancing to next duration",
-                            duration, page
-                        ),
-                    );
-                }
-                advance_gecko_trending_cursor(&mut cursor, false);
-                continue;
-            }
-
-            for pool in data {
-                if let Some(relationships) = pool.get("relationships") {
-                    if let Some(base_token) = relationships
-                        .get("base_token")
-                        .and_then(|bt| bt.get("data"))
-                        .and_then(|data| data.get("id"))
-                        .and_then(|id| id.as_str())
-                    {
-                        if let Some(address) = base_token.strip_prefix("solana_") {
-                            page_mints.push(address.to_string());
-                        }
-                    }
-
-                    if let Some(quote_token) = relationships
-                        .get("quote_token")
-                        .and_then(|qt| qt.get("data"))
-                        .and_then(|data| data.get("id"))
-                        .and_then(|id| id.as_str())
-                    {
-                        if let Some(address) = quote_token.strip_prefix("solana_") {
-                            page_mints.push(address.to_string());
-                        }
-                    }
-                }
-            }
+pub async fn process_new_mints(provider: &TokenDataProvider, entries: Vec<(String, String)>) {
+    let mut seen = HashSet::new();
+    for (mint, source) in entries {
+        if !seen.insert(mint.clone()) {
+            continue;
         }
-
-        if is_debug_discovery_enabled() {
-            log(
-                LogTag::Discovery,
-                "EXTRACTED",
-                &format!(
-                    "GeckoTerminal trending duration {} page {} yielded {} addresses",
-                    duration,
-                    page,
-                    page_mints.len()
-                ),
+        emit(TokenEvent::TokenDiscovered {
+            mint: mint.clone(),
+            source: source.clone(),
+            at: Utc::now(),
+        });
+        upsert_snapshot(Snapshot {
+            mint: mint.clone(),
+            updated_at: Utc::now(),
+            ..Default::default()
+        });
+        if let Err(err) = provider.fetch_complete_data(&mint, None).await {
+            warn!(
+                "[TOKENS_NEW] Discovery follow-up fetch failed: mint={} err={}",
+                mint, err
             );
         }
-
-        all_mints.extend(page_mints);
-        advance_gecko_trending_cursor(&mut cursor, true);
-    }
-
-    if requests_used > 0 {
-        let next_duration_index = cursor.duration_index;
-        let next_page = cursor.page;
-        {
-            let mut guard = cursor_handle.lock().await;
-            *guard = cursor;
-        }
-
-        if is_debug_discovery_enabled() {
-            log(
-                LogTag::Discovery,
-                "CURSOR",
-                &format!(
-                    "Trending pagination advanced after {} requests – next fetch duration {} page {}",
-                    requests_used,
-                    GECKO_TRENDING_DURATIONS[next_duration_index],
-                    next_page
-                ),
-            );
-        }
-    } else if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "CURSOR",
-            "Trending pagination unchanged – GeckoTerminal permit unavailable this cycle",
-        );
-    }
-
-    Ok(all_mints)
-}
-
-/// Fetch recent tokens from Jupiter API and extract Solana mint addresses
-pub async fn fetch_jupiter_recent_tokens() -> Result<Vec<String>, String> {
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "DEBUG",
-            "ENTERED fetch_jupiter_recent_tokens function",
-        );
-        log(
-            LogTag::Discovery,
-            "API",
-            "Fetching recent tokens from Jupiter",
-        );
-    }
-    let client = build_discovery_client()?;
-
-    let response = client
-        .get("https://lite-api.jup.ag/tokens/v2/recent")
-        .header("Accept", "application/json")
-        .send()
-        .await
-        .map_err(|e| format!("HTTP request failed (Jupiter recent): {}", e))?;
-
-    if !response.status().is_success() {
-        return Err(format!(
-            "Jupiter recent API returned status: {}",
-            response.status()
-        ));
-    }
-
-    let text = response
-        .text()
-        .await
-        .map_err(|e| format!("Failed to read Jupiter recent response: {}", e))?;
-
-    let json: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| format!("Failed to parse JSON: {}", e))?;
-
-    let mut mints = Vec::new();
-
-    if let Some(array) = json.as_array() {
-        for token in array {
-            if let Some(address) = token.get("id").and_then(|v| v.as_str()) {
-                // Verify it's a valid Solana address format (base58, ~44 chars)
-                if address.len() > 32 && address.len() < 50 {
-                    mints.push(address.to_string());
-                }
-            }
-        }
-    }
-
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "EXTRACTED",
-            &format!("Found {} recent token mints from Jupiter", mints.len()),
-        );
-    }
-
-    Ok(mints)
-}
-
-/// Fetch top organic score tokens from Jupiter API and extract Solana mint addresses
-pub async fn fetch_jupiter_top_organic_score() -> Result<Vec<String>, String> {
-    fetch_jupiter_category_tokens("toporganicscore", "24h").await
-}
-
-/// Fetch top traded tokens from Jupiter API and extract Solana mint addresses
-pub async fn fetch_jupiter_top_traded() -> Result<Vec<String>, String> {
-    fetch_jupiter_category_tokens("toptraded", "24h").await
-}
-
-/// Fetch top trending tokens from Jupiter API and extract Solana mint addresses
-pub async fn fetch_jupiter_top_trending() -> Result<Vec<String>, String> {
-    fetch_jupiter_category_tokens("toptrending", "24h").await
-}
-
-/// Generic function to fetch tokens from Jupiter category API
-async fn fetch_jupiter_category_tokens(
-    category: &str,
-    interval: &str,
-) -> Result<Vec<String>, String> {
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "DEBUG",
-            &format!(
-                "ENTERED fetch_jupiter_category_tokens function for category: {} interval: {}",
-                category, interval
-            ),
-        );
-        log(
-            LogTag::Discovery,
-            "API",
-            &format!(
-                "Fetching {} tokens from Jupiter for {} interval",
-                category, interval
-            ),
-        );
-    }
-    let client = build_discovery_client()?;
-
-    let url = format!(
-        "https://lite-api.jup.ag/tokens/v2/{}/{}?limit=100",
-        category, interval
-    );
-    let response = client
-        .get(&url)
-        .header("Accept", "application/json")
-        .send()
-        .await
-        .map_err(|e| format!("HTTP request failed (Jupiter {}): {}", category, e))?;
-
-    if !response.status().is_success() {
-        return Err(format!(
-            "Jupiter {} API returned status: {}",
-            category,
-            response.status()
-        ));
-    }
-
-    let text = response
-        .text()
-        .await
-        .map_err(|e| format!("Failed to read Jupiter {} response: {}", category, e))?;
-
-    let json: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| format!("Failed to parse JSON: {}", e))?;
-
-    let mut mints = Vec::new();
-
-    if let Some(array) = json.as_array() {
-        for token in array {
-            if let Some(address) = token.get("id").and_then(|v| v.as_str()) {
-                // Verify it's a valid Solana address format (base58, ~44 chars)
-                if address.len() > 32 && address.len() < 50 {
-                    mints.push(address.to_string());
-                }
-            }
-        }
-    }
-
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "EXTRACTED",
-            &format!(
-                "Found {} {} token mints from Jupiter for {} interval",
-                mints.len(),
-                category,
-                interval
-            ),
-        );
-    }
-
-    Ok(mints)
-}
-
-/// CoinGecko API key for authenticated requests
-const COINGECKO_API_KEY: &str = "COINGECKO_KEY_REMOVED";
-
-/// Fetch Solana ecosystem tokens from CoinGecko API and extract mint addresses
-pub async fn fetch_coingecko_solana_markets() -> Result<Vec<String>, String> {
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "DEBUG",
-            "ENTERED fetch_coingecko_solana_markets function",
-        );
-        log(
-            LogTag::Discovery,
-            "API",
-            "Fetching Solana ecosystem tokens from CoinGecko",
-        );
-    }
-    let client = build_discovery_client()?;
-
-    // Use coins list endpoint with platform filter to get Solana tokens
-    let response = client
-        .get("https://api.coingecko.com/api/v3/coins/list?include_platform=true")
-        .header("Accept", "application/json")
-        .header("x-cg-demo-api-key", COINGECKO_API_KEY)
-        .send()
-        .await
-        .map_err(|e| format!("HTTP request failed (CoinGecko): {}", e))?;
-
-    if !response.status().is_success() {
-        return Err(format!(
-            "CoinGecko API returned status: {}",
-            response.status()
-        ));
-    }
-
-    let text = response
-        .text()
-        .await
-        .map_err(|e| format!("Failed to read response: {}", e))?;
-
-    let json: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| format!("Failed to parse JSON: {}", e))?;
-
-    let mut mints = Vec::new();
-
-    if let Some(array) = json.as_array() {
-        for token in array {
-            // Try to extract Solana contract address from platforms
-            if let Some(platforms) = token.get("platforms").and_then(|p| p.as_object()) {
-                if let Some(solana_address) = platforms.get("solana").and_then(|v| v.as_str()) {
-                    if !solana_address.is_empty()
-                        && solana_address.len() > 32
-                        && solana_address.len() < 50
-                    {
-                        mints.push(solana_address.to_string());
-                    }
-                }
-            }
-        }
-    }
-
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "EXTRACTED",
-            &format!("Found {} Solana token mints from CoinGecko", mints.len()),
-        );
-    }
-
-    Ok(mints)
-}
-
-/// Fetch DeFi protocols from DeFiLlama API and extract Solana token addresses
-pub async fn fetch_defillama_protocols() -> Result<Vec<String>, String> {
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "DEBUG",
-            "ENTERED fetch_defillama_protocols function",
-        );
-        log(
-            LogTag::Discovery,
-            "API",
-            "Fetching protocols from DeFiLlama",
-        );
-    }
-    let client = build_discovery_client()?;
-
-    let response = client
-        .get("https://api.llama.fi/protocols")
-        .header("Accept", "application/json")
-        .send()
-        .await
-        .map_err(|e| format!("HTTP request failed (DeFiLlama): {}", e))?;
-
-    if !response.status().is_success() {
-        return Err(format!(
-            "DeFiLlama API returned status: {}",
-            response.status()
-        ));
-    }
-
-    let text = response
-        .text()
-        .await
-        .map_err(|e| format!("Failed to read response: {}", e))?;
-
-    let json: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| format!("Failed to parse JSON: {}", e))?;
-
-    let mut mints = Vec::new();
-
-    if let Some(array) = json.as_array() {
-        for protocol in array {
-            // Check if protocol supports Solana
-            if let Some(chains) = protocol.get("chains").and_then(|c| c.as_array()) {
-                let has_solana = chains.iter().any(|chain| {
-                    chain
-                        .as_str()
-                        .map_or(false, |s| s.to_lowercase().contains("solana"))
-                });
-
-                if has_solana {
-                    // Try to extract token address from various fields
-                    if let Some(address) = protocol.get("address").and_then(|v| v.as_str()) {
-                        if address.len() > 32 && address.len() < 50 {
-                            mints.push(address.to_string());
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "EXTRACTED",
-            &format!(
-                "Found {} Solana protocol token mints from DeFiLlama",
-                mints.len()
-            ),
-        );
-    }
-
-    Ok(mints)
-}
-
-/// Fetch current price for a specific Solana token from DeFiLlama API
-pub async fn fetch_defillama_token_price(mint: &str) -> Result<f64, String> {
-    if is_debug_discovery_enabled() {
-        log(
-            LogTag::Discovery,
-            "DEBUG",
-            &format!("Fetching DeFiLlama price for mint: {}", mint),
-        );
-    }
-    let client = build_discovery_client()?;
-
-    let url = format!("https://coins.llama.fi/prices/current/solana:{}", mint);
-    let response = client
-        .get(&url)
-        .header("Accept", "application/json")
-        .send()
-        .await
-        .map_err(|e| format!("HTTP request failed (DeFiLlama price): {}", e))?;
-
-    if !response.status().is_success() {
-        return Err(format!(
-            "DeFiLlama price API returned status: {}",
-            response.status()
-        ));
-    }
-
-    let text = response
-        .text()
-        .await
-        .map_err(|e| format!("Failed to read response: {}", e))?;
-
-    let json: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| format!("Failed to parse JSON: {}", e))?;
-
-    // Extract price from coins.{chain:address}.price
-    let price_key = format!("solana:{}", mint);
-    if let Some(price) = json
-        .get("coins")
-        .and_then(|coins| coins.get(&price_key))
-        .and_then(|token| token.get("price"))
-        .and_then(|p| p.as_f64())
-    {
-        if is_debug_discovery_enabled() {
-            log(
-                LogTag::Discovery,
-                "EXTRACTED",
-                &format!("DeFiLlama price for {}: ${:.6}", mint, price),
-            );
-        }
-        Ok(price)
-    } else {
-        Err(format!("Price not found for token: {}", mint))
     }
 }
 
-// =============================================================================
-// CONFIGURATION CONSTANTS
-// =============================================================================
-
-/// Discovery cycle duration in seconds
-pub const DISCOVERY_CYCLE_SECONDS: u64 = 10;
-
-// =============================================================================
-// TOKEN DISCOVERY MANAGER
-// =============================================================================
-
-/// Discovery statistics snapshot
-#[derive(Debug, Clone, Default)]
-pub struct DiscoverySourceCounts {
-    pub profiles: usize,
-    pub boosted: usize,
-    pub top_boosts: usize,
-    pub rug_new: usize,
-    pub rug_viewed: usize,
-    pub rug_trending: usize,
-    pub rug_verified: usize,
-    pub gecko_updated: usize,
-    pub gecko_trending: usize,
-    pub jupiter_tokens: usize,
-    pub jupiter_top_organic: usize,
-    pub jupiter_top_traded: usize,
-    pub jupiter_top_trending: usize,
-    pub coingecko_markets: usize,
-    pub defillama_protocols: usize,
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct DiscoveryStats {
-    pub total_cycles: u64,
-    pub last_cycle_started: Option<DateTime<Utc>>,
-    pub last_cycle_completed: Option<DateTime<Utc>>,
-    pub last_processed: usize,
-    pub last_added: usize,
-    pub last_deduplicated_removed: usize,
-    pub last_blacklist_removed: usize,
-    pub total_processed: u64,
-    pub total_added: u64,
-    pub per_source: DiscoverySourceCounts,
-    pub last_error: Option<String>,
-}
-
-static DISCOVERY_STATS: OnceLock<Arc<RwLock<DiscoveryStats>>> = OnceLock::new();
-
-fn get_discovery_stats_handle() -> Arc<RwLock<DiscoveryStats>> {
-    DISCOVERY_STATS
-        .get_or_init(|| Arc::new(RwLock::new(DiscoveryStats::default())))
-        .clone()
-}
-
-pub struct TokenDiscovery;
-
-impl TokenDiscovery {
-    /// Create new token discovery instance
-    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let store = get_global_token_store();
-        if !store.is_database_configured() {
-            let db = TokenDatabase::new()?;
-            store.configure_database(db);
-            log(
-                LogTag::Tokens,
-                "INIT",
-                "Token store database configured for discovery",
-            );
-        }
-
-        Ok(Self)
+fn normalize_mint(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
     }
 
-    /// Main discovery function - calls all APIs, combines mints, fetches decimals and token info
-    pub async fn discover_new_tokens(
-        &mut self,
-        shutdown: Option<Arc<tokio::sync::Notify>>,
-    ) -> Result<(), String> {
-        use crate::utils::check_shutdown_or_delay;
-        use tokio::time::Duration;
-
-        // Always log cycle start (visibility even without --debug-discovery)
-        if is_debug_discovery_enabled() {
-            log(
-                LogTag::Discovery,
-                "START",
-                "Starting comprehensive discovery cycle",
-            );
-        }
-
-        // Mark stats: cycle start (non-blocking)
-        if let Some(stats_handle) = DISCOVERY_STATS.get() {
-            if let Ok(mut stats) = stats_handle.try_write() {
-                stats.total_cycles = stats.total_cycles.saturating_add(1);
-                stats.last_cycle_started = Some(Utc::now());
-                stats.last_error = None; // reset at start
-                                         // reset per-source for this cycle; will be overwritten below
-                stats.per_source = DiscoverySourceCounts::default();
-            } else {
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "WARN",
-                        "Stats lock busy, skipping stats update",
-                    );
-                }
-            }
-        }
-
-        let mut all_mints = Vec::new();
-        // Per-cycle source counters
-        let mut cycle_counts = DiscoverySourceCounts::default();
-
-        if is_debug_discovery_enabled() {
-            log(
-                LogTag::Discovery,
-                "API_START",
-                "About to fetch from profiles API",
-            );
-
-            log(
-                LogTag::Discovery,
-                "DEBUG",
-                "Calling fetch_dexscreener_latest_token_profiles() function...",
-            );
-        }
-
-        // Fetch latest token profiles
-        match fetch_dexscreener_latest_token_profiles().await {
-            Ok(mints) => {
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "SUCCESS",
-                        &format!("Profiles fetched: {}", mints.len()),
-                    );
-                }
-                cycle_counts.profiles = mints.len();
-                all_mints.extend(mints);
-            }
-            Err(e) => {
-                log(
-                    LogTag::Discovery,
-                    "ERROR",
-                    &format!("Profiles fetch failed: {}", e),
-                );
-                if let Some(stats_handle) = DISCOVERY_STATS.get() {
-                    if let Ok(mut stats) = stats_handle.try_write() {
-                        stats.last_error = Some(format!("profiles: {}", e));
-                    }
-                }
-            }
-        }
-
-        // Delay between API calls
-        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await;
-
-        // Fetch latest boosted tokens
-        match fetch_dexscreener_latest_boosted_tokens().await {
-            Ok(mints) => {
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "SUCCESS",
-                        &format!("Boosted fetched: {}", mints.len()),
-                    );
-                }
-                cycle_counts.boosted = mints.len();
-                all_mints.extend(mints);
-            }
-            Err(e) => {
-                log(
-                    LogTag::Discovery,
-                    "ERROR",
-                    &format!("Boosted fetch failed: {}", e),
-                );
-                if let Some(stats_handle) = DISCOVERY_STATS.get() {
-                    if let Ok(mut stats) = stats_handle.try_write() {
-                        stats.last_error = Some(format!("boosted: {}", e));
-                    }
-                }
-            }
-        }
-
-        // Delay between API calls
-        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await;
-
-        // Fetch tokens with most active boosts
-        match fetch_dexscreener_tokens_with_most_active_boosts().await {
-            Ok(mints) => {
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "SUCCESS",
-                        &format!("Top boosts fetched: {}", mints.len()),
-                    );
-                }
-                cycle_counts.top_boosts = mints.len();
-                all_mints.extend(mints);
-            }
-            Err(e) => {
-                log(
-                    LogTag::Discovery,
-                    "ERROR",
-                    &format!("Top boosts fetch failed: {}", e),
-                );
-                if let Some(stats_handle) = DISCOVERY_STATS.get() {
-                    if let Ok(mut stats) = stats_handle.try_write() {
-                        stats.last_error = Some(format!("top_boosts: {}", e));
-                    }
-                }
-            }
-        }
-
-        // Delay between API calls
-        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await; // Fetch new tokens from RugCheck
-        match fetch_rugcheck_new_tokens().await {
-            Ok(mints) => {
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "SUCCESS",
-                        &format!("RugCheck new fetched: {}", mints.len()),
-                    );
-                }
-                cycle_counts.rug_new = mints.len();
-                all_mints.extend(mints);
-            }
-            Err(e) => {
-                log(
-                    LogTag::Discovery,
-                    "ERROR",
-                    &format!("RugCheck new fetch failed: {}", e),
-                );
-                if let Some(stats_handle) = DISCOVERY_STATS.get() {
-                    if let Ok(mut stats) = stats_handle.try_write() {
-                        stats.last_error = Some(format!("rug_new: {}", e));
-                    }
-                }
-            }
-        }
-
-        // Delay between API calls
-        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await;
-
-        // Fetch most viewed tokens from RugCheck
-        match fetch_rugcheck_most_viewed().await {
-            Ok(mints) => {
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "SUCCESS",
-                        &format!("RugCheck viewed fetched: {}", mints.len()),
-                    );
-                }
-                cycle_counts.rug_viewed = mints.len();
-                all_mints.extend(mints);
-            }
-            Err(e) => {
-                log(
-                    LogTag::Discovery,
-                    "ERROR",
-                    &format!("RugCheck viewed fetch failed: {}", e),
-                );
-                if let Some(stats_handle) = DISCOVERY_STATS.get() {
-                    if let Ok(mut stats) = stats_handle.try_write() {
-                        stats.last_error = Some(format!("rug_viewed: {}", e));
-                    }
-                }
-            }
-        }
-
-        // Delay between API calls
-        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await;
-
-        // Fetch trending tokens from RugCheck
-        match fetch_rugcheck_trending().await {
-            Ok(mints) => {
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "SUCCESS",
-                        &format!("RugCheck trending fetched: {}", mints.len()),
-                    );
-                }
-                cycle_counts.rug_trending = mints.len();
-                all_mints.extend(mints);
-            }
-            Err(e) => {
-                log(
-                    LogTag::Discovery,
-                    "ERROR",
-                    &format!("RugCheck trending fetch failed: {}", e),
-                );
-                if let Some(stats_handle) = DISCOVERY_STATS.get() {
-                    if let Ok(mut stats) = stats_handle.try_write() {
-                        stats.last_error = Some(format!("rug_trending: {}", e));
-                    }
-                }
-            }
-        }
-
-        // Delay between API calls
-        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await;
-
-        // Fetch verified tokens from RugCheck
-        match fetch_rugcheck_verified().await {
-            Ok(mints) => {
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "SUCCESS",
-                        &format!("RugCheck verified fetched: {}", mints.len()),
-                    );
-                }
-                cycle_counts.rug_verified = mints.len();
-                all_mints.extend(mints);
-            }
-            Err(e) => {
-                log(
-                    LogTag::Discovery,
-                    "ERROR",
-                    &format!("RugCheck verified fetch failed: {}", e),
-                );
-                if let Some(stats_handle) = DISCOVERY_STATS.get() {
-                    if let Ok(mut stats) = stats_handle.try_write() {
-                        stats.last_error = Some(format!("rug_verified: {}", e));
-                    }
-                }
-            }
-        }
-
-        // Delay between API calls
-        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await;
-
-        // Fetch recently updated tokens from GeckoTerminal
-        match fetch_geckoterminal_recently_updated().await {
-            Ok(mints) => {
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "SUCCESS",
-                        &format!("GeckoTerminal updated fetched: {}", mints.len()),
-                    );
-                }
-                cycle_counts.gecko_updated = mints.len();
-                all_mints.extend(mints);
-            }
-            Err(e) => {
-                log(
-                    LogTag::Discovery,
-                    "ERROR",
-                    &format!("GeckoTerminal updated fetch failed: {}", e),
-                );
-                if let Some(stats_handle) = DISCOVERY_STATS.get() {
-                    if let Ok(mut stats) = stats_handle.try_write() {
-                        stats.last_error = Some(format!("gecko_updated: {}", e));
-                    }
-                }
-            }
-        }
-
-        // Delay between API calls
-        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await;
-
-        // Fetch trending pools tokens from GeckoTerminal
-        match fetch_geckoterminal_trending_pools().await {
-            Ok(mints) => {
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "SUCCESS",
-                        &format!("GeckoTerminal trending pools fetched: {}", mints.len()),
-                    );
-                }
-                cycle_counts.gecko_trending = mints.len();
-                all_mints.extend(mints);
-            }
-            Err(e) => {
-                log(
-                    LogTag::Discovery,
-                    "ERROR",
-                    &format!("GeckoTerminal trending pools fetch failed: {}", e),
-                );
-                if let Some(stats_handle) = DISCOVERY_STATS.get() {
-                    if let Ok(mut stats) = stats_handle.try_write() {
-                        stats.last_error = Some(format!("gecko_trending: {}", e));
-                    }
-                }
-            }
-        }
-
-        // Delay between API calls
-        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await;
-
-        // Fetch recent tokens from Jupiter
-        match fetch_jupiter_recent_tokens().await {
-            Ok(mints) => {
-                let mints_count = mints.len();
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "SUCCESS",
-                        &format!("Jupiter recent tokens fetched: {} tokens", mints_count),
-                    );
-                }
-                cycle_counts.jupiter_tokens = mints_count;
-                all_mints.extend(mints);
-            }
-            Err(e) => {
-                log(
-                    LogTag::Discovery,
-                    "ERROR",
-                    &format!("Jupiter recent tokens fetch failed: {}", e),
-                );
-                if let Some(stats_handle) = DISCOVERY_STATS.get() {
-                    if let Ok(mut stats) = stats_handle.try_write() {
-                        stats.last_error = Some(format!("jupiter_recent: {}", e));
-                    }
-                }
-            }
-        }
-
-        // Delay between API calls
-        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await;
-
-        // Fetch top organic score tokens from Jupiter
-        match fetch_jupiter_top_organic_score().await {
-            Ok(mints) => {
-                let mints_count = mints.len();
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "SUCCESS",
-                        &format!(
-                            "Jupiter top organic score tokens fetched: {} tokens",
-                            mints_count
-                        ),
-                    );
-                }
-                cycle_counts.jupiter_top_organic = mints_count;
-                all_mints.extend(mints);
-            }
-            Err(e) => {
-                log(
-                    LogTag::Discovery,
-                    "ERROR",
-                    &format!("Jupiter top organic score tokens fetch failed: {}", e),
-                );
-                if let Some(stats_handle) = DISCOVERY_STATS.get() {
-                    if let Ok(mut stats) = stats_handle.try_write() {
-                        stats.last_error = Some(format!("jupiter_top_organic: {}", e));
-                    }
-                }
-            }
-        }
-
-        // Delay between API calls
-        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await;
-
-        // Fetch top traded tokens from Jupiter
-        match fetch_jupiter_top_traded().await {
-            Ok(mints) => {
-                let mints_count = mints.len();
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "SUCCESS",
-                        &format!("Jupiter top traded tokens fetched: {} tokens", mints_count),
-                    );
-                }
-                cycle_counts.jupiter_top_traded = mints_count;
-                all_mints.extend(mints);
-            }
-            Err(e) => {
-                log(
-                    LogTag::Discovery,
-                    "ERROR",
-                    &format!("Jupiter top traded tokens fetch failed: {}", e),
-                );
-                if let Some(stats_handle) = DISCOVERY_STATS.get() {
-                    if let Ok(mut stats) = stats_handle.try_write() {
-                        stats.last_error = Some(format!("jupiter_top_traded: {}", e));
-                    }
-                }
-            }
-        }
-
-        // Delay between API calls
-        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await;
-
-        // Fetch top trending tokens from Jupiter
-        match fetch_jupiter_top_trending().await {
-            Ok(mints) => {
-                let mints_count = mints.len();
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "SUCCESS",
-                        &format!(
-                            "Jupiter top trending tokens fetched: {} tokens",
-                            mints_count
-                        ),
-                    );
-                }
-                cycle_counts.jupiter_top_trending = mints_count;
-                all_mints.extend(mints);
-            }
-            Err(e) => {
-                log(
-                    LogTag::Discovery,
-                    "ERROR",
-                    &format!("Jupiter top trending tokens fetch failed: {}", e),
-                );
-                if let Some(stats_handle) = DISCOVERY_STATS.get() {
-                    if let Ok(mut stats) = stats_handle.try_write() {
-                        stats.last_error = Some(format!("jupiter_top_trending: {}", e));
-                    }
-                }
-            }
-        }
-
-        // Delay between API calls
-        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await;
-
-        // Fetch Solana ecosystem markets from CoinGecko
-        match fetch_coingecko_solana_markets().await {
-            Ok(mints) => {
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "SUCCESS",
-                        &format!("CoinGecko Solana markets fetched: {}", mints.len()),
-                    );
-                }
-                cycle_counts.coingecko_markets = mints.len();
-                all_mints.extend(mints);
-            }
-            Err(e) => {
-                log(
-                    LogTag::Discovery,
-                    "ERROR",
-                    &format!("CoinGecko Solana markets fetch failed: {}", e),
-                );
-                if let Some(stats_handle) = DISCOVERY_STATS.get() {
-                    if let Ok(mut stats) = stats_handle.try_write() {
-                        stats.last_error = Some(format!("coingecko_markets: {}", e));
-                    }
-                }
-            }
-        }
-
-        // Delay between API calls
-        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await;
-
-        // Fetch DeFi protocols from DeFiLlama
-        match fetch_defillama_protocols().await {
-            Ok(mints) => {
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "SUCCESS",
-                        &format!("DeFiLlama protocols fetched: {}", mints.len()),
-                    );
-                }
-                cycle_counts.defillama_protocols = mints.len();
-                all_mints.extend(mints);
-            }
-            Err(e) => {
-                log(
-                    LogTag::Discovery,
-                    "ERROR",
-                    &format!("DeFiLlama protocols fetch failed: {}", e),
-                );
-                if let Some(stats_handle) = DISCOVERY_STATS.get() {
-                    if let Ok(mut stats) = stats_handle.try_write() {
-                        stats.last_error = Some(format!("defillama_protocols: {}", e));
-                    }
-                }
-            }
-        }
-
-        // Final delay after last API call
-        sleep(Duration::from_secs(DISCOVERY_API_DELAY_SECS)).await;
-
-        // Deduplicate mints
-        let original_count = all_mints.len();
-        all_mints.sort();
-        all_mints.dedup();
-        let deduplicated_count = all_mints.len();
-        let dedup_removed = original_count.saturating_sub(deduplicated_count);
-
-        // Filter out blacklisted/excluded tokens
-        let before_blacklist_count = all_mints.len();
-        all_mints.retain(|mint| !is_token_excluded_from_trading(mint));
-        let after_blacklist_count = all_mints.len();
-        let blacklisted_count = before_blacklist_count - after_blacklist_count;
-
-        if is_debug_discovery_enabled() {
-            log(
-                LogTag::Discovery,
-                "DEDUP",
-                &format!(
-                    "Processed mints: {} → {} deduplicated → {} after blacklist filter (removed {} blacklisted)",
-                    original_count,
-                    deduplicated_count,
-                    after_blacklist_count,
-                    blacklisted_count
-                )
-            );
-        }
-
-        // REMOVED: Price service seeding that was causing resource waste
-        // Discovery tokens should not be added to priority monitoring
-        // Only open positions should be priority per user requirements
-        if !all_mints.is_empty() {
-            if is_debug_discovery_enabled() {
-                log(
-                    LogTag::Discovery,
-                    "DISCOVERY_COMPLETE",
-                    &format!(
-                        "📊 Discovery completed: {} tokens found (not added to priority monitoring)",
-                        all_mints.len().min(50)
-                    )
-                );
-            }
-        }
-
-        if all_mints.is_empty() {
-            if is_debug_discovery_enabled() {
-                log(LogTag::Discovery, "COMPLETE", "No tokens to process");
-            }
-            // Update stats and return (non-blocking)
-            if let Some(stats_handle) = DISCOVERY_STATS.get() {
-                if let Ok(mut stats) = stats_handle.try_write() {
-                    stats.last_processed = 0;
-                    stats.last_added = 0;
-                    stats.last_deduplicated_removed = dedup_removed;
-                    stats.last_blacklist_removed = blacklisted_count;
-                    stats.per_source = cycle_counts;
-                    stats.last_cycle_completed = Some(Utc::now());
-                }
-            }
-            return Ok(());
-        }
-
-        // Process tokens in batches to avoid overwhelming APIs
-        let batch_size = 30; // DexScreener API limit
-        let mut total_processed = 0;
-        let mut total_added = 0;
-
-        for (batch_index, batch) in all_mints.chunks(batch_size).enumerate() {
-            if is_debug_discovery_enabled() {
-                log(
-                    LogTag::Discovery,
-                    "BATCH",
-                    &format!(
-                        "Processing batch {}/{} with {} tokens",
-                        batch_index + 1,
-                        (all_mints.len() + batch_size - 1) / batch_size,
-                        batch.len()
-                    ),
-                );
-            }
-
-            // Get token information from DexScreener API
-            let tokens_result = {
-                let api = match get_global_dexscreener_api().await {
-                    Ok(api) => api,
-                    Err(e) => {
-                        log(
-                            LogTag::Discovery,
-                            "ERROR",
-                            &format!("Failed to get global API client: {}", e),
-                        );
-                        continue;
-                    }
-                };
-                let mut api_instance = api.lock().await;
-                // CRITICAL: Only hold the lock for the API call, then release immediately
-                api_instance.get_tokens_info(batch).await
-            }; // Lock is released here automatically
-
-            match tokens_result {
-                Ok(tokens) => {
-                    if !tokens.is_empty() {
-                        // Fetch actual decimals from blockchain and ensure they're cached
-                        // This is critical for P&L calculations - decimals must be in cache
-                        let mints: Vec<String> = tokens.iter().map(|t| t.mint.clone()).collect();
-                        let decimal_results =
-                            crate::tokens::decimals::batch_fetch_token_decimals(&mints).await;
-
-                        // Verify all decimals were successfully cached
-                        let mut failed_tokens = Vec::new();
-                        for (mint, decimal_result) in decimal_results.iter() {
-                            match decimal_result {
-                                Ok(_) => {
-                                    if is_debug_discovery_enabled() {
-                                        if let Some(token) = tokens.iter().find(|t| t.mint == *mint)
-                                        {
-                                            log(
-                                                LogTag::Discovery,
-                                                "DECIMALS",
-                                                &format!(
-                                                    "Cached decimals for {} ({})",
-                                                    token.symbol,
-                                                    &token.mint[..8]
-                                                ),
-                                            );
-                                        }
-                                    }
-                                }
-                                Err(e) => {
-                                    // CRITICAL: Never proceed without cached decimals
-                                    // If decimals fetch fails, we should not add this token to watch list
-                                    if let Some(token) = tokens.iter().find(|t| t.mint == *mint) {
-                                        if is_debug_discovery_enabled() {
-                                            log(
-                                                LogTag::Discovery,
-                                                "ERROR",
-                                                &format!(
-                                                    "Failed to fetch decimals for {} ({}): {} - SKIPPING TOKEN",
-                                                    token.symbol,
-                                                    &token.mint[..8],
-                                                    e
-                                                )
-                                            );
-                                        }
-
-                                        failed_tokens.push(mint.clone());
-                                    }
-                                }
-                            }
-                        }
-
-                        // Filter out tokens with failed decimal fetching
-                        let original_count = tokens.len();
-                        let tokens: Vec<_> = tokens
-                            .into_iter()
-                            .filter(|token| !failed_tokens.contains(&token.mint))
-                            .collect();
-                        let filtered_count = tokens.len();
-
-                        if original_count != filtered_count {
-                            if is_debug_discovery_enabled() {
-                                log(
-                                    LogTag::Discovery,
-                                    "FILTER",
-                                    &format!(
-                                        "Removed {} tokens with failed decimal fetching (keeping {} tokens)",
-                                        original_count - filtered_count,
-                                        filtered_count
-                                    )
-                                );
-                            }
-                        }
-
-                        if tokens.is_empty() {
-                            if is_debug_discovery_enabled() {
-                                log(
-                                    LogTag::Discovery,
-                                    "SKIP",
-                                    "No tokens remaining after decimal validation",
-                                );
-                            }
-                            continue;
-                        }
-
-                        // Check for new tokens before adding to store/database
-                        let original_count = tokens.len();
-                        let mut new_tokens = Vec::new();
-                        let mut existing_count = 0;
-
-                        let store = get_global_token_store();
-                        for token in &tokens {
-                            if store.get(&token.mint).is_some() {
-                                existing_count += 1;
-                            } else {
-                                new_tokens.push(token.clone());
-                            }
-                        }
-
-                        if new_tokens.is_empty() {
-                            if is_debug_discovery_enabled() {
-                                log(
-                                    LogTag::Discovery,
-                                    "SKIP",
-                                    &format!(
-                                        "All {} tokens already exist in cache - skipping batch",
-                                        original_count
-                                    ),
-                                );
-                            }
-                            continue;
-                        }
-
-                        match store
-                            .ingest_tokens(new_tokens.clone(), TokenUpdateSource::Api)
-                            .await
-                        {
-                            Ok(stats) => {
-                                total_added += stats.inserted;
-
-                                if is_debug_discovery_enabled() {
-                                    log(
-                                        LogTag::Discovery,
-                                        "DATABASE",
-                                        &format!(
-                                            "Added {} NEW tokens (skipped {} existing)",
-                                            stats.inserted, existing_count
-                                        ),
-                                    );
-
-                                    // Log only first-seen tokens
-                                    for token in &new_tokens {
-                                        log(
-                                            LogTag::Discovery,
-                                            "NEW",
-                                            &format!(
-                                                "{} ({}) - Liquidity: ${:.0}",
-                                                token.symbol,
-                                                &token.mint[..8],
-                                                token
-                                                    .liquidity
-                                                    .as_ref()
-                                                    .and_then(|l| l.usd)
-                                                    .unwrap_or(0.0)
-                                            ),
-                                        );
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                log(
-                                    LogTag::Discovery,
-                                    "ERROR",
-                                    &format!("Failed to ingest tokens into store: {}", e),
-                                );
-                            }
-                        }
-                    } else {
-                        if is_debug_discovery_enabled() {
-                            log(
-                                LogTag::Discovery,
-                                "WARN",
-                                "No token data returned from API for batch",
-                            );
-                        }
-                    }
-                }
-                Err(e) => {
-                    log(
-                        LogTag::Discovery,
-                        "ERROR",
-                        &format!("Failed to get token info for batch: {}", e),
-                    );
-                }
-            }
-
-            total_processed += batch.len();
-
-            // Small delay between batches to respect rate limits
-            if batch_index < (all_mints.len() + batch_size - 1) / batch_size - 1 {
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-            }
-        }
-
-        if is_debug_discovery_enabled() {
-            log(
-                LogTag::Discovery,
-                "COMPLETE",
-                &format!(
-                    "Discovery cycle completed: processed {} added {} | sources profiles={} boosted={} top_boosts={} rug_new={} rug_viewed={} rug_trending={} rug_verified={} gecko_updated={} gecko_trending={} dedup_removed={} blacklist_removed={}",
-                    total_processed,
-                    total_added,
-                    cycle_counts.profiles,
-                    cycle_counts.boosted,
-                    cycle_counts.top_boosts,
-                    cycle_counts.rug_new,
-                    cycle_counts.rug_viewed,
-                    cycle_counts.rug_trending,
-                    cycle_counts.rug_verified,
-                    cycle_counts.gecko_updated,
-                    cycle_counts.gecko_trending,
-                    dedup_removed,
-                    blacklisted_count
-                )
-            );
-        }
-
-        // Persist stats (non-blocking)
-        if let Some(stats_handle) = DISCOVERY_STATS.get() {
-            if let Ok(mut stats) = stats_handle.try_write() {
-                stats.last_processed = total_processed;
-                stats.last_added = total_added;
-                stats.last_deduplicated_removed = dedup_removed;
-                stats.last_blacklist_removed = blacklisted_count;
-                stats.total_processed =
-                    stats.total_processed.saturating_add(total_processed as u64);
-                stats.total_added = stats.total_added.saturating_add(total_added as u64);
-                stats.per_source = cycle_counts.clone();
-                stats.last_cycle_completed = Some(Utc::now());
-            } else {
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "WARN",
-                        "Stats lock busy, skipping final stats update",
-                    );
-                }
-            }
-        }
-
-        // Print detailed discovery cycle summary
-        print_discovery_cycle_summary(
-            total_processed,
-            total_added,
-            dedup_removed,
-            blacklisted_count,
-            &cycle_counts,
-        )
-        .await;
-
-        Ok(())
-    }
-    /// Start continuous discovery loop in background
-    pub async fn start_discovery_loop(&mut self, shutdown: Arc<tokio::sync::Notify>) {
-        log(LogTag::Discovery, "START", "Discovery loop started");
-
-        // IMPORTANT: Create the shutdown future once to avoid missing notifications
-        let mut shutdown_fut = Box::pin(shutdown.notified());
-
-        // Immediate first cycle (non-blocking shutdown check first)
-        // Check for shutdown before starting (non-blocking)
-        if let Some(_) = shutdown_fut.as_mut().now_or_never() {
-            log(
-                LogTag::Discovery,
-                "SHUTDOWN",
-                "Discovery loop stopping before first cycle",
-            );
-            return;
-        }
-
-        if is_debug_discovery_enabled() {
-            log(
-                LogTag::Discovery,
-                "START_FETCHING",
-                "Beginning API data collection",
-            );
-        }
-        if let Err(e) = self.discover_new_tokens(Some(shutdown.clone())).await {
-            log(
-                LogTag::Discovery,
-                "ERROR",
-                &format!("Discovery initial cycle failed: {}", e),
-            );
-        }
-
-        loop {
-            tokio::select! {
-            _ = shutdown_fut.as_mut() => {
-                        log(LogTag::Discovery, "SHUTDOWN", "Discovery loop stopping");
-                        break;
-                    }
-                    _ = sleep(Duration::from_secs(DISCOVERY_CYCLE_SECONDS)) => {
-                        if let Err(e) = self.discover_new_tokens(Some(shutdown.clone())).await {
-                            log(LogTag::Discovery, "ERROR", &format!("Discovery cycle failed: {}", e));
-                        }
-                    }
-                }
-        }
-
-        log(LogTag::Discovery, "STOP", "Discovery loop stopped");
-    }
-}
-
-// =============================================================================
-// DISCOVERY CYCLE SUMMARY
-// =============================================================================
-
-/// Print a detailed, colorful summary of the discovery cycle results
-async fn print_discovery_cycle_summary(
-    processed: usize,
-    added: usize,
-    dedup_removed: usize,
-    blacklist_removed: usize,
-    cycle_counts: &DiscoverySourceCounts,
-) {
-    // Get current stats for context
-    let stats = get_discovery_stats().await;
-
-    // Calculate cycle duration
-    let cycle_duration =
-        if let (Some(start), Some(end)) = (stats.last_cycle_started, stats.last_cycle_completed) {
-            let duration = end.signed_duration_since(start);
-            if duration.num_seconds() > 0 {
-                format!("{}s", duration.num_seconds())
-            } else {
-                format!("{}ms", duration.num_milliseconds())
-            }
-        } else {
-            "N/A".to_string()
-        };
-
-    let total_fetched = cycle_counts.profiles
-        + cycle_counts.boosted
-        + cycle_counts.top_boosts
-        + cycle_counts.rug_new
-        + cycle_counts.rug_viewed
-        + cycle_counts.rug_trending
-        + cycle_counts.rug_verified
-        + cycle_counts.gecko_updated
-        + cycle_counts.gecko_trending;
-
-    let dex_total = cycle_counts.profiles + cycle_counts.boosted + cycle_counts.top_boosts;
-    let rug_total = cycle_counts.rug_new
-        + cycle_counts.rug_viewed
-        + cycle_counts.rug_trending
-        + cycle_counts.rug_verified;
-    let gecko_total = cycle_counts.gecko_updated + cycle_counts.gecko_trending;
-
-    let success_rate = if stats.total_processed > 0 {
-        ((stats.total_added as f64) / (stats.total_processed as f64)) * 100.0
-    } else {
-        0.0
-    };
-
-    let error_status = if let Some(error) = &stats.last_error {
-        format!("⚠️  LAST ERROR: {}", error)
-    } else {
-        "✅ STATUS: All API endpoints successful - no errors".to_string()
-    };
-
-    let timing_info = if let Some(completed) = stats.last_cycle_completed {
-        let now = Utc::now();
-        let time_since = now.signed_duration_since(completed);
-        format!(
-            "⏰ TIMING: Completed {} | Next cycle in ~{}s",
-            completed.format("%H:%M:%S UTC"),
-            DISCOVERY_CYCLE_SECONDS.saturating_sub(time_since.num_seconds() as u64)
-        )
-    } else {
-        "⏰ TIMING: N/A".to_string()
-    };
-
-    let filtering_info = if dedup_removed > 0 || blacklist_removed > 0 {
-        let mut filter_parts = Vec::new();
-        if dedup_removed > 0 {
-            filter_parts.push(format!("♻️  {} duplicates", dedup_removed));
-        }
-        if blacklist_removed > 0 {
-            filter_parts.push(format!("🚫 {} blacklisted", blacklist_removed));
-        }
-        format!("🧹 FILTERING: Removed {}", filter_parts.join(" + "))
-    } else {
-        "🧹 FILTERING: No tokens filtered".to_string()
-    };
-
-    let results_emoji = if added > 0 { "🎉" } else { "ℹ️" };
-    let results_text = if added > 0 {
-        format!(
-            "DISCOVERED {} NEW VALID TOKENS (no duplicates/blacklisted)!",
-            added
-        )
-    } else {
-        "NO NEW TOKENS: All fetched tokens already exist in database".to_string()
-    };
-
-    let header_line = "════════════════════════════════════════════════════════════";
-    let title = "🔍 DISCOVERY SUMMARY - Comprehensive Token Sweep";
-    let cycle_line = format!(
-        "  • Cycle     📊  #{:<3} | Duration: {} | Total Lifetime: {} cycles",
-        stats.total_cycles, cycle_duration, stats.total_cycles
-    );
-    let results_line = format!(
-        "  • Results   🎯  Processed {} | 🆕 NEW VALID: {} | Filtered out: {}",
-        processed,
-        added,
-        dedup_removed + blacklist_removed
-    );
-    let status_line = format!("  • Status    {} {}", results_emoji, results_text);
-
-    let api_breakdown_line = format!(
-        "  • API Calls 📚  {} total from 9 endpoints:",
-        total_fetched
-    );
-    let dex_line = format!(
-        "    🔸 DexScreener: Profiles({}) + Boosted({}) + TopBoosts({}) = {}",
-        cycle_counts.profiles, cycle_counts.boosted, cycle_counts.top_boosts, dex_total
-    );
-    let rug_line = format!(
-        "    🔸 RugCheck: New({}) + Viewed({}) + Trending({}) + Verified({}) = {}",
-        cycle_counts.rug_new,
-        cycle_counts.rug_viewed,
-        cycle_counts.rug_trending,
-        cycle_counts.rug_verified,
-        rug_total
-    );
-    let gecko_line = format!(
-        "    🔸 GeckoTerminal: Updated({}) + TrendingPools({}) = {}",
-        cycle_counts.gecko_updated, cycle_counts.gecko_trending, gecko_total
-    );
-
-    let filtering_line = format!(
-        "  • Filtering {}",
-        filtering_info.replace("🧹 FILTERING: ", "🧹  ")
-    );
-    let error_line = format!("  • Status    {}", error_status);
-    let lifetime_line = format!(
-        "  • Lifetime  📈  Processed {} | 🆕 Total Valid Added {} | Success Rate {:.1}%",
-        stats.total_processed, stats.total_added, success_rate
-    );
-    let timing_line = format!(
-        "  • Timing    {}",
-        timing_info.replace("⏰ TIMING: ", "⏰  ")
-    );
-
-    let body = format!(
-        "\n{header}\n{title}\n{header}\n{cycle}\n{results}\n{status}\n\n{api_breakdown}\n{dex}\n{rug}\n{gecko}\n\n{filtering}\n{error}\n{lifetime}\n{timing}\n{header}",
-        header = header_line,
-        title = title,
-        cycle = cycle_line,
-        results = results_line,
-        status = status_line,
-        api_breakdown = api_breakdown_line,
-        dex = dex_line,
-        rug = rug_line,
-        gecko = gecko_line,
-        filtering = filtering_line,
-        error = error_line,
-        lifetime = lifetime_line,
-        timing = timing_line
-    );
-
-    log(LogTag::Discovery, "SUMMARY", &body);
-}
-
-// =============================================================================
-// PUBLIC HELPER FUNCTIONS
-// =============================================================================
-
-/// Start token discovery background task
-pub async fn start_token_discovery(
-    shutdown: Arc<tokio::sync::Notify>,
-    monitor: tokio_metrics::TaskMonitor,
-) -> Result<tokio::task::JoinHandle<()>, String> {
-    log(
-        LogTag::System,
-        "START",
-        "Starting token discovery background task (instrumented)",
-    );
-
-    let handle = tokio::spawn(monitor.instrument(async move {
-        let mut discovery = match TokenDiscovery::new() {
-            Ok(discovery) => {
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "INIT",
-                        "Discovery instance created successfully",
-                    );
-                }
-                discovery
-            }
-            Err(e) => {
-                log(
-                    LogTag::Discovery,
-                    "ERROR",
-                    &format!("Failed to initialize discovery: {}", e),
-                );
-                return;
-            }
-        };
-
-        // Wait for Transactions system to be ready before starting discovery
-        let mut last_log = std::time::Instant::now();
-        loop {
-            let tx_ready =
-                crate::global::TRANSACTIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst);
-
-            if tx_ready {
-                if is_debug_discovery_enabled() {
-                    log(
-                        LogTag::Discovery,
-                        "READY",
-                        "✅ Transactions ready. Starting discovery loop",
-                    );
-                }
-                break;
-            }
-
-            // Log only every 15 seconds
-            if last_log.elapsed() >= std::time::Duration::from_secs(15) {
-                log(
-                    LogTag::Discovery,
-                    "READY",
-                    "⏳ Waiting for Transactions system to be ready...",
-                );
-                last_log = std::time::Instant::now();
-            }
-
-            tokio::select! {
-                _ = shutdown.notified() => {
-                    log(LogTag::Discovery, "EXIT", "Discovery exiting during dependency wait");
-                    return;
-                }
-                _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {}
-            }
-        }
-
-        discovery.start_discovery_loop(shutdown).await;
-        if is_debug_discovery_enabled() {
-            log(LogTag::Discovery, "EXIT", "Discovery task ended");
-        }
-    }));
-
-    Ok(handle)
-}
-
-/// Manual token discovery for testing
-pub async fn discover_tokens_once() -> Result<(), String> {
-    let mut discovery =
-        TokenDiscovery::new().map_err(|e| format!("Failed to create discovery: {}", e))?;
-    discovery.discover_new_tokens(None).await
-}
-
-/// Get a snapshot of discovery stats for display
-pub async fn get_discovery_stats() -> DiscoveryStats {
-    let handle = get_discovery_stats_handle();
-    let snapshot = {
-        let guard = handle.read().await;
-        guard.clone()
-    };
-    snapshot
+    let candidate = trimmed
+        .strip_prefix("solana:")
+        .or_else(|| trimmed.strip_prefix("solana_"))
+        .unwrap_or(trimmed);
+
+    Pubkey::from_str(candidate).map(|pk| pk.to_string()).ok()
 }
