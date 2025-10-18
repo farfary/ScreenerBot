@@ -68,3 +68,22 @@ pub fn all_snapshots() -> Vec<Snapshot> {
         .map(|m| m.values().cloned().collect())
         .unwrap_or_default()
 }
+
+pub fn set_decimals(mint: &str, decimals: u8) {
+    if let Ok(mut m) = STORE.write() {
+        if let Some(snapshot) = m.get_mut(mint) {
+            snapshot.decimals = Some(decimals);
+            snapshot.updated_at = Utc::now();
+        } else {
+            m.insert(
+                mint.to_string(),
+                Snapshot {
+                    mint: mint.to_string(),
+                    decimals: Some(decimals),
+                    updated_at: Utc::now(),
+                    ..Default::default()
+                },
+            );
+        }
+    }
+}

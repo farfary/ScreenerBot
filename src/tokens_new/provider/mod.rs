@@ -35,7 +35,7 @@ impl TokenDataProvider {
         info!("[TOKENS_NEW] Initializing TokenDataProvider...");
 
         // Get database path from config
-    let db_path = TOKENS_DB_PATH;
+        let db_path = TOKENS_DB_PATH;
 
         // Initialize database
         let database = Arc::new(Database::new(db_path)?);

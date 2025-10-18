@@ -65,17 +65,13 @@ pub async fn refresh_for(provider: &TokenDataProvider, mint: &str) -> Result<(),
 }
 
 fn compute_liquidity_sol_from_dex(pool: &DexScreenerPool) -> Option<f64> {
-    let quote_is_sol = pool
-        .quote_token_address
-        .eq_ignore_ascii_case(SOL_MINT)
+    let quote_is_sol = pool.quote_token_address.eq_ignore_ascii_case(SOL_MINT)
         || pool.quote_token_symbol.eq_ignore_ascii_case("SOL");
     if quote_is_sol {
         return pool.liquidity_quote;
     }
 
-    let base_is_sol = pool
-        .base_token_address
-        .eq_ignore_ascii_case(SOL_MINT)
+    let base_is_sol = pool.base_token_address.eq_ignore_ascii_case(SOL_MINT)
         || pool.base_token_symbol.eq_ignore_ascii_case("SOL");
     if base_is_sol {
         return pool.liquidity_base;
@@ -91,10 +87,7 @@ fn compute_liquidity_sol_from_gecko(pool: &GeckoTerminalPool) -> Option<f64> {
         // When base token is SOL, reserve_usd approximates total USD liquidity.
         // Half of that belongs to SOL side.
         if let Some(reserve) = pool.reserve_usd {
-            if let Ok(sol_price) = pool
-                .base_token_price_usd
-                .parse::<f64>()
-            {
+            if let Ok(sol_price) = pool.base_token_price_usd.parse::<f64>() {
                 if sol_price > 0.0 {
                     return Some((reserve / 2.0) / sol_price);
                 }
@@ -105,10 +98,7 @@ fn compute_liquidity_sol_from_gecko(pool: &GeckoTerminalPool) -> Option<f64> {
     let quote_is_sol = is_gecko_solana_id(&pool.quote_token_id);
     if quote_is_sol {
         if let Some(reserve) = pool.reserve_usd {
-            if let Ok(sol_price) = pool
-                .quote_token_price_usd
-                .parse::<f64>()
-            {
+            if let Ok(sol_price) = pool.quote_token_price_usd.parse::<f64>() {
                 if sol_price > 0.0 {
                     return Some((reserve / 2.0) / sol_price);
                 }

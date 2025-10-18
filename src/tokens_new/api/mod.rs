@@ -42,13 +42,18 @@ impl ApiClients {
         let discovery_cfg = &cfg.tokens.discovery;
         let discovery_enabled = discovery_cfg.enabled;
 
-    let _dex_enabled = sources_cfg.dexscreener.enabled;
-    let _gecko_enabled = sources_cfg.geckoterminal.enabled;
-        let rug_enabled = sources_cfg.rugcheck.enabled && discovery_enabled && discovery_cfg.rugcheck.enabled;
+        let _dex_enabled = sources_cfg.dexscreener.enabled;
+        let _gecko_enabled = sources_cfg.geckoterminal.enabled;
+        let rug_enabled =
+            sources_cfg.rugcheck.enabled && discovery_enabled && discovery_cfg.rugcheck.enabled;
 
         let jup_enabled = discovery_enabled && discovery_cfg.jupiter.enabled;
-        let coingecko_enabled = discovery_enabled && discovery_cfg.coingecko.enabled && discovery_cfg.coingecko.markets_enabled;
-        let defillama_enabled = discovery_enabled && discovery_cfg.defillama.enabled && discovery_cfg.defillama.protocols_enabled;
+        let coingecko_enabled = discovery_enabled
+            && discovery_cfg.coingecko.enabled
+            && discovery_cfg.coingecko.markets_enabled;
+        let defillama_enabled = discovery_enabled
+            && discovery_cfg.defillama.enabled
+            && discovery_cfg.defillama.protocols_enabled;
 
         Ok(Self {
             dexscreener: DexScreenerClient::new(
