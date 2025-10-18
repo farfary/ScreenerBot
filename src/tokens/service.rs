@@ -1,57 +1,45 @@
-// tokens_new/service.rs
-// Service scaffold for tokens_new background tasks (not wired yet)
+// Tokens orchestrator logic – owned by tokens module; invoked by a centralized service in services module
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::services::Service;
-use crate::tokens_new::blacklist as bl;
-use crate::tokens_new::provider::TokenDataProvider;
-use crate::tokens_new::store;
-use crate::tokens_new::{decimals, discovery, pools};
+use crate::tokens::blacklist as bl;
+use crate::tokens::provider::TokenDataProvider;
+use crate::tokens::store;
+use crate::tokens::{decimals, discovery, pools};
 use log::{info, warn};
 use tokio::sync::Notify;
+use tokio::task::JoinHandle;
 use tokio_metrics::TaskMonitor;
 
-pub struct TokensNewService {
+/// Public orchestrator that owns provider and spawns all token-related background tasks.
+pub struct TokensOrchestrator {
     provider: Arc<TokenDataProvider>,
 }
 
-impl TokensNewService {
+impl TokensOrchestrator {
     pub async fn new() -> Result<Self, String> {
         let provider = Arc::new(TokenDataProvider::new().await?);
         Ok(Self { provider })
     }
-}
 
-#[async_trait::async_trait]
-impl Service for TokensNewService {
-    fn name(&self) -> &'static str {
-        "tokens_new_service"
-    }
-    fn priority(&self) -> i32 {
-        50
-    }
-    fn dependencies(&self) -> Vec<&'static str> {
-        vec!["rpc_service", "pool_service"]
-    }
-
-    async fn initialize(&mut self) -> Result<(), String> {
-        // Hydrate blacklist into memory for fast checks
+    /// Initialize caches/state owned by tokens module (e.g., blacklist hydration)
+    pub fn initialize(&self) -> Result<(), String> {
         let db = self.provider.database();
         match bl::hydrate_from_db(&db) {
-            Ok(count) => info!("[TOKENS_NEW] Blacklist hydrated: {} entries", count),
-            Err(e) => warn!("[TOKENS_NEW] Blacklist hydrate failed: {}", e),
+            Ok(count) => info!("[TOKENS] Blacklist hydrated: {} entries", count),
+            Err(e) => warn!("[TOKENS] Blacklist hydrate failed: {}", e),
         }
         Ok(())
     }
 
-    async fn start(
-        &mut self,
+    /// Start all background tasks; return join handles to the caller service.
+    pub async fn start(
+        &self,
         shutdown: Arc<Notify>,
         monitor: TaskMonitor,
-    ) -> Result<Vec<tokio::task::JoinHandle<()>>, String> {
+    ) -> Result<Vec<JoinHandle<()>>, String> {
         let mut handles = Vec::new();
 
         // Discovery loop (every 20s)
@@ -62,15 +50,15 @@ impl Service for TokensNewService {
                 loop {
                     tokio::select! {
                         _ = shutdown_c.notified() => break,
-                        _ = tokio::time::sleep(std::time::Duration::from_secs(20)) => {
+                        _ = tokio::time::sleep(Duration::from_secs(20)) => {
                             match discovery::discover_from_sources(&provider).await {
                                 Ok(entries) => {
                                     if !entries.is_empty() {
-                                        info!("[TOKENS_NEW] Discovery dispatching {} mints", entries.len());
+                                        info!("[TOKENS] Discovery dispatching {} mints", entries.len());
                                         discovery::process_new_mints(&provider, entries).await;
                                     }
                                 }
-                                Err(e) => warn!("[TOKENS_NEW] Discovery error: {}", e),
+                                Err(e) => warn!("[TOKENS] Discovery error: {}", e),
                             }
                         }
                     }
@@ -106,7 +94,7 @@ impl Service for TokensNewService {
                                     }
                                     Err(e) => {
                                         last_refresh.insert(s.mint.clone(), now);
-                                        warn!("[TOKENS_NEW] Pools refresh failed: mint={} err={}", s.mint, e);
+                                        warn!("[TOKENS] Pools refresh failed: mint={} err={}", s.mint, e);
                                     }
                                 }
                             }
@@ -154,7 +142,7 @@ impl Service for TokensNewService {
 
                                 match decimals::ensure(&provider, &mint).await {
                                     Ok(_) => {
-                                    completed.insert(mint.clone());
+                                        completed.insert(mint.clone());
                                         retry_state.remove(&mint);
                                     }
                                     Err(e) => {
@@ -163,7 +151,7 @@ impl Service for TokensNewService {
                                             RetryDisposition::RetryAfter(delay) => {
                                                 state.next_attempt = now + delay;
                                                 warn!(
-                                                    "[TOKENS_NEW] Decimals ensure failed: mint={} attempts={} next_retry_in={}s err={}",
+                                                    "[TOKENS] Decimals ensure failed: mint={} attempts={} next_retry_in={}s err={}",
                                                     mint,
                                                     state.attempts,
                                                     delay.as_secs(),
@@ -172,7 +160,7 @@ impl Service for TokensNewService {
                                             }
                                             RetryDisposition::GiveUp => {
                                                 warn!(
-                                                    "[TOKENS_NEW] Decimals ensure giving up: mint={} attempts={} err={}",
+                                                    "[TOKENS] Decimals ensure giving up: mint={} attempts={} err={}",
                                                     mint,
                                                     state.attempts,
                                                     e

@@ -1,13 +1,13 @@
-// tokens_new/pools.rs
+// tokens/pools.rs
 // Best-pool selection helper built on top of provider data
 
 use chrono::Utc;
 
 use crate::constants::SOL_MINT;
 
-use crate::tokens_new::provider::TokenDataProvider;
-use crate::tokens_new::store::{upsert_snapshot, BestPoolSummary, Snapshot};
-use crate::tokens_new::types::{DexScreenerPool, GeckoTerminalPool};
+use crate::tokens::provider::TokenDataProvider;
+use crate::tokens::store::{upsert_snapshot, BestPoolSummary, Snapshot};
+use crate::tokens::types::{DexScreenerPool, GeckoTerminalPool};
 
 pub async fn refresh_for(provider: &TokenDataProvider, mint: &str) -> Result<(), String> {
     let data = provider.fetch_complete_data(mint, None).await?;
@@ -55,7 +55,7 @@ pub async fn refresh_for(provider: &TokenDataProvider, mint: &str) -> Result<(),
         is_blacklisted: false,
         best_pool: best,
         sources: data.sources_used.clone(),
-        priority: crate::tokens_new::priorities::Priority::Medium,
+        priority: crate::tokens::priorities::Priority::Medium,
         fetched_at: Some(data.fetch_timestamp),
         updated_at: Utc::now(),
     };

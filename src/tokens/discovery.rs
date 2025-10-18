@@ -1,4 +1,4 @@
-// tokens_new/discovery.rs
+// tokens/discovery.rs
 // Token discovery from multiple sources driven by configuration
 
 use std::collections::{HashMap, HashSet};
@@ -8,14 +8,14 @@ use chrono::Utc;
 use log::{info, warn};
 use solana_sdk::pubkey::Pubkey;
 
-use crate::tokens_new::api::{coingecko::CoinGeckoClient, defillama::DefiLlamaClient};
+use crate::tokens::api::{coingecko::CoinGeckoClient, defillama::DefiLlamaClient};
 
 use crate::config::get_config_clone;
-use crate::tokens_new::blacklist;
-use crate::tokens_new::events::{emit, TokenEvent};
-use crate::tokens_new::provider::TokenDataProvider;
-use crate::tokens_new::store::{upsert_snapshot, Snapshot};
-use crate::tokens_new::types::ApiError;
+use crate::tokens::blacklist;
+use crate::tokens::events::{emit, TokenEvent};
+use crate::tokens::provider::TokenDataProvider;
+use crate::tokens::store::{upsert_snapshot, Snapshot};
+use crate::tokens::types::ApiError;
 
 const GECKO_TRENDING_DURATIONS: &[&str] = &["5m", "1h", "6h", "24h"];
 
@@ -52,7 +52,7 @@ pub async fn discover_from_sources(
                     }
                 }
                 Err(err) => warn!(
-                    "[TOKENS_NEW] Discovery DexScreener latest_profiles failed: {}",
+                    "[TOKENS] Discovery DexScreener latest_profiles failed: {}",
                     err
                 ),
             }
@@ -70,7 +70,7 @@ pub async fn discover_from_sources(
                     }
                 }
                 Err(err) => warn!(
-                    "[TOKENS_NEW] Discovery DexScreener latest_boosts failed: {}",
+                    "[TOKENS] Discovery DexScreener latest_boosts failed: {}",
                     err
                 ),
             }
@@ -86,7 +86,7 @@ pub async fn discover_from_sources(
                     }
                 }
                 Err(err) => warn!(
-                    "[TOKENS_NEW] Discovery DexScreener top_boosts failed: {}",
+                    "[TOKENS] Discovery DexScreener top_boosts failed: {}",
                     err
                 ),
             }
@@ -111,7 +111,7 @@ pub async fn discover_from_sources(
                         }
                     }
                 }
-                Err(err) => warn!("[TOKENS_NEW] Discovery Gecko new_pools failed: {}", err),
+                Err(err) => warn!("[TOKENS] Discovery Gecko new_pools failed: {}", err),
             }
         }
 
@@ -129,7 +129,7 @@ pub async fn discover_from_sources(
                     }
                 }
                 Err(err) => warn!(
-                    "[TOKENS_NEW] Discovery Gecko recently_updated failed: {}",
+                    "[TOKENS] Discovery Gecko recently_updated failed: {}",
                     err
                 ),
             }
@@ -160,7 +160,7 @@ pub async fn discover_from_sources(
                         }
                     }
                     Err(err) => warn!(
-                        "[TOKENS_NEW] Discovery Gecko trending {} failed: {}",
+                        "[TOKENS] Discovery Gecko trending {} failed: {}",
                         duration, err
                     ),
                 }
@@ -180,7 +180,7 @@ pub async fn discover_from_sources(
                     }
                 }
                 Err(ApiError::Disabled) => {}
-                Err(err) => warn!("[TOKENS_NEW] Discovery Rugcheck new_tokens failed: {}", err),
+                Err(err) => warn!("[TOKENS] Discovery Rugcheck new_tokens failed: {}", err),
             }
         }
 
@@ -194,7 +194,7 @@ pub async fn discover_from_sources(
                     }
                 }
                 Err(ApiError::Disabled) => {}
-                Err(err) => warn!("[TOKENS_NEW] Discovery Rugcheck recent failed: {}", err),
+                Err(err) => warn!("[TOKENS] Discovery Rugcheck recent failed: {}", err),
             }
         }
 
@@ -208,7 +208,7 @@ pub async fn discover_from_sources(
                     }
                 }
                 Err(ApiError::Disabled) => {}
-                Err(err) => warn!("[TOKENS_NEW] Discovery Rugcheck trending failed: {}", err),
+                Err(err) => warn!("[TOKENS] Discovery Rugcheck trending failed: {}", err),
             }
         }
 
@@ -222,7 +222,7 @@ pub async fn discover_from_sources(
                     }
                 }
                 Err(ApiError::Disabled) => {}
-                Err(err) => warn!("[TOKENS_NEW] Discovery Rugcheck verified failed: {}", err),
+                Err(err) => warn!("[TOKENS] Discovery Rugcheck verified failed: {}", err),
             }
         }
     }
@@ -239,7 +239,7 @@ pub async fn discover_from_sources(
                     }
                 }
                 Err(ApiError::Disabled) => {}
-                Err(err) => warn!("[TOKENS_NEW] Discovery Jupiter recent failed: {}", err),
+                Err(err) => warn!("[TOKENS] Discovery Jupiter recent failed: {}", err),
             }
         }
 
@@ -253,7 +253,7 @@ pub async fn discover_from_sources(
                     }
                 }
                 Err(ApiError::Disabled) => {}
-                Err(err) => warn!("[TOKENS_NEW] Discovery Jupiter top_organic failed: {}", err),
+                Err(err) => warn!("[TOKENS] Discovery Jupiter top_organic failed: {}", err),
             }
         }
 
@@ -267,7 +267,7 @@ pub async fn discover_from_sources(
                     }
                 }
                 Err(ApiError::Disabled) => {}
-                Err(err) => warn!("[TOKENS_NEW] Discovery Jupiter top_traded failed: {}", err),
+                Err(err) => warn!("[TOKENS] Discovery Jupiter top_traded failed: {}", err),
             }
         }
 
@@ -282,7 +282,7 @@ pub async fn discover_from_sources(
                 }
                 Err(ApiError::Disabled) => {}
                 Err(err) => warn!(
-                    "[TOKENS_NEW] Discovery Jupiter top_trending failed: {}",
+                    "[TOKENS] Discovery Jupiter top_trending failed: {}",
                     err
                 ),
             }
@@ -301,7 +301,7 @@ pub async fn discover_from_sources(
                 }
             }
             Err(ApiError::Disabled) => {}
-            Err(err) => warn!("[TOKENS_NEW] Discovery CoinGecko markets failed: {}", err),
+            Err(err) => warn!("[TOKENS] Discovery CoinGecko markets failed: {}", err),
         }
     }
 
@@ -317,7 +317,7 @@ pub async fn discover_from_sources(
                 }
             }
             Err(ApiError::Disabled) => {}
-            Err(err) => warn!("[TOKENS_NEW] Discovery DeFiLlama protocols failed: {}", err),
+            Err(err) => warn!("[TOKENS] Discovery DeFiLlama protocols failed: {}", err),
         }
     }
 
@@ -344,7 +344,7 @@ pub async fn discover_from_sources(
             .collect::<Vec<_>>()
             .join(", ");
         info!(
-            "[TOKENS_NEW] Discovery aggregated {} unique mints ({})",
+            "[TOKENS] Discovery aggregated {} unique mints ({})",
             results.len(),
             summary
         );
@@ -371,7 +371,7 @@ pub async fn process_new_mints(provider: &TokenDataProvider, entries: Vec<(Strin
         });
         if let Err(err) = provider.fetch_complete_data(&mint, None).await {
             warn!(
-                "[TOKENS_NEW] Discovery follow-up fetch failed: mint={} err={}",
+                "[TOKENS] Discovery follow-up fetch failed: mint={} err={}",
                 mint, err
             );
         }

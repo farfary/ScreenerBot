@@ -5,20 +5,20 @@ pub mod fetcher;
 pub mod query;
 pub mod types;
 
-use crate::tokens_new::api::ApiClients;
-use crate::tokens_new::cache::CacheManager;
-use crate::tokens_new::provider::fetcher::Fetcher;
-use crate::tokens_new::provider::query::Query;
-use crate::tokens_new::provider::types::{
+use crate::tokens::api::ApiClients;
+use crate::tokens::cache::CacheManager;
+use crate::tokens::provider::fetcher::Fetcher;
+use crate::tokens::provider::query::Query;
+use crate::tokens::provider::types::{
     CompleteTokenData, FetchOptions, ProviderStats, TokenMetadata,
 };
-use crate::tokens_new::storage::Database;
-use crate::tokens_new::types::DataSource;
+use crate::tokens::storage::Database;
+use crate::tokens::types::DataSource;
 use chrono::Utc;
 use log::{error, info};
 use std::sync::{Arc, Mutex};
 
-const TOKENS_DB_PATH: &str = "data/tokens_new.db";
+const TOKENS_DB_PATH: &str = "data/tokens.db";
 
 pub use types::{CacheStrategy, FetchResult};
 
@@ -32,7 +32,7 @@ pub struct TokenDataProvider {
 impl TokenDataProvider {
     /// Create new provider instance
     pub async fn new() -> Result<Self, String> {
-        info!("[TOKENS_NEW] Initializing TokenDataProvider...");
+        info!("[TOKENS] Initializing TokenDataProvider...");
 
         // Get database path from config
         let db_path = TOKENS_DB_PATH;
@@ -41,7 +41,7 @@ impl TokenDataProvider {
         let database = Arc::new(Database::new(db_path)?);
 
         // Initialize cache
-        let cache_config = crate::tokens_new::cache::CacheConfig::from_global();
+        let cache_config = crate::tokens::cache::CacheConfig::from_global();
         let cache = Arc::new(CacheManager::new(cache_config));
 
         // Initialize API clients
@@ -55,7 +55,7 @@ impl TokenDataProvider {
         ));
         let query = Arc::new(Query::new(Arc::clone(&database)));
 
-        info!("[TOKENS_NEW] TokenDataProvider initialized successfully");
+        info!("[TOKENS] TokenDataProvider initialized successfully");
 
         Ok(Self {
             fetcher,
@@ -73,7 +73,7 @@ impl TokenDataProvider {
         let options = options.unwrap_or_default();
         let fetch_start = Utc::now();
 
-        info!("[TOKENS_NEW] Fetching complete data for mint={}", mint);
+        info!("[TOKENS] Fetching complete data for mint={}", mint);
 
         let mut dexscreener_pools = Vec::new();
         let mut geckoterminal_pools = Vec::new();
@@ -105,7 +105,7 @@ impl TokenDataProvider {
                     }
                 }
                 Err(e) => {
-                    error!("[TOKENS_NEW] Failed to fetch DexScreener data: {}", e);
+                    error!("[TOKENS] Failed to fetch DexScreener data: {}", e);
                     self.increment_errors();
                 }
             }
@@ -127,7 +127,7 @@ impl TokenDataProvider {
                     // Metadata will come from Rugcheck or DexScreener
                 }
                 Err(e) => {
-                    error!("[TOKENS_NEW] Failed to fetch GeckoTerminal data: {}", e);
+                    error!("[TOKENS] Failed to fetch GeckoTerminal data: {}", e);
                     self.increment_errors();
                 }
             }
@@ -154,7 +154,7 @@ impl TokenDataProvider {
                     );
                 }
                 Err(e) => {
-                    error!("[TOKENS_NEW] Failed to fetch Rugcheck data: {}", e);
+                    error!("[TOKENS] Failed to fetch Rugcheck data: {}", e);
                     self.increment_errors();
                 }
             }
@@ -187,7 +187,7 @@ impl TokenDataProvider {
         }
 
         info!(
-            "[TOKENS_NEW] Fetched complete data for mint={}: {} sources, {} cache hits, {} cache misses",
+            "[TOKENS] Fetched complete data for mint={}: {} sources, {} cache hits, {} cache misses",
             mint,
             sources_used.len(),
             cache_hits.len(),

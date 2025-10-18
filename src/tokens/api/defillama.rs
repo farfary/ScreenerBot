@@ -8,7 +8,7 @@
 use super::client::HttpClient;
 use super::defillama_types::*;
 use super::stats::ApiStatsTracker;
-use crate::tokens_new::types::ApiError;
+use crate::tokens::types::ApiError;
 use std::sync::Arc;
 use std::time::Instant;
 

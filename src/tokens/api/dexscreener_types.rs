@@ -1,5 +1,5 @@
 /// DexScreener API response types
-use crate::tokens_new::types::DexScreenerPool;
+use crate::tokens::types::DexScreenerPool;
 use serde::{Deserialize, Serialize};
 
 // ============================================================================

@@ -10,7 +10,7 @@
 use super::client::{HttpClient, RateLimiter};
 use super::rugcheck_types::*;
 use super::stats::ApiStatsTracker;
-use crate::tokens_new::types::{ApiError, RugcheckHolder, RugcheckInfo, RugcheckRisk};
+use crate::tokens::types::{ApiError, RugcheckHolder, RugcheckInfo, RugcheckRisk};
 use chrono::Utc;
 use std::sync::Arc;
 use std::time::Instant;

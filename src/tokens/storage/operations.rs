@@ -1,7 +1,7 @@
 // Database CRUD operations for all token data tables
 
-use crate::tokens_new::storage::database::Database;
-use crate::tokens_new::types::{DataSource, DexScreenerPool, GeckoTerminalPool, RugcheckInfo};
+use crate::tokens::storage::database::Database;
+use crate::tokens::types::{DataSource, DexScreenerPool, GeckoTerminalPool, RugcheckInfo};
 use chrono::Utc;
 use log::{debug, error, warn};
 use rusqlite::{params, Result as SqliteResult, Row};
@@ -36,7 +36,7 @@ pub fn upsert_token_metadata(
     )
     .map_err(|e| format!("Failed to upsert token metadata: {}", e))?;
 
-    debug!("[TOKENS_NEW] Upserted token metadata: mint={}", mint);
+    debug!("[TOKENS] Upserted token metadata: mint={}", mint);
 
     Ok(())
 }
@@ -136,7 +136,7 @@ pub fn save_dexscreener_pools(
     }
 
     debug!(
-        "[TOKENS_NEW] Saved {} DexScreener pools for mint={}",
+        "[TOKENS] Saved {} DexScreener pools for mint={}",
         pools.len(),
         mint
     );
@@ -243,7 +243,7 @@ pub fn save_geckoterminal_pools(
     }
 
     debug!(
-        "[TOKENS_NEW] Saved {} GeckoTerminal pools for mint={}",
+        "[TOKENS] Saved {} GeckoTerminal pools for mint={}",
         pools.len(),
         mint
     );
@@ -287,7 +287,7 @@ pub fn save_rugcheck_info(db: &Database, mint: &str, info: &RugcheckInfo) -> Res
     )
     .map_err(|e| format!("Failed to save Rugcheck info: {}", e))?;
 
-    debug!("[TOKENS_NEW] Saved Rugcheck info for mint={}", mint);
+    debug!("[TOKENS] Saved Rugcheck info for mint={}", mint);
 
     Ok(())
 }
@@ -356,7 +356,7 @@ pub fn get_token_metadata(db: &Database, mint: &str) -> Result<Option<TokenMetad
 }
 
 // TokenMetadata defined in query module, re-use that type
-use crate::tokens_new::provider::query::TokenMetadata;
+use crate::tokens::provider::query::TokenMetadata;
 
 /// Get DexScreener pools for a token
 pub fn get_dexscreener_pools(db: &Database, mint: &str) -> Result<Vec<DexScreenerPool>, String> {
@@ -377,7 +377,7 @@ pub fn get_dexscreener_pools(db: &Database, mint: &str) -> Result<Vec<DexScreene
     for row_result in rows {
         match row_result {
             Ok(pool) => pools.push(pool),
-            Err(e) => warn!("[TOKENS_NEW] Failed to parse DexScreener pool row: {}", e),
+            Err(e) => warn!("[TOKENS] Failed to parse DexScreener pool row: {}", e),
         }
     }
 
@@ -408,7 +408,7 @@ pub fn get_geckoterminal_pools(
     for row_result in rows {
         match row_result {
             Ok(pool) => pools.push(pool),
-            Err(e) => warn!("[TOKENS_NEW] Failed to parse GeckoTerminal pool row: {}", e),
+            Err(e) => warn!("[TOKENS] Failed to parse GeckoTerminal pool row: {}", e),
         }
     }
 

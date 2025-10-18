@@ -1,4 +1,4 @@
-// tokens_new/store.rs
+// tokens/store.rs
 // In-memory token snapshots for fast access by other modules
 
 use std::collections::HashMap;
@@ -6,8 +6,8 @@ use std::sync::{Arc, RwLock};
 
 use chrono::{DateTime, Utc};
 
-use crate::tokens_new::priorities::Priority;
-use crate::tokens_new::types::DataSource;
+use crate::tokens::priorities::Priority;
+use crate::tokens::types::DataSource;
 
 #[derive(Debug, Clone, Default)]
 pub struct BestPoolSummary {

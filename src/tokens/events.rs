@@ -1,4 +1,4 @@
-// tokens_new/events.rs
+// tokens/events.rs
 // Lightweight internal event bus for token updates
 
 use chrono::{DateTime, Utc};

@@ -1,6 +1,6 @@
 // Database connection management and initialization
 
-use crate::tokens_new::storage::schema::{PERFORMANCE_PRAGMAS, SCHEMA_STATEMENTS};
+use crate::tokens::storage::schema::{PERFORMANCE_PRAGMAS, SCHEMA_STATEMENTS};
 use log::{error, info};
 use rusqlite::{Connection, Result as SqliteResult};
 use std::path::Path;
@@ -17,7 +17,7 @@ impl Database {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, String> {
         let db_path = path.as_ref().to_string_lossy().to_string();
 
-        info!("[TOKENS_NEW] Opening database: {}", db_path);
+        info!("[TOKENS] Opening database: {}", db_path);
 
         let conn =
             Connection::open(&path).map_err(|e| format!("Failed to open database: {}", e))?;
@@ -36,7 +36,7 @@ impl Database {
         // Initialize schema
         db.initialize_schema()?;
 
-        info!("[TOKENS_NEW] Database initialized: {}", db_path);
+        info!("[TOKENS] Database initialized: {}", db_path);
 
         Ok(db)
     }
@@ -48,14 +48,14 @@ impl Database {
             .lock()
             .map_err(|e| format!("Failed to lock connection: {}", e))?;
 
-        info!("[TOKENS_NEW] Initializing database schema...");
+        info!("[TOKENS] Initializing database schema...");
 
         for (i, statement) in SCHEMA_STATEMENTS.iter().enumerate() {
             conn.execute(statement, [])
                 .map_err(|e| format!("Failed to execute schema statement {}: {}", i, e))?;
         }
 
-        info!("[TOKENS_NEW] Schema initialization complete");
+        info!("[TOKENS] Schema initialization complete");
 
         Ok(())
     }
@@ -133,7 +133,7 @@ impl Database {
 
     /// Vacuum database to reclaim space
     pub fn vacuum(&self) -> Result<(), String> {
-        info!("[TOKENS_NEW] Vacuuming database...");
+        info!("[TOKENS] Vacuuming database...");
 
         let conn = self
             .conn
@@ -143,7 +143,7 @@ impl Database {
         conn.execute("VACUUM", [])
             .map_err(|e| format!("Failed to vacuum database: {}", e))?;
 
-        info!("[TOKENS_NEW] Vacuum complete");
+        info!("[TOKENS] Vacuum complete");
 
         Ok(())
     }

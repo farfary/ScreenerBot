@@ -102,7 +102,6 @@ fn register_all_services(manager: &mut ServiceManager) {
     manager.register(Box::new(EventsService));
     manager.register(Box::new(TokenStoreService::new()));
     manager.register(Box::new(TransactionsService));
-    manager.register(Box::new(BlacklistService));
     manager.register(Box::new(SolPriceService));
 
     // Pool services (4 sub-services + 1 helper coordinator)
@@ -112,12 +111,10 @@ fn register_all_services(manager: &mut ServiceManager) {
     manager.register(Box::new(PoolAnalyzerService)); // 103
     manager.register(Box::new(PoolsService)); // 35 - helper tasks (health, cleanup)
 
-    // Token services (2 sub-services, no empty coordinator)
-    manager.register(Box::new(TokenDiscoveryService)); // 41 - includes initialization
-    manager.register(Box::new(TokenMonitoringService)); // 42
+    // Centralized Tokens service (replaces token discovery/monitoring/security/blacklist services)
+    manager.register(Box::new(TokensService::default()));
 
     // Other application services
-    manager.register(Box::new(SecurityService));
     manager.register(Box::new(FilteringService::new()));
     manager.register(Box::new(OhlcvService));
     manager.register(Box::new(PositionsService));
@@ -132,7 +129,7 @@ fn register_all_services(manager: &mut ServiceManager) {
     log(
         LogTag::System,
         "INFO",
-        "All services registered (24 total - includes TokenStoreService)",
+        "All services registered (20 total - centralized TokensService)",
     );
 }
 

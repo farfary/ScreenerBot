@@ -1,5 +1,5 @@
 /// Cache entry types
-use crate::tokens_new::types::DataSource;
+use crate::tokens::types::DataSource;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;

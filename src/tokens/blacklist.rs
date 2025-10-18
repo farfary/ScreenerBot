@@ -1,11 +1,11 @@
-// tokens_new/blacklist.rs
+// tokens/blacklist.rs
 // Fast in-memory blacklist with DB persistence hooks (to be wired via storage layer later)
 
 use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
 
-use crate::tokens_new::storage::database::Database;
-use crate::tokens_new::storage::operations::{list_blacklist, remove_blacklist, upsert_blacklist};
+use crate::tokens::storage::database::Database;
+use crate::tokens::storage::operations::{list_blacklist, remove_blacklist, upsert_blacklist};
 
 static BLACKLIST: std::sync::LazyLock<Arc<RwLock<HashSet<String>>>> =
     std::sync::LazyLock::new(|| Arc::new(RwLock::new(HashSet::new())));

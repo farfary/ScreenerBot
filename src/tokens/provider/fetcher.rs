@@ -1,13 +1,13 @@
 // Provider fetcher: Orchestrates data fetching from API → Cache → DB
 
-use crate::tokens_new::api::ApiClients;
-use crate::tokens_new::cache::{CacheKey, CacheManager, DataType};
-use crate::tokens_new::provider::types::{CacheStrategy, FetchOptions, FetchResult};
-use crate::tokens_new::storage::{
+use crate::tokens::api::ApiClients;
+use crate::tokens::cache::{CacheKey, CacheManager, DataType};
+use crate::tokens::provider::types::{CacheStrategy, FetchOptions, FetchResult};
+use crate::tokens::storage::{
     log_api_fetch, save_dexscreener_pools, save_geckoterminal_pools, save_rugcheck_info,
     upsert_token_metadata, Database,
 };
-use crate::tokens_new::types::{DataSource, DexScreenerPool, GeckoTerminalPool, RugcheckInfo};
+use crate::tokens::types::{DataSource, DexScreenerPool, GeckoTerminalPool, RugcheckInfo};
 use log::{debug, error, info, warn};
 use std::sync::Arc;
 use std::time::Instant;
@@ -71,7 +71,7 @@ impl Fetcher {
             || options.cache_strategy == CacheStrategy::CacheOnly
         {
             if let Some(cached) = self.cache.get::<Vec<DexScreenerPool>>(&cache_key) {
-                debug!("[TOKENS_NEW] DexScreener pools cache HIT: mint={}", mint);
+                debug!("[TOKENS] DexScreener pools cache HIT: mint={}", mint);
                 return Ok(FetchResult {
                     data: cached,
                     source: DataSource::DexScreener,
@@ -88,7 +88,7 @@ impl Fetcher {
 
         // Fetch from API
         debug!(
-            "[TOKENS_NEW] Fetching DexScreener pools from API: mint={}",
+            "[TOKENS] Fetching DexScreener pools from API: mint={}",
             mint
         );
         let pools = self.api_clients.dexscreener.fetch_pools(mint).await?;
@@ -99,7 +99,7 @@ impl Fetcher {
         // Save to database if persist enabled
         if options.persist {
             if let Err(e) = save_dexscreener_pools(&self.database, mint, &pools) {
-                error!("[TOKENS_NEW] Failed to save DexScreener pools to DB: {}", e);
+                error!("[TOKENS] Failed to save DexScreener pools to DB: {}", e);
             }
         }
 
@@ -114,7 +114,7 @@ impl Fetcher {
         );
 
         info!(
-            "[TOKENS_NEW] Fetched {} DexScreener pools for mint={} in {}ms",
+            "[TOKENS] Fetched {} DexScreener pools for mint={} in {}ms",
             pools.len(),
             mint,
             start.elapsed().as_millis()
@@ -146,7 +146,7 @@ impl Fetcher {
             || options.cache_strategy == CacheStrategy::CacheOnly
         {
             if let Some(cached) = self.cache.get::<Vec<GeckoTerminalPool>>(&cache_key) {
-                debug!("[TOKENS_NEW] GeckoTerminal pools cache HIT: mint={}", mint);
+                debug!("[TOKENS] GeckoTerminal pools cache HIT: mint={}", mint);
                 return Ok(FetchResult {
                     data: cached,
                     source: DataSource::GeckoTerminal,
@@ -163,7 +163,7 @@ impl Fetcher {
 
         // Fetch from API
         debug!(
-            "[TOKENS_NEW] Fetching GeckoTerminal pools from API: mint={}",
+            "[TOKENS] Fetching GeckoTerminal pools from API: mint={}",
             mint
         );
         let pools = self.api_clients.geckoterminal.fetch_pools(mint).await?;
@@ -175,7 +175,7 @@ impl Fetcher {
         if options.persist {
             if let Err(e) = save_geckoterminal_pools(&self.database, mint, &pools) {
                 error!(
-                    "[TOKENS_NEW] Failed to save GeckoTerminal pools to DB: {}",
+                    "[TOKENS] Failed to save GeckoTerminal pools to DB: {}",
                     e
                 );
             }
@@ -192,7 +192,7 @@ impl Fetcher {
         );
 
         info!(
-            "[TOKENS_NEW] Fetched {} GeckoTerminal pools for mint={} in {}ms",
+            "[TOKENS] Fetched {} GeckoTerminal pools for mint={} in {}ms",
             pools.len(),
             mint,
             start.elapsed().as_millis()
@@ -224,7 +224,7 @@ impl Fetcher {
             || options.cache_strategy == CacheStrategy::CacheOnly
         {
             if let Some(cached) = self.cache.get::<RugcheckInfo>(&cache_key) {
-                debug!("[TOKENS_NEW] Rugcheck info cache HIT: mint={}", mint);
+                debug!("[TOKENS] Rugcheck info cache HIT: mint={}", mint);
                 return Ok(FetchResult {
                     data: cached,
                     source: DataSource::Rugcheck,
@@ -241,7 +241,7 @@ impl Fetcher {
 
         // Fetch from API
         debug!(
-            "[TOKENS_NEW] Fetching Rugcheck info from API: mint={}",
+            "[TOKENS] Fetching Rugcheck info from API: mint={}",
             mint
         );
         let info = self.api_clients.rugcheck.fetch_report(mint).await?;
@@ -252,7 +252,7 @@ impl Fetcher {
         // Save to database if persist enabled
         if options.persist {
             if let Err(e) = save_rugcheck_info(&self.database, mint, &info) {
-                error!("[TOKENS_NEW] Failed to save Rugcheck info to DB: {}", e);
+                error!("[TOKENS] Failed to save Rugcheck info to DB: {}", e);
             }
         }
 
@@ -267,7 +267,7 @@ impl Fetcher {
         );
 
         info!(
-            "[TOKENS_NEW] Fetched Rugcheck info for mint={} in {}ms",
+            "[TOKENS] Fetched Rugcheck info for mint={} in {}ms",
             mint,
             start.elapsed().as_millis()
         );
@@ -289,7 +289,7 @@ impl Fetcher {
         decimals: Option<u8>,
     ) {
         if let Err(e) = upsert_token_metadata(&self.database, mint, symbol, name, decimals) {
-            warn!("[TOKENS_NEW] Failed to update token metadata: {}", e);
+            warn!("[TOKENS] Failed to update token metadata: {}", e);
         }
     }
 }

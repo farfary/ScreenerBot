@@ -1,6 +1,6 @@
 /// Cache configuration and TTL strategies
 use crate::config::with_config;
-use crate::tokens_new::types::DataSource;
+use crate::tokens::types::DataSource;
 use std::time::Duration;
 
 /// Cache configuration

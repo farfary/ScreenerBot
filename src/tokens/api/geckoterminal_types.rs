@@ -113,7 +113,7 @@ pub struct GeckoTerminalDexData {
 // ============================================================================
 
 impl GeckoTerminalPoolData {
-    pub fn to_pool(&self, mint: &str) -> crate::tokens_new::types::GeckoTerminalPool {
+    pub fn to_pool(&self, mint: &str) -> crate::tokens::types::GeckoTerminalPool {
         use chrono::Utc;
 
         let attrs = &self.attributes;
@@ -125,7 +125,7 @@ impl GeckoTerminalPoolData {
         let transactions = attrs.transactions.as_ref();
         let volume = attrs.volume_usd.as_ref();
 
-        crate::tokens_new::types::GeckoTerminalPool {
+        crate::tokens::types::GeckoTerminalPool {
             mint: mint.to_string(),
             pool_address: attrs.address.clone(),
             pool_name: attrs.name.clone(),

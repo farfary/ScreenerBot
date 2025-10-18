@@ -16,7 +16,7 @@
 /// 11. /tokens/info_recently_updated - Get 100 most recently updated tokens (global endpoint)
 /// 12. /networks/{network}/pools/{pool_address}/trades - Get last 300 trades in past 24h by pool
 use super::geckoterminal_types::*;
-use crate::tokens_new::types::GeckoTerminalPool;
+use crate::tokens::types::GeckoTerminalPool;
 use log::debug;
 use reqwest::Client;
 use serde::Deserialize;

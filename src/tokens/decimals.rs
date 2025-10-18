@@ -1,17 +1,17 @@
-// tokens_new/decimals.rs
+// tokens/decimals.rs
 // Decimals lookup with memory/db caching and guarded single fetches.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 
-use crate::tokens_new::provider::types::{CacheStrategy, FetchOptions};
-use crate::tokens_new::provider::TokenDataProvider;
-use crate::tokens_new::store;
-use crate::tokens_new::types::DataSource;
+use crate::tokens::provider::types::{CacheStrategy, FetchOptions};
+use crate::tokens::provider::TokenDataProvider;
+use crate::tokens::store;
+use crate::tokens::types::DataSource;
 use log::warn;
 use tokio::sync::Mutex as AsyncMutex;
 
-// Simple in-memory cache (TTL can be layered later via tokens_new/cache)
+// Simple in-memory cache (TTL can be layered later via tokens/cache)
 static DECIMALS_CACHE: std::sync::LazyLock<Arc<RwLock<HashMap<String, u8>>>> =
     std::sync::LazyLock::new(|| Arc::new(RwLock::new(HashMap::new())));
 
@@ -68,7 +68,7 @@ async fn ensure_locked(provider: &TokenDataProvider, mint: &str) -> Result<u8, S
                 cache_and_store(mint, d);
                 if let Err(e) = provider.upsert_token_metadata(mint, None, None, Some(d)) {
                     warn!(
-                        "[TOKENS_NEW] Failed to persist decimals after Rugcheck fetch: mint={} err={}",
+                        "[TOKENS] Failed to persist decimals after Rugcheck fetch: mint={} err={}",
                         mint, e
                     );
                 }
@@ -77,7 +77,7 @@ async fn ensure_locked(provider: &TokenDataProvider, mint: &str) -> Result<u8, S
         }
         Err(err) => {
             warn!(
-                "[TOKENS_NEW] Rugcheck decimals fetch failed: mint={} err={}",
+                "[TOKENS] Rugcheck decimals fetch failed: mint={} err={}",
                 mint, err
             );
         }
@@ -89,7 +89,7 @@ async fn ensure_locked(provider: &TokenDataProvider, mint: &str) -> Result<u8, S
             cache_and_store(mint, d);
             if let Err(e) = provider.upsert_token_metadata(mint, None, None, Some(d)) {
                 warn!(
-                    "[TOKENS_NEW] Failed to persist decimals after chain fetch: mint={} err={}",
+                    "[TOKENS] Failed to persist decimals after chain fetch: mint={} err={}",
                     mint, e
                 );
             }

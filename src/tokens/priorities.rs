@@ -1,4 +1,4 @@
-// tokens_new/priorities.rs
+// tokens/priorities.rs
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Priority {
