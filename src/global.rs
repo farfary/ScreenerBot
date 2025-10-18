@@ -15,7 +15,7 @@ pub use crate::arguments::{
     is_debug_pool_decoders_enabled, is_debug_pool_discovery_enabled, is_debug_pool_monitor_enabled,
     is_debug_pool_prices_enabled, is_debug_pool_service_enabled, is_debug_pool_tokens_enabled,
     is_debug_price_service_enabled, is_debug_profit_enabled, is_debug_rpc_enabled,
-    is_debug_sol_price_enabled, is_debug_summary_enabled, is_debug_swaps_enabled,
+    is_debug_sol_price_enabled, is_debug_swaps_enabled,
     is_debug_trader_enabled, is_debug_transactions_enabled, is_debug_wallet_enabled,
     is_debug_webserver_enabled, is_dry_run_enabled, print_debug_info, set_cmd_args, CMD_ARGS,
 };

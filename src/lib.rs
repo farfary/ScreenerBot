@@ -19,7 +19,6 @@ pub mod rpc;
 pub mod run;
 pub mod services;
 pub mod sol_price;
-pub mod summary;
 pub mod swaps;
 pub mod tokens;
 pub mod trader;

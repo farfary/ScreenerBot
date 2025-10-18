@@ -1557,37 +1557,6 @@ config_struct! {
 // SUMMARY DISPLAY
 // ============================================================================
 
-config_struct! {
-    /// Summary display configuration
-    pub struct SummaryConfig {
-        /// Display refresh interval (seconds)
-        #[metadata(field_metadata! {
-            label: "Display Interval",
-            hint: "Seconds between summary display updates",
-            min: 5,
-            max: 300,
-            step: 5,
-            unit: "seconds",
-            impact: "critical",
-            category: "Display",
-        })]
-        summary_display_interval_secs: u64 = 15,
-
-        /// Maximum recent closed positions to display
-        #[metadata(field_metadata! {
-            label: "Max Recent Closed",
-            hint: "Number of recent closed positions to display",
-            min: 5,
-            max: 100,
-            step: 5,
-            unit: "positions",
-            impact: "low",
-            category: "Display",
-        })]
-        max_recent_closed_positions: usize = 20,
-    }
-}
-
 // ============================================================================
 // EVENTS SYSTEM
 // ============================================================================
@@ -1918,8 +1887,6 @@ config_struct! {
         /// SOL price service configuration
         sol_price: SolPriceConfig = SolPriceConfig::default(),
 
-        /// Summary display configuration
-        summary: SummaryConfig = SummaryConfig::default(),
 
         /// Events system configuration
         events: EventsConfig = EventsConfig::default(),

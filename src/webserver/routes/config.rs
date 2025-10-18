@@ -36,7 +36,6 @@ pub struct FullConfigResponse {
     pub swaps: config::SwapsConfig,
     pub tokens: config::TokensConfig,
     pub sol_price: config::SolPriceConfig,
-    pub summary: config::SummaryConfig,
     pub events: config::EventsConfig,
     pub webserver: config::WebserverConfig,
     pub services: config::ServicesConfig,
@@ -100,10 +99,6 @@ pub fn routes() -> Router<Arc<AppState>> {
             patch(patch_any_config::<config::SolPriceConfig>),
         )
         .route(
-            "/config/summary",
-            patch(patch_any_config::<config::SummaryConfig>),
-        )
-        .route(
             "/config/events",
             patch(patch_any_config::<config::EventsConfig>),
         )
@@ -143,7 +138,6 @@ async fn get_full_config() -> Response {
         swaps: cfg.swaps.clone(),
         tokens: cfg.tokens.clone(),
         sol_price: cfg.sol_price.clone(),
-        summary: cfg.summary.clone(),
         events: cfg.events.clone(),
         webserver: cfg.webserver.clone(),
         services: cfg.services.clone(),
@@ -322,7 +316,6 @@ where
             "TokensConfig" => serde_json::to_value(&cfg.tokens).ok(),
             "RpcConfig" => serde_json::to_value(&cfg.rpc).ok(),
             "SolPriceConfig" => serde_json::to_value(&cfg.sol_price).ok(),
-            "SummaryConfig" => serde_json::to_value(&cfg.summary).ok(),
             "EventsConfig" => serde_json::to_value(&cfg.events).ok(),
             "WebserverConfig" => serde_json::to_value(&cfg.webserver).ok(),
             "ServicesConfig" => serde_json::to_value(&cfg.services).ok(),
@@ -414,16 +407,6 @@ where
                 config::update_config_section(
                     |cfg| {
                         cfg.sol_price = new_config;
-                    },
-                    true,
-                )?;
-            }
-            "SummaryConfig" => {
-                let new_config: config::SummaryConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid SummaryConfig: {}", e))?;
-                config::update_config_section(
-                    |cfg| {
-                        cfg.summary = new_config;
                     },
                     true,
                 )?;

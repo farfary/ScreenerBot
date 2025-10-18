@@ -178,16 +178,6 @@ pub fn is_debug_decimals_enabled() -> bool {
     has_arg("--debug-decimals")
 }
 
-/// Summary module debug mode
-pub fn is_debug_summary_enabled() -> bool {
-    has_arg("--debug-summary")
-}
-
-/// Summary logging debug mode - writes summary tables to log file
-pub fn is_debug_summary_logging_enabled() -> bool {
-    has_arg("--debug-summary-logging")
-}
-
 /// Transactions module debug mode
 pub fn is_debug_transactions_enabled() -> bool {
     has_arg("--debug-transactions")
@@ -298,11 +288,6 @@ pub fn get_max_exit_retries() -> u32 {
     3
 }
 
-/// Summary mode - enables console output from summary module
-pub fn is_summary_enabled() -> bool {
-    has_arg("--summary")
-}
-
 /// Run mode - enables actual bot execution (required to start services)
 pub fn is_run_enabled() -> bool {
     has_arg("--run")
@@ -346,7 +331,6 @@ pub fn print_help() {
     println!("    --add-to-blacklist <mint> Add a token mint address to blacklist");
     println!("    --help, -h                Show this help message");
     println!("    --dry-run                 Simulate trading without executing transactions");
-    println!("    --summary                 Enable console output from summary module");
     println!();
     println!("DEBUG FLAGS:");
     println!("    --debug-api               API calls debug mode");
@@ -367,8 +351,6 @@ pub fn print_help() {
     println!("    --debug-positions         Positions module debug mode");
     println!("    --debug-profit            Profit calculation debug mode");
     println!("    --debug-rpc               RPC operations debug mode");
-    println!("    --debug-summary           Summary module debug mode");
-    println!("    --debug-summary-logging   Write summary tables to log file");
     println!("    --debug-swaps             Swap operations debug mode");
     println!("    --debug-system            System operations debug mode");
     println!("    --debug-security          Security operations debug mode");
@@ -381,7 +363,6 @@ pub fn print_help() {
     println!("EXAMPLES:");
     println!("    screenerbot --run                           # Start bot normally");
     println!("    screenerbot --run --dry-run                 # Start bot in simulation mode");
-    println!("    screenerbot --run --summary                 # Start bot with console summary");
     println!("    screenerbot --run --debug-trader --dry-run  # Debug trader with simulation");
     println!("    screenerbot --clear-all                     # Clear all data and reset");
     println!("    screenerbot --positions-sell-all            # Sell all open positions");
@@ -421,8 +402,6 @@ pub fn is_any_debug_enabled() -> bool {
         || is_debug_wallet_enabled()
         || is_debug_swaps_enabled()
         || is_debug_decimals_enabled()
-        || is_debug_summary_enabled()
-        || is_debug_summary_logging_enabled()
         || is_debug_transactions_enabled()
         || is_debug_websocket_enabled()
         || is_debug_rpc_enabled()
@@ -497,12 +476,6 @@ pub fn get_enabled_debug_modes() -> Vec<&'static str> {
     if is_debug_decimals_enabled() {
         modes.push("decimals");
     }
-    if is_debug_summary_enabled() {
-        modes.push("summary");
-    }
-    if is_debug_summary_logging_enabled() {
-        modes.push("summary-logging");
-    }
     if is_debug_transactions_enabled() {
         modes.push("transactions");
     }
@@ -529,9 +502,6 @@ pub fn get_enabled_debug_modes() -> Vec<&'static str> {
     }
     if is_dry_run_enabled() {
         modes.push("dry-run");
-    }
-    if is_summary_enabled() {
-        modes.push("summary");
     }
     if is_clear_all_enabled() {
         modes.push("clear-all");

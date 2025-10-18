@@ -202,11 +202,6 @@ fn validate_arguments() -> Result<(), String> {
         return Err("--dry-run can only be used with --run mode".to_string());
     }
 
-    // Validate that --summary is only used with --run
-    if screenerbot::arguments::is_summary_enabled() && !is_run_enabled() {
-        return Err("--summary can only be used with --run mode".to_string());
-    }
-
     Ok(())
 }
 

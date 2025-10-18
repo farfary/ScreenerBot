@@ -238,7 +238,6 @@ pub fn collect_config_metadata() -> ConfigMetadata {
     map.insert("swaps", super::SwapsConfig::field_metadata());
     map.insert("tokens", super::TokensConfig::field_metadata());
     map.insert("sol_price", super::SolPriceConfig::field_metadata());
-    map.insert("summary", super::SummaryConfig::field_metadata());
     map.insert("events", super::EventsConfig::field_metadata());
     map.insert("webserver", super::WebserverConfig::field_metadata());
     map.insert("services", super::ServicesConfig::field_metadata());

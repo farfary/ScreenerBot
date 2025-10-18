@@ -89,7 +89,7 @@ pub use metadata::{
 
 pub use schemas::{
     Config, EventsConfig, FilteringConfig, MonitoringConfig, OhlcvConfig, PositionsConfig,
-    RpcConfig, ServicesConfig, SolPriceConfig, SummaryConfig, SwapsConfig, TokensConfig,
+    RpcConfig, ServicesConfig, SolPriceConfig, SwapsConfig, TokensConfig,
     TraderConfig, WebserverConfig,
 };
 
