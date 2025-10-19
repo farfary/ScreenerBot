@@ -92,7 +92,6 @@ impl ApiStatsTracker {
 
     pub async fn record_error(&self, error_message: String) {
         *self.last_error.write().await = Some((Utc::now(), error_message));
-        self.failed_requests.fetch_add(1, Ordering::Relaxed);
     }
 
     pub fn record_cache_hit(&self) {

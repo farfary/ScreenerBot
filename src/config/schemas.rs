@@ -1521,6 +1521,7 @@ config_struct! {
     pub struct CoingeckoDiscoveryConfig {
         enabled: bool = false,
         markets_enabled: bool = false,
+        api_key: Option<String> = None,
     }
 }
 

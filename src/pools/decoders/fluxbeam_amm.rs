@@ -6,9 +6,9 @@ use super::super::utils::{is_sol_mint, WRAPPED_SOL_MINT};
 /// Based on analysis of pool structure at 324 bytes with standard AMM vault ratio pricing.
 use super::{AccountData, PoolDecoder};
 use crate::arguments::is_debug_pool_decoders_enabled;
+use crate::constants::SOL_DECIMALS;
 use crate::logger::{log, LogTag};
 use crate::pools::types::{PriceResult, ProgramKind, FLUXBEAM_AMM_PROGRAM_ID};
-use crate::constants::SOL_DECIMALS;
 use crate::tokens::get_cached_decimals;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;

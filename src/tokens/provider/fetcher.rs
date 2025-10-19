@@ -1,10 +1,10 @@
 // Provider fetcher: Orchestrates data fetching from API → Cache → DB
 
+use crate::apis::rugcheck_types::RugcheckInfo;
 use crate::apis::ApiManager;
+use crate::logger::{log, LogTag};
 use crate::tokens::cache::{CacheKey, CacheManager, DataType};
 use crate::tokens::provider::types::{CacheStrategy, FetchOptions, FetchResult};
-use crate::logger::{log, LogTag};
-use crate::apis::rugcheck_types::RugcheckInfo;
 use crate::tokens::storage::{save_rugcheck_info, upsert_token_metadata, Database};
 use crate::tokens::types::DataSource;
 use std::sync::Arc;
@@ -69,7 +69,11 @@ impl Fetcher {
             || options.cache_strategy == CacheStrategy::CacheOnly
         {
             if let Some(cached) = self.cache.get::<RugcheckInfo>(&cache_key) {
-                log(LogTag::Tokens, "DEBUG", &format!("Rugcheck info cache HIT: mint={}", mint));
+                log(
+                    LogTag::Tokens,
+                    "DEBUG",
+                    &format!("Rugcheck info cache HIT: mint={}", mint),
+                );
                 return Ok(FetchResult {
                     data: cached,
                     source: DataSource::Rugcheck,
@@ -85,7 +89,11 @@ impl Fetcher {
         }
 
         // Fetch from API
-        log(LogTag::Tokens, "DEBUG", &format!("Fetching Rugcheck info from API: mint={}", mint));
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            &format!("Fetching Rugcheck info from API: mint={}", mint),
+        );
         let info = self.api_manager.rugcheck.fetch_report(mint).await?;
 
         // Save to cache
@@ -94,11 +102,23 @@ impl Fetcher {
         // Save to database if persist enabled
         if options.persist {
             if let Err(e) = save_rugcheck_info(&self.database, mint, &info) {
-                log(LogTag::Tokens, "ERROR", &format!("Failed to save Rugcheck info to DB: {}", e));
+                log(
+                    LogTag::Tokens,
+                    "ERROR",
+                    &format!("Failed to save Rugcheck info to DB: {}", e),
+                );
             }
         }
 
-        log(LogTag::Tokens, "INFO", &format!("Fetched Rugcheck info for mint={} in {}ms", mint, start.elapsed().as_millis()));
+        log(
+            LogTag::Tokens,
+            "INFO",
+            &format!(
+                "Fetched Rugcheck info for mint={} in {}ms",
+                mint,
+                start.elapsed().as_millis()
+            ),
+        );
 
         Ok(FetchResult {
             data: info,
@@ -117,7 +137,11 @@ impl Fetcher {
         decimals: Option<u8>,
     ) {
         if let Err(e) = upsert_token_metadata(&self.database, mint, symbol, name, decimals) {
-            log(LogTag::Tokens, "WARN", &format!("Failed to update token metadata: {}", e));
+            log(
+                LogTag::Tokens,
+                "WARN",
+                &format!("Failed to update token metadata: {}", e),
+            );
         }
     }
 }

@@ -8,8 +8,8 @@ use crate::global::is_debug_filtering_enabled;
 use crate::logger::{log, LogTag};
 use crate::positions;
 use crate::tokens::get_cached_decimals;
-use crate::tokens::types::Token;
 use crate::tokens::store::all_tokens;
+use crate::tokens::types::Token;
 
 use super::types::{
     FilteringSnapshot, PassedToken, RejectedToken, TokenEntry, MAX_DECISION_HISTORY,
@@ -96,7 +96,10 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
     };
     let open_pos_set: std::collections::HashSet<String> = {
         // Preferred: positions::get_open_mints()
-        crate::positions::get_open_mints().await.into_iter().collect()
+        crate::positions::get_open_mints()
+            .await
+            .into_iter()
+            .collect()
     };
     let ohlcv_set: std::collections::HashSet<String> = {
         // Preferred: ohlcvs::get_mints_with_data(&mints)
@@ -260,10 +263,7 @@ fn check_basic_token_info(
 
     if config.dexscreener.require_website_url {
         // Consider websites list (metadata) as presence of a website
-        let has_website = token
-            .websites
-            .iter()
-            .any(|w| !w.url.trim().is_empty());
+        let has_website = token.websites.iter().any(|w| !w.url.trim().is_empty());
         if !has_website {
             return Some(FilterRejectionReason::DexScreener_EmptyWebsiteUrl);
         }

@@ -11,20 +11,20 @@
 /// 6. /token-boosts/latest/v1 - Get latest boosted tokens
 /// 7. /token-boosts/top/v1 - Get top boosted tokens  
 /// 8. /orders/v1/{chainId}/{tokenAddress} - Get orders for a token
-
 pub mod types;
 
 use self::types::{
-    DexScreenerPool, DexScreenerPairRaw, PairResponse, PairsResponse,
-    TokenProfile, TokenBoostTop, TokenBoostLatest, TokenInfo, TokenOrder, ChainInfo
+    ChainInfo, DexScreenerPairRaw, DexScreenerPool, PairResponse, PairsResponse, TokenBoostLatest,
+    TokenBoostTop, TokenInfo, TokenOrder, TokenProfile,
 };
+use crate::apis::client::RateLimiter;
+use crate::apis::stats::ApiStatsTracker;
 use crate::logger::{log, LogTag};
-use crate::tokens::types::ApiError;
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
+use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::Semaphore;
+use std::time::{Duration, Instant};
 
 // ============================================================================
 // API CONFIGURATION - Hardcoded for DexScreener API
@@ -51,22 +51,106 @@ pub const RATE_LIMIT_PER_MINUTE: usize = 300;
 /// Complete DexScreener API client
 pub struct DexScreenerClient {
     client: Client,
-    rate_limiter: Arc<Semaphore>,
+    rate_limiter: RateLimiter,
+    stats: Arc<ApiStatsTracker>,
     timeout: Duration,
+    enabled: bool,
 }
 
 impl DexScreenerClient {
-    pub fn new(rate_limit: usize, timeout_seconds: u64) -> Self {
-        Self {
-            client: Client::new(),
-            rate_limiter: Arc::new(Semaphore::new(rate_limit)),
-            timeout: Duration::from_secs(timeout_seconds),
+    pub fn new(enabled: bool, rate_limit: usize, timeout_seconds: u64) -> Result<Self, String> {
+        if timeout_seconds == 0 {
+            return Err("Timeout must be greater than zero".to_string());
         }
+
+        Ok(Self {
+            client: Client::new(),
+            rate_limiter: RateLimiter::new(rate_limit),
+            stats: Arc::new(ApiStatsTracker::new()),
+            timeout: Duration::from_secs(timeout_seconds),
+            enabled,
+        })
     }
 
     /// Get API stats (placeholder - DexScreener uses direct HTTP without stats tracking)
     pub async fn get_stats(&self) -> crate::apis::stats::ApiStats {
-        crate::apis::stats::ApiStats::default()
+        self.stats.get_stats().await
+    }
+
+    fn ensure_enabled(&self, endpoint: &str) -> Result<(), String> {
+        if self.enabled {
+            Ok(())
+        } else {
+            Err(format!(
+                "DexScreener client disabled via configuration (endpoint={})",
+                endpoint
+            ))
+        }
+    }
+
+    async fn execute_request(
+        &self,
+        endpoint: &str,
+        builder: reqwest::RequestBuilder,
+    ) -> Result<(reqwest::Response, f64), String> {
+        self.ensure_enabled(endpoint)?;
+
+        let guard = self
+            .rate_limiter
+            .acquire()
+            .await
+            .map_err(|e| format!("Rate limiter error: {}", e))?;
+
+        let start = Instant::now();
+        let response_result = builder.timeout(self.timeout).send().await;
+        drop(guard);
+        let elapsed = start.elapsed().as_millis() as f64;
+
+        match response_result {
+            Ok(response) => Ok((response, elapsed)),
+            Err(err) => {
+                self.stats.record_request(false, elapsed).await;
+                self.stats
+                    .record_error(format!("{} request failed: {}", endpoint, err))
+                    .await;
+                Err(format!("Request failed: {}", err))
+            }
+        }
+    }
+
+    async fn get_json<T>(
+        &self,
+        endpoint: &str,
+        builder: reqwest::RequestBuilder,
+    ) -> Result<T, String>
+    where
+        T: DeserializeOwned,
+    {
+        let (mut response, elapsed) = self.execute_request(endpoint, builder).await?;
+        let status = response.status();
+
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            self.stats.record_request(false, elapsed).await;
+            self.stats
+                .record_error(format!("{} HTTP {}: {}", endpoint, status, body))
+                .await;
+            return Err(format!("DexScreener API error {}: {}", status, body));
+        }
+
+        match response.json::<T>().await {
+            Ok(value) => {
+                self.stats.record_request(true, elapsed).await;
+                Ok(value)
+            }
+            Err(err) => {
+                self.stats.record_request(false, elapsed).await;
+                self.stats
+                    .record_error(format!("{} parse error: {}", endpoint, err))
+                    .await;
+                Err(format!("Failed to parse response: {}", err))
+            }
+        }
     }
 
     /// PRIMARY METHOD: Fetch ALL pools for a single token address
@@ -87,43 +171,20 @@ impl DexScreenerClient {
         chain_id: Option<&str>,
     ) -> Result<Vec<DexScreenerPool>, String> {
         let chain = chain_id.unwrap_or(DEFAULT_CHAIN_ID);
-        let permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {}", e))?;
-
-        let url = format!(
-            "{}/token-pairs/v1/{}/{}",
-            DEXSCREENER_BASE_URL, chain, token_address
-        );
+        let endpoint = format!("token-pairs/v1/{}/{}", chain, token_address);
+        let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
 
         log(
             LogTag::Tokens,
             "DEBUG",
-            &format!("[DEXSCREENER] Fetching token pools: token={}, chain={}", token_address, chain)
+            &format!(
+                "[DEXSCREENER] Fetching token pools: token={}, chain={}",
+                token_address, chain
+            ),
         );
 
-        let response = self
-            .client
-            .get(&url)
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        drop(permit);
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("DexScreener API error {}: {}", status, error_text));
-        }
-
-        let pairs: Vec<DexScreenerPairRaw> = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
+        let pairs: Vec<DexScreenerPairRaw> =
+            self.get_json(&endpoint, self.client.get(&url)).await?;
 
         Ok(pairs.into_iter().map(|p| p.to_pool()).collect())
     }
@@ -158,44 +219,21 @@ impl DexScreenerClient {
         }
 
         let chain = chain_id.unwrap_or(DEFAULT_CHAIN_ID);
-        let permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {}", e))?;
-
         let address_list = addresses.join(",");
-        let url = format!(
-            "{}/tokens/v1/{}/{}",
-            DEXSCREENER_BASE_URL, chain, address_list
-        );
+        let endpoint = format!("tokens/v1/{}/{}", chain, address_list);
+        let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
 
         log(
             LogTag::Tokens,
             "DEBUG",
-            &format!("[DEXSCREENER] Fetching batch tokens: {} addresses, chain={}", addresses.len(), chain)
+            &format!(
+                "[DEXSCREENER] Fetching batch tokens: {} addresses, chain={}",
+                addresses.len(),
+                chain
+            ),
         );
-
-        let response = self
-            .client
-            .get(&url)
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        drop(permit);
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("DexScreener API error {}: {}", status, error_text));
-        }
-
-        let pairs: Vec<DexScreenerPairRaw> = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
+        let pairs: Vec<DexScreenerPairRaw> =
+            self.get_json(&endpoint, self.client.get(&url)).await?;
 
         Ok(pairs.into_iter().map(|p| p.to_pool()).collect())
     }
@@ -210,43 +248,18 @@ impl DexScreenerClient {
         chain_id: &str,
         pair_address: &str,
     ) -> Result<Option<DexScreenerPool>, String> {
-        let permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {}", e))?;
-
-        let url = format!(
-            "{}/latest/dex/pairs/{}/{}",
-            DEXSCREENER_BASE_URL, chain_id, pair_address
-        );
+        let endpoint = format!("latest/dex/pairs/{}/{}", chain_id, pair_address);
+        let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
 
         log(
             LogTag::Tokens,
             "DEBUG",
-            &format!("[DEXSCREENER] Fetching pair: pair={}, chain={}", pair_address, chain_id)
+            &format!(
+                "[DEXSCREENER] Fetching pair: pair={}, chain={}",
+                pair_address, chain_id
+            ),
         );
-
-        let response = self
-            .client
-            .get(&url)
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        drop(permit);
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("DexScreener API error {}: {}", status, error_text));
-        }
-
-        let data: PairResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
+        let data: PairResponse = self.get_json(&endpoint, self.client.get(&url)).await?;
 
         Ok(data.pair.map(|p| p.to_pool()))
     }
@@ -263,78 +276,70 @@ impl DexScreenerClient {
             return Err("Query cannot be empty".to_string());
         }
 
-        let permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {}", e))?;
+        let endpoint = "latest/dex/search";
+        let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
 
-        let url = format!("{}/latest/dex/search", DEXSCREENER_BASE_URL);
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            &format!("[DEXSCREENER] Searching pairs: query={}", query),
+        );
+        let builder = self.client.get(&url).query(&[("q", query)]);
 
-        log(LogTag::Tokens, "DEBUG", &format!("[DEXSCREENER] Searching pairs: query={}", query));
-
-        let response = self
-            .client
-            .get(&url)
-            .query(&[("q", query)])
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        drop(permit);
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("DexScreener API error {}: {}", status, error_text));
-        }
-
-        let data: PairsResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
+        let data: PairsResponse = self.get_json(endpoint, builder).await?;
 
         Ok(data.pairs.into_iter().map(|p| p.to_pool()).collect())
     }
 
     /// Get latest token profiles (newest listings)
     pub async fn get_latest_profiles(&self) -> Result<Vec<TokenProfile>, String> {
-        let permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {}", e))?;
+        let endpoint = "token-profiles/latest/v1";
+        let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
 
-        let url = format!("{}/token-profiles/latest/v1", DEXSCREENER_BASE_URL);
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            "[DEXSCREENER] Fetching latest token profiles",
+        );
 
-        log(LogTag::Tokens, "DEBUG", "[DEXSCREENER] Fetching latest token profiles");
-
-        let response = self
-            .client
-            .get(&url)
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        drop(permit);
+        let (mut response, elapsed) = self
+            .execute_request(endpoint, self.client.get(&url))
+            .await?;
 
         let status = response.status();
         if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("DexScreener API error {}: {}", status, error_text));
+            let body = response.text().await.unwrap_or_default();
+            self.stats.record_request(false, elapsed).await;
+            self.stats
+                .record_error(format!("{} HTTP {}: {}", endpoint, status, body))
+                .await;
+            return Err(format!("DexScreener API error {}: {}", status, body));
         }
 
-        let data: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
+        let raw: serde_json::Value = match response.json().await {
+            Ok(val) => val,
+            Err(err) => {
+                self.stats.record_request(false, elapsed).await;
+                self.stats
+                    .record_error(format!("{} parse error: {}", endpoint, err))
+                    .await;
+                return Err(format!("Failed to parse response: {}", err));
+            }
+        };
 
-        // Parse token profiles from response
-        let profiles: Vec<TokenProfile> = serde_json::from_value(data).unwrap_or_default();
-
-        Ok(profiles)
+        match serde_json::from_value::<Vec<TokenProfile>>(raw) {
+            Ok(profiles) => {
+                self.stats.record_request(true, elapsed).await;
+                Ok(profiles)
+            }
+            Err(err) => {
+                self.stats.record_request(false, elapsed).await;
+                self.stats
+                    .record_error(format!("{} conversion error: {}", endpoint, err))
+                    .await;
+                Err(format!("Failed to decode token profiles: {}", err))
+            }
+        }
     }
 
     /// Get top boosted tokens (most promoted)
@@ -349,41 +354,21 @@ impl DexScreenerClient {
         &self,
         chain_id: Option<&str>,
     ) -> Result<Vec<TokenBoostTop>, String> {
-        let permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {}", e))?;
+        let endpoint = "token-boosts/top/v1";
+        let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
+        let builder = if let Some(chain) = chain_id {
+            self.client.get(&url).query(&[("chainId", chain)])
+        } else {
+            self.client.get(&url)
+        };
 
-        let mut url = format!("{}/token-boosts/top/v1", DEXSCREENER_BASE_URL);
-        if let Some(chain) = chain_id {
-            url = format!("{}?chainId={}", url, chain);
-        }
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            "[DEXSCREENER] Fetching top boosted tokens",
+        );
 
-        log(LogTag::Tokens, "DEBUG", "[DEXSCREENER] Fetching top boosted tokens");
-
-        let response = self
-            .client
-            .get(&url)
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        drop(permit);
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("DexScreener API error {}: {}", status, error_text));
-        }
-
-        let boosts: Vec<TokenBoostTop> = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-        Ok(boosts)
+        self.get_json(endpoint, builder).await
     }
 
     /// Get latest boosted tokens (newest promotions)
@@ -392,38 +377,16 @@ impl DexScreenerClient {
     /// # Returns
     /// Vec<TokenBoostLatest> - Latest boosted tokens
     pub async fn get_latest_boosted_tokens(&self) -> Result<Vec<TokenBoostLatest>, String> {
-        let permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {}", e))?;
+        let endpoint = "token-boosts/latest/v1";
+        let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
 
-        let url = format!("{}/token-boosts/latest/v1", DEXSCREENER_BASE_URL);
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            "[DEXSCREENER] Fetching latest boosted tokens",
+        );
 
-        log(LogTag::Tokens, "DEBUG", "[DEXSCREENER] Fetching latest boosted tokens");
-
-        let response = self
-            .client
-            .get(&url)
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        drop(permit);
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("DexScreener API error {}: {}", status, error_text));
-        }
-
-        let boosts: Vec<TokenBoostLatest> = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-        Ok(boosts)
+        self.get_json(endpoint, self.client.get(&url)).await
     }
 
     /// Get top tokens by volume in a specific time window
@@ -438,58 +401,61 @@ impl DexScreenerClient {
         sort_by: Option<&str>,
         order: Option<&str>,
     ) -> Result<Vec<DexScreenerPool>, String> {
-        let permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {}", e))?;
-
-        let mut url = format!("{}/token-profiles/latest/v1", DEXSCREENER_BASE_URL);
-
-        let mut params = vec![];
+        let endpoint = "token-profiles/latest/v1";
+        let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
+        let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(chain) = chain_id {
-            params.push(format!("chainId={}", chain));
+            query_params.push(("chainId".to_string(), chain.to_string()));
         }
         if let Some(sort) = sort_by {
-            params.push(format!("sortBy={}", sort));
+            query_params.push(("sortBy".to_string(), sort.to_string()));
         }
         if let Some(order_val) = order {
-            params.push(format!("order={}", order_val));
+            query_params.push(("order".to_string(), order_val.to_string()));
         }
 
-        if !params.is_empty() {
-            url = format!("{}?{}", url, params.join("&"));
-        }
+        let builder = if query_params.is_empty() {
+            self.client.get(&url)
+        } else {
+            self.client.get(&url).query(&query_params)
+        };
 
         log(
             LogTag::Tokens,
             "DEBUG",
-            &format!("[DEXSCREENER] Fetching top tokens: chain={:?}, sort={:?}", chain_id, sort_by)
+            &format!(
+                "[DEXSCREENER] Fetching top tokens: chain={:?}, sort={:?}",
+                chain_id, sort_by
+            ),
         );
 
-        let response = self
-            .client
-            .get(&url)
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        drop(permit);
+        let (mut response, elapsed) = self.execute_request(endpoint, builder).await?;
 
         let status = response.status();
         if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("DexScreener API error {}: {}", status, error_text));
+            let body = response.text().await.unwrap_or_default();
+            self.stats.record_request(false, elapsed).await;
+            self.stats
+                .record_error(format!("{} HTTP {}: {}", endpoint, status, body))
+                .await;
+            return Err(format!("DexScreener API error {}: {}", status, body));
         }
 
-        let data: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-        // Parse and convert to pools - implement based on actual response
-        Ok(Vec::new())
+        match response.json::<serde_json::Value>().await {
+            Ok(value) => {
+                // Placeholder until this endpoint is wired into pool conversion logic
+                let _ = value;
+                self.stats.record_request(true, elapsed).await;
+                Ok(Vec::new())
+            }
+            Err(err) => {
+                self.stats.record_request(false, elapsed).await;
+                self.stats
+                    .record_error(format!("{} parse error: {}", endpoint, err))
+                    .await;
+                Err(format!("Failed to parse response: {}", err))
+            }
+        }
     }
 
     /// Get token info with social links, description, etc.
@@ -497,41 +463,46 @@ impl DexScreenerClient {
     /// # Arguments
     /// * `address` - Token address
     pub async fn get_token_info(&self, address: &str) -> Result<Option<TokenInfo>, String> {
-        let permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate-limiter error: {}", e))?;
+        let endpoint = format!("token-profiles/{}", address);
+        let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
 
-        let url = format!("{}/token-profiles/{}", DEXSCREENER_BASE_URL, address);
-
-        log(LogTag::Tokens, "DEBUG", &format!("[DEXSCREENER] Fetching token info: {}", address));
-
-        let response = self
-            .client
-            .get(&url)
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        drop(permit);
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            &format!("[DEXSCREENER] Fetching token info: {}", address),
+        );
+        let (mut response, elapsed) = self
+            .execute_request(&endpoint, self.client.get(&url))
+            .await?;
 
         let status = response.status();
-        if !status.is_success() {
-            if status.as_u16() == 404 {
-                return Ok(None);
-            }
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("DexScreener API error {}: {}", status, error_text));
+        if status == StatusCode::NOT_FOUND {
+            self.stats.record_request(true, elapsed).await;
+            return Ok(None);
         }
 
-        let info: TokenInfo = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            self.stats.record_request(false, elapsed).await;
+            self.stats
+                .record_error(format!("{} HTTP {}: {}", endpoint, status, body))
+                .await;
+            return Err(format!("DexScreener API error {}: {}", status, body));
+        }
 
-        Ok(Some(info))
+        match response.json::<TokenInfo>().await {
+            Ok(info) => {
+                self.stats.record_request(true, elapsed).await;
+                Ok(Some(info))
+            }
+            Err(err) => {
+                self.stats.record_request(false, elapsed).await;
+                self.stats
+                    .record_error(format!("{} parse error: {}", endpoint, err))
+                    .await;
+                Err(format!("Failed to parse response: {}", err))
+            }
+        }
     }
 
     /// Get token orders (paid promotions, ads)
@@ -546,81 +517,33 @@ impl DexScreenerClient {
         chain_id: Option<&str>,
     ) -> Result<Vec<TokenOrder>, String> {
         let chain = chain_id.unwrap_or(DEFAULT_CHAIN_ID);
-        let permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {}", e))?;
-
-        let url = format!(
-            "{}/orders/v1/{}/{}",
-            DEXSCREENER_BASE_URL, chain, token_address
-        );
+        let endpoint = format!("orders/v1/{}/{}", chain, token_address);
+        let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
 
         log(
             LogTag::Tokens,
             "DEBUG",
-            &format!("[DEXSCREENER] Fetching token orders: token={}, chain={}", token_address, chain)
+            &format!(
+                "[DEXSCREENER] Fetching token orders: token={}, chain={}",
+                token_address, chain
+            ),
         );
 
-        let response = self
-            .client
-            .get(&url)
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        drop(permit);
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("DexScreener API error {}: {}", status, error_text));
-        }
-
-        let orders: Vec<TokenOrder> = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-        Ok(orders)
+        self.get_json(&endpoint, self.client.get(&url)).await
     }
 
     /// Get supported chains
     pub async fn get_supported_chains(&self) -> Result<Vec<ChainInfo>, String> {
-        let permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {}", e))?;
+        let endpoint = "chains/v1";
+        let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
 
-        let url = format!("{}/chains/v1", DEXSCREENER_BASE_URL);
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            "[DEXSCREENER] Fetching supported chains",
+        );
 
-        log(LogTag::Tokens, "DEBUG", "[DEXSCREENER] Fetching supported chains");
-
-        let response = self
-            .client
-            .get(&url)
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        drop(permit);
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("DexScreener API error {}: {}", status, error_text));
-        }
-
-        let chains: Vec<ChainInfo> = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-        Ok(chains)
+        self.get_json(endpoint, self.client.get(&url)).await
     }
 
     /// Legacy method for backward compatibility - redirects to fetch_token_pools

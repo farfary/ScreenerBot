@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use once_cell::sync::OnceCell;
+use std::sync::Arc;
 
 use crate::tokens::types::SecurityRisk;
 

@@ -840,15 +840,15 @@ async fn collect_token_discovery_snapshot() -> Option<TokenDiscoveryStatusSnapsh
 
     Some(TokenDiscoveryStatusSnapshot {
         running,
-    total_cycles: 0,
-    last_cycle_started: None,
-    last_cycle_completed: None,
-    last_processed: 0,
-    last_added: 0,
-    last_deduplicated_removed: 0,
-    last_blacklist_removed: 0,
-    total_processed: 0,
-    total_added: 0,
+        total_cycles: 0,
+        last_cycle_started: None,
+        last_cycle_completed: None,
+        last_processed: 0,
+        last_added: 0,
+        last_deduplicated_removed: 0,
+        last_blacklist_removed: 0,
+        total_processed: 0,
+        total_added: 0,
         sources: DiscoverySourceSnapshot {
             profiles: 0,
             boosted: 0,
@@ -866,7 +866,7 @@ async fn collect_token_discovery_snapshot() -> Option<TokenDiscoveryStatusSnapsh
             coingecko_markets: 0,
             defillama_protocols: 0,
         },
-    last_error: None,
+        last_error: None,
     })
 }
 
@@ -891,9 +891,9 @@ async fn collect_dexscreener_status_snapshot() -> Option<DexscreenerStatusSnapsh
         api_cache_hits: 0,
         api_cache_misses: 0,
         api_cache_hit_rate: 0.0,
-    api_average_response_ms: 0.0,
+        api_average_response_ms: 0.0,
         last_request_time: None,
-    })
+    });
 }
 
 async fn collect_gecko_terminal_status_snapshot() -> Option<GeckoTerminalStatusSnapshot> {
@@ -914,14 +914,14 @@ async fn collect_gecko_terminal_status_snapshot() -> Option<GeckoTerminalStatusS
         api_cache_hits: 0,
         api_cache_misses: 0,
         api_cache_hit_rate: 0.0,
-    api_average_response_ms: 0.0,
+        api_average_response_ms: 0.0,
         last_request_time: None,
         last_success_time: None,
         last_error_time: None,
         last_error_message: None,
         current_rate_limit_calls: 0,
         current_rate_limit_max: 0,
-    rate_limit_resets_in_ms: Some(0),
+        rate_limit_resets_in_ms: Some(0),
     })
 }
 

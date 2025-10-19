@@ -2,6 +2,7 @@
 /// Handles swap quotes and execution via Jupiter DEX router
 /// Based on official Jupiter API documentation: https://dev.jup.ag/docs/swap-api/
 use crate::config::with_config;
+use crate::constants::SOL_DECIMALS;
 use crate::constants::SOL_MINT;
 use crate::errors::ScreenerBotError;
 use crate::global::{is_debug_api_enabled, is_debug_swaps_enabled};
@@ -9,7 +10,6 @@ use crate::logger::{log, LogTag};
 use crate::swaps::types::{
     JupiterQuoteResponse, JupiterSwapResponse, RawTransaction, SwapData, SwapQuote,
 };
-use crate::constants::SOL_DECIMALS;
 use crate::tokens::get_decimals;
 use crate::tokens::Token;
 

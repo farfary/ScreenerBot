@@ -28,6 +28,7 @@ const FORCE_PREMIUM_RPC_ONLY: bool = true;
 /// Maximum calls per second for main RPC (premium RPC has no limits)
 const MAX_RPC_CALLS_PER_SECOND: u64 = 20;
 
+use crate::constants::LAMPORTS_PER_SOL;
 use crate::errors::blockchain::CommitmentLevel;
 use crate::errors::{parse_solana_error, BlockchainError, ScreenerBotError};
 use crate::errors::{ConfigurationError, DataError, NetworkError, RpcProviderError};
@@ -35,7 +36,6 @@ use crate::global::{
     is_debug_rpc_enabled, is_debug_transactions_enabled, is_debug_wallet_enabled, RPC_STATS,
 };
 use crate::logger::{log, LogTag};
-use crate::constants::LAMPORTS_PER_SOL;
 use crate::utils::lamports_to_sol;
 use base64::Engine as _;
 use bincode;

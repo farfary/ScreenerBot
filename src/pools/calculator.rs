@@ -2,6 +2,7 @@ use super::cache;
 use super::decoders;
 use super::fetcher::{AccountData, PoolAccountBundle};
 use super::types::{PoolDescriptor, PriceResult, ProgramKind, SOL_MINT};
+use crate::constants::SOL_DECIMALS;
 use crate::events::{record_safe, Event, EventCategory, Severity};
 /// Price calculator module
 ///
@@ -13,7 +14,6 @@ use crate::events::{record_safe, Event, EventCategory, Severity};
 use crate::global::is_debug_pool_calculator_enabled;
 use crate::logger::{log, LogTag};
 use crate::pools::discovery::PoolDiscovery;
-use crate::constants::SOL_DECIMALS;
 use crate::tokens::get_cached_decimals;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;

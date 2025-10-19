@@ -915,14 +915,22 @@ async fn enrich_token_overview(
     for balance in balances {
         let token_meta = metadata_map.get(&balance.mint);
 
-    let (symbol, name, price_sol, price_usd, liquidity_usd, volume_24h, last_updated, dex_id) =
+        let (symbol, name, price_sol, price_usd, liquidity_usd, volume_24h, last_updated, dex_id) =
             if let Some(meta) = token_meta {
-        let price_sol = if meta.price_sol > 0.0 { Some(meta.price_sol) } else { None };
-        let price_usd = if meta.price_usd > 0.0 { Some(meta.price_usd) } else { None };
-        let liquidity_usd = meta.liquidity_usd;
-        let volume_24h = meta.volume_h24;
-        let last_updated = Some(meta.updated_at.to_rfc3339());
-        let dex_id = Some(meta.data_source.as_str().to_string());
+                let price_sol = if meta.price_sol > 0.0 {
+                    Some(meta.price_sol)
+                } else {
+                    None
+                };
+                let price_usd = if meta.price_usd > 0.0 {
+                    Some(meta.price_usd)
+                } else {
+                    None
+                };
+                let liquidity_usd = meta.liquidity_usd;
+                let volume_24h = meta.volume_h24;
+                let last_updated = Some(meta.updated_at.to_rfc3339());
+                let dex_id = Some(meta.data_source.as_str().to_string());
 
                 let symbol = if meta.symbol.trim().is_empty() {
                     short_mint_label(&balance.mint)
@@ -2255,13 +2263,12 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
             continue;
         }
 
-        let balance_ui = if let Some(decimals) =
-            crate::tokens::get_cached_decimals(&account_info.mint)
-        {
-            (account_info.balance as f64) / (10_f64).powi(decimals as i32)
-        } else {
-            account_info.balance as f64 // Fallback without decimals
-        };
+        let balance_ui =
+            if let Some(decimals) = crate::tokens::get_cached_decimals(&account_info.mint) {
+                (account_info.balance as f64) / (10_f64).powi(decimals as i32)
+            } else {
+                account_info.balance as f64 // Fallback without decimals
+            };
 
         token_balances.push(TokenBalance {
             id: None,

@@ -1,34 +1,35 @@
-/// Complete GeckoTerminal API client with ALL available endpoints
+/// GeckoTerminal API client
 ///
 /// API Documentation: https://www.geckoterminal.com/dex-api
 ///
-/// Endpoints implemented (verified working):
-/// 1. /networks/{network}/tokens/{token}/pools - PRIMARY: Get all pools for a token (with advanced params)
-/// 2. /networks/{network}/trending_pools - Get trending pools by network
-/// 3. /networks/{network}/pools - Get top pools by network
-/// 4. /networks/{network}/pools/{address} - Get specific pool data by pool address
-/// 5. /networks/{network}/pools/multi/{addresses} - Get multiple pools data (up to 30 addresses)
-/// 6. /networks/{network}/pools/{pool}/ohlcv/{timeframe} - Get OHLCV candlestick data
-/// 7. /networks/{network}/dexes - Get supported DEXes list by network
-/// 8. /networks/{network}/new_pools - Get latest new pools by network
-/// 9. /networks/{network}/tokens/multi/{addresses} - Get multiple tokens data (up to 30 addresses)
-/// 10. /networks/{network}/tokens/{address}/info - Get token metadata (name, symbol, socials, etc.)
-/// 11. /tokens/info_recently_updated - Get 100 most recently updated tokens (global endpoint)
-/// 12. /networks/{network}/pools/{pool_address}/trades - Get last 300 trades in past 24h by pool
-
+/// Endpoints implemented:
+/// 1. /networks/{network}/tokens/{token}/pools - Get all pools for a token (primary)
+/// 2. /networks/{network}/trending_pools - Trending pools per network
+/// 3. /networks/{network}/pools - Top pools per network
+/// 4. /networks/{network}/pools/{address} - Pool details by address
+/// 5. /networks/{network}/pools/multi/{addresses} - Multiple pools at once
+/// 6. /networks/{network}/pools/{pool}/ohlcv/{timeframe} - OHLCV data
+/// 7. /networks/{network}/dexes - Supported DEX list
+/// 8. /networks/{network}/new_pools - Newly listed pools
+/// 9. /networks/{network}/tokens/multi/{addresses} - Multiple token metadata
+/// 10. /networks/{network}/tokens/{address}/info - Token metadata
+/// 11. /tokens/info_recently_updated - Recent token updates (global)
+/// 12. /networks/{network}/pools/{pool_address}/trades - Recent pool trades
 pub mod types;
 
 use self::types::{
-    GeckoTerminalPool, GeckoTerminalResponse, GeckoTerminalDexesResponse,
-    GeckoTerminalTokensMultiResponse, GeckoTerminalTokenInfoResponse,
-    GeckoTerminalRecentlyUpdatedResponse, GeckoTerminalTradesResponse
+    GeckoTerminalDexesResponse, GeckoTerminalPool, GeckoTerminalRecentlyUpdatedResponse,
+    GeckoTerminalResponse, GeckoTerminalTokenInfoResponse, GeckoTerminalTokensMultiResponse,
+    GeckoTerminalTradesResponse,
 };
+use crate::apis::client::RateLimiter;
+use crate::apis::stats::ApiStatsTracker;
 use crate::logger::{log, LogTag};
 use reqwest::Client;
+use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::Semaphore;
+use std::time::{Duration, Instant};
 
 // ============================================================================
 // API CONFIGURATION - Hardcoded for GeckoTerminal API
@@ -52,93 +53,140 @@ pub const RATE_LIMIT_PER_MINUTE: usize = 30;
 // CLIENT IMPLEMENTATION
 // ============================================================================
 
-/// Complete GeckoTerminal API client
+/// GeckoTerminal API client with rate limiting and stats tracking
 pub struct GeckoTerminalClient {
     client: Client,
-    rate_limiter: Arc<Semaphore>,
+    rate_limiter: RateLimiter,
+    stats: Arc<ApiStatsTracker>,
     timeout: Duration,
+    enabled: bool,
 }
 
 impl GeckoTerminalClient {
-    pub fn new(rate_limit: usize, timeout_seconds: u64) -> Self {
-        Self {
+    pub fn new(enabled: bool, rate_limit: usize, timeout_seconds: u64) -> Result<Self, String> {
+        if timeout_seconds == 0 {
+            return Err("Timeout must be greater than zero".to_string());
+        }
+
+        Ok(Self {
             client: Client::new(),
-            rate_limiter: Arc::new(Semaphore::new(rate_limit)),
+            rate_limiter: RateLimiter::new(rate_limit),
+            stats: Arc::new(ApiStatsTracker::new()),
             timeout: Duration::from_secs(timeout_seconds),
+            enabled,
+        })
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+
+    pub async fn get_stats(&self) -> crate::apis::stats::ApiStats {
+        self.stats.get_stats().await
+    }
+
+    fn ensure_enabled(&self, endpoint: &str) -> Result<(), String> {
+        if self.enabled {
+            Ok(())
+        } else {
+            Err(format!(
+                "GeckoTerminal client disabled via configuration (endpoint={})",
+                endpoint
+            ))
         }
     }
 
-    /// Get API stats (placeholder - GeckoTerminal uses direct HTTP without stats tracking)
-    pub async fn get_stats(&self) -> crate::apis::stats::ApiStats {
-        crate::apis::stats::ApiStats::default()
+    async fn execute_request(
+        &self,
+        endpoint: &str,
+        builder: reqwest::RequestBuilder,
+    ) -> Result<(reqwest::Response, f64), String> {
+        self.ensure_enabled(endpoint)?;
+
+        let guard = self
+            .rate_limiter
+            .acquire()
+            .await
+            .map_err(|e| format!("Rate limiter error: {}", e))?;
+
+        let start = Instant::now();
+        let response_result = builder.timeout(self.timeout).send().await;
+        drop(guard);
+        let elapsed = start.elapsed().as_millis() as f64;
+
+        match response_result {
+            Ok(response) => Ok((response, elapsed)),
+            Err(err) => {
+                self.stats.record_request(false, elapsed).await;
+                self.stats
+                    .record_error(format!("{} request failed: {}", endpoint, err))
+                    .await;
+                Err(format!("Request failed: {}", err))
+            }
+        }
     }
 
-    /// PRIMARY METHOD: Fetch ALL pools for a single token address
-    /// Uses /networks/{network}/tokens/{token}/pools
-    ///
-    /// Returns ALL liquidity pools (typically 20+) for the token across all DEXes on the network.
-    ///
-    /// # Arguments
-    /// * `mint` - Token mint address
-    /// * `network` - Network identifier (defaults to "solana")
-    ///
-    /// # Returns
-    /// Vec<GeckoTerminalPool> - ALL pools for this token
+    async fn get_json<T>(
+        &self,
+        endpoint: &str,
+        builder: reqwest::RequestBuilder,
+    ) -> Result<T, String>
+    where
+        T: DeserializeOwned,
+    {
+        let (mut response, elapsed) = self.execute_request(endpoint, builder).await?;
+        let status = response.status();
+
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            self.stats.record_request(false, elapsed).await;
+            self.stats
+                .record_error(format!("{} HTTP {}: {}", endpoint, status, body))
+                .await;
+            return Err(format!("GeckoTerminal API error {}: {}", status, body));
+        }
+
+        match response.json::<T>().await {
+            Ok(value) => {
+                self.stats.record_request(true, elapsed).await;
+                Ok(value)
+            }
+            Err(err) => {
+                self.stats.record_request(false, elapsed).await;
+                self.stats
+                    .record_error(format!("{} parse error: {}", endpoint, err))
+                    .await;
+                Err(format!("Failed to parse response: {}", err))
+            }
+        }
+    }
+
+    /// Fetch all pools for a single token address
     pub async fn fetch_pools(&self, mint: &str) -> Result<Vec<GeckoTerminalPool>, String> {
         self.fetch_pools_on_network(mint, None).await
     }
 
     /// Fetch pools for a token on a specific network
-    ///
-    /// # Arguments
-    /// * `mint` - Token mint address
-    /// * `network` - Network identifier (defaults to "solana")
-    ///
-    /// # Returns
-    /// Vec<GeckoTerminalPool> - ALL pools for this token on the network
     pub async fn fetch_pools_on_network(
         &self,
         mint: &str,
         network: Option<&str>,
     ) -> Result<Vec<GeckoTerminalPool>, String> {
         let network_id = network.unwrap_or(DEFAULT_NETWORK);
-        let permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {}", e))?;
-
-        let url = format!(
-            "{}/networks/{}/tokens/{}/pools",
-            GECKOTERMINAL_BASE_URL, network_id, mint
-        );
+        let endpoint = format!("networks/{}/tokens/{}/pools", network_id, mint);
+        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
 
         log(
             LogTag::Tokens,
             "DEBUG",
-            &format!("[GECKOTERMINAL] Fetching pools: token={}, network={}", mint, network_id)
+            &format!(
+                "[GECKOTERMINAL] Fetching pools: token={}, network={}",
+                mint, network_id
+            ),
         );
 
-        let response = self
-            .client
-            .get(&url)
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        drop(permit);
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("HTTP {}: {}", status, error_text));
-        }
-
-        let api_response: GeckoTerminalResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("JSON parse error: {}", e))?;
+        let api_response: GeckoTerminalResponse =
+            self.get_json(&endpoint, self.client.get(&url)).await?;
 
         Ok(api_response
             .data
@@ -147,32 +195,7 @@ impl GeckoTerminalClient {
             .collect())
     }
 
-    /// Get top pools by token address with advanced filtering
-    /// Uses /networks/{network}/tokens/{token_address}/pools with query parameters
-    ///
-    /// Returns top pools for a token with sorting and filtering options.
-    /// Same endpoint as fetch_pools_on_network but with additional query parameters.
-    ///
-    /// # Arguments
-    /// * `token_address` - Token contract address
-    /// * `network` - Network identifier (e.g., "solana", "eth", "bsc")
-    /// * `include` - Optional comma-separated attributes to include (base_token, quote_token, dex)
-    /// * `page` - Optional page number for pagination (max: 10, default: 1)
-    /// * `sort` - Optional sort field (h24_volume_usd_desc, h24_tx_count_desc, h24_volume_usd_liquidity_desc)
-    ///
-    /// # Returns
-    /// Vector of pools sorted by specified criteria
-    ///
-    /// # Example
-    /// ```no_run
-    /// let pools = client.fetch_top_pools_by_token(
-    ///     "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-    ///     "solana",
-    ///     Some("base_token,quote_token"),
-    ///     Some(1),
-    ///     Some("h24_volume_usd_desc")
-    /// ).await?;
-    /// ```
+    /// Get top pools by token address with optional sorting/filtering
     pub async fn fetch_top_pools_by_token(
         &self,
         token_address: &str,
@@ -181,56 +204,36 @@ impl GeckoTerminalClient {
         page: Option<u32>,
         sort: Option<&str>,
     ) -> Result<Vec<GeckoTerminalPool>, String> {
-        let permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {}", e))?;
+        let endpoint = format!("networks/{}/tokens/{}/pools", network, token_address);
+        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
 
-        let mut url = format!(
-            "{}/networks/{}/tokens/{}/pools",
-            GECKOTERMINAL_BASE_URL, network, token_address
-        );
-
-        let mut params = Vec::new();
-
+        let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(inc) = include {
-            params.push(format!("include={}", inc));
+            query_params.push(("include".to_string(), inc.to_string()));
         }
         if let Some(p) = page {
-            params.push(format!("page={}", p));
+            query_params.push(("page".to_string(), p.to_string()));
         }
         if let Some(s) = sort {
-            params.push(format!("sort={}", s));
+            query_params.push(("sort".to_string(), s.to_string()));
         }
 
-        if !params.is_empty() {
-            url.push_str(&format!("?{}", params.join("&")));
-        }
+        let builder = if query_params.is_empty() {
+            self.client.get(&url)
+        } else {
+            self.client.get(&url).query(&query_params)
+        };
 
-        log(LogTag::Tokens, "DEBUG", &format!("[GECKOTERMINAL] Fetching top pools by token: token={}, network={}, page={:?}, sort={:?}", 
-               token_address, network, page, sort));
+        log(
+            LogTag::Tokens,
+            "DEBUG",
+            &format!(
+                "[GECKOTERMINAL] Fetching top pools by token: token={}, network={}, page={:?}, sort={:?}",
+                token_address, network, page, sort
+            ),
+        );
 
-        let response = self
-            .client
-            .get(&url)
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        drop(permit);
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("HTTP {}: {}", status, error_text));
-        }
-
-        let api_response: GeckoTerminalResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("JSON parse error: {}", e))?;
+        let api_response: GeckoTerminalResponse = self.get_json(&endpoint, builder).await?;
 
         Ok(api_response
             .data
@@ -240,18 +243,6 @@ impl GeckoTerminalClient {
     }
 
     /// Get trending pools by network
-    /// Uses /networks/{network}/trending_pools
-    ///
-    /// Returns trending pools for a specific network with optional filtering by duration.
-    ///
-    /// # Arguments
-    /// * `network` - Network ID (e.g., "solana", "eth") - defaults to "solana"
-    /// * `page` - Page number (1-10, default 1)
-    /// * `duration` - Trending duration: "5m", "1h", "6h", "24h" (default "24h")
-    /// * `include` - Attributes to include: Vec of "base_token", "quote_token", "dex"
-    ///
-    /// # Returns
-    /// Vec<GeckoTerminalPool> - 20 trending pools per page
     pub async fn fetch_trending_pools_by_network(
         &self,
         network: Option<&str>,
@@ -260,65 +251,38 @@ impl GeckoTerminalClient {
         include: Option<Vec<&str>>,
     ) -> Result<Vec<GeckoTerminalPool>, String> {
         let network_id = network.unwrap_or(DEFAULT_NETWORK);
-        let permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {}", e))?;
+        let endpoint = format!("networks/{}/trending_pools", network_id);
+        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
 
-        let url = format!(
-            "{}/networks/{}/trending_pools",
-            GECKOTERMINAL_BASE_URL, network_id
-        );
-
-        let mut params = Vec::new();
-
+        let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(p) = page {
-            params.push(format!("page={}", p.min(MAX_TRENDING_PAGE)));
+            query_params.push(("page".to_string(), p.min(MAX_TRENDING_PAGE).to_string()));
         }
-
         if let Some(d) = duration {
-            params.push(format!("duration={}", d));
+            query_params.push(("duration".to_string(), d.to_string()));
         }
-
         if let Some(includes) = include {
             if !includes.is_empty() {
-                params.push(format!("include={}", includes.join(",")));
+                query_params.push(("include".to_string(), includes.join(",")));
             }
         }
 
-        let final_url = if !params.is_empty() {
-            format!("{}?{}", url, params.join("&"))
+        let builder = if query_params.is_empty() {
+            self.client.get(&url)
         } else {
-            url
+            self.client.get(&url).query(&query_params)
         };
 
         log(
             LogTag::Tokens,
             "DEBUG",
-            &format!("[GECKOTERMINAL] Fetching trending pools: network={}, page={:?}, duration={:?}", network_id, page, duration)
+            &format!(
+                "[GECKOTERMINAL] Fetching trending pools: network={}, page={:?}, duration={:?}",
+                network_id, page, duration
+            ),
         );
 
-        let response = self
-            .client
-            .get(&final_url)
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        drop(permit);
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("HTTP {}: {}", status, error_text));
-        }
-
-        let api_response: GeckoTerminalResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("JSON parse error: {}", e))?;
+        let api_response: GeckoTerminalResponse = self.get_json(&endpoint, builder).await?;
 
         Ok(api_response
             .data
@@ -328,18 +292,6 @@ impl GeckoTerminalClient {
     }
 
     /// Get top pools by network
-    /// Uses /networks/{network}/pools
-    ///
-    /// Returns top pools on the network sorted by volume or transaction count.
-    ///
-    /// # Arguments
-    /// * `network` - Network ID (e.g., "solana", "eth") - defaults to "solana"
-    /// * `include` - Attributes to include: Vec of "base_token", "quote_token", "dex"
-    /// * `page` - Page number (1-10, default 1)
-    /// * `sort` - Sort field: "h24_volume_usd_desc" or "h24_tx_count_desc" (default)
-    ///
-    /// # Returns
-    /// Vec<GeckoTerminalPool> - Top pools on the network
     pub async fn fetch_top_pools_by_network(
         &self,
         network: Option<&str>,
@@ -348,63 +300,39 @@ impl GeckoTerminalClient {
         sort: Option<&str>,
     ) -> Result<Vec<GeckoTerminalPool>, String> {
         let network_id = network.unwrap_or(DEFAULT_NETWORK);
-        let permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {}", e))?;
+        let endpoint = format!("networks/{}/pools", network_id);
+        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
 
-        let url = format!("{}/networks/{}/pools", GECKOTERMINAL_BASE_URL, network_id);
-
-        let mut params = Vec::new();
-
+        let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(p) = page {
             let page_num = p.min(10).max(1);
-            params.push(format!("page={}", page_num));
+            query_params.push(("page".to_string(), page_num.to_string()));
         }
-
         if let Some(s) = sort {
-            params.push(format!("sort={}", s));
+            query_params.push(("sort".to_string(), s.to_string()));
         }
-
         if let Some(includes) = include {
             if !includes.is_empty() {
-                params.push(format!("include={}", includes.join(",")));
+                query_params.push(("include".to_string(), includes.join(",")));
             }
         }
 
-        let final_url = if !params.is_empty() {
-            format!("{}?{}", url, params.join("&"))
+        let builder = if query_params.is_empty() {
+            self.client.get(&url)
         } else {
-            url
+            self.client.get(&url).query(&query_params)
         };
 
         log(
             LogTag::Tokens,
             "DEBUG",
-            &format!("[GECKOTERMINAL] Fetching top pools: network={}, page={:?}, sort={:?}", network_id, page, sort)
+            &format!(
+                "[GECKOTERMINAL] Fetching top pools: network={}, page={:?}, sort={:?}",
+                network_id, page, sort
+            ),
         );
 
-        let response = self
-            .client
-            .get(&final_url)
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        drop(permit);
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("HTTP {}: {}", status, error_text));
-        }
-
-        let api_response: GeckoTerminalResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("JSON parse error: {}", e))?;
+        let api_response: GeckoTerminalResponse = self.get_json(&endpoint, builder).await?;
 
         Ok(api_response
             .data
@@ -413,20 +341,7 @@ impl GeckoTerminalClient {
             .collect())
     }
 
-    /// Get specific pool data by pool address
-    /// Uses /networks/{network}/pools/{address}
-    ///
-    /// Returns detailed data for a single pool including liquidity, volume, and price information.
-    ///
-    /// # Arguments
-    /// * `network` - Network ID (e.g., "solana", "eth") - defaults to "solana"
-    /// * `pool_address` - Pool contract address
-    /// * `include` - Attributes to include: Vec of "base_token", "quote_token", "dex"
-    /// * `include_volume_breakdown` - Include volume breakdown (default false)
-    /// * `include_composition` - Include pool composition (default false)
-    ///
-    /// # Returns
-    /// GeckoTerminalPool - Single pool data
+    /// Get specific pool data by address
     pub async fn fetch_pool_by_address(
         &self,
         network: Option<&str>,
@@ -436,67 +351,39 @@ impl GeckoTerminalClient {
         include_composition: bool,
     ) -> Result<GeckoTerminalPool, String> {
         let network_id = network.unwrap_or(DEFAULT_NETWORK);
-        let permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {}", e))?;
+        let endpoint = format!("networks/{}/pools/{}", network_id, pool_address);
+        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
 
-        let url = format!(
-            "{}/networks/{}/pools/{}",
-            GECKOTERMINAL_BASE_URL, network_id, pool_address
-        );
-
-        let mut params = Vec::new();
-
+        let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(includes) = include {
             if !includes.is_empty() {
-                params.push(format!("include={}", includes.join(",")));
+                query_params.push(("include".to_string(), includes.join(",")));
             }
         }
-
         if include_volume_breakdown {
-            params.push("include_volume_breakdown=true".to_string());
+            query_params.push(("include_volume_breakdown".to_string(), "true".to_string()));
         }
-
         if include_composition {
-            params.push("include_composition=true".to_string());
+            query_params.push(("include_composition".to_string(), "true".to_string()));
         }
 
-        let final_url = if !params.is_empty() {
-            format!("{}?{}", url, params.join("&"))
+        let builder = if query_params.is_empty() {
+            self.client.get(&url)
         } else {
-            url
+            self.client.get(&url).query(&query_params)
         };
 
         log(
             LogTag::Tokens,
             "DEBUG",
-            &format!("[GECKOTERMINAL] Fetching pool: network={}, address={}", network_id, pool_address)
+            &format!(
+                "[GECKOTERMINAL] Fetching pool: network={}, address={}",
+                network_id, pool_address
+            ),
         );
 
-        let response = self
-            .client
-            .get(&final_url)
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
+        let api_response: GeckoTerminalResponse = self.get_json(&endpoint, builder).await?;
 
-        drop(permit);
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("HTTP {}: {}", status, error_text));
-        }
-
-        let api_response: GeckoTerminalResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("JSON parse error: {}", e))?;
-
-        // Single pool endpoint returns data array with one item
         api_response
             .data
             .into_iter()
@@ -505,20 +392,7 @@ impl GeckoTerminalClient {
             .ok_or_else(|| "No pool data returned".to_string())
     }
 
-    /// Get multiple pools data by pool addresses
-    /// Uses /networks/{network}/pools/multi/{addresses}
-    ///
-    /// Returns detailed data for multiple pools (up to 30 addresses).
-    ///
-    /// # Arguments
-    /// * `network` - Network ID (e.g., "solana", "eth") - defaults to "solana"
-    /// * `addresses` - Pool contract addresses (up to 30, comma-separated)
-    /// * `include` - Attributes to include: Vec of "base_token", "quote_token", "dex"
-    /// * `include_volume_breakdown` - Include volume breakdown (default false)
-    /// * `include_composition` - Include pool composition (default false)
-    ///
-    /// # Returns
-    /// Vec<GeckoTerminalPool> - Multiple pool data
+    /// Fetch multiple pools in one call (max 30 pool addresses)
     pub async fn fetch_pools_multi(
         &self,
         network: Option<&str>,
@@ -530,72 +404,45 @@ impl GeckoTerminalClient {
         if addresses.is_empty() {
             return Err("At least one address is required".to_string());
         }
-
         if addresses.len() > 30 {
             return Err("Maximum 30 addresses allowed".to_string());
         }
 
         let network_id = network.unwrap_or(DEFAULT_NETWORK);
-        let permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {}", e))?;
-
+        let address_count = addresses.len();
         let addresses_str = addresses.join(",");
-        let url = format!(
-            "{}/networks/{}/pools/multi/{}",
-            GECKOTERMINAL_BASE_URL, network_id, addresses_str
-        );
+        let endpoint = format!("networks/{}/pools/multi/{}", network_id, addresses_str);
+        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
 
-        let mut params = Vec::new();
-
+        let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(includes) = include {
             if !includes.is_empty() {
-                params.push(format!("include={}", includes.join(",")));
+                query_params.push(("include".to_string(), includes.join(",")));
             }
         }
-
         if include_volume_breakdown {
-            params.push("include_volume_breakdown=true".to_string());
+            query_params.push(("include_volume_breakdown".to_string(), "true".to_string()));
         }
-
         if include_composition {
-            params.push("include_composition=true".to_string());
+            query_params.push(("include_composition".to_string(), "true".to_string()));
         }
 
-        let final_url = if !params.is_empty() {
-            format!("{}?{}", url, params.join("&"))
+        let builder = if query_params.is_empty() {
+            self.client.get(&url)
         } else {
-            url
+            self.client.get(&url).query(&query_params)
         };
 
         log(
             LogTag::Tokens,
             "DEBUG",
-            &format!("[GECKOTERMINAL] Fetching multi pools: network={}, count={}", network_id, addresses.len())
+            &format!(
+                "[GECKOTERMINAL] Fetching multi pools: network={}, count={}",
+                network_id, address_count
+            ),
         );
 
-        let response = self
-            .client
-            .get(&final_url)
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        drop(permit);
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("HTTP {}: {}", status, error_text));
-        }
-
-        let api_response: GeckoTerminalResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("JSON parse error: {}", e))?;
+        let api_response: GeckoTerminalResponse = self.get_json(&endpoint, builder).await?;
 
         Ok(api_response
             .data
@@ -604,23 +451,7 @@ impl GeckoTerminalClient {
             .collect())
     }
 
-    /// Get OHLCV (Open, High, Low, Close, Volume) candlestick data for a pool
-    /// Uses /networks/{network}/pools/{pool}/ohlcv/{timeframe}
-    ///
-    /// Returns candlestick chart data with configurable timeframe and aggregation.
-    ///
-    /// # Arguments
-    /// * `network` - Network ID (e.g., "solana", "eth")
-    /// * `pool_address` - Pool contract address
-    /// * `timeframe` - Timeframe: "day", "hour", or "minute"
-    /// * `aggregate` - Time period to aggregate (day: 1, hour: 1/4/12, minute: 1/5/15)
-    /// * `limit` - Number of results (max 1000, default 100)
-    /// * `currency` - "usd" or "token"
-    /// * `before_timestamp` - Optional: return data before this timestamp
-    /// * `token` - Optional: "base", "quote", or token address to invert chart
-    ///
-    /// # Returns
-    /// OhlcvResponse - Contains list of [timestamp, open, high, low, close, volume] candles
+    /// Fetch OHLCV candlestick data for a pool
     pub async fn fetch_ohlcv(
         &self,
         network: &str,
@@ -632,71 +463,45 @@ impl GeckoTerminalClient {
         before_timestamp: Option<i64>,
         token: Option<&str>,
     ) -> Result<OhlcvResponse, String> {
-        let permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {}", e))?;
+        let endpoint = format!(
+            "networks/{}/pools/{}/ohlcv/{}",
+            network, pool_address, timeframe
+        );
+        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
+
+        let mut query_params: Vec<(String, String)> = Vec::new();
+        if let Some(agg) = aggregate {
+            query_params.push(("aggregate".to_string(), agg.to_string()));
+        }
+        if let Some(lim) = limit {
+            query_params.push(("limit".to_string(), lim.min(1000).to_string()));
+        }
+        if let Some(curr) = currency {
+            query_params.push(("currency".to_string(), curr.to_string()));
+        }
+        if let Some(ts) = before_timestamp {
+            query_params.push(("before_timestamp".to_string(), ts.to_string()));
+        }
+        if let Some(tok) = token {
+            query_params.push(("token".to_string(), tok.to_string()));
+        }
+
+        let builder = if query_params.is_empty() {
+            self.client.get(&url)
+        } else {
+            self.client.get(&url).query(&query_params)
+        };
 
         log(
             LogTag::Tokens,
             "DEBUG",
-            &format!("[GECKOTERMINAL] Fetching OHLCV: network={}, pool={}, timeframe={}, aggregate={:?}, limit={:?}", network, pool_address, timeframe, aggregate, limit)
+            &format!(
+                "[GECKOTERMINAL] Fetching OHLCV: network={}, pool={}, timeframe={}, aggregate={:?}, limit={:?}",
+                network, pool_address, timeframe, aggregate, limit
+            ),
         );
 
-        let mut url = format!(
-            "{}/networks/{}/pools/{}/ohlcv/{}",
-            GECKOTERMINAL_BASE_URL, network, pool_address, timeframe
-        );
-
-        // Build query parameters
-        let mut params = Vec::new();
-
-        if let Some(agg) = aggregate {
-            params.push(format!("aggregate={}", agg));
-        }
-
-        if let Some(lim) = limit {
-            params.push(format!("limit={}", lim.min(1000))); // Max 1000
-        }
-
-        if let Some(curr) = currency {
-            params.push(format!("currency={}", curr));
-        }
-
-        if let Some(ts) = before_timestamp {
-            params.push(format!("before_timestamp={}", ts));
-        }
-
-        if let Some(tok) = token {
-            params.push(format!("token={}", tok));
-        }
-
-        if !params.is_empty() {
-            url.push('?');
-            url.push_str(&params.join("&"));
-        }
-
-        let response = self
-            .client
-            .get(&url)
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        drop(permit);
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("HTTP {}: {}", status, error_text));
-        }
-
-        let ohlcv_response: OhlcvResponseRaw = response
-            .json()
-            .await
-            .map_err(|e| format!("JSON parse error: {}", e))?;
+        let ohlcv_response: OhlcvResponseRaw = self.get_json(&endpoint, builder).await?;
 
         Ok(OhlcvResponse {
             ohlcv_list: ohlcv_response.data.attributes.ohlcv_list,
@@ -705,62 +510,33 @@ impl GeckoTerminalClient {
         })
     }
 
-    /// Get supported DEXes list by network
-    /// Uses /networks/{network}/dexes
-    ///
-    /// Returns list of all supported decentralized exchanges (DEXs) on the network.
-    ///
-    /// # Arguments
-    /// * `network` - Network ID (e.g., "solana", "eth")
-    /// * `page` - Page number (default 1)
-    ///
-    /// # Returns
-    /// Vec<(String, String)> - List of (dex_id, dex_name) tuples
+    /// Get supported DEX list for a network
     pub async fn fetch_dexes_by_network(
         &self,
         network: &str,
         page: Option<u32>,
     ) -> Result<Vec<(String, String)>, String> {
-        let permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {}", e))?;
+        let endpoint = format!("networks/{}/dexes", network);
+        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
 
-        let url = format!("{}/networks/{}/dexes", GECKOTERMINAL_BASE_URL, network);
-
-        let final_url = if let Some(p) = page {
-            format!("{}?page={}", url, p)
+        let builder = if let Some(p) = page {
+            self.client
+                .get(&url)
+                .query(&[("page".to_string(), p.to_string())])
         } else {
-            url
+            self.client.get(&url)
         };
 
         log(
             LogTag::Tokens,
             "DEBUG",
-            &format!("[GECKOTERMINAL] Fetching DEXes: network={}, page={:?}", network, page)
+            &format!(
+                "[GECKOTERMINAL] Fetching DEXes: network={}, page={:?}",
+                network, page
+            ),
         );
 
-        let response = self
-            .client
-            .get(&final_url)
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        drop(permit);
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("HTTP {}: {}", status, error_text));
-        }
-
-        let dex_response: GeckoTerminalDexesResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("JSON parse error: {}", e))?;
+        let dex_response: GeckoTerminalDexesResponse = self.get_json(&endpoint, builder).await?;
 
         Ok(dex_response
             .data
@@ -769,76 +545,40 @@ impl GeckoTerminalClient {
             .collect())
     }
 
-    /// Get latest new pools by network
-    ///
-    /// # Arguments
-    /// * `network` - Network identifier (e.g., "solana", "eth", "bsc")
-    /// * `include` - Optional comma-separated attributes to include (base_token, quote_token, dex)
-    /// * `page` - Optional page number for pagination (max: 10, default: 1)
-    ///
-    /// # Returns
-    /// Vector of pools sorted by creation time (newest first)
-    ///
-    /// # Example
-    /// ```no_run
-    /// let pools = client.fetch_new_pools_by_network("solana", Some("base_token,quote_token"), None).await?;
-    /// ```
+    /// Fetch latest newly created pools on a network
     pub async fn fetch_new_pools_by_network(
         &self,
         network: &str,
         include: Option<&str>,
         page: Option<u32>,
     ) -> Result<Vec<GeckoTerminalPool>, String> {
-        let network_id = network;
-        let permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {}", e))?;
+        let endpoint = format!("networks/{}/new_pools", network);
+        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
 
-        let mut url = format!(
-            "{}/networks/{}/new_pools",
-            GECKOTERMINAL_BASE_URL, network_id
-        );
-        let mut params = Vec::new();
-
+        let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(inc) = include {
-            params.push(format!("include={}", inc));
+            query_params.push(("include".to_string(), inc.to_string()));
         }
         if let Some(p) = page {
-            params.push(format!("page={}", p));
+            query_params.push(("page".to_string(), p.to_string()));
         }
 
-        if !params.is_empty() {
-            url.push_str(&format!("?{}", params.join("&")));
-        }
+        let builder = if query_params.is_empty() {
+            self.client.get(&url)
+        } else {
+            self.client.get(&url).query(&query_params)
+        };
 
         log(
             LogTag::Tokens,
             "DEBUG",
-            &format!("[GECKOTERMINAL] Fetching new pools: network={}, page={:?}", network_id, page)
+            &format!(
+                "[GECKOTERMINAL] Fetching new pools: network={}, page={:?}",
+                network, page
+            ),
         );
 
-        let response = self
-            .client
-            .get(&url)
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        drop(permit);
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("HTTP {}: {}", status, error_text));
-        }
-
-        let api_response: GeckoTerminalResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("JSON parse error: {}", e))?;
+        let api_response: GeckoTerminalResponse = self.get_json(&endpoint, builder).await?;
 
         Ok(api_response
             .data
@@ -847,29 +587,7 @@ impl GeckoTerminalClient {
             .collect())
     }
 
-    /// Get multiple tokens data by addresses
-    /// Uses /networks/{network}/tokens/multi/{addresses}
-    ///
-    /// Returns data for multiple tokens including optional top pools and composition.
-    ///
-    /// # Arguments
-    /// * `network` - Network identifier (e.g., "solana", "eth", "bsc")
-    /// * `addresses` - Comma-separated token addresses (up to 30)
-    /// * `include` - Optional attributes to include (top_pools)
-    /// * `include_composition` - Optional flag to include pool composition
-    ///
-    /// # Returns
-    /// Result with tokens data
-    ///
-    /// # Example
-    /// ```no_run
-    /// let tokens = client.fetch_tokens_multi(
-    ///     "eth",
-    ///     "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2,0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-    ///     Some("top_pools"),
-    ///     Some(true)
-    /// ).await?;
-    /// ```
+    /// Fetch multiple token metadata entries
     pub async fn fetch_tokens_multi(
         &self,
         network: &str,
@@ -877,218 +595,93 @@ impl GeckoTerminalClient {
         include: Option<&str>,
         include_composition: Option<bool>,
     ) -> Result<GeckoTerminalTokensMultiResponse, String> {
-        let permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {}", e))?;
+        let endpoint = format!("networks/{}/tokens/multi/{}", network, addresses);
+        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
 
-        let mut url = format!(
-            "{}/networks/{}/tokens/multi/{}",
-            GECKOTERMINAL_BASE_URL, network, addresses
-        );
-
-        let mut params = Vec::new();
-
+        let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(inc) = include {
-            params.push(format!("include={}", inc));
+            query_params.push(("include".to_string(), inc.to_string()));
         }
         if let Some(comp) = include_composition {
-            params.push(format!("include_composition={}", comp));
+            query_params.push(("include_composition".to_string(), comp.to_string()));
         }
 
-        if !params.is_empty() {
-            url.push_str(&format!("?{}", params.join("&")));
-        }
+        let builder = if query_params.is_empty() {
+            self.client.get(&url)
+        } else {
+            self.client.get(&url).query(&query_params)
+        };
 
         log(
             LogTag::Tokens,
             "DEBUG",
-            &format!("[GECKOTERMINAL] Fetching tokens multi: network={}, addresses_count={}", network, addresses.split(',').count())
+            &format!(
+                "[GECKOTERMINAL] Fetching tokens multi: network={}, addresses_count={}",
+                network,
+                addresses.split(',').count()
+            ),
         );
 
-        let response = self
-            .client
-            .get(&url)
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        drop(permit);
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("HTTP {}: {}", status, error_text));
-        }
-
-        let tokens_response: GeckoTerminalTokensMultiResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("JSON parse error: {}", e))?;
-
-        Ok(tokens_response)
+        self.get_json(&endpoint, builder).await
     }
 
-    /// Get token info/metadata by address
-    /// Uses /networks/{network}/tokens/{address}/info
-    ///
-    /// Returns detailed token metadata including name, symbol, CoinGecko ID, image,
-    /// socials, websites, description, and other metadata.
-    ///
-    /// # Arguments
-    /// * `network` - Network identifier (e.g., "solana", "eth", "bsc")
-    /// * `address` - Token contract address
-    ///
-    /// # Returns
-    /// Result with token info/metadata
-    ///
-    /// # Example
-    /// ```no_run
-    /// let token_info = client.fetch_token_info("eth", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").await?;
-    /// ```
+    /// Fetch token metadata for a single address
     pub async fn fetch_token_info(
         &self,
         network: &str,
         address: &str,
     ) -> Result<GeckoTerminalTokenInfoResponse, String> {
-        let permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {}", e))?;
-
-        let url = format!(
-            "{}/networks/{}/tokens/{}/info",
-            GECKOTERMINAL_BASE_URL, network, address
-        );
+        let endpoint = format!("networks/{}/tokens/{}/info", network, address);
+        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
 
         log(
             LogTag::Tokens,
             "DEBUG",
-            &format!("[GECKOTERMINAL] Fetching token info: network={}, address={}", network, address)
+            &format!(
+                "[GECKOTERMINAL] Fetching token info: network={}, address={}",
+                network, address
+            ),
         );
 
-        let response = self
-            .client
-            .get(&url)
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        drop(permit);
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("HTTP {}: {}", status, error_text));
-        }
-
-        let token_info_response: GeckoTerminalTokenInfoResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("JSON parse error: {}", e))?;
-
-        Ok(token_info_response)
+        self.get_json(&endpoint, self.client.get(&url)).await
     }
 
-    /// Get most recently updated tokens list
-    /// Uses /tokens/info_recently_updated
-    ///
-    /// Returns 100 most recently updated tokens info, either across all networks or filtered by network.
-    /// This is a global endpoint (no network in path).
-    ///
-    /// # Arguments
-    /// * `include` - Optional attributes to include (network)
-    /// * `network` - Optional network filter (e.g., "solana", "eth", "bsc")
-    ///
-    /// # Returns
-    /// Result with recently updated tokens list
-    ///
-    /// # Example
-    /// ```no_run
-    /// let recent = client.fetch_recently_updated_tokens(Some("network"), Some("eth")).await?;
-    /// ```
+    /// Fetch recently updated tokens (global endpoint)
     pub async fn fetch_recently_updated_tokens(
         &self,
         include: Option<&str>,
         network: Option<&str>,
     ) -> Result<GeckoTerminalRecentlyUpdatedResponse, String> {
-        let permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {}", e))?;
+        let endpoint = "tokens/info_recently_updated";
+        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
 
-        let mut url = format!("{}/tokens/info_recently_updated", GECKOTERMINAL_BASE_URL);
-        let mut params = Vec::new();
-
+        let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(inc) = include {
-            params.push(format!("include={}", inc));
+            query_params.push(("include".to_string(), inc.to_string()));
         }
         if let Some(net) = network {
-            params.push(format!("network={}", net));
+            query_params.push(("network".to_string(), net.to_string()));
         }
 
-        if !params.is_empty() {
-            url.push_str(&format!("?{}", params.join("&")));
-        }
+        let builder = if query_params.is_empty() {
+            self.client.get(&url)
+        } else {
+            self.client.get(&url).query(&query_params)
+        };
 
         log(
             LogTag::Tokens,
             "DEBUG",
-            &format!("[GECKOTERMINAL] Fetching recently updated tokens: network={:?}", network)
+            &format!(
+                "[GECKOTERMINAL] Fetching recently updated tokens: network={:?}",
+                network
+            ),
         );
 
-        let response = self
-            .client
-            .get(&url)
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        drop(permit);
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("HTTP {}: {}", status, error_text));
-        }
-
-        let recently_updated_response: GeckoTerminalRecentlyUpdatedResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("JSON parse error: {}", e))?;
-
-        Ok(recently_updated_response)
+        self.get_json(endpoint, builder).await
     }
 
-    /// Get past 24 hour trades by pool address
-    /// Uses /networks/{network}/pools/{pool_address}/trades
-    ///
-    /// Returns the last 300 trades in the past 24 hours for a pool.
-    ///
-    /// # Arguments
-    /// * `network` - Network identifier (e.g., "solana", "eth", "bsc")
-    /// * `pool_address` - Pool contract address
-    /// * `trade_volume_in_usd_greater_than` - Optional minimum trade volume filter in USD
-    /// * `token` - Optional token filter ('base', 'quote', or token address)
-    ///
-    /// # Returns
-    /// Result with trades data
-    ///
-    /// # Example
-    /// ```no_run
-    /// let trades = client.fetch_pool_trades(
-    ///     "eth",
-    ///     "0x60594a405d53811d3bc4766596efd80fd545a270",
-    ///     Some(100000.0),
-    ///     Some("base")
-    /// ).await?;
-    /// ```
+    /// Fetch trades for a pool in the last 24 hours
     pub async fn fetch_pool_trades(
         &self,
         network: &str,
@@ -1096,62 +689,42 @@ impl GeckoTerminalClient {
         trade_volume_in_usd_greater_than: Option<f64>,
         token: Option<&str>,
     ) -> Result<GeckoTerminalTradesResponse, String> {
-        let permit = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {}", e))?;
+        let endpoint = format!("networks/{}/pools/{}/trades", network, pool_address);
+        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
 
-        let mut url = format!(
-            "{}/networks/{}/pools/{}/trades",
-            GECKOTERMINAL_BASE_URL, network, pool_address
-        );
-
-        let mut params = Vec::new();
-
+        let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(min_volume) = trade_volume_in_usd_greater_than {
-            params.push(format!("trade_volume_in_usd_greater_than={}", min_volume));
+            query_params.push((
+                "trade_volume_in_usd_greater_than".to_string(),
+                min_volume.to_string(),
+            ));
         }
         if let Some(tok) = token {
-            params.push(format!("token={}", tok));
+            query_params.push(("token".to_string(), tok.to_string()));
         }
 
-        if !params.is_empty() {
-            url.push_str(&format!("?{}", params.join("&")));
-        }
+        let builder = if query_params.is_empty() {
+            self.client.get(&url)
+        } else {
+            self.client.get(&url).query(&query_params)
+        };
 
         log(
             LogTag::Tokens,
             "DEBUG",
-            &format!("[GECKOTERMINAL] Fetching pool trades: network={}, pool={}, min_volume={:?}", network, pool_address, trade_volume_in_usd_greater_than)
+            &format!(
+                "[GECKOTERMINAL] Fetching pool trades: network={}, pool={}, min_volume={:?}",
+                network, pool_address, trade_volume_in_usd_greater_than
+            ),
         );
 
-        let response = self
-            .client
-            .get(&url)
-            .timeout(self.timeout)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        drop(permit);
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("HTTP {}: {}", status, error_text));
-        }
-
-        let trades_response: GeckoTerminalTradesResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("JSON parse error: {}", e))?;
-
-        Ok(trades_response)
+        self.get_json(&endpoint, builder).await
     }
 }
 
-// ===== OHLCV Response Types =====
+// ============================================================================
+// OHLCV Response Types
+// ============================================================================
 
 #[derive(Debug, Deserialize)]
 struct OhlcvResponseRaw {
@@ -1166,7 +739,7 @@ struct OhlcvData {
 
 #[derive(Debug, Deserialize)]
 struct OhlcvAttributes {
-    ohlcv_list: Vec<[f64; 6]>, // [timestamp, open, high, low, close, volume]
+    ohlcv_list: Vec<[f64; 6]>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1186,44 +759,36 @@ pub struct TokenInfo {
 /// OHLCV response containing candle data
 #[derive(Debug, Clone)]
 pub struct OhlcvResponse {
-    /// List of OHLCV candles: [timestamp, open, high, low, close, volume]
     pub ohlcv_list: Vec<[f64; 6]>,
     pub base_token: TokenInfo,
     pub quote_token: TokenInfo,
 }
 
 impl OhlcvResponse {
-    /// Get the number of candles
     pub fn len(&self) -> usize {
         self.ohlcv_list.len()
     }
 
-    /// Check if empty
     pub fn is_empty(&self) -> bool {
         self.ohlcv_list.is_empty()
     }
 
-    /// Get a specific candle by index
     pub fn get_candle(&self, index: usize) -> Option<&[f64; 6]> {
         self.ohlcv_list.get(index)
     }
 
-    /// Get the latest candle
     pub fn latest(&self) -> Option<&[f64; 6]> {
         self.ohlcv_list.first()
     }
 
-    /// Get all timestamps
     pub fn timestamps(&self) -> Vec<i64> {
         self.ohlcv_list.iter().map(|c| c[0] as i64).collect()
     }
 
-    /// Get all close prices
     pub fn close_prices(&self) -> Vec<f64> {
         self.ohlcv_list.iter().map(|c| c[4]).collect()
     }
 
-    /// Get all volumes
     pub fn volumes(&self) -> Vec<f64> {
         self.ohlcv_list.iter().map(|c| c[5]).collect()
     }

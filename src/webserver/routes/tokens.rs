@@ -18,11 +18,11 @@ use crate::{
     logger::{log, LogTag},
     pools, positions,
     tokens::blacklist,
+    tokens::SecurityRisk,
     webserver::{
         state::AppState,
         utils::{error_response, success_response},
     },
-    tokens::SecurityRisk,
 };
 
 // =============================================================================
@@ -116,11 +116,11 @@ pub struct TokenDetailResponse {
     pub tagline: Option<String>,
     pub description: Option<String>,
     pub decimals: Option<u8>,
-    
+
     // Visuals
     pub logo_url: Option<String>,
     pub website: Option<String>,
-    
+
     // Status flags
     pub verified: bool,
     pub tags: Vec<String>,
@@ -129,14 +129,14 @@ pub struct TokenDetailResponse {
     pub has_ohlcv: bool,
     pub has_pool_price: bool,
     pub has_open_position: bool,
-    
+
     // Timestamps
     pub created_at: Option<i64>,
     pub last_updated: Option<i64>,
     pub pair_created_at: Option<i64>,
     pub pair_url: Option<String>,
     pub boosts_active: Option<i64>,
-    
+
     // Price data
     pub price_sol: Option<f64>,
     pub price_usd: Option<f64>,
@@ -145,33 +145,33 @@ pub struct TokenDetailResponse {
     pub price_change_h1: Option<f64>,
     pub price_change_h24: Option<f64>,
     pub price_change_periods: PeriodStats<f64>,
-    
+
     // Liquidity
     pub liquidity_usd: Option<f64>,
     pub liquidity_base: Option<f64>,
     pub liquidity_quote: Option<f64>,
-    
+
     // Volume
     pub volume_24h: Option<f64>,
     pub volume_periods: PeriodStats<f64>,
-    
+
     // Market metrics
     pub fdv: Option<f64>,
     pub market_cap: Option<f64>,
-    
+
     // Pool info
     pub pool_address: Option<String>,
     pub pool_dex: Option<String>,
     pub pool_reserves_sol: Option<f64>,
     pub pool_reserves_token: Option<f64>,
-    
+
     // Transactions
     pub txn_periods: PeriodStats<TxnPeriodSummary>,
     pub buys_24h: Option<i64>,
     pub sells_24h: Option<i64>,
     pub net_flow_24h: Option<i64>,
     pub buy_sell_ratio_24h: Option<f64>,
-    
+
     // Security
     pub risk_score: Option<i32>,
     pub rugged: Option<bool>,
@@ -181,14 +181,14 @@ pub struct TokenDetailResponse {
     pub top_10_concentration: Option<f64>,
     pub security_risks: Vec<SecurityRisk>,
     pub security_summary: Option<String>,
-    
+
     // Social/Links
     pub websites: Vec<TokenWebsiteLink>,
     pub socials: Vec<TokenSocialLink>,
-    
+
     // Pools
     pub pools: Vec<TokenPoolInfo>,
-    
+
     // Metadata
     pub timestamp: String,
 }
@@ -740,7 +740,15 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         total_holders,
         top_10_concentration,
         security_risks,
-    ) = (None, None, None, None, None, None, Vec::<SecurityRisk>::new());
+    ) = (
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Vec::<SecurityRisk>::new(),
+    );
 
     if is_debug_webserver_enabled() {
         log(
@@ -857,10 +865,10 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     let created_at_ts = Some(token.first_seen_at.timestamp());
     let last_updated_ts = Some(token.updated_at.timestamp());
     let pair_created_at = created_at_ts;
-    
+
     // Prefer pool price (real-time on-chain) over token cached price
     let price_usd = price_sol.map(|p| p * 150.0); // Rough SOL/USD conversion; ideally fetch SOL price
-    
+
     // Build price change periods from flat fields
     let price_change_periods = PeriodStats {
         m5: token.price_change_m5,
@@ -868,7 +876,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         h6: token.price_change_h6,
         h24: token.price_change_h24,
     };
-    
+
     // Build volume periods from flat fields
     let volume_periods = PeriodStats {
         m5: token.volume_m5,
@@ -876,7 +884,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         h6: token.volume_h6,
         h24: token.volume_h24,
     };
-    
+
     // Build transaction periods from flat fields
     let txn_periods = PeriodStats {
         m5: Some(TxnPeriodSummary {
@@ -987,7 +995,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         created_at: created_at_ts,
         last_updated: last_updated_ts,
         pair_created_at,
-        pair_url: None, // Not available in unified Token
+        pair_url: None,      // Not available in unified Token
         boosts_active: None, // Not available in unified Token
         price_sol,
         price_usd,

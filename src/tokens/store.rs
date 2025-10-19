@@ -67,7 +67,10 @@ pub fn upsert_token(token: Token) -> Result<(), String> {
             log(
                 LogTag::Tokens,
                 "WARN",
-                &format!("Failed to persist token metadata to DB: mint={} err={}", mint, e)
+                &format!(
+                    "Failed to persist token metadata to DB: mint={} err={}",
+                    mint, e
+                ),
             );
             // Don't fail - memory update succeeded
         }
@@ -227,7 +230,7 @@ pub fn set_decimals(mint: &str, decimals: u8) -> Result<(), String> {
             log(
                 LogTag::Tokens,
                 "WARN",
-                &format!("Failed to persist decimals to DB: mint={} err={}", mint, e)
+                &format!("Failed to persist decimals to DB: mint={} err={}", mint, e),
             );
         }
     }

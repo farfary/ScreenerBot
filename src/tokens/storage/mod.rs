@@ -6,4 +6,6 @@ pub mod operations;
 pub mod schema;
 
 pub use database::{Database, TableStats};
-pub use operations::{get_rugcheck_info, get_token_metadata, save_rugcheck_info, upsert_token_metadata};
+pub use operations::{
+    get_rugcheck_info, get_token_metadata, save_rugcheck_info, upsert_token_metadata,
+};

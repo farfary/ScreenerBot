@@ -1761,7 +1761,6 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     if let Some(current_price) = price_map.get(&position.mint) {
                         // Fetch token from cache
                         if let Some(full_token) = crate::tokens::store::get_token(&position.mint) {
-
                             log(
                                 LogTag::Trader,
                                 "SELL_RETRY",
@@ -1960,7 +1959,8 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                         .await;
 
                         // Fetch token from cache for immediate processing
-                        let Some(full_token) = crate::tokens::store::get_token(&position.mint) else {
+                        let Some(full_token) = crate::tokens::store::get_token(&position.mint)
+                        else {
                             // If token not found in cache, remove the cached decision since we can't trade it
                             remove_sell_decision(&position_id);
                             log(

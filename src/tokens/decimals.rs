@@ -114,7 +114,10 @@ async fn ensure_locked(provider: &TokenDataProvider, mint: &str) -> Result<u8, S
                     log(
                         LogTag::Tokens,
                         "WARN",
-                        &format!("Failed to persist decimals after Rugcheck fetch: mint={} err={}", mint, e)
+                        &format!(
+                            "Failed to persist decimals after Rugcheck fetch: mint={} err={}",
+                            mint, e
+                        ),
                     );
                 }
                 return Ok(d);
@@ -124,7 +127,7 @@ async fn ensure_locked(provider: &TokenDataProvider, mint: &str) -> Result<u8, S
             log(
                 LogTag::Tokens,
                 "WARN",
-                &format!("Rugcheck decimals fetch failed: mint={} err={}", mint, err)
+                &format!("Rugcheck decimals fetch failed: mint={} err={}", mint, err),
             );
         }
     }
@@ -137,7 +140,10 @@ async fn ensure_locked(provider: &TokenDataProvider, mint: &str) -> Result<u8, S
                 log(
                     LogTag::Tokens,
                     "WARN",
-                    &format!("Failed to persist decimals after chain fetch: mint={} err={}", mint, e)
+                    &format!(
+                        "Failed to persist decimals after chain fetch: mint={} err={}",
+                        mint, e
+                    ),
                 );
             }
             Ok(d)
@@ -151,13 +157,16 @@ fn cache_and_store(mint: &str, decimals: u8) {
     if let Ok(mut w) = DECIMALS_CACHE.write() {
         w.insert(mint.to_string(), decimals);
     }
-    
+
     // Update store (memory + DB synchronized)
     if let Err(e) = store::set_decimals(mint, decimals) {
         log(
             LogTag::Tokens,
             "WARN",
-            &format!("Failed to persist decimals via store: mint={} err={}", mint, e)
+            &format!(
+                "Failed to persist decimals via store: mint={} err={}",
+                mint, e
+            ),
         );
     }
 }
@@ -194,25 +203,21 @@ async fn fetch_decimals_from_chain(mint: &str) -> Result<u8, String> {
     }
 
     // Parse mint address
-    let mint_pubkey = Pubkey::from_str(mint)
-        .map_err(|e| format!("Invalid mint address: {}", e))?;
+    let mint_pubkey = Pubkey::from_str(mint).map_err(|e| format!("Invalid mint address: {}", e))?;
 
     // Get RPC client
     let rpc_client = get_rpc_client();
 
     // Fetch account data
-    let account = rpc_client
-        .get_account(&mint_pubkey)
-        .await
-        .map_err(|e| {
-            if e.contains("could not find account") || e.contains("Account not found") {
-                "Account not found".to_string()
-            } else if e.contains("429") || e.to_lowercase().contains("rate limit") {
-                format!("Rate limited: {}", e)
-            } else {
-                format!("Failed to fetch account: {}", e)
-            }
-        })?;
+    let account = rpc_client.get_account(&mint_pubkey).await.map_err(|e| {
+        if e.contains("could not find account") || e.contains("Account not found") {
+            "Account not found".to_string()
+        } else if e.contains("429") || e.to_lowercase().contains("rate limit") {
+            format!("Rate limited: {}", e)
+        } else {
+            format!("Failed to fetch account: {}", e)
+        }
+    })?;
 
     // Check account data
     if account.data.is_empty() {
@@ -239,4 +244,3 @@ async fn fetch_decimals_from_chain(mint: &str) -> Result<u8, String> {
         account.owner
     ))
 }
-

@@ -991,20 +991,18 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
     let security = None::<SecurityInfo>;
 
     // 7. Get social info from token database
-    let social = api_token.as_ref().map(|token| {
-        SocialInfo {
-            website: token.websites.first().map(|w| w.url.clone()),
-            twitter: token
-                .socials
-                .iter()
-                .find(|s| s.link_type.to_lowercase().contains("twitter"))
-                .map(|s| s.url.clone()),
-            telegram: token
-                .socials
-                .iter()
-                .find(|s| s.link_type.to_lowercase().contains("telegram"))
-                .map(|s| s.url.clone()),
-        }
+    let social = api_token.as_ref().map(|token| SocialInfo {
+        website: token.websites.first().map(|w| w.url.clone()),
+        twitter: token
+            .socials
+            .iter()
+            .find(|s| s.link_type.to_lowercase().contains("twitter"))
+            .map(|s| s.url.clone()),
+        telegram: token
+            .socials
+            .iter()
+            .find(|s| s.link_type.to_lowercase().contains("telegram"))
+            .map(|s| s.url.clone()),
     });
 
     // 8. Get position debug data

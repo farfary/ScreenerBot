@@ -2,7 +2,7 @@
 use reqwest::Client;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{Mutex, Semaphore};
+use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
 
 /// Rate limiter for API clients
 pub struct RateLimiter {
@@ -29,25 +29,35 @@ impl RateLimiter {
     }
 
     /// Wait until we can make a request (respects rate limits)
-    pub async fn acquire(&self) {
-        // Acquire semaphore permit (ensures only 1 concurrent request)
-        let _permit = self.semaphore.acquire().await.unwrap();
+    pub async fn acquire(&self) -> Result<RateLimitGuard, String> {
+        let permit = self
+            .semaphore
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|e| format!("Failed to acquire rate limiter permit: {}", e))?;
 
-        // Enforce minimum interval between requests
         if !self.min_interval.is_zero() {
             let mut last = self.last_request.lock().await;
+            let now = Instant::now();
+
             if let Some(last_time) = *last {
                 let elapsed = last_time.elapsed();
                 if elapsed < self.min_interval {
                     let sleep_duration = self.min_interval - elapsed;
                     drop(last);
                     tokio::time::sleep(sleep_duration).await;
-                    last = self.last_request.lock().await;
+                    let mut last_relocked = self.last_request.lock().await;
+                    *last_relocked = Some(Instant::now());
+                } else {
+                    *last = Some(now);
                 }
+            } else {
+                *last = Some(now);
             }
-            *last = Some(Instant::now());
         }
-        // Permit is dropped here automatically
+
+        Ok(RateLimitGuard { _permit: permit })
     }
 
     pub fn max_per_minute(&self) -> usize {
@@ -57,6 +67,11 @@ impl RateLimiter {
     pub fn min_interval(&self) -> Duration {
         self.min_interval
     }
+}
+
+/// RAII guard returned by [`RateLimiter::acquire`]
+pub struct RateLimitGuard {
+    _permit: OwnedSemaphorePermit,
 }
 
 /// HTTP client wrapper with timeout and retry logic

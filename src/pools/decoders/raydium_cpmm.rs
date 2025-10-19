@@ -5,9 +5,9 @@
 /// from the old pool system.
 use super::{AccountData, PoolDecoder};
 use crate::arguments::is_debug_pool_decoders_enabled;
+use crate::constants::SOL_DECIMALS;
 use crate::logger::{log, LogTag};
 use crate::pools::types::{PriceResult, ProgramKind, RAYDIUM_CPMM_PROGRAM_ID, SOL_MINT};
-use crate::constants::SOL_DECIMALS;
 use crate::pools::utils::{
     read_bool_at_offset, read_pubkey_at_offset, read_u64_at_offset, read_u8_at_offset,
 };

@@ -643,11 +643,8 @@ impl TransactionProcessor {
                     .unwrap_or_else(|| {
                         // Fallback to DB lookup only if RPC doesn't have it
                         tokio::task::block_in_place(|| {
-                            tokio::runtime::Handle::current().block_on(async {
-                                get_decimals(primary_mint)
-                                    .await
-                                    .unwrap_or(9)
-                            })
+                            tokio::runtime::Handle::current()
+                                .block_on(async { get_decimals(primary_mint).await.unwrap_or(9) })
                         })
                     }) as u8;
 

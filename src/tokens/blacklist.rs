@@ -78,6 +78,9 @@ pub fn get_blacklist_summary() -> Result<BlacklistSummary, String> {
 // Track a failed route for potential blacklist policies
 pub fn track_route_failure_db(mint: &str, _symbol: &str, reason: &str) {
     // Persisting route failures is currently disabled until storage operation is restored
-    log(LogTag::Tokens, "ROUTE_FAILURE", &format!("mint={} reason={}", mint, reason));
+    log(
+        LogTag::Tokens,
+        "ROUTE_FAILURE",
+        &format!("mint={} reason={}", mint, reason),
+    );
 }
-

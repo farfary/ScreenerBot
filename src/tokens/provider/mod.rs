@@ -6,11 +6,11 @@ pub mod query;
 pub mod types;
 
 use crate::apis::get_api_manager;
+use crate::logger::{log, LogTag};
 use crate::tokens::cache::CacheManager;
 use crate::tokens::provider::fetcher::Fetcher;
 use crate::tokens::provider::query::Query;
 use crate::tokens::provider::types::{CompleteTokenData, FetchOptions, ProviderStats};
-use crate::logger::{log, LogTag};
 use crate::tokens::storage::Database;
 use crate::tokens::types::{DataSource, TokenMetadata};
 use chrono::Utc;
@@ -59,7 +59,11 @@ impl TokenDataProvider {
         ));
         let query = Arc::new(Query::new(Arc::clone(&database)));
 
-        log(LogTag::Tokens, "INFO", "TokenDataProvider initialized successfully");
+        log(
+            LogTag::Tokens,
+            "INFO",
+            "TokenDataProvider initialized successfully",
+        );
 
         Ok(Self {
             fetcher,
@@ -71,7 +75,7 @@ impl TokenDataProvider {
     /// Hydrate store from database on startup
     fn hydrate_store_from_database(db: &Arc<Database>) -> Result<(), String> {
         use std::time::Instant;
-        
+
         log(LogTag::Tokens, "INFO", "Hydrating store from database...");
         let start = Instant::now();
 
@@ -87,8 +91,8 @@ impl TokenDataProvider {
         let tokens: Vec<crate::tokens::types::Token> = stmt
             .query_map([], |row| {
                 let updated_ts: i64 = row.get(4)?;
-                let updated_dt = chrono::DateTime::from_timestamp(updated_ts, 0)
-                    .unwrap_or_else(|| Utc::now());
+                let updated_dt =
+                    chrono::DateTime::from_timestamp(updated_ts, 0).unwrap_or_else(|| Utc::now());
                 let mint: String = row.get(0)?;
                 let symbol: String = row.get(1)?;
                 let name: String = row.get(2)?;
@@ -154,7 +158,15 @@ impl TokenDataProvider {
         // Batch load into store (direct memory access, skip DB write)
         crate::tokens::store::hydrate_from_tokens(tokens)?;
 
-        log(LogTag::Tokens, "INFO", &format!("Store hydrated: {} tokens loaded in {}ms", count, start.elapsed().as_millis()));
+        log(
+            LogTag::Tokens,
+            "INFO",
+            &format!(
+                "Store hydrated: {} tokens loaded in {}ms",
+                count,
+                start.elapsed().as_millis()
+            ),
+        );
 
         Ok(())
     }
@@ -168,7 +180,11 @@ impl TokenDataProvider {
         let options = options.unwrap_or_default();
         let fetch_start = Utc::now();
 
-        log(LogTag::Tokens, "INFO", &format!("Fetching complete data for mint={}", mint));
+        log(
+            LogTag::Tokens,
+            "INFO",
+            &format!("Fetching complete data for mint={}", mint),
+        );
 
         let mut rugcheck_info = None;
         let mut sources_used = Vec::new();
@@ -196,27 +212,28 @@ impl TokenDataProvider {
                     );
                 }
                 Err(e) => {
-                    log(LogTag::Tokens, "ERROR", &format!("Failed to fetch Rugcheck data: {}", e));
+                    log(
+                        LogTag::Tokens,
+                        "ERROR",
+                        &format!("Failed to fetch Rugcheck data: {}", e),
+                    );
                     self.increment_errors();
                 }
             }
         }
 
         // Get unified metadata
-        let metadata = self
-            .query
-            .get_token_metadata(mint)?
-            .unwrap_or_else(|| {
-                let now = Utc::now().timestamp();
-                TokenMetadata {
-                    mint: mint.to_string(),
-                    symbol: None,
-                    name: None,
-                    decimals: None,
-                    created_at: now,
-                    updated_at: now,
-                }
-            });
+        let metadata = self.query.get_token_metadata(mint)?.unwrap_or_else(|| {
+            let now = Utc::now().timestamp();
+            TokenMetadata {
+                mint: mint.to_string(),
+                symbol: None,
+                name: None,
+                decimals: None,
+                created_at: now,
+                updated_at: now,
+            }
+        });
 
         // Update stats
         self.increment_fetches();
@@ -227,7 +244,17 @@ impl TokenDataProvider {
             self.increment_cache_misses();
         }
 
-        log(LogTag::Tokens, "INFO", &format!("Fetched complete data for mint={}: {} sources, {} cache hits, {} cache misses", mint, sources_used.len(), cache_hits.len(), cache_misses.len()));
+        log(
+            LogTag::Tokens,
+            "INFO",
+            &format!(
+                "Fetched complete data for mint={}: {} sources, {} cache hits, {} cache misses",
+                mint,
+                sources_used.len(),
+                cache_hits.len(),
+                cache_misses.len()
+            ),
+        );
 
         Ok(CompleteTokenData {
             mint: mint.to_string(),

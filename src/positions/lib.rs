@@ -326,9 +326,7 @@ async fn fetch_and_create_token_snapshot(
     // Compute freshness based on last price update vs now
     let now = Utc::now();
     let last_update = token.last_price_update;
-    let age_ms = now
-        .signed_duration_since(last_update)
-        .num_milliseconds();
+    let age_ms = now.signed_duration_since(last_update).num_milliseconds();
     let freshness_score = if age_ms < 30_000 {
         100 // < 30s
     } else if age_ms < 60_000 {
@@ -376,10 +374,7 @@ async fn fetch_and_create_token_snapshot(
     // Token meta links
     let token_description = token.description.clone();
     let token_image = token.image_url.clone();
-    let token_website = token
-        .websites
-        .get(0)
-        .map(|w| w.url.clone());
+    let token_website = token.websites.get(0).map(|w| w.url.clone());
     let token_twitter = token
         .socials
         .iter()

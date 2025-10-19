@@ -20,7 +20,11 @@ impl Database {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, String> {
         let db_path = path.as_ref().to_string_lossy().to_string();
 
-        log(LogTag::Tokens, "INFO", &format!("Opening database: {}", db_path));
+        log(
+            LogTag::Tokens,
+            "INFO",
+            &format!("Opening database: {}", db_path),
+        );
 
         let conn =
             Connection::open(&path).map_err(|e| format!("Failed to open database: {}", e))?;
@@ -39,7 +43,11 @@ impl Database {
         // Initialize schema
         db.initialize_schema()?;
 
-        log(LogTag::Tokens, "INFO", &format!("Database initialized: {}", db_path));
+        log(
+            LogTag::Tokens,
+            "INFO",
+            &format!("Database initialized: {}", db_path),
+        );
 
         let db_arc = Arc::new(db);
         let _ = GLOBAL_DB.set(Arc::clone(&db_arc));

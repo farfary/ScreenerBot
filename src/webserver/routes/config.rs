@@ -222,7 +222,7 @@ async fn get_sol_price_config() -> Response {
 /// GET /api/config/summary - Get summary display configuration
 async fn get_summary_config() -> Response {
     let data = config::with_config(|cfg| ConfigResponse {
-    data: serde_json::json!({}),
+        data: serde_json::json!({}),
         timestamp: chrono::Utc::now().to_rfc3339(),
     });
 

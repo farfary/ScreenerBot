@@ -12,6 +12,10 @@
 // =============================================================================
 use super::types::{max_watched_tokens, PoolDescriptor, ProgramKind, SOL_MINT};
 use super::utils::is_stablecoin_mint;
+use crate::apis::{
+    dexscreener_types::DexScreenerPool, geckoterminal_types::GeckoTerminalPool, get_api_manager,
+    DexScreenerClient, GeckoTerminalClient,
+};
 use crate::config::with_config;
 use crate::events::{record_safe, Event, EventCategory, Severity};
 use crate::filtering;
@@ -19,13 +23,6 @@ use crate::global::is_debug_pool_discovery_enabled;
 use crate::logger::{log, LogTag};
 use crate::pools::service::{
     get_debug_token_override, get_pool_analyzer, is_single_pool_mode_enabled,
-};
-use crate::apis::{
-    get_api_manager,
-    DexScreenerClient,
-    dexscreener_types::DexScreenerPool,
-    GeckoTerminalClient,
-    geckoterminal_types::GeckoTerminalPool,
 };
 use dashmap::DashMap;
 use solana_sdk::pubkey::Pubkey;
@@ -45,7 +42,9 @@ struct DexsBatchResult {
 
 impl DexsBatchResult {
     fn empty() -> Self {
-        Self { pools: HashMap::new() }
+        Self {
+            pools: HashMap::new(),
+        }
     }
 }
 
@@ -55,7 +54,9 @@ struct GeckoBatchResult {
 
 impl GeckoBatchResult {
     fn empty() -> Self {
-        Self { pools: HashMap::new() }
+        Self {
+            pools: HashMap::new(),
+        }
     }
 }
 
@@ -107,7 +108,8 @@ impl PoolDiscovery {
                         // Prefer matching base, else quote
                         let mut assigned = false;
                         for mint in batch {
-                            if &pool.base_token_address == mint || &pool.quote_token_address == mint {
+                            if &pool.base_token_address == mint || &pool.quote_token_address == mint
+                            {
                                 out.entry(mint.clone()).or_default().push(pool.clone());
                                 assigned = true;
                                 break;
@@ -115,7 +117,9 @@ impl PoolDiscovery {
                         }
                         if !assigned {
                             // Fallback: group under base token
-                            out.entry(pool.base_token_address.clone()).or_default().push(pool.clone());
+                            out.entry(pool.base_token_address.clone())
+                                .or_default()
+                                .push(pool.clone());
                         }
                     }
                 }
@@ -814,7 +818,7 @@ impl PoolDiscovery {
             // Use global API manager
             let apis = get_api_manager();
             let client = &apis.dexscreener;
-            
+
             match client.fetch_token_pools(mint, Some("solana")).await {
                 Ok(token_pairs) => {
                     let mut pools = Vec::new();

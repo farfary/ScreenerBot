@@ -7,17 +7,18 @@
 /// 2. /v1/tokens/{mint}/report/summary - Get summary security report
 /// 3. /v1/stats/summary - Get global platform statistics
 /// 4. /v1/tokens/{mints}/batch - Get multiple token reports (batch)
-
 pub mod types;
 
+use self::types::{
+    RugcheckInfo, RugcheckNewToken, RugcheckRecentToken, RugcheckResponse, RugcheckTrendingToken,
+    RugcheckVerifiedToken,
+};
 use crate::apis::client::{HttpClient, RateLimiter};
 use crate::apis::stats::ApiStatsTracker;
-use self::types::{
-    RugcheckInfo, RugcheckResponse, RugcheckNewToken, RugcheckRecentToken,
-    RugcheckTrendingToken, RugcheckVerifiedToken
-};
 use crate::tokens::types::{ApiError, SecurityRisk, TokenHolder};
 use chrono::Utc;
+use reqwest::StatusCode;
+use serde::de::DeserializeOwned;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -71,48 +72,86 @@ impl RugcheckClient {
         self.stats.get_stats().await
     }
 
-    /// Fetch security report for a token
-    pub async fn fetch_report(&self, mint: &str) -> Result<RugcheckInfo, ApiError> {
+    async fn execute_request(
+        &self,
+        url: &str,
+        endpoint: &str,
+    ) -> Result<(reqwest::Response, f64), ApiError> {
         if !self.enabled {
             return Err(ApiError::Disabled);
         }
 
-        self.rate_limiter.acquire().await;
+        let guard = match self.rate_limiter.acquire().await {
+            Ok(permit) => permit,
+            Err(err) => {
+                self.stats
+                    .record_error(format!("{} rate limiter acquire failed: {}", endpoint, err))
+                    .await;
+                return Err(ApiError::RateLimitExceeded);
+            }
+        };
+
         let start = Instant::now();
-
-        let url = format!("{}/{}/report", RUGCHECK_BASE_URL, mint);
-
-        let response = self
-            .http_client
-            .client()
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| {
-                let error = ApiError::NetworkError(e.to_string());
-                self.stats.record_cache_miss();
-                error
-            })?;
-
+        let response_result = self.http_client.client().get(url).send().await;
+        drop(guard);
         let elapsed = start.elapsed().as_millis() as f64;
 
-        if !response.status().is_success() {
+        match response_result {
+            Ok(response) => Ok((response, elapsed)),
+            Err(err) => {
+                self.stats.record_cache_miss();
+                self.stats.record_request(false, elapsed).await;
+                self.stats
+                    .record_error(format!("{} request failed: {}", endpoint, err))
+                    .await;
+                Err(ApiError::NetworkError(err.to_string()))
+            }
+        }
+    }
+
+    async fn parse_json<T>(&self, url: &str, endpoint: &str) -> Result<T, ApiError>
+    where
+        T: DeserializeOwned,
+    {
+        let (mut response, elapsed) = self.execute_request(url, endpoint).await?;
+        let status = response.status();
+
+        if !status.is_success() {
             self.stats.record_request(false, elapsed).await;
-            if response.status() == 404 {
+            let body = response.text().await.unwrap_or_default();
+            self.stats
+                .record_error(format!("{} HTTP {}: {}", endpoint, status, body))
+                .await;
+
+            if status == StatusCode::NOT_FOUND {
                 return Err(ApiError::NotFound);
             }
+
             return Err(ApiError::InvalidResponse(format!(
-                "HTTP {}",
-                response.status()
+                "HTTP {}: {}",
+                status, body
             )));
         }
 
-        let api_response: RugcheckResponse = response.json().await.map_err(|e| {
-            self.stats.record_request(false, elapsed);
-            ApiError::InvalidResponse(e.to_string())
-        })?;
+        match response.json::<T>().await {
+            Ok(value) => {
+                self.stats.record_request(true, elapsed).await;
+                Ok(value)
+            }
+            Err(err) => {
+                self.stats.record_request(false, elapsed).await;
+                self.stats
+                    .record_error(format!("{} parse error: {}", endpoint, err))
+                    .await;
+                Err(ApiError::InvalidResponse(err.to_string()))
+            }
+        }
+    }
 
-        self.stats.record_request(true, elapsed).await;
+    /// Fetch security report for a token
+    pub async fn fetch_report(&self, mint: &str) -> Result<RugcheckInfo, ApiError> {
+        let url = format!("{}/{}/report", RUGCHECK_BASE_URL, mint);
+        let api_response: RugcheckResponse = self.parse_json(&url, "rugcheck.report").await?;
 
         // Convert API response to domain type
         let risks = api_response
@@ -189,173 +228,25 @@ impl RugcheckClient {
 
     /// Fetch new tokens from /v1/stats/new_tokens
     pub async fn fetch_new_tokens(&self) -> Result<Vec<RugcheckNewToken>, ApiError> {
-        if !self.enabled {
-            return Err(ApiError::Disabled);
-        }
-
-        self.rate_limiter.acquire().await;
-        let start = Instant::now();
-
         let url = format!("{}/new_tokens", RUGCHECK_STATS_BASE_URL);
-
-        let response = self
-            .http_client
-            .client()
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| {
-                let error = ApiError::NetworkError(e.to_string());
-                self.stats.record_cache_miss();
-                error
-            })?;
-
-        let elapsed = start.elapsed().as_millis() as f64;
-
-        if !response.status().is_success() {
-            self.stats.record_request(false, elapsed).await;
-            return Err(ApiError::InvalidResponse(format!(
-                "HTTP {}",
-                response.status()
-            )));
-        }
-
-        let tokens: Vec<RugcheckNewToken> = response.json().await.map_err(|e| {
-            self.stats.record_request(false, elapsed);
-            ApiError::InvalidResponse(e.to_string())
-        })?;
-
-        self.stats.record_request(true, elapsed).await;
-
-        Ok(tokens)
+        self.parse_json(&url, "rugcheck.stats.new_tokens").await
     }
 
     /// Fetch most viewed tokens from /v1/stats/recent
     pub async fn fetch_recent_tokens(&self) -> Result<Vec<RugcheckRecentToken>, ApiError> {
-        if !self.enabled {
-            return Err(ApiError::Disabled);
-        }
-
-        self.rate_limiter.acquire().await;
-        let start = Instant::now();
-
         let url = format!("{}/recent", RUGCHECK_STATS_BASE_URL);
-
-        let response = self
-            .http_client
-            .client()
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| {
-                let error = ApiError::NetworkError(e.to_string());
-                self.stats.record_cache_miss();
-                error
-            })?;
-
-        let elapsed = start.elapsed().as_millis() as f64;
-
-        if !response.status().is_success() {
-            self.stats.record_request(false, elapsed).await;
-            return Err(ApiError::InvalidResponse(format!(
-                "HTTP {}",
-                response.status()
-            )));
-        }
-
-        let tokens: Vec<RugcheckRecentToken> = response.json().await.map_err(|e| {
-            self.stats.record_request(false, elapsed);
-            ApiError::InvalidResponse(e.to_string())
-        })?;
-
-        self.stats.record_request(true, elapsed).await;
-
-        Ok(tokens)
+        self.parse_json(&url, "rugcheck.stats.recent").await
     }
 
     /// Fetch trending tokens from /v1/stats/trending
     pub async fn fetch_trending_tokens(&self) -> Result<Vec<RugcheckTrendingToken>, ApiError> {
-        if !self.enabled {
-            return Err(ApiError::Disabled);
-        }
-
-        self.rate_limiter.acquire().await;
-        let start = Instant::now();
-
         let url = format!("{}/trending", RUGCHECK_STATS_BASE_URL);
-
-        let response = self
-            .http_client
-            .client()
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| {
-                let error = ApiError::NetworkError(e.to_string());
-                self.stats.record_cache_miss();
-                error
-            })?;
-
-        let elapsed = start.elapsed().as_millis() as f64;
-
-        if !response.status().is_success() {
-            self.stats.record_request(false, elapsed).await;
-            return Err(ApiError::InvalidResponse(format!(
-                "HTTP {}",
-                response.status()
-            )));
-        }
-
-        let tokens: Vec<RugcheckTrendingToken> = response.json().await.map_err(|e| {
-            self.stats.record_request(false, elapsed);
-            ApiError::InvalidResponse(e.to_string())
-        })?;
-
-        self.stats.record_request(true, elapsed).await;
-
-        Ok(tokens)
+        self.parse_json(&url, "rugcheck.stats.trending").await
     }
 
     /// Fetch verified tokens from /v1/stats/verified
     pub async fn fetch_verified_tokens(&self) -> Result<Vec<RugcheckVerifiedToken>, ApiError> {
-        if !self.enabled {
-            return Err(ApiError::Disabled);
-        }
-
-        self.rate_limiter.acquire().await;
-        let start = Instant::now();
-
         let url = format!("{}/verified", RUGCHECK_STATS_BASE_URL);
-
-        let response = self
-            .http_client
-            .client()
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| {
-                let error = ApiError::NetworkError(e.to_string());
-                self.stats.record_cache_miss();
-                error
-            })?;
-
-        let elapsed = start.elapsed().as_millis() as f64;
-
-        if !response.status().is_success() {
-            self.stats.record_request(false, elapsed).await;
-            return Err(ApiError::InvalidResponse(format!(
-                "HTTP {}",
-                response.status()
-            )));
-        }
-
-        let tokens: Vec<RugcheckVerifiedToken> = response.json().await.map_err(|e| {
-            self.stats.record_request(false, elapsed);
-            ApiError::InvalidResponse(e.to_string())
-        })?;
-
-        self.stats.record_request(true, elapsed).await;
-
-        Ok(tokens)
+        self.parse_json(&url, "rugcheck.stats.verified").await
     }
 }

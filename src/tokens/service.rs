@@ -28,8 +28,16 @@ impl TokensOrchestrator {
     pub fn initialize(&self) -> Result<(), String> {
         let db = self.provider.database();
         match bl::hydrate_from_db(&db) {
-            Ok(count) => log(LogTag::Tokens, "INFO", &format!("Blacklist hydrated: {} entries", count)),
-            Err(e) => log(LogTag::Tokens, "WARN", &format!("Blacklist hydrate failed: {}", e)),
+            Ok(count) => log(
+                LogTag::Tokens,
+                "INFO",
+                &format!("Blacklist hydrated: {} entries", count),
+            ),
+            Err(e) => log(
+                LogTag::Tokens,
+                "WARN",
+                &format!("Blacklist hydrate failed: {}", e),
+            ),
         }
         Ok(())
     }

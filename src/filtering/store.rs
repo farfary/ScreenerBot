@@ -127,7 +127,7 @@ impl FilteringStore {
             .map(|entry| entry.token.clone())
             .collect();
 
-    apply_filters(&mut tokens, &query, snapshot.as_ref());
+        apply_filters(&mut tokens, &query, snapshot.as_ref());
         sort_tokens(&mut tokens, query.sort_key, query.sort_direction);
 
         let total = tokens.len();
@@ -147,11 +147,13 @@ impl FilteringStore {
             }
         }
         let priced_set: std::collections::HashSet<_> = priced_mints.iter().cloned().collect();
-        let open_set: std::collections::HashSet<_> =
-            open_position_mints.iter().cloned().collect();
+        let open_set: std::collections::HashSet<_> = open_position_mints.iter().cloned().collect();
         let ohlcv_set: std::collections::HashSet<_> = ohlcv_mints.iter().cloned().collect();
 
-        let priced_total = tokens.iter().filter(|t| priced_set.contains(&t.mint)).count();
+        let priced_total = tokens
+            .iter()
+            .filter(|t| priced_set.contains(&t.mint))
+            .count();
         let positions_total = tokens.iter().filter(|t| open_set.contains(&t.mint)).count();
         let blacklisted_total = tokens.iter().filter(|t| t.is_blacklisted).count();
         let total_pages = if total == 0 {
@@ -170,7 +172,11 @@ impl FilteringStore {
             .saturating_sub(1)
             .saturating_mul(query.page_size);
         let end_idx = start_idx.saturating_add(query.page_size).min(total);
-        let items = if start_idx < total { tokens[start_idx..end_idx].to_vec() } else { Vec::new() };
+        let items = if start_idx < total {
+            tokens[start_idx..end_idx].to_vec()
+        } else {
+            Vec::new()
+        };
 
         Ok(FilteringQueryResult {
             items,
@@ -310,7 +316,17 @@ fn apply_filters(items: &mut Vec<Token>, query: &FilteringQuery, snapshot: &Filt
     let flags: std::collections::HashMap<&str, (&TokenEntry, bool, bool, bool)> = snapshot
         .tokens
         .iter()
-        .map(|(mint, entry)| (mint.as_str(), (entry, entry.has_pool_price, entry.has_open_position, entry.has_ohlcv)))
+        .map(|(mint, entry)| {
+            (
+                mint.as_str(),
+                (
+                    entry,
+                    entry.has_pool_price,
+                    entry.has_open_position,
+                    entry.has_ohlcv,
+                ),
+            )
+        })
         .collect();
 
     if let Some(search) = query.search.as_ref().map(|s| s.trim().to_lowercase()) {
@@ -344,15 +360,25 @@ fn apply_filters(items: &mut Vec<Token>, query: &FilteringQuery, snapshot: &Filt
     }
 
     if let Some(min) = query.min_unique_holders {
-    items.retain(|t| t.total_holders.unwrap_or(0) >= (min as i64));
+        items.retain(|t| t.total_holders.unwrap_or(0) >= (min as i64));
     }
 
     if let Some(flag) = query.has_pool_price {
-        items.retain(|t| flags.get(t.mint.as_str()).map(|(_, hp, _, _)| *hp == flag).unwrap_or(false));
+        items.retain(|t| {
+            flags
+                .get(t.mint.as_str())
+                .map(|(_, hp, _, _)| *hp == flag)
+                .unwrap_or(false)
+        });
     }
 
     if let Some(flag) = query.has_open_position {
-        items.retain(|t| flags.get(t.mint.as_str()).map(|(_, _, op, _)| *op == flag).unwrap_or(false));
+        items.retain(|t| {
+            flags
+                .get(t.mint.as_str())
+                .map(|(_, _, op, _)| *op == flag)
+                .unwrap_or(false)
+        });
     }
 
     if let Some(flag) = query.blacklisted {
@@ -360,7 +386,12 @@ fn apply_filters(items: &mut Vec<Token>, query: &FilteringQuery, snapshot: &Filt
     }
 
     if let Some(flag) = query.has_ohlcv {
-        items.retain(|t| flags.get(t.mint.as_str()).map(|(_, _, _, oh)| *oh == flag).unwrap_or(false));
+        items.retain(|t| {
+            flags
+                .get(t.mint.as_str())
+                .map(|(_, _, _, oh)| *oh == flag)
+                .unwrap_or(false)
+        });
     }
 }
 
@@ -428,7 +459,7 @@ fn build_stats(snapshot: &FilteringSnapshot, secure_threshold: i32) -> Filtering
     let with_ohlcv = snapshot
         .tokens
         .values()
-    .filter(|entry| entry.has_ohlcv)
+        .filter(|entry| entry.has_ohlcv)
         .count();
 
     FilteringStatsSnapshot {

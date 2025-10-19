@@ -4,12 +4,11 @@
 ///
 /// Endpoints implemented:
 /// 1. /api/v3/coins/list?include_platform=true - Get all coins with platform addresses
-
 pub mod types;
 
+use self::types::CoinGeckoCoin;
 use crate::apis::client::HttpClient;
 use crate::apis::stats::ApiStatsTracker;
-use self::types::CoinGeckoCoin;
 use crate::tokens::types::ApiError;
 use std::sync::Arc;
 use std::time::Instant;

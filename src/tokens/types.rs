@@ -42,14 +42,14 @@ pub struct TokenMetadata {
 // ============================================================================
 
 /// Complete token information - THE primary token type used everywhere in the bot
-/// 
+///
 /// **DATA SOURCE STRATEGY:**
 /// - Market data (price, volume, liquidity, transactions): From config.tokens.preferred_market_data_source
 ///   (either "dexscreener" or "geckoterminal")
 /// - Security data (authorities, risks, holders): Always from Rugcheck API
 /// - Real-time pricing: Use pools module (src/pools/) which fetches on-chain pool data
 ///   and provides current pricing via pools::get_pool_price()
-/// 
+///
 /// The `data_source` field indicates which API was used for market data.
 /// Rugcheck is always fetched separately for security information.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,10 +73,10 @@ pub struct Token {
     // ========================================================================
     /// Which API was used to populate price/volume/pool data (DexScreener or GeckoTerminal)
     pub data_source: DataSource,
-    
+
     /// When this token data was fetched
     pub fetched_at: DateTime<Utc>,
-    
+
     /// When this token data was last updated
     pub updated_at: DateTime<Utc>,
 

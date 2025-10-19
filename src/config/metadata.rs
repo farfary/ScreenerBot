@@ -192,6 +192,19 @@ impl FieldTypeInfo for i8 {
     }
 }
 
+impl<T> FieldTypeInfo for Option<T>
+where
+    T: FieldTypeInfo,
+{
+    fn field_type() -> FieldType {
+        T::field_type()
+    }
+
+    fn item_type() -> Option<FieldType> {
+        T::item_type()
+    }
+}
+
 impl<T> FieldTypeInfo for Vec<T>
 where
     T: FieldTypeInfo,
