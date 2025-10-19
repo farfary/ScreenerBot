@@ -1,5 +1,5 @@
 use clap::Parser;
-use screenerbot::tokens_new::api::coingecko::CoinGeckoClient;
+use screenerbot::apis::coingecko::CoinGeckoClient;
 use std::error::Error;
 
 #[derive(Parser)]

@@ -13,7 +13,7 @@
 ///   cargo run --bin debug_rugcheck --verified         # Test verified tokens endpoint
 ///   cargo run --bin debug_rugcheck --all-stats        # Test all stats endpoints
 use clap::Parser;
-use screenerbot::tokens_new::api::rugcheck::RugcheckClient;
+use screenerbot::apis::rugcheck::RugcheckClient;
 
 #[derive(Parser, Debug)]
 #[command(name = "debug_rugcheck")]

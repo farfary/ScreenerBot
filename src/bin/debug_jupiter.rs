@@ -10,7 +10,7 @@
 ///   cargo run --bin debug_jupiter --trending         # Test top trending (24h)
 ///   cargo run --bin debug_jupiter --all              # Test all endpoints
 use clap::Parser;
-use screenerbot::tokens_new::api::jupiter::JupiterClient;
+use screenerbot::apis::jupiter::JupiterClient;
 
 #[derive(Parser, Debug)]
 #[command(name = "debug_jupiter")]

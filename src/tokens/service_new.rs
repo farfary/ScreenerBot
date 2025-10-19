@@ -7,6 +7,7 @@
 /// - Cleanup tasks
 ///
 /// This service coordinates the new architecture with proper lifecycle management.
+use crate::global::TOKENS_DATABASE;
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use crate::tokens::cleanup;
 use crate::tokens::database::TokenDatabase;
@@ -16,8 +17,6 @@ use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
-
-const DB_PATH: &str = "data/tokens_new.db";
 
 /// New tokens service using clean architecture
 pub struct TokensServiceNew {
@@ -46,8 +45,8 @@ impl Service for TokensServiceNew {
 
     async fn initialize(&mut self) -> Result<(), String> {
         // Initialize database (schema initialized automatically in new())
-        let db =
-            TokenDatabase::new(DB_PATH).map_err(|e| format!("Failed to create database: {}", e))?;
+        let db = TokenDatabase::new(TOKENS_DATABASE)
+            .map_err(|e| format!("Failed to create database: {}", e))?;
 
         let db_arc = Arc::new(db);
 
@@ -59,7 +58,7 @@ impl Service for TokensServiceNew {
 
         println!(
             "[TOKENS_NEW] Service initialized with database at {}",
-            DB_PATH
+            TOKENS_DATABASE
         );
         Ok(())
     }
@@ -133,14 +132,4 @@ impl Service for TokensServiceNew {
             .insert("rugcheck_cache_entries".to_string(), rug_size as f64);
         metrics
     }
-}
-
-/// Get the global database handle for external access
-///
-/// This allows other parts of the system to access the token database
-/// without needing to pass it around everywhere.
-pub fn get_global_database() -> Option<Arc<TokenDatabase>> {
-    // This will be populated by the service on initialization
-    // For now, we'll need to implement global state management
-    None
 }

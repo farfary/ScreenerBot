@@ -1,5 +1,5 @@
 use clap::Parser;
-use screenerbot::tokens_new::api::defillama::DefiLlamaClient;
+use screenerbot::apis::defillama::DefiLlamaClient;
 use std::error::Error;
 
 #[derive(Parser)]

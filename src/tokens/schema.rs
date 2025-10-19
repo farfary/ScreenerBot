@@ -124,19 +124,19 @@ pub const CREATE_TABLES: &[&str] = &[
 pub const CREATE_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_tokens_updated ON tokens(updated_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_tokens_symbol ON tokens(symbol)",
-    
+
     "CREATE INDEX IF NOT EXISTS idx_market_dex_fetched ON market_dexscreener(fetched_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_market_dex_liquidity ON market_dexscreener(liquidity_usd DESC)",
-    
+
     "CREATE INDEX IF NOT EXISTS idx_market_gecko_fetched ON market_geckoterminal(fetched_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_market_gecko_liquidity ON market_geckoterminal(liquidity_usd DESC)",
-    
+
     "CREATE INDEX IF NOT EXISTS idx_security_rug_fetched ON security_rugcheck(fetched_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_security_rug_score ON security_rugcheck(score DESC)",
-    
+
     "CREATE INDEX IF NOT EXISTS idx_blacklist_added ON blacklist(added_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_blacklist_source ON blacklist(source)",
-    
+
     "CREATE INDEX IF NOT EXISTS idx_tracking_priority ON update_tracking(priority DESC, last_market_update ASC)",
     "CREATE INDEX IF NOT EXISTS idx_tracking_market_update ON update_tracking(last_market_update ASC)",
 ];
