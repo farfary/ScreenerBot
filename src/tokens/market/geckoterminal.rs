@@ -9,14 +9,31 @@ use crate::tokens::types::{GeckoTerminalData, TokenError, TokenResult};
 use chrono::Utc;
 
 /// Convert API pool data to our GeckoTerminalData type
-fn convert_pool_to_data(pool: &GeckoTerminalPool) -> GeckoTerminalData {
+fn convert_pool_to_data(pool: &GeckoTerminalPool, is_sol_pair: bool) -> GeckoTerminalData {
     fn parse_f64(value: &str) -> Option<f64> {
         value.parse::<f64>().ok()
     }
 
+    let price_usd = parse_f64(&pool.token_price_usd).unwrap_or(0.0);
+    
+    // Calculate price_sol based on pool type
+    let price_sol = if is_sol_pair {
+        // For SOL-paired pools, base_token_price_native IS the price in SOL
+        parse_f64(&pool.base_token_price_native).unwrap_or(0.0)
+    } else {
+        // For non-SOL pairs, calculate: price_sol = price_usd / sol_usd_price
+        let sol_price = crate::sol_price::get_sol_price();
+        if sol_price > 0.0 {
+            price_usd / sol_price
+        } else {
+            // Fallback: use base_token_price_native (may be wrong but better than 0)
+            parse_f64(&pool.base_token_price_native).unwrap_or(0.0)
+        }
+    };
+
     GeckoTerminalData {
-        price_usd: parse_f64(&pool.token_price_usd).unwrap_or(0.0),
-        price_sol: parse_f64(&pool.base_token_price_native).unwrap_or(0.0),
+        price_usd,
+        price_sol,
         price_native: pool.base_token_price_native.clone(),
         price_change_5m: pool.price_change_m5,
         price_change_1h: pool.price_change_h1,
@@ -93,19 +110,59 @@ pub async fn fetch_geckoterminal_data(
             message: format!("{:?}", e),
         })?;
 
-    // Find best pool (highest reserve_usd)
-    let best_pool = pools
+    // Find best SOL-paired pool (highest reserve_usd)
+    // SOL mint address
+    const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
+    
+    // CRITICAL: Only consider pools where our token is the BASE token!
+    // GeckoTerminal token IDs are formatted as "network_address" (e.g., "solana_EPjFWdd...")
+    let valid_pools: Vec<&GeckoTerminalPool> = pools
         .iter()
-        .filter(|p| p.reserve_usd.is_some())
-        .max_by(|a, b| {
-            a.reserve_usd
-                .unwrap_or(0.0)
-                .partial_cmp(&b.reserve_usd.unwrap_or(0.0))
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        .filter(|p| {
+            p.reserve_usd.is_some() && 
+            p.base_token_id.ends_with(mint)  // Token must be base, not quote!
+        })
+        .collect();
+
+    // Among valid pools, prefer SOL-paired pools
+    let sol_pools: Vec<&GeckoTerminalPool> = valid_pools
+        .iter()
+        .filter(|p| p.quote_token_id.ends_with(SOL_MINT))
+        .copied()
+        .collect();
+
+    // Select best pool: prefer SOL-paired, fallback to highest liquidity
+    let best_pool = if !sol_pools.is_empty() {
+        // Use best SOL-paired pool
+        sol_pools
+            .iter()
+            .max_by(|a, b| {
+                a.reserve_usd
+                    .unwrap_or(0.0)
+                    .partial_cmp(&b.reserve_usd.unwrap_or(0.0))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .copied()
+    } else if !valid_pools.is_empty() {
+        // Fallback: use highest liquidity pool (any quote token, but token is base)
+        valid_pools
+            .iter()
+            .max_by(|a, b| {
+                a.reserve_usd
+                    .unwrap_or(0.0)
+                    .partial_cmp(&b.reserve_usd.unwrap_or(0.0))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .copied()
+    } else {
+        // No valid pools found
+        None
+    };
 
     if let Some(pool) = best_pool {
-        let data = convert_pool_to_data(pool);
+        const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
+        let is_sol_pair = pool.quote_token_id.ends_with(SOL_MINT);
+        let data = convert_pool_to_data(pool, is_sol_pair);
 
         // Store in database
         db.upsert_geckoterminal_data(mint, &data)?;

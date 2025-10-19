@@ -9,7 +9,7 @@ use crate::tokens::types::{DexScreenerData, TokenError, TokenResult};
 use chrono::Utc;
 
 /// Convert API pool data to our DexScreenerData type
-fn convert_pool_to_data(pool: &DexScreenerPool) -> DexScreenerData {
+fn convert_pool_to_data(pool: &DexScreenerPool, is_sol_pair: bool) -> DexScreenerData {
     fn parse_f64(value: &str) -> Option<f64> {
         value.parse::<f64>().ok()
     }
@@ -21,9 +21,27 @@ fn convert_pool_to_data(pool: &DexScreenerPool) -> DexScreenerData {
         }
     }
 
+    let price_usd = parse_f64(&pool.price_usd).unwrap_or(0.0);
+    
+    // Calculate price_sol based on pool type
+    let price_sol = if is_sol_pair {
+        // For SOL-paired pools, priceNative IS the SOL price
+        parse_f64(&pool.price_native).unwrap_or(0.0)
+    } else {
+        // For non-SOL pairs, calculate: price_sol = price_usd / sol_usd_price
+        let sol_price = crate::sol_price::get_sol_price();
+        if sol_price > 0.0 {
+            price_usd / sol_price
+        } else {
+            // Fallback: use priceNative as-is (may be wrong but better than 0)
+            // This happens when SOL price service isn't running (e.g., in debug tools)
+            parse_f64(&pool.price_native).unwrap_or(0.0)
+        }
+    };
+
     DexScreenerData {
-        price_usd: parse_f64(&pool.price_usd).unwrap_or(0.0),
-        price_sol: parse_f64(&pool.price_native).unwrap_or(0.0),
+        price_usd,
+        price_sol,
         price_native: pool.price_native.clone(),
         price_change_5m: pool.price_change_m5,
         price_change_1h: pool.price_change_h1,
@@ -113,19 +131,60 @@ pub async fn fetch_dexscreener_data(
             message: format!("{:?}", e),
         })?;
 
-    // Find best pool (highest liquidity)
-    let best_pool = pools
+    // Find best SOL-paired pool (highest liquidity)
+    // SOL mint address (native SOL and wrapped SOL are the same address)
+    const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
+    
+    // CRITICAL: Only consider pools where our token is the BASE token!
+    // The API returns pools where token can be either base OR quote.
+    // We want the price OF the token, not the price IN the token.
+    let valid_pools: Vec<&DexScreenerPool> = pools
         .iter()
-        .filter(|p| p.liquidity_usd.is_some())
-        .max_by(|a, b| {
-            a.liquidity_usd
-                .unwrap_or(0.0)
-                .partial_cmp(&b.liquidity_usd.unwrap_or(0.0))
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        .filter(|p| {
+            p.liquidity_usd.is_some() && 
+            p.base_token_address == mint  // Token must be base, not quote!
+        })
+        .collect();
+
+    // Among valid pools, prefer SOL-paired pools
+    let sol_pools: Vec<&DexScreenerPool> = valid_pools
+        .iter()
+        .filter(|p| p.quote_token_address == SOL_MINT)
+        .copied()
+        .collect();
+
+    // Select best pool: prefer SOL-paired, fallback to highest liquidity
+    let best_pool = if !sol_pools.is_empty() {
+        // Use best SOL-paired pool
+        sol_pools
+            .iter()
+            .max_by(|a, b| {
+                a.liquidity_usd
+                    .unwrap_or(0.0)
+                    .partial_cmp(&b.liquidity_usd.unwrap_or(0.0))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .copied()
+    } else if !valid_pools.is_empty() {
+        // Fallback: use highest liquidity pool (any quote token, but token is base)
+        valid_pools
+            .iter()
+            .max_by(|a, b| {
+                a.liquidity_usd
+                    .unwrap_or(0.0)
+                    .partial_cmp(&b.liquidity_usd.unwrap_or(0.0))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .copied()
+    } else {
+        // No valid pools found
+        None
+    };
 
     if let Some(pool) = best_pool {
-        let data = convert_pool_to_data(pool);
+        const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
+        let is_sol_pair = pool.quote_token_address == SOL_MINT;
+        let data = convert_pool_to_data(pool, is_sol_pair);
 
         // Store in database
         db.upsert_dexscreener_data(mint, &data)?;

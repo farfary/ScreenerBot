@@ -169,6 +169,28 @@ pub fn is_sol_price_service_running() -> bool {
     SERVICE_RUNNING.load(std::sync::atomic::Ordering::SeqCst)
 }
 
+/// Manually fetch and cache SOL price (useful for debug tools)
+/// Returns the fetched price on success
+pub async fn fetch_and_cache_sol_price() -> Result<f64, String> {
+    let price = fetch_sol_price_from_jupiter().await?;
+    
+    // Update cache
+    match SOL_PRICE_CACHE.write() {
+        Ok(mut cache) => {
+            *cache = SolPriceData {
+                price_usd: price,
+                last_updated: Instant::now(),
+                source: "Jupiter API (manual)".to_string(),
+                is_valid: true,
+                fetch_count: cache.fetch_count + 1,
+                error_count: cache.error_count,
+            };
+            Ok(price)
+        }
+        Err(e) => Err(format!("Failed to update cache: {}", e)),
+    }
+}
+
 // =============================================================================
 // SERVICE LIFECYCLE
 // =============================================================================

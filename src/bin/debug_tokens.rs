@@ -135,6 +135,12 @@ async fn execute(cli: Cli) -> Result<(), String> {
     ensure_data_directories().map_err(|e| format!("Failed to prepare data directories: {e}"))?;
     load_config()?;
 
+    // Initialize SOL price cache (needed for price_sol calculations)
+    if let Err(e) = screenerbot::sol_price::fetch_and_cache_sol_price().await {
+        eprintln!("Warning: Failed to fetch SOL price: {}", e);
+        eprintln!("  price_sol calculations may be incorrect for non-SOL-paired tokens");
+    }
+
     let db = ensure_database()?;
 
     match cli.command {
