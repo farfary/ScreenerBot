@@ -1,28 +1,12 @@
 /// Rugcheck security data fetching and caching
 ///
-/// Flow: API -> Parse -> Database -> Cache
+/// Flow: API -> Parse -> Database -> Store cache
 /// Updates: Every 30 minutes (security data is relatively stable)
 use crate::apis::rugcheck::RugcheckInfo;
-use crate::cache::manager::CacheMetrics;
-use crate::cache::{CacheConfig, CacheManager};
 use crate::tokens::database::TokenDatabase;
+use crate::tokens::store::{self, CacheMetrics};
 use crate::tokens::types::{RugcheckData, TokenError, TokenResult};
 use chrono::Utc;
-use once_cell::sync::OnceCell;
-use std::sync::Arc;
-
-// Global cache instance (TTL = 30min)
-static RUGCHECK_CACHE: OnceCell<Arc<CacheManager<String, RugcheckData>>> = OnceCell::new();
-
-/// Get or initialize Rugcheck cache
-fn get_cache() -> Arc<CacheManager<String, RugcheckData>> {
-    RUGCHECK_CACHE
-        .get_or_init(|| {
-            let config = CacheConfig::security_rugcheck(); // 30min TTL
-            Arc::new(CacheManager::new(config))
-        })
-        .clone()
-}
 
 /// Convert API rugcheck info to our RugcheckData type
 fn convert_rugcheck_to_data(info: &RugcheckInfo) -> RugcheckData {
@@ -70,10 +54,8 @@ pub async fn fetch_rugcheck_data(
     mint: &str,
     db: &TokenDatabase,
 ) -> TokenResult<Option<RugcheckData>> {
-    let cache = get_cache();
-
-    // 1. Check cache
-    if let Some(data) = cache.get(&mint.to_string()) {
+    // 1. Check in-memory store cache
+    if let Some(data) = store::get_cached_rugcheck(mint) {
         return Ok(Some(data));
     }
 
@@ -86,7 +68,14 @@ pub async fn fetch_rugcheck_data(
 
         if age < 1800 {
             // 30 minutes
-            cache.insert(mint.to_string(), db_data.clone());
+            store::store_rugcheck(mint, &db_data);
+            if let Err(err) = store::refresh_token_snapshot(mint).await {
+                eprintln!(
+                    "[TOKENS][STORE] Failed to refresh token snapshot after Rugcheck DB hit mint={} err={:?}",
+                    mint,
+                    err
+                );
+            }
             return Ok(Some(db_data));
         }
     }
@@ -115,8 +104,14 @@ pub async fn fetch_rugcheck_data(
     // Store in database
     db.upsert_rugcheck_data(mint, &data)?;
 
-    // Cache it
-    cache.insert(mint.to_string(), data.clone());
+    // Cache it in store and refresh token snapshot
+    store::store_rugcheck(mint, &data);
+    if let Err(err) = store::refresh_token_snapshot(mint).await {
+        eprintln!(
+            "[TOKENS][STORE] Failed to refresh token snapshot after Rugcheck API mint={} err={:?}",
+            mint, err
+        );
+    }
 
     Ok(Some(data))
 }
@@ -134,10 +129,10 @@ pub fn calculate_security_score(data: &RugcheckData) -> i32 {
 
 /// Get cache metrics for monitoring
 pub fn get_cache_metrics() -> CacheMetrics {
-    get_cache().metrics()
+    store::rugcheck_cache_metrics()
 }
 
 /// Return current cache size
 pub fn get_cache_size() -> usize {
-    get_cache().len()
+    store::rugcheck_cache_size()
 }

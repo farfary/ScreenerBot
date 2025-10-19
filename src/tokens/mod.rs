@@ -21,12 +21,12 @@ pub mod priorities;
 pub mod schema;
 pub mod security;
 pub mod service_new;
+pub mod store;
 pub mod types;
 pub mod updates;
 
 // Re-export main types for convenience
 pub use database::{
-    get_full_token_async,
     get_global_database,
     // Async wrappers for external code
     get_token_async,
@@ -52,6 +52,14 @@ pub use crate::apis::rugcheck::types::RugcheckInfo;
 // Re-export common types from new modules
 pub use events::{subscribe as subscribe_events, TokenEvent};
 pub use priorities::Priority;
+
+// Re-export store APIs
+pub use store::{
+    dexscreener_cache_metrics, dexscreener_cache_size, geckoterminal_cache_metrics,
+    geckoterminal_cache_size, get_cached_token, get_full_token_async, invalidate_token_snapshot,
+    refresh_token_snapshot, rugcheck_cache_metrics, rugcheck_cache_size, store_token_snapshot,
+    CacheMetrics,
+};
 
 // Re-export decimals API
 pub use decimals::{

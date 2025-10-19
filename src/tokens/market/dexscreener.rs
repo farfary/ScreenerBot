@@ -1,28 +1,12 @@
 /// DexScreener market data fetching and caching
 ///
-/// Flow: API -> Parse -> Database -> Cache
+/// Flow: API -> Parse -> Database -> Store cache
 /// Updates: Every 30 seconds for active tokens
 use crate::apis::dexscreener::DexScreenerPool;
-use crate::cache::manager::CacheMetrics;
-use crate::cache::{CacheConfig, CacheManager};
 use crate::tokens::database::TokenDatabase;
+use crate::tokens::store::{self, CacheMetrics};
 use crate::tokens::types::{DexScreenerData, TokenError, TokenResult};
 use chrono::Utc;
-use once_cell::sync::OnceCell;
-use std::sync::Arc;
-
-// Global cache instance (TTL = 30s)
-static DEXSCREENER_CACHE: OnceCell<Arc<CacheManager<String, DexScreenerData>>> = OnceCell::new();
-
-/// Get or initialize DexScreener cache
-fn get_cache() -> Arc<CacheManager<String, DexScreenerData>> {
-    DEXSCREENER_CACHE
-        .get_or_init(|| {
-            let config = CacheConfig::market_dexscreener(); // 30s TTL
-            Arc::new(CacheManager::new(config))
-        })
-        .clone()
-}
 
 /// Convert API pool data to our DexScreenerData type
 fn convert_pool_to_data(pool: &DexScreenerPool) -> DexScreenerData {
@@ -93,10 +77,8 @@ pub async fn fetch_dexscreener_data(
     mint: &str,
     db: &TokenDatabase,
 ) -> TokenResult<Option<DexScreenerData>> {
-    let cache = get_cache();
-
-    // 1. Check cache
-    if let Some(data) = cache.get(&mint.to_string()) {
+    // 1. Check in-memory store cache
+    if let Some(data) = store::get_cached_dexscreener(mint) {
         return Ok(Some(data));
     }
 
@@ -108,7 +90,14 @@ pub async fn fetch_dexscreener_data(
             .num_seconds();
 
         if age < 30 {
-            cache.insert(mint.to_string(), db_data.clone());
+            store::store_dexscreener(mint, &db_data);
+            if let Err(err) = store::refresh_token_snapshot(mint).await {
+                eprintln!(
+                    "[TOKENS][STORE] Failed to refresh token snapshot after DexScreener DB hit mint={} err={:?}",
+                    mint,
+                    err
+                );
+            }
             return Ok(Some(db_data));
         }
     }
@@ -141,8 +130,15 @@ pub async fn fetch_dexscreener_data(
         // Store in database
         db.upsert_dexscreener_data(mint, &data)?;
 
-        // Cache it
-        cache.insert(mint.to_string(), data.clone());
+        // Cache it in store and refresh token snapshot
+        store::store_dexscreener(mint, &data);
+        if let Err(err) = store::refresh_token_snapshot(mint).await {
+            eprintln!(
+                "[TOKENS][STORE] Failed to refresh token snapshot after DexScreener API mint={} err={:?}",
+                mint,
+                err
+            );
+        }
 
         Ok(Some(data))
     } else {
@@ -153,10 +149,10 @@ pub async fn fetch_dexscreener_data(
 
 /// Get cache metrics for monitoring
 pub fn get_cache_metrics() -> CacheMetrics {
-    get_cache().metrics()
+    store::dexscreener_cache_metrics()
 }
 
 /// Return current cache size (for monitoring)
 pub fn get_cache_size() -> usize {
-    get_cache().len()
+    store::dexscreener_cache_size()
 }

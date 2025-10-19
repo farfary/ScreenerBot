@@ -1,29 +1,12 @@
 /// GeckoTerminal market data fetching and caching
 ///
-/// Flow: API -> Parse -> Database -> Cache
+/// Flow: API -> Parse -> Database -> Store cache
 /// Updates: Every 60 seconds for active tokens
 use crate::apis::geckoterminal::GeckoTerminalPool;
-use crate::cache::manager::CacheMetrics;
-use crate::cache::{CacheConfig, CacheManager};
 use crate::tokens::database::TokenDatabase;
+use crate::tokens::store::{self, CacheMetrics};
 use crate::tokens::types::{GeckoTerminalData, TokenError, TokenResult};
 use chrono::Utc;
-use once_cell::sync::OnceCell;
-use std::sync::Arc;
-
-// Global cache instance (TTL = 60s)
-static GECKOTERMINAL_CACHE: OnceCell<Arc<CacheManager<String, GeckoTerminalData>>> =
-    OnceCell::new();
-
-/// Get or initialize GeckoTerminal cache
-fn get_cache() -> Arc<CacheManager<String, GeckoTerminalData>> {
-    GECKOTERMINAL_CACHE
-        .get_or_init(|| {
-            let config = CacheConfig::market_geckoterminal(); // 60s TTL
-            Arc::new(CacheManager::new(config))
-        })
-        .clone()
-}
 
 /// Convert API pool data to our GeckoTerminalData type
 fn convert_pool_to_data(pool: &GeckoTerminalPool) -> GeckoTerminalData {
@@ -74,10 +57,8 @@ pub async fn fetch_geckoterminal_data(
     mint: &str,
     db: &TokenDatabase,
 ) -> TokenResult<Option<GeckoTerminalData>> {
-    let cache = get_cache();
-
-    // 1. Check cache
-    if let Some(data) = cache.get(&mint.to_string()) {
+    // 1. Check in-memory store cache
+    if let Some(data) = store::get_cached_geckoterminal(mint) {
         return Ok(Some(data));
     }
 
@@ -89,7 +70,14 @@ pub async fn fetch_geckoterminal_data(
             .num_seconds();
 
         if age < 60 {
-            cache.insert(mint.to_string(), db_data.clone());
+            store::store_geckoterminal(mint, &db_data);
+            if let Err(err) = store::refresh_token_snapshot(mint).await {
+                eprintln!(
+                    "[TOKENS][STORE] Failed to refresh token snapshot after GeckoTerminal DB hit mint={} err={:?}",
+                    mint,
+                    err
+                );
+            }
             return Ok(Some(db_data));
         }
     }
@@ -122,8 +110,15 @@ pub async fn fetch_geckoterminal_data(
         // Store in database
         db.upsert_geckoterminal_data(mint, &data)?;
 
-        // Cache it
-        cache.insert(mint.to_string(), data.clone());
+        // Cache it in store and refresh token snapshot
+        store::store_geckoterminal(mint, &data);
+        if let Err(err) = store::refresh_token_snapshot(mint).await {
+            eprintln!(
+                "[TOKENS][STORE] Failed to refresh token snapshot after GeckoTerminal API mint={} err={:?}",
+                mint,
+                err
+            );
+        }
 
         Ok(Some(data))
     } else {
@@ -134,10 +129,10 @@ pub async fn fetch_geckoterminal_data(
 
 /// Get cache metrics for monitoring
 pub fn get_cache_metrics() -> CacheMetrics {
-    get_cache().metrics()
+    store::geckoterminal_cache_metrics()
 }
 
 /// Return current cache size
 pub fn get_cache_size() -> usize {
-    get_cache().len()
+    store::geckoterminal_cache_size()
 }
