@@ -1,6 +1,7 @@
 /// Database schema for tokens system
 /// No migrations - clean slate implementation
 use rusqlite::Connection;
+use std::time::Duration;
 
 pub const SCHEMA_VERSION: i32 = 1;
 
@@ -142,23 +143,28 @@ pub const CREATE_INDEXES: &[&str] = &[
 ];
 
 /// Performance PRAGMAs
-pub const PERFORMANCE_PRAGMAS: &[&str] = &[
-    "PRAGMA journal_mode = WAL",
-    "PRAGMA synchronous = NORMAL",
-    "PRAGMA cache_size = 10000",
-    "PRAGMA temp_store = memory",
-    "PRAGMA mmap_size = 30000000000",
-    "PRAGMA page_size = 4096",
-    "PRAGMA busy_timeout = 30000",
-];
+// Kept for reference; we now set PRAGMAs via rusqlite APIs to avoid "Execute returned results" errors
+pub const PERFORMANCE_PRAGMAS: &[&str] = &[];
 
 /// Initialize database schema
 pub fn initialize_schema(conn: &Connection) -> Result<(), String> {
-    // Apply PRAGMAs
-    for pragma in PERFORMANCE_PRAGMAS {
-        conn.execute(pragma, [])
-            .map_err(|e| format!("Failed to apply PRAGMA: {}", e))?;
-    }
+    // Apply PRAGMAs using proper APIs (some PRAGMAs return rows and must not be executed directly)
+    conn.pragma_update(None, "journal_mode", &"WAL")
+        .map_err(|e| format!("Failed to set journal_mode: {}", e))?;
+    conn.pragma_update(None, "synchronous", &"NORMAL")
+        .map_err(|e| format!("Failed to set synchronous: {}", e))?;
+    conn.pragma_update(None, "cache_size", &10000i64)
+        .map_err(|e| format!("Failed to set cache_size: {}", e))?;
+    conn.pragma_update(None, "temp_store", &"MEMORY")
+        .map_err(|e| format!("Failed to set temp_store: {}", e))?;
+    conn.pragma_update(None, "mmap_size", &30000000000i64)
+        .map_err(|e| format!("Failed to set mmap_size: {}", e))?;
+    // page_size must be set before any tables are created
+    conn.pragma_update(None, "page_size", &4096i64)
+        .map_err(|e| format!("Failed to set page_size: {}", e))?;
+    // Prefer busy_timeout API over PRAGMA busy_timeout
+    conn.busy_timeout(Duration::from_millis(30000))
+        .map_err(|e| format!("Failed to set busy_timeout: {}", e))?;
 
     // Create tables
     for statement in CREATE_TABLES {

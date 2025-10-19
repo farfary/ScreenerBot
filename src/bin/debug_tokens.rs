@@ -300,6 +300,12 @@ async fn handle_update(
     mint: &str,
     scope: UpdateScope,
 ) -> Result<(), String> {
+    // Ensure token metadata row exists to satisfy FK constraints for market/security tables
+    // Attempt to prefill decimals via cache/DB/chain
+    let dec_opt = decimals::get(mint).await;
+    db.upsert_token(mint, None, None, dec_opt)
+        .map_err(|e| e.to_string())?;
+
     match scope {
         UpdateScope::All => {
             let coordinator = RateLimitCoordinator::new();

@@ -102,7 +102,7 @@ impl TokenDatabase {
             "SELECT mint, symbol, name, decimals, created_at, updated_at FROM tokens WHERE mint = ?1"
         ).map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
 
-        let result = stmt.query_row(params![mint], |row| {
+    let result = stmt.query_row(params![mint], |row| {
             Ok(TokenMetadata {
                 mint: row.get(0)?,
                 symbol: row.get(1)?,
@@ -235,7 +235,8 @@ impl TokenDatabase {
             let txns_6h_sells: Option<i64> = row.get(19)?;
             let txns_24h_buys: Option<i64> = row.get(20)?;
             let txns_24h_sells: Option<i64> = row.get(21)?;
-            let fetched_ts: i64 = row.get(27)?;
+            // fetched_at is the 27th selected column (0-based index 26)
+            let fetched_ts: i64 = row.get(26)?;
 
             Ok(DexScreenerData {
                 price_usd: row.get(0)?,
@@ -332,6 +333,7 @@ impl TokenDatabase {
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
 
         let result = stmt.query_row(params![mint], |row| {
+            // fetched_at is the last selected column for geckoterminal (0-based index 17)
             let fetched_ts: i64 = row.get(17)?;
 
             Ok(GeckoTerminalData {
