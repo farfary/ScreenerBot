@@ -701,11 +701,13 @@ pub async fn get_best_quote_for_opening(
 
             if is_no_route_error {
                 // Track the route failure for blacklisting (only for opening positions)
-                crate::tokens::blacklist::track_route_failure_db(
-                    output_mint,
-                    token_symbol,
-                    "no_route",
-                );
+                if let Some(db) = crate::tokens::database::get_global_database() {
+                    let _ = crate::tokens::cleanup::blacklist_token(
+                        output_mint,
+                        "NoRoute",
+                        &db,
+                    );
+                }
 
                 log(
                     LogTag::Swap,

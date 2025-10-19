@@ -5,9 +5,9 @@ use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
 /// Centralized tokens service that delegates all token background logic
-/// to the tokens module orchestrator.
+/// to the tokens module orchestrator (new architecture).
 pub struct TokensService {
-    orchestrator: Option<crate::tokens::service::TokensOrchestrator>,
+    orchestrator: Option<crate::tokens::service_new::TokensServiceNew>,
 }
 
 impl Default for TokensService {
@@ -31,9 +31,9 @@ impl Service for TokensService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
-        let orchestrator = crate::tokens::service::TokensOrchestrator::new().await?;
-        orchestrator.initialize()?;
-        self.orchestrator = Some(orchestrator);
+        let mut service = crate::tokens::service_new::TokensServiceNew::default();
+        service.initialize().await?;
+        self.orchestrator = Some(service);
         Ok(())
     }
 
@@ -43,7 +43,7 @@ impl Service for TokensService {
         monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
         let mut handles = Vec::new();
-        if let Some(orchestrator) = &self.orchestrator {
+        if let Some(orchestrator) = &mut self.orchestrator {
             let mut orch_handles = orchestrator.start(shutdown, monitor).await?;
             handles.append(&mut orch_handles);
         } else {

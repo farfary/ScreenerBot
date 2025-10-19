@@ -906,10 +906,13 @@ async fn enrich_token_overview(
     let metadata_map: HashMap<String, crate::tokens::types::Token> = if unique_mints.is_empty() {
         HashMap::new()
     } else {
-        unique_mints
-            .iter()
-            .filter_map(|mint| crate::tokens::store::get_token(mint).map(|t| (mint.clone(), t)))
-            .collect()
+        let mut map = HashMap::new();
+        for mint in &unique_mints {
+            if let Ok(Some(token)) = crate::tokens::get_full_token_async(mint).await {
+                map.insert(mint.clone(), token);
+            }
+        }
+        map
     };
 
     for balance in balances {

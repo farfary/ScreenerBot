@@ -320,7 +320,8 @@ async fn fetch_and_create_token_snapshot(
     snapshot_type: &str,
 ) -> Result<TokenSnapshot, String> {
     // Read token from the unified tokens store
-    let token = crate::tokens::store::get_token(mint)
+    let token = crate::tokens::get_full_token_async(mint).await
+        .map_err(|e| format!("Failed to get token: {}", e))?
         .ok_or_else(|| format!("Token not found in store: {}", mint))?;
 
     // Compute freshness based on last price update vs now

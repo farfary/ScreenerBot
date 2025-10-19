@@ -1,45 +1,67 @@
-/// New unified token data system
+/// New unified token data system with clean architecture
 ///
 /// Architecture:
-/// - cache/: Unified caching with configurable TTLs
-/// - storage/: Database layer with separate tables per source
-/// - provider/: High-level data access interface
+/// - database.rs: Unified database operations (all SQL in one place)
+/// - schema.rs: Database schema definition (6 tables, 12 indexes)
+/// - market/: Market data fetchers (DexScreener, GeckoTerminal)
+/// - security/: Security data fetchers (Rugcheck)
+/// - updates.rs: Priority-based background updates with rate limiting
+/// - cleanup.rs: Automatic blacklist management
+/// - service_new.rs: ServiceManager integration
+/// - decimals.rs: Decimals lookup with caching
 /// - types.rs: Core domain types
 ///
-/// Note: API clients moved to crate::apis module
-pub mod blacklist;
-pub mod cache;
+/// Note: API clients in crate::apis module
+pub mod cleanup;
+pub mod database;
 pub mod decimals;
-pub mod discovery;
 pub mod events;
+pub mod market;
 pub mod priorities;
-pub mod provider;
+pub mod schema;
 pub mod security;
-pub mod service;
-pub mod storage;
-pub mod store;
+pub mod service_new;
 pub mod types;
+pub mod updates;
 
 // Re-export main types for convenience
-pub use provider::{CacheStrategy, TokenDataProvider};
+pub use database::{
+    get_global_database, 
+    init_global_database, 
+    TokenDatabase,
+    // Async wrappers for external code
+    get_token_async,
+    get_full_token_async,
+    list_tokens_async,
+};
+pub use market::{dexscreener, geckoterminal};
+pub use security::rugcheck;
 
 // Domain types from types.rs
 pub use types::{
-    ApiError, DataSource, SecurityRisk, SocialLink, Token, TokenHolder, TokenMetadata, WebsiteLink,
+    ApiError, DataSource, DexScreenerData, GeckoTerminalData, MarketDataBundle, RugcheckData,
+    SecurityBundle, SecurityLevel, SecurityRisk, SecurityScore, SocialLink, Token, TokenError,
+    TokenHolder, TokenMetadata, TokenResult, UpdateTrackingInfo, WebsiteLink,
 };
 
 // API parsing types from api modules (now in crate::apis)
-pub use crate::apis::dexscreener_types::DexScreenerPool;
-pub use crate::apis::geckoterminal_types::GeckoTerminalPool;
-pub use crate::apis::rugcheck_types::RugcheckInfo;
+pub use crate::apis::dexscreener::types::DexScreenerPool;
+pub use crate::apis::geckoterminal::types::GeckoTerminalPool;
+pub use crate::apis::rugcheck::types::RugcheckInfo;
 
 // Re-export common types from new modules
 pub use events::{subscribe as subscribe_events, TokenEvent};
 pub use priorities::Priority;
-pub use store::{
-    all_tokens, count_tokens, filter_blacklisted, get_by_priority, get_by_source,
-    get_recently_updated, get_token, list_mints, search_tokens, set_priority, token_exists,
-};
 
 // Re-export decimals API
-pub use decimals::{get as get_decimals, get_cached as get_cached_decimals};
+pub use decimals::{
+    cache as cache_decimals, 
+    clear_all_cache as clear_all_decimals_cache,
+    clear_cache as clear_decimals_cache,
+    get as get_decimals, 
+    get_cached as get_cached_decimals,
+    get_token_decimals_from_chain,
+    SOL_DECIMALS, 
+    SOL_MINT,
+    WSOL_MINT,
+};

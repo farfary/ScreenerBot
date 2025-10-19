@@ -9,10 +9,12 @@
 /// 4. /v1/tokens/{mints}/batch - Get multiple token reports (batch)
 pub mod types;
 
-use self::types::{
+// Re-export types for external use
+pub use self::types::{
     RugcheckInfo, RugcheckNewToken, RugcheckRecentToken, RugcheckResponse, RugcheckTrendingToken,
     RugcheckVerifiedToken,
 };
+
 use crate::apis::client::{HttpClient, RateLimiter};
 use crate::apis::stats::ApiStatsTracker;
 use crate::tokens::types::{ApiError, SecurityRisk, TokenHolder};

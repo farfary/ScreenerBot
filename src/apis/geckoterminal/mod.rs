@@ -17,11 +17,13 @@
 /// 12. /networks/{network}/pools/{pool_address}/trades - Recent pool trades
 pub mod types;
 
-use self::types::{
+// Re-export types for external use
+pub use self::types::{
     GeckoTerminalDexesResponse, GeckoTerminalPool, GeckoTerminalRecentlyUpdatedResponse,
     GeckoTerminalResponse, GeckoTerminalTokenInfoResponse, GeckoTerminalTokensMultiResponse,
     GeckoTerminalTradesResponse,
 };
+
 use crate::apis::client::RateLimiter;
 use crate::apis::stats::ApiStatsTracker;
 use crate::logger::{log, LogTag};

@@ -17,7 +17,8 @@ use crate::{
     global::is_debug_webserver_enabled,
     logger::{log, LogTag},
     pools, positions,
-    tokens::blacklist,
+    tokens::cleanup,
+    tokens::database::get_global_database,
     tokens::SecurityRisk,
     webserver::{
         state::AppState,
@@ -529,10 +530,10 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         );
     }
 
-    // Fetch token from in-memory store (instant lookup, no DB I/O)
+    // Fetch token from database (with market data)
     let lookup_start = std::time::Instant::now();
-    let snapshot = match crate::tokens::store::get_token(&mint) {
-        Some(snap) => {
+    let snapshot = match crate::tokens::get_full_token_async(&mint).await {
+        Ok(Some(snap)) => {
             if is_debug_webserver_enabled() {
                 log(
                     LogTag::Webserver,
@@ -546,7 +547,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
             }
             snap
         }
-        None => {
+        Ok(None) | Err(_) => {
             if is_debug_webserver_enabled() {
                 log(
                     LogTag::Webserver,

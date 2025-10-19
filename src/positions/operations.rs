@@ -27,7 +27,8 @@ const SOLANA_BLOCKHASH_VALIDITY_SLOTS: u64 = 150;
 
 /// Open a new position
 pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
-    let api_token = crate::tokens::store::get_token(token_mint)
+    let api_token = crate::tokens::get_full_token_async(token_mint).await
+        .map_err(|e| format!("Failed to get token: {}", e))?
         .ok_or_else(|| format!("Token not found: {}", token_mint))?;
 
     let price_info = get_pool_price(token_mint)
@@ -310,7 +311,8 @@ pub async fn close_position_direct(
     token_mint: &str,
     exit_reason: String,
 ) -> Result<String, String> {
-    let api_token = crate::tokens::store::get_token(token_mint)
+    let api_token = crate::tokens::get_full_token_async(token_mint).await
+        .map_err(|e| format!("Failed to get token: {}", e))?
         .ok_or_else(|| format!("Token not found: {}", token_mint))?;
 
     let price_info = get_pool_price(token_mint)

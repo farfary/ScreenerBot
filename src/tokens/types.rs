@@ -2,7 +2,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::tokens::priorities::Priority;
+// Re-export Priority for external modules
+pub use crate::tokens::priorities::Priority;
 
 /// Data source identifier
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -226,3 +227,175 @@ impl From<ApiError> for String {
         err.to_string()
     }
 }
+
+// ============================================================================
+// MARKET DATA TYPES (per source)
+// ============================================================================
+
+/// DexScreener market data for a token
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DexScreenerData {
+    pub price_usd: f64,
+    pub price_sol: f64,
+    pub price_native: String,
+    pub price_change_5m: Option<f64>,
+    pub price_change_1h: Option<f64>,
+    pub price_change_6h: Option<f64>,
+    pub price_change_24h: Option<f64>,
+    pub market_cap: Option<f64>,
+    pub fdv: Option<f64>,
+    pub liquidity_usd: Option<f64>,
+    pub volume_5m: Option<f64>,
+    pub volume_1h: Option<f64>,
+    pub volume_6h: Option<f64>,
+    pub volume_24h: Option<f64>,
+    pub txns_5m: Option<(u32, u32)>,  // (buys, sells)
+    pub txns_1h: Option<(u32, u32)>,
+    pub txns_6h: Option<(u32, u32)>,
+    pub txns_24h: Option<(u32, u32)>,
+    pub pair_address: Option<String>,
+    pub chain_id: Option<String>,
+    pub dex_id: Option<String>,
+    pub url: Option<String>,
+    pub fetched_at: DateTime<Utc>,
+}
+
+/// GeckoTerminal market data for a token
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeckoTerminalData {
+    pub price_usd: f64,
+    pub price_sol: f64,
+    pub price_native: String,
+    pub price_change_5m: Option<f64>,
+    pub price_change_1h: Option<f64>,
+    pub price_change_6h: Option<f64>,
+    pub price_change_24h: Option<f64>,
+    pub market_cap: Option<f64>,
+    pub fdv: Option<f64>,
+    pub liquidity_usd: Option<f64>,
+    pub volume_5m: Option<f64>,
+    pub volume_1h: Option<f64>,
+    pub volume_6h: Option<f64>,
+    pub volume_24h: Option<f64>,
+    pub pool_count: Option<u32>,
+    pub top_pool_address: Option<String>,
+    pub reserve_in_usd: Option<f64>,
+    pub fetched_at: DateTime<Utc>,
+}
+
+/// Bundle of market data from all sources
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketDataBundle {
+    pub dexscreener: Option<DexScreenerData>,
+    pub geckoterminal: Option<GeckoTerminalData>,
+}
+
+// ============================================================================
+// SECURITY DATA TYPES
+// ============================================================================
+
+/// Rugcheck security data for a token
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RugcheckData {
+    pub token_type: Option<String>,
+    pub score: Option<i32>,
+    pub score_description: Option<String>,
+    pub mint_authority: Option<String>,
+    pub freeze_authority: Option<String>,
+    pub top_10_holders_pct: Option<f64>,
+    pub total_supply: Option<String>,
+    pub risks: Vec<SecurityRisk>,
+    pub top_holders: Vec<TokenHolder>,
+    pub markets: Option<serde_json::Value>,  // Raw market data from rugcheck
+    pub fetched_at: DateTime<Utc>,
+}
+
+/// On-chain security verification (future)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OnChainSecurityData {
+    pub mint_authority: Option<String>,
+    pub freeze_authority: Option<String>,
+    pub total_supply: String,
+    pub holder_count: Option<u64>,
+    pub verified_at: DateTime<Utc>,
+}
+
+/// Combined security assessment
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SecurityBundle {
+    pub rugcheck: Option<RugcheckData>,
+    pub onchain: Option<OnChainSecurityData>,
+    pub combined_score: SecurityScore,
+}
+
+/// Security score (0-100, higher = safer)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SecurityScore {
+    pub score: i32,
+    pub level: SecurityLevel,
+    pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SecurityLevel {
+    Safe,       // 80-100
+    Good,       // 60-79
+    Moderate,   // 40-59
+    Risky,      // 20-39
+    Dangerous,  // 0-19
+}
+
+// ============================================================================
+// UPDATE TRACKING
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateTrackingInfo {
+    pub mint: String,
+    pub priority: i32,
+    pub last_market_update: Option<DateTime<Utc>>,
+    pub last_security_update: Option<DateTime<Utc>>,
+    pub last_decimals_update: Option<DateTime<Utc>>,
+    pub market_update_count: u64,
+    pub security_update_count: u64,
+    pub last_error: Option<String>,
+    pub last_error_at: Option<DateTime<Utc>>,
+}
+
+// ============================================================================
+// ERROR TYPES
+// ============================================================================
+
+#[derive(Debug)]
+pub enum TokenError {
+    Database(String),
+    Api { source: String, message: String },
+    RateLimit { source: String, message: String },
+    NotFound(String),
+    InvalidMint(String),
+    Blacklisted { mint: String, reason: String },
+    RateLimitExceeded { source: String },
+    PartialFailure { successful: usize, failed: usize, details: Vec<String> },
+}
+
+impl std::fmt::Display for TokenError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TokenError::Database(msg) => write!(f, "Database error: {}", msg),
+            TokenError::Api { source, message } => write!(f, "API error ({}): {}", source, message),
+            TokenError::RateLimit { source, message } => write!(f, "Rate limit ({}): {}", source, message),
+            TokenError::NotFound(mint) => write!(f, "Token not found: {}", mint),
+            TokenError::InvalidMint(mint) => write!(f, "Invalid mint address: {}", mint),
+            TokenError::Blacklisted { mint, reason } => write!(f, "Blacklisted {}: {}", mint, reason),
+            TokenError::RateLimitExceeded { source } => write!(f, "Rate limit exceeded for {}", source),
+            TokenError::PartialFailure { successful, failed, details } => {
+                write!(f, "Partial failure: {} succeeded, {} failed. Details: {}", 
+                       successful, failed, details.join("; "))
+            }
+        }
+    }
+}
+
+impl std::error::Error for TokenError {}
+
+pub type TokenResult<T> = Result<T, TokenError>;

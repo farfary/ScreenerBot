@@ -13,10 +13,12 @@
 /// 8. /orders/v1/{chainId}/{tokenAddress} - Get orders for a token
 pub mod types;
 
-use self::types::{
+// Re-export types for external use
+pub use self::types::{
     ChainInfo, DexScreenerPairRaw, DexScreenerPool, PairResponse, PairsResponse, TokenBoostLatest,
     TokenBoostTop, TokenInfo, TokenOrder, TokenProfile,
 };
+
 use crate::apis::client::RateLimiter;
 use crate::apis::stats::ApiStatsTracker;
 use crate::logger::{log, LogTag};

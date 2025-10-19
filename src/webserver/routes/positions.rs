@@ -916,8 +916,8 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
         win_rate: closed_positions.2,
     });
 
-    // 2. Get token info from in-memory store (instant lookup)
-    let snapshot = crate::tokens::store::get_token(&mint);
+    // 2. Get token info from database (with market data)
+    let snapshot = crate::tokens::get_full_token_async(&mint).await.ok().flatten();
     let api_token = snapshot.as_ref();
 
     let token_info = api_token.map(|token| TokenInfo {

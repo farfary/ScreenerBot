@@ -1,26 +1,28 @@
 // tokens/decimals.rs
-// Decimals lookup with memory/db caching and guarded single fetches.
+// Decimals lookup with memory caching and on-chain fallback
+// Refactored for new clean architecture (no dependency on old storage/provider)
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 
 use crate::logger::{log, LogTag};
-use crate::tokens::provider::types::{CacheStrategy, FetchOptions};
-use crate::tokens::provider::TokenDataProvider;
-use crate::tokens::store;
-use crate::tokens::types::DataSource;
 use tokio::sync::Mutex as AsyncMutex;
 
-// Simple in-memory cache (TTL can be layered later via tokens/cache)
+// In-memory decimals cache for fast synchronous lookups
 static DECIMALS_CACHE: std::sync::LazyLock<Arc<RwLock<HashMap<String, u8>>>> =
     std::sync::LazyLock::new(|| Arc::new(RwLock::new(HashMap::new())));
 
-// Single-flight locks to ensure we only hit APIs once per mint concurrently
+// Single-flight locks to prevent duplicate fetches
 static FETCH_LOCKS: std::sync::LazyLock<Mutex<HashMap<String, Arc<AsyncMutex<()>>>>> =
     std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 
+// Constants
+pub const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
+pub const WSOL_MINT: &str = "So11111111111111111111111111111111111111112";
+pub const SOL_DECIMALS: u8 = 9;
+
 // =============================================================================
-// PUBLIC API - Only 2 functions
+// PUBLIC API
 // =============================================================================
 
 /// Get decimals from in-memory cache only (sync, instant, no fetching)
@@ -33,8 +35,8 @@ static FETCH_LOCKS: std::sync::LazyLock<Mutex<HashMap<String, Arc<AsyncMutex<()>
 /// Returns None if not in cache - caller should handle appropriately
 pub fn get_cached(mint: &str) -> Option<u8> {
     // SOL always has 9 decimals
-    if mint == crate::constants::SOL_MINT {
-        return Some(crate::constants::SOL_DECIMALS);
+    if mint == SOL_MINT {
+        return Some(SOL_DECIMALS);
     }
 
     DECIMALS_CACHE
@@ -43,13 +45,13 @@ pub fn get_cached(mint: &str) -> Option<u8> {
         .and_then(|m| m.get(mint).copied())
 }
 
-/// Get decimals with full fallback chain (cache → DB → API → chain)
+/// Get decimals with fallback chain (cache → DB → chain)
 ///
 /// Use this in:
 /// - Async business logic (positions, verifier, webserver)
 /// - Any context where you can await and need guaranteed decimals
 ///
-/// Tries: memory cache → DB → Rugcheck API → on-chain RPC
+/// Tries: memory cache → database → on-chain RPC
 /// Returns None only if all methods fail
 pub async fn get(mint: &str) -> Option<u8> {
     // Try cache first
@@ -57,140 +59,54 @@ pub async fn get(mint: &str) -> Option<u8> {
         return Some(d);
     }
 
-    // For internal provider usage, we need provider - but external callers don't have it
-    // So we only do cache check here, and let service loops call ensure() to populate
-    None
-}
-
-// =============================================================================
-// INTERNAL API - For service use only
-// =============================================================================
-
-/// Ensure decimals exist, fetching if needed (with provider access)
-///
-/// This is for internal service loops that populate decimals proactively.
-/// External code should use get() instead.
-pub(crate) async fn ensure(provider: &TokenDataProvider, mint: &str) -> Result<u8, String> {
-    if let Some(d) = get_cached(mint) {
-        return Ok(d);
+    // Try database
+    if let Some(d) = get_from_db(mint).await {
+        cache(mint, d);
+        return Some(d);
     }
 
+    // Acquire single-flight lock to avoid duplicate chain fetches
     let lock = fetch_lock_for(mint);
     let guard = lock.lock().await;
-    let result = ensure_locked(provider, mint).await;
-    drop(guard);
-    release_lock_if_idle(mint);
-    result
-}
 
-async fn ensure_locked(provider: &TokenDataProvider, mint: &str) -> Result<u8, String> {
+    // Double-check cache after acquiring lock
     if let Some(d) = get_cached(mint) {
-        return Ok(d);
+        drop(guard);
+        release_lock_if_idle(mint);
+        return Some(d);
     }
 
-    // 1) Try provider metadata (persisted DB) first
-    if let Ok(Some(meta)) = provider.get_token_metadata(mint) {
-        if let Some(d) = meta.decimals {
-            cache_and_store(mint, d);
-            return Ok(d);
-        }
-    }
-
-    // 2) Fetch Rugcheck once to populate decimals if available
-    let mut options = FetchOptions::default();
-    options.sources = vec![DataSource::Rugcheck];
-    options.cache_strategy = CacheStrategy::CacheFirst;
-    options.persist = true;
-
-    match provider.fetch_complete_data(mint, Some(options)).await {
-        Ok(result) => {
-            if let Some(d) = result
-                .metadata
-                .decimals
-                .or_else(|| result.rugcheck_info.as_ref().and_then(|r| r.token_decimals))
-            {
-                cache_and_store(mint, d);
-                if let Err(e) = provider.upsert_token_metadata(mint, None, None, Some(d)) {
-                    log(
-                        LogTag::Tokens,
-                        "WARN",
-                        &format!(
-                            "Failed to persist decimals after Rugcheck fetch: mint={} err={}",
-                            mint, e
-                        ),
-                    );
-                }
-                return Ok(d);
+    // Fetch from chain as last resort
+    match get_token_decimals_from_chain(mint).await {
+        Ok(d) => {
+            cache(mint, d);
+            // Persist to database if available
+            if let Err(e) = persist_to_db(mint, d).await {
+                log(
+                    LogTag::Tokens,
+                    "WARN",
+                    &format!("Failed to persist decimals to DB: mint={} err={}", mint, e),
+                );
             }
+            drop(guard);
+            release_lock_if_idle(mint);
+            Some(d)
         }
         Err(err) => {
             log(
                 LogTag::Tokens,
                 "WARN",
-                &format!("Rugcheck decimals fetch failed: mint={} err={}", mint, err),
+                &format!("Failed to fetch decimals from chain: mint={} err={}", mint, err),
             );
+            drop(guard);
+            release_lock_if_idle(mint);
+            None
         }
     }
-
-    // 3) Chain fallback - fetch from Solana blockchain
-    match fetch_decimals_from_chain(mint).await {
-        Ok(d) => {
-            cache_and_store(mint, d);
-            if let Err(e) = provider.upsert_token_metadata(mint, None, None, Some(d)) {
-                log(
-                    LogTag::Tokens,
-                    "WARN",
-                    &format!(
-                        "Failed to persist decimals after chain fetch: mint={} err={}",
-                        mint, e
-                    ),
-                );
-            }
-            Ok(d)
-        }
-        Err(e) => Err(e),
-    }
 }
 
-fn cache_and_store(mint: &str, decimals: u8) {
-    // Update in-memory cache
-    if let Ok(mut w) = DECIMALS_CACHE.write() {
-        w.insert(mint.to_string(), decimals);
-    }
-
-    // Update store (memory + DB synchronized)
-    if let Err(e) = store::set_decimals(mint, decimals) {
-        log(
-            LogTag::Tokens,
-            "WARN",
-            &format!(
-                "Failed to persist decimals via store: mint={} err={}",
-                mint, e
-            ),
-        );
-    }
-}
-
-fn fetch_lock_for(mint: &str) -> Arc<AsyncMutex<()>> {
-    let mut map = FETCH_LOCKS.lock().expect("decimals fetch locks poisoned");
-    Arc::clone(
-        map.entry(mint.to_string())
-            .or_insert_with(|| Arc::new(AsyncMutex::new(()))),
-    )
-}
-
-fn release_lock_if_idle(mint: &str) {
-    if let Ok(mut map) = FETCH_LOCKS.lock() {
-        map.remove(mint);
-    }
-}
-
-// =============================================================================
-// ON-CHAIN DECIMALS FETCHING
-// =============================================================================
-
-/// Fetch token decimals directly from Solana blockchain
-async fn fetch_decimals_from_chain(mint: &str) -> Result<u8, String> {
+/// Fetch token decimals directly from Solana blockchain (public for debug bins)
+pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
     use crate::rpc::get_rpc_client;
     use solana_program::program_pack::Pack;
     use solana_sdk::pubkey::Pubkey;
@@ -198,8 +114,8 @@ async fn fetch_decimals_from_chain(mint: &str) -> Result<u8, String> {
     use std::str::FromStr;
 
     // SOL always has 9 decimals
-    if mint == crate::constants::SOL_MINT {
-        return Ok(crate::constants::SOL_DECIMALS);
+    if mint == SOL_MINT {
+        return Ok(SOL_DECIMALS);
     }
 
     // Parse mint address
@@ -243,4 +159,78 @@ async fn fetch_decimals_from_chain(mint: &str) -> Result<u8, String> {
         "Account owner is not SPL Token program: {}",
         account.owner
     ))
+}
+
+/// Manually cache a decimals value (used when fetched from other sources)
+pub fn cache(mint: &str, decimals: u8) {
+    if let Ok(mut w) = DECIMALS_CACHE.write() {
+        w.insert(mint.to_string(), decimals);
+    }
+}
+
+/// Clear cached decimals for a specific mint
+pub fn clear_cache(mint: &str) {
+    if let Ok(mut w) = DECIMALS_CACHE.write() {
+        w.remove(mint);
+    }
+}
+
+/// Clear all cached decimals
+pub fn clear_all_cache() {
+    if let Ok(mut w) = DECIMALS_CACHE.write() {
+        w.clear();
+    }
+}
+
+// =============================================================================
+// INTERNAL HELPERS
+// =============================================================================
+
+/// Try to get decimals from database
+async fn get_from_db(mint: &str) -> Option<u8> {
+    use crate::tokens::database::get_global_database;
+
+    let db = get_global_database()?;
+    let mint = mint.to_string();
+    
+    // Use spawn_blocking for synchronous database access
+    let result = tokio::task::spawn_blocking(move || {
+        db.get_token(&mint)
+    }).await.ok()??;
+    
+    // Return decimals if available and non-zero
+    match result {
+        Ok(Some(token)) if token.decimals > 0 => Some(token.decimals),
+        _ => None,
+    }
+}
+
+/// Persist decimals to database
+async fn persist_to_db(mint: &str, decimals: u8) -> Result<(), String> {
+    use crate::tokens::database::get_global_database;
+
+    let db = get_global_database().ok_or("Database not initialized")?;
+    let mint = mint.to_string();
+    
+    // Use spawn_blocking for synchronous database access
+    tokio::task::spawn_blocking(move || {
+        db.upsert_token(&mint, None, None, Some(decimals))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+    .map_err(|e| format!("Database error: {}", e))
+}
+
+fn fetch_lock_for(mint: &str) -> Arc<AsyncMutex<()>> {
+    let mut map = FETCH_LOCKS.lock().expect("decimals fetch locks poisoned");
+    Arc::clone(
+        map.entry(mint.to_string())
+            .or_insert_with(|| Arc::new(AsyncMutex::new(()))),
+    )
+}
+
+fn release_lock_if_idle(mint: &str) {
+    if let Ok(mut map) = FETCH_LOCKS.lock() {
+        map.remove(mint);
+    }
 }

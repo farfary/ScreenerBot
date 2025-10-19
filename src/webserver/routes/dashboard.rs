@@ -8,7 +8,8 @@ use crate::global::{
 };
 use crate::positions;
 use crate::rpc::get_global_rpc_stats;
-use crate::tokens::blacklist::get_blacklist_summary;
+use crate::tokens::cleanup::get_blacklist_summary;
+use crate::tokens::database::get_global_database;
 use crate::wallet::get_current_wallet_status;
 use crate::webserver::state::AppState;
 
@@ -245,24 +246,33 @@ async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<Dash
     };
 
     // Get blacklist info
-    let blacklist_info = match get_blacklist_summary() {
-        Ok(summary) => {
-            let mut by_reason = std::collections::HashMap::new();
-            by_reason.insert("LowLiquidity".to_string(), summary.low_liquidity_count);
-            by_reason.insert("NoRoute".to_string(), summary.no_route_count);
-            by_reason.insert("ApiError".to_string(), summary.api_error_count);
-            by_reason.insert("SystemToken".to_string(), summary.system_token_count);
-            by_reason.insert("Manual".to_string(), summary.manual_count);
+    let blacklist_info = if let Some(db) = get_global_database() {
+        match get_blacklist_summary(&db) {
+            Ok(summary) => {
+                let mut by_reason = std::collections::HashMap::new();
+                by_reason.insert("LowLiquidity".to_string(), summary.low_liquidity_count);
+                by_reason.insert("NoRoute".to_string(), summary.no_route_count);
+                by_reason.insert("ApiError".to_string(), summary.api_error_count);
+                by_reason.insert("SystemToken".to_string(), summary.system_token_count);
+                by_reason.insert("Manual".to_string(), summary.manual_count);
+                by_reason.insert("PoorPerformance".to_string(), summary.poor_performance_count);
+                by_reason.insert("SecurityIssue".to_string(), summary.security_count);
 
-            BlacklistInfo {
-                total_blacklisted: summary.total_count,
-                by_reason,
+                BlacklistInfo {
+                    total_blacklisted: summary.total_count,
+                    by_reason,
+                }
+            }
+            Err(_) => BlacklistInfo {
+                total_blacklisted: 0,
+                by_reason: std::collections::HashMap::new(),
             }
         }
-        Err(_) => BlacklistInfo {
+    } else {
+        BlacklistInfo {
             total_blacklisted: 0,
             by_reason: std::collections::HashMap::new(),
-        },
+        }
     };
 
     // Get monitoring info (use hardcoded constants from trader module)

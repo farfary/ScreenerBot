@@ -1,43 +1,9 @@
-use once_cell::sync::OnceCell;
-use std::sync::Arc;
+/// Security data fetching from multiple sources
+/// 
+/// Each module handles one security analysis source:
+/// - rugcheck: Rugcheck API (comprehensive security analysis)
+/// - onchain: Future on-chain verification
 
-use crate::tokens::types::SecurityRisk;
+pub mod rugcheck;
 
-#[derive(Debug, Clone)]
-pub struct SecuritySnapshot {
-    pub score: Option<i32>,
-    pub rugged: bool,
-    pub mint_authority: Option<String>,
-    pub freeze_authority: Option<String>,
-    pub total_holders: Option<i64>,
-    pub top_10_concentration: Option<f64>,
-    pub risks: Vec<SecurityRisk>,
-}
-
-#[async_trait::async_trait]
-pub trait SecurityProvider: Send + Sync {
-    async fn get(&self, mint: &str) -> Option<SecuritySnapshot>;
-}
-
-#[derive(Debug, Default)]
-struct NoopSecurityProvider;
-
-#[async_trait::async_trait]
-impl SecurityProvider for NoopSecurityProvider {
-    async fn get(&self, _mint: &str) -> Option<SecuritySnapshot> {
-        None
-    }
-}
-
-static GLOBAL: OnceCell<Arc<dyn SecurityProvider>> = OnceCell::new();
-
-pub fn init_security_provider() {
-    let _ = GLOBAL.set(Arc::new(NoopSecurityProvider::default()));
-}
-
-pub fn get_security_provider() -> Arc<dyn SecurityProvider> {
-    GLOBAL
-        .get()
-        .cloned()
-        .unwrap_or_else(|| Arc::new(NoopSecurityProvider::default()))
-}
+pub use rugcheck::fetch_rugcheck_data;

@@ -778,9 +778,10 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
 
     // Dynamic activity score based on cached token txns (m5 buys)
     let activity_score: f64 = {
-        let txns_m5_buys: f64 = crate::tokens::store::get_token(&price_info.mint)
-            .and_then(|t| t.txns_m5_buys)
-            .unwrap_or(0) as f64;
+        let txns_m5_buys: f64 = match crate::tokens::get_full_token_async(&price_info.mint).await {
+            Ok(Some(token)) => token.txns_m5_buys.unwrap_or(0) as f64,
+            _ => 0.0,
+        };
         calculate_scalp_activity_score(txns_m5_buys)
     };
 
@@ -916,7 +917,7 @@ pub async fn should_buy(price_info: &PriceResult) -> (bool, f64, String) {
         let mut h24_change_opt: Option<f64> = None;
         let mut h1_buys: i64 = 0;
         let mut h1_sells: i64 = 0;
-        if let Some(snap) = get_token_market_snapshot(&price_info.mint) {
+        if let Some(snap) = get_token_market_snapshot(&price_info.mint).await {
             h24_change_opt = snap.price_change_h24;
             h1_buys = snap.txns_h1_buys.unwrap_or(0);
             h1_sells = snap.txns_h1_sells.unwrap_or(0);
@@ -1804,8 +1805,8 @@ struct TokenMarketSnapshot {
     txns_h1_sells: Option<i64>,
 }
 
-fn get_token_market_snapshot(mint: &str) -> Option<TokenMarketSnapshot> {
-    let token = crate::tokens::store::get_token(mint)?;
+async fn get_token_market_snapshot(mint: &str) -> Option<TokenMarketSnapshot> {
+    let token = crate::tokens::get_full_token_async(mint).await.ok()??;
     let price_change_h24 = token.price_change_h24;
     let txns_h1_buys = token.txns_h1_buys;
     let txns_h1_sells = token.txns_h1_sells;

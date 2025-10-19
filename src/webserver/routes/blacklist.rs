@@ -2,7 +2,8 @@ use axum::{extract::State, response::Json, routing::get, Router};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::tokens::blacklist::get_blacklist_summary;
+use crate::tokens::cleanup::get_blacklist_summary;
+use crate::tokens::database::get_global_database;
 use crate::webserver::state::AppState;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -19,7 +20,18 @@ pub fn routes() -> Router<Arc<AppState>> {
 
 /// Get blacklist statistics
 async fn get_blacklist_stats() -> Json<BlacklistStatsResponse> {
-    match get_blacklist_summary() {
+    let db = match get_global_database() {
+        Some(db) => db,
+        None => {
+            return Json(BlacklistStatsResponse {
+                total_count: 0,
+                by_reason: std::collections::HashMap::new(),
+                timestamp: chrono::Utc::now().to_rfc3339(),
+            });
+        }
+    };
+    
+    match get_blacklist_summary(&db) {
         Ok(summary) => {
             let mut by_reason = std::collections::HashMap::new();
             by_reason.insert("LowLiquidity".to_string(), summary.low_liquidity_count);
@@ -32,6 +44,7 @@ async fn get_blacklist_stats() -> Json<BlacklistStatsResponse> {
                 "PoorPerformance".to_string(),
                 summary.poor_performance_count,
             );
+            by_reason.insert("SecurityIssue".to_string(), summary.security_count);
 
             Json(BlacklistStatsResponse {
                 total_count: summary.total_count,
@@ -39,7 +52,7 @@ async fn get_blacklist_stats() -> Json<BlacklistStatsResponse> {
                 timestamp: chrono::Utc::now().to_rfc3339(),
             })
         }
-        Err(e) => {
+        Err(_e) => {
             // Return empty stats on error
             Json(BlacklistStatsResponse {
                 total_count: 0,

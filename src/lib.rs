@@ -3,6 +3,7 @@
 pub mod apis;
 pub mod arguments;
 pub mod ata_cleanup;
+pub mod cache;
 pub mod config;
 pub mod constants;
 pub mod entry;

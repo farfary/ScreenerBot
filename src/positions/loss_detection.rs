@@ -1,6 +1,7 @@
 use super::{lib::calculate_position_pnl, types::Position};
 use crate::logger::{log, LogTag};
-use crate::tokens::blacklist as bl;
+use crate::tokens::cleanup;
+use crate::tokens::database::get_global_database;
 
 // =============================================================================
 // LOSS DETECTION CONFIGURATION
@@ -55,26 +56,36 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<(), 
 
         // Only blacklist for significant losses to avoid being too aggressive
         if should_blacklist_for_loss(net_pnl_percent) {
-            // Add to in-memory blacklist and persist if possible
-            let added = bl::add(&position.mint);
-            if added {
-                if let Some(db) = crate::tokens::storage::database::get_global_database() {
-                    let _ = bl::persist_add(&db, &position.mint, Some("PoorPerformance"));
+            // Add to database-backed blacklist
+            if let Some(db) = get_global_database() {
+                match cleanup::blacklist_token(&position.mint, "PoorPerformance", &db) {
+                    Ok(_) => {
+                        log(
+                            LogTag::Positions,
+                            "AUTO_BLACKLIST",
+                            &format!(
+                                "🚫 Auto-blacklisted {} due to significant loss: -{:.3} SOL ({:.1}%)",
+                                position.symbol, loss_sol, net_pnl_percent
+                            ),
+                        );
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Positions,
+                            "BLACKLIST_FAILED",
+                            &format!(
+                                "⚠️ Failed to blacklist {} after significant loss: {}",
+                                position.symbol, e
+                            ),
+                        );
+                    }
                 }
-                log(
-                    LogTag::Positions,
-                    "AUTO_BLACKLIST",
-                    &format!(
-                        "🚫 Auto-blacklisted {} due to significant loss: -{:.3} SOL ({:.1}%)",
-                        position.symbol, loss_sol, net_pnl_percent
-                    ),
-                );
             } else {
                 log(
                     LogTag::Positions,
                     "BLACKLIST_FAILED",
                     &format!(
-                        "⚠️ Failed to blacklist {} after significant loss",
+                        "⚠️ Failed to blacklist {} - database not initialized",
                         position.symbol
                     ),
                 );
