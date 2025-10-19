@@ -645,6 +645,157 @@ impl TokenDatabase {
     }
 
     // ========================================================================
+    // AGGREGATE & DEBUG HELPERS
+    // ========================================================================
+
+    /// Count total tokens stored in the tokens table
+    pub fn count_tokens(&self) -> TokenResult<u64> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM tokens", [], |row| row.get(0))
+            .map_err(|e| TokenError::Database(format!("Failed to count tokens: {}", e)))?;
+
+        Ok(count.max(0) as u64)
+    }
+
+    /// Count tokens currently tracked for updates
+    pub fn count_tracked_tokens(&self) -> TokenResult<u64> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM update_tracking", [], |row| row.get(0))
+            .map_err(|e| TokenError::Database(format!("Failed to count tracked tokens: {}", e)))?;
+
+        Ok(count.max(0) as u64)
+    }
+
+    /// Count blacklisted tokens
+    pub fn count_blacklisted(&self) -> TokenResult<u64> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM blacklist", [], |row| row.get(0))
+            .map_err(|e| {
+                TokenError::Database(format!("Failed to count blacklisted tokens: {}", e))
+            })?;
+
+        Ok(count.max(0) as u64)
+    }
+
+    /// Retrieve update tracking information for a specific token
+    pub fn get_update_tracking_info(&self, mint: &str) -> TokenResult<Option<UpdateTrackingInfo>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT mint, priority, last_market_update, last_security_update, last_decimals_update,
+                        market_update_count, security_update_count, last_error, last_error_at
+                 FROM update_tracking
+                 WHERE mint = ?1",
+            )
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+
+        let result = stmt.query_row(params![mint], |row| map_tracking_row(row));
+
+        match result {
+            Ok(info) => Ok(Some(info)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(TokenError::Database(format!("Query failed: {}", e))),
+        }
+    }
+
+    /// List update tracking entries with optional priority filter
+    pub fn list_update_tracking(
+        &self,
+        limit: usize,
+        priority: Option<i32>,
+    ) -> TokenResult<Vec<UpdateTrackingInfo>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let records = if let Some(priority) = priority {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT mint, priority, last_market_update, last_security_update, last_decimals_update,
+                            market_update_count, security_update_count, last_error, last_error_at
+                     FROM update_tracking
+                     WHERE priority = ?1
+                     ORDER BY COALESCE(last_market_update, 0) ASC, mint ASC
+                     LIMIT ?2",
+                )
+                .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+
+            let rows = stmt
+                .query_map(params![priority, limit as i64], |row| map_tracking_row(row))
+                .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| {
+                TokenError::Database(format!("Failed to collect tracking entries: {}", e))
+            })?
+        } else {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT mint, priority, last_market_update, last_security_update, last_decimals_update,
+                            market_update_count, security_update_count, last_error, last_error_at
+                     FROM update_tracking
+                     ORDER BY priority DESC, COALESCE(last_market_update, 0) ASC, mint ASC
+                     LIMIT ?1",
+                )
+                .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+
+            let rows = stmt
+                .query_map(params![limit as i64], |row| map_tracking_row(row))
+                .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| {
+                TokenError::Database(format!("Failed to collect tracking entries: {}", e))
+            })?
+        };
+
+        Ok(records)
+    }
+
+    /// Summarize tracked tokens by their priority value
+    pub fn summarize_priorities(&self) -> TokenResult<Vec<(i32, u64)>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT priority, COUNT(*) FROM update_tracking GROUP BY priority ORDER BY priority DESC",
+            )
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                let priority: i32 = row.get(0)?;
+                let count: i64 = row.get(1)?;
+                Ok((priority, count.max(0) as u64))
+            })
+            .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| TokenError::Database(format!("Failed to collect priority summary: {}", e)))
+    }
+
+    // ========================================================================
     // FULL TOKEN ASSEMBLY (for external code)
     // ========================================================================
 
@@ -955,4 +1106,32 @@ pub async fn list_tokens_async(limit: usize) -> TokenResult<Vec<TokenMetadata>> 
     tokio::task::spawn_blocking(move || db.list_tokens(limit))
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+fn map_tracking_row(row: &rusqlite::Row) -> rusqlite::Result<UpdateTrackingInfo> {
+    let mint: String = row.get(0)?;
+    let priority: i32 = row.get(1)?;
+    let last_market = ts_to_datetime(row.get::<_, Option<i64>>(2)?);
+    let last_security = ts_to_datetime(row.get::<_, Option<i64>>(3)?);
+    let last_decimals = ts_to_datetime(row.get::<_, Option<i64>>(4)?);
+    let market_update_count = row.get::<_, Option<i64>>(5)?.unwrap_or(0).max(0) as u64;
+    let security_update_count = row.get::<_, Option<i64>>(6)?.unwrap_or(0).max(0) as u64;
+    let last_error: Option<String> = row.get(7)?;
+    let last_error_at = ts_to_datetime(row.get::<_, Option<i64>>(8)?);
+
+    Ok(UpdateTrackingInfo {
+        mint,
+        priority,
+        last_market_update: last_market,
+        last_security_update: last_security,
+        last_decimals_update: last_decimals,
+        market_update_count,
+        security_update_count,
+        last_error,
+        last_error_at,
+    })
+}
+
+fn ts_to_datetime(ts: Option<i64>) -> Option<DateTime<Utc>> {
+    ts.and_then(|value| DateTime::from_timestamp(value, 0))
 }
