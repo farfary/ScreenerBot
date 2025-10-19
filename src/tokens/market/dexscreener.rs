@@ -5,6 +5,7 @@
 
 use crate::apis::dexscreener::DexScreenerPool;
 use crate::cache::{CacheConfig, CacheManager};
+use crate::cache::manager::CacheMetrics;
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::types::{DexScreenerData, TokenError, TokenResult};
 use chrono::Utc;
@@ -26,59 +27,53 @@ fn get_cache() -> Arc<CacheManager<String, DexScreenerData>> {
 
 /// Convert API pool data to our DexScreenerData type
 fn convert_pool_to_data(pool: &DexScreenerPool) -> DexScreenerData {
+    fn parse_f64(value: &str) -> Option<f64> {
+        value.parse::<f64>().ok()
+    }
+
+    fn combine_txns(buys: Option<i64>, sells: Option<i64>) -> Option<(u32, u32)> {
+        match (buys, sells) {
+            (Some(b), Some(s)) if b >= 0 && s >= 0 => Some((b as u32, s as u32)),
+            _ => None,
+        }
+    }
+
     DexScreenerData {
-        mint: pool.mint.clone(),
-        pair_address: pool.pair_address.clone(),
-        chain_id: pool.chain_id.clone(),
-        dex_id: pool.dex_id.clone(),
-        url: pool.url.clone(),
-        
-        base_token_address: pool.base_token_address.clone(),
-        base_token_name: pool.base_token_name.clone(),
-        base_token_symbol: pool.base_token_symbol.clone(),
-        quote_token_address: pool.quote_token_address.clone(),
-        quote_token_name: pool.quote_token_name.clone(),
-        quote_token_symbol: pool.quote_token_symbol.clone(),
-        
+        price_usd: parse_f64(&pool.price_usd).unwrap_or(0.0),
+        price_sol: parse_f64(&pool.price_native).unwrap_or(0.0),
         price_native: pool.price_native.clone(),
-        price_usd: pool.price_usd.clone(),
-        
-        liquidity_usd: pool.liquidity_usd,
-        liquidity_base: pool.liquidity_base,
-        liquidity_quote: pool.liquidity_quote,
-        
-        volume_m5: pool.volume_m5,
-        volume_h1: pool.volume_h1,
-        volume_h6: pool.volume_h6,
-        volume_h24: pool.volume_h24,
-        
-        txns_m5_buys: pool.txns_m5_buys,
-        txns_m5_sells: pool.txns_m5_sells,
-        txns_h1_buys: pool.txns_h1_buys,
-        txns_h1_sells: pool.txns_h1_sells,
-        txns_h6_buys: pool.txns_h6_buys,
-        txns_h6_sells: pool.txns_h6_sells,
-        txns_h24_buys: pool.txns_h24_buys,
-        txns_h24_sells: pool.txns_h24_sells,
-        
-        price_change_m5: pool.price_change_m5,
-        price_change_h1: pool.price_change_h1,
-        price_change_h6: pool.price_change_h6,
-        price_change_h24: pool.price_change_h24,
-        
-        fdv: pool.fdv,
+        price_change_5m: pool.price_change_m5,
+        price_change_1h: pool.price_change_h1,
+        price_change_6h: pool.price_change_h6,
+        price_change_24h: pool.price_change_h24,
         market_cap: pool.market_cap,
-        
-        pair_created_at: pool.pair_created_at,
-        labels: pool.labels.clone(),
-        
-        info_image_url: pool.info_image_url.clone(),
-        info_header: pool.info_header.clone(),
-        info_open_graph: pool.info_open_graph.clone(),
-        info_websites: pool.info_websites.clone(),
-        info_socials: pool.info_socials.clone(),
-        
-        updated_at: Utc::now(),
+        fdv: pool.fdv,
+        liquidity_usd: pool.liquidity_usd,
+        volume_5m: pool.volume_m5,
+        volume_1h: pool.volume_h1,
+        volume_6h: pool.volume_h6,
+        volume_24h: pool.volume_h24,
+        txns_5m: combine_txns(pool.txns_m5_buys, pool.txns_m5_sells),
+        txns_1h: combine_txns(pool.txns_h1_buys, pool.txns_h1_sells),
+        txns_6h: combine_txns(pool.txns_h6_buys, pool.txns_h6_sells),
+        txns_24h: combine_txns(pool.txns_h24_buys, pool.txns_h24_sells),
+        pair_address: if pool.pair_address.is_empty() {
+            None
+        } else {
+            Some(pool.pair_address.clone())
+        },
+        chain_id: if pool.chain_id.is_empty() {
+            None
+        } else {
+            Some(pool.chain_id.clone())
+        },
+        dex_id: if pool.dex_id.is_empty() {
+            None
+        } else {
+            Some(pool.dex_id.clone())
+        },
+        url: pool.url.clone(),
+        fetched_at: Utc::now(),
     }
 }
 
@@ -110,7 +105,7 @@ pub async fn fetch_dexscreener_data(
     if let Some(db_data) = db.get_dexscreener_data(mint)? {
         // If data is fresh (< 30s old), use it
         let age = Utc::now()
-            .signed_duration_since(db_data.updated_at)
+            .signed_duration_since(db_data.fetched_at)
             .num_seconds();
         
         if age < 30 {
@@ -145,10 +140,10 @@ pub async fn fetch_dexscreener_data(
         let data = convert_pool_to_data(pool);
         
         // Store in database
-        db.upsert_dexscreener_data(mint, &data)?;
+    db.upsert_dexscreener_data(mint, &data)?;
         
-        // Cache it
-        cache.insert(mint.to_string(), data.clone());
+    // Cache it
+    cache.insert(mint.to_string(), data.clone());
         
         Ok(Some(data))
     } else {
@@ -158,14 +153,11 @@ pub async fn fetch_dexscreener_data(
 }
 
 /// Get cache metrics for monitoring
-pub fn get_cache_metrics() -> String {
-    let cache = get_cache();
-    let metrics = cache.metrics();
-    format!(
-        "DexScreener cache: {} entries, {:.2}% hit rate ({} hits, {} misses)",
-        cache.len(),
-        metrics.hit_rate() * 100.0,
-        metrics.hits,
-        metrics.misses
-    )
+pub fn get_cache_metrics() -> CacheMetrics {
+    get_cache().metrics()
+}
+
+/// Return current cache size (for monitoring)
+pub fn get_cache_size() -> usize {
+    get_cache().len()
 }

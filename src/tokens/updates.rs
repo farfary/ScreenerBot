@@ -252,7 +252,7 @@ pub fn start_update_loop(
 /// Update critical priority tokens (open positions)
 async fn update_critical_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
     // Get tokens with priority = 100 (open positions)
-    let tokens = match db.get_tokens_by_priority(100) {
+    let tokens = match db.get_tokens_by_priority(100, 200) {
         Ok(tokens) => tokens,
         Err(e) => {
             eprintln!("[UPDATES] Failed to get critical tokens: {}", e);
@@ -292,7 +292,7 @@ async fn update_critical_tokens(db: &TokenDatabase, coordinator: &RateLimitCoord
 /// Update high priority tokens (filtered/watched)
 async fn update_high_priority_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
     // Get tokens with priority = 50
-    let tokens = match db.get_tokens_by_priority(50) {
+    let tokens = match db.get_tokens_by_priority(50, 200) {
         Ok(tokens) => tokens,
         Err(e) => {
             eprintln!("[UPDATES] Failed to get high priority tokens: {}", e);

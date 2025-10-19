@@ -5,6 +5,7 @@
 
 use crate::apis::geckoterminal::GeckoTerminalPool;
 use crate::cache::{CacheConfig, CacheManager};
+use crate::cache::manager::CacheMetrics;
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::types::{GeckoTerminalData, TokenError, TokenResult};
 use chrono::Utc;
@@ -27,69 +28,33 @@ fn get_cache() -> Arc<CacheManager<String, GeckoTerminalData>> {
 
 /// Convert API pool data to our GeckoTerminalData type
 fn convert_pool_to_data(pool: &GeckoTerminalPool) -> GeckoTerminalData {
+    fn parse_f64(value: &str) -> Option<f64> {
+        value.parse::<f64>().ok()
+    }
+
     GeckoTerminalData {
-        mint: pool.mint.clone(),
-        pool_address: pool.pool_address.clone(),
-        pool_name: pool.pool_name.clone(),
-        dex_id: pool.dex_id.clone(),
-        
-        base_token_id: pool.base_token_id.clone(),
-        quote_token_id: pool.quote_token_id.clone(),
-        
-        base_token_price_usd: pool.base_token_price_usd.clone(),
-        base_token_price_native: pool.base_token_price_native.clone(),
-        base_token_price_quote: pool.base_token_price_quote.clone(),
-        quote_token_price_usd: pool.quote_token_price_usd.clone(),
-        quote_token_price_native: pool.quote_token_price_native.clone(),
-        quote_token_price_base: pool.quote_token_price_base.clone(),
-        token_price_usd: pool.token_price_usd.clone(),
-        
-        fdv_usd: pool.fdv_usd,
-        market_cap_usd: pool.market_cap_usd,
-        reserve_usd: pool.reserve_usd,
-        
-        volume_m5: pool.volume_m5,
-        volume_m15: pool.volume_m15,
-        volume_m30: pool.volume_m30,
-        volume_h1: pool.volume_h1,
-        volume_h6: pool.volume_h6,
-        volume_h24: pool.volume_h24,
-        
-        price_change_m5: pool.price_change_m5,
-        price_change_m15: pool.price_change_m15,
-        price_change_m30: pool.price_change_m30,
-        price_change_h1: pool.price_change_h1,
-        price_change_h6: pool.price_change_h6,
-        price_change_h24: pool.price_change_h24,
-        
-        txns_m5_buys: pool.txns_m5_buys,
-        txns_m5_sells: pool.txns_m5_sells,
-        txns_m5_buyers: pool.txns_m5_buyers,
-        txns_m5_sellers: pool.txns_m5_sellers,
-        txns_m15_buys: pool.txns_m15_buys,
-        txns_m15_sells: pool.txns_m15_sells,
-        txns_m15_buyers: pool.txns_m15_buyers,
-        txns_m15_sellers: pool.txns_m15_sellers,
-        txns_m30_buys: pool.txns_m30_buys,
-        txns_m30_sells: pool.txns_m30_sells,
-        txns_m30_buyers: pool.txns_m30_buyers,
-        txns_m30_sellers: pool.txns_m30_sellers,
-        txns_h1_buys: pool.txns_h1_buys,
-        txns_h1_sells: pool.txns_h1_sells,
-        txns_h1_buyers: pool.txns_h1_buyers,
-        txns_h1_sellers: pool.txns_h1_sellers,
-        txns_h6_buys: pool.txns_h6_buys,
-        txns_h6_sells: pool.txns_h6_sells,
-        txns_h6_buyers: pool.txns_h6_buyers,
-        txns_h6_sellers: pool.txns_h6_sellers,
-        txns_h24_buys: pool.txns_h24_buys,
-        txns_h24_sells: pool.txns_h24_sells,
-        txns_h24_buyers: pool.txns_h24_buyers,
-        txns_h24_sellers: pool.txns_h24_sellers,
-        
-        pool_created_at: pool.pool_created_at.clone(),
-        
-        updated_at: Utc::now(),
+        price_usd: parse_f64(&pool.token_price_usd).unwrap_or(0.0),
+        price_sol: parse_f64(&pool.base_token_price_native).unwrap_or(0.0),
+        price_native: pool.base_token_price_native.clone(),
+        price_change_5m: pool.price_change_m5,
+        price_change_1h: pool.price_change_h1,
+        price_change_6h: pool.price_change_h6,
+        price_change_24h: pool.price_change_h24,
+        market_cap: pool.market_cap_usd,
+        fdv: pool.fdv_usd,
+        liquidity_usd: pool.reserve_usd,
+        volume_5m: pool.volume_m5,
+        volume_1h: pool.volume_h1,
+        volume_6h: pool.volume_h6,
+        volume_24h: pool.volume_h24,
+        pool_count: None,
+        top_pool_address: if pool.pool_address.is_empty() {
+            None
+        } else {
+            Some(pool.pool_address.clone())
+        },
+        reserve_in_usd: pool.reserve_usd,
+        fetched_at: Utc::now(),
     }
 }
 
@@ -121,7 +86,7 @@ pub async fn fetch_geckoterminal_data(
     if let Some(db_data) = db.get_geckoterminal_data(mint)? {
         // If data is fresh (< 60s old), use it
         let age = Utc::now()
-            .signed_duration_since(db_data.updated_at)
+            .signed_duration_since(db_data.fetched_at)
             .num_seconds();
         
         if age < 60 {
@@ -156,10 +121,10 @@ pub async fn fetch_geckoterminal_data(
         let data = convert_pool_to_data(pool);
         
         // Store in database
-        db.upsert_geckoterminal_data(mint, &data)?;
+    db.upsert_geckoterminal_data(mint, &data)?;
         
         // Cache it
-        cache.insert(mint.to_string(), data.clone());
+    cache.insert(mint.to_string(), data.clone());
         
         Ok(Some(data))
     } else {
@@ -169,14 +134,11 @@ pub async fn fetch_geckoterminal_data(
 }
 
 /// Get cache metrics for monitoring
-pub fn get_cache_metrics() -> String {
-    let cache = get_cache();
-    let metrics = cache.metrics();
-    format!(
-        "GeckoTerminal cache: {} entries, {:.2}% hit rate ({} hits, {} misses)",
-        cache.len(),
-        metrics.hit_rate() * 100.0,
-        metrics.hits,
-        metrics.misses
-    )
+pub fn get_cache_metrics() -> CacheMetrics {
+    get_cache().metrics()
+}
+
+/// Return current cache size
+pub fn get_cache_size() -> usize {
+    get_cache().len()
 }

@@ -5,6 +5,7 @@
 
 use crate::apis::rugcheck::RugcheckInfo;
 use crate::cache::{CacheConfig, CacheManager};
+use crate::cache::manager::CacheMetrics;
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::types::{RugcheckData, TokenError, TokenResult};
 use chrono::Utc;
@@ -26,35 +27,31 @@ fn get_cache() -> Arc<CacheManager<String, RugcheckData>> {
 
 /// Convert API rugcheck info to our RugcheckData type
 fn convert_rugcheck_to_data(info: &RugcheckInfo) -> RugcheckData {
+    let top_pct = if info.top_holders.is_empty() {
+        None
+    } else {
+        Some(
+            info
+                .top_holders
+                .iter()
+                .take(10)
+                .map(|holder| holder.pct)
+                .sum(),
+        )
+    };
+
     RugcheckData {
-        mint: info.mint.clone(),
-        
-        token_program: info.token_program.clone(),
         token_type: info.token_type.clone(),
-        
+        score: info.score,
+        score_description: None,
         mint_authority: info.mint_authority.clone(),
         freeze_authority: info.freeze_authority.clone(),
-        
-        score: info.score,
-        score_normalised: info.score_normalised,
-        rugged: info.rugged,
-        
-        // Serialize complex types to JSON for database storage
-        risks: serde_json::to_string(&info.risks).ok(),
-        top_holders: serde_json::to_string(&info.top_holders).ok(),
-        
-        total_markets: info.total_markets,
-        total_market_liquidity: info.total_market_liquidity,
-        total_stable_liquidity: info.total_stable_liquidity,
-        total_lp_providers: info.total_lp_providers,
-        
-        total_holders: info.total_holders,
-        
-        transfer_fee_pct: info.transfer_fee_pct,
-        transfer_fee_max_amount: info.transfer_fee_max_amount,
-        transfer_fee_authority: info.transfer_fee_authority.clone(),
-        
-        updated_at: Utc::now(),
+        top_10_holders_pct: top_pct,
+        total_supply: info.token_supply.clone(),
+        risks: info.risks.clone(),
+        top_holders: info.top_holders.clone(),
+        markets: None,
+        fetched_at: Utc::now(),
     }
 }
 
@@ -86,7 +83,7 @@ pub async fn fetch_rugcheck_data(
     if let Some(db_data) = db.get_rugcheck_data(mint)? {
         // If data is fresh (< 30min old), use it
         let age = Utc::now()
-            .signed_duration_since(db_data.updated_at)
+            .signed_duration_since(db_data.fetched_at)
             .num_seconds();
         
         if age < 1800 { // 30 minutes
@@ -133,29 +130,15 @@ pub async fn fetch_rugcheck_data(
 /// - 20-49: Risky (orange)
 /// - 0-19: Dangerous (red)
 pub fn calculate_security_score(data: &RugcheckData) -> i32 {
-    // Use normalized score if available (0-100 scale)
-    if let Some(score) = data.score_normalised {
-        return score.max(0).min(100);
-    }
-    
-    // Fallback: use raw score (typically 0-1000) and normalize
-    if let Some(score) = data.score {
-        return ((score as f64 / 1000.0) * 100.0) as i32;
-    }
-    
-    // No score available
-    50 // Default to medium
+    data.score.unwrap_or(50).clamp(0, 100)
 }
 
 /// Get cache metrics for monitoring
-pub fn get_cache_metrics() -> String {
-    let cache = get_cache();
-    let metrics = cache.metrics();
-    format!(
-        "Rugcheck cache: {} entries, {:.2}% hit rate ({} hits, {} misses)",
-        cache.len(),
-        metrics.hit_rate() * 100.0,
-        metrics.hits,
-        metrics.misses
-    )
+pub fn get_cache_metrics() -> CacheMetrics {
+    get_cache().metrics()
+}
+
+/// Return current cache size
+pub fn get_cache_size() -> usize {
+    get_cache().len()
 }

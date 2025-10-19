@@ -73,20 +73,14 @@ impl Service for TokensServiceNew {
             .ok_or("Database not initialized")?
             .clone();
         
-        let mut handles = Vec::new();
-        
+        let _ = monitor; // Metrics instrumentation will be wired up in a follow-up
+
         // Start update loops (critical, high, low priority + semaphore refill)
-        let update_handles = updates::start_update_loop(db.clone(), shutdown.clone());
-        for handle in update_handles {
-            // Wrap each handle with monitor for metrics
-            let monitored = monitor.instrument(handle);
-            handles.push(tokio::spawn(monitored));
-        }
-        
+        let mut handles = updates::start_update_loop(db.clone(), shutdown.clone());
+
         // Start cleanup loop (hourly)
-        let cleanup_handle = cleanup::start_cleanup_loop(db.clone(), shutdown.clone());
-        let monitored_cleanup = monitor.instrument(cleanup_handle);
-        handles.push(tokio::spawn(monitored_cleanup));
+        let cleanup_handle = cleanup::start_cleanup_loop(db.clone(), shutdown);
+        handles.push(cleanup_handle);
         
         println!("[TOKENS_NEW] Service started with {} background tasks", handles.len());
         Ok(handles)
@@ -108,13 +102,31 @@ impl Service for TokensServiceNew {
     async fn metrics(&self) -> ServiceMetrics {
         // Return cache metrics
         let dex_metrics = crate::tokens::market::dexscreener::get_cache_metrics();
+        let dex_size = crate::tokens::market::dexscreener::get_cache_size();
         let gecko_metrics = crate::tokens::market::geckoterminal::get_cache_metrics();
+        let gecko_size = crate::tokens::market::geckoterminal::get_cache_size();
         let rug_metrics = crate::tokens::security::rugcheck::get_cache_metrics();
-        
+        let rug_size = crate::tokens::security::rugcheck::get_cache_size();
+
         let mut metrics = ServiceMetrics::default();
-        metrics.custom_metrics.insert("dexscreener_cache".to_string(), dex_metrics);
-        metrics.custom_metrics.insert("geckoterminal_cache".to_string(), gecko_metrics);
-        metrics.custom_metrics.insert("rugcheck_cache".to_string(), rug_metrics);
+        metrics
+            .custom_metrics
+            .insert("dexscreener_cache_hit_rate".to_string(), dex_metrics.hit_rate());
+        metrics
+            .custom_metrics
+            .insert("dexscreener_cache_entries".to_string(), dex_size as f64);
+        metrics
+            .custom_metrics
+            .insert("geckoterminal_cache_hit_rate".to_string(), gecko_metrics.hit_rate());
+        metrics
+            .custom_metrics
+            .insert("geckoterminal_cache_entries".to_string(), gecko_size as f64);
+        metrics
+            .custom_metrics
+            .insert("rugcheck_cache_hit_rate".to_string(), rug_metrics.hit_rate());
+        metrics
+            .custom_metrics
+            .insert("rugcheck_cache_entries".to_string(), rug_size as f64);
         metrics
     }
 }

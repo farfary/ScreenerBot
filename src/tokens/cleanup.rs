@@ -28,19 +28,15 @@ pub async fn should_blacklist_for_failures(
     db: &TokenDatabase,
 ) -> TokenResult<Option<String>> {
     // Check update tracking
-    let tracking = match db.get_oldest_non_blacklisted(1) {
-        Ok(tokens) => {
-            if tokens.is_empty() || tokens[0] != mint {
-                return Ok(None);
-            }
-            // Token is in oldest list - check its failure count
-            // This is a simplified check; real impl would query tracking table
-            None
+    if let Ok(tokens) = db.get_oldest_non_blacklisted(1) {
+        if tokens.is_empty() || tokens[0] != mint {
+            return Ok(None);
         }
-        Err(_) => return Ok(None),
-    };
-    
-    // For now, return None (full implementation requires update_tracking queries)
+
+        // Token is among the oldest entries; additional tracking checks can be added here.
+        // For now, we fall through to the default None response.
+    }
+
     Ok(None)
 }
 
@@ -67,7 +63,7 @@ pub async fn should_blacklist_for_liquidity(
     
     // Check GeckoTerminal liquidity
     if let Some(gecko_data) = db.get_geckoterminal_data(mint)? {
-        if let Some(reserve) = gecko_data.reserve_usd {
+        if let Some(reserve) = gecko_data.reserve_in_usd {
             if reserve < 1000.0 {
                 return Ok(Some(format!(
                     "Low reserve: ${:.2} (threshold: $1000)",
@@ -90,13 +86,19 @@ pub async fn should_blacklist_for_security(
     db: &TokenDatabase,
 ) -> TokenResult<Option<String>> {
     if let Some(rugcheck_data) = db.get_rugcheck_data(mint)? {
-        // Check if marked as rugged
-        if rugcheck_data.rugged {
-            return Ok(Some("Token marked as rugged by Rugcheck".to_string()));
+        // Check critical risks flagged by Rugcheck
+        if let Some(risk) = rugcheck_data
+            .risks
+            .iter()
+            .find(|risk| risk.level.eq_ignore_ascii_case("critical"))
+        {
+            return Ok(Some(format!(
+                "Critical Rugcheck risk detected: {}", risk.name
+            )));
         }
-        
-        // Check security score (normalized 0-100)
-        if let Some(score) = rugcheck_data.score_normalised {
+
+        // Check security score (0-100 scale expected)
+        if let Some(score) = rugcheck_data.score {
             if score < 20 {
                 return Ok(Some(format!(
                     "Security score too low: {} (threshold: 20)",

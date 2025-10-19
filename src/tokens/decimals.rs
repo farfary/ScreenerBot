@@ -191,17 +191,20 @@ async fn get_from_db(mint: &str) -> Option<u8> {
     use crate::tokens::database::get_global_database;
 
     let db = get_global_database()?;
-    let mint = mint.to_string();
-    
+    let mint_owned = mint.to_string();
+    let db_clone = db.clone();
+
     // Use spawn_blocking for synchronous database access
-    let result = tokio::task::spawn_blocking(move || {
-        db.get_token(&mint)
-    }).await.ok()??;
-    
-    // Return decimals if available and non-zero
-    match result {
-        Ok(Some(token)) if token.decimals > 0 => Some(token.decimals),
-        _ => None,
+    let join_result = tokio::task::spawn_blocking(move || db_clone.get_token(&mint_owned))
+        .await
+        .ok()?;
+
+    match join_result {
+        Ok(Some(token)) => token
+            .decimals
+            .and_then(|value| if value > 0 { Some(value) } else { None }),
+        Ok(None) => None,
+        Err(_) => None,
     }
 }
 

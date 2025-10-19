@@ -792,7 +792,31 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     }
 
     let has_pool_price = price_sol.is_some();
-    let blacklisted = blacklist::is(&mint);
+    let blacklisted = if let Some(db) = get_global_database() {
+        let mint_clone = mint.clone();
+        let db_clone = db.clone();
+        match tokio::task::spawn_blocking(move || db_clone.is_blacklisted(&mint_clone)).await {
+            Ok(Ok(flag)) => flag,
+            Ok(Err(err)) => {
+                log(
+                    LogTag::Webserver,
+                    "WARN",
+                    &format!("Failed to check blacklist for {}: {}", mint, err),
+                );
+                false
+            }
+            Err(join_err) => {
+                log(
+                    LogTag::Webserver,
+                    "WARN",
+                    &format!("Join error checking blacklist for {}: {}", mint, join_err),
+                );
+                false
+            }
+        }
+    } else {
+        false
+    };
 
     // Position check - this is the ONLY additional async, keep it last and simple
     let position_start = std::time::Instant::now();
