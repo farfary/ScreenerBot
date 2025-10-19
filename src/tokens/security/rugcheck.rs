@@ -1,11 +1,10 @@
 /// Rugcheck security data fetching and caching
-/// 
+///
 /// Flow: API -> Parse -> Database -> Cache
 /// Updates: Every 30 minutes (security data is relatively stable)
-
 use crate::apis::rugcheck::RugcheckInfo;
-use crate::cache::{CacheConfig, CacheManager};
 use crate::cache::manager::CacheMetrics;
+use crate::cache::{CacheConfig, CacheManager};
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::types::{RugcheckData, TokenError, TokenResult};
 use chrono::Utc;
@@ -31,8 +30,7 @@ fn convert_rugcheck_to_data(info: &RugcheckInfo) -> RugcheckData {
         None
     } else {
         Some(
-            info
-                .top_holders
+            info.top_holders
                 .iter()
                 .take(10)
                 .map(|holder| holder.pct)
@@ -56,16 +54,16 @@ fn convert_rugcheck_to_data(info: &RugcheckInfo) -> RugcheckData {
 }
 
 /// Fetch Rugcheck security data for a token (with cache + database)
-/// 
+///
 /// Flow:
 /// 1. Check cache (if fresh, return immediately)
 /// 2. Check database (if fresh, cache + return)
 /// 3. Fetch from API (store in database + cache + return)
-/// 
+///
 /// # Arguments
 /// * `mint` - Token mint address
 /// * `db` - Database instance
-/// 
+///
 /// # Returns
 /// RugcheckData if analysis available, None if token not analyzed
 pub async fn fetch_rugcheck_data(
@@ -73,25 +71,26 @@ pub async fn fetch_rugcheck_data(
     db: &TokenDatabase,
 ) -> TokenResult<Option<RugcheckData>> {
     let cache = get_cache();
-    
+
     // 1. Check cache
     if let Some(data) = cache.get(&mint.to_string()) {
         return Ok(Some(data));
     }
-    
+
     // 2. Check database (if recently updated, use it)
     if let Some(db_data) = db.get_rugcheck_data(mint)? {
         // If data is fresh (< 30min old), use it
         let age = Utc::now()
             .signed_duration_since(db_data.fetched_at)
             .num_seconds();
-        
-        if age < 1800 { // 30 minutes
+
+        if age < 1800 {
+            // 30 minutes
             cache.insert(mint.to_string(), db_data.clone());
             return Ok(Some(db_data));
         }
     }
-    
+
     // 3. Fetch from API
     let api_manager = crate::apis::manager::get_api_manager();
     let rugcheck_info = match api_manager.rugcheck.fetch_report(mint).await {
@@ -102,7 +101,7 @@ pub async fn fetch_rugcheck_data(
             if err_str.contains("404") || err_str.contains("NotFound") {
                 return Ok(None);
             }
-            
+
             // Other errors
             return Err(TokenError::Api {
                 source: "Rugcheck".to_string(),
@@ -110,20 +109,20 @@ pub async fn fetch_rugcheck_data(
             });
         }
     };
-    
+
     let data = convert_rugcheck_to_data(&rugcheck_info);
-    
+
     // Store in database
     db.upsert_rugcheck_data(mint, &data)?;
-    
+
     // Cache it
     cache.insert(mint.to_string(), data.clone());
-    
+
     Ok(Some(data))
 }
 
 /// Calculate security score from Rugcheck data
-/// 
+///
 /// Returns a 0-100 score where:
 /// - 80-100: Safe (green)
 /// - 50-79: Medium (yellow)

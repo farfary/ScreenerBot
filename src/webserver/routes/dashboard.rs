@@ -255,7 +255,10 @@ async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<Dash
                 by_reason.insert("ApiError".to_string(), summary.api_error_count);
                 by_reason.insert("SystemToken".to_string(), summary.system_token_count);
                 by_reason.insert("Manual".to_string(), summary.manual_count);
-                by_reason.insert("PoorPerformance".to_string(), summary.poor_performance_count);
+                by_reason.insert(
+                    "PoorPerformance".to_string(),
+                    summary.poor_performance_count,
+                );
                 by_reason.insert("SecurityIssue".to_string(), summary.security_count);
 
                 BlacklistInfo {
@@ -266,7 +269,7 @@ async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<Dash
             Err(_) => BlacklistInfo {
                 total_blacklisted: 0,
                 by_reason: std::collections::HashMap::new(),
-            }
+            },
         }
     } else {
         BlacklistInfo {

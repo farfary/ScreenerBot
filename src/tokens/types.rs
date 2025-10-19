@@ -249,7 +249,7 @@ pub struct DexScreenerData {
     pub volume_1h: Option<f64>,
     pub volume_6h: Option<f64>,
     pub volume_24h: Option<f64>,
-    pub txns_5m: Option<(u32, u32)>,  // (buys, sells)
+    pub txns_5m: Option<(u32, u32)>, // (buys, sells)
     pub txns_1h: Option<(u32, u32)>,
     pub txns_6h: Option<(u32, u32)>,
     pub txns_24h: Option<(u32, u32)>,
@@ -306,7 +306,7 @@ pub struct RugcheckData {
     pub total_supply: Option<String>,
     pub risks: Vec<SecurityRisk>,
     pub top_holders: Vec<TokenHolder>,
-    pub markets: Option<serde_json::Value>,  // Raw market data from rugcheck
+    pub markets: Option<serde_json::Value>, // Raw market data from rugcheck
     pub fetched_at: DateTime<Utc>,
 }
 
@@ -338,11 +338,11 @@ pub struct SecurityScore {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SecurityLevel {
-    Safe,       // 80-100
-    Good,       // 60-79
-    Moderate,   // 40-59
-    Risky,      // 20-39
-    Dangerous,  // 0-19
+    Safe,      // 80-100
+    Good,      // 60-79
+    Moderate,  // 40-59
+    Risky,     // 20-39
+    Dangerous, // 0-19
 }
 
 // ============================================================================
@@ -369,13 +369,28 @@ pub struct UpdateTrackingInfo {
 #[derive(Debug)]
 pub enum TokenError {
     Database(String),
-    Api { source: String, message: String },
-    RateLimit { source: String, message: String },
+    Api {
+        source: String,
+        message: String,
+    },
+    RateLimit {
+        source: String,
+        message: String,
+    },
     NotFound(String),
     InvalidMint(String),
-    Blacklisted { mint: String, reason: String },
-    RateLimitExceeded { source: String },
-    PartialFailure { successful: usize, failed: usize, details: Vec<String> },
+    Blacklisted {
+        mint: String,
+        reason: String,
+    },
+    RateLimitExceeded {
+        source: String,
+    },
+    PartialFailure {
+        successful: usize,
+        failed: usize,
+        details: Vec<String>,
+    },
 }
 
 impl std::fmt::Display for TokenError {
@@ -383,14 +398,29 @@ impl std::fmt::Display for TokenError {
         match self {
             TokenError::Database(msg) => write!(f, "Database error: {}", msg),
             TokenError::Api { source, message } => write!(f, "API error ({}): {}", source, message),
-            TokenError::RateLimit { source, message } => write!(f, "Rate limit ({}): {}", source, message),
+            TokenError::RateLimit { source, message } => {
+                write!(f, "Rate limit ({}): {}", source, message)
+            }
             TokenError::NotFound(mint) => write!(f, "Token not found: {}", mint),
             TokenError::InvalidMint(mint) => write!(f, "Invalid mint address: {}", mint),
-            TokenError::Blacklisted { mint, reason } => write!(f, "Blacklisted {}: {}", mint, reason),
-            TokenError::RateLimitExceeded { source } => write!(f, "Rate limit exceeded for {}", source),
-            TokenError::PartialFailure { successful, failed, details } => {
-                write!(f, "Partial failure: {} succeeded, {} failed. Details: {}", 
-                       successful, failed, details.join("; "))
+            TokenError::Blacklisted { mint, reason } => {
+                write!(f, "Blacklisted {}: {}", mint, reason)
+            }
+            TokenError::RateLimitExceeded { source } => {
+                write!(f, "Rate limit exceeded for {}", source)
+            }
+            TokenError::PartialFailure {
+                successful,
+                failed,
+                details,
+            } => {
+                write!(
+                    f,
+                    "Partial failure: {} succeeded, {} failed. Details: {}",
+                    successful,
+                    failed,
+                    details.join("; ")
+                )
             }
         }
     }

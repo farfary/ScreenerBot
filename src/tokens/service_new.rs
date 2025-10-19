@@ -1,13 +1,12 @@
 /// Token service - ServiceManager integration
-/// 
+///
 /// Orchestrates all token system background tasks:
 /// - Database initialization
 /// - Cache setup  
 /// - Update loops (priority-based)
 /// - Cleanup tasks
-/// 
+///
 /// This service coordinates the new architecture with proper lifecycle management.
-
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use crate::tokens::cleanup;
 use crate::tokens::database::TokenDatabase;
@@ -47,18 +46,21 @@ impl Service for TokensServiceNew {
 
     async fn initialize(&mut self) -> Result<(), String> {
         // Initialize database (schema initialized automatically in new())
-        let db = TokenDatabase::new(DB_PATH)
-            .map_err(|e| format!("Failed to create database: {}", e))?;
-        
+        let db =
+            TokenDatabase::new(DB_PATH).map_err(|e| format!("Failed to create database: {}", e))?;
+
         let db_arc = Arc::new(db);
-        
+
         // Initialize global database for decimals module and other components
         crate::tokens::database::init_global_database(db_arc.clone())
             .map_err(|e| format!("Failed to init global database: {}", e))?;
-        
+
         self.db = Some(db_arc);
-        
-        println!("[TOKENS_NEW] Service initialized with database at {}", DB_PATH);
+
+        println!(
+            "[TOKENS_NEW] Service initialized with database at {}",
+            DB_PATH
+        );
         Ok(())
     }
 
@@ -67,12 +69,8 @@ impl Service for TokensServiceNew {
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
-        let db = self
-            .db
-            .as_ref()
-            .ok_or("Database not initialized")?
-            .clone();
-        
+        let db = self.db.as_ref().ok_or("Database not initialized")?.clone();
+
         let _ = monitor; // Metrics instrumentation will be wired up in a follow-up
 
         // Start update loops (critical, high, low priority + semaphore refill)
@@ -81,8 +79,11 @@ impl Service for TokensServiceNew {
         // Start cleanup loop (hourly)
         let cleanup_handle = cleanup::start_cleanup_loop(db.clone(), shutdown);
         handles.push(cleanup_handle);
-        
-        println!("[TOKENS_NEW] Service started with {} background tasks", handles.len());
+
+        println!(
+            "[TOKENS_NEW] Service started with {} background tasks",
+            handles.len()
+        );
         Ok(handles)
     }
 
@@ -109,21 +110,24 @@ impl Service for TokensServiceNew {
         let rug_size = crate::tokens::security::rugcheck::get_cache_size();
 
         let mut metrics = ServiceMetrics::default();
-        metrics
-            .custom_metrics
-            .insert("dexscreener_cache_hit_rate".to_string(), dex_metrics.hit_rate());
+        metrics.custom_metrics.insert(
+            "dexscreener_cache_hit_rate".to_string(),
+            dex_metrics.hit_rate(),
+        );
         metrics
             .custom_metrics
             .insert("dexscreener_cache_entries".to_string(), dex_size as f64);
-        metrics
-            .custom_metrics
-            .insert("geckoterminal_cache_hit_rate".to_string(), gecko_metrics.hit_rate());
+        metrics.custom_metrics.insert(
+            "geckoterminal_cache_hit_rate".to_string(),
+            gecko_metrics.hit_rate(),
+        );
         metrics
             .custom_metrics
             .insert("geckoterminal_cache_entries".to_string(), gecko_size as f64);
-        metrics
-            .custom_metrics
-            .insert("rugcheck_cache_hit_rate".to_string(), rug_metrics.hit_rate());
+        metrics.custom_metrics.insert(
+            "rugcheck_cache_hit_rate".to_string(),
+            rug_metrics.hit_rate(),
+        );
         metrics
             .custom_metrics
             .insert("rugcheck_cache_entries".to_string(), rug_size as f64);
@@ -132,7 +136,7 @@ impl Service for TokensServiceNew {
 }
 
 /// Get the global database handle for external access
-/// 
+///
 /// This allows other parts of the system to access the token database
 /// without needing to pass it around everywhere.
 pub fn get_global_database() -> Option<Arc<TokenDatabase>> {

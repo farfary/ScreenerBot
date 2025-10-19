@@ -30,7 +30,7 @@ async fn get_blacklist_stats() -> Json<BlacklistStatsResponse> {
             });
         }
     };
-    
+
     match get_blacklist_summary(&db) {
         Ok(summary) => {
             let mut by_reason = std::collections::HashMap::new();

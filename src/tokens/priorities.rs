@@ -26,7 +26,7 @@ impl Priority {
             _ => Priority::Low,
         }
     }
-    
+
     /// Convert Priority to integer value
     pub fn to_value(&self) -> i32 {
         match self {

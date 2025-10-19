@@ -1,6 +1,5 @@
 /// Database schema for tokens system
 /// No migrations - clean slate implementation
-
 use rusqlite::Connection;
 
 pub const SCHEMA_VERSION: i32 = 1;
@@ -18,7 +17,6 @@ pub const CREATE_TABLES: &[&str] = &[
         updated_at INTEGER NOT NULL
     )
     "#,
-    
     // DexScreener market data (per token, per source)
     r#"
     CREATE TABLE IF NOT EXISTS market_dexscreener (
@@ -53,7 +51,6 @@ pub const CREATE_TABLES: &[&str] = &[
         FOREIGN KEY (mint) REFERENCES tokens(mint) ON DELETE RESTRICT
     )
     "#,
-    
     // GeckoTerminal market data (per token, per source)
     r#"
     CREATE TABLE IF NOT EXISTS market_geckoterminal (
@@ -79,7 +76,6 @@ pub const CREATE_TABLES: &[&str] = &[
         FOREIGN KEY (mint) REFERENCES tokens(mint) ON DELETE RESTRICT
     )
     "#,
-    
     // Rugcheck security data (per token)
     r#"
     CREATE TABLE IF NOT EXISTS security_rugcheck (
@@ -98,7 +94,6 @@ pub const CREATE_TABLES: &[&str] = &[
         FOREIGN KEY (mint) REFERENCES tokens(mint) ON DELETE RESTRICT
     )
     "#,
-    
     // Blacklist
     r#"
     CREATE TABLE IF NOT EXISTS blacklist (
@@ -108,7 +103,6 @@ pub const CREATE_TABLES: &[&str] = &[
         added_at INTEGER NOT NULL
     )
     "#,
-    
     // Update tracking and priority
     r#"
     CREATE TABLE IF NOT EXISTS update_tracking (
@@ -165,19 +159,19 @@ pub fn initialize_schema(conn: &Connection) -> Result<(), String> {
         conn.execute(pragma, [])
             .map_err(|e| format!("Failed to apply PRAGMA: {}", e))?;
     }
-    
+
     // Create tables
     for statement in CREATE_TABLES {
         conn.execute(statement, [])
             .map_err(|e| format!("Failed to create table: {}", e))?;
     }
-    
+
     // Create indexes
     for statement in CREATE_INDEXES {
         conn.execute(statement, [])
             .map_err(|e| format!("Failed to create index: {}", e))?;
     }
-    
+
     Ok(())
 }
 
@@ -190,6 +184,5 @@ pub fn get_schema_version(conn: &Connection) -> Result<i32, String> {
 
 /// Check if database is initialized
 pub fn is_initialized(conn: &Connection) -> bool {
-    conn.prepare("SELECT 1 FROM tokens LIMIT 1")
-        .is_ok()
+    conn.prepare("SELECT 1 FROM tokens LIMIT 1").is_ok()
 }

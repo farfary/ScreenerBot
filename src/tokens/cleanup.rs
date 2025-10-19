@@ -1,13 +1,12 @@
 /// Cleanup logic - Blacklist management and database maintenance
-/// 
+///
 /// Automatically blacklists tokens that meet certain conditions:
 /// - Too many consecutive update failures
 /// - Liquidity below threshold for extended period
 /// - Marked as rugged by security analysis
 /// - Manual blacklist via API
-
 use crate::tokens::database::TokenDatabase;
-use crate::tokens::types::{TokenResult, TokenError};
+use crate::tokens::types::{TokenError, TokenResult};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Notify;
@@ -19,7 +18,7 @@ use tokio::time::sleep;
 // ============================================================================
 
 /// Check if a token should be blacklisted based on update failures
-/// 
+///
 /// Blacklist if:
 /// - More than 5 consecutive update failures
 /// - Last successful update > 7 days ago
@@ -41,7 +40,7 @@ pub async fn should_blacklist_for_failures(
 }
 
 /// Check if a token should be blacklisted based on low liquidity
-/// 
+///
 /// Blacklist if:
 /// - Liquidity < $1000 USD for > 24 hours
 /// - No market data available for > 7 days
@@ -60,7 +59,7 @@ pub async fn should_blacklist_for_liquidity(
             }
         }
     }
-    
+
     // Check GeckoTerminal liquidity
     if let Some(gecko_data) = db.get_geckoterminal_data(mint)? {
         if let Some(reserve) = gecko_data.reserve_in_usd {
@@ -72,12 +71,12 @@ pub async fn should_blacklist_for_liquidity(
             }
         }
     }
-    
+
     Ok(None)
 }
 
 /// Check if a token should be blacklisted based on security analysis
-/// 
+///
 /// Blacklist if:
 /// - Marked as rugged by Rugcheck
 /// - Security score < 20 (dangerous)
@@ -93,7 +92,8 @@ pub async fn should_blacklist_for_security(
             .find(|risk| risk.level.eq_ignore_ascii_case("critical"))
         {
             return Ok(Some(format!(
-                "Critical Rugcheck risk detected: {}", risk.name
+                "Critical Rugcheck risk detected: {}",
+                risk.name
             )));
         }
 
@@ -107,7 +107,7 @@ pub async fn should_blacklist_for_security(
             }
         }
     }
-    
+
     Ok(None)
 }
 
@@ -117,20 +117,20 @@ pub async fn evaluate_blacklist(mint: &str, db: &TokenDatabase) -> TokenResult<O
     if db.is_blacklisted(mint)? {
         return Ok(None);
     }
-    
+
     // Check all conditions
     if let Some(reason) = should_blacklist_for_failures(mint, db).await? {
         return Ok(Some(reason));
     }
-    
+
     if let Some(reason) = should_blacklist_for_liquidity(mint, db).await? {
         return Ok(Some(reason));
     }
-    
+
     if let Some(reason) = should_blacklist_for_security(mint, db).await? {
         return Ok(Some(reason));
     }
-    
+
     Ok(None)
 }
 
@@ -139,24 +139,24 @@ pub async fn evaluate_blacklist(mint: &str, db: &TokenDatabase) -> TokenResult<O
 // ============================================================================
 
 /// Run cleanup scan on all tokens
-/// 
+///
 /// Checks all non-blacklisted tokens and blacklists any that meet conditions
 pub async fn run_cleanup_scan(db: &TokenDatabase) -> TokenResult<CleanupResult> {
     let mut checked = 0;
     let mut blacklisted = 0;
     let mut errors = 0;
-    
+
     // Get all non-blacklisted tokens (limit to 10000 for performance)
     let tokens = db.list_tokens(10000)?;
-    
+
     for token in tokens {
         checked += 1;
-        
+
         // Skip if already blacklisted
         if db.is_blacklisted(&token.mint)? {
             continue;
         }
-        
+
         // Evaluate blacklist conditions
         match evaluate_blacklist(&token.mint, db).await {
             Ok(Some(reason)) => {
@@ -181,7 +181,7 @@ pub async fn run_cleanup_scan(db: &TokenDatabase) -> TokenResult<CleanupResult> 
             }
         }
     }
-    
+
     Ok(CleanupResult {
         checked,
         blacklisted,
@@ -239,7 +239,8 @@ pub fn unblacklist_token(mint: &str, db: &TokenDatabase) -> TokenResult<()> {
 /// Check if a token is blacklisted and get reason
 pub fn get_blacklist_status(mint: &str, db: &TokenDatabase) -> TokenResult<Option<String>> {
     if db.is_blacklisted(mint)? {
-        db.get_blacklist_reason(mint).map(|opt| opt.map(|(reason, _)| reason))
+        db.get_blacklist_reason(mint)
+            .map(|opt| opt.map(|(reason, _)| reason))
     } else {
         Ok(None)
     }
@@ -262,15 +263,14 @@ pub struct BlacklistSummary {
 /// Get blacklist summary
 pub fn get_blacklist_summary(db: &TokenDatabase) -> TokenResult<BlacklistSummary> {
     let conn = db.connection();
-    let conn = conn.lock()
+    let conn = conn
+        .lock()
         .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
-    
-    let total_count: usize = conn.query_row(
-        "SELECT COUNT(*) FROM blacklist",
-        [],
-        |row| row.get(0),
-    ).unwrap_or(0);
-    
+
+    let total_count: usize = conn
+        .query_row("SELECT COUNT(*) FROM blacklist", [], |row| row.get(0))
+        .unwrap_or(0);
+
     let mut low_liquidity_count = 0;
     let mut no_route_count = 0;
     let mut api_error_count = 0;
@@ -279,13 +279,15 @@ pub fn get_blacklist_summary(db: &TokenDatabase) -> TokenResult<BlacklistSummary
     let mut manual_count = 0;
     let mut poor_performance_count = 0;
     let mut security_count = 0;
-    
-    let mut stmt = conn.prepare("SELECT reason FROM blacklist")
+
+    let mut stmt = conn
+        .prepare("SELECT reason FROM blacklist")
         .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
-    
-    let reasons = stmt.query_map([], |row| row.get::<_, String>(0))
+
+    let reasons = stmt
+        .query_map([], |row| row.get::<_, String>(0))
         .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
-    
+
     for reason_result in reasons {
         if let Ok(reason) = reason_result {
             match reason.as_str() {
@@ -297,11 +299,11 @@ pub fn get_blacklist_summary(db: &TokenDatabase) -> TokenResult<BlacklistSummary
                 "manual" => manual_count += 1,
                 "PoorPerformance" => poor_performance_count += 1,
                 "SecurityIssue" | "LowSecurityScore" => security_count += 1,
-                _ => {},
+                _ => {}
             }
         }
     }
-    
+
     Ok(BlacklistSummary {
         total_count,
         low_liquidity_count,

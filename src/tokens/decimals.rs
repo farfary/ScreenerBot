@@ -96,7 +96,10 @@ pub async fn get(mint: &str) -> Option<u8> {
             log(
                 LogTag::Tokens,
                 "WARN",
-                &format!("Failed to fetch decimals from chain: mint={} err={}", mint, err),
+                &format!(
+                    "Failed to fetch decimals from chain: mint={} err={}",
+                    mint, err
+                ),
             );
             drop(guard);
             release_lock_if_idle(mint);
@@ -214,14 +217,12 @@ async fn persist_to_db(mint: &str, decimals: u8) -> Result<(), String> {
 
     let db = get_global_database().ok_or("Database not initialized")?;
     let mint = mint.to_string();
-    
+
     // Use spawn_blocking for synchronous database access
-    tokio::task::spawn_blocking(move || {
-        db.upsert_token(&mint, None, None, Some(decimals))
-    })
-    .await
-    .map_err(|e| format!("Task join error: {}", e))?
-    .map_err(|e| format!("Database error: {}", e))
+    tokio::task::spawn_blocking(move || db.upsert_token(&mint, None, None, Some(decimals)))
+        .await
+        .map_err(|e| format!("Task join error: {}", e))?
+        .map_err(|e| format!("Database error: {}", e))
 }
 
 fn fetch_lock_for(mint: &str) -> Arc<AsyncMutex<()>> {

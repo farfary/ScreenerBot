@@ -17,14 +17,14 @@ use super::types::{
 
 pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapshot, String> {
     let debug_enabled = is_debug_filtering_enabled();
-    
+
     // TODO: Filtering engine needs update for new token architecture
     // The new architecture uses database-backed tokens with separate market/security data tables
     // Need to implement:
     // 1. Batch fetching of full Token structs (with market data)
     // 2. Update filtering logic to work with new types
     //  3. Integration with priority-based updates system
-    
+
     if debug_enabled {
         log(
             LogTag::Filtering,
@@ -32,7 +32,7 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
             "Filtering engine temporarily disabled - needs update for new token architecture",
         );
     }
-    
+
     Ok(FilteringSnapshot::empty())
 }
 
