@@ -20,8 +20,20 @@ const TOKEN_VIEWS = [
 // Constants
 const DEFAULT_VIEW = "all";
 const DEFAULT_SERVER_SORT = { by: "symbol", direction: "asc" };
-const DEFAULT_FILTERS = { priced: "all", positions: "all" };
+const DEFAULT_FILTERS = {
+  pool_price: false,
+  positions: false,
+  rejection_reason: "all",
+};
 const DEFAULT_SUMMARY = { priced: 0, positions: 0, blacklisted: 0 };
+
+const getDefaultFiltersForView = (view) => {
+  const filters = { ...DEFAULT_FILTERS };
+  if (view === "positions") {
+    filters.positions = true;
+  }
+  return filters;
+};
 
 const COLUMN_TO_SORT_KEY = {
   token: "symbol",
@@ -102,8 +114,101 @@ function createLifecycle() {
     totalCount: null,
     lastUpdate: null,
     sort: { ...DEFAULT_SERVER_SORT },
-    filters: { ...DEFAULT_FILTERS },
+    filters: getDefaultFiltersForView(DEFAULT_VIEW),
     summary: { ...DEFAULT_SUMMARY },
+    availableRejectionReasons: [],
+  };
+
+  const parseToggleValue = (value, fallback = false) => {
+    if (typeof value === "boolean") {
+      return value;
+    }
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === "true" || normalized === "1" || normalized === "on") {
+        return true;
+      }
+      if (normalized === "false" || normalized === "0" || normalized === "off") {
+        return false;
+      }
+    }
+    return fallback;
+  };
+
+  const updateFilterVisibility = () => {
+    if (!table?.elements?.toolbar) {
+      return;
+    }
+    const toolbar = table.elements.toolbar;
+
+    const reasonField = toolbar.querySelector(
+      '.table-toolbar-field[data-filter-id="rejection_reason"]'
+    );
+    if (reasonField) {
+      reasonField.hidden = state.view !== "rejected";
+    }
+
+    const poolToggle = toolbar.querySelector('.dt-filter[data-filter-id="pool_price"]');
+    if (poolToggle) {
+      const container = poolToggle.closest(".table-toolbar-field--switch");
+      const disabled = state.view === "no_market";
+      poolToggle.disabled = disabled;
+      if (container) {
+        container.classList.toggle("is-disabled", disabled);
+      }
+    }
+
+    const positionsToggle = toolbar.querySelector('.dt-filter[data-filter-id="positions"]');
+    if (positionsToggle) {
+      const container = positionsToggle.closest(".table-toolbar-field--switch");
+      const disabled = state.view === "positions";
+      positionsToggle.disabled = disabled;
+      if (container) {
+        container.classList.toggle("is-disabled", disabled);
+      }
+    }
+  };
+
+  const updateRejectionReasonOptions = () => {
+    if (!table?.elements?.toolbar) {
+      return;
+    }
+
+    const select = table.elements.toolbar.querySelector(
+      '.dt-filter[data-filter-id="rejection_reason"]'
+    );
+    if (!select) {
+      return;
+    }
+
+    const reasons = Array.isArray(state.availableRejectionReasons)
+      ? Array.from(new Set(state.availableRejectionReasons.filter((item) => item && item.trim())))
+      : [];
+
+    reasons.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+
+    const currentValue = state.filters.rejection_reason || "all";
+    const optionMarkup = [
+      '<option value="all">All</option>',
+      ...reasons.map((reason) => {
+        const escaped = Utils.escapeHtml(reason);
+        return `<option value="${escaped}">${escaped}</option>`;
+      }),
+    ].join("");
+
+    if (select.innerHTML !== optionMarkup) {
+      select.innerHTML = optionMarkup;
+    }
+
+    const normalizedCurrent = reasons.some((reason) => reason === currentValue)
+      ? currentValue
+      : "all";
+
+    if (normalizedCurrent !== currentValue) {
+      state.filters.rejection_reason = normalizedCurrent;
+    }
+
+    select.value = normalizedCurrent;
   };
 
   const applyViewPreferences = () => {
@@ -122,6 +227,8 @@ function createLifecycle() {
     if (typeof table._renderTable === "function") {
       table._renderTable();
     }
+    updateFilterVisibility();
+    updateRejectionReasonOptions();
   };
 
   const updateToolbar = () => {
@@ -174,22 +281,39 @@ function createLifecycle() {
     ]);
 
     const metaEntries = [];
+
+    let lastUpdateLines = ["Last Update", "—"];
+    if (state.lastUpdate) {
+      const parsed = new Date(state.lastUpdate);
+      if (!Number.isNaN(parsed.getTime())) {
+        const dateLine = parsed.toLocaleDateString(undefined, {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
+        const timeLine = parsed.toLocaleTimeString(undefined, {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        });
+        lastUpdateLines = ["Last Update", `${dateLine} · ${timeLine}`];
+      }
+    }
+
     metaEntries.push({
       id: "tokens-last-update",
-      text: state.lastUpdate
-        ? `Last update ${Utils.formatTimestamp(state.lastUpdate, { includeSeconds: true })}`
-        : "Last update —",
+      lines: lastUpdateLines,
     });
 
     const loadedLabel = Utils.formatNumber(loaded, { decimals: 0 });
     const hasTotalCount = typeof state.totalCount === "number" && Number.isFinite(state.totalCount);
-    const totalLabel = hasTotalCount
-      ? `Loaded ${loadedLabel} / ${Utils.formatNumber(state.totalCount, { decimals: 0 })}`
-      : `Loaded ${loadedLabel}`;
+    const loadedValue = hasTotalCount
+      ? `${loadedLabel} / ${Utils.formatNumber(state.totalCount, { decimals: 0 })}`
+      : `${loadedLabel}`;
 
     metaEntries.push({
       id: "tokens-loaded",
-      text: `${totalLabel} tokens`,
+      lines: ["Loaded", `${loadedValue} tokens`],
     });
 
     table.updateToolbarMeta(metaEntries);
@@ -204,13 +328,18 @@ function createLifecycle() {
     const sortDir = sort?.direction ?? DEFAULT_SERVER_SORT.direction;
     params.set("sort_by", sortBy);
     params.set("sort_dir", sortDir);
-    if (state.filters.priced === "priced") {
+    if (state.filters.pool_price) {
       params.set("has_pool_price", "true");
-    } else if (state.filters.priced === "noprice") {
-      params.set("has_pool_price", "false");
     }
-    if (state.filters.positions === "open") {
+    if (state.filters.positions) {
       params.set("has_open_position", "true");
+    }
+    if (
+      state.view === "rejected" &&
+      state.filters.rejection_reason &&
+      state.filters.rejection_reason !== "all"
+    ) {
+      params.set("rejection_reason", state.filters.rejection_reason);
     }
     params.set("limit", String(PAGE_LIMIT));
     if (cursor !== null && cursor !== undefined) {
@@ -254,12 +383,17 @@ function createLifecycle() {
     if (!table) {
       return;
     }
-    table.setToolbarFilterValue("priced", state.filters.priced, {
+    table.setToolbarFilterValue("pool_price", state.filters.pool_price, {
       apply: false,
     });
     table.setToolbarFilterValue("positions", state.filters.positions, {
       apply: false,
     });
+    table.setToolbarFilterValue("rejection_reason", state.filters.rejection_reason, {
+      apply: false,
+    });
+    updateFilterVisibility();
+    updateRejectionReasonOptions();
   };
 
   const handleSortChange = ({ column, direction, restored }) => {
@@ -330,6 +464,23 @@ function createLifecycle() {
           : row.reject_reason ?? null;
         return { ...row, reject_reason: resolvedReason ?? null };
       });
+
+      if (Array.isArray(data?.available_rejection_reasons)) {
+        state.availableRejectionReasons = data.available_rejection_reasons.filter(
+          (reason) => typeof reason === "string" && reason.trim().length > 0
+        );
+      } else {
+        state.availableRejectionReasons = [];
+      }
+
+      if (state.view === "rejected") {
+        updateRejectionReasonOptions();
+        if (table) {
+          table.setToolbarFilterValue("rejection_reason", state.filters.rejection_reason, {
+            apply: false,
+          });
+        }
+      }
 
       if (typeof data?.total === "number" && Number.isFinite(data.total)) {
         state.totalCount = data.total;
@@ -407,8 +558,9 @@ function createLifecycle() {
     state.totalCount = null;
     state.lastUpdate = null;
     state.sort = { ...DEFAULT_SERVER_SORT };
-    state.filters = { ...DEFAULT_FILTERS };
+    state.filters = getDefaultFiltersForView(view);
     state.summary = { ...DEFAULT_SUMMARY };
+    state.availableRejectionReasons = [];
     applyViewPreferences();
     syncTableSortState({ render: true });
     syncToolbarFilters();
@@ -445,6 +597,8 @@ function createLifecycle() {
         // Sync state with tab bar's restored state (e.g., from URL hash)
         state.view = activeTab;
       }
+
+      state.filters = getDefaultFiltersForView(state.view);
 
       const initialSortColumn = resolveSortColumn(state.sort.by);
 
@@ -594,7 +748,12 @@ function createLifecycle() {
           title: {
             icon: "🪙",
             text: "Tokens",
-            meta: [{ id: "tokens-last-update", text: "Last update —" }],
+            meta: [
+              {
+                id: "tokens-last-update",
+                lines: ["Last Update", "—"],
+              },
+            ],
           },
           summary: [
             { id: "tokens-total", label: "Total", value: "0" },
@@ -622,20 +781,14 @@ function createLifecycle() {
           },
           filters: [
             {
-              id: "priced",
-              label: "With Price",
+              id: "pool_price",
+              label: "Pool Price",
               mode: "server",
-              autoApply: false,
-              defaultValue: DEFAULT_FILTERS.priced,
-              options: [
-                { value: "all", label: "All" },
-                { value: "priced", label: "With Price" },
-                { value: "noprice", label: "No Price" },
-              ],
-              onChange: (value, el, options) => {
-                state.filters.priced = value;
-                // For restored state, just update state without reload
-                // User must click Apply button to reload
+              control: "switch",
+              defaultValue: DEFAULT_FILTERS.pool_price,
+              switchLabels: { on: "Only", off: "All" },
+              onChange: (value, _el, options) => {
+                state.filters.pool_price = Boolean(value);
                 if (options?.restored) {
                   return;
                 }
@@ -652,16 +805,32 @@ function createLifecycle() {
               id: "positions",
               label: "Positions",
               mode: "server",
-              autoApply: false,
+              control: "switch",
               defaultValue: DEFAULT_FILTERS.positions,
-              options: [
-                { value: "all", label: "All" },
-                { value: "open", label: "Open Only" },
-              ],
-              onChange: (value, el, options) => {
-                state.filters.positions = value;
-                // For restored state, just update state without reload
-                // User must click Apply button to reload
+              switchLabels: { on: "Only", off: "All" },
+              onChange: (value, _el, options) => {
+                state.filters.positions = Boolean(value);
+                if (options?.restored) {
+                  return;
+                }
+                state.totalCount = null;
+                state.lastUpdate = null;
+                updateToolbar();
+                requestReload("filters", {
+                  silent: false,
+                  resetScroll: true,
+                }).catch(() => {});
+              },
+            },
+            {
+              id: "rejection_reason",
+              label: "Reject Reason",
+              mode: "server",
+              autoApply: true,
+              defaultValue: DEFAULT_FILTERS.rejection_reason,
+              options: [{ value: "all", label: "All" }],
+              onChange: (value, _el, options) => {
+                state.filters.rejection_reason = value || "all";
                 if (options?.restored) {
                   return;
                 }
@@ -689,11 +858,11 @@ function createLifecycle() {
           ],
         },
       });
+      applyViewPreferences();
 
-  applyViewPreferences();
-
-  // Sync state from DataTable's restored server state
-      const serverState = table.getServerState();
+      // Sync state from DataTable's restored server state
+      const restoredState = table.getServerState();
+      const serverState = restoredState || { filters: {} };
       let hasSortRestored = false;
 
       if (serverState.sortColumn) {
@@ -709,11 +878,39 @@ function createLifecycle() {
       if (serverState.searchQuery) {
         state.search = serverState.searchQuery;
       }
-      if (serverState.filters.priced) {
-        state.filters.priced = serverState.filters.priced;
+
+      const serverFilters = serverState.filters || {};
+      if (Object.prototype.hasOwnProperty.call(serverFilters, "pool_price")) {
+        state.filters.pool_price = parseToggleValue(serverFilters.pool_price, false);
+      } else if (Object.prototype.hasOwnProperty.call(serverFilters, "priced")) {
+        const legacy = serverFilters.priced;
+        state.filters.pool_price =
+          legacy === "priced" || parseToggleValue(legacy, false);
       }
-      if (serverState.filters.positions) {
-        state.filters.positions = serverState.filters.positions;
+
+      if (Object.prototype.hasOwnProperty.call(serverFilters, "positions")) {
+        const value = serverFilters.positions;
+        if (typeof value === "string") {
+          state.filters.positions = value === "open";
+        } else {
+          state.filters.positions = parseToggleValue(value, false);
+        }
+      }
+
+      if (Object.prototype.hasOwnProperty.call(serverFilters, "rejection_reason")) {
+        const reason = serverFilters.rejection_reason;
+        state.filters.rejection_reason =
+          typeof reason === "string" && reason.trim().length > 0 ? reason : "all";
+      }
+
+      if (state.view === "positions") {
+        state.filters.positions = true;
+      }
+      if (state.view === "no_market") {
+        state.filters.pool_price = false;
+      }
+      if (state.view !== "rejected") {
+        state.filters.rejection_reason = "all";
       }
 
       syncTableSortState({ render: false });
@@ -759,7 +956,7 @@ function createLifecycle() {
       state.totalCount = null;
       state.lastUpdate = null;
       state.sort = { ...DEFAULT_SERVER_SORT };
-      state.filters = { ...DEFAULT_FILTERS };
+  state.filters = getDefaultFiltersForView(DEFAULT_VIEW);
       state.summary = { ...DEFAULT_SUMMARY };
     },
   };

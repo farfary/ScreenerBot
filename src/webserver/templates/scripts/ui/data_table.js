@@ -1048,13 +1048,27 @@ export class DataTable {
         return;
       }
 
+      const isCheckbox = select.type === "checkbox";
+
       if (!(filterId in this.state.filters)) {
-        this.state.filters[filterId] = select.value;
+        this.state.filters[filterId] = isCheckbox ? select.checked : select.value;
       }
 
       const handler = (e) => {
-        const value = e.target.value;
+        const input = e.target;
+        const isSwitch = input.type === "checkbox";
+        const value = isSwitch ? input.checked : input.value;
         this.state.filters[filterId] = value;
+        if (isSwitch) {
+          const status = input
+            .closest(".table-toolbar-switch")
+            ?.querySelector(".table-toolbar-switch__status");
+          if (status) {
+            const onLabel = status.dataset.onLabel || "On";
+            const offLabel = status.dataset.offLabel || "All";
+            status.textContent = value ? onLabel : offLabel;
+          }
+        }
         const filterConfig = this.options.toolbar.filters?.find((filter) => filter.id === filterId);
 
         const autoApply = filterConfig?.autoApply !== false;
@@ -1064,7 +1078,7 @@ export class DataTable {
         this._saveState();
 
         if (typeof filterConfig?.onChange === "function") {
-          filterConfig.onChange(value, e.target);
+          filterConfig.onChange(value, input);
         }
       };
       this._addEventListener(select, "change", handler);
@@ -3271,10 +3285,17 @@ export class DataTable {
     if (!filterId) {
       return;
     }
-    this.state.filters[filterId] = value;
+    let normalizedValue = value;
     if (this.elements.toolbar) {
-      TableToolbarView.setFilterValue(this.elements.toolbar, filterId, value);
+      const input = this.elements.toolbar.querySelector(
+        `.dt-filter[data-filter-id="${filterId}"]`
+      );
+      if (input?.type === "checkbox") {
+        normalizedValue = Boolean(value);
+      }
+      TableToolbarView.setFilterValue(this.elements.toolbar, filterId, normalizedValue);
     }
+    this.state.filters[filterId] = normalizedValue;
     if (options.apply !== false) {
       this._applyFilters();
     }

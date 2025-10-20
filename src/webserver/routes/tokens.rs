@@ -51,6 +51,8 @@ pub struct TokenListResponse {
     pub blacklisted_total: usize,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub rejection_reasons: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub available_rejection_reasons: Vec<String>,
 }
 
 /// Period-based numeric metrics helper
@@ -260,6 +262,8 @@ pub struct TokenListQuery {
     pub has_pool_price: Option<bool>,
     #[serde(default)]
     pub has_open_position: Option<bool>,
+    #[serde(default)]
+    pub rejection_reason: Option<String>,
 }
 
 fn default_view() -> String {
@@ -312,6 +316,8 @@ pub struct FilterRequest {
     pub has_open_position: Option<bool>,
     pub blacklisted: Option<bool>,
     pub has_ohlcv: Option<bool>,
+    #[serde(default)]
+    pub rejection_reason: Option<String>,
     #[serde(default = "default_sort_by")]
     pub sort_by: String,
     #[serde(default = "default_sort_dir")]
@@ -333,6 +339,17 @@ fn normalize_search(value: String) -> Option<String> {
     } else {
         Some(trimmed)
     }
+}
+
+fn normalize_choice(value: Option<String>) -> Option<String> {
+    value.and_then(|raw| {
+        let trimmed = raw.trim().to_string();
+        if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("all") {
+            None
+        } else {
+            Some(trimmed)
+        }
+    })
 }
 
 fn resolve_page_and_size(
@@ -392,6 +409,7 @@ fn build_token_list_response(result: FilteringQueryResult) -> TokenListResponse 
         positions_total: result.positions_total,
         blacklisted_total: result.blacklisted_total,
         rejection_reasons: result.rejection_reasons,
+        available_rejection_reasons: result.available_rejection_reasons,
     }
 }
 
@@ -414,6 +432,7 @@ impl TokenListQuery {
         query.min_unique_holders = self.min_holders;
         query.has_pool_price = self.has_pool_price;
         query.has_open_position = self.has_open_position;
+        query.rejection_reason = normalize_choice(self.rejection_reason);
         query.clamp_page_size(max_page_size);
         query
     }
@@ -445,6 +464,7 @@ impl FilterRequest {
         query.has_open_position = self.has_open_position;
         query.blacklisted = self.blacklisted;
         query.has_ohlcv = self.has_ohlcv;
+        query.rejection_reason = normalize_choice(self.rejection_reason);
         query.clamp_page_size(max_page_size);
         query
     }
@@ -518,6 +538,7 @@ pub(crate) async fn get_tokens_list(
                 positions_total: 0,
                 blacklisted_total: 0,
                 rejection_reasons: HashMap::new(),
+                available_rejection_reasons: Vec::new(),
             })
         }
     }

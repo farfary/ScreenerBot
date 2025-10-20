@@ -179,12 +179,25 @@ impl FilteringStore {
         };
 
         let mut rejection_reasons = HashMap::new();
+        let mut available_rejection_reasons = Vec::new();
         if matches!(query.view, FilteringView::Rejected) {
             let reason_lookup: HashMap<&str, &str> = snapshot
                 .rejected_tokens
                 .iter()
                 .map(|entry| (entry.mint.as_str(), entry.reason.as_str()))
                 .collect();
+
+            let mut unique_reasons: std::collections::HashSet<String> = std::collections::HashSet::new();
+            for entry in &snapshot.rejected_tokens {
+                let trimmed = entry.reason.trim();
+                if !trimmed.is_empty() {
+                    unique_reasons.insert(trimmed.to_string());
+                }
+            }
+
+            let mut sorted_reasons: Vec<String> = unique_reasons.into_iter().collect();
+            sorted_reasons.sort_unstable_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+            available_rejection_reasons = sorted_reasons;
 
             for token in &items {
                 if let Some(reason) = reason_lookup.get(token.mint.as_str()) {
@@ -207,6 +220,7 @@ impl FilteringStore {
             open_position_mints,
             ohlcv_mints,
             rejection_reasons,
+            available_rejection_reasons,
         })
     }
 
@@ -350,6 +364,12 @@ fn apply_filters(items: &mut Vec<Token>, query: &FilteringQuery, snapshot: &Filt
         })
         .collect();
 
+    let rejection_reasons: std::collections::HashMap<&str, &str> = snapshot
+        .rejected_tokens
+        .iter()
+        .map(|entry| (entry.mint.as_str(), entry.reason.as_str()))
+        .collect();
+
     if let Some(search) = query.search.as_ref().map(|s| s.trim().to_lowercase()) {
         if !search.is_empty() {
             items.retain(|token| {
@@ -411,6 +431,15 @@ fn apply_filters(items: &mut Vec<Token>, query: &FilteringQuery, snapshot: &Filt
             flags
                 .get(t.mint.as_str())
                 .map(|(_, _, _, oh)| *oh == flag)
+                .unwrap_or(false)
+        });
+    }
+
+    if let Some(target_reason) = query.rejection_reason.as_ref() {
+        items.retain(|t| {
+            rejection_reasons
+                .get(t.mint.as_str())
+                .map(|reason| reason.eq_ignore_ascii_case(target_reason))
                 .unwrap_or(false)
         });
     }

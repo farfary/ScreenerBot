@@ -10,6 +10,26 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+function renderMetaLines(lines = []) {
+  if (!Array.isArray(lines) || lines.length === 0) {
+    return "";
+  }
+
+  return lines
+    .map((line, index) => {
+      const text = typeof line === "string" ? line : line?.text ?? "";
+      const variant =
+        typeof line === "object" && line && line.variant
+          ? ` data-variant="${escapeHtml(line.variant)}"`
+          : "";
+      const role = index === lines.length - 1 ? "value" : "label";
+      return `<span class="table-toolbar-meta__line table-toolbar-meta__line--${role}"${variant}>${escapeHtml(
+        text
+      )}</span>`;
+    })
+    .join("");
+}
+
 function renderMeta(metaItems = []) {
   if (!Array.isArray(metaItems) || metaItems.length === 0) {
     return "";
@@ -19,9 +39,10 @@ function renderMeta(metaItems = []) {
     .map((item) => {
       const variant = item.variant ? ` data-variant="${escapeHtml(item.variant)}"` : "";
       const id = item.id ? ` data-meta-id="${escapeHtml(item.id)}"` : "";
-      return `<span class="table-toolbar-meta__item"${id}${variant}>${escapeHtml(
-        item.text ?? ""
-      )}</span>`;
+      const hasLines = Array.isArray(item.lines) && item.lines.length > 0;
+      const layout = hasLines ? ' data-layout="stack"' : "";
+      const content = hasLines ? renderMetaLines(item.lines) : escapeHtml(item.text ?? "");
+      return `<span class="table-toolbar-meta__item"${id}${variant}${layout}>${content}</span>`;
     })
     .join("");
 
@@ -122,6 +143,44 @@ function renderSearch(searchConfig = {}, state = {}) {
 }
 
 function renderFilter(filter, stateFilters = {}) {
+  if (!filter || !filter.id) {
+    return "";
+  }
+
+  if (filter.control === "switch") {
+    const currentValue = stateFilters[filter.id];
+    const checked =
+      currentValue !== undefined
+        ? Boolean(currentValue)
+        : Boolean(filter.defaultValue ?? false);
+    const label = filter.label
+      ? `<span class="table-toolbar-field__label">${escapeHtml(filter.label)}</span>`
+      : "";
+    const widthStyle = filter.minWidth ? ` style="min-width:${escapeHtml(filter.minWidth)};"` : "";
+    const onLabel = filter.switchLabels?.on ?? "On";
+    const offLabel = filter.switchLabels?.off ?? "All";
+
+    return `
+    <div class="table-toolbar-field table-toolbar-field--switch"${widthStyle} data-filter-id="${escapeHtml(filter.id)}">
+      ${label}
+      <label class="table-toolbar-switch">
+        <input
+          type="checkbox"
+          class="dt-filter table-toolbar-switch__input"
+          id="tt-filter-${escapeHtml(filter.id)}"
+          data-filter-id="${escapeHtml(filter.id)}"
+          data-filter-kind="switch"
+          ${checked ? "checked" : ""}
+        />
+        <span class="table-toolbar-switch__slider" aria-hidden="true"></span>
+        <span class="table-toolbar-switch__status" data-on-label="${escapeHtml(onLabel)}" data-off-label="${escapeHtml(offLabel)}">${escapeHtml(
+          checked ? onLabel : offLabel
+        )}</span>
+      </label>
+    </div>
+  `;
+  }
+
   const currentValue =
     stateFilters[filter.id] ?? filter.defaultValue ?? filter.options?.[0]?.value ?? "";
   const optionsMarkup = (filter.options || [])
@@ -150,7 +209,7 @@ function renderFilter(filter, stateFilters = {}) {
   }
 
   return `
-    <div class="table-toolbar-field"${widthStyle}>
+    <div class="table-toolbar-field"${widthStyle} data-filter-id="${escapeHtml(filter.id)}">
       ${label}
       <select class="dt-filter table-toolbar-select" id="tt-filter-${escapeHtml(
         filter.id
@@ -259,13 +318,15 @@ export class TableToolbarView {
       <div class="data-table-toolbar table-toolbar">
         <div class="table-toolbar__row table-toolbar__row--main">
           <div class="table-toolbar-title">
-            ${titleIcon}
-            <div class="table-toolbar-title__text-block">
-              <div class="table-toolbar-title__line">
-                ${titleText}
-                ${titleTag}
+            <div class="table-toolbar-title__main">
+              ${titleIcon}
+              <div class="table-toolbar-title__text-block">
+                <div class="table-toolbar-title__line">
+                  ${titleText}
+                  ${titleTag}
+                </div>
+                ${titleMeta}
               </div>
-              ${titleMeta}
             </div>
             ${summarySection}
           </div>
@@ -348,7 +409,14 @@ export class TableToolbarView {
       if (item.variant) {
         metaEl.setAttribute("data-variant", item.variant);
       }
-      metaEl.textContent = item.text ?? "";
+      const hasLines = Array.isArray(item.lines) && item.lines.length > 0;
+      if (hasLines) {
+        metaEl.setAttribute("data-layout", "stack");
+        metaEl.innerHTML = renderMetaLines(item.lines);
+      } else {
+        metaEl.removeAttribute("data-layout");
+        metaEl.textContent = item.text ?? "";
+      }
     });
   }
 
@@ -368,7 +436,20 @@ export class TableToolbarView {
     if (!root || !filterId) return;
     const select = root.querySelector(`.dt-filter[data-filter-id="${escapeSelector(filterId)}"]`);
     if (select) {
-      select.value = value ?? "";
+      if (select.type === "checkbox") {
+        const checked = Boolean(value);
+        select.checked = checked;
+        const status = select
+          .closest(".table-toolbar-switch")
+          ?.querySelector(".table-toolbar-switch__status");
+        if (status) {
+          const onLabel = status.dataset.onLabel || "On";
+          const offLabel = status.dataset.offLabel || "All";
+          status.textContent = checked ? onLabel : offLabel;
+        }
+      } else {
+        select.value = value ?? "";
+      }
     }
   }
 

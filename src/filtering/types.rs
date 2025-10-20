@@ -141,6 +141,7 @@ pub struct FilteringQuery {
     pub has_open_position: Option<bool>,
     pub blacklisted: Option<bool>,
     pub has_ohlcv: Option<bool>,
+    pub rejection_reason: Option<String>,
 }
 
 impl Default for FilteringQuery {
@@ -162,6 +163,7 @@ impl Default for FilteringQuery {
             has_open_position: None,
             blacklisted: None,
             has_ohlcv: None,
+            rejection_reason: None,
         }
     }
 }
@@ -201,6 +203,7 @@ pub struct FilteringQueryResult {
     pub open_position_mints: Vec<String>,
     pub ohlcv_mints: Vec<String>,
     pub rejection_reasons: HashMap<String, String>,
+    pub available_rejection_reasons: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
