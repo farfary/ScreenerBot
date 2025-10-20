@@ -22,7 +22,7 @@ fn convert_pool_to_data(pool: &DexScreenerPool, is_sol_pair: bool) -> DexScreene
     }
 
     let price_usd = parse_f64(&pool.price_usd).unwrap_or(0.0);
-    
+
     // Calculate price_sol based on pool type
     let price_sol = if is_sol_pair {
         // For SOL-paired pools, priceNative IS the SOL price
@@ -134,15 +134,14 @@ pub async fn fetch_dexscreener_data(
     // Find best SOL-paired pool (highest liquidity)
     // SOL mint address (native SOL and wrapped SOL are the same address)
     const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
-    
+
     // CRITICAL: Only consider pools where our token is the BASE token!
     // The API returns pools where token can be either base OR quote.
     // We want the price OF the token, not the price IN the token.
     let valid_pools: Vec<&DexScreenerPool> = pools
         .iter()
         .filter(|p| {
-            p.liquidity_usd.is_some() && 
-            p.base_token_address == mint  // Token must be base, not quote!
+            p.liquidity_usd.is_some() && p.base_token_address == mint // Token must be base, not quote!
         })
         .collect();
 

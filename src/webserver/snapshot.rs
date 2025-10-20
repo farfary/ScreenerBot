@@ -9,7 +9,7 @@ use crate::{
     config,
     global::{
         are_core_services_ready, get_pending_services, POOL_SERVICE_READY, POSITIONS_SYSTEM_READY,
-        SECURITY_ANALYZER_READY, TOKENS_SYSTEM_READY, TRANSACTIONS_SYSTEM_READY,
+        TOKENS_SYSTEM_READY, TRANSACTIONS_SYSTEM_READY,
     },
     logger::{log, LogTag},
     rpc::get_global_rpc_stats,
@@ -70,7 +70,6 @@ pub struct ServiceStatusSnapshot {
     pub tokens_system: ServiceStateSnapshot,
     pub positions_system: ServiceStateSnapshot,
     pub pool_service: ServiceStateSnapshot,
-    pub security_analyzer: ServiceStateSnapshot,
     pub transactions_system: ServiceStateSnapshot,
     pub all_ready: bool,
 }
@@ -541,14 +540,12 @@ fn collect_service_status_snapshot() -> ServiceStatusSnapshot {
     let tokens_ready = TOKENS_SYSTEM_READY.load(Ordering::SeqCst);
     let positions_ready = POSITIONS_SYSTEM_READY.load(Ordering::SeqCst);
     let pool_ready = POOL_SERVICE_READY.load(Ordering::SeqCst);
-    let security_ready = SECURITY_ANALYZER_READY.load(Ordering::SeqCst);
     let transactions_ready = TRANSACTIONS_SYSTEM_READY.load(Ordering::SeqCst);
 
     ServiceStatusSnapshot {
         tokens_system: ServiceStateSnapshot::new(tokens_ready, now, pending_message.clone()),
         positions_system: ServiceStateSnapshot::new(positions_ready, now, pending_message.clone()),
         pool_service: ServiceStateSnapshot::new(pool_ready, now, pending_message.clone()),
-        security_analyzer: ServiceStateSnapshot::new(security_ready, now, pending_message.clone()),
         transactions_system: ServiceStateSnapshot::new(transactions_ready, now, pending_message),
         all_ready,
     }

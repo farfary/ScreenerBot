@@ -15,6 +15,7 @@
 pub mod cleanup;
 pub mod database;
 pub mod decimals;
+pub mod discovery;
 pub mod events;
 pub mod market;
 pub mod priorities;

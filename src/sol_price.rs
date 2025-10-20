@@ -173,7 +173,7 @@ pub fn is_sol_price_service_running() -> bool {
 /// Returns the fetched price on success
 pub async fn fetch_and_cache_sol_price() -> Result<f64, String> {
     let price = fetch_sol_price_from_jupiter().await?;
-    
+
     // Update cache
     match SOL_PRICE_CACHE.write() {
         Ok(mut cache) => {

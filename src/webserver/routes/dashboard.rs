@@ -3,8 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::global::{
-    POOL_SERVICE_READY, POSITIONS_SYSTEM_READY, SECURITY_ANALYZER_READY, TOKENS_SYSTEM_READY,
-    TRANSACTIONS_SYSTEM_READY,
+    POOL_SERVICE_READY, POSITIONS_SYSTEM_READY, TOKENS_SYSTEM_READY, TRANSACTIONS_SYSTEM_READY,
 };
 use crate::positions;
 use crate::rpc::get_global_rpc_stats;
@@ -69,7 +68,6 @@ pub struct ServiceStatus {
     pub tokens_system: bool,
     pub positions_system: bool,
     pub pool_service: bool,
-    pub security_analyzer: bool,
     pub transactions_system: bool,
 }
 
@@ -193,14 +191,12 @@ async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<Dash
         tokens_system: TOKENS_SYSTEM_READY.load(std::sync::atomic::Ordering::Relaxed),
         positions_system: POSITIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::Relaxed),
         pool_service: POOL_SERVICE_READY.load(std::sync::atomic::Ordering::Relaxed),
-        security_analyzer: SECURITY_ANALYZER_READY.load(std::sync::atomic::Ordering::Relaxed),
         transactions_system: TRANSACTIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::Relaxed),
     };
 
     let all_services_ready = services.tokens_system
         && services.positions_system
         && services.pool_service
-        && services.security_analyzer
         && services.transactions_system;
 
     let uptime_seconds = state.uptime_seconds();

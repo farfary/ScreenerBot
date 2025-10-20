@@ -31,7 +31,6 @@ pub static STARTUP_TIME: Lazy<DateTime<Utc>> = Lazy::new(|| Utc::now());
 pub static TOKENS_SYSTEM_READY: AtomicBool = AtomicBool::new(false);
 pub static POSITIONS_SYSTEM_READY: AtomicBool = AtomicBool::new(false);
 pub static POOL_SERVICE_READY: AtomicBool = AtomicBool::new(false);
-pub static SECURITY_ANALYZER_READY: AtomicBool = AtomicBool::new(false);
 pub static TRANSACTIONS_SYSTEM_READY: AtomicBool = AtomicBool::new(false);
 
 /// Check if all critical services are ready for trading operations
@@ -39,7 +38,6 @@ pub fn are_core_services_ready() -> bool {
     TOKENS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst)
         && POSITIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst)
         && POOL_SERVICE_READY.load(std::sync::atomic::Ordering::SeqCst)
-        && SECURITY_ANALYZER_READY.load(std::sync::atomic::Ordering::SeqCst)
         && TRANSACTIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst)
 }
 
@@ -55,9 +53,6 @@ pub fn get_pending_services() -> Vec<&'static str> {
     }
     if !POOL_SERVICE_READY.load(std::sync::atomic::Ordering::SeqCst) {
         pending.push("Pool Service");
-    }
-    if !SECURITY_ANALYZER_READY.load(std::sync::atomic::Ordering::SeqCst) {
-        pending.push("Security Analyzer");
     }
     if !TRANSACTIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst) {
         pending.push("Transactions System");

@@ -214,12 +214,8 @@ const MICRO_LIQ_LOOKBACK_SECS: i64 = 900; // 15 min lookback window to find rece
 const MICRO_LIQ_CONF_BASE: f64 = 82.0; // Base confidence when triggered
 const MICRO_LIQ_CONF_BONUS: f64 = 8.0; // Bonus if drop >= preferred threshold
 
-async fn get_cached_holder_count_fast(mint: &str) -> Option<u32> {
-    // Uses security analyzer in-memory cache only; never triggers fresh analysis.
-    // Safe (no panics) – returns None if analyzer not available or no cached data.
-    if false {
-        return Some(0);
-    }
+async fn get_cached_holder_count_fast(_mint: &str) -> Option<u32> {
+    // Security analyzer removed; no cached holder count available.
     None
 }
 

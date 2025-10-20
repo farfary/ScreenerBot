@@ -221,17 +221,17 @@ pub struct PairInfo {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct TokenProfile {
-    pub address: String,
-    pub name: Option<String>,
-    pub symbol: Option<String>,
-    pub description: Option<String>,
-    pub image_url: Option<String>,
-    pub header_url: Option<String>,
+    #[serde(rename = "tokenAddress")]
+    pub token_address: String,
+    #[serde(rename = "chainId")]
     pub chain_id: Option<String>,
-    pub website: Option<String>,
-    pub twitter: Option<String>,
-    pub telegram: Option<String>,
-    pub discord: Option<String>,
+    pub url: Option<String>,
+    pub icon: Option<String>,
+    pub header: Option<String>,
+    #[serde(rename = "openGraph")]
+    pub open_graph: Option<String>,
+    pub description: Option<String>,
+    pub links: Option<Vec<serde_json::Value>>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

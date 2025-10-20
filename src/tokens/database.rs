@@ -102,7 +102,7 @@ impl TokenDatabase {
             "SELECT mint, symbol, name, decimals, created_at, updated_at FROM tokens WHERE mint = ?1"
         ).map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
 
-    let result = stmt.query_row(params![mint], |row| {
+        let result = stmt.query_row(params![mint], |row| {
             Ok(TokenMetadata {
                 mint: row.get(0)?,
                 symbol: row.get(1)?,

@@ -15,7 +15,7 @@ fn convert_pool_to_data(pool: &GeckoTerminalPool, is_sol_pair: bool) -> GeckoTer
     }
 
     let price_usd = parse_f64(&pool.token_price_usd).unwrap_or(0.0);
-    
+
     // Calculate price_sol based on pool type
     let price_sol = if is_sol_pair {
         // For SOL-paired pools, base_token_price_native IS the price in SOL
@@ -113,14 +113,13 @@ pub async fn fetch_geckoterminal_data(
     // Find best SOL-paired pool (highest reserve_usd)
     // SOL mint address
     const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
-    
+
     // CRITICAL: Only consider pools where our token is the BASE token!
     // GeckoTerminal token IDs are formatted as "network_address" (e.g., "solana_EPjFWdd...")
     let valid_pools: Vec<&GeckoTerminalPool> = pools
         .iter()
         .filter(|p| {
-            p.reserve_usd.is_some() && 
-            p.base_token_id.ends_with(mint)  // Token must be base, not quote!
+            p.reserve_usd.is_some() && p.base_token_id.ends_with(mint) // Token must be base, not quote!
         })
         .collect();
 

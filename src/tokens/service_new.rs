@@ -7,10 +7,11 @@
 /// - Cleanup tasks
 ///
 /// This service coordinates the new architecture with proper lifecycle management.
-use crate::global::TOKENS_DATABASE;
+use crate::global::{TOKENS_DATABASE, TOKENS_SYSTEM_READY};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use crate::tokens::cleanup;
 use crate::tokens::database::TokenDatabase;
+use crate::tokens::discovery;
 use crate::tokens::schema;
 use crate::tokens::updates;
 use async_trait::async_trait;
@@ -60,6 +61,8 @@ impl Service for TokensServiceNew {
             "[TOKENS_NEW] Service initialized with database at {}",
             TOKENS_DATABASE
         );
+        // Mark tokens system ready after successful initialization
+        TOKENS_SYSTEM_READY.store(true, std::sync::atomic::Ordering::SeqCst);
         Ok(())
     }
 
@@ -75,6 +78,10 @@ impl Service for TokensServiceNew {
         // Start update loops (critical, high, low priority + semaphore refill)
         let mut handles = updates::start_update_loop(db.clone(), shutdown.clone());
 
+        // Start discovery loop (new token discovery)
+        let discovery_handle = discovery::start_discovery_loop(db.clone(), shutdown.clone());
+        handles.push(discovery_handle);
+
         // Start cleanup loop (hourly)
         let cleanup_handle = cleanup::start_cleanup_loop(db.clone(), shutdown);
         handles.push(cleanup_handle);
@@ -88,6 +95,8 @@ impl Service for TokensServiceNew {
 
     async fn stop(&mut self) -> Result<(), String> {
         println!("[TOKENS_NEW] Service stopping...");
+        // On stop, mark as not ready
+        TOKENS_SYSTEM_READY.store(false, std::sync::atomic::Ordering::SeqCst);
         Ok(())
     }
 
