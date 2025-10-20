@@ -1,3 +1,7 @@
+use crate::apis::dexscreener::RATE_LIMIT_PER_MINUTE as DEX_DEFAULT_PER_MINUTE;
+use crate::apis::geckoterminal::RATE_LIMIT_PER_MINUTE as GECKO_DEFAULT_PER_MINUTE;
+use crate::apis::rugcheck::RATE_LIMIT_PER_MINUTE as RUG_DEFAULT_PER_MINUTE;
+use crate::config::with_config;
 /// Updates orchestrator - Priority-based background updates
 ///
 /// Coordinates fetching from all sources (DexScreener, GeckoTerminal, Rugcheck)
@@ -8,10 +12,6 @@
 /// - High (50): Filtered/watched tokens → Update every 60s  
 /// - Low (10): Oldest non-blacklisted → Update every 5min
 use crate::tokens::database::TokenDatabase;
-use crate::config::with_config;
-use crate::apis::dexscreener::RATE_LIMIT_PER_MINUTE as DEX_DEFAULT_PER_MINUTE;
-use crate::apis::geckoterminal::RATE_LIMIT_PER_MINUTE as GECKO_DEFAULT_PER_MINUTE;
-use crate::apis::rugcheck::RATE_LIMIT_PER_MINUTE as RUG_DEFAULT_PER_MINUTE;
 use crate::tokens::market::{dexscreener, geckoterminal};
 use crate::tokens::security::rugcheck;
 use crate::tokens::types::{TokenError, TokenResult};
@@ -121,7 +121,8 @@ impl RateLimitCoordinator {
             self.dexscreener_sem.add_permits(self.dexscreener_budget);
         }
         if self.geckoterminal_budget > 0 {
-            self.geckoterminal_sem.add_permits(self.geckoterminal_budget);
+            self.geckoterminal_sem
+                .add_permits(self.geckoterminal_budget);
         }
         if self.rugcheck_budget > 0 {
             self.rugcheck_sem.add_permits(self.rugcheck_budget);

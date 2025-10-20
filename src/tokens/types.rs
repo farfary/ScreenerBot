@@ -137,6 +137,9 @@ pub struct Token {
     // Security assessment
     pub security_score: Option<i32>,
     pub is_rugged: bool,
+    pub token_type: Option<String>,
+    pub graph_insiders_detected: Option<i64>,
+    pub lp_provider_count: Option<i64>,
 
     // Security risks
     pub security_risks: Vec<SecurityRisk>,
@@ -148,6 +151,8 @@ pub struct Token {
 
     // Token-2022 transfer fee
     pub transfer_fee_pct: Option<f64>,
+    pub transfer_fee_max_amount: Option<i64>,
+    pub transfer_fee_authority: Option<String>,
 
     // ========================================================================
     // Bot-Specific State
@@ -303,7 +308,17 @@ pub struct RugcheckData {
     pub mint_authority: Option<String>,
     pub freeze_authority: Option<String>,
     pub top_10_holders_pct: Option<f64>,
+    pub total_holders: Option<i64>,
+    pub total_lp_providers: Option<i64>,
+    pub graph_insiders_detected: Option<i64>,
+    pub total_market_liquidity: Option<f64>,
+    pub total_stable_liquidity: Option<f64>,
     pub total_supply: Option<String>,
+    pub creator_balance_pct: Option<f64>,
+    pub transfer_fee_pct: Option<f64>,
+    pub transfer_fee_max_amount: Option<i64>,
+    pub transfer_fee_authority: Option<String>,
+    pub rugged: bool,
     pub risks: Vec<SecurityRisk>,
     pub top_holders: Vec<TokenHolder>,
     pub markets: Option<serde_json::Value>, // Raw market data from rugcheck

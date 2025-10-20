@@ -88,6 +88,16 @@ pub const CREATE_TABLES: &[&str] = &[
         freeze_authority TEXT,
         top_10_holders_pct REAL,
         total_supply TEXT,
+    total_holders INTEGER,
+    total_lp_providers INTEGER,
+    graph_insiders_detected INTEGER,
+    total_market_liquidity REAL,
+    total_stable_liquidity REAL,
+    creator_balance_pct REAL,
+    transfer_fee_pct REAL,
+    transfer_fee_max_amount INTEGER,
+    transfer_fee_authority TEXT,
+    rugged INTEGER,
         risks TEXT,
         top_holders TEXT,
         markets TEXT,
@@ -142,6 +152,20 @@ pub const CREATE_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_tracking_market_update ON update_tracking(last_market_update ASC)",
 ];
 
+/// ALTER TABLE statements to backfill new columns when upgrading existing databases.
+pub const SECURITY_RUGCHECK_ALTER_STATEMENTS: &[&str] = &[
+    "ALTER TABLE security_rugcheck ADD COLUMN total_holders INTEGER",
+    "ALTER TABLE security_rugcheck ADD COLUMN total_lp_providers INTEGER",
+    "ALTER TABLE security_rugcheck ADD COLUMN graph_insiders_detected INTEGER",
+    "ALTER TABLE security_rugcheck ADD COLUMN total_market_liquidity REAL",
+    "ALTER TABLE security_rugcheck ADD COLUMN total_stable_liquidity REAL",
+    "ALTER TABLE security_rugcheck ADD COLUMN creator_balance_pct REAL",
+    "ALTER TABLE security_rugcheck ADD COLUMN transfer_fee_pct REAL",
+    "ALTER TABLE security_rugcheck ADD COLUMN transfer_fee_max_amount INTEGER",
+    "ALTER TABLE security_rugcheck ADD COLUMN transfer_fee_authority TEXT",
+    "ALTER TABLE security_rugcheck ADD COLUMN rugged INTEGER",
+];
+
 /// Performance PRAGMAs
 // Kept for reference; we now set PRAGMAs via rusqlite APIs to avoid "Execute returned results" errors
 pub const PERFORMANCE_PRAGMAS: &[&str] = &[];
@@ -170,6 +194,10 @@ pub fn initialize_schema(conn: &Connection) -> Result<(), String> {
     for statement in CREATE_TABLES {
         conn.execute(statement, [])
             .map_err(|e| format!("Failed to create table: {}", e))?;
+    }
+
+    for statement in SECURITY_RUGCHECK_ALTER_STATEMENTS {
+        let _ = conn.execute(statement, []);
     }
 
     // Create indexes

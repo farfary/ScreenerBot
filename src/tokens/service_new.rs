@@ -93,12 +93,14 @@ impl Service for TokensServiceNew {
             }
         });
 
-    // Start update loops (critical, high, low priority)
-    let mut handles = updates::start_update_loop(db.clone(), shutdown.clone(), coordinator.clone());
+        // Start update loops (critical, high, low priority)
+        let mut handles =
+            updates::start_update_loop(db.clone(), shutdown.clone(), coordinator.clone());
         handles.push(refill_handle);
 
         // Start discovery loop (new token discovery)
-        let discovery_handle = discovery::start_discovery_loop(db.clone(), shutdown.clone(), coordinator.clone());
+        let discovery_handle =
+            discovery::start_discovery_loop(db.clone(), shutdown.clone(), coordinator.clone());
         handles.push(discovery_handle);
 
         // Start cleanup loop (hourly)

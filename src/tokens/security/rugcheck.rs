@@ -22,6 +22,38 @@ fn convert_rugcheck_to_data(info: &RugcheckInfo) -> RugcheckData {
         )
     };
 
+    let creator_pct_from_holders = info.top_holders.iter().find_map(|holder| {
+        if holder
+            .owner
+            .as_ref()
+            .map(|owner| owner.eq_ignore_ascii_case("creator"))
+            .unwrap_or(false)
+        {
+            return Some(holder.pct);
+        }
+
+        if let Some(creator_address) = info.creator.as_ref() {
+            if creator_address == &holder.address {
+                return Some(holder.pct);
+            }
+        }
+
+        None
+    });
+
+    let creator_pct = creator_pct_from_holders.or_else(|| {
+        let balance = info.creator_balance? as f64;
+        let supply = info
+            .token_supply
+            .as_ref()
+            .and_then(|value| value.parse::<f64>().ok())?;
+        if supply > 0.0 {
+            Some((balance / supply) * 100.0)
+        } else {
+            None
+        }
+    });
+
     RugcheckData {
         token_type: info.token_type.clone(),
         score: info.score,
@@ -29,7 +61,17 @@ fn convert_rugcheck_to_data(info: &RugcheckInfo) -> RugcheckData {
         mint_authority: info.mint_authority.clone(),
         freeze_authority: info.freeze_authority.clone(),
         top_10_holders_pct: top_pct,
+        total_holders: info.total_holders,
+        total_lp_providers: info.total_lp_providers,
+        graph_insiders_detected: info.graph_insiders_detected,
+        total_market_liquidity: info.total_market_liquidity,
+        total_stable_liquidity: info.total_stable_liquidity,
         total_supply: info.token_supply.clone(),
+        creator_balance_pct: creator_pct,
+        transfer_fee_pct: info.transfer_fee_pct,
+        transfer_fee_max_amount: info.transfer_fee_max_amount,
+        transfer_fee_authority: info.transfer_fee_authority.clone(),
+        rugged: info.rugged,
         risks: info.risks.clone(),
         top_holders: info.top_holders.clone(),
         markets: None,

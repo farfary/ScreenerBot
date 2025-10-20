@@ -387,23 +387,84 @@ impl TokenDatabase {
             .transpose()
             .map_err(|e| TokenError::Database(format!("Failed to serialize markets: {}", e)))?;
 
+        let rugged_flag = if data.rugged { 1 } else { 0 };
+
         conn.execute(
             "INSERT INTO security_rugcheck (
-                mint, token_type, score, score_description,
-                mint_authority, freeze_authority, top_10_holders_pct, total_supply,
-                risks, top_holders, markets, fetched_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                mint,
+                token_type,
+                score,
+                score_description,
+                mint_authority,
+                freeze_authority,
+                top_10_holders_pct,
+                total_supply,
+                total_holders,
+                total_lp_providers,
+                graph_insiders_detected,
+                total_market_liquidity,
+                total_stable_liquidity,
+                creator_balance_pct,
+                transfer_fee_pct,
+                transfer_fee_max_amount,
+                transfer_fee_authority,
+                rugged,
+                risks,
+                top_holders,
+                markets,
+                fetched_at
+             ) VALUES (
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11,
+                ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22
+             )
              ON CONFLICT(mint) DO UPDATE SET
-                token_type = ?2, score = ?3, score_description = ?4,
-                mint_authority = ?5, freeze_authority = ?6, top_10_holders_pct = ?7, total_supply = ?8,
-                risks = ?9, top_holders = ?10, markets = ?11, fetched_at = ?12",
+                token_type = excluded.token_type,
+                score = excluded.score,
+                score_description = excluded.score_description,
+                mint_authority = excluded.mint_authority,
+                freeze_authority = excluded.freeze_authority,
+                top_10_holders_pct = excluded.top_10_holders_pct,
+                total_supply = excluded.total_supply,
+                total_holders = excluded.total_holders,
+                total_lp_providers = excluded.total_lp_providers,
+                graph_insiders_detected = excluded.graph_insiders_detected,
+                total_market_liquidity = excluded.total_market_liquidity,
+                total_stable_liquidity = excluded.total_stable_liquidity,
+                creator_balance_pct = excluded.creator_balance_pct,
+                transfer_fee_pct = excluded.transfer_fee_pct,
+                transfer_fee_max_amount = excluded.transfer_fee_max_amount,
+                transfer_fee_authority = excluded.transfer_fee_authority,
+                rugged = excluded.rugged,
+                risks = excluded.risks,
+                top_holders = excluded.top_holders,
+                markets = excluded.markets,
+                fetched_at = excluded.fetched_at",
             params![
-                mint, &data.token_type, data.score, &data.score_description,
-                &data.mint_authority, &data.freeze_authority, data.top_10_holders_pct, &data.total_supply,
-                risks_json, holders_json, markets_json,
+                mint,
+                &data.token_type,
+                data.score,
+                &data.score_description,
+                &data.mint_authority,
+                &data.freeze_authority,
+                data.top_10_holders_pct,
+                &data.total_supply,
+                data.total_holders,
+                data.total_lp_providers,
+                data.graph_insiders_detected,
+                data.total_market_liquidity,
+                data.total_stable_liquidity,
+                data.creator_balance_pct,
+                data.transfer_fee_pct,
+                data.transfer_fee_max_amount,
+                &data.transfer_fee_authority,
+                rugged_flag,
+                risks_json,
+                holders_json,
+                markets_json,
                 data.fetched_at.timestamp(),
             ],
-        ).map_err(|e| TokenError::Database(format!("Failed to upsert Rugcheck data: {}", e)))?;
+        )
+        .map_err(|e| TokenError::Database(format!("Failed to upsert Rugcheck data: {}", e)))?;
 
         Ok(())
     }
@@ -417,18 +478,39 @@ impl TokenDatabase {
 
         let mut stmt = conn
             .prepare(
-                "SELECT token_type, score, score_description,
-                    mint_authority, freeze_authority, top_10_holders_pct, total_supply,
-                    risks, top_holders, markets, fetched_at
-             FROM security_rugcheck WHERE mint = ?1",
+                "SELECT
+                    token_type,
+                    score,
+                    score_description,
+                    mint_authority,
+                    freeze_authority,
+                    top_10_holders_pct,
+                    total_supply,
+                    total_holders,
+                    total_lp_providers,
+                    graph_insiders_detected,
+                    total_market_liquidity,
+                    total_stable_liquidity,
+                    creator_balance_pct,
+                    transfer_fee_pct,
+                    transfer_fee_max_amount,
+                    transfer_fee_authority,
+                    rugged,
+                    risks,
+                    top_holders,
+                    markets,
+                    fetched_at
+                 FROM security_rugcheck WHERE mint = ?1",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
 
         let result = stmt.query_row(params![mint], |row| {
-            let risks_json: String = row.get(7)?;
-            let holders_json: String = row.get(8)?;
-            let markets_json: Option<String> = row.get(9)?;
-            let fetched_ts: i64 = row.get(10)?;
+            let risks_json: String = row.get(17)?;
+            let holders_json: String = row.get(18)?;
+            let markets_json: Option<String> = row.get(19)?;
+            let fetched_ts: i64 = row.get(20)?;
+            let rugged_flag: Option<i64> = row.get(16)?;
+            let is_rugged = rugged_flag.unwrap_or(0) != 0;
 
             let risks: Vec<SecurityRisk> = serde_json::from_str(&risks_json)
                 .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
@@ -444,6 +526,16 @@ impl TokenDatabase {
                 freeze_authority: row.get(4)?,
                 top_10_holders_pct: row.get(5)?,
                 total_supply: row.get(6)?,
+                total_holders: row.get(7)?,
+                total_lp_providers: row.get(8)?,
+                graph_insiders_detected: row.get(9)?,
+                total_market_liquidity: row.get(10)?,
+                total_stable_liquidity: row.get(11)?,
+                creator_balance_pct: row.get(12)?,
+                transfer_fee_pct: row.get(13)?,
+                transfer_fee_max_amount: row.get(14)?,
+                transfer_fee_authority: row.get(15)?,
+                rugged: is_rugged,
                 risks,
                 top_holders: holders,
                 markets,
@@ -1025,6 +1117,7 @@ fn assemble_token(
 
     // Extract security data
     let (
+        token_type,
         mint_authority,
         freeze_authority,
         security_score,
@@ -1034,24 +1127,44 @@ fn assemble_token(
         total_holders,
         creator_balance_pct,
         transfer_fee_pct,
+        transfer_fee_max_amount,
+        transfer_fee_authority,
+        graph_insiders_detected,
+        lp_provider_count,
     ) = if let Some(sec) = security {
-        let is_rugged = sec.score.map(|s| s < 20).unwrap_or(false);
-        let total_holders = sec.top_holders.len() as i64;
-        let creator_pct = sec.top_10_holders_pct;
-
         (
+            sec.token_type,
             sec.mint_authority,
             sec.freeze_authority,
             sec.score,
-            is_rugged,
+            sec.rugged,
             sec.risks,
             sec.top_holders,
-            Some(total_holders),
-            creator_pct,
-            None, // Transfer fee not in rugcheck data
+            sec.total_holders,
+            sec.creator_balance_pct,
+            sec.transfer_fee_pct,
+            sec.transfer_fee_max_amount,
+            sec.transfer_fee_authority,
+            sec.graph_insiders_detected,
+            sec.total_lp_providers,
         )
     } else {
-        (None, None, None, false, vec![], vec![], None, None, None)
+        (
+            None,
+            None,
+            None,
+            None,
+            false,
+            Vec::new(),
+            Vec::new(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
     };
 
     Token {
@@ -1109,11 +1222,16 @@ fn assemble_token(
         freeze_authority,
         security_score,
         is_rugged,
+        token_type,
+        graph_insiders_detected,
+        lp_provider_count,
         security_risks,
         total_holders,
         top_holders,
         creator_balance_pct,
         transfer_fee_pct,
+        transfer_fee_max_amount,
+        transfer_fee_authority,
 
         // Bot-specific state
         is_blacklisted,

@@ -1,10 +1,10 @@
 use crate::apis::get_api_manager;
 use crate::config;
 use crate::pools::utils::{is_sol_mint, is_stablecoin_mint};
-use crate::tokens::updates::RateLimitCoordinator;
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::events::{self, TokenEvent};
 use crate::tokens::priorities::Priority;
+use crate::tokens::updates::RateLimitCoordinator;
 use chrono::Utc;
 use futures::future::{join_all, BoxFuture};
 use solana_sdk::pubkey::Pubkey;
