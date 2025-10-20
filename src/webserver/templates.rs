@@ -26,6 +26,7 @@ pub const CORE_POLLER: &str = include_str!("templates/scripts/core/poller.js");
 pub const CORE_DOM: &str = include_str!("templates/scripts/core/dom.js");
 pub const CORE_UTILS: &str = include_str!("templates/scripts/core/utils.js");
 pub const CORE_ROUTER: &str = include_str!("templates/scripts/core/router.js");
+pub const CORE_HEADER: &str = include_str!("templates/scripts/core/header.js");
 
 const THEME_SCRIPTS: &str = include_str!("templates/scripts/theme.js");
 

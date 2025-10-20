@@ -128,6 +128,7 @@ async fn get_core_script(axum::extract::Path(file): axum::extract::Path<String>)
         "dom.js" => Some(templates::CORE_DOM),
         "utils.js" => Some(templates::CORE_UTILS),
         "router.js" => Some(templates::CORE_ROUTER),
+        "header.js" => Some(templates::CORE_HEADER),
         _ => None,
     };
 
