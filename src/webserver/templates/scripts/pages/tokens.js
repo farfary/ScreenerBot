@@ -7,6 +7,7 @@ import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 // Sub-tabs (views) configuration
 const TOKEN_VIEWS = [
   { id: "pool", label: "💧 Pool Service" },
+  { id: "no_market", label: "📉 No Market Data" },
   { id: "all", label: "📋 All Tokens" },
   { id: "passed", label: "✅ Passed" },
   { id: "rejected", label: "⛔ Rejected" },
@@ -103,6 +104,24 @@ function createLifecycle() {
     sort: { ...DEFAULT_SERVER_SORT },
     filters: { ...DEFAULT_FILTERS },
     summary: { ...DEFAULT_SUMMARY },
+  };
+
+  const applyViewPreferences = () => {
+    if (!table) return;
+    const showRejectReason = state.view === "rejected";
+    if (table.state && typeof table.state === "object") {
+      table.state.visibleColumns = table.state.visibleColumns || {};
+      table.state.visibleColumns.reject_reason = showRejectReason;
+    }
+    const column = Array.isArray(table.options?.columns)
+      ? table.options.columns.find((col) => col.id === "reject_reason")
+      : null;
+    if (column) {
+      column.visible = showRejectReason;
+    }
+    if (typeof table._renderTable === "function") {
+      table._renderTable();
+    }
   };
 
   const updateToolbar = () => {
@@ -292,6 +311,26 @@ function createLifecycle() {
       const data = await response.json();
       const items = Array.isArray(data?.items) ? data.items : [];
 
+      const rejectionReasons =
+        data &&
+        typeof data === "object" &&
+        data.rejection_reasons &&
+        typeof data.rejection_reasons === "object"
+          ? data.rejection_reasons
+          : null;
+
+      const normalizedItems = items.map((row) => {
+        if (!row || typeof row !== "object") return row;
+        const hasServerReason =
+          rejectionReasons &&
+          row.mint &&
+          Object.prototype.hasOwnProperty.call(rejectionReasons, row.mint);
+        const resolvedReason = hasServerReason
+          ? rejectionReasons[row.mint]
+          : row.reject_reason ?? null;
+        return { ...row, reject_reason: resolvedReason ?? null };
+      });
+
       if (typeof data?.total === "number" && Number.isFinite(data.total)) {
         state.totalCount = data.total;
       } else {
@@ -314,19 +353,21 @@ function createLifecycle() {
 
       state.summary = {
         priced:
-          pricedTotal !== null ? pricedTotal : items.filter((row) => row.has_pool_price).length,
+          pricedTotal !== null
+            ? pricedTotal
+            : normalizedItems.filter((row) => row.has_pool_price).length,
         positions:
           positionsTotal !== null
             ? positionsTotal
-            : items.filter((row) => row.has_open_position).length,
+            : normalizedItems.filter((row) => row.has_open_position).length,
         blacklisted:
           blacklistedTotal !== null
             ? blacklistedTotal
-            : items.filter((row) => row.blacklisted).length,
+            : normalizedItems.filter((row) => row.blacklisted).length,
       };
 
       return {
-        rows: items,
+        rows: normalizedItems,
         cursorNext: data?.next_cursor ?? null,
         cursorPrev: null,
         hasMoreNext: Boolean(data?.next_cursor),
@@ -368,6 +409,7 @@ function createLifecycle() {
     state.sort = { ...DEFAULT_SERVER_SORT };
     state.filters = { ...DEFAULT_FILTERS };
     state.summary = { ...DEFAULT_SUMMARY };
+    applyViewPreferences();
     syncTableSortState({ render: true });
     syncToolbarFilters();
     updateToolbar();
@@ -484,6 +526,17 @@ function createLifecycle() {
             if (v <= 1000) return `<span style="color: var(--success)">${num}</span>`;
             if (v <= 10000) return `<span style="color: var(--warning)">${num}</span>`;
             return `<span style="color: var(--error)">${num}</span>`;
+          },
+        },
+        {
+          id: "reject_reason",
+          label: "Reject Reason",
+          sortable: false,
+          minWidth: 220,
+          wrap: true,
+          render: (value) => {
+            if (!value) return "—";
+            return Utils.escapeHtml(String(value));
           },
         },
         {
@@ -637,7 +690,9 @@ function createLifecycle() {
         },
       });
 
-      // Sync state from DataTable's restored server state
+  applyViewPreferences();
+
+  // Sync state from DataTable's restored server state
       const serverState = table.getServerState();
       let hasSortRestored = false;
 

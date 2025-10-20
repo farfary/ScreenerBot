@@ -178,6 +178,21 @@ impl FilteringStore {
             Vec::new()
         };
 
+        let mut rejection_reasons = HashMap::new();
+        if matches!(query.view, FilteringView::Rejected) {
+            let reason_lookup: HashMap<&str, &str> = snapshot
+                .rejected_tokens
+                .iter()
+                .map(|entry| (entry.mint.as_str(), entry.reason.as_str()))
+                .collect();
+
+            for token in &items {
+                if let Some(reason) = reason_lookup.get(token.mint.as_str()) {
+                    rejection_reasons.insert(token.mint.clone(), (*reason).to_string());
+                }
+            }
+        }
+
         Ok(FilteringQueryResult {
             items,
             page: normalized_page,
@@ -191,6 +206,7 @@ impl FilteringStore {
             priced_mints,
             open_position_mints,
             ohlcv_mints,
+            rejection_reasons,
         })
     }
 
@@ -308,6 +324,11 @@ fn collect_entries<'a>(
                 })
                 .collect()
         }
+        FilteringView::NoMarketData => snapshot
+            .tokens
+            .values()
+            .filter(|entry| !entry.has_pool_price)
+            .collect(),
     }
 }
 

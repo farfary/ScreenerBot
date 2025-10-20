@@ -35,6 +35,7 @@ pub enum FilteringView {
     Positions,
     Secure,
     Recent,
+    NoMarketData,
 }
 
 impl FilteringView {
@@ -48,6 +49,7 @@ impl FilteringView {
             FilteringView::Positions => "positions",
             FilteringView::Secure => "secure",
             FilteringView::Recent => "recent",
+            FilteringView::NoMarketData => "no_market",
         }
     }
 
@@ -60,6 +62,7 @@ impl FilteringView {
             "positions" => FilteringView::Positions,
             "secure" => FilteringView::Secure,
             "recent" => FilteringView::Recent,
+            "no_market" => FilteringView::NoMarketData,
             _ => FilteringView::Pool,
         }
     }
@@ -197,6 +200,7 @@ pub struct FilteringQueryResult {
     pub priced_mints: Vec<String>,
     pub open_position_mints: Vec<String>,
     pub ohlcv_mints: Vec<String>,
+    pub rejection_reasons: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone)]
