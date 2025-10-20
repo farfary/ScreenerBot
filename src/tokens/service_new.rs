@@ -14,6 +14,7 @@ use crate::tokens::database::TokenDatabase;
 use crate::tokens::discovery;
 use crate::tokens::schema;
 use crate::tokens::updates;
+use crate::tokens::updates::RateLimitCoordinator;
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
@@ -75,11 +76,29 @@ impl Service for TokensServiceNew {
 
         let _ = monitor; // Metrics instrumentation will be wired up in a follow-up
 
-        // Start update loops (critical, high, low priority + semaphore refill)
-        let mut handles = updates::start_update_loop(db.clone(), shutdown.clone());
+        // Create a single shared rate limit coordinator for all token tasks
+        let coordinator = Arc::new(RateLimitCoordinator::new());
+
+        // Start a single refill task (every minute) shared by all loops
+        let coord_refill = coordinator.clone();
+        let shutdown_refill = shutdown.clone();
+        let refill_handle = tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    _ = shutdown_refill.notified() => break,
+                    _ = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
+                        coord_refill.refill_all();
+                    }
+                }
+            }
+        });
+
+    // Start update loops (critical, high, low priority)
+    let mut handles = updates::start_update_loop(db.clone(), shutdown.clone(), coordinator.clone());
+        handles.push(refill_handle);
 
         // Start discovery loop (new token discovery)
-        let discovery_handle = discovery::start_discovery_loop(db.clone(), shutdown.clone());
+        let discovery_handle = discovery::start_discovery_loop(db.clone(), shutdown.clone(), coordinator.clone());
         handles.push(discovery_handle);
 
         // Start cleanup loop (hourly)

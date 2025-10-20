@@ -472,9 +472,10 @@ impl TokenDatabase {
         let mut stmt = conn
             .prepare(
                 "SELECT mint FROM update_tracking 
-             WHERE priority = ?1 
-             ORDER BY last_market_update ASC NULLS FIRST 
-             LIMIT ?2",
+                 WHERE priority = ?1
+                 AND (last_error_at IS NULL OR last_error_at < strftime('%s','now') - 180)
+                 ORDER BY last_market_update ASC NULLS FIRST 
+                 LIMIT ?2",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
 
@@ -526,6 +527,55 @@ impl TokenDatabase {
             params![priority, mint],
         )
         .map_err(|e| TokenError::Database(format!("Failed to update priority: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Get tokens that have never received market data
+    pub fn get_tokens_without_market_data(&self, limit: usize) -> TokenResult<Vec<String>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT t.mint FROM tokens t
+             INNER JOIN update_tracking u ON t.mint = u.mint
+             LEFT JOIN market_dexscreener md ON t.mint = md.mint
+             LEFT JOIN market_geckoterminal mg ON t.mint = mg.mint
+             WHERE u.market_update_count = 0
+             AND md.mint IS NULL
+             AND mg.mint IS NULL
+             AND (u.last_error_at IS NULL OR u.last_error_at < strftime('%s','now') - 180)
+             ORDER BY u.priority DESC, t.created_at ASC
+             LIMIT ?1",
+            )
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+
+        let mints = stmt
+            .query_map(params![limit], |row| row.get(0))
+            .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+
+        mints
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| TokenError::Database(format!("Failed to collect: {}", e)))
+    }
+
+    /// Record a failed market update attempt (used to throttle retries)
+    pub fn record_market_error(&self, mint: &str, message: &str) -> TokenResult<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let now = Utc::now().timestamp();
+
+        conn.execute(
+            "UPDATE update_tracking SET last_error = ?1, last_error_at = ?2 WHERE mint = ?3",
+            params![message, now, mint],
+        )
+        .map_err(|e| TokenError::Database(format!("Failed to record market error: {}", e)))?;
 
         Ok(())
     }

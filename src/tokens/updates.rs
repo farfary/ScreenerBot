@@ -8,6 +8,10 @@
 /// - High (50): Filtered/watched tokens → Update every 60s  
 /// - Low (10): Oldest non-blacklisted → Update every 5min
 use crate::tokens::database::TokenDatabase;
+use crate::config::with_config;
+use crate::apis::dexscreener::RATE_LIMIT_PER_MINUTE as DEX_DEFAULT_PER_MINUTE;
+use crate::apis::geckoterminal::RATE_LIMIT_PER_MINUTE as GECKO_DEFAULT_PER_MINUTE;
+use crate::apis::rugcheck::RATE_LIMIT_PER_MINUTE as RUG_DEFAULT_PER_MINUTE;
 use crate::tokens::market::{dexscreener, geckoterminal};
 use crate::tokens::security::rugcheck;
 use crate::tokens::types::{TokenError, TokenResult};
@@ -31,14 +35,41 @@ pub struct RateLimitCoordinator {
     dexscreener_sem: Arc<Semaphore>,
     geckoterminal_sem: Arc<Semaphore>,
     rugcheck_sem: Arc<Semaphore>,
+    dexscreener_budget: usize,
+    geckoterminal_budget: usize,
+    rugcheck_budget: usize,
 }
 
 impl RateLimitCoordinator {
     pub fn new() -> Self {
+        // Read limits from config; fall back to API defaults if unset (0)
+        let (dex_limit, gecko_limit, rug_limit) = with_config(|cfg| {
+            let s = &cfg.tokens.sources;
+            let dex = if s.dexscreener.rate_limit_per_minute == 0 {
+                DEX_DEFAULT_PER_MINUTE
+            } else {
+                s.dexscreener.rate_limit_per_minute as usize
+            };
+            let gecko = if s.geckoterminal.rate_limit_per_minute == 0 {
+                GECKO_DEFAULT_PER_MINUTE
+            } else {
+                s.geckoterminal.rate_limit_per_minute as usize
+            };
+            let rug = if s.rugcheck.rate_limit_per_minute == 0 {
+                RUG_DEFAULT_PER_MINUTE
+            } else {
+                s.rugcheck.rate_limit_per_minute as usize
+            };
+            (dex, gecko, rug)
+        });
+
         Self {
-            dexscreener_sem: Arc::new(Semaphore::new(300)), // 300/min
-            geckoterminal_sem: Arc::new(Semaphore::new(30)), // 30/min
-            rugcheck_sem: Arc::new(Semaphore::new(60)),     // 60/min
+            dexscreener_sem: Arc::new(Semaphore::new(dex_limit)),
+            geckoterminal_sem: Arc::new(Semaphore::new(gecko_limit)),
+            rugcheck_sem: Arc::new(Semaphore::new(rug_limit)),
+            dexscreener_budget: dex_limit,
+            geckoterminal_budget: gecko_limit,
+            rugcheck_budget: rug_limit,
         }
     }
 
@@ -86,9 +117,15 @@ impl RateLimitCoordinator {
 
     /// Refill all semaphores (called every minute)
     pub fn refill_all(&self) {
-        self.dexscreener_sem.add_permits(300);
-        self.geckoterminal_sem.add_permits(30);
-        self.rugcheck_sem.add_permits(60);
+        if self.dexscreener_budget > 0 {
+            self.dexscreener_sem.add_permits(self.dexscreener_budget);
+        }
+        if self.geckoterminal_budget > 0 {
+            self.geckoterminal_sem.add_permits(self.geckoterminal_budget);
+        }
+        if self.rugcheck_budget > 0 {
+            self.rugcheck_sem.add_permits(self.rugcheck_budget);
+        }
     }
 }
 
@@ -184,20 +221,24 @@ impl UpdateResult {
 // ============================================================================
 
 /// Start the main update loop with all priority levels
-pub fn start_update_loop(db: Arc<TokenDatabase>, shutdown: Arc<Notify>) -> Vec<JoinHandle<()>> {
-    let coordinator = Arc::new(RateLimitCoordinator::new());
-
+pub fn start_update_loop(
+    db: Arc<TokenDatabase>,
+    shutdown: Arc<Notify>,
+    coordinator: Arc<RateLimitCoordinator>,
+) -> Vec<JoinHandle<()>> {
     let mut handles = Vec::new();
 
-    // Semaphore refill task (every minute)
-    let coord_refill = coordinator.clone();
-    let shutdown_refill = shutdown.clone();
+    // Immediate seeding loop for tokens that have no market data yet
+    let db_seed = db.clone();
+    let coord_seed = coordinator.clone();
+    let shutdown_seed = shutdown.clone();
     handles.push(tokio::spawn(async move {
+        update_uninitialized_tokens(&db_seed, &coord_seed).await;
         loop {
             tokio::select! {
-                _ = shutdown_refill.notified() => break,
-                _ = sleep(Duration::from_secs(60)) => {
-                    coord_refill.refill_all();
+                _ = shutdown_seed.notified() => break,
+                _ = sleep(Duration::from_secs(10)) => {
+                    update_uninitialized_tokens(&db_seed, &coord_seed).await;
                 }
             }
         }
@@ -251,6 +292,60 @@ pub fn start_update_loop(db: Arc<TokenDatabase>, shutdown: Arc<Notify>) -> Vec<J
     handles
 }
 
+/// Seed market data for tokens that have never been updated
+async fn update_uninitialized_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
+    const MAX_INITIAL_BATCH: usize = 25;
+
+    let tokens = match db.get_tokens_without_market_data(MAX_INITIAL_BATCH) {
+        Ok(tokens) => tokens,
+        Err(e) => {
+            eprintln!("[UPDATES] Failed to load uninitialized tokens: {}", e);
+            return;
+        }
+    };
+
+    if tokens.is_empty() {
+        return;
+    }
+
+    println!(
+        "[UPDATES] Seeding market data for {} newly discovered tokens",
+        tokens.len()
+    );
+
+    for mint in tokens {
+        match update_token(&mint, db, coordinator).await {
+            Ok(result) if result.is_success() => {}
+            Ok(result) if result.is_partial_failure() => {
+                eprintln!(
+                    "[UPDATES] Partial failure while seeding {}: {:?}",
+                    mint, result.failures
+                );
+            }
+            Ok(result) if result.is_total_failure() => {
+                let message = result.failures.join(" | ");
+                if let Err(err) = db.record_market_error(mint.as_str(), message.as_str()) {
+                    eprintln!(
+                        "[UPDATES] Failed to record seed error for {}: {}",
+                        mint, err
+                    );
+                }
+            }
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!("[UPDATES] Error seeding {}: {}", mint, e);
+                let err_msg = e.to_string();
+                if let Err(err) = db.record_market_error(mint.as_str(), err_msg.as_str()) {
+                    eprintln!(
+                        "[UPDATES] Failed to record seed error for {}: {}",
+                        mint, err
+                    );
+                }
+            }
+        }
+    }
+}
+
 /// Update critical priority tokens (open positions)
 async fn update_critical_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
     // Get tokens with priority = 100 (open positions)
@@ -289,9 +384,17 @@ async fn update_critical_tokens(db: &TokenDatabase, coordinator: &RateLimitCoord
                     "[UPDATES] Total failure for {}: {:?}",
                     mint, result.failures
                 );
+                let message = result.failures.join(" | ");
+                if let Err(err) = db.record_market_error(mint.as_str(), message.as_str()) {
+                    eprintln!("[UPDATES] Failed to record error for {}: {}", mint, err);
+                }
             }
             Err(e) => {
                 eprintln!("[UPDATES] Error updating {}: {}", mint, e);
+                let err_msg = e.to_string();
+                if let Err(err) = db.record_market_error(mint.as_str(), err_msg.as_str()) {
+                    eprintln!("[UPDATES] Failed to record error for {}: {}", mint, err);
+                }
             }
         }
     }
@@ -327,7 +430,20 @@ async fn update_high_priority_tokens(db: &TokenDatabase, coordinator: &RateLimit
                     result.failures.len()
                 );
             }
-            _ => {}
+            Ok(result) if result.is_total_failure() => {
+                let message = result.failures.join(" | ");
+                if let Err(err) = db.record_market_error(mint.as_str(), message.as_str()) {
+                    eprintln!("[UPDATES] Failed to record error for {}: {}", mint, err);
+                }
+            }
+            Err(e) => {
+                eprintln!("[UPDATES] Error updating {}: {}", mint, e);
+                let err_msg = e.to_string();
+                if let Err(err) = db.record_market_error(mint.as_str(), err_msg.as_str()) {
+                    eprintln!("[UPDATES] Failed to record error for {}: {}", mint, err);
+                }
+            }
+            Ok(_) => {}
         }
     }
 }
@@ -360,7 +476,20 @@ async fn update_low_priority_tokens(db: &TokenDatabase, coordinator: &RateLimitC
                     result.failures.len()
                 );
             }
-            _ => {}
+            Ok(result) if result.is_total_failure() => {
+                let message = result.failures.join(" | ");
+                if let Err(err) = db.record_market_error(mint.as_str(), message.as_str()) {
+                    eprintln!("[UPDATES] Failed to record error for {}: {}", mint, err);
+                }
+            }
+            Err(e) => {
+                eprintln!("[UPDATES] Error updating {}: {}", mint, e);
+                let err_msg = e.to_string();
+                if let Err(err) = db.record_market_error(mint.as_str(), err_msg.as_str()) {
+                    eprintln!("[UPDATES] Failed to record error for {}: {}", mint, err);
+                }
+            }
+            Ok(_) => {}
         }
     }
 }

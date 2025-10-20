@@ -161,12 +161,13 @@ pub struct GeckoTerminalPoolData {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GeckoTerminalAttributes {
-    pub base_token_price_usd: String,
-    pub base_token_price_native_currency: String,
-    pub base_token_price_quote_token: String,
-    pub quote_token_price_usd: String,
-    pub quote_token_price_native_currency: String,
-    pub quote_token_price_base_token: String,
+    // Some price fields can be null for freshly created or illiquid pools
+    pub base_token_price_usd: Option<String>,
+    pub base_token_price_native_currency: Option<String>,
+    pub base_token_price_quote_token: Option<String>,
+    pub quote_token_price_usd: Option<String>,
+    pub quote_token_price_native_currency: Option<String>,
+    pub quote_token_price_base_token: Option<String>,
     pub address: String,
     pub name: String,
     pub pool_created_at: Option<String>,
@@ -272,16 +273,35 @@ impl GeckoTerminalPoolData {
             dex_id: rels.dex.data.id.clone(),
             base_token_id: rels.base_token.data.id.clone(),
             quote_token_id: rels.quote_token.data.id.clone(),
-            base_token_price_usd: attrs.base_token_price_usd.clone(),
-            base_token_price_native: attrs.base_token_price_native_currency.clone(),
-            base_token_price_quote: attrs.base_token_price_quote_token.clone(),
-            quote_token_price_usd: attrs.quote_token_price_usd.clone(),
-            quote_token_price_native: attrs.quote_token_price_native_currency.clone(),
-            quote_token_price_base: attrs.quote_token_price_base_token.clone(),
+            base_token_price_usd: attrs
+                .base_token_price_usd
+                .clone()
+                .unwrap_or_else(|| "0".to_string()),
+            base_token_price_native: attrs
+                .base_token_price_native_currency
+                .clone()
+                .unwrap_or_else(|| "0".to_string()),
+            base_token_price_quote: attrs
+                .base_token_price_quote_token
+                .clone()
+                .unwrap_or_else(|| "0".to_string()),
+            quote_token_price_usd: attrs
+                .quote_token_price_usd
+                .clone()
+                .unwrap_or_else(|| "0".to_string()),
+            quote_token_price_native: attrs
+                .quote_token_price_native_currency
+                .clone()
+                .unwrap_or_else(|| "0".to_string()),
+            quote_token_price_base: attrs
+                .quote_token_price_base_token
+                .clone()
+                .unwrap_or_else(|| "0".to_string()),
             token_price_usd: attrs
                 .token_price_usd
                 .clone()
-                .unwrap_or_else(|| attrs.base_token_price_usd.clone()),
+                .or_else(|| attrs.base_token_price_usd.clone())
+                .unwrap_or_else(|| "0".to_string()),
             fdv_usd: attrs.fdv_usd.as_ref().and_then(|s| parse_f64(s)),
             market_cap_usd: attrs.market_cap_usd.as_ref().and_then(|s| parse_f64(s)),
             reserve_usd: attrs.reserve_in_usd.as_ref().and_then(|s| parse_f64(s)),

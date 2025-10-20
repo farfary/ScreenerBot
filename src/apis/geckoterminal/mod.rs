@@ -145,6 +145,11 @@ impl GeckoTerminalClient {
             self.stats
                 .record_error(format!("{} HTTP {}: {}", endpoint, status, body))
                 .await;
+            // Simple 429 backoff to avoid hammering when provider clamps down
+            if status.as_u16() == 429 {
+                // Sleep briefly to cool down; tuneable if needed
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
             return Err(format!("GeckoTerminal API error {}: {}", status, body));
         }
 

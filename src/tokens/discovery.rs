@@ -1,6 +1,7 @@
 use crate::apis::get_api_manager;
 use crate::config;
 use crate::pools::utils::{is_sol_mint, is_stablecoin_mint};
+use crate::tokens::updates::RateLimitCoordinator;
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::events::{self, TokenEvent};
 use crate::tokens::priorities::Priority;
@@ -44,7 +45,11 @@ impl DiscoveryStats {
 }
 
 /// Start background discovery loop
-pub fn start_discovery_loop(db: Arc<TokenDatabase>, shutdown: Arc<Notify>) -> JoinHandle<()> {
+pub fn start_discovery_loop(
+    db: Arc<TokenDatabase>,
+    shutdown: Arc<Notify>,
+    coordinator: Arc<RateLimitCoordinator>,
+) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut wait = Duration::from_secs(INITIAL_DELAY_SECS);
         let mut last_skip_reason: Option<String> = None;
@@ -55,7 +60,7 @@ pub fn start_discovery_loop(db: Arc<TokenDatabase>, shutdown: Arc<Notify>) -> Jo
                 _ = sleep(wait) => {
                     wait = Duration::from_secs(DISCOVERY_INTERVAL_SECS);
 
-                    match run_discovery_once(&db).await {
+                    match run_discovery_once(&db, coordinator.clone()).await {
                         Ok(stats) => {
                             if let Some(reason) = stats.skip_reason.clone() {
                                 if last_skip_reason.as_ref() != Some(&reason) {
@@ -103,7 +108,10 @@ pub fn start_discovery_loop(db: Arc<TokenDatabase>, shutdown: Arc<Notify>) -> Jo
 }
 
 /// Perform a single discovery run
-pub async fn run_discovery_once(db: &TokenDatabase) -> Result<DiscoveryStats, String> {
+pub async fn run_discovery_once(
+    db: &TokenDatabase,
+    coordinator: Arc<RateLimitCoordinator>,
+) -> Result<DiscoveryStats, String> {
     let start = Instant::now();
     let cfg = config::get_config_clone();
     let discovery_cfg = &cfg.tokens.discovery;
@@ -120,30 +128,33 @@ pub async fn run_discovery_once(db: &TokenDatabase) -> Result<DiscoveryStats, St
     if discovery_cfg.dexscreener.enabled && sources_cfg.dexscreener.enabled {
         if discovery_cfg.dexscreener.latest_profiles_enabled {
             let api = apis.clone();
+            let coord = coordinator.clone();
             tasks.push(Box::pin(async move {
                 (
                     "dexscreener.latest_profiles".to_string(),
-                    fetch_dexscreener_profiles(&api).await,
+                    fetch_dexscreener_profiles(&api, coord.clone()).await,
                 )
             }));
         }
 
         if discovery_cfg.dexscreener.latest_boosts_enabled {
             let api = apis.clone();
+            let coord = coordinator.clone();
             tasks.push(Box::pin(async move {
                 (
                     "dexscreener.latest_boosts".to_string(),
-                    fetch_dexscreener_latest_boosts(&api).await,
+                    fetch_dexscreener_latest_boosts(&api, coord.clone()).await,
                 )
             }));
         }
 
         if discovery_cfg.dexscreener.top_boosts_enabled {
             let api = apis.clone();
+            let coord = coordinator.clone();
             tasks.push(Box::pin(async move {
                 (
                     "dexscreener.top_boosts".to_string(),
-                    fetch_dexscreener_top_boosts(&api).await,
+                    fetch_dexscreener_top_boosts(&api, coord.clone()).await,
                 )
             }));
         }
@@ -152,30 +163,33 @@ pub async fn run_discovery_once(db: &TokenDatabase) -> Result<DiscoveryStats, St
     if discovery_cfg.geckoterminal.enabled && sources_cfg.geckoterminal.enabled {
         if discovery_cfg.geckoterminal.new_pools_enabled {
             let api = apis.clone();
+            let coord = coordinator.clone();
             tasks.push(Box::pin(async move {
                 (
                     "geckoterminal.new_pools".to_string(),
-                    fetch_gecko_new_pools(&api).await,
+                    fetch_gecko_new_pools(&api, coord.clone()).await,
                 )
             }));
         }
 
         if discovery_cfg.geckoterminal.recently_updated_enabled {
             let api = apis.clone();
+            let coord = coordinator.clone();
             tasks.push(Box::pin(async move {
                 (
                     "geckoterminal.recently_updated".to_string(),
-                    fetch_gecko_recent_updates(&api).await,
+                    fetch_gecko_recent_updates(&api, coord.clone()).await,
                 )
             }));
         }
 
         if discovery_cfg.geckoterminal.trending_enabled {
             let api = apis.clone();
+            let coord = coordinator.clone();
             tasks.push(Box::pin(async move {
                 (
                     "geckoterminal.trending".to_string(),
-                    fetch_gecko_trending(&api).await,
+                    fetch_gecko_trending(&api, coord.clone()).await,
                 )
             }));
         }
@@ -184,40 +198,44 @@ pub async fn run_discovery_once(db: &TokenDatabase) -> Result<DiscoveryStats, St
     if discovery_cfg.rugcheck.enabled && sources_cfg.rugcheck.enabled {
         if discovery_cfg.rugcheck.new_tokens_enabled {
             let api = apis.clone();
+            let coord = coordinator.clone();
             tasks.push(Box::pin(async move {
                 (
                     "rugcheck.new_tokens".to_string(),
-                    fetch_rugcheck_new_tokens(&api).await,
+                    fetch_rugcheck_new_tokens(&api, coord.clone()).await,
                 )
             }));
         }
 
         if discovery_cfg.rugcheck.recent_enabled {
             let api = apis.clone();
+            let coord = coordinator.clone();
             tasks.push(Box::pin(async move {
                 (
                     "rugcheck.recent".to_string(),
-                    fetch_rugcheck_recent_tokens(&api).await,
+                    fetch_rugcheck_recent_tokens(&api, coord.clone()).await,
                 )
             }));
         }
 
         if discovery_cfg.rugcheck.trending_enabled {
             let api = apis.clone();
+            let coord = coordinator.clone();
             tasks.push(Box::pin(async move {
                 (
                     "rugcheck.trending".to_string(),
-                    fetch_rugcheck_trending_tokens(&api).await,
+                    fetch_rugcheck_trending_tokens(&api, coord.clone()).await,
                 )
             }));
         }
 
         if discovery_cfg.rugcheck.verified_enabled {
             let api = apis.clone();
+            let coord = coordinator.clone();
             tasks.push(Box::pin(async move {
                 (
                     "rugcheck.verified".to_string(),
-                    fetch_rugcheck_verified_tokens(&api).await,
+                    fetch_rugcheck_verified_tokens(&api, coord.clone()).await,
                 )
             }));
         }
@@ -454,7 +472,13 @@ fn collect_pool_tokens(pool: &crate::apis::geckoterminal::types::GeckoTerminalPo
 
 async fn fetch_dexscreener_profiles(
     api: &Arc<crate::apis::ApiManager>,
+    coordinator: Arc<RateLimitCoordinator>,
 ) -> Result<Vec<DiscoveryRecord>, String> {
+    // Share DexScreener budget with updates
+    let _ = coordinator
+        .acquire_dexscreener()
+        .await
+        .map_err(|e| e.to_string())?;
     let profiles = api.dexscreener.get_latest_profiles().await?;
 
     Ok(profiles
@@ -477,7 +501,12 @@ async fn fetch_dexscreener_profiles(
 
 async fn fetch_dexscreener_latest_boosts(
     api: &Arc<crate::apis::ApiManager>,
+    coordinator: Arc<RateLimitCoordinator>,
 ) -> Result<Vec<DiscoveryRecord>, String> {
+    let _ = coordinator
+        .acquire_dexscreener()
+        .await
+        .map_err(|e| e.to_string())?;
     let boosts = api.dexscreener.get_latest_boosted_tokens().await?;
 
     Ok(boosts
@@ -494,7 +523,12 @@ async fn fetch_dexscreener_latest_boosts(
 
 async fn fetch_dexscreener_top_boosts(
     api: &Arc<crate::apis::ApiManager>,
+    coordinator: Arc<RateLimitCoordinator>,
 ) -> Result<Vec<DiscoveryRecord>, String> {
+    let _ = coordinator
+        .acquire_dexscreener()
+        .await
+        .map_err(|e| e.to_string())?;
     let boosts = api
         .dexscreener
         .get_top_boosted_tokens(Some("solana"))
@@ -513,7 +547,12 @@ async fn fetch_dexscreener_top_boosts(
 
 async fn fetch_gecko_new_pools(
     api: &Arc<crate::apis::ApiManager>,
+    coordinator: Arc<RateLimitCoordinator>,
 ) -> Result<Vec<DiscoveryRecord>, String> {
+    let _ = coordinator
+        .acquire_geckoterminal()
+        .await
+        .map_err(|e| e.to_string())?;
     let pools = api
         .geckoterminal
         .fetch_new_pools_by_network("solana", None, Some(1))
@@ -536,7 +575,12 @@ async fn fetch_gecko_new_pools(
 
 async fn fetch_gecko_recent_updates(
     api: &Arc<crate::apis::ApiManager>,
+    coordinator: Arc<RateLimitCoordinator>,
 ) -> Result<Vec<DiscoveryRecord>, String> {
+    let _ = coordinator
+        .acquire_geckoterminal()
+        .await
+        .map_err(|e| e.to_string())?;
     let response = api
         .geckoterminal
         .fetch_recently_updated_tokens(None, Some("solana"))
@@ -556,7 +600,12 @@ async fn fetch_gecko_recent_updates(
 
 async fn fetch_gecko_trending(
     api: &Arc<crate::apis::ApiManager>,
+    coordinator: Arc<RateLimitCoordinator>,
 ) -> Result<Vec<DiscoveryRecord>, String> {
+    let _ = coordinator
+        .acquire_geckoterminal()
+        .await
+        .map_err(|e| e.to_string())?;
     let pools = api
         .geckoterminal
         .fetch_trending_pools_by_network(Some("solana"), Some(1), None, None)
@@ -579,7 +628,12 @@ async fn fetch_gecko_trending(
 
 async fn fetch_rugcheck_new_tokens(
     api: &Arc<crate::apis::ApiManager>,
+    coordinator: Arc<RateLimitCoordinator>,
 ) -> Result<Vec<DiscoveryRecord>, String> {
+    let _ = coordinator
+        .acquire_rugcheck()
+        .await
+        .map_err(|e| e.to_string())?;
     let tokens = api
         .rugcheck
         .fetch_new_tokens()
@@ -599,7 +653,12 @@ async fn fetch_rugcheck_new_tokens(
 
 async fn fetch_rugcheck_recent_tokens(
     api: &Arc<crate::apis::ApiManager>,
+    coordinator: Arc<RateLimitCoordinator>,
 ) -> Result<Vec<DiscoveryRecord>, String> {
+    let _ = coordinator
+        .acquire_rugcheck()
+        .await
+        .map_err(|e| e.to_string())?;
     let tokens = api
         .rugcheck
         .fetch_recent_tokens()
@@ -619,7 +678,12 @@ async fn fetch_rugcheck_recent_tokens(
 
 async fn fetch_rugcheck_trending_tokens(
     api: &Arc<crate::apis::ApiManager>,
+    coordinator: Arc<RateLimitCoordinator>,
 ) -> Result<Vec<DiscoveryRecord>, String> {
+    let _ = coordinator
+        .acquire_rugcheck()
+        .await
+        .map_err(|e| e.to_string())?;
     let tokens = api
         .rugcheck
         .fetch_trending_tokens()
@@ -639,7 +703,12 @@ async fn fetch_rugcheck_trending_tokens(
 
 async fn fetch_rugcheck_verified_tokens(
     api: &Arc<crate::apis::ApiManager>,
+    coordinator: Arc<RateLimitCoordinator>,
 ) -> Result<Vec<DiscoveryRecord>, String> {
+    let _ = coordinator
+        .acquire_rugcheck()
+        .await
+        .map_err(|e| e.to_string())?;
     let tokens = api
         .rugcheck
         .fetch_verified_tokens()
