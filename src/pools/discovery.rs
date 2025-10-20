@@ -342,19 +342,18 @@ impl PoolDiscovery {
         let mut tokens: Vec<String> = if let Some(override_tokens) = get_debug_token_override() {
             override_tokens
         } else {
-            match filtering::get_filtered_token_mints().await {
-                Ok(v) => v,
-                Err(e) => {
-                    if is_debug_pool_discovery_enabled() {
-                        log(
-                            LogTag::PoolDiscovery,
-                            "WARN",
-                            &format!("Failed to load filtered tokens: {}", e),
-                        );
-                    }
-                    Vec::new()
-                }
+            // Get passed tokens from tokens module (not filtering module)
+            let passed_tokens = crate::tokens::get_passed_tokens();
+
+            if passed_tokens.is_empty() && is_debug_pool_discovery_enabled() {
+                log(
+                    LogTag::PoolDiscovery,
+                    "NO_PASSED_TOKENS",
+                    "No tokens passed filtering - pool service has nothing to price",
+                );
             }
+
+            passed_tokens
         };
 
         // CRITICAL FIX: Always include tokens with open positions for price monitoring

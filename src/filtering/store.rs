@@ -289,7 +289,7 @@ fn collect_entries<'a>(
                 entry
                     .token
                     .security_score
-                    .map(|score| score >= secure_threshold)
+                    .map(|score| score <= secure_threshold)
                     .unwrap_or(false)
                     && !entry.token.is_rugged
             })
@@ -448,7 +448,7 @@ fn build_stats(snapshot: &FilteringSnapshot, secure_threshold: i32) -> Filtering
         if entry
             .token
             .security_score
-            .map(|score| score >= secure_threshold)
+            .map(|score| score <= secure_threshold)
             .unwrap_or(false)
             && !entry.token.is_rugged
         {

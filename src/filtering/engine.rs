@@ -190,14 +190,43 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
         );
     }
 
-    Ok(FilteringSnapshot {
+    let snapshot = FilteringSnapshot {
         updated_at: Utc::now(),
         filtered_mints,
         passed_tokens: passed_tokens.into_iter().collect(),
         rejected_mints,
         rejected_tokens: rejected_tokens.into_iter().collect(),
         tokens: token_entries,
-    })
+    };
+
+    // Store filtered results in tokens module for consumption by other services
+    let filtered_lists = crate::tokens::FilteredTokenLists {
+        passed: snapshot.filtered_mints.clone(),
+        rejected: snapshot.rejected_mints.clone(),
+        blacklisted: snapshot
+            .tokens
+            .values()
+            .filter(|e| e.token.is_blacklisted)
+            .map(|e| e.token.mint.clone())
+            .collect(),
+        with_pool_price: snapshot
+            .tokens
+            .values()
+            .filter(|e| e.has_pool_price)
+            .map(|e| e.token.mint.clone())
+            .collect(),
+        open_positions: snapshot
+            .tokens
+            .values()
+            .filter(|e| e.has_open_position)
+            .map(|e| e.token.mint.clone())
+            .collect(),
+        updated_at: snapshot.updated_at,
+    };
+
+    crate::tokens::store_filtered_results(filtered_lists);
+
+    Ok(snapshot)
 }
 
 async fn apply_all_filters(

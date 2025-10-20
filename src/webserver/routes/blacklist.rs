@@ -34,17 +34,24 @@ async fn get_blacklist_stats() -> Json<BlacklistStatsResponse> {
     match get_blacklist_summary(&db) {
         Ok(summary) => {
             let mut by_reason = std::collections::HashMap::new();
-            by_reason.insert("LowLiquidity".to_string(), summary.low_liquidity_count);
-            by_reason.insert("NoRoute".to_string(), summary.no_route_count);
-            by_reason.insert("ApiError".to_string(), summary.api_error_count);
-            by_reason.insert("SystemToken".to_string(), summary.system_token_count);
-            by_reason.insert("StableToken".to_string(), summary.stable_token_count);
-            by_reason.insert("Manual".to_string(), summary.manual_count);
             by_reason.insert(
-                "PoorPerformance".to_string(),
-                summary.poor_performance_count,
+                "MintAuthority".to_string(),
+                summary.authority_mint_count,
             );
-            by_reason.insert("SecurityIssue".to_string(), summary.security_count);
+            by_reason.insert(
+                "FreezeAuthority".to_string(),
+                summary.authority_freeze_count,
+            );
+            by_reason.insert("Manual".to_string(), summary.manual_count);
+            if summary.non_authority_auto_count > 0 {
+                by_reason.insert(
+                    "NonAuthorityAuto".to_string(),
+                    summary.non_authority_auto_count,
+                );
+                for (reason, count) in summary.non_authority_breakdown.iter() {
+                    by_reason.insert(format!("NonAuthority::{reason}"), *count);
+                }
+            }
 
             Json(BlacklistStatsResponse {
                 total_count: summary.total_count,

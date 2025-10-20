@@ -7,6 +7,7 @@
 /// - security/: Security data fetchers (Rugcheck)
 /// - updates.rs: Priority-based background updates with rate limiting
 /// - cleanup.rs: Automatic blacklist management
+/// - filtered_store.rs: Centralized storage for filtered token lists
 /// - service_new.rs: ServiceManager integration
 /// - decimals.rs: Decimals lookup with caching
 /// - types.rs: Core domain types
@@ -17,6 +18,7 @@ pub mod database;
 pub mod decimals;
 pub mod discovery;
 pub mod events;
+pub mod filtered_store;
 pub mod market;
 pub mod priorities;
 pub mod schema;
@@ -34,6 +36,12 @@ pub use database::{
     init_global_database,
     list_tokens_async,
     TokenDatabase,
+};
+pub use filtered_store::{
+    get_blacklisted_tokens, get_counts as get_filtered_counts, get_filtered_lists,
+    get_last_update_time as get_filtered_last_update, get_passed_tokens, get_rejected_tokens,
+    get_tokens_with_open_positions, get_tokens_with_pool_price, store_filtered_results,
+    FilteredListCounts, FilteredTokenLists,
 };
 pub use market::{dexscreener, geckoterminal};
 pub use security::rugcheck;

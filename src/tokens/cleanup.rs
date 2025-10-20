@@ -1,10 +1,11 @@
 /// Cleanup logic - Blacklist management and database maintenance
 ///
-/// Automatically blacklists tokens that meet certain conditions:
-/// - Too many consecutive update failures
-/// - Liquidity below threshold for extended period
-/// - Marked as rugged by security analysis
-/// - Manual blacklist via API
+/// Automatically blacklists tokens based on permanent token characteristics:
+/// - mint_authority present (can mint unlimited tokens)
+/// - freeze_authority present (can freeze user accounts)
+///
+/// NOTE: Liquidity and security scores are FILTERING criteria, not blacklist criteria.
+/// Blacklist is for tokens that should NEVER be traded due to fundamental risks.
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::types::{TokenError, TokenResult};
 use std::sync::Arc;
@@ -17,94 +18,33 @@ use tokio::time::sleep;
 // BLACKLIST CONDITIONS
 // ============================================================================
 
-/// Check if a token should be blacklisted based on update failures
+/// Check if a token should be blacklisted based on authorities
 ///
-/// Blacklist if:
-/// - More than 5 consecutive update failures
-/// - Last successful update > 7 days ago
-pub async fn should_blacklist_for_failures(
-    mint: &str,
-    db: &TokenDatabase,
-) -> TokenResult<Option<String>> {
-    // Check update tracking
-    if let Ok(tokens) = db.get_oldest_non_blacklisted(1) {
-        if tokens.is_empty() || tokens[0] != mint {
-            return Ok(None);
-        }
-
-        // Token is among the oldest entries; additional tracking checks can be added here.
-        // For now, we fall through to the default None response.
-    }
-
-    Ok(None)
-}
-
-/// Check if a token should be blacklisted based on low liquidity
+/// Blacklist ONLY if:
+/// - mint_authority IS NOT NULL (can mint unlimited tokens)
+/// - freeze_authority IS NOT NULL (can freeze user accounts)
 ///
-/// Blacklist if:
-/// - Liquidity < $1000 USD for > 24 hours
-/// - No market data available for > 7 days
-pub async fn should_blacklist_for_liquidity(
-    mint: &str,
-    db: &TokenDatabase,
-) -> TokenResult<Option<String>> {
-    // Check DexScreener liquidity
-    if let Some(dex_data) = db.get_dexscreener_data(mint)? {
-        if let Some(liquidity) = dex_data.liquidity_usd {
-            if liquidity < 1000.0 {
-                return Ok(Some(format!(
-                    "Low liquidity: ${:.2} (threshold: $1000)",
-                    liquidity
-                )));
-            }
-        }
-    }
-
-    // Check GeckoTerminal liquidity
-    if let Some(gecko_data) = db.get_geckoterminal_data(mint)? {
-        if let Some(reserve) = gecko_data.reserve_in_usd {
-            if reserve < 1000.0 {
-                return Ok(Some(format!(
-                    "Low reserve: ${:.2} (threshold: $1000)",
-                    reserve
-                )));
-            }
-        }
-    }
-
-    Ok(None)
-}
-
-/// Check if a token should be blacklisted based on security analysis
-///
-/// Blacklist if:
-/// - Marked as rugged by Rugcheck
-/// - Security score < 20 (dangerous)
-pub async fn should_blacklist_for_security(
+/// These are permanent token characteristics that make tokens fundamentally unsafe.
+/// Liquidity and security scores belong in filtering, not blacklisting.
+pub async fn should_blacklist_for_authorities(
     mint: &str,
     db: &TokenDatabase,
 ) -> TokenResult<Option<String>> {
     if let Some(rugcheck_data) = db.get_rugcheck_data(mint)? {
-        // Check critical risks flagged by Rugcheck
-        if let Some(risk) = rugcheck_data
-            .risks
-            .iter()
-            .find(|risk| risk.level.eq_ignore_ascii_case("critical"))
-        {
+        // Check mint authority
+        if let Some(mint_auth) = &rugcheck_data.mint_authority {
             return Ok(Some(format!(
-                "Critical Rugcheck risk detected: {}",
-                risk.name
+                "Mint authority present: {}",
+                mint_auth
             )));
         }
 
-        // Check security score (0-100 scale expected)
-        if let Some(score) = rugcheck_data.score {
-            if score < 20 {
-                return Ok(Some(format!(
-                    "Security score too low: {} (threshold: 20)",
-                    score
-                )));
-            }
+        // Check freeze authority
+        if let Some(freeze_auth) = &rugcheck_data.freeze_authority {
+            return Ok(Some(format!(
+                "Freeze authority present: {}",
+                freeze_auth
+            )));
         }
     }
 
@@ -112,26 +52,17 @@ pub async fn should_blacklist_for_security(
 }
 
 /// Evaluate all blacklist conditions for a token
+///
+/// Only checks for permanent token characteristics (authorities).
+/// Filtering criteria (liquidity, security scores) are handled by the filtering system.
 pub async fn evaluate_blacklist(mint: &str, db: &TokenDatabase) -> TokenResult<Option<String>> {
     // Check if already blacklisted
     if db.is_blacklisted(mint)? {
         return Ok(None);
     }
 
-    // Check all conditions
-    if let Some(reason) = should_blacklist_for_failures(mint, db).await? {
-        return Ok(Some(reason));
-    }
-
-    if let Some(reason) = should_blacklist_for_liquidity(mint, db).await? {
-        return Ok(Some(reason));
-    }
-
-    if let Some(reason) = should_blacklist_for_security(mint, db).await? {
-        return Ok(Some(reason));
-    }
-
-    Ok(None)
+    // ONLY check authorities - this is the correct blacklist criteria
+    should_blacklist_for_authorities(mint, db).await
 }
 
 // ============================================================================
@@ -250,14 +181,11 @@ pub fn get_blacklist_status(mint: &str, db: &TokenDatabase) -> TokenResult<Optio
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BlacklistSummary {
     pub total_count: usize,
-    pub low_liquidity_count: usize,
-    pub no_route_count: usize,
-    pub api_error_count: usize,
-    pub system_token_count: usize,
-    pub stable_token_count: usize,
+    pub authority_mint_count: usize,
+    pub authority_freeze_count: usize,
     pub manual_count: usize,
-    pub poor_performance_count: usize,
-    pub security_count: usize,
+    pub non_authority_auto_count: usize,
+    pub non_authority_breakdown: std::collections::HashMap<String, usize>,
 }
 
 /// Get blacklist summary
@@ -271,48 +199,51 @@ pub fn get_blacklist_summary(db: &TokenDatabase) -> TokenResult<BlacklistSummary
         .query_row("SELECT COUNT(*) FROM blacklist", [], |row| row.get(0))
         .unwrap_or(0);
 
-    let mut low_liquidity_count = 0;
-    let mut no_route_count = 0;
-    let mut api_error_count = 0;
-    let mut system_token_count = 0;
-    let mut stable_token_count = 0;
+    let mut authority_mint_count = 0;
+    let mut authority_freeze_count = 0;
     let mut manual_count = 0;
-    let mut poor_performance_count = 0;
-    let mut security_count = 0;
+    let mut non_authority_auto_count = 0;
+    let mut non_authority_breakdown: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
 
     let mut stmt = conn
-        .prepare("SELECT reason FROM blacklist")
+        .prepare("SELECT reason, source FROM blacklist")
         .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
 
     let reasons = stmt
-        .query_map([], |row| row.get::<_, String>(0))
+        .query_map([], |row| {
+            let reason: String = row.get(0)?;
+            let source: String = row.get(1)?;
+            Ok((reason, source))
+        })
         .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
 
     for reason_result in reasons {
-        if let Ok(reason) = reason_result {
-            match reason.as_str() {
-                "LowLiquidity" => low_liquidity_count += 1,
-                "NoRoute" => no_route_count += 1,
-                "ApiError" => api_error_count += 1,
-                "SystemToken" => system_token_count += 1,
-                "StableToken" => stable_token_count += 1,
-                "manual" => manual_count += 1,
-                "PoorPerformance" => poor_performance_count += 1,
-                "SecurityIssue" | "LowSecurityScore" => security_count += 1,
-                _ => {}
+        if let Ok((reason, source)) = reason_result {
+            if source.eq_ignore_ascii_case("manual") {
+                manual_count += 1;
+                continue;
+            }
+
+            let reason_lower = reason.to_ascii_lowercase();
+
+            if reason_lower.starts_with("mint authority") {
+                authority_mint_count += 1;
+            } else if reason_lower.starts_with("freeze authority") {
+                authority_freeze_count += 1;
+            } else {
+                non_authority_auto_count += 1;
+                *non_authority_breakdown.entry(reason).or_insert(0) += 1;
             }
         }
     }
 
     Ok(BlacklistSummary {
         total_count,
-        low_liquidity_count,
-        no_route_count,
-        api_error_count,
-        system_token_count,
-        stable_token_count,
+        authority_mint_count,
+        authority_freeze_count,
         manual_count,
-        poor_performance_count,
-        security_count,
+        non_authority_auto_count,
+        non_authority_breakdown,
     })
 }
