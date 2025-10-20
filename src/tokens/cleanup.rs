@@ -33,18 +33,12 @@ pub async fn should_blacklist_for_authorities(
     if let Some(rugcheck_data) = db.get_rugcheck_data(mint)? {
         // Check mint authority
         if let Some(mint_auth) = &rugcheck_data.mint_authority {
-            return Ok(Some(format!(
-                "Mint authority present: {}",
-                mint_auth
-            )));
+            return Ok(Some(format!("Mint authority present: {}", mint_auth)));
         }
 
         // Check freeze authority
         if let Some(freeze_auth) = &rugcheck_data.freeze_authority {
-            return Ok(Some(format!(
-                "Freeze authority present: {}",
-                freeze_auth
-            )));
+            return Ok(Some(format!("Freeze authority present: {}", freeze_auth)));
         }
     }
 

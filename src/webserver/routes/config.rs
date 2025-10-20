@@ -525,9 +525,26 @@ async fn reload_config_from_disk() -> Response {
 
 /// POST /api/config/reset - Reset configuration to defaults
 async fn reset_config_to_defaults() -> Response {
+    let (wallet_key, auth_api_key, coingecko_api_key) = config::with_config(|cfg| {
+        (
+            cfg.main_wallet_private.clone(),
+            cfg.webserver.auth.api_key.clone(),
+            cfg.tokens.discovery.coingecko.api_key.clone(),
+        )
+    });
+
     let result = config::update_config_section(
         |cfg| {
-            *cfg = config::Config::default();
+            // Keep secrets that are not recoverable via the UI while resetting everything else.
+            let mut fresh = config::Config::default();
+            if !wallet_key.is_empty() {
+                fresh.main_wallet_private = wallet_key.clone();
+            }
+            if !auth_api_key.is_empty() {
+                fresh.webserver.auth.api_key = auth_api_key.clone();
+            }
+            fresh.tokens.discovery.coingecko.api_key = coingecko_api_key.clone();
+            *cfg = fresh;
         },
         true, // Save to disk
     );

@@ -15,6 +15,7 @@ const TRANSACTIONS_PAGE_STYLES: &str = include_str!("templates/styles/pages/tran
 const EVENTS_PAGE_STYLES: &str = include_str!("templates/styles/pages/events.css");
 const TOKENS_PAGE_STYLES: &str = include_str!("templates/styles/pages/tokens.css");
 const FILTERING_PAGE_STYLES: &str = include_str!("templates/styles/pages/filtering.css");
+const CONFIG_PAGE_STYLES: &str = include_str!("templates/styles/pages/config.css");
 const DATA_TABLE_STYLES: &str = include_str!("templates/styles/ui/data_table.css");
 const TABLE_TOOLBAR_STYLES: &str = include_str!("templates/styles/ui/table_toolbar.css");
 const EVENTS_DIALOG_STYLES: &str = include_str!("templates/styles/ui/events_dialog.css");
@@ -40,12 +41,14 @@ pub const TRANSACTIONS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages
 pub const EVENTS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/events.js");
 pub const TOKENS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/tokens.js");
 pub const FILTERING_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/filtering.js");
+pub const CONFIG_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/config.js");
 
 const TOKENS_PAGE: &str = include_str!("templates/pages/tokens.html");
 const EVENTS_PAGE: &str = include_str!("templates/pages/events.html");
 const SERVICES_PAGE: &str = include_str!("templates/pages/services.html");
 const TRANSACTIONS_PAGE: &str = include_str!("templates/pages/transactions.html");
 const FILTERING_PAGE: &str = include_str!("templates/pages/filtering.html");
+const CONFIG_PAGE: &str = include_str!("templates/pages/config.html");
 
 /// Render the base layout with shared chrome and inject the requested content.
 pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
@@ -77,6 +80,9 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     if active_tab == "filtering" {
         combined_styles.push(FILTERING_PAGE_STYLES);
     }
+    if active_tab == "config" {
+        combined_styles.push(CONFIG_PAGE_STYLES);
+    }
     html = html.replace("/*__INJECTED_STYLES__*/", &combined_styles.join("\n"));
     let mut page_style_injections = String::new();
     for (page, styles) in [
@@ -85,6 +91,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         ("events", EVENTS_PAGE_STYLES),
         ("tokens", TOKENS_PAGE_STYLES),
         ("filtering", FILTERING_PAGE_STYLES),
+        ("config", CONFIG_PAGE_STYLES),
     ] {
         if styles.trim().is_empty() {
             continue;
@@ -110,6 +117,7 @@ fn nav_tabs(active: &str) -> String {
         ("transactions", "💱 Transactions"),
         ("events", "📡 Events"),
         ("filtering", "🎯 Filtering"),
+        ("config", "⚙️ Config"),
     ];
 
     tabs.iter()
@@ -147,4 +155,8 @@ pub fn transactions_content() -> String {
 
 pub fn filtering_content() -> String {
     render_page(FILTERING_PAGE)
+}
+
+pub fn config_content() -> String {
+    render_page(CONFIG_PAGE)
 }

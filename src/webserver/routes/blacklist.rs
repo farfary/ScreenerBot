@@ -34,10 +34,7 @@ async fn get_blacklist_stats() -> Json<BlacklistStatsResponse> {
     match get_blacklist_summary(&db) {
         Ok(summary) => {
             let mut by_reason = std::collections::HashMap::new();
-            by_reason.insert(
-                "MintAuthority".to_string(),
-                summary.authority_mint_count,
-            );
+            by_reason.insert("MintAuthority".to_string(), summary.authority_mint_count);
             by_reason.insert(
                 "FreezeAuthority".to_string(),
                 summary.authority_freeze_count,

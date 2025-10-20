@@ -247,10 +247,7 @@ async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<Dash
             Ok(summary) => {
                 let mut by_reason = std::collections::HashMap::new();
                 by_reason.insert("Manual".to_string(), summary.manual_count);
-                by_reason.insert(
-                    "MintAuthority".to_string(),
-                    summary.authority_mint_count,
-                );
+                by_reason.insert("MintAuthority".to_string(), summary.authority_mint_count);
                 by_reason.insert(
                     "FreezeAuthority".to_string(),
                     summary.authority_freeze_count,
