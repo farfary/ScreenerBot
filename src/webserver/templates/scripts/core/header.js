@@ -209,10 +209,7 @@ async function controlTrader(action) {
       applyStatus(payload.status);
     }
 
-    Utils.showToast(
-      action === "start" ? "✅ Trader started" : "✅ Trader stopped",
-      "success"
-    );
+    Utils.showToast(action === "start" ? "✅ Trader started" : "✅ Trader stopped", "success");
   } catch (err) {
     console.error("[TraderHeader] Control action failed", err);
     Utils.showToast(`❌ ${err.message || "Trader control failed"}`, "error");

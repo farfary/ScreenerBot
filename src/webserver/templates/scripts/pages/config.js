@@ -329,7 +329,11 @@ const FIELD_RENDERERS = {
     return component;
   },
   string({ fieldId, value, metadata = {}, disabled, onChange }) {
-    if (metadata.docs || metadata.placeholder || (typeof value === "string" && value.length > 120)) {
+    if (
+      metadata.docs ||
+      metadata.placeholder ||
+      (typeof value === "string" && value.length > 120)
+    ) {
       const textarea = create("textarea", {
         id: fieldId,
         value: value ?? "",
@@ -411,7 +415,16 @@ const FIELD_RENDERERS = {
     });
     return textarea;
   },
-  object({ fieldId, value, originalValue, metadata = {}, disabled, path = [], searchTerm = "", onChange }) {
+  object({
+    fieldId,
+    value,
+    originalValue,
+    metadata = {},
+    disabled,
+    path = [],
+    searchTerm = "",
+    onChange,
+  }) {
     const nested = renderObjectWithChildren({
       fieldId,
       value,
@@ -500,9 +513,7 @@ function deepClone(value) {
     return value.map((item) => deepClone(item));
   }
   if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, val]) => [key, deepClone(val)])
-    );
+    return Object.fromEntries(Object.entries(value).map(([key, val]) => [key, deepClone(val)]));
   }
   return value;
 }
@@ -589,13 +600,17 @@ function metadataMatchesSearch(fieldKey, fieldMeta, term) {
   if (!term || term.length === 0) {
     return false;
   }
-  const matches = (value) =>
-    typeof value === "string" && value.toLowerCase().includes(term);
+  const matches = (value) => typeof value === "string" && value.toLowerCase().includes(term);
 
   if (matches(fieldKey)) {
     return true;
   }
-  if (matches(fieldMeta.label) || matches(fieldMeta.hint) || matches(fieldMeta.docs) || matches(fieldMeta.unit)) {
+  if (
+    matches(fieldMeta.label) ||
+    matches(fieldMeta.hint) ||
+    matches(fieldMeta.docs) ||
+    matches(fieldMeta.unit)
+  ) {
     return true;
   }
 
@@ -646,7 +661,9 @@ function sortSectionsForDisplay(entries) {
 
 function ensureActiveSectionValid() {
   const metadata = state.metadata || {};
-  const sectionIds = sortSectionsForDisplay(Object.entries(metadata)).map(([sectionId]) => sectionId);
+  const sectionIds = sortSectionsForDisplay(Object.entries(metadata)).map(
+    ([sectionId]) => sectionId
+  );
   if (sectionIds.length === 0) {
     if (state.activeSection !== null) {
       state.activeSection = null;
@@ -759,7 +776,8 @@ function renderStateMessage() {
   }
 
   if (errors.size > 0) {
-    banner.innerHTML = "<strong>Validation issues detected.</strong> Please review highlighted fields.";
+    banner.innerHTML =
+      "<strong>Validation issues detected.</strong> Please review highlighted fields.";
     banner.classList.add("error");
     banner.hidden = false;
     return;
@@ -779,9 +797,9 @@ function renderSidebar() {
   const sections = sortSectionsForDisplay(Object.entries(state.metadata || {}));
 
   for (const [sectionId, metadata] of sections) {
-  const summary = metadata.summary ?? {};
-  const label = metadata.label ?? formatSectionLabel(sectionId);
-  const sectionPending = countPendingChanges(sectionId);
+    const summary = metadata.summary ?? {};
+    const label = metadata.label ?? formatSectionLabel(sectionId);
+    const sectionPending = countPendingChanges(sectionId);
     const icon = SECTION_ICONS[sectionId] || "⚙️";
     const button = create("button", {
       type: "button",
@@ -807,9 +825,7 @@ function renderSidebar() {
     const totalFields = summary.total ?? Object.keys(metadata.fields || {}).length;
     const metaParts = [`<span class="config-section-count">${totalFields}</span>`];
     if (sectionPending > 0) {
-      metaParts.push(
-        `<span class="config-section-pending">+${sectionPending}</span>`
-      );
+      metaParts.push(`<span class="config-section-pending">+${sectionPending}</span>`);
     }
     metaEl.innerHTML = metaParts.join("");
 
@@ -951,7 +967,9 @@ function renderSectionSummary(metadata) {
   const summaryItems = [];
   if (metadata.summary) {
     if (typeof metadata.summary.total === "number") {
-      summaryItems.push(`<span class="config-summary-badge">${metadata.summary.total} fields</span>`);
+      summaryItems.push(
+        `<span class="config-summary-badge">${metadata.summary.total} fields</span>`
+      );
     }
     if (typeof metadata.summary.critical === "number" && metadata.summary.critical > 0) {
       summaryItems.push(
@@ -1036,12 +1054,12 @@ function renderCategories(sectionId) {
     let categoryHasMatch = false;
     let pendingCount = 0;
     for (const [fieldKey, fieldMeta] of fieldsList) {
-  const fieldId = `config-${sectionId}-${fieldKey}`;
-  const fieldValue = sectionConfig[fieldKey];
-        const fieldOriginalValue = originalConfig[fieldKey];
-  const defaultValue = deepClone(fieldMeta.default);
-  const fieldPath = [sectionId, fieldKey];
-  const fieldPathLabel = fieldPath.join(".");
+      const fieldId = `config-${sectionId}-${fieldKey}`;
+      const fieldValue = sectionConfig[fieldKey];
+      const fieldOriginalValue = originalConfig[fieldKey];
+      const defaultValue = deepClone(fieldMeta.default);
+      const fieldPath = [sectionId, fieldKey];
+      const fieldPathLabel = fieldPath.join(".");
 
       const matchesSearch = metadataMatchesSearch(fieldKey, fieldMeta, searchTerm);
 
@@ -1051,7 +1069,7 @@ function renderCategories(sectionId) {
         categoryHasMatch = true;
       }
 
-        if (!deepEqual(fieldValue, fieldOriginalValue)) {
+      if (!deepEqual(fieldValue, fieldOriginalValue)) {
         fieldEl.classList.add("config-field--changed");
         pendingCount += 1;
       }
@@ -1060,15 +1078,19 @@ function renderCategories(sectionId) {
       const controlEl = create("div", { className: "config-field-control" });
 
       const labelHtml = [];
-  labelHtml.push(`<div class="config-field-name">${Utils.escapeHtml(fieldMeta.label || fieldKey)}</div>`);
-  labelHtml.push(`<div class="config-field-key">${Utils.escapeHtml(fieldPathLabel)}</div>`);
+      labelHtml.push(
+        `<div class="config-field-name">${Utils.escapeHtml(fieldMeta.label || fieldKey)}</div>`
+      );
+      labelHtml.push(`<div class="config-field-key">${Utils.escapeHtml(fieldPathLabel)}</div>`);
       if (fieldMeta.hint) {
         labelHtml.push(`<div class="config-field-hint">${Utils.escapeHtml(fieldMeta.hint)}</div>`);
       }
 
       const metaItems = [];
       if (fieldMeta.unit) {
-        metaItems.push(`<span class="config-field-unit">Unit: ${Utils.escapeHtml(fieldMeta.unit)}</span>`);
+        metaItems.push(
+          `<span class="config-field-unit">Unit: ${Utils.escapeHtml(fieldMeta.unit)}</span>`
+        );
       }
       if (fieldMeta.impact) {
         metaItems.push(
@@ -1094,7 +1116,7 @@ function renderCategories(sectionId) {
 
       labelEl.innerHTML = labelHtml.join("\n");
 
-  const isAtDefault = deepEqual(fieldValue, defaultValue);
+      const isAtDefault = deepEqual(fieldValue, defaultValue);
 
       const resetBtn = create("button", {
         type: "button",
@@ -1112,7 +1134,7 @@ function renderCategories(sectionId) {
       const control = renderFieldControl(fieldMeta.type, {
         fieldId,
         value: fieldValue,
-          originalValue: fieldOriginalValue,
+        originalValue: fieldOriginalValue,
         metadata: fieldMeta,
         disabled: state.saving,
         path: fieldPath,
@@ -1352,7 +1374,9 @@ function attachEventHandlers(ctx) {
     // Press Enter to focus the first matched field if any
     const enterHandler = (event) => {
       if (event.key === "Enter") {
-        const firstMatch = document.querySelector(".config-field.config-field--match input, .config-field.config-field--match textarea, .config-field.config-field--match button, .config-section-item.search-match");
+        const firstMatch = document.querySelector(
+          ".config-field.config-field--match input, .config-field.config-field--match textarea, .config-field.config-field--match button, .config-section-item.search-match"
+        );
         if (firstMatch) {
           firstMatch.focus();
         }

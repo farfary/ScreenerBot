@@ -3332,9 +3332,7 @@ export class DataTable {
     }
     let normalizedValue = value;
     if (this.elements.toolbar) {
-      const input = this.elements.toolbar.querySelector(
-        `.dt-filter[data-filter-id="${filterId}"]`
-      );
+      const input = this.elements.toolbar.querySelector(`.dt-filter[data-filter-id="${filterId}"]`);
       if (input?.type === "checkbox") {
         normalizedValue = Boolean(value);
       }

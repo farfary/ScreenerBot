@@ -1023,7 +1023,6 @@ function renderCategoryToggle(source, enableKey, _categoryName) {
   `;
 }
 
-
 function renderConfigCategory(categoryName, categoryData) {
   const { source, enableKey, fields } = categoryData;
   const sourceEnabled = getSourceEnabled(state.draft, source);

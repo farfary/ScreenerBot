@@ -464,7 +464,7 @@ function createLifecycle() {
           Object.prototype.hasOwnProperty.call(rejectionReasons, row.mint);
         const resolvedReason = hasServerReason
           ? rejectionReasons[row.mint]
-          : row.reject_reason ?? null;
+          : (row.reject_reason ?? null);
         return { ...row, reject_reason: resolvedReason ?? null };
       });
 
@@ -560,16 +560,33 @@ function createLifecycle() {
     state.view = view;
     state.totalCount = null;
     state.lastUpdate = null;
-    state.sort = { ...DEFAULT_SERVER_SORT };
     state.filters = getDefaultFiltersForView(view);
     state.summary = { ...DEFAULT_SUMMARY };
     state.availableRejectionReasons = [];
-    
+
     // Update table stateKey for per-tab state persistence
     if (table) {
       table.setStateKey(`tokens-table.${view}`, { render: false });
+
+      // Read restored sort state from table and sync to state.sort
+      const restoredTableState = table.getServerState();
+      if (restoredTableState?.sortColumn) {
+        const sortKey = resolveSortKey(restoredTableState.sortColumn);
+        if (sortKey) {
+          state.sort = {
+            by: sortKey,
+            direction: restoredTableState.sortDirection || "asc",
+          };
+        } else {
+          state.sort = { ...DEFAULT_SERVER_SORT };
+        }
+      } else {
+        state.sort = { ...DEFAULT_SERVER_SORT };
+      }
+    } else {
+      state.sort = { ...DEFAULT_SERVER_SORT };
     }
-    
+
     applyViewPreferences();
     syncTableSortState({ render: true });
     syncToolbarFilters();
@@ -724,7 +741,8 @@ function createLifecycle() {
           minWidth: 100,
           wrap: false,
           render: (v, row) => {
-            const source = typeof row?.data_source === "string" ? row.data_source.toLowerCase() : "";
+            const source =
+              typeof row?.data_source === "string" ? row.data_source.toLowerCase() : "";
             if (!v || source === "unknown") {
               return "—";
             }
@@ -926,8 +944,7 @@ function createLifecycle() {
         state.filters.pool_price = parseToggleValue(serverFilters.pool_price, false);
       } else if (Object.prototype.hasOwnProperty.call(serverFilters, "priced")) {
         const legacy = serverFilters.priced;
-        state.filters.pool_price =
-          legacy === "priced" || parseToggleValue(legacy, false);
+        state.filters.pool_price = legacy === "priced" || parseToggleValue(legacy, false);
       }
 
       if (Object.prototype.hasOwnProperty.call(serverFilters, "positions")) {
@@ -998,7 +1015,7 @@ function createLifecycle() {
       state.totalCount = null;
       state.lastUpdate = null;
       state.sort = { ...DEFAULT_SERVER_SORT };
-  state.filters = getDefaultFiltersForView(DEFAULT_VIEW);
+      state.filters = getDefaultFiltersForView(DEFAULT_VIEW);
       state.summary = { ...DEFAULT_SUMMARY };
     },
   };

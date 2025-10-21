@@ -17,7 +17,7 @@ function renderMetaLines(lines = []) {
 
   return lines
     .map((line, index) => {
-      const text = typeof line === "string" ? line : line?.text ?? "";
+      const text = typeof line === "string" ? line : (line?.text ?? "");
       const variant =
         typeof line === "object" && line && line.variant
           ? ` data-variant="${escapeHtml(line.variant)}"`
@@ -150,9 +150,7 @@ function renderFilter(filter, stateFilters = {}) {
   if (filter.control === "switch") {
     const currentValue = stateFilters[filter.id];
     const checked =
-      currentValue !== undefined
-        ? Boolean(currentValue)
-        : Boolean(filter.defaultValue ?? false);
+      currentValue !== undefined ? Boolean(currentValue) : Boolean(filter.defaultValue ?? false);
     const label = filter.label
       ? `<span class="table-toolbar-field__label">${escapeHtml(filter.label)}</span>`
       : "";
