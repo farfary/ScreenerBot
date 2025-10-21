@@ -48,6 +48,7 @@ pub const CREATE_TABLES: &[&str] = &[
         chain_id TEXT,
         dex_id TEXT,
         url TEXT,
+        pair_created_at INTEGER,
         fetched_at INTEGER NOT NULL,
         FOREIGN KEY (mint) REFERENCES tokens(mint) ON DELETE RESTRICT
     )
@@ -166,6 +167,9 @@ pub const SECURITY_RUGCHECK_ALTER_STATEMENTS: &[&str] = &[
     "ALTER TABLE security_rugcheck ADD COLUMN rugged INTEGER",
 ];
 
+pub const MARKET_DEXSCREENER_ALTER_STATEMENTS: &[&str] =
+    &["ALTER TABLE market_dexscreener ADD COLUMN pair_created_at INTEGER"];
+
 /// Performance PRAGMAs
 // Kept for reference; we now set PRAGMAs via rusqlite APIs to avoid "Execute returned results" errors
 pub const PERFORMANCE_PRAGMAS: &[&str] = &[];
@@ -197,6 +201,9 @@ pub fn initialize_schema(conn: &Connection) -> Result<(), String> {
     }
 
     for statement in SECURITY_RUGCHECK_ALTER_STATEMENTS {
+        let _ = conn.execute(statement, []);
+    }
+    for statement in MARKET_DEXSCREENER_ALTER_STATEMENTS {
         let _ = conn.execute(statement, []);
     }
 

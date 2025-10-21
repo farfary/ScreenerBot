@@ -6,7 +6,7 @@ use crate::apis::dexscreener::DexScreenerPool;
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::store::{self, CacheMetrics};
 use crate::tokens::types::{DexScreenerData, TokenError, TokenResult};
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 
 /// Convert API pool data to our DexScreenerData type
 fn convert_pool_to_data(pool: &DexScreenerPool, is_sol_pair: bool) -> DexScreenerData {
@@ -74,6 +74,9 @@ fn convert_pool_to_data(pool: &DexScreenerPool, is_sol_pair: bool) -> DexScreene
             Some(pool.dex_id.clone())
         },
         url: pool.url.clone(),
+        pair_created_at: pool
+            .pair_created_at
+            .and_then(|ts| DateTime::from_timestamp(ts, 0)),
         fetched_at: Utc::now(),
     }
 }

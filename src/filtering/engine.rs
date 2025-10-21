@@ -127,7 +127,12 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
                 has_pool_price,
                 has_open_position,
                 has_ohlcv,
-                pair_created_at: Some(token.first_seen_at.timestamp()),
+                pair_created_at: Some(
+                    token
+                        .token_birth_at
+                        .unwrap_or(token.first_seen_at)
+                        .timestamp(),
+                ),
                 last_updated: token.updated_at,
             },
         );

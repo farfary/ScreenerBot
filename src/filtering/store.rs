@@ -108,6 +108,16 @@ impl FilteringStore {
             query.page = 1;
         }
 
+        // Special handling for "All" view - query database directly to get ALL tokens
+        if matches!(query.view, FilteringView::All) {
+            return self.execute_all_view_query(query).await;
+        }
+
+        // Special handling for "NoMarketData" view - query database for tokens with no market API data
+        if matches!(query.view, FilteringView::NoMarketData) {
+            return self.execute_no_market_view_query(query).await;
+        }
+
         let snapshot = self.ensure_snapshot().await?;
         let recent_cutoff = if matches!(query.view, FilteringView::Recent) {
             Some(Utc::now() - ChronoDuration::hours(recent_hours.max(0)))
@@ -187,7 +197,8 @@ impl FilteringStore {
                 .map(|entry| (entry.mint.as_str(), entry.reason.as_str()))
                 .collect();
 
-            let mut unique_reasons: std::collections::HashSet<String> = std::collections::HashSet::new();
+            let mut unique_reasons: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
             for entry in &snapshot.rejected_tokens {
                 let trimmed = entry.reason.trim();
                 if !trimmed.is_empty() {
@@ -224,6 +235,192 @@ impl FilteringStore {
         })
     }
 
+    /// Execute query for "All" view by querying database directly (bypasses snapshot)
+    async fn execute_all_view_query(
+        &self,
+        query: FilteringQuery,
+    ) -> Result<FilteringQueryResult, String> {
+        use crate::tokens::{count_tokens_async, get_all_tokens_optional_market_async};
+
+        // Fast count query (no data loading)
+        let total_count = count_tokens_async()
+            .await
+            .map_err(|e| format!("Failed to count tokens: {:?}", e))?;
+
+        // Calculate pagination FIRST, then only fetch what we need
+        let total_pages = if total_count == 0 {
+            0
+        } else {
+            (total_count + query.page_size - 1) / query.page_size
+        };
+
+        let normalized_page = if total_pages == 0 {
+            1
+        } else {
+            query.page.min(total_pages)
+        };
+
+        let offset = (normalized_page - 1) * query.page_size;
+
+        // Map TokenSortKey to SQL column name
+        let sort_by = match query.sort_key {
+            TokenSortKey::Symbol => Some("symbol".to_string()),
+            TokenSortKey::PriceSol => Some("price_sol".to_string()),
+            TokenSortKey::LiquidityUsd => Some("liquidity_usd".to_string()),
+            TokenSortKey::Volume24h => Some("volume_24h".to_string()),
+            TokenSortKey::Fdv => Some("fdv".to_string()),
+            TokenSortKey::MarketCap => Some("market_cap".to_string()),
+            TokenSortKey::PriceChangeH1 => Some("price_change_h1".to_string()),
+            TokenSortKey::PriceChangeH24 => Some("price_change_h24".to_string()),
+            TokenSortKey::RiskScore => Some("risk_score".to_string()),
+            TokenSortKey::UpdatedAt => Some("updated_at".to_string()),
+            TokenSortKey::FirstSeenAt => Some("first_seen_at".to_string()),
+            TokenSortKey::CreatedAt => Some("created_at".to_string()),
+            TokenSortKey::MetadataUpdatedAt => Some("metadata_updated_at".to_string()),
+            TokenSortKey::TokenBirthAt => Some("token_birth_at".to_string()),
+            TokenSortKey::Mint => Some("mint".to_string()),
+        };
+
+        let sort_direction = match query.sort_direction {
+            SortDirection::Asc => Some("asc".to_string()),
+            SortDirection::Desc => Some("desc".to_string()),
+        };
+
+        // Only load the tokens for THIS page with proper sorting
+        let items =
+            get_all_tokens_optional_market_async(query.page_size, offset, sort_by, sort_direction)
+                .await
+                .map_err(|e| format!("Failed to get tokens from database: {:?}", e))?;
+
+        // Get snapshot for derived flags lookup (pool price, open positions, ohlcv)
+        let snapshot = self.ensure_snapshot().await?;
+
+        // Build lookup sets for derived flags
+        let mut priced_mints: Vec<String> = Vec::new();
+        let mut open_position_mints: Vec<String> = Vec::new();
+        let mut ohlcv_mints: Vec<String> = Vec::new();
+
+        for (mint, entry) in &snapshot.tokens {
+            if entry.has_pool_price {
+                priced_mints.push(mint.clone());
+            }
+            if entry.has_open_position {
+                open_position_mints.push(mint.clone());
+            }
+            if entry.has_ohlcv {
+                ohlcv_mints.push(mint.clone());
+            }
+        }
+
+        // Count totals (approximations based on snapshot)
+        let priced_total = snapshot
+            .tokens
+            .values()
+            .filter(|e| e.has_pool_price)
+            .count();
+        let positions_total = snapshot
+            .tokens
+            .values()
+            .filter(|e| e.has_open_position)
+            .count();
+        let blacklisted_total = items.iter().filter(|t| t.is_blacklisted).count();
+
+        Ok(FilteringQueryResult {
+            items,
+            page: normalized_page,
+            page_size: query.page_size,
+            total: total_count,
+            total_pages,
+            timestamp: snapshot.updated_at,
+            priced_total,
+            positions_total,
+            blacklisted_total,
+            priced_mints,
+            open_position_mints,
+            ohlcv_mints,
+            rejection_reasons: HashMap::new(), // Not applicable for "All" view
+            available_rejection_reasons: Vec::new(), // Not applicable for "All" view
+        })
+    }
+
+    /// Execute query for "No Market Data" view using DB (no Dex/Gecko rows)
+    async fn execute_no_market_view_query(
+        &self,
+        query: FilteringQuery,
+    ) -> Result<FilteringQueryResult, String> {
+        use crate::tokens::{count_tokens_no_market_async, get_tokens_no_market_async};
+
+        // Count
+        let total_count = count_tokens_no_market_async()
+            .await
+            .map_err(|e| format!("Failed to count no-market tokens: {:?}", e))?;
+
+        let total_pages = if total_count == 0 {
+            0
+        } else {
+            (total_count + query.page_size - 1) / query.page_size
+        };
+        let normalized_page = if total_pages == 0 {
+            1
+        } else {
+            query.page.min(total_pages)
+        };
+        let offset = (normalized_page - 1) * query.page_size;
+
+        // Sort mapping (limit to metadata/security)
+        let sort_by = match query.sort_key {
+            TokenSortKey::Symbol => Some("symbol".to_string()),
+            TokenSortKey::RiskScore => Some("risk_score".to_string()),
+            TokenSortKey::UpdatedAt => Some("updated_at".to_string()),
+            TokenSortKey::FirstSeenAt => Some("first_seen_at".to_string()),
+            TokenSortKey::CreatedAt => Some("created_at".to_string()),
+            TokenSortKey::MetadataUpdatedAt => Some("metadata_updated_at".to_string()),
+            TokenSortKey::TokenBirthAt => Some("token_birth_at".to_string()),
+            TokenSortKey::Mint => Some("mint".to_string()),
+            _ => Some("updated_at".to_string()),
+        };
+        let sort_direction = match query.sort_direction {
+            SortDirection::Asc => Some("asc".to_string()),
+            SortDirection::Desc => Some("desc".to_string()),
+        };
+
+        let items = get_tokens_no_market_async(query.page_size, offset, sort_by, sort_direction)
+            .await
+            .map_err(|e| format!("Failed to load no-market tokens: {:?}", e))?;
+
+        // Snapshot for timestamp and derived counts
+        let snapshot = self.ensure_snapshot().await?;
+
+        let priced_total = 0; // by definition of this view (no market), keep 0 to avoid confusion
+        let positions_total = items
+            .iter()
+            .filter(|t| {
+                snapshot
+                    .tokens
+                    .get(&t.mint)
+                    .map(|e| e.has_open_position)
+                    .unwrap_or(false)
+            })
+            .count();
+        let blacklisted_total = items.iter().filter(|t| t.is_blacklisted).count();
+
+        Ok(FilteringQueryResult {
+            items,
+            page: normalized_page,
+            page_size: query.page_size,
+            total: total_count,
+            total_pages,
+            timestamp: snapshot.updated_at,
+            priced_total,
+            positions_total,
+            blacklisted_total,
+            priced_mints: Vec::new(),
+            open_position_mints: Vec::new(),
+            ohlcv_mints: Vec::new(),
+            rejection_reasons: HashMap::new(),
+            available_rejection_reasons: Vec::new(),
+        })
+    }
     pub async fn get_stats(&self) -> Result<FilteringStatsSnapshot, String> {
         let secure_threshold =
             crate::config::with_config(|cfg| cfg.webserver.tokens_tab.secure_token_score_threshold);
@@ -462,6 +659,18 @@ fn sort_tokens(items: &mut [Token], sort_key: TokenSortKey, direction: SortDirec
                 .unwrap_or(i32::MAX)
                 .cmp(&b.security_score.unwrap_or(i32::MAX)),
             TokenSortKey::UpdatedAt => a.updated_at.cmp(&b.updated_at),
+            TokenSortKey::FirstSeenAt => a.first_seen_at.cmp(&b.first_seen_at),
+            TokenSortKey::CreatedAt => a.created_at.cmp(&b.created_at),
+            TokenSortKey::MetadataUpdatedAt => {
+                let lhs = a.metadata_updated_at.unwrap_or(a.created_at);
+                let rhs = b.metadata_updated_at.unwrap_or(b.created_at);
+                lhs.cmp(&rhs)
+            }
+            TokenSortKey::TokenBirthAt => {
+                let lhs = a.token_birth_at.unwrap_or(a.created_at);
+                let rhs = b.token_birth_at.unwrap_or(b.created_at);
+                lhs.cmp(&rhs)
+            }
             TokenSortKey::Mint => a.mint.cmp(&b.mint),
         };
 

@@ -46,6 +46,9 @@ const COLUMN_TO_SORT_KEY = {
   price_change_h24: "price_change_h24",
   risk_score: "risk_score",
   updated_at: "updated_at",
+  first_seen_at: "first_seen_at",
+  created_at: "created_at",
+  token_birth_at: "token_birth_at",
 };
 
 const SORT_KEY_TO_COLUMN = Object.entries(COLUMN_TO_SORT_KEY).reduce((acc, [columnId, sortKey]) => {
@@ -713,6 +716,39 @@ function createLifecycle() {
           label: "Updated",
           sortable: true,
           minWidth: 100,
+          wrap: false,
+          render: (v, row) => {
+            const source = typeof row?.data_source === "string" ? row.data_source.toLowerCase() : "";
+            if (!v || source === "unknown") {
+              return "—";
+            }
+            return timeAgoCell(v);
+          },
+        },
+        {
+          id: "token_birth_at",
+          label: "Birth",
+          sortable: true,
+          minWidth: 110,
+          wrap: false,
+          render: (_v, row) => {
+            const value = row.token_birth_at || row.first_seen_at || row.created_at;
+            return timeAgoCell(value);
+          },
+        },
+        {
+          id: "first_seen_at",
+          label: "First Seen",
+          sortable: true,
+          minWidth: 110,
+          wrap: false,
+          render: (v) => timeAgoCell(v),
+        },
+        {
+          id: "created_at",
+          label: "Created",
+          sortable: true,
+          minWidth: 110,
           wrap: false,
           render: (v) => timeAgoCell(v),
         },

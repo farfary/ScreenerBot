@@ -182,8 +182,12 @@ pub async fn update_token(
         Err(e) => failures.push(format!("Rugcheck rate limit: {}", e)),
     }
 
-    // Update tracking timestamp
-    if !successes.is_empty() {
+    // Update tracking timestamp - ONLY for market data updates (not security)
+    let market_data_updated = successes
+        .iter()
+        .any(|s| s.as_str() == "DexScreener" || s.as_str() == "GeckoTerminal");
+
+    if market_data_updated {
         let had_errors = !failures.is_empty();
         let _ = db.mark_updated(mint, had_errors);
     }

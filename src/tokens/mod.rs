@@ -30,9 +30,14 @@ pub mod updates;
 
 // Re-export main types for convenience
 pub use database::{
-    get_global_database,
     // Async wrappers for external code
+    count_tokens_async,
+    count_tokens_no_market_async,
+    get_all_tokens_optional_market_async,
+    get_full_token_async,
+    get_global_database,
     get_token_async,
+    get_tokens_no_market_async,
     init_global_database,
     list_tokens_async,
     TokenDatabase,
@@ -65,9 +70,8 @@ pub use priorities::Priority;
 // Re-export store APIs
 pub use store::{
     dexscreener_cache_metrics, dexscreener_cache_size, geckoterminal_cache_metrics,
-    geckoterminal_cache_size, get_cached_token, get_full_token_async, invalidate_token_snapshot,
-    refresh_token_snapshot, rugcheck_cache_metrics, rugcheck_cache_size, store_token_snapshot,
-    CacheMetrics,
+    geckoterminal_cache_size, get_cached_token, invalidate_token_snapshot, refresh_token_snapshot,
+    rugcheck_cache_metrics, rugcheck_cache_size, store_token_snapshot, CacheMetrics,
 };
 
 // Re-export decimals API

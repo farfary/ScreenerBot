@@ -50,6 +50,174 @@ impl TokenDatabase {
         self.conn.clone()
     }
 
+    /// Count tokens with NO market data in both DexScreener and GeckoTerminal
+    pub fn count_tokens_no_market(&self) -> TokenResult<usize> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let count: usize = conn
+            .query_row(
+                "SELECT COUNT(*) FROM tokens t \
+                 LEFT JOIN market_dexscreener d ON t.mint = d.mint \
+                 LEFT JOIN market_geckoterminal g ON t.mint = g.mint \
+                 WHERE d.mint IS NULL AND g.mint IS NULL",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|e| TokenError::Database(format!("Count no-market failed: {}", e)))?;
+
+        Ok(count)
+    }
+
+    /// Get tokens WITHOUT any market data (assemble minimal tokens)
+    pub fn get_tokens_no_market(
+        &self,
+        limit: usize,
+        offset: usize,
+        sort_by: Option<&str>,
+        sort_direction: Option<&str>,
+    ) -> TokenResult<Vec<Token>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        // Only support sorting by metadata/security fields for this view
+        let order_column = match sort_by {
+            Some("symbol") => "t.symbol",
+            Some("updated_at") => "COALESCE(ut.last_market_update, t.created_at)",
+            Some("first_seen_at") => "t.created_at",
+            Some("created_at") => "t.created_at",
+            Some("metadata_updated_at") => "COALESCE(ut.last_decimals_update, t.updated_at)",
+            Some("token_birth_at") => "COALESCE(ut.last_decimals_update, t.created_at)",
+            Some("mint") => "t.mint",
+            Some("risk_score") => "sr.score",
+            _ => "COALESCE(ut.last_market_update, t.created_at)",
+        };
+        let direction = match sort_direction {
+            Some("asc") => "ASC",
+            Some("desc") => "DESC",
+            _ => "DESC",
+        };
+
+        let base = "SELECT \
+                        t.mint, t.symbol, t.name, t.decimals, t.created_at, \
+                        COALESCE(ut.last_decimals_update, t.updated_at) AS metadata_updated_at, \
+                        ut.last_market_update, \
+                        sr.score, sr.rugged, \
+                        bl.reason as blacklist_reason, \
+                        ut.priority \
+                    FROM tokens t \
+                    LEFT JOIN security_rugcheck sr ON t.mint = sr.mint \
+                    LEFT JOIN blacklist bl ON t.mint = bl.mint \
+                    LEFT JOIN update_tracking ut ON t.mint = ut.mint \
+                    LEFT JOIN market_dexscreener d ON t.mint = d.mint \
+                    LEFT JOIN market_geckoterminal g ON t.mint = g.mint \
+                    WHERE d.mint IS NULL AND g.mint IS NULL";
+
+        let query = if limit == 0 {
+            format!("{} ORDER BY {} {}", base, order_column, direction)
+        } else {
+            format!(
+                "{} ORDER BY {} {} LIMIT {} OFFSET {}",
+                base, order_column, direction, limit, offset
+            )
+        };
+
+        let mut stmt = conn
+            .prepare(&query)
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+
+        let rows = stmt
+            .query_map(params![], |row| {
+                let metadata = TokenMetadata {
+                    mint: row.get::<_, String>(0)?,
+                    symbol: row.get::<_, Option<String>>(1)?,
+                    name: row.get::<_, Option<String>>(2)?,
+                    decimals: row.get::<_, Option<i64>>(3)?.map(|v| v as u8),
+                    created_at: row.get::<_, i64>(4)?,
+                    updated_at: row.get::<_, i64>(5)?,
+                };
+                let last_market_update: Option<i64> = row.get(6)?;
+                let security_score: Option<i32> = row.get(7)?;
+                let is_rugged: bool = row
+                    .get::<_, Option<i64>>(8)?
+                    .map(|v| v != 0)
+                    .unwrap_or(false);
+                let is_blacklisted = row.get::<_, Option<String>>(9)?.is_some();
+                let priority_value: Option<i32> = row.get(10)?;
+
+                Ok((
+                    metadata,
+                    last_market_update,
+                    security_score,
+                    is_rugged,
+                    is_blacklisted,
+                    priority_value,
+                ))
+            })
+            .map_err(|e| TokenError::Database(format!("Query no-market failed: {}", e)))?;
+
+        let mut tokens = Vec::new();
+        for row in rows {
+            let (
+                meta,
+                last_market_update,
+                security_score,
+                is_rugged,
+                is_blacklisted,
+                priority_value,
+            ) = row.map_err(|e| TokenError::Database(format!("Row parse failed: {}", e)))?;
+
+            // Build a RugcheckData-lite only for values we expose directly; we can avoid it and set fields below
+            let security = if security_score.is_some() || is_rugged {
+                Some(RugcheckData {
+                    token_type: None,
+                    score: security_score,
+                    score_description: None,
+                    mint_authority: None,
+                    freeze_authority: None,
+                    top_10_holders_pct: None,
+                    total_holders: None,
+                    total_lp_providers: None,
+                    graph_insiders_detected: None,
+                    total_market_liquidity: None,
+                    total_stable_liquidity: None,
+                    total_supply: None,
+                    creator_balance_pct: None,
+                    transfer_fee_pct: None,
+                    transfer_fee_max_amount: None,
+                    transfer_fee_authority: None,
+                    rugged: is_rugged,
+                    risks: vec![],
+                    top_holders: vec![],
+                    markets: None,
+                    fetched_at: Utc::now(),
+                })
+            } else {
+                None
+            };
+
+            let priority = priority_value
+                .map(Priority::from_value)
+                .unwrap_or(Priority::Medium);
+
+            let token = assemble_token_without_market_data(
+                meta,
+                security,
+                is_blacklisted,
+                priority,
+                None,
+                last_market_update.and_then(|ts| DateTime::from_timestamp(ts, 0)),
+                None,
+            );
+            tokens.push(token);
+        }
+
+        Ok(tokens)
+    }
     // ========================================================================
     // TOKEN METADATA OPERATIONS
     // ========================================================================
@@ -178,9 +346,9 @@ impl TokenDatabase {
                 volume_5m, volume_1h, volume_6h, volume_24h,
                 txns_5m_buys, txns_5m_sells, txns_1h_buys, txns_1h_sells,
                 txns_6h_buys, txns_6h_sells, txns_24h_buys, txns_24h_sells,
-                pair_address, chain_id, dex_id, url, fetched_at
+                pair_address, chain_id, dex_id, url, pair_created_at, fetched_at
              ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
-                       ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28)
+                       ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29)
              ON CONFLICT(mint) DO UPDATE SET
                 price_usd = ?2, price_sol = ?3, price_native = ?4,
                 price_change_5m = ?5, price_change_1h = ?6, price_change_6h = ?7, price_change_24h = ?8,
@@ -188,7 +356,7 @@ impl TokenDatabase {
                 volume_5m = ?12, volume_1h = ?13, volume_6h = ?14, volume_24h = ?15,
                 txns_5m_buys = ?16, txns_5m_sells = ?17, txns_1h_buys = ?18, txns_1h_sells = ?19,
                 txns_6h_buys = ?20, txns_6h_sells = ?21, txns_24h_buys = ?22, txns_24h_sells = ?23,
-                pair_address = ?24, chain_id = ?25, dex_id = ?26, url = ?27, fetched_at = ?28",
+                pair_address = ?24, chain_id = ?25, dex_id = ?26, url = ?27, pair_created_at = ?28, fetched_at = ?29",
             params![
                 mint, data.price_usd, data.price_sol, &data.price_native,
                 data.price_change_5m, data.price_change_1h, data.price_change_6h, data.price_change_24h,
@@ -199,6 +367,9 @@ impl TokenDatabase {
                 data.txns_6h.map(|t| t.0 as i64), data.txns_6h.map(|t| t.1 as i64),
                 data.txns_24h.map(|t| t.0 as i64), data.txns_24h.map(|t| t.1 as i64),
                 &data.pair_address, &data.chain_id, &data.dex_id, &data.url,
+                data
+                    .pair_created_at
+                    .map(|dt| dt.timestamp()),
                 data.fetched_at.timestamp(),
             ],
         ).map_err(|e| TokenError::Database(format!("Failed to upsert DexScreener data: {}", e)))?;
@@ -221,7 +392,7 @@ impl TokenDatabase {
                     volume_5m, volume_1h, volume_6h, volume_24h,
                     txns_5m_buys, txns_5m_sells, txns_1h_buys, txns_1h_sells,
                     txns_6h_buys, txns_6h_sells, txns_24h_buys, txns_24h_sells,
-                    pair_address, chain_id, dex_id, url, fetched_at
+                    pair_address, chain_id, dex_id, url, pair_created_at, fetched_at
              FROM market_dexscreener WHERE mint = ?1",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
@@ -236,7 +407,8 @@ impl TokenDatabase {
             let txns_24h_buys: Option<i64> = row.get(20)?;
             let txns_24h_sells: Option<i64> = row.get(21)?;
             // fetched_at is the 27th selected column (0-based index 26)
-            let fetched_ts: i64 = row.get(26)?;
+            let pair_created_ts: Option<i64> = row.get(26)?;
+            let fetched_ts: i64 = row.get(27)?;
 
             Ok(DexScreenerData {
                 price_usd: row.get(0)?,
@@ -261,6 +433,7 @@ impl TokenDatabase {
                 chain_id: row.get(23)?,
                 dex_id: row.get(24)?,
                 url: row.get(25)?,
+                pair_created_at: pair_created_ts.and_then(|ts| DateTime::from_timestamp(ts, 0)),
                 fetched_at: DateTime::from_timestamp(fetched_ts, 0).unwrap_or_else(|| Utc::now()),
             })
         });
@@ -1011,6 +1184,635 @@ impl TokenDatabase {
         Ok(Some(token))
     }
 
+    /// Get all tokens from database with optional market data.
+    /// Unlike get_full_token(), this returns tokens EVEN WITHOUT market data,
+    /// using default/null values for missing fields.
+    ///
+    /// Use this for "All Tokens" view to show complete database contents.
+    ///
+    /// If limit=0, returns ALL tokens. Otherwise returns limit tokens with offset.
+    ///
+    /// PERFORMANCE: Uses LEFT JOINs to fetch all data in a single query, avoiding N+1 problem.
+    pub fn get_all_tokens_optional_market(
+        &self,
+        limit: usize,
+        offset: usize,
+        sort_by: Option<&str>,
+        sort_direction: Option<&str>,
+    ) -> TokenResult<Vec<Token>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        // Map sort_by to SQL column with table prefix
+        let order_column = match sort_by {
+            Some("symbol") => "t.symbol",
+            Some("updated_at") =>
+                "COALESCE(ut.last_market_update, COALESCE(d.fetched_at, g.fetched_at, t.updated_at))",
+            Some("first_seen_at") => "t.created_at",
+            Some("created_at") => "t.created_at",
+            Some("metadata_updated_at") => "COALESCE(ut.last_decimals_update, t.updated_at)",
+            Some("token_birth_at") => "COALESCE(d.pair_created_at, t.created_at)",
+            Some("mint") => "t.mint",
+            Some("risk_score") => "sr.score",
+            Some("price_sol") => "COALESCE(d.price_sol, g.price_sol)",
+            Some("liquidity_usd") => "COALESCE(d.liquidity_usd, g.liquidity_usd)",
+            Some("volume_24h") => "COALESCE(d.volume_24h, g.volume_24h)",
+            Some("fdv") => "COALESCE(d.fdv, g.fdv)",
+            Some("market_cap") => "COALESCE(d.market_cap, g.market_cap)",
+            Some("price_change_h1") => "COALESCE(d.price_change_1h, g.price_change_1h)",
+            Some("price_change_h24") => "COALESCE(d.price_change_24h, g.price_change_24h)",
+            _ => "t.updated_at", // default
+        };
+
+        let direction = match sort_direction {
+            Some("asc") => "ASC",
+            Some("desc") => "DESC",
+            _ => "DESC", // default
+        };
+
+        // Build query (always join market tables so we can populate Token fields consistently)
+        let select_base = r#"
+            SELECT
+                t.mint, t.symbol, t.name, t.decimals, t.created_at, t.updated_at,
+                sr.score, sr.rugged,
+                bl.reason as blacklist_reason,
+                ut.priority,
+                d.price_usd, d.price_sol, d.price_native,
+                d.price_change_5m, d.price_change_1h, d.price_change_6h, d.price_change_24h,
+                d.market_cap, d.fdv, d.liquidity_usd,
+                d.volume_5m, d.volume_1h, d.volume_6h, d.volume_24h,
+                d.txns_5m_buys, d.txns_5m_sells, d.txns_1h_buys, d.txns_1h_sells,
+                d.txns_6h_buys, d.txns_6h_sells, d.txns_24h_buys, d.txns_24h_sells,
+                d.fetched_at as d_fetched_at,
+                g.price_usd, g.price_sol, g.price_native,
+                g.price_change_5m, g.price_change_1h, g.price_change_6h, g.price_change_24h,
+                g.market_cap, g.fdv, g.liquidity_usd,
+                g.volume_5m, g.volume_1h, g.volume_6h, g.volume_24h,
+                g.fetched_at as g_fetched_at,
+                ut.last_market_update,
+                ut.last_decimals_update,
+                d.pair_created_at
+            FROM tokens t
+            LEFT JOIN security_rugcheck sr ON t.mint = sr.mint
+            LEFT JOIN blacklist bl ON t.mint = bl.mint
+            LEFT JOIN update_tracking ut ON t.mint = ut.mint
+            LEFT JOIN market_dexscreener d ON t.mint = d.mint
+            LEFT JOIN market_geckoterminal g ON t.mint = g.mint
+        "#;
+
+        let query = if limit == 0 {
+            format!("{} ORDER BY {} {}", select_base, order_column, direction)
+        } else {
+            format!(
+                "{} ORDER BY {} {} LIMIT {} OFFSET {}",
+                select_base, order_column, direction, limit, offset
+            )
+        };
+
+        let mut stmt = conn
+            .prepare(&query)
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+
+        // Parse row data
+        let tokens_iter = stmt
+            .query_map(params![], |row| {
+                let mint: String = row.get(0)?;
+                let symbol: Option<String> = row.get(1)?;
+                let name: Option<String> = row.get(2)?;
+                let decimals: Option<i64> = row.get(3)?;
+                let created_at: i64 = row.get(4)?;
+                let updated_at: i64 = row.get(5)?;
+
+                // Security data (optional)
+                let security_score: Option<i32> = row.get(6)?;
+                let is_rugged: bool = row
+                    .get::<_, Option<i64>>(7)?
+                    .map(|v| v != 0)
+                    .unwrap_or(false);
+
+                // Blacklist status
+                let is_blacklisted = row.get::<_, Option<String>>(8)?.is_some();
+
+                // Priority
+                let priority_value: Option<i32> = row.get(9)?;
+
+                // DexScreener fields 10..=30
+                let d_price_usd: Option<f64> = row.get(10)?;
+                let d_price_sol: Option<f64> = row.get(11)?;
+                let d_price_native: Option<String> = row.get(12)?;
+                let d_change_5m: Option<f64> = row.get(13)?;
+                let d_change_1h: Option<f64> = row.get(14)?;
+                let d_change_6h: Option<f64> = row.get(15)?;
+                let d_change_24h: Option<f64> = row.get(16)?;
+                let d_market_cap: Option<f64> = row.get(17)?;
+                let d_fdv: Option<f64> = row.get(18)?;
+                let d_liquidity_usd: Option<f64> = row.get(19)?;
+                let d_vol_5m: Option<f64> = row.get(20)?;
+                let d_vol_1h: Option<f64> = row.get(21)?;
+                let d_vol_6h: Option<f64> = row.get(22)?;
+                let d_vol_24h: Option<f64> = row.get(23)?;
+                let d_txn_5m_buys: Option<i64> = row.get(24)?;
+                let d_txn_5m_sells: Option<i64> = row.get(25)?;
+                let d_txn_1h_buys: Option<i64> = row.get(26)?;
+                let d_txn_1h_sells: Option<i64> = row.get(27)?;
+                let d_txn_6h_buys: Option<i64> = row.get(28)?;
+                let d_txn_6h_sells: Option<i64> = row.get(29)?;
+                let d_txn_24h_buys: Option<i64> = row.get(30)?;
+                let d_txn_24h_sells: Option<i64> = row.get(31)?;
+                let d_fetched_at: Option<i64> = row.get(32)?;
+
+                // GeckoTerminal fields 33..=45
+                let g_price_usd: Option<f64> = row.get(33)?;
+                let g_price_sol: Option<f64> = row.get(34)?;
+                let g_price_native: Option<String> = row.get(35)?;
+                let g_change_5m: Option<f64> = row.get(36)?;
+                let g_change_1h: Option<f64> = row.get(37)?;
+                let g_change_6h: Option<f64> = row.get(38)?;
+                let g_change_24h: Option<f64> = row.get(39)?;
+                let g_market_cap: Option<f64> = row.get(40)?;
+                let g_fdv: Option<f64> = row.get(41)?;
+                let g_liquidity_usd: Option<f64> = row.get(42)?;
+                let g_vol_5m: Option<f64> = row.get(43)?;
+                let g_vol_1h: Option<f64> = row.get(44)?;
+                let g_vol_6h: Option<f64> = row.get(45)?;
+                let g_vol_24h: Option<f64> = row.get(46)?;
+                let g_fetched_at: Option<i64> = row.get(47)?;
+
+                let d_pair_created_at: Option<i64> = row.get(50)?;
+
+                Ok((
+                    mint,
+                    symbol,
+                    name,
+                    decimals.map(|d| d as u8),
+                    created_at,
+                    updated_at,
+                    security_score,
+                    is_rugged,
+                    is_blacklisted,
+                    priority_value,
+                    // Dex
+                    d_price_usd,
+                    d_price_sol,
+                    d_price_native,
+                    d_change_5m,
+                    d_change_1h,
+                    d_change_6h,
+                    d_change_24h,
+                    d_market_cap,
+                    d_fdv,
+                    d_liquidity_usd,
+                    d_vol_5m,
+                    d_vol_1h,
+                    d_vol_6h,
+                    d_vol_24h,
+                    d_txn_5m_buys,
+                    d_txn_5m_sells,
+                    d_txn_1h_buys,
+                    d_txn_1h_sells,
+                    d_txn_6h_buys,
+                    d_txn_6h_sells,
+                    d_txn_24h_buys,
+                    d_txn_24h_sells,
+                    d_fetched_at,
+                    // Gecko
+                    g_price_usd,
+                    g_price_sol,
+                    g_price_native,
+                    g_change_5m,
+                    g_change_1h,
+                    g_change_6h,
+                    g_change_24h,
+                    g_market_cap,
+                    g_fdv,
+                    g_liquidity_usd,
+                    g_vol_5m,
+                    g_vol_1h,
+                    g_vol_6h,
+                    g_vol_24h,
+                    g_fetched_at,
+                    row.get::<_, Option<i64>>(48)?,
+                    row.get::<_, Option<i64>>(49)?,
+                    d_pair_created_at,
+                ))
+            })
+            .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+
+        let mut tokens = Vec::new();
+        for row_result in tokens_iter {
+            let (
+                mint,
+                symbol,
+                name,
+                decimals,
+                created_at,
+                updated_at,
+                security_score,
+                is_rugged,
+                is_blacklisted,
+                priority_value,
+                // Dex fields
+                d_price_usd,
+                d_price_sol,
+                d_price_native,
+                d_change_5m,
+                d_change_1h,
+                d_change_6h,
+                d_change_24h,
+                d_market_cap,
+                d_fdv,
+                d_liquidity_usd,
+                d_vol_5m,
+                d_vol_1h,
+                d_vol_6h,
+                d_vol_24h,
+                d_txn_5m_buys,
+                d_txn_5m_sells,
+                d_txn_1h_buys,
+                d_txn_1h_sells,
+                d_txn_6h_buys,
+                d_txn_6h_sells,
+                d_txn_24h_buys,
+                d_txn_24h_sells,
+                d_fetched_at,
+                // Gecko fields
+                g_price_usd,
+                g_price_sol,
+                g_price_native,
+                g_change_5m,
+                g_change_1h,
+                g_change_6h,
+                g_change_24h,
+                g_market_cap,
+                g_fdv,
+                g_liquidity_usd,
+                g_vol_5m,
+                g_vol_1h,
+                g_vol_6h,
+                g_vol_24h,
+                g_fetched_at,
+                last_market_update_ts,
+                last_decimals_update_ts,
+                d_pair_created_at,
+            ) = row_result.map_err(|e| TokenError::Database(format!("Row parse failed: {}", e)))?;
+
+            let created_dt = DateTime::from_timestamp(created_at, 0).unwrap_or_else(|| Utc::now());
+            let metadata_updated_dt = last_decimals_update_ts
+                .and_then(|ts| DateTime::from_timestamp(ts, 0))
+                .or_else(|| DateTime::from_timestamp(updated_at, 0));
+            let fallback_fetch_dt = metadata_updated_dt.unwrap_or(created_dt);
+            let last_market_update_dt =
+                last_market_update_ts.and_then(|ts| DateTime::from_timestamp(ts, 0));
+            let dex_pair_created_dt =
+                d_pair_created_at.and_then(|ts| DateTime::from_timestamp(ts, 0));
+
+            let priority = priority_value
+                .map(Priority::from_value)
+                .unwrap_or(Priority::Medium);
+            // Determine chosen market source based on config preference then fallback
+            let preferred_source =
+                crate::config::with_config(|cfg| cfg.tokens.preferred_market_data_source.clone());
+            let dex_available = d_price_sol.is_some() || d_price_usd.is_some();
+            let gecko_available = g_price_sol.is_some() || g_price_usd.is_some();
+
+            let (
+                data_source,
+                fetched_at_dt,
+                price_usd,
+                price_sol,
+                price_native,
+                change_5m,
+                change_1h,
+                change_6h,
+                change_24h,
+                market_cap,
+                fdv,
+                liquidity_usd,
+                vol_5m,
+                vol_1h,
+                vol_6h,
+                vol_24h,
+                tx5b,
+                tx5s,
+                tx1b,
+                tx1s,
+                tx6b,
+                tx6s,
+                tx24b,
+                tx24s,
+            ) = if preferred_source == "geckoterminal" {
+                if gecko_available {
+                    (
+                        DataSource::GeckoTerminal,
+                        g_fetched_at
+                            .and_then(|ts| DateTime::from_timestamp(ts, 0))
+                            .unwrap_or(fallback_fetch_dt),
+                        g_price_usd.unwrap_or(0.0),
+                        g_price_sol.unwrap_or(0.0),
+                        g_price_native.unwrap_or_else(|| "0".to_string()),
+                        g_change_5m,
+                        g_change_1h,
+                        g_change_6h,
+                        g_change_24h,
+                        g_market_cap,
+                        g_fdv,
+                        g_liquidity_usd,
+                        g_vol_5m,
+                        g_vol_1h,
+                        g_vol_6h,
+                        g_vol_24h,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
+                } else if dex_available {
+                    (
+                        DataSource::DexScreener,
+                        d_fetched_at
+                            .and_then(|ts| DateTime::from_timestamp(ts, 0))
+                            .unwrap_or(fallback_fetch_dt),
+                        d_price_usd.unwrap_or(0.0),
+                        d_price_sol.unwrap_or(0.0),
+                        d_price_native.unwrap_or_else(|| "0".to_string()),
+                        d_change_5m,
+                        d_change_1h,
+                        d_change_6h,
+                        d_change_24h,
+                        d_market_cap,
+                        d_fdv,
+                        d_liquidity_usd,
+                        d_vol_5m,
+                        d_vol_1h,
+                        d_vol_6h,
+                        d_vol_24h,
+                        d_txn_5m_buys,
+                        d_txn_5m_sells,
+                        d_txn_1h_buys,
+                        d_txn_1h_sells,
+                        d_txn_6h_buys,
+                        d_txn_6h_sells,
+                        d_txn_24h_buys,
+                        d_txn_24h_sells,
+                    )
+                } else {
+                    (
+                        DataSource::Unknown,
+                        fallback_fetch_dt,
+                        0.0,
+                        0.0,
+                        "0".to_string(),
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
+                }
+            } else {
+                if dex_available {
+                    (
+                        DataSource::DexScreener,
+                        d_fetched_at
+                            .and_then(|ts| DateTime::from_timestamp(ts, 0))
+                            .unwrap_or(fallback_fetch_dt),
+                        d_price_usd.unwrap_or(0.0),
+                        d_price_sol.unwrap_or(0.0),
+                        d_price_native.unwrap_or_else(|| "0".to_string()),
+                        d_change_5m,
+                        d_change_1h,
+                        d_change_6h,
+                        d_change_24h,
+                        d_market_cap,
+                        d_fdv,
+                        d_liquidity_usd,
+                        d_vol_5m,
+                        d_vol_1h,
+                        d_vol_6h,
+                        d_vol_24h,
+                        d_txn_5m_buys,
+                        d_txn_5m_sells,
+                        d_txn_1h_buys,
+                        d_txn_1h_sells,
+                        d_txn_6h_buys,
+                        d_txn_6h_sells,
+                        d_txn_24h_buys,
+                        d_txn_24h_sells,
+                    )
+                } else if gecko_available {
+                    (
+                        DataSource::GeckoTerminal,
+                        g_fetched_at
+                            .and_then(|ts| DateTime::from_timestamp(ts, 0))
+                            .unwrap_or(fallback_fetch_dt),
+                        g_price_usd.unwrap_or(0.0),
+                        g_price_sol.unwrap_or(0.0),
+                        g_price_native.unwrap_or_else(|| "0".to_string()),
+                        g_change_5m,
+                        g_change_1h,
+                        g_change_6h,
+                        g_change_24h,
+                        g_market_cap,
+                        g_fdv,
+                        g_liquidity_usd,
+                        g_vol_5m,
+                        g_vol_1h,
+                        g_vol_6h,
+                        g_vol_24h,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
+                } else {
+                    (
+                        DataSource::Unknown,
+                        fallback_fetch_dt,
+                        0.0,
+                        0.0,
+                        "0".to_string(),
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
+                }
+            };
+
+            let market_updated_dt = last_market_update_dt.unwrap_or(fetched_at_dt);
+
+            let token = Token {
+                // Core Identity & Metadata
+                mint: mint.clone(),
+                symbol: symbol.unwrap_or_else(|| "UNKNOWN".to_string()),
+                name: name.unwrap_or_else(|| "Unknown Token".to_string()),
+                decimals: decimals.unwrap_or(9),
+                description: None,
+                image_url: None,
+                header_image_url: None,
+                supply: None,
+
+                // Data source & timestamps
+                data_source,
+                fetched_at: fetched_at_dt,
+                updated_at: market_updated_dt,
+                created_at: created_dt,
+                metadata_updated_at: metadata_updated_dt,
+                token_birth_at: dex_pair_created_dt,
+
+                // Price Information
+                price_usd,
+                price_sol,
+                price_native,
+                price_change_m5: change_5m,
+                price_change_h1: change_1h,
+                price_change_h6: change_6h,
+                price_change_h24: change_24h,
+
+                // Market Metrics
+                market_cap,
+                fdv,
+                liquidity_usd,
+
+                // Volume Data
+                volume_m5: vol_5m,
+                volume_h1: vol_1h,
+                volume_h6: vol_6h,
+                volume_h24: vol_24h,
+
+                // Transaction Activity (only available for DexScreener)
+                txns_m5_buys: tx5b,
+                txns_m5_sells: tx5s,
+                txns_h1_buys: tx1b,
+                txns_h1_sells: tx1s,
+                txns_h6_buys: tx6b,
+                txns_h6_sells: tx6s,
+                txns_h24_buys: tx24b,
+                txns_h24_sells: tx24s,
+
+                // Social & Links
+                websites: vec![],
+                socials: vec![],
+
+                // Security Information
+                mint_authority: None,
+                freeze_authority: None,
+                security_score,
+                is_rugged,
+                token_type: None,
+                graph_insiders_detected: None,
+                lp_provider_count: None,
+                security_risks: vec![],
+                total_holders: None,
+                top_holders: vec![],
+                creator_balance_pct: None,
+                transfer_fee_pct: None,
+                transfer_fee_max_amount: None,
+                transfer_fee_authority: None,
+
+                // Bot-Specific State
+                is_blacklisted,
+                priority,
+                first_seen_at: created_dt,
+                last_price_update: fetched_at_dt,
+            };
+
+            tokens.push(token);
+        }
+
+        Ok(tokens)
+    }
+
+    /// Get tokens that have NO market data in either DexScreener or GeckoTerminal
+    /// Returns minimal Token objects (Unknown data_source; market fields empty/defaults)
+    pub fn get_tokens_without_market_data_paginated(
+        &self,
+        limit: usize,
+        offset: usize,
+        sort_by: Option<&str>,
+        sort_direction: Option<&str>,
+    ) -> TokenResult<Vec<Token>> {
+        self.get_tokens_no_market(limit, offset, sort_by, sort_direction)
+    }
+
+    /// Helper to get market data from either source (returns None if not available)
+    fn get_optional_market_data(
+        &self,
+        mint: &str,
+    ) -> TokenResult<(Option<MarketDataType>, DataSource)> {
+        let preferred_source =
+            crate::config::with_config(|cfg| cfg.tokens.preferred_market_data_source.clone());
+
+        if preferred_source == "geckoterminal" {
+            if let Some(data) = self.get_geckoterminal_data(mint)? {
+                return Ok((
+                    Some(MarketDataType::GeckoTerminal(data)),
+                    DataSource::GeckoTerminal,
+                ));
+            }
+            if let Some(data) = self.get_dexscreener_data(mint)? {
+                return Ok((
+                    Some(MarketDataType::DexScreener(data)),
+                    DataSource::DexScreener,
+                ));
+            }
+        } else {
+            if let Some(data) = self.get_dexscreener_data(mint)? {
+                return Ok((
+                    Some(MarketDataType::DexScreener(data)),
+                    DataSource::DexScreener,
+                ));
+            }
+            if let Some(data) = self.get_geckoterminal_data(mint)? {
+                return Ok((
+                    Some(MarketDataType::GeckoTerminal(data)),
+                    DataSource::GeckoTerminal,
+                ));
+            }
+        }
+
+        Ok((None, DataSource::Unknown))
+    }
+
     /// Get priority for a token
     fn get_priority(&self, mint: &str) -> TokenResult<Priority> {
         let conn = self
@@ -1049,6 +1851,9 @@ fn assemble_token(
     is_blacklisted: bool,
     priority: Priority,
 ) -> Token {
+    let created_dt = DateTime::from_timestamp(metadata.created_at, 0).unwrap_or_else(|| Utc::now());
+    let metadata_updated_dt = DateTime::from_timestamp(metadata.updated_at, 0);
+
     // Extract market data fields based on source
     let (
         price_usd,
@@ -1059,6 +1864,7 @@ fn assemble_token(
         volumes,
         txns,
         fetched_at,
+        token_birth_at,
     ) = match market_data {
         MarketDataType::DexScreener(data) => {
             let txns = (
@@ -1087,6 +1893,7 @@ fn assemble_token(
                 ),
                 txns,
                 data.fetched_at,
+                data.pair_created_at,
             )
         }
         MarketDataType::GeckoTerminal(data) => {
@@ -1111,6 +1918,7 @@ fn assemble_token(
                 ),
                 txns,
                 data.fetched_at,
+                None,
             )
         }
     };
@@ -1167,6 +1975,10 @@ fn assemble_token(
         )
     };
 
+    let token_birth_dt = token_birth_at
+        .or(metadata_updated_dt.clone())
+        .or(Some(created_dt));
+
     Token {
         // Core identity
         mint: metadata.mint.clone(),
@@ -1181,7 +1993,10 @@ fn assemble_token(
         // Data source
         data_source,
         fetched_at,
-        updated_at: DateTime::from_timestamp(metadata.updated_at, 0).unwrap_or_else(|| Utc::now()),
+        updated_at: fetched_at,
+        created_at: created_dt,
+        metadata_updated_at: metadata_updated_dt.clone(),
+        token_birth_at: token_birth_dt,
 
         // Price information
         price_usd,
@@ -1236,9 +2051,157 @@ fn assemble_token(
         // Bot-specific state
         is_blacklisted,
         priority,
-        first_seen_at: DateTime::from_timestamp(metadata.created_at, 0)
-            .unwrap_or_else(|| Utc::now()),
+        first_seen_at: created_dt,
         last_price_update: fetched_at,
+    }
+}
+
+/// Assemble Token without market data (for tokens discovered but not yet enriched)
+fn assemble_token_without_market_data(
+    metadata: TokenMetadata,
+    security: Option<RugcheckData>,
+    is_blacklisted: bool,
+    priority: Priority,
+    metadata_updated_at_override: Option<DateTime<Utc>>,
+    last_market_update: Option<DateTime<Utc>>,
+    token_birth_at_override: Option<DateTime<Utc>>,
+) -> Token {
+    // Extract security data
+    let (
+        token_type,
+        mint_authority,
+        freeze_authority,
+        security_score,
+        is_rugged,
+        security_risks,
+        top_holders,
+        total_holders,
+        creator_balance_pct,
+        transfer_fee_pct,
+        transfer_fee_max_amount,
+        transfer_fee_authority,
+        graph_insiders_detected,
+        lp_provider_count,
+    ) = if let Some(sec) = security {
+        (
+            sec.token_type,
+            sec.mint_authority,
+            sec.freeze_authority,
+            sec.score,
+            sec.rugged,
+            sec.risks,
+            sec.top_holders,
+            sec.total_holders,
+            sec.creator_balance_pct,
+            sec.transfer_fee_pct,
+            sec.transfer_fee_max_amount,
+            sec.transfer_fee_authority,
+            sec.graph_insiders_detected,
+            sec.total_lp_providers,
+        )
+    } else {
+        (
+            None,
+            None,
+            None,
+            None,
+            false,
+            vec![],
+            vec![],
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+    };
+
+    let created_at = DateTime::from_timestamp(metadata.created_at, 0).unwrap_or_else(|| Utc::now());
+    let metadata_updated_dt =
+        metadata_updated_at_override.or_else(|| DateTime::from_timestamp(metadata.updated_at, 0));
+    let market_updated_dt = last_market_update
+        .or_else(|| metadata_updated_dt.clone())
+        .unwrap_or(created_at);
+    let token_birth_dt = token_birth_at_override
+        .or_else(|| metadata_updated_dt.clone())
+        .or(Some(created_at));
+
+    Token {
+        // Core Identity & Metadata
+        mint: metadata.mint.clone(),
+        symbol: metadata.symbol.unwrap_or_else(|| "UNKNOWN".to_string()),
+        name: metadata.name.unwrap_or_else(|| "Unknown Token".to_string()),
+        decimals: metadata.decimals.unwrap_or(9), // Default to 9 if unknown
+        description: None,
+        image_url: None,
+        header_image_url: None,
+        supply: None,
+
+        // Data source
+        data_source: DataSource::Unknown,
+        fetched_at: market_updated_dt,
+        updated_at: market_updated_dt,
+        created_at,
+        metadata_updated_at: metadata_updated_dt,
+        token_birth_at: token_birth_dt,
+
+        // Price Information (defaults for missing market data)
+        price_usd: 0.0,
+        price_sol: 0.0,
+        price_native: "0".to_string(),
+        price_change_m5: None,
+        price_change_h1: None,
+        price_change_h6: None,
+        price_change_h24: None,
+
+        // Market Metrics
+        market_cap: None,
+        fdv: None,
+        liquidity_usd: None,
+
+        // Volume Data
+        volume_m5: None,
+        volume_h1: None,
+        volume_h6: None,
+        volume_h24: None,
+
+        // Transaction Activity
+        txns_m5_buys: None,
+        txns_m5_sells: None,
+        txns_h1_buys: None,
+        txns_h1_sells: None,
+        txns_h6_buys: None,
+        txns_h6_sells: None,
+        txns_h24_buys: None,
+        txns_h24_sells: None,
+
+        // Social & Links
+        websites: vec![],
+        socials: vec![],
+
+        // Security Information
+        mint_authority,
+        freeze_authority,
+        security_score,
+        is_rugged,
+        token_type,
+        graph_insiders_detected,
+        lp_provider_count,
+        security_risks,
+        total_holders,
+        top_holders,
+        creator_balance_pct,
+        transfer_fee_pct,
+        transfer_fee_max_amount,
+        transfer_fee_authority,
+
+        // Bot-Specific State
+        is_blacklisted,
+        priority,
+        first_seen_at: created_at,
+        last_price_update: created_at,
     }
 }
 
@@ -1276,6 +2239,74 @@ pub async fn list_tokens_async(limit: usize) -> TokenResult<Vec<TokenMetadata>> 
     tokio::task::spawn_blocking(move || db.list_tokens(limit))
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async wrapper to count total tokens in database (fast, no data loading)
+pub async fn count_tokens_async() -> TokenResult<usize> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+
+    tokio::task::spawn_blocking(move || {
+        let conn = db
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let count: usize = conn
+            .query_row("SELECT COUNT(*) FROM tokens", [], |row| row.get(0))
+            .map_err(|e| TokenError::Database(format!("Count query failed: {}", e)))?;
+
+        Ok(count)
+    })
+    .await
+    .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async wrapper for get_all_tokens_optional_market (returns Vec<Token> with optional market data)
+pub async fn get_all_tokens_optional_market_async(
+    limit: usize,
+    offset: usize,
+    sort_by: Option<String>,
+    sort_direction: Option<String>,
+) -> TokenResult<Vec<Token>> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+
+    tokio::task::spawn_blocking(move || {
+        db.get_all_tokens_optional_market(
+            limit,
+            offset,
+            sort_by.as_deref(),
+            sort_direction.as_deref(),
+        )
+    })
+    .await
+    .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async: count tokens with no market
+pub async fn count_tokens_no_market_async() -> TokenResult<usize> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+    tokio::task::spawn_blocking(move || db.count_tokens_no_market())
+        .await
+        .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async: get tokens with no market
+pub async fn get_tokens_no_market_async(
+    limit: usize,
+    offset: usize,
+    sort_by: Option<String>,
+    sort_direction: Option<String>,
+) -> TokenResult<Vec<Token>> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+    tokio::task::spawn_blocking(move || {
+        db.get_tokens_no_market(limit, offset, sort_by.as_deref(), sort_direction.as_deref())
+    })
+    .await
+    .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
 }
 
 fn map_tracking_row(row: &rusqlite::Row) -> rusqlite::Result<UpdateTrackingInfo> {

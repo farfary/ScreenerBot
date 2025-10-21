@@ -914,8 +914,9 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     }
 
     let created_at_ts = Some(token.first_seen_at.timestamp());
+    let token_birth_ts = token.token_birth_at.map(|dt| dt.timestamp());
     let last_updated_ts = Some(token.updated_at.timestamp());
-    let pair_created_at = created_at_ts;
+    let pair_created_at = token_birth_ts.or(created_at_ts);
 
     // Prefer pool price (real-time on-chain) over token cached price
     let price_usd = price_sol.map(|p| p * 150.0); // Rough SOL/USD conversion; ideally fetch SOL price

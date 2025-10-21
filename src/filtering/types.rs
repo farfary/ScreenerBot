@@ -102,6 +102,10 @@ pub enum TokenSortKey {
     PriceChangeH24,
     RiskScore,
     UpdatedAt,
+    FirstSeenAt,
+    CreatedAt,
+    MetadataUpdatedAt,
+    TokenBirthAt,
     Mint,
 }
 
@@ -118,6 +122,10 @@ impl TokenSortKey {
             "price_change_h24" => TokenSortKey::PriceChangeH24,
             "risk_score" => TokenSortKey::RiskScore,
             "updated_at" => TokenSortKey::UpdatedAt,
+            "first_seen_at" => TokenSortKey::FirstSeenAt,
+            "created_at" => TokenSortKey::CreatedAt,
+            "metadata_updated_at" => TokenSortKey::MetadataUpdatedAt,
+            "token_birth_at" => TokenSortKey::TokenBirthAt,
             _ => TokenSortKey::Mint,
         }
     }

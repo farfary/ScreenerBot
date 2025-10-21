@@ -11,6 +11,7 @@ pub enum DataSource {
     DexScreener,
     GeckoTerminal,
     Rugcheck,
+    Unknown, // For tokens without market data
 }
 
 impl DataSource {
@@ -19,6 +20,7 @@ impl DataSource {
             DataSource::DexScreener => "dexscreener",
             DataSource::GeckoTerminal => "geckoterminal",
             DataSource::Rugcheck => "rugcheck",
+            DataSource::Unknown => "unknown",
         }
     }
 }
@@ -80,6 +82,17 @@ pub struct Token {
 
     /// When this token data was last updated
     pub updated_at: DateTime<Utc>,
+
+    /// When this token was first created in our cache (first discovery)
+    pub created_at: DateTime<Utc>,
+
+    /// When we last refreshed metadata for this token (symbol/name/decimals)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata_updated_at: Option<DateTime<Utc>>,
+
+    /// When this token/pair was first created on-chain (if known)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token_birth_at: Option<DateTime<Utc>>,
 
     // ========================================================================
     // Price Information (from chosen source)
@@ -262,6 +275,8 @@ pub struct DexScreenerData {
     pub chain_id: Option<String>,
     pub dex_id: Option<String>,
     pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pair_created_at: Option<DateTime<Utc>>,
     pub fetched_at: DateTime<Utc>,
 }
 
