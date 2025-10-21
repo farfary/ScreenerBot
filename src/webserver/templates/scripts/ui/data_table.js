@@ -2939,6 +2939,51 @@ export class DataTable {
     }
   }
 
+  /**
+   * Update the stateKey and reload state from localStorage
+   * Useful for pages with tabs where each tab should have separate table state
+   * @param {string} newStateKey - The new state key to use
+   * @param {Object} options - Options for state reload
+   * @param {boolean} options.saveCurrentState - Save current state before switching (default: true)
+   * @param {boolean} options.render - Re-render table after state reload (default: true)
+   */
+  setStateKey(newStateKey, options = {}) {
+    if (!newStateKey || typeof newStateKey !== "string") {
+      this._log("error", "Invalid stateKey provided", { newStateKey });
+      return;
+    }
+
+    const saveCurrentState = options.saveCurrentState !== false;
+    const shouldRender = options.render !== false;
+
+    // Save current state before switching (optional)
+    if (saveCurrentState) {
+      this._saveState();
+      this._log("debug", "Saved state before switching", {
+        oldStateKey: this.options.stateKey,
+        newStateKey,
+      });
+    }
+
+    // Update stateKey
+    this.options.stateKey = newStateKey;
+
+    // Load state for new stateKey
+    this._loadState();
+    this._log("info", "StateKey updated and state reloaded", {
+      stateKey: newStateKey,
+      loadedState: {
+        sortColumn: this.state.sortColumn,
+        sortDirection: this.state.sortDirection,
+      },
+    });
+
+    // Re-render if requested
+    if (shouldRender) {
+      this._renderTable();
+    }
+  }
+
   getPaginationState() {
     if (!this._pagination?.enabled) {
       return null;

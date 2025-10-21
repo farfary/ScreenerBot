@@ -564,6 +564,12 @@ function createLifecycle() {
     state.filters = getDefaultFiltersForView(view);
     state.summary = { ...DEFAULT_SUMMARY };
     state.availableRejectionReasons = [];
+    
+    // Update table stateKey for per-tab state persistence
+    if (table) {
+      table.setStateKey(`tokens-table.${view}`, { render: false });
+    }
+    
     applyViewPreferences();
     syncTableSortState({ render: true });
     syncToolbarFilters();
@@ -758,7 +764,7 @@ function createLifecycle() {
         container: "#tokens-root",
         columns,
         rowIdField: "mint",
-        stateKey: "tokens-table.v2",
+        stateKey: `tokens-table.${state.view}`,
         enableLogging: false,
         sorting: {
           mode: "server",
