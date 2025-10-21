@@ -8,8 +8,8 @@ use crate::config::FilteringConfig;
 use crate::global::is_debug_filtering_enabled;
 use crate::logger::{log, LogTag};
 use crate::positions;
-use crate::tokens::types::Token;
-use crate::tokens::{get_full_token_async, list_tokens_async};
+use crate::tokens::types::{DataSource, Token};
+use crate::tokens::{get_full_token_async, get_full_token_for_source_async, list_tokens_async};
 
 use super::sources::{self, FilterRejectionReason};
 use super::types::{
@@ -239,8 +239,94 @@ async fn apply_all_filters(
     config: &FilteringConfig,
 ) -> Result<(), FilterRejectionReason> {
     sources::meta::evaluate(token, config).await?;
-    sources::dexscreener::evaluate(token, &config.dexscreener)?;
-    sources::rugcheck::evaluate(token, &config.rugcheck)?;
+
+    let mut dex_overlay: Option<Token> = None;
+    let dex_token_ref = if config.dexscreener.enabled {
+        if token.data_source == DataSource::DexScreener {
+            Some(token)
+        } else {
+            match get_full_token_for_source_async(&token.mint, DataSource::DexScreener).await {
+                Ok(Some(full_token)) => {
+                    dex_overlay = Some(full_token);
+                    dex_overlay.as_ref()
+                }
+                Ok(None) => None,
+                Err(err) => {
+                    log(
+                        LogTag::Filtering,
+                        "DEX_DATA_LOAD_FAILED",
+                        &format!("mint={} err={}", token.mint, err),
+                    );
+                    None
+                }
+            }
+        }
+    } else {
+        None
+    };
+
+    if config.dexscreener.enabled {
+        if let Some(dex_token) = dex_token_ref {
+            sources::dexscreener::evaluate(dex_token, &config.dexscreener)?;
+        } else {
+            return Err(FilterRejectionReason::DexScreenerDataMissing);
+        }
+    }
+
+    let mut gecko_overlay: Option<Token> = None;
+    let gecko_token_ref = if config.geckoterminal.enabled {
+        if token.data_source == DataSource::GeckoTerminal {
+            Some(token)
+        } else {
+            match get_full_token_for_source_async(&token.mint, DataSource::GeckoTerminal).await {
+                Ok(Some(full_token)) => {
+                    gecko_overlay = Some(full_token);
+                    gecko_overlay.as_ref()
+                }
+                Ok(None) => None,
+                Err(err) => {
+                    log(
+                        LogTag::Filtering,
+                        "GECKO_DATA_LOAD_FAILED",
+                        &format!("mint={} err={}", token.mint, err),
+                    );
+                    None
+                }
+            }
+        }
+    } else {
+        None
+    };
+
+    if config.geckoterminal.enabled {
+        if let Some(gecko_token) = gecko_token_ref {
+            sources::geckoterminal::evaluate(gecko_token, &config.geckoterminal)?;
+        } else {
+            return Err(FilterRejectionReason::GeckoTerminalDataMissing);
+        }
+    }
+
+    if config.rugcheck.enabled {
+        let has_rug_data = token.security_score.is_some()
+            || token.token_type.is_some()
+            || token.mint_authority.is_some()
+            || token.freeze_authority.is_some()
+            || token.graph_insiders_detected.is_some()
+            || token.lp_provider_count.is_some()
+            || token.total_holders.is_some()
+            || !token.security_risks.is_empty()
+            || !token.top_holders.is_empty()
+            || token.creator_balance_pct.is_some()
+            || token.transfer_fee_pct.is_some()
+            || token.transfer_fee_max_amount.is_some()
+            || token.transfer_fee_authority.is_some();
+
+        if !has_rug_data {
+            return Err(FilterRejectionReason::RugcheckDataMissing);
+        }
+
+        sources::rugcheck::evaluate(token, &config.rugcheck)?;
+    }
 
     Ok(())
 }

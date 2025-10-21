@@ -175,6 +175,7 @@ impl TokenDatabase {
             let security = if security_score.is_some() || is_rugged {
                 Some(RugcheckData {
                     token_type: None,
+                    token_decimals: None,
                     score: security_score,
                     score_description: None,
                     mint_authority: None,
@@ -411,9 +412,12 @@ impl TokenDatabase {
             let fetched_ts: i64 = row.get(27)?;
 
             Ok(DexScreenerData {
-                price_usd: row.get(0)?,
-                price_sol: row.get(1)?,
-                price_native: row.get(2)?,
+                // Some historical rows may have NULLs; treat missing numeric/text values as defaults
+                price_usd: row.get::<_, Option<f64>>(0)?.unwrap_or(0.0),
+                price_sol: row.get::<_, Option<f64>>(1)?.unwrap_or(0.0),
+                price_native: row
+                    .get::<_, Option<String>>(2)?
+                    .unwrap_or_else(|| "0".to_string()),
                 price_change_5m: row.get(3)?,
                 price_change_1h: row.get(4)?,
                 price_change_6h: row.get(5)?,
@@ -510,9 +514,12 @@ impl TokenDatabase {
             let fetched_ts: i64 = row.get(17)?;
 
             Ok(GeckoTerminalData {
-                price_usd: row.get(0)?,
-                price_sol: row.get(1)?,
-                price_native: row.get(2)?,
+                // Some historical rows may have NULLs; treat missing numeric/text values as defaults
+                price_usd: row.get::<_, Option<f64>>(0)?.unwrap_or(0.0),
+                price_sol: row.get::<_, Option<f64>>(1)?.unwrap_or(0.0),
+                price_native: row
+                    .get::<_, Option<String>>(2)?
+                    .unwrap_or_else(|| "0".to_string()),
                 price_change_5m: row.get(3)?,
                 price_change_1h: row.get(4)?,
                 price_change_6h: row.get(5)?,
@@ -566,6 +573,7 @@ impl TokenDatabase {
             "INSERT INTO security_rugcheck (
                 mint,
                 token_type,
+                token_decimals,
                 score,
                 score_description,
                 mint_authority,
@@ -588,10 +596,11 @@ impl TokenDatabase {
                 fetched_at
              ) VALUES (
                 ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11,
-                ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22
+                ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23
              )
              ON CONFLICT(mint) DO UPDATE SET
                 token_type = excluded.token_type,
+                token_decimals = excluded.token_decimals,
                 score = excluded.score,
                 score_description = excluded.score_description,
                 mint_authority = excluded.mint_authority,
@@ -615,6 +624,7 @@ impl TokenDatabase {
             params![
                 mint,
                 &data.token_type,
+                data.token_decimals,
                 data.score,
                 &data.score_description,
                 &data.mint_authority,
@@ -653,6 +663,7 @@ impl TokenDatabase {
             .prepare(
                 "SELECT
                     token_type,
+                    token_decimals,
                     score,
                     score_description,
                     mint_authority,
@@ -678,11 +689,11 @@ impl TokenDatabase {
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
 
         let result = stmt.query_row(params![mint], |row| {
-            let risks_json: String = row.get(17)?;
-            let holders_json: String = row.get(18)?;
-            let markets_json: Option<String> = row.get(19)?;
-            let fetched_ts: i64 = row.get(20)?;
-            let rugged_flag: Option<i64> = row.get(16)?;
+            let risks_json: String = row.get(18)?;
+            let holders_json: String = row.get(19)?;
+            let markets_json: Option<String> = row.get(20)?;
+            let fetched_ts: i64 = row.get(21)?;
+            let rugged_flag: Option<i64> = row.get(17)?;
             let is_rugged = rugged_flag.unwrap_or(0) != 0;
 
             let risks: Vec<SecurityRisk> = serde_json::from_str(&risks_json)
@@ -693,21 +704,22 @@ impl TokenDatabase {
 
             Ok(RugcheckData {
                 token_type: row.get(0)?,
-                score: row.get(1)?,
-                score_description: row.get(2)?,
-                mint_authority: row.get(3)?,
-                freeze_authority: row.get(4)?,
-                top_10_holders_pct: row.get(5)?,
-                total_supply: row.get(6)?,
-                total_holders: row.get(7)?,
-                total_lp_providers: row.get(8)?,
-                graph_insiders_detected: row.get(9)?,
-                total_market_liquidity: row.get(10)?,
-                total_stable_liquidity: row.get(11)?,
-                creator_balance_pct: row.get(12)?,
-                transfer_fee_pct: row.get(13)?,
-                transfer_fee_max_amount: row.get(14)?,
-                transfer_fee_authority: row.get(15)?,
+                token_decimals: row.get(1)?,
+                score: row.get(2)?,
+                score_description: row.get(3)?,
+                mint_authority: row.get(4)?,
+                freeze_authority: row.get(5)?,
+                top_10_holders_pct: row.get(6)?,
+                total_supply: row.get(7)?,
+                total_holders: row.get(8)?,
+                total_lp_providers: row.get(9)?,
+                graph_insiders_detected: row.get(10)?,
+                total_market_liquidity: row.get(11)?,
+                total_stable_liquidity: row.get(12)?,
+                creator_balance_pct: row.get(13)?,
+                transfer_fee_pct: row.get(14)?,
+                transfer_fee_max_amount: row.get(15)?,
+                transfer_fee_authority: row.get(16)?,
                 rugged: is_rugged,
                 risks,
                 top_holders: holders,
@@ -1116,6 +1128,45 @@ impl TokenDatabase {
     // FULL TOKEN ASSEMBLY (for external code)
     // ========================================================================
 
+    /// Assemble complete Token using a specific market data source
+    pub fn get_full_token_for_source(
+        &self,
+        mint: &str,
+        source: DataSource,
+    ) -> TokenResult<Option<Token>> {
+        let metadata = match self.get_token(mint)? {
+            Some(m) => m,
+            None => return Ok(None),
+        };
+
+        let (market_data, data_source) = match source {
+            DataSource::DexScreener => match self.get_dexscreener_data(mint)? {
+                Some(data) => (MarketDataType::DexScreener(data), DataSource::DexScreener),
+                None => return Ok(None),
+            },
+            DataSource::GeckoTerminal => match self.get_geckoterminal_data(mint)? {
+                Some(data) => (MarketDataType::GeckoTerminal(data), DataSource::GeckoTerminal),
+                None => return Ok(None),
+            },
+            _ => return Ok(None),
+        };
+
+        let security = self.get_rugcheck_data(mint)?;
+        let is_blacklisted = self.is_blacklisted(mint)?;
+        let priority = self.get_priority(mint)?;
+
+        let token = assemble_token(
+            metadata,
+            market_data,
+            data_source,
+            security,
+            is_blacklisted,
+            priority,
+        );
+
+        Ok(Some(token))
+    }
+
     /// Assemble complete Token struct from all data sources
     ///
     /// This is the bridge function that external code should use when they need
@@ -1127,61 +1178,26 @@ impl TokenDatabase {
     ///
     /// Returns None if token doesn't exist or has no market data from preferred source.
     pub fn get_full_token(&self, mint: &str) -> TokenResult<Option<Token>> {
-        // Get basic metadata
-        let metadata = match self.get_token(mint)? {
-            Some(m) => m,
-            None => return Ok(None),
-        };
-
         // Determine preferred source from config
         let preferred_source =
             crate::config::with_config(|cfg| cfg.tokens.preferred_market_data_source.clone());
-
-        // Get market data from preferred source
-        let (market_data, data_source) = if preferred_source == "geckoterminal" {
-            match self.get_geckoterminal_data(mint)? {
-                Some(data) => (
-                    MarketDataType::GeckoTerminal(data),
-                    DataSource::GeckoTerminal,
-                ),
-                None => match self.get_dexscreener_data(mint)? {
-                    Some(data) => (MarketDataType::DexScreener(data), DataSource::DexScreener),
-                    None => return Ok(None), // No market data available
-                },
-            }
+        let primary_source = if preferred_source.eq_ignore_ascii_case("geckoterminal") {
+            DataSource::GeckoTerminal
         } else {
-            match self.get_dexscreener_data(mint)? {
-                Some(data) => (MarketDataType::DexScreener(data), DataSource::DexScreener),
-                None => match self.get_geckoterminal_data(mint)? {
-                    Some(data) => (
-                        MarketDataType::GeckoTerminal(data),
-                        DataSource::GeckoTerminal,
-                    ),
-                    None => return Ok(None), // No market data available
-                },
-            }
+            DataSource::DexScreener
         };
 
-        // Get security data
-        let security = self.get_rugcheck_data(mint)?;
+        if let Some(token) = self.get_full_token_for_source(mint, primary_source)? {
+            return Ok(Some(token));
+        }
 
-        // Get blacklist status
-        let is_blacklisted = self.is_blacklisted(mint)?;
+        let fallback_source = match primary_source {
+            DataSource::DexScreener => DataSource::GeckoTerminal,
+            DataSource::GeckoTerminal => DataSource::DexScreener,
+            _ => return Ok(None),
+        };
 
-        // Get priority
-        let priority = self.get_priority(mint)?;
-
-        // Assemble Token struct
-        let token = assemble_token(
-            metadata,
-            market_data,
-            data_source,
-            security,
-            is_blacklisted,
-            priority,
-        );
-
-        Ok(Some(token))
+        self.get_full_token_for_source(mint, fallback_source)
     }
 
     /// Get all tokens from database with optional market data.
@@ -1250,6 +1266,7 @@ impl TokenDatabase {
                 g.price_change_5m, g.price_change_1h, g.price_change_6h, g.price_change_24h,
                 g.market_cap, g.fdv, g.liquidity_usd,
                 g.volume_5m, g.volume_1h, g.volume_6h, g.volume_24h,
+                g.pool_count, g.reserve_in_usd,
                 g.fetched_at as g_fetched_at,
                 ut.last_market_update,
                 ut.last_decimals_update,
@@ -1338,7 +1355,9 @@ impl TokenDatabase {
                 let g_vol_1h: Option<f64> = row.get(44)?;
                 let g_vol_6h: Option<f64> = row.get(45)?;
                 let g_vol_24h: Option<f64> = row.get(46)?;
-                let g_fetched_at: Option<i64> = row.get(47)?;
+                let g_pool_count: Option<i64> = row.get(47)?;
+                let g_reserve_in_usd: Option<f64> = row.get(48)?;
+                let g_fetched_at: Option<i64> = row.get(49)?;
 
                 let d_pair_created_at: Option<i64> = row.get(50)?;
 
@@ -1392,9 +1411,11 @@ impl TokenDatabase {
                     g_vol_1h,
                     g_vol_6h,
                     g_vol_24h,
+                    g_pool_count,
+                    g_reserve_in_usd,
                     g_fetched_at,
-                    row.get::<_, Option<i64>>(48)?,
-                    row.get::<_, Option<i64>>(49)?,
+                    row.get::<_, Option<i64>>(50)?,
+                    row.get::<_, Option<i64>>(51)?,
                     d_pair_created_at,
                 ))
             })
@@ -1452,6 +1473,8 @@ impl TokenDatabase {
                 g_vol_1h,
                 g_vol_6h,
                 g_vol_24h,
+                g_pool_count,
+                g_reserve_in_usd,
                 g_fetched_at,
                 last_market_update_ts,
                 last_decimals_update_ts,
@@ -1678,6 +1701,18 @@ impl TokenDatabase {
                 }
             };
 
+            let pool_count = if data_source == DataSource::GeckoTerminal {
+                g_pool_count.map(|value| value as u32)
+            } else {
+                None
+            };
+
+            let reserve_in_usd = if data_source == DataSource::GeckoTerminal {
+                g_reserve_in_usd
+            } else {
+                None
+            };
+
             let market_updated_dt = last_market_update_dt.unwrap_or(fetched_at_dt);
 
             let token = Token {
@@ -1718,6 +1753,10 @@ impl TokenDatabase {
                 volume_h1: vol_1h,
                 volume_h6: vol_6h,
                 volume_h24: vol_24h,
+
+                // Pool metrics
+                pool_count,
+                reserve_in_usd,
 
                 // Transaction Activity (only available for DexScreener)
                 txns_m5_buys: tx5b,
@@ -1865,6 +1904,7 @@ fn assemble_token(
         txns,
         fetched_at,
         token_birth_at,
+        pool_metrics,
     ) = match market_data {
         MarketDataType::DexScreener(data) => {
             let txns = (
@@ -1894,6 +1934,7 @@ fn assemble_token(
                 txns,
                 data.fetched_at,
                 data.pair_created_at,
+                (None, None),
             )
         }
         MarketDataType::GeckoTerminal(data) => {
@@ -1919,61 +1960,37 @@ fn assemble_token(
                 txns,
                 data.fetched_at,
                 None,
+                (data.pool_count, data.reserve_in_usd),
             )
         }
     };
 
     // Extract security data
-    let (
-        token_type,
-        mint_authority,
-        freeze_authority,
-        security_score,
-        is_rugged,
-        security_risks,
-        top_holders,
-        total_holders,
-        creator_balance_pct,
-        transfer_fee_pct,
-        transfer_fee_max_amount,
-        transfer_fee_authority,
-        graph_insiders_detected,
-        lp_provider_count,
-    ) = if let Some(sec) = security {
-        (
-            sec.token_type,
-            sec.mint_authority,
-            sec.freeze_authority,
-            sec.score,
-            sec.rugged,
-            sec.risks,
-            sec.top_holders,
-            sec.total_holders,
-            sec.creator_balance_pct,
-            sec.transfer_fee_pct,
-            sec.transfer_fee_max_amount,
-            sec.transfer_fee_authority,
-            sec.graph_insiders_detected,
-            sec.total_lp_providers,
-        )
-    } else {
-        (
-            None,
-            None,
-            None,
-            None,
-            false,
-            Vec::new(),
-            Vec::new(),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
-    };
+    let security_ref = security.as_ref();
+
+    let token_type = security_ref.and_then(|sec| sec.token_type.clone());
+    let mint_authority = security_ref.and_then(|sec| sec.mint_authority.clone());
+    let freeze_authority = security_ref.and_then(|sec| sec.freeze_authority.clone());
+    let security_score = security_ref.and_then(|sec| sec.score);
+    let is_rugged = security_ref.map(|sec| sec.rugged).unwrap_or(false);
+    let security_risks = security_ref
+        .map(|sec| sec.risks.clone())
+        .unwrap_or_else(Vec::new);
+    let top_holders = security_ref
+        .map(|sec| sec.top_holders.clone())
+        .unwrap_or_else(Vec::new);
+    let total_holders = security_ref.and_then(|sec| sec.total_holders);
+    let creator_balance_pct = security_ref.and_then(|sec| sec.creator_balance_pct);
+    let transfer_fee_pct = security_ref.and_then(|sec| sec.transfer_fee_pct);
+    let transfer_fee_max_amount = security_ref.and_then(|sec| sec.transfer_fee_max_amount);
+    let transfer_fee_authority = security_ref.and_then(|sec| sec.transfer_fee_authority.clone());
+    let graph_insiders_detected = security_ref.and_then(|sec| sec.graph_insiders_detected);
+    let lp_provider_count = security_ref.and_then(|sec| sec.total_lp_providers);
+
+    let resolved_decimals = metadata
+        .decimals
+        .or_else(|| security_ref.and_then(|data| data.token_decimals))
+        .unwrap_or(9);
 
     let token_birth_dt = token_birth_at
         .or(metadata_updated_dt.clone())
@@ -1984,7 +2001,7 @@ fn assemble_token(
         mint: metadata.mint.clone(),
         symbol: metadata.symbol.unwrap_or_else(|| "UNKNOWN".to_string()),
         name: metadata.name.unwrap_or_else(|| "Unknown Token".to_string()),
-        decimals: metadata.decimals.unwrap_or(9),
+        decimals: resolved_decimals,
         description: None,
         image_url: None,
         header_image_url: None,
@@ -2017,6 +2034,10 @@ fn assemble_token(
         volume_h1: volumes.1,
         volume_h6: volumes.2,
         volume_h24: volumes.3,
+
+        // Pool metrics
+        pool_count: pool_metrics.0,
+        reserve_in_usd: pool_metrics.1,
 
         // Transaction activity
         txns_m5_buys: txns.0.map(|(b, _)| b),
@@ -2067,56 +2088,26 @@ fn assemble_token_without_market_data(
     token_birth_at_override: Option<DateTime<Utc>>,
 ) -> Token {
     // Extract security data
-    let (
-        token_type,
-        mint_authority,
-        freeze_authority,
-        security_score,
-        is_rugged,
-        security_risks,
-        top_holders,
-        total_holders,
-        creator_balance_pct,
-        transfer_fee_pct,
-        transfer_fee_max_amount,
-        transfer_fee_authority,
-        graph_insiders_detected,
-        lp_provider_count,
-    ) = if let Some(sec) = security {
-        (
-            sec.token_type,
-            sec.mint_authority,
-            sec.freeze_authority,
-            sec.score,
-            sec.rugged,
-            sec.risks,
-            sec.top_holders,
-            sec.total_holders,
-            sec.creator_balance_pct,
-            sec.transfer_fee_pct,
-            sec.transfer_fee_max_amount,
-            sec.transfer_fee_authority,
-            sec.graph_insiders_detected,
-            sec.total_lp_providers,
-        )
-    } else {
-        (
-            None,
-            None,
-            None,
-            None,
-            false,
-            vec![],
-            vec![],
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
-    };
+    let security_ref = security.as_ref();
+
+    let token_type = security_ref.and_then(|sec| sec.token_type.clone());
+    let mint_authority = security_ref.and_then(|sec| sec.mint_authority.clone());
+    let freeze_authority = security_ref.and_then(|sec| sec.freeze_authority.clone());
+    let security_score = security_ref.and_then(|sec| sec.score);
+    let is_rugged = security_ref.map(|sec| sec.rugged).unwrap_or(false);
+    let security_risks = security_ref
+        .map(|sec| sec.risks.clone())
+        .unwrap_or_else(Vec::new);
+    let top_holders = security_ref
+        .map(|sec| sec.top_holders.clone())
+        .unwrap_or_else(Vec::new);
+    let total_holders = security_ref.and_then(|sec| sec.total_holders);
+    let creator_balance_pct = security_ref.and_then(|sec| sec.creator_balance_pct);
+    let transfer_fee_pct = security_ref.and_then(|sec| sec.transfer_fee_pct);
+    let transfer_fee_max_amount = security_ref.and_then(|sec| sec.transfer_fee_max_amount);
+    let transfer_fee_authority = security_ref.and_then(|sec| sec.transfer_fee_authority.clone());
+    let graph_insiders_detected = security_ref.and_then(|sec| sec.graph_insiders_detected);
+    let lp_provider_count = security_ref.and_then(|sec| sec.total_lp_providers);
 
     let created_at = DateTime::from_timestamp(metadata.created_at, 0).unwrap_or_else(|| Utc::now());
     let metadata_updated_dt =
@@ -2128,12 +2119,17 @@ fn assemble_token_without_market_data(
         .or_else(|| metadata_updated_dt.clone())
         .or(Some(created_at));
 
+    let resolved_decimals = metadata
+        .decimals
+        .or_else(|| security_ref.and_then(|data| data.token_decimals))
+        .unwrap_or(9);
+
     Token {
         // Core Identity & Metadata
         mint: metadata.mint.clone(),
         symbol: metadata.symbol.unwrap_or_else(|| "UNKNOWN".to_string()),
         name: metadata.name.unwrap_or_else(|| "Unknown Token".to_string()),
-        decimals: metadata.decimals.unwrap_or(9), // Default to 9 if unknown
+        decimals: resolved_decimals, // Default to 9 if unknown
         description: None,
         image_url: None,
         header_image_url: None,
@@ -2166,6 +2162,10 @@ fn assemble_token_without_market_data(
         volume_h1: None,
         volume_h6: None,
         volume_h24: None,
+
+        // Pool metrics
+        pool_count: None,
+        reserve_in_usd: None,
 
         // Transaction Activity
         txns_m5_buys: None,
@@ -2226,7 +2226,23 @@ pub async fn get_full_token_async(mint: &str) -> TokenResult<Option<Token>> {
         .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
 
     let mint = mint.to_string();
-    tokio::task::spawn_blocking(move || db.get_full_token(&mint))
+    let db_clone = db.clone();
+    tokio::task::spawn_blocking(move || db_clone.get_full_token(&mint))
+        .await
+        .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async wrapper for get_full_token_for_source (returns complete Token with specific source)
+pub async fn get_full_token_for_source_async(
+    mint: &str,
+    source: DataSource,
+) -> TokenResult<Option<Token>> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+
+    let mint = mint.to_string();
+    let db_clone = db.clone();
+    tokio::task::spawn_blocking(move || db_clone.get_full_token_for_source(&mint, source))
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
 }

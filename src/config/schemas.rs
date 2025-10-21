@@ -482,6 +482,36 @@ config_struct! {
         })]
         max_market_cap_usd: f64 = 100_000_000.0,
 
+        #[metadata(field_metadata! {
+            label: "Enable FDV Checks",
+            hint: "Check fully diluted valuation bounds",
+            impact: "medium",
+            category: "FDV",
+        })]
+        fdv_enabled: bool = false,
+        #[metadata(field_metadata! {
+            label: "Min FDV",
+            hint: "Minimum fully diluted valuation in USD",
+            min: 0,
+            max: 1000000000000.0,
+            step: 1000,
+            unit: "USD",
+            impact: "medium",
+            category: "FDV",
+        })]
+        min_fdv_usd: f64 = 0.0,
+        #[metadata(field_metadata! {
+            label: "Max FDV",
+            hint: "Maximum fully diluted valuation in USD",
+            min: 0,
+            max: 1000000000000.0,
+            step: 1000,
+            unit: "USD",
+            impact: "medium",
+            category: "FDV",
+        })]
+        max_fdv_usd: f64 = 100_000_000_000.0,
+
         // Transaction activity checks
         #[metadata(field_metadata! {
             label: "Enable Transaction Checks",
@@ -522,6 +552,39 @@ config_struct! {
         })]
         volume_enabled: bool = false,
         #[metadata(field_metadata! {
+            label: "Min Volume 5m",
+            hint: "Minimum 5 minute trading volume in USD",
+            min: 0,
+            max: 1000000,
+            step: 10,
+            unit: "USD",
+            impact: "medium",
+            category: "Volume",
+        })]
+        min_volume_5m: f64 = 0.0,
+        #[metadata(field_metadata! {
+            label: "Min Volume 1h",
+            hint: "Minimum 1 hour trading volume in USD",
+            min: 0,
+            max: 10000000,
+            step: 10,
+            unit: "USD",
+            impact: "medium",
+            category: "Volume",
+        })]
+        min_volume_1h: f64 = 0.0,
+        #[metadata(field_metadata! {
+            label: "Min Volume 6h",
+            hint: "Minimum 6 hour trading volume in USD",
+            min: 0,
+            max: 10000000,
+            step: 10,
+            unit: "USD",
+            impact: "medium",
+            category: "Volume",
+        })]
+        min_volume_6h: f64 = 0.0,
+        #[metadata(field_metadata! {
             label: "Min Volume 24h",
             hint: "Minimum 24h trading volume in USD",
             min: 0,
@@ -541,6 +604,28 @@ config_struct! {
             category: "Price Change",
         })]
         price_change_enabled: bool = false,
+        #[metadata(field_metadata! {
+            label: "Min Price Change 5m",
+            hint: "Minimum 5 minute price change %",
+            min: -100,
+            max: 10000,
+            step: 5,
+            unit: "%",
+            impact: "low",
+            category: "Price Change",
+        })]
+        min_price_change_m5: f64 = -100.0,
+        #[metadata(field_metadata! {
+            label: "Max Price Change 5m",
+            hint: "Maximum 5 minute price change %",
+            min: 0,
+            max: 100000,
+            step: 50,
+            unit: "%",
+            impact: "low",
+            category: "Price Change",
+        })]
+        max_price_change_m5: f64 = 10000.0,
         #[metadata(field_metadata! {
             label: "Min Price Change 1h",
             hint: "Minimum 1h price change % (negative = dump filter)",
@@ -563,12 +648,290 @@ config_struct! {
             category: "Price Change",
         })]
         max_price_change_h1: f64 = 10000.0,
+        #[metadata(field_metadata! {
+            label: "Min Price Change 6h",
+            hint: "Minimum 6h price change %",
+            min: -100,
+            max: 10000,
+            step: 5,
+            unit: "%",
+            impact: "low",
+            category: "Price Change",
+        })]
+        min_price_change_h6: f64 = -100.0,
+        #[metadata(field_metadata! {
+            label: "Max Price Change 6h",
+            hint: "Maximum 6h price change %",
+            min: 0,
+            max: 100000,
+            step: 50,
+            unit: "%",
+            impact: "low",
+            category: "Price Change",
+        })]
+        max_price_change_h6: f64 = 10000.0,
+        #[metadata(field_metadata! {
+            label: "Min Price Change 24h",
+            hint: "Minimum 24h price change %",
+            min: -100,
+            max: 10000,
+            step: 5,
+            unit: "%",
+            impact: "low",
+            category: "Price Change",
+        })]
+        min_price_change_h24: f64 = -100.0,
+        #[metadata(field_metadata! {
+            label: "Max Price Change 24h",
+            hint: "Maximum 24h price change %",
+            min: 0,
+            max: 100000,
+            step: 50,
+            unit: "%",
+            impact: "low",
+            category: "Price Change",
+        })]
+        max_price_change_h24: f64 = 10000.0,
     }
 }
 
 // ============================================================================
 // RUGCHECK FILTERING CONFIGURATION
 // ============================================================================
+
+config_struct! {
+    /// GeckoTerminal-specific filtering configuration
+    pub struct GeckoTerminalFilters {
+        #[metadata(field_metadata! {
+            label: "Enable GeckoTerminal Filters",
+            hint: "Master switch for GeckoTerminal-based filtering",
+            impact: "critical",
+            category: "Source Control",
+        })]
+        enabled: bool = true,
+
+        // Liquidity checks
+        #[metadata(field_metadata! {
+            label: "Enable Liquidity Checks",
+            hint: "Check min/max liquidity from GeckoTerminal",
+            impact: "critical",
+            category: "Liquidity",
+        })]
+        liquidity_enabled: bool = true,
+        #[metadata(field_metadata! {
+            label: "Min Liquidity",
+            hint: "Minimum liquidity in USD",
+            min: 0,
+            max: 10000000,
+            step: 10,
+            unit: "USD",
+            impact: "critical",
+            category: "Liquidity",
+        })]
+        min_liquidity_usd: f64 = 1.0,
+        #[metadata(field_metadata! {
+            label: "Max Liquidity",
+            hint: "Maximum liquidity in USD",
+            min: 0,
+            max: 1000000000,
+            step: 10000,
+            unit: "USD",
+            impact: "medium",
+            category: "Liquidity",
+        })]
+        max_liquidity_usd: f64 = 100_000_000.0,
+
+        // Market cap checks
+        #[metadata(field_metadata! {
+            label: "Enable Market Cap Checks",
+            hint: "Check min/max market cap from GeckoTerminal",
+            impact: "medium",
+            category: "Market Cap",
+        })]
+        market_cap_enabled: bool = false,
+        #[metadata(field_metadata! {
+            label: "Min Market Cap",
+            hint: "Minimum market cap in USD",
+            min: 0,
+            max: 1000000000,
+            step: 1000,
+            unit: "USD",
+            impact: "medium",
+            category: "Market Cap",
+        })]
+        min_market_cap_usd: f64 = 0.0,
+        #[metadata(field_metadata! {
+            label: "Max Market Cap",
+            hint: "Maximum market cap in USD",
+            min: 0,
+            max: 1000000000,
+            step: 1000,
+            unit: "USD",
+            impact: "medium",
+            category: "Market Cap",
+        })]
+        max_market_cap_usd: f64 = 100_000_000.0,
+
+        // Volume checks
+        #[metadata(field_metadata! {
+            label: "Enable Volume Checks",
+            hint: "Check trading volume from GeckoTerminal",
+            impact: "medium",
+            category: "Volume",
+        })]
+        volume_enabled: bool = false,
+        #[metadata(field_metadata! {
+            label: "Min Volume 5m",
+            hint: "Minimum 5 minute trading volume in USD",
+            min: 0,
+            max: 1000000,
+            step: 10,
+            unit: "USD",
+            impact: "medium",
+            category: "Volume",
+        })]
+        min_volume_5m: f64 = 0.0,
+        #[metadata(field_metadata! {
+            label: "Min Volume 1h",
+            hint: "Minimum 1 hour trading volume in USD",
+            min: 0,
+            max: 10000000,
+            step: 10,
+            unit: "USD",
+            impact: "medium",
+            category: "Volume",
+        })]
+        min_volume_1h: f64 = 0.0,
+        #[metadata(field_metadata! {
+            label: "Min Volume 24h",
+            hint: "Minimum 24 hour trading volume in USD",
+            min: 0,
+            max: 10000000,
+            step: 100,
+            unit: "USD",
+            impact: "medium",
+            category: "Volume",
+        })]
+        min_volume_24h: f64 = 0.0,
+
+        // Price change checks
+        #[metadata(field_metadata! {
+            label: "Enable Price Change Checks",
+            hint: "Check price change from GeckoTerminal",
+            impact: "low",
+            category: "Price Change",
+        })]
+        price_change_enabled: bool = false,
+        #[metadata(field_metadata! {
+            label: "Min Price Change 5m",
+            hint: "Minimum 5 minute price change %",
+            min: -100,
+            max: 10000,
+            step: 5,
+            unit: "%",
+            impact: "low",
+            category: "Price Change",
+        })]
+        min_price_change_m5: f64 = -100.0,
+        #[metadata(field_metadata! {
+            label: "Max Price Change 5m",
+            hint: "Maximum 5 minute price change %",
+            min: 0,
+            max: 100000,
+            step: 50,
+            unit: "%",
+            impact: "low",
+            category: "Price Change",
+        })]
+        max_price_change_m5: f64 = 10000.0,
+        #[metadata(field_metadata! {
+            label: "Min Price Change 1h",
+            hint: "Minimum 1 hour price change %",
+            min: -100,
+            max: 10000,
+            step: 5,
+            unit: "%",
+            impact: "low",
+            category: "Price Change",
+        })]
+        min_price_change_h1: f64 = -100.0,
+        #[metadata(field_metadata! {
+            label: "Max Price Change 1h",
+            hint: "Maximum 1 hour price change %",
+            min: 0,
+            max: 100000,
+            step: 50,
+            unit: "%",
+            impact: "low",
+            category: "Price Change",
+        })]
+        max_price_change_h1: f64 = 10000.0,
+        #[metadata(field_metadata! {
+            label: "Min Price Change 24h",
+            hint: "Minimum 24 hour price change %",
+            min: -100,
+            max: 10000,
+            step: 5,
+            unit: "%",
+            impact: "low",
+            category: "Price Change",
+        })]
+        min_price_change_h24: f64 = -100.0,
+        #[metadata(field_metadata! {
+            label: "Max Price Change 24h",
+            hint: "Maximum 24 hour price change %",
+            min: 0,
+            max: 100000,
+            step: 50,
+            unit: "%",
+            impact: "low",
+            category: "Price Change",
+        })]
+        max_price_change_h24: f64 = 10000.0,
+
+        // Pool metrics
+        #[metadata(field_metadata! {
+            label: "Enable Pool Metrics Checks",
+            hint: "Check pool count and reserve metrics",
+            impact: "low",
+            category: "Pool Metrics",
+        })]
+        pool_metrics_enabled: bool = false,
+        #[metadata(field_metadata! {
+            label: "Min Pool Count",
+            hint: "Minimum number of pools tracked",
+            min: 0,
+            max: 1000,
+            step: 1,
+            unit: "pools",
+            impact: "low",
+            category: "Pool Metrics",
+        })]
+        min_pool_count: u32 = 0,
+        #[metadata(field_metadata! {
+            label: "Max Pool Count",
+            hint: "Maximum number of pools tracked",
+            min: 0,
+            max: 1000,
+            step: 1,
+            unit: "pools",
+            impact: "low",
+            category: "Pool Metrics",
+        })]
+        max_pool_count: u32 = 1000,
+        #[metadata(field_metadata! {
+            label: "Min Reserve USD",
+            hint: "Minimum reserve liquidity across pools in USD",
+            min: 0,
+            max: 100000000,
+            step: 100,
+            unit: "USD",
+            impact: "low",
+            category: "Pool Metrics",
+        })]
+        min_reserve_usd: f64 = 0.0,
+    }
+}
 
 config_struct! {
     /// RugCheck-specific filtering configuration
@@ -900,6 +1263,14 @@ config_struct! {
             category: "Data Sources",
         })]
         dexscreener: DexScreenerFilters = DexScreenerFilters::default(),
+
+        #[metadata(field_metadata! {
+            label: "GeckoTerminal Filters",
+            hint: "Market data filtering from GeckoTerminal",
+            impact: "high",
+            category: "Data Sources",
+        })]
+        geckoterminal: GeckoTerminalFilters = GeckoTerminalFilters::default(),
 
         #[metadata(field_metadata! {
             label: "RugCheck Filters",

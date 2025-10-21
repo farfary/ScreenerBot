@@ -4,7 +4,7 @@ use crate::config::FilteringConfig;
 use crate::filtering::sources::FilterRejectionReason;
 use crate::positions;
 use crate::tokens::types::Token;
-use crate::tokens::{self, get_cached_decimals};
+use crate::tokens::{self, get_cached_decimals, get_decimals};
 
 /// Evaluate meta-level filters that apply regardless of external data sources.
 pub async fn evaluate(
@@ -12,7 +12,9 @@ pub async fn evaluate(
     config: &FilteringConfig,
 ) -> Result<(), FilterRejectionReason> {
     if config.require_decimals_in_db && !has_cached_decimals(&token.mint) {
-        return Err(FilterRejectionReason::NoDecimalsInDatabase);
+        if get_decimals(&token.mint).await.is_none() {
+            return Err(FilterRejectionReason::NoDecimalsInDatabase);
+        }
     }
 
     if is_too_new(token, config) {

@@ -83,6 +83,7 @@ pub const CREATE_TABLES: &[&str] = &[
     CREATE TABLE IF NOT EXISTS security_rugcheck (
         mint TEXT PRIMARY KEY,
         token_type TEXT,
+        token_decimals INTEGER,
         score INTEGER,
         score_description TEXT,
         mint_authority TEXT,
@@ -155,6 +156,7 @@ pub const CREATE_INDEXES: &[&str] = &[
 
 /// ALTER TABLE statements to backfill new columns when upgrading existing databases.
 pub const SECURITY_RUGCHECK_ALTER_STATEMENTS: &[&str] = &[
+    "ALTER TABLE security_rugcheck ADD COLUMN token_decimals INTEGER",
     "ALTER TABLE security_rugcheck ADD COLUMN total_holders INTEGER",
     "ALTER TABLE security_rugcheck ADD COLUMN total_lp_providers INTEGER",
     "ALTER TABLE security_rugcheck ADD COLUMN graph_insiders_detected INTEGER",

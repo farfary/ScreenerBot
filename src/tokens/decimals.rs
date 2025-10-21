@@ -2,7 +2,7 @@
 // Decimals lookup with memory caching and on-chain fallback
 // Refactored for new clean architecture (no dependency on old storage/provider)
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, RwLock};
 
 use crate::logger::{log, LogTag};
@@ -15,6 +15,10 @@ static DECIMALS_CACHE: std::sync::LazyLock<Arc<RwLock<HashMap<String, u8>>>> =
 // Single-flight locks to prevent duplicate fetches
 static FETCH_LOCKS: std::sync::LazyLock<Mutex<HashMap<String, Arc<AsyncMutex<()>>>>> =
     std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+
+// Track mints with unresolved decimals to avoid repeated expensive lookups
+static FAILED_CACHE: std::sync::LazyLock<Arc<RwLock<HashSet<String>>>> =
+    std::sync::LazyLock::new(|| Arc::new(RwLock::new(HashSet::new())));
 
 // Constants
 pub const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
@@ -39,6 +43,10 @@ pub fn get_cached(mint: &str) -> Option<u8> {
         return Some(SOL_DECIMALS);
     }
 
+    if is_marked_failure(mint) {
+        return None;
+    }
+
     DECIMALS_CACHE
         .read()
         .ok()
@@ -59,6 +67,10 @@ pub async fn get(mint: &str) -> Option<u8> {
         return Some(d);
     }
 
+    if is_marked_failure(mint) {
+        return None;
+    }
+
     // Try database
     if let Some(d) = get_from_db(mint).await {
         cache(mint, d);
@@ -77,35 +89,60 @@ pub async fn get(mint: &str) -> Option<u8> {
     }
 
     // Fetch from chain as last resort
-    match get_token_decimals_from_chain(mint).await {
-        Ok(d) => {
-            cache(mint, d);
-            // Persist to database if available
-            if let Err(e) = persist_to_db(mint, d).await {
-                log(
-                    LogTag::Tokens,
-                    "WARN",
-                    &format!("Failed to persist decimals to DB: mint={} err={}", mint, e),
-                );
-            }
-            drop(guard);
-            release_lock_if_idle(mint);
-            Some(d)
-        }
-        Err(err) => {
+    let chain_result = get_token_decimals_from_chain(mint).await;
+    if let Ok(d) = chain_result {
+        cache(mint, d);
+        if let Err(e) = persist_to_db(mint, d).await {
             log(
                 LogTag::Tokens,
                 "WARN",
-                &format!(
-                    "Failed to fetch decimals from chain: mint={} err={}",
-                    mint, err
-                ),
+                &format!("Failed to persist decimals to DB: mint={} err={}", mint, e),
             );
-            drop(guard);
-            release_lock_if_idle(mint);
-            None
         }
+        drop(guard);
+        release_lock_if_idle(mint);
+        return Some(d);
     }
+
+    if let Err(err) = &chain_result {
+        log(
+            LogTag::Tokens,
+            "WARN",
+            &format!(
+                "Failed to fetch decimals from chain: mint={} err={}",
+                mint, err
+            ),
+        );
+    }
+
+    if let Some(d) = get_from_rugcheck(mint).await {
+        log(
+            LogTag::Tokens,
+            "DECIMALS_RUGCHECK_FALLBACK",
+            &format!("Resolved decimals via RugCheck: mint={} decimals={}", mint, d),
+        );
+        cache(mint, d);
+        if let Err(e) = persist_to_db(mint, d).await {
+            log(
+                LogTag::Tokens,
+                "WARN",
+                &format!("Failed to persist RugCheck decimals to DB: mint={} err={}", mint, e),
+            );
+        }
+        drop(guard);
+        release_lock_if_idle(mint);
+        return Some(d);
+    }
+
+    log(
+        LogTag::Tokens,
+        "DECIMALS_UNRESOLVED",
+        &format!("Unable to resolve decimals after all fallbacks: mint={}", mint),
+    );
+    mark_failure(mint);
+    drop(guard);
+    release_lock_if_idle(mint);
+    None
 }
 
 /// Fetch token decimals directly from Solana blockchain (public for debug bins)
@@ -113,7 +150,8 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
     use crate::rpc::get_rpc_client;
     use solana_program::program_pack::Pack;
     use solana_sdk::pubkey::Pubkey;
-    use spl_token::state::Mint;
+    use spl_token::state::Mint as SplMint;
+    use spl_token_2022::state::Mint as Mint2022;
     use std::str::FromStr;
 
     // SOL always has 9 decimals
@@ -145,21 +183,32 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
 
     // Check if it's an SPL Token mint
     if account.owner == spl_token::id() {
-        let mint_data = Mint::unpack(&account.data)
+        let mint_data = SplMint::unpack(&account.data)
             .map_err(|e| format!("Failed to unpack SPL Token mint: {}", e))?;
         return Ok(mint_data.decimals);
     }
 
     // Check if it's a Token-2022 mint
     if account.owner == spl_token_2022::id() {
-        // Token-2022 has same layout as SPL Token for basic mint data
-        let mint_data = Mint::unpack(&account.data)
-            .map_err(|e| format!("Failed to unpack Token-2022 mint: {}", e))?;
-        return Ok(mint_data.decimals);
+        // First, try unpack via the Token-2022 Mint directly
+        if let Ok(mint_data) = Mint2022::unpack(&account.data) {
+            return Ok(mint_data.decimals);
+        }
+
+        // Fallback: unpack with extensions-aware parser and read base.decimals
+        // Some Token-2022 mints include extensions that require this API.
+        match spl_token_2022::extension::StateWithExtensionsOwned::<Mint2022>::unpack(
+            account.data.clone(),
+        ) {
+            Ok(state) => return Ok(state.base.decimals),
+            Err(e) => {
+                return Err(format!("Failed to unpack Token-2022 mint with extensions: {}", e))
+            }
+        }
     }
 
     Err(format!(
-        "Account owner is not SPL Token program: {}",
+        "Account owner is not a supported token program: {}",
         account.owner
     ))
 }
@@ -169,6 +218,7 @@ pub fn cache(mint: &str, decimals: u8) {
     if let Ok(mut w) = DECIMALS_CACHE.write() {
         w.insert(mint.to_string(), decimals);
     }
+    clear_failure(mint);
 }
 
 /// Clear cached decimals for a specific mint
@@ -176,11 +226,15 @@ pub fn clear_cache(mint: &str) {
     if let Ok(mut w) = DECIMALS_CACHE.write() {
         w.remove(mint);
     }
+    clear_failure(mint);
 }
 
 /// Clear all cached decimals
 pub fn clear_all_cache() {
     if let Ok(mut w) = DECIMALS_CACHE.write() {
+        w.clear();
+    }
+    if let Ok(mut w) = FAILED_CACHE.write() {
         w.clear();
     }
 }
@@ -205,6 +259,27 @@ async fn get_from_db(mint: &str) -> Option<u8> {
     match join_result {
         Ok(Some(token)) => token
             .decimals
+            .and_then(|value| if value > 0 { Some(value) } else { None }),
+        Ok(None) => None,
+        Err(_) => None,
+    }
+}
+
+/// Try to get decimals from stored RugCheck data
+async fn get_from_rugcheck(mint: &str) -> Option<u8> {
+    use crate::tokens::database::get_global_database;
+
+    let db = get_global_database()?;
+    let mint_owned = mint.to_string();
+    let db_clone = db.clone();
+
+    let join_result = tokio::task::spawn_blocking(move || db_clone.get_rugcheck_data(&mint_owned))
+        .await
+        .ok()?;
+
+    match join_result {
+        Ok(Some(data)) => data
+            .token_decimals
             .and_then(|value| if value > 0 { Some(value) } else { None }),
         Ok(None) => None,
         Err(_) => None,
@@ -237,4 +312,23 @@ fn release_lock_if_idle(mint: &str) {
     if let Ok(mut map) = FETCH_LOCKS.lock() {
         map.remove(mint);
     }
+}
+
+fn mark_failure(mint: &str) {
+    if let Ok(mut w) = FAILED_CACHE.write() {
+        w.insert(mint.to_string());
+    }
+}
+
+fn clear_failure(mint: &str) {
+    if let Ok(mut w) = FAILED_CACHE.write() {
+        w.remove(mint);
+    }
+}
+
+fn is_marked_failure(mint: &str) -> bool {
+    FAILED_CACHE
+        .read()
+        .map(|set| set.contains(mint))
+        .unwrap_or(false)
 }

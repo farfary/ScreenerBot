@@ -35,6 +35,7 @@ pub use database::{
     count_tokens_no_market_async,
     get_all_tokens_optional_market_async,
     get_full_token_async,
+    get_full_token_for_source_async,
     get_global_database,
     get_token_async,
     get_tokens_no_market_async,

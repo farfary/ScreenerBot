@@ -34,7 +34,8 @@ const state = {
 const FILTER_TABS = [
   { id: "status", label: "📊 Status" },
   { id: "meta", label: "⚙️ Core" },
-  { id: "dexscreener", label: "� DexScreener" },
+  { id: "dexscreener", label: "📈 DexScreener" },
+  { id: "geckoterminal", label: "🦎 GeckoTerminal" },
   { id: "rugcheck", label: "🛡️ RugCheck" },
 ];
 
@@ -223,6 +224,257 @@ const CONFIG_CATEGORIES = {
         step: 5,
         hint: "Min transactions in last hour (sustained activity)",
         impact: "medium",
+      },
+    ],
+  },
+  "DexScreener - Volume": {
+    source: "dexscreener",
+    enableKey: "volume_enabled",
+    fields: [
+      {
+        key: "min_volume_24h",
+        label: "Min Volume 24h",
+        type: "number",
+        unit: "USD",
+        min: 0,
+        max: 10000000,
+        step: 100,
+        hint: "Minimum 24h trading volume in USD",
+        impact: "medium",
+      },
+    ],
+  },
+  "DexScreener - Price Change": {
+    source: "dexscreener",
+    enableKey: "price_change_enabled",
+    fields: [
+      {
+        key: "min_price_change_h1",
+        label: "Min Price Change 1h",
+        type: "number",
+        unit: "%",
+        min: -100,
+        max: 10000,
+        step: 5,
+        hint: "Minimum 1h price change % (negative = dump filter)",
+        impact: "low",
+      },
+      {
+        key: "max_price_change_h1",
+        label: "Max Price Change 1h",
+        type: "number",
+        unit: "%",
+        min: 0,
+        max: 100000,
+        step: 50,
+        hint: "Maximum 1h price change % (filter extreme pumps)",
+        impact: "low",
+      },
+    ],
+  },
+  "GeckoTerminal - Liquidity": {
+    source: "geckoterminal",
+    enableKey: "liquidity_enabled",
+    fields: [
+      {
+        key: "min_liquidity_usd",
+        label: "Min Liquidity",
+        type: "number",
+        unit: "USD",
+        min: 0,
+        max: 10000000,
+        step: 10,
+        hint: "Minimum liquidity in USD",
+        impact: "critical",
+      },
+      {
+        key: "max_liquidity_usd",
+        label: "Max Liquidity",
+        type: "number",
+        unit: "USD",
+        min: 0,
+        max: 1000000000,
+        step: 10000,
+        hint: "Maximum liquidity in USD",
+        impact: "medium",
+      },
+    ],
+  },
+  "GeckoTerminal - Market Cap": {
+    source: "geckoterminal",
+    enableKey: "market_cap_enabled",
+    fields: [
+      {
+        key: "min_market_cap_usd",
+        label: "Min Market Cap",
+        type: "number",
+        unit: "USD",
+        min: 0,
+        max: 1000000000,
+        step: 1000,
+        hint: "Minimum market cap in USD",
+        impact: "medium",
+      },
+      {
+        key: "max_market_cap_usd",
+        label: "Max Market Cap",
+        type: "number",
+        unit: "USD",
+        min: 0,
+        max: 1000000000,
+        step: 1000,
+        hint: "Maximum market cap in USD",
+        impact: "medium",
+      },
+    ],
+  },
+  "GeckoTerminal - Volume": {
+    source: "geckoterminal",
+    enableKey: "volume_enabled",
+    fields: [
+      {
+        key: "min_volume_5m",
+        label: "Min Volume 5m",
+        type: "number",
+        unit: "USD",
+        min: 0,
+        max: 1000000,
+        step: 10,
+        hint: "Minimum 5 minute trading volume in USD",
+        impact: "medium",
+      },
+      {
+        key: "min_volume_1h",
+        label: "Min Volume 1h",
+        type: "number",
+        unit: "USD",
+        min: 0,
+        max: 10000000,
+        step: 10,
+        hint: "Minimum 1 hour trading volume in USD",
+        impact: "medium",
+      },
+      {
+        key: "min_volume_24h",
+        label: "Min Volume 24h",
+        type: "number",
+        unit: "USD",
+        min: 0,
+        max: 10000000,
+        step: 100,
+        hint: "Minimum 24 hour trading volume in USD",
+        impact: "medium",
+      },
+    ],
+  },
+  "GeckoTerminal - Price Change": {
+    source: "geckoterminal",
+    enableKey: "price_change_enabled",
+    fields: [
+      {
+        key: "min_price_change_m5",
+        label: "Min Price Change 5m",
+        type: "number",
+        unit: "%",
+        min: -100,
+        max: 10000,
+        step: 5,
+        hint: "Minimum 5 minute price change %",
+        impact: "low",
+      },
+      {
+        key: "max_price_change_m5",
+        label: "Max Price Change 5m",
+        type: "number",
+        unit: "%",
+        min: 0,
+        max: 100000,
+        step: 50,
+        hint: "Maximum 5 minute price change %",
+        impact: "low",
+      },
+      {
+        key: "min_price_change_h1",
+        label: "Min Price Change 1h",
+        type: "number",
+        unit: "%",
+        min: -100,
+        max: 10000,
+        step: 5,
+        hint: "Minimum 1 hour price change %",
+        impact: "low",
+      },
+      {
+        key: "max_price_change_h1",
+        label: "Max Price Change 1h",
+        type: "number",
+        unit: "%",
+        min: 0,
+        max: 100000,
+        step: 50,
+        hint: "Maximum 1 hour price change %",
+        impact: "low",
+      },
+      {
+        key: "min_price_change_h24",
+        label: "Min Price Change 24h",
+        type: "number",
+        unit: "%",
+        min: -100,
+        max: 10000,
+        step: 5,
+        hint: "Minimum 24 hour price change %",
+        impact: "low",
+      },
+      {
+        key: "max_price_change_h24",
+        label: "Max Price Change 24h",
+        type: "number",
+        unit: "%",
+        min: 0,
+        max: 100000,
+        step: 50,
+        hint: "Maximum 24 hour price change %",
+        impact: "low",
+      },
+    ],
+  },
+  "GeckoTerminal - Pool Metrics": {
+    source: "geckoterminal",
+    enableKey: "pool_metrics_enabled",
+    fields: [
+      {
+        key: "min_pool_count",
+        label: "Min Pool Count",
+        type: "number",
+        unit: "pools",
+        min: 0,
+        max: 1000,
+        step: 1,
+        hint: "Minimum number of pools tracked",
+        impact: "low",
+      },
+      {
+        key: "max_pool_count",
+        label: "Max Pool Count",
+        type: "number",
+        unit: "pools",
+        min: 0,
+        max: 1000,
+        step: 1,
+        hint: "Maximum number of pools tracked",
+        impact: "low",
+      },
+      {
+        key: "min_reserve_usd",
+        label: "Min Reserve USD",
+        type: "number",
+        unit: "USD",
+        min: 0,
+        max: 100000000,
+        step: 100,
+        hint: "Minimum reserve liquidity across pools in USD",
+        impact: "low",
       },
     ],
   },
@@ -837,7 +1089,12 @@ function renderSourceToggle(source) {
   if (!state.draft) return "";
 
   const enabled = getSourceEnabled(state.draft, source);
-  const sourceLabel = source === "dexscreener" ? "DexScreener Enabled" : "RugCheck Enabled";
+  const sourceLabelMap = {
+    dexscreener: "DexScreener Enabled",
+    geckoterminal: "GeckoTerminal Enabled",
+    rugcheck: "RugCheck Enabled",
+  };
+  const sourceLabel = sourceLabelMap[source] || "Source Enabled";
   const toggleId = `source-toggle-${source}`;
 
   return `
@@ -857,7 +1114,10 @@ function renderSourceToggle(source) {
 }
 
 function renderSearchBar() {
-  const showSourceToggle = state.activeTab === "dexscreener" || state.activeTab === "rugcheck";
+  const showSourceToggle =
+    state.activeTab === "dexscreener" ||
+    state.activeTab === "geckoterminal" ||
+    state.activeTab === "rugcheck";
   const sourceToggle = showSourceToggle ? renderSourceToggle(state.activeTab) : "";
 
   return `

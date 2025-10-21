@@ -122,6 +122,10 @@ pub struct Token {
     pub volume_h6: Option<f64>,
     pub volume_h24: Option<f64>,
 
+    // Pool metrics (source-specific)
+    pub pool_count: Option<u32>,
+    pub reserve_in_usd: Option<f64>,
+
     // ========================================================================
     // Transaction Activity (from chosen source)
     // ========================================================================
@@ -318,6 +322,7 @@ pub struct MarketDataBundle {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RugcheckData {
     pub token_type: Option<String>,
+    pub token_decimals: Option<u8>,
     pub score: Option<i32>,
     pub score_description: Option<String>,
     pub mint_authority: Option<String>,
