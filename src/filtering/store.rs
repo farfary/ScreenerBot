@@ -267,7 +267,6 @@ impl FilteringStore {
             TokenSortKey::RiskScore => Some("risk_score".to_string()),
             TokenSortKey::UpdatedAt => Some("updated_at".to_string()),
             TokenSortKey::FirstSeenAt => Some("first_seen_at".to_string()),
-            TokenSortKey::CreatedAt => Some("created_at".to_string()),
             TokenSortKey::MetadataUpdatedAt => Some("metadata_updated_at".to_string()),
             TokenSortKey::TokenBirthAt => Some("token_birth_at".to_string()),
             TokenSortKey::Mint => Some("mint".to_string()),
@@ -365,7 +364,6 @@ impl FilteringStore {
             TokenSortKey::RiskScore => Some("risk_score".to_string()),
             TokenSortKey::UpdatedAt => Some("updated_at".to_string()),
             TokenSortKey::FirstSeenAt => Some("first_seen_at".to_string()),
-            TokenSortKey::CreatedAt => Some("created_at".to_string()),
             TokenSortKey::MetadataUpdatedAt => Some("metadata_updated_at".to_string()),
             TokenSortKey::TokenBirthAt => Some("token_birth_at".to_string()),
             TokenSortKey::Mint => Some("mint".to_string()),
@@ -636,7 +634,6 @@ fn sort_tokens(items: &mut [Token], sort_key: TokenSortKey, direction: SortDirec
                 .cmp(&b.security_score.unwrap_or(i32::MAX)),
             TokenSortKey::UpdatedAt => a.updated_at.cmp(&b.updated_at),
             TokenSortKey::FirstSeenAt => a.first_seen_at.cmp(&b.first_seen_at),
-            TokenSortKey::CreatedAt => a.created_at.cmp(&b.created_at),
             TokenSortKey::MetadataUpdatedAt => {
                 let lhs = a.metadata_updated_at.unwrap_or(a.created_at);
                 let rhs = b.metadata_updated_at.unwrap_or(b.created_at);

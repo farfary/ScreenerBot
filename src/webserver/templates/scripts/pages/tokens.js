@@ -46,7 +46,6 @@ const COLUMN_TO_SORT_KEY = {
   risk_score: "risk_score",
   updated_at: "updated_at",
   first_seen_at: "first_seen_at",
-  created_at: "created_at",
   token_birth_at: "token_birth_at",
 };
 
@@ -756,21 +755,13 @@ function createLifecycle() {
           minWidth: 110,
           wrap: false,
           render: (_v, row) => {
-            const value = row.token_birth_at || row.first_seen_at || row.created_at;
+            const value = row.token_birth_at || row.first_seen_at;
             return timeAgoCell(value);
           },
         },
         {
           id: "first_seen_at",
           label: "First Seen",
-          sortable: true,
-          minWidth: 110,
-          wrap: false,
-          render: (v) => timeAgoCell(v),
-        },
-        {
-          id: "created_at",
-          label: "Created",
           sortable: true,
           minWidth: 110,
           wrap: false,

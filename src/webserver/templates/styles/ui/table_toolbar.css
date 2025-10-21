@@ -260,7 +260,9 @@
   border-radius: 10px;
   border: 1px solid rgba(148, 163, 184, 0.22);
   background: rgba(30, 41, 59, 0.45);
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease;
 }
 
 .table-toolbar-field--switch:not(.is-disabled):hover {

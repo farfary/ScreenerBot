@@ -191,7 +191,6 @@ impl TokenDatabase {
             Some("symbol") => "t.symbol",
             Some("updated_at") => "COALESCE(ut.last_market_update, t.created_at)",
             Some("first_seen_at") => "t.created_at",
-            Some("created_at") => "t.created_at",
             Some("metadata_updated_at") => "COALESCE(ut.last_decimals_update, t.updated_at)",
             Some("token_birth_at") => "COALESCE(ut.last_decimals_update, t.created_at)",
             Some("mint") => "t.mint",
@@ -1242,7 +1241,6 @@ impl TokenDatabase {
             Some("updated_at") =>
                 "COALESCE(ut.last_market_update, COALESCE(d.fetched_at, g.fetched_at, t.updated_at))",
             Some("first_seen_at") => "t.created_at",
-            Some("created_at") => "t.created_at",
             Some("metadata_updated_at") => "COALESCE(ut.last_decimals_update, t.updated_at)",
             Some("token_birth_at") => "COALESCE(d.pair_created_at, t.created_at)",
             Some("mint") => "t.mint",

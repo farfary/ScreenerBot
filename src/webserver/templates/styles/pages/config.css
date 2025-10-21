@@ -32,7 +32,9 @@
   background: var(--input-bg);
   color: var(--text-primary);
   font-size: 0.85rem;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .config-search input:focus {
@@ -61,7 +63,9 @@
   font-size: 0.85rem;
   cursor: pointer;
   text-align: left;
-  transition: background 0.2s ease, color 0.2s ease;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
 }
 
 .config-section-item:last-child {
@@ -151,7 +155,10 @@
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
 }
 
 .config-action-btn:hover {
@@ -268,7 +275,10 @@
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
 }
 
 .config-header-action:hover {
@@ -392,7 +402,9 @@
   border-radius: 12px;
   background: rgb(15 23 42 / 0.35);
   overflow: hidden;
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease;
 }
 
 .config-category.collapsed .config-category-body {
@@ -473,7 +485,9 @@
   border-radius: 10px;
   border: 1px solid transparent;
   background: rgb(15 23 42 / 0.35);
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease;
 }
 
 .config-field:hover {
@@ -624,7 +638,9 @@
   border-radius: 9px;
   border: 1px solid rgba(148, 163, 184, 0.25);
   background: rgb(15 23 42 / 0.5);
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease;
 }
 
 .config-object-field:hover {
@@ -689,7 +705,9 @@
   background: rgba(15, 23, 42, 0.6);
   color: var(--text-primary);
   font-size: 0.85rem;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .config-field-control .config-field-error-input {
@@ -730,7 +748,10 @@
   color: var(--text-secondary);
   font-size: 0.7rem;
   cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
 }
 
 .config-field-reset:hover {

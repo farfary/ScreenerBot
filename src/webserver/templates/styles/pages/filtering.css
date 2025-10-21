@@ -38,7 +38,6 @@
   color: var(--text-primary);
 }
 
-
 /* Tab Bar */
 .filtering-tab-bar {
   flex-shrink: 0;
@@ -439,7 +438,9 @@
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-primary);
