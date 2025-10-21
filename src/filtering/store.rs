@@ -21,6 +21,8 @@ static GLOBAL_STORE: Lazy<Arc<FilteringStore>> = Lazy::new(|| Arc::new(Filtering
 // Timing constants
 const FILTER_CACHE_TTL_SECS: u64 = 30;
 const STALE_MULTIPLIER: u64 = 3;
+const TOKENS_TAB_MAX_PAGE_SIZE: usize = 200;
+const TOKENS_TAB_RECENT_TOKEN_HOURS: i64 = 24;
 
 pub struct FilteringStore {
     snapshot: RwLock<Option<Arc<FilteringSnapshot>>>,
@@ -95,13 +97,8 @@ impl FilteringStore {
         &self,
         mut query: FilteringQuery,
     ) -> Result<FilteringQueryResult, String> {
-        let (max_page_size, secure_threshold, recent_hours) = crate::config::with_config(|cfg| {
-            (
-                cfg.webserver.tokens_tab.max_page_size,
-                cfg.webserver.tokens_tab.secure_token_score_threshold,
-                cfg.webserver.tokens_tab.recent_token_hours,
-            )
-        });
+        let max_page_size = TOKENS_TAB_MAX_PAGE_SIZE;
+        let recent_hours = TOKENS_TAB_RECENT_TOKEN_HOURS;
 
         query.clamp_page_size(max_page_size);
         if query.page == 0 {
@@ -125,12 +122,7 @@ impl FilteringStore {
             None
         };
 
-        let entries = collect_entries(
-            snapshot.as_ref(),
-            query.view,
-            secure_threshold,
-            recent_cutoff,
-        );
+        let entries = collect_entries(snapshot.as_ref(), query.view, recent_cutoff);
         // Collect raw tokens for filtering/sorting on Token fields
         let mut tokens: Vec<_> = entries
             .into_iter()
@@ -422,11 +414,8 @@ impl FilteringStore {
         })
     }
     pub async fn get_stats(&self) -> Result<FilteringStatsSnapshot, String> {
-        let secure_threshold =
-            crate::config::with_config(|cfg| cfg.webserver.tokens_tab.secure_token_score_threshold);
-
         let snapshot = self.ensure_snapshot().await?;
-        Ok(build_stats(snapshot.as_ref(), secure_threshold))
+        Ok(build_stats(snapshot.as_ref()))
     }
 
     pub async fn snapshot_age(&self) -> Option<Duration> {
@@ -470,7 +459,6 @@ pub async fn get_stats() -> Result<FilteringStatsSnapshot, String> {
 fn collect_entries<'a>(
     snapshot: &'a FilteringSnapshot,
     view: FilteringView,
-    secure_threshold: i32,
     recent_cutoff: Option<DateTime<Utc>>,
 ) -> Vec<&'a TokenEntry> {
     match view {
@@ -508,18 +496,6 @@ fn collect_entries<'a>(
             .tokens
             .values()
             .filter(|entry| entry.has_open_position)
-            .collect(),
-        FilteringView::Secure => snapshot
-            .tokens
-            .values()
-            .filter(|entry| {
-                entry
-                    .token
-                    .security_score
-                    .map(|score| score <= secure_threshold)
-                    .unwrap_or(false)
-                    && !entry.token.is_rugged
-            })
             .collect(),
         FilteringView::Recent => {
             let cutoff = recent_cutoff.unwrap_or_else(Utc::now);
@@ -688,11 +664,10 @@ fn cmp_f64(lhs: Option<f64>, rhs: Option<f64>) -> Ordering {
     left.partial_cmp(&right).unwrap_or(Ordering::Equal)
 }
 
-fn build_stats(snapshot: &FilteringSnapshot, secure_threshold: i32) -> FilteringStatsSnapshot {
+fn build_stats(snapshot: &FilteringSnapshot) -> FilteringStatsSnapshot {
     let mut with_pool_price = 0usize;
     let mut open_positions = 0usize;
     let mut blacklisted = 0usize;
-    let mut secure_tokens = 0usize;
 
     for entry in snapshot.tokens.values() {
         if entry.has_pool_price {
@@ -703,15 +678,6 @@ fn build_stats(snapshot: &FilteringSnapshot, secure_threshold: i32) -> Filtering
         }
         if entry.token.is_blacklisted {
             blacklisted += 1;
-        }
-        if entry
-            .token
-            .security_score
-            .map(|score| score <= secure_threshold)
-            .unwrap_or(false)
-            && !entry.token.is_rugged
-        {
-            secure_tokens += 1;
         }
     }
 
@@ -726,7 +692,6 @@ fn build_stats(snapshot: &FilteringSnapshot, secure_threshold: i32) -> Filtering
         with_pool_price,
         open_positions,
         blacklisted,
-        secure_tokens,
         with_ohlcv,
         passed_filtering: snapshot.passed_tokens.len(),
         updated_at: snapshot.updated_at,

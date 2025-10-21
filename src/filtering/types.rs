@@ -33,7 +33,6 @@ pub enum FilteringView {
     Rejected,
     Blacklisted,
     Positions,
-    Secure,
     Recent,
     NoMarketData,
 }
@@ -47,7 +46,6 @@ impl FilteringView {
             FilteringView::Rejected => "rejected",
             FilteringView::Blacklisted => "blacklisted",
             FilteringView::Positions => "positions",
-            FilteringView::Secure => "secure",
             FilteringView::Recent => "recent",
             FilteringView::NoMarketData => "no_market",
         }
@@ -60,7 +58,6 @@ impl FilteringView {
             "rejected" => FilteringView::Rejected,
             "blacklisted" => FilteringView::Blacklisted,
             "positions" => FilteringView::Positions,
-            "secure" => FilteringView::Secure,
             "recent" => FilteringView::Recent,
             "no_market" => FilteringView::NoMarketData,
             _ => FilteringView::Pool,
@@ -263,7 +260,6 @@ pub struct FilteringStatsSnapshot {
     pub with_pool_price: usize,
     pub open_positions: usize,
     pub blacklisted: usize,
-    pub secure_tokens: usize,
     pub with_ohlcv: usize,
     pub passed_filtering: usize,
     pub updated_at: DateTime<Utc>,

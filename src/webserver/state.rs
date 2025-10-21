@@ -2,24 +2,19 @@
 ///
 /// Contains references to core ScreenerBot systems and shared resources
 /// that need to be accessed by route handlers.
-use crate::config::WebserverConfig;
 use std::sync::Arc;
 
 /// Shared application state passed to all route handlers
 #[derive(Clone)]
 pub struct AppState {
-    /// Webserver configuration
-    pub config: Arc<WebserverConfig>,
-
     /// Server startup time
     pub startup_time: chrono::DateTime<chrono::Utc>,
 }
 
 impl AppState {
     /// Create new application state
-    pub fn new(config: WebserverConfig) -> Self {
+    pub fn new() -> Self {
         Self {
-            config: Arc::new(config),
             startup_time: chrono::Utc::now(),
         }
     }

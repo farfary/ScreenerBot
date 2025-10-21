@@ -13,7 +13,6 @@ const TOKEN_VIEWS = [
   { id: "rejected", label: "⛔ Rejected" },
   { id: "blacklisted", label: "🚫 Blacklisted" },
   { id: "positions", label: "📊 Positions" },
-  { id: "secure", label: "🛡️ Secure" },
   { id: "recent", label: "🆕 Recent" },
 ];
 

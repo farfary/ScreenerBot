@@ -1580,95 +1580,6 @@ config_struct! {
     }
 }
 
-// ============================================================================
-// WEBSERVER CONFIGURATION
-// ============================================================================
-
-config_struct! {
-    /// CORS configuration
-    pub struct CorsConfig {
-        allowed_origins: Vec<String> = vec!["http://localhost:3000".to_string()],
-        allowed_methods: Vec<String> = vec![
-            "GET".to_string(),
-            "POST".to_string(),
-            "PUT".to_string(),
-            "DELETE".to_string(),
-        ],
-    }
-}
-
-config_struct! {
-    /// Rate limiting configuration
-    pub struct RateLimitConfig {
-        enabled: bool = true,
-        requests_per_minute: u32 = 100,
-    }
-}
-
-config_struct! {
-    /// Authentication configuration
-    pub struct AuthConfig {
-        enabled: bool = false,
-        api_key: String = String::new(),
-    }
-}
-
-config_struct! {
-    /// WebSocket Hub snapshot limits
-    pub struct WsSnapshotLimitsConfig {
-        positions: usize = 100,
-        tokens: usize = 200,
-        events: usize = 50,
-        services: usize = 50,
-    }
-}
-
-config_struct! {
-    /// WebSocket configuration
-    pub struct WebSocketConfig {
-        enabled: bool = true,
-        max_connections: usize = 100,
-        #[metadata(field_metadata! {
-            label: "Heartbeat Interval",
-            hint: "Seconds between WebSocket heartbeat messages",
-            min: 5,
-            max: 300,
-            step: 5,
-            unit: "seconds",
-            impact: "critical",
-            category: "WebSocket",
-        })]
-        heartbeat_interval_secs: u64 = 30,
-
-        // Central hub configuration
-        central_hub_enabled: bool = false,
-        per_client_buffer: usize = 256,
-        #[metadata(field_metadata! {
-            label: "Hub Heartbeat",
-            hint: "Seconds between central hub heartbeat signals",
-            min: 5,
-            max: 300,
-            step: 5,
-            unit: "seconds",
-            impact: "critical",
-            category: "WebSocket",
-        })]
-        heartbeat_secs: u64 = 30,
-        #[metadata(field_metadata! {
-            label: "Client Idle Timeout",
-            hint: "Seconds before disconnecting idle WebSocket clients",
-            min: 10,
-            max: 600,
-            step: 10,
-            unit: "seconds",
-            impact: "critical",
-            category: "WebSocket",
-        })]
-        client_idle_timeout_secs: u64 = 90,
-        snapshot_limits: WsSnapshotLimitsConfig = WsSnapshotLimitsConfig::default(),
-    }
-}
-
 config_struct! {
     /// OHLCV data monitoring configuration
     pub struct OhlcvConfig {
@@ -1711,90 +1622,6 @@ config_struct! {
         pool_failover_enabled: bool = true,
         /// Maximum pool failures before switching
         max_pool_failures: u32 = 5,
-    }
-}
-
-config_struct! {
-    /// Tokens tab webserver configuration
-    pub struct TokensTabConfig {
-        /// Default page size for token lists
-        default_page_size: usize = 50,
-
-        /// Maximum page size (enforced limit)
-        max_page_size: usize = 200,
-
-        /// Auto-refresh interval (milliseconds)
-        #[metadata(field_metadata! {
-            label: "Auto Refresh Interval",
-            hint: "Milliseconds between token table refreshes",
-            min: 500,
-            max: 10000,
-            step: 100,
-            unit: "ms",
-            impact: "critical",
-            category: "Tokens Tab",
-        })]
-        auto_refresh_interval_ms: u64 = 2000,
-
-        /// Price staleness warning threshold (seconds)
-        #[metadata(field_metadata! {
-            label: "Price Staleness Threshold",
-            hint: "Seconds before highlighting stale price data",
-            min: 10,
-            max: 600,
-            step: 5,
-            unit: "seconds",
-            impact: "critical",
-            category: "Tokens Tab",
-        })]
-        price_staleness_threshold_seconds: u64 = 60,
-
-        /// Security score threshold for "secure" view
-        secure_token_score_threshold: i32 = 500,
-
-        /// Recent token lookback period (hours)
-        #[metadata(field_metadata! {
-            label: "Recent Token Window",
-            hint: "Hours considered for recent token filtering",
-            min: 1,
-            max: 72,
-            step: 1,
-            unit: "hours",
-            impact: "critical",
-            category: "Tokens Tab",
-        })]
-        recent_token_hours: i64 = 24,
-
-        /// Enable OHLCV charts
-        enable_ohlcv_charts: bool = true,
-
-        /// Enable token detail page
-        enable_detail_page: bool = true,
-    }
-}
-
-config_struct! {
-    /// Webserver configuration
-    pub struct WebserverConfig {
-        enabled: bool = true,
-        host: String = "127.0.0.1".to_string(),
-        port: u16 = 8080,
-        cors: CorsConfig = CorsConfig::default(),
-        rate_limit: RateLimitConfig = RateLimitConfig::default(),
-        auth: AuthConfig = AuthConfig::default(),
-        tokens_tab: TokensTabConfig = TokensTabConfig::default(),
-        transactions_page_default_limit: usize = 50,
-        #[metadata(field_metadata! {
-            label: "Transactions Poll Interval",
-            hint: "Milliseconds between transaction list refreshes",
-            min: 500,
-            max: 10000,
-            step: 100,
-            unit: "ms",
-            impact: "critical",
-            category: "Transactions",
-        })]
-        transactions_poll_interval_ms: u64 = 2000,
     }
 }
 
@@ -1892,9 +1719,6 @@ config_struct! {
         /// Events system configuration
         events: EventsConfig = EventsConfig::default(),
 
-        /// Webserver configuration
-        webserver: WebserverConfig = WebserverConfig::default(),
-
         /// Services configuration
         services: ServicesConfig = ServicesConfig::default(),
 
@@ -1912,27 +1736,3 @@ config_struct! {
 // ============================================================================
 // IMPLEMENTATIONS
 // ============================================================================
-
-impl WebserverConfig {
-    /// Validate webserver configuration
-    pub fn validate(&self) -> Result<(), String> {
-        if self.host.is_empty() {
-            return Err("Host cannot be empty".to_string());
-        }
-
-        if self.port == 0 {
-            return Err("Port cannot be 0".to_string());
-        }
-
-        if self.rate_limit.enabled && self.rate_limit.requests_per_minute == 0 {
-            return Err("Rate limit requests_per_minute must be > 0 when enabled".to_string());
-        }
-
-        Ok(())
-    }
-
-    /// Get the full bind address (host:port)
-    pub fn bind_address(&self) -> String {
-        format!("{}:{}", self.host, self.port)
-    }
-}

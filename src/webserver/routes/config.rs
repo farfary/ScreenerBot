@@ -37,7 +37,6 @@ pub struct FullConfigResponse {
     pub tokens: config::TokensConfig,
     pub sol_price: config::SolPriceConfig,
     pub events: config::EventsConfig,
-    pub webserver: config::WebserverConfig,
     pub services: config::ServicesConfig,
     pub monitoring: config::MonitoringConfig,
     pub ohlcv: config::OhlcvConfig,
@@ -67,7 +66,6 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/config/sol_price", get(get_sol_price_config))
         .route("/config/summary", get(get_summary_config))
         .route("/config/events", get(get_events_config))
-        .route("/config/webserver", get(get_webserver_config))
         .route("/config/services", get(get_services_config))
         .route("/config/monitoring", get(get_monitoring_config))
         .route("/config/ohlcv", get(get_ohlcv_config))
@@ -103,10 +101,6 @@ pub fn routes() -> Router<Arc<AppState>> {
             patch(patch_any_config::<config::EventsConfig>),
         )
         .route(
-            "/config/webserver",
-            patch(patch_any_config::<config::WebserverConfig>),
-        )
-        .route(
             "/config/services",
             patch(patch_any_config::<config::ServicesConfig>),
         )
@@ -139,7 +133,6 @@ async fn get_full_config() -> Response {
         tokens: cfg.tokens.clone(),
         sol_price: cfg.sol_price.clone(),
         events: cfg.events.clone(),
-        webserver: cfg.webserver.clone(),
         services: cfg.services.clone(),
         monitoring: cfg.monitoring.clone(),
         ohlcv: cfg.ohlcv.clone(),
@@ -239,16 +232,6 @@ async fn get_events_config() -> Response {
     success_response(data)
 }
 
-/// GET /api/config/webserver - Get webserver configuration
-async fn get_webserver_config() -> Response {
-    let data = config::with_config(|cfg| ConfigResponse {
-        data: cfg.webserver.clone(),
-        timestamp: chrono::Utc::now().to_rfc3339(),
-    });
-
-    success_response(data)
-}
-
 /// GET /api/config/services - Get services configuration
 async fn get_services_config() -> Response {
     let data = config::with_config(|cfg| ConfigResponse {
@@ -317,7 +300,6 @@ where
             "RpcConfig" => serde_json::to_value(&cfg.rpc).ok(),
             "SolPriceConfig" => serde_json::to_value(&cfg.sol_price).ok(),
             "EventsConfig" => serde_json::to_value(&cfg.events).ok(),
-            "WebserverConfig" => serde_json::to_value(&cfg.webserver).ok(),
             "ServicesConfig" => serde_json::to_value(&cfg.services).ok(),
             "MonitoringConfig" => serde_json::to_value(&cfg.monitoring).ok(),
             "OhlcvConfig" => serde_json::to_value(&cfg.ohlcv).ok(),
@@ -421,16 +403,6 @@ where
                     true,
                 )?;
             }
-            "WebserverConfig" => {
-                let new_config: config::WebserverConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid WebserverConfig: {}", e))?;
-                config::update_config_section(
-                    |cfg| {
-                        cfg.webserver = new_config;
-                    },
-                    true,
-                )?;
-            }
             "ServicesConfig" => {
                 let new_config: config::ServicesConfig = serde_json::from_value(section_json)
                     .map_err(|e| format!("Invalid ServicesConfig: {}", e))?;
@@ -525,10 +497,9 @@ async fn reload_config_from_disk() -> Response {
 
 /// POST /api/config/reset - Reset configuration to defaults
 async fn reset_config_to_defaults() -> Response {
-    let (wallet_key, auth_api_key, coingecko_api_key) = config::with_config(|cfg| {
+    let (wallet_key, coingecko_api_key) = config::with_config(|cfg| {
         (
             cfg.main_wallet_private.clone(),
-            cfg.webserver.auth.api_key.clone(),
             cfg.tokens.discovery.coingecko.api_key.clone(),
         )
     });
@@ -539,9 +510,6 @@ async fn reset_config_to_defaults() -> Response {
             let mut fresh = config::Config::default();
             if !wallet_key.is_empty() {
                 fresh.main_wallet_private = wallet_key.clone();
-            }
-            if !auth_api_key.is_empty() {
-                fresh.webserver.auth.api_key = auth_api_key.clone();
             }
             fresh.tokens.discovery.coingecko.api_key = coingecko_api_key.clone();
             *cfg = fresh;

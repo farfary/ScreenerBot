@@ -11,7 +11,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use crate::{
-    config::with_config,
     filtering::{
         self, FilteringQuery, FilteringQueryResult, FilteringView, SortDirection, TokenSortKey,
     },
@@ -26,6 +25,8 @@ use crate::{
         utils::{error_response, success_response},
     },
 };
+
+const MAX_PAGE_SIZE: usize = 200;
 
 // =============================================================================
 // RESPONSE TYPES
@@ -228,7 +229,6 @@ pub struct TokenStatsResponse {
     pub with_pool_price: usize,
     pub open_positions: usize,
     pub blacklisted: usize,
-    pub secure_tokens: usize,
     pub with_ohlcv: usize,
     pub timestamp: String,
 }
@@ -494,7 +494,7 @@ pub fn routes() -> Router<Arc<AppState>> {
 pub(crate) async fn get_tokens_list(
     Query(query): Query<TokenListQuery>,
 ) -> Json<TokenListResponse> {
-    let max_page_size = with_config(|cfg| cfg.webserver.tokens_tab.max_page_size);
+    let max_page_size = MAX_PAGE_SIZE;
     let request_view = query.view.clone();
     let filtering_query = query.into_filtering_query(max_page_size);
 
@@ -1178,12 +1178,11 @@ async fn get_tokens_stats() -> Result<Json<TokenStatsResponse>, StatusCode> {
                     LogTag::Webserver,
                     "TOKENS_STATS",
                     &format!(
-                        "total={} pool={} open={} blacklist={} secure={}",
+                        "total={} pool={} open={} blacklist={}",
                         snapshot.total_tokens,
                         snapshot.with_pool_price,
                         snapshot.open_positions,
-                        snapshot.blacklisted,
-                        snapshot.secure_tokens
+                        snapshot.blacklisted
                     ),
                 );
             }
@@ -1193,7 +1192,6 @@ async fn get_tokens_stats() -> Result<Json<TokenStatsResponse>, StatusCode> {
                 with_pool_price: snapshot.with_pool_price,
                 open_positions: snapshot.open_positions,
                 blacklisted: snapshot.blacklisted,
-                secure_tokens: snapshot.secure_tokens,
                 with_ohlcv: snapshot.with_ohlcv,
                 timestamp: snapshot.updated_at.to_rfc3339(),
             }))
@@ -1221,7 +1219,7 @@ async fn filter_tokens(
         );
     }
 
-    let max_page_size = with_config(|cfg| cfg.webserver.tokens_tab.max_page_size);
+    let max_page_size = MAX_PAGE_SIZE;
     let filtering_query = filter.into_filtering_query(max_page_size);
 
     match filtering::query_tokens(filtering_query).await {

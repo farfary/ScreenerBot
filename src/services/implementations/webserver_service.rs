@@ -22,7 +22,7 @@ impl Service for WebserverService {
     }
 
     fn is_enabled(&self) -> bool {
-        crate::config::with_config(|cfg| cfg.webserver.enabled)
+        true
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
@@ -34,14 +34,8 @@ impl Service for WebserverService {
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
-        // Get webserver config from main config system
-        let webserver_config = crate::config::with_config(|cfg| cfg.webserver.clone());
-
-        let host = webserver_config.host.clone();
-        let port = webserver_config.port;
-
         let handle = tokio::spawn(monitor.instrument(async move {
-            if let Err(e) = crate::webserver::start_server(webserver_config).await {
+            if let Err(e) = crate::webserver::start_server().await {
                 log(
                     LogTag::System,
                     "ERROR",
@@ -56,7 +50,11 @@ impl Service for WebserverService {
         log_service_notice(
             self.name(),
             "ready",
-            Some(&format!("endpoint=http://{}:{}", host, port)),
+            Some(&format!(
+                "endpoint=http://{}:{}",
+                crate::webserver::DEFAULT_HOST,
+                crate::webserver::DEFAULT_PORT
+            )),
             true,
         );
 

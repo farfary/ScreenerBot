@@ -646,7 +646,6 @@ function renderStatusView() {
     with_pool_price,
     open_positions,
     blacklisted,
-    secure_tokens,
     with_ohlcv,
     passed_filtering,
     updated_at,
@@ -676,11 +675,6 @@ function renderStatusView() {
         <span class="metric-label">Open Positions</span>
         <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(open_positions))}</span>
         <span class="metric-meta">Active trades</span>
-      </div>
-      <div class="status-card">
-        <span class="metric-label">Secure Tokens</span>
-        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(secure_tokens))}</span>
-        <span class="metric-meta">Pass security checks</span>
       </div>
       <div class="status-card warning">
         <span class="metric-label">Blacklisted</span>

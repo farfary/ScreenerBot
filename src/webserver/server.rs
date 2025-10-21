@@ -10,10 +10,12 @@ use tower_http::compression::CompressionLayer;
 
 use crate::{
     arguments::is_debug_webserver_enabled,
-    config::WebserverConfig,
     logger::{log, LogTag},
     webserver::{routes, state::AppState},
 };
+
+pub(crate) const DEFAULT_HOST: &str = "127.0.0.1";
+pub(crate) const DEFAULT_PORT: u16 = 8080;
 
 /// Global shutdown notifier
 static SHUTDOWN_NOTIFY: once_cell::sync::Lazy<Arc<Notify>> =
@@ -22,22 +24,17 @@ static SHUTDOWN_NOTIFY: once_cell::sync::Lazy<Arc<Notify>> =
 /// Start the webserver
 ///
 /// This function blocks until the server is shut down
-pub async fn start_server(config: WebserverConfig) -> Result<(), String> {
-    // Validate configuration
-    config
-        .validate()
-        .map_err(|e| format!("Invalid webserver config: {}", e))?;
-
+pub async fn start_server() -> Result<(), String> {
     if is_debug_webserver_enabled() {
         log(
             LogTag::Webserver,
             "INFO",
-            &format!("🌐 Starting webserver on {}", config.bind_address()),
+            &format!("🌐 Starting webserver on {}:{}", DEFAULT_HOST, DEFAULT_PORT),
         );
     }
 
     // Create application state
-    let state = Arc::new(AppState::new(config.clone()));
+    let state = Arc::new(AppState::new());
 
     // Set global app state
     crate::webserver::state::set_global_app_state(Arc::clone(&state));
@@ -49,8 +46,7 @@ pub async fn start_server(config: WebserverConfig) -> Result<(), String> {
     let app = build_app(state.clone());
 
     // Parse bind address
-    let addr: SocketAddr = config
-        .bind_address()
+    let addr: SocketAddr = format!("{}:{}", DEFAULT_HOST, DEFAULT_PORT)
         .parse()
         .map_err(|e| format!("Invalid bind address: {}", e))?;
 
@@ -124,14 +120,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_config_validation() {
-        let config = WebserverConfig::default();
-        assert!(config.validate().is_ok());
-    }
-
-    #[test]
-    fn test_bind_address() {
-        let config = WebserverConfig::default();
-        assert_eq!(config.bind_address(), "127.0.0.1:8080");
+    fn test_default_address_parses() {
+        assert!(format!("{}:{}", DEFAULT_HOST, DEFAULT_PORT)
+            .parse::<SocketAddr>()
+            .is_ok());
     }
 }
