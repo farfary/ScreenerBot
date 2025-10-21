@@ -1586,7 +1586,7 @@ async fn attempt_single_sell(account: &TokenAccountInfo) -> Result<String, Strin
     };
 
     // Get quote and execute swap
-    let quote_slippage = with_config(|cfg| cfg.swaps.slippage_quote_default_pct);
+    let quote_slippage = with_config(|cfg| cfg.swaps.slippage.quote_default_pct);
     let best_quote = get_best_quote(
         &token.mint,
         SOL_MINT,

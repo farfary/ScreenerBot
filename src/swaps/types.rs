@@ -288,9 +288,9 @@ pub struct SwapRequest {
 
 impl Default for JupiterQuoteRequest {
     fn default() -> Self {
-        let slippage = crate::config::with_config(|cfg| cfg.swaps.slippage_quote_default_pct);
+        let slippage = crate::config::with_config(|cfg| cfg.swaps.slippage.quote_default_pct);
         let jupiter_swap_mode =
-            crate::config::with_config(|cfg| cfg.swaps.jupiter_default_swap_mode.clone());
+            crate::config::with_config(|cfg| cfg.swaps.jupiter.default_swap_mode.clone());
         Self {
             input_mint: crate::constants::SOL_MINT.to_string(),
             output_mint: String::new(),

@@ -568,6 +568,10 @@
   font-size: 0.7rem;
   color: var(--text-secondary);
   word-break: break-word;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .config-field-control {
@@ -575,6 +579,76 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 6px;
+}
+
+.config-object-wrapper {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.config-object-header {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 6px 10px;
+  background: rgb(59 130 246 / 0.08);
+  border-radius: 6px;
+  border: 1px solid rgb(59 130 246 / 0.25);
+}
+
+.config-object-group {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgb(15 23 42 / 0.25);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.config-object-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 210px);
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgb(15 23 42 / 0.4);
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.config-object-field:hover {
+  background: rgb(59 130 246 / 0.08);
+  border-color: rgba(148, 163, 184, 0.35);
+}
+
+.config-object-field--changed {
+  border-color: rgb(59 130 246 / 0.5);
+  background: rgb(59 130 246 / 0.12);
+  box-shadow: inset 2px 0 0 0 rgb(59 130 246 / 0.55);
+}
+
+.config-object-field--match {
+  border-color: rgb(34 197 94 / 0.5);
+  box-shadow: 0 0 0 1px rgb(34 197 94 / 0.25);
+}
+
+.config-object-field-label {
+  gap: 6px;
+}
+
+.config-object-field-control {
+  align-items: stretch;
+  width: 100%;
+}
+
+.config-object-field-control textarea,
+.config-object-field-control input[type="text"],
+.config-object-field-control input[type="number"] {
+  width: 100%;
 }
 
 .config-field-control input[type="text"],
@@ -689,6 +763,14 @@
 
   .config-field-control input[type="number"] {
     text-align: left;
+  }
+
+  .config-object-field {
+    grid-template-columns: 1fr;
+  }
+
+  .config-object-field-control {
+    align-items: stretch;
   }
 }
 

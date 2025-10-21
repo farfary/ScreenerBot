@@ -97,8 +97,8 @@ pub async fn get_best_quote(
         Pin<Box<dyn Future<Output = Result<UnifiedQuote, ScreenerBotError>> + Send>>,
     > = Vec::new();
 
-    let gmgn_enabled = with_config(|cfg| cfg.swaps.gmgn_enabled);
-    let jupiter_enabled = with_config(|cfg| cfg.swaps.jupiter_enabled);
+    let gmgn_enabled = with_config(|cfg| cfg.swaps.gmgn.enabled);
+    let jupiter_enabled = with_config(|cfg| cfg.swaps.jupiter.enabled);
 
     // Prepare GMGN quote future
     if gmgn_enabled {
@@ -454,8 +454,8 @@ pub async fn execute_best_swap(
                 } // If can't get wallet, return original error
             };
 
-            let gmgn_enabled_fallback = with_config(|cfg| cfg.swaps.gmgn_enabled);
-            let jupiter_enabled_fallback = with_config(|cfg| cfg.swaps.jupiter_enabled);
+            let gmgn_enabled_fallback = with_config(|cfg| cfg.swaps.gmgn.enabled);
+            let jupiter_enabled_fallback = with_config(|cfg| cfg.swaps.jupiter.enabled);
 
             let fallback_quote = match quote.router {
                 RouterType::Jupiter => {

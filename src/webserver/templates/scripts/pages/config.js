@@ -127,6 +127,161 @@ function describeInvalidArrayEntries(invalidEntries, itemType) {
   return `Line${invalidEntries.length === 1 ? "" : "s"} ${lines} must be a valid ${typeLabel}.`;
 }
 
+function renderObjectWithChildren({
+  fieldId,
+  value,
+  originalValue,
+  metadata = {},
+  disabled,
+  path = [],
+  searchTerm = "",
+  onChange,
+  parentLabel = "",
+}) {
+  if (!metadata.children) {
+    return null;
+  }
+
+  const entries = Object.entries(metadata.children);
+  if (!entries.length) {
+    return null;
+  }
+
+  const wrapper = create("div", { className: "config-object-wrapper" });
+
+  if (parentLabel) {
+    const header = create("div", { className: "config-object-header" });
+    header.textContent = parentLabel;
+    wrapper.appendChild(header);
+  }
+
+  const container = create("div", {
+    className: "config-object-group",
+  });
+
+  const safeValue = value && typeof value === "object" ? value : {};
+  const safeOriginal = originalValue && typeof originalValue === "object" ? originalValue : {};
+  const normalizedSearch = typeof searchTerm === "string" ? searchTerm.trim().toLowerCase() : "";
+  const hasSearch = normalizedSearch.length > 0;
+
+  entries.sort(([keyA, metaA], [keyB, metaB]) => {
+    const labelA = metaA.label || keyA;
+    const labelB = metaB.label || keyB;
+    return labelA.localeCompare(labelB);
+  });
+
+  for (const [childKey, childMeta] of entries) {
+    const childId = `${fieldId}-${childKey}`;
+    const childPath = [...path, childKey];
+    const childPathLabel = childPath.join(".");
+    const childValue = safeValue[childKey];
+    const childOriginal = safeOriginal[childKey];
+    const childDefault = deepClone(childMeta.default);
+
+    const row = create("div", { className: "config-object-field" });
+
+    if (!deepEqual(childValue, childOriginal)) {
+      row.classList.add("config-object-field--changed");
+    }
+
+    if (hasSearch && metadataMatchesSearch(childKey, childMeta, normalizedSearch)) {
+      row.classList.add("config-object-field--match");
+    }
+
+    const labelHtml = [];
+    labelHtml.push(
+      `<div class="config-field-name">${Utils.escapeHtml(childMeta.label || childKey)}</div>`
+    );
+    labelHtml.push(`<div class="config-field-key">${Utils.escapeHtml(childPathLabel)}</div>`);
+    if (childMeta.hint) {
+      labelHtml.push(`<div class="config-field-hint">${Utils.escapeHtml(childMeta.hint)}</div>`);
+    }
+
+    const metaItems = [];
+    if (childMeta.unit) {
+      metaItems.push(
+        `<span class="config-field-unit">Unit: ${Utils.escapeHtml(childMeta.unit)}</span>`
+      );
+    }
+    if (childMeta.impact) {
+      metaItems.push(
+        `<span class="config-field-impact ${Utils.escapeHtml(childMeta.impact.toLowerCase())}">` +
+          `${Utils.escapeHtml(childMeta.impact)}</span>`
+      );
+    }
+    if (childMeta.docs) {
+      metaItems.push(`<span>Docs: ${Utils.escapeHtml(childMeta.docs)}</span>`);
+    }
+    if (metaItems.length > 0) {
+      labelHtml.push(`<div class="config-field-meta">${metaItems.join(" ")}</div>`);
+    }
+
+    if (childDefault !== null && childDefault !== undefined) {
+      const defaultText =
+        typeof childDefault === "object"
+          ? Utils.escapeHtml(JSON.stringify(childDefault))
+          : Utils.escapeHtml(String(childDefault));
+      labelHtml.push(`<div class="config-field-default">Default: ${defaultText}</div>`);
+    }
+
+    const labelEl = create("div", {
+      className: "config-field-label config-object-field-label",
+    });
+    labelEl.innerHTML = labelHtml.join("\n");
+
+    const controlEl = create("div", {
+      className: "config-field-control config-object-field-control",
+    });
+
+    const childControl = renderFieldControl(childMeta.type, {
+      fieldId: childId,
+      value: childValue,
+      originalValue: childOriginal,
+      metadata: childMeta,
+      disabled,
+      path: childPath,
+      searchTerm: normalizedSearch,
+      onChange: (nextValue) => {
+        const normalizedChild = normalizeFieldValue(childMeta.type, nextValue);
+        const nextObject = deepClone(safeValue);
+        nextObject[childKey] = normalizedChild;
+        onChange(nextObject);
+      },
+    });
+
+    controlEl.appendChild(childControl);
+
+    if (childDefault !== undefined) {
+      const atDefault = deepEqual(childValue, childDefault);
+      const resetBtn = create("button", {
+        type: "button",
+        className: "config-field-reset",
+        disabled: atDefault,
+      });
+      resetBtn.textContent = "Reset to default";
+      on(resetBtn, "click", () => {
+        const nextObject = deepClone(safeValue);
+        if (childDefault === null) {
+          nextObject[childKey] = null;
+        } else if (typeof childDefault === "object") {
+          nextObject[childKey] = deepClone(childDefault);
+        } else {
+          nextObject[childKey] = childDefault;
+        }
+        onChange(nextObject);
+      });
+      controlEl.appendChild(resetBtn);
+    }
+
+    row.appendChild(labelEl);
+    row.appendChild(controlEl);
+    container.appendChild(row);
+  }
+
+  wrapper.appendChild(container);
+  return wrapper;
+}
+
 const FIELD_RENDERERS = {
   boolean({ fieldId, value, disabled, onChange }) {
     const input = create("input", {
@@ -149,6 +304,7 @@ const FIELD_RENDERERS = {
       step: metadata.step ?? "any",
       min: metadata.min ?? undefined,
       max: metadata.max ?? undefined,
+      autocomplete: "off",
     });
     on(input, "input", (event) => {
       const raw = event.target.value;
@@ -179,6 +335,8 @@ const FIELD_RENDERERS = {
         value: value ?? "",
         placeholder: metadata.placeholder ?? "",
         disabled,
+        autocomplete: "off",
+        spellcheck: false,
       });
       on(textarea, "input", (event) => {
         onChange(event.target.value);
@@ -192,6 +350,8 @@ const FIELD_RENDERERS = {
       value: value ?? "",
       placeholder: metadata.placeholder ?? "",
       disabled,
+      autocomplete: "off",
+      spellcheck: false,
     });
     on(input, "input", (event) => {
       onChange(event.target.value);
@@ -204,6 +364,8 @@ const FIELD_RENDERERS = {
       value: Array.isArray(value) ? value.join("\n") : "",
       placeholder: metadata.placeholder ?? "Enter one value per line",
       disabled,
+      autocomplete: "off",
+      spellcheck: false,
     });
     const itemType = metadata.item_type || "string";
 
@@ -249,11 +411,28 @@ const FIELD_RENDERERS = {
     });
     return textarea;
   },
-  object({ fieldId, value, metadata = {}, disabled, onChange }) {
+  object({ fieldId, value, originalValue, metadata = {}, disabled, path = [], searchTerm = "", onChange }) {
+    const nested = renderObjectWithChildren({
+      fieldId,
+      value,
+      originalValue,
+      metadata,
+      disabled,
+      path,
+      searchTerm,
+      onChange,
+      parentLabel: metadata.label || (path.length > 0 ? path[path.length - 1] : ""),
+    });
+    if (nested) {
+      return nested;
+    }
+
     const textarea = create("textarea", {
       id: fieldId,
       value: JSON.stringify(value ?? {}, null, 2),
       disabled,
+      autocomplete: "off",
+      spellcheck: false,
     });
     on(textarea, "blur", (event) => {
       const raw = event.target.value.trim();
@@ -384,16 +563,59 @@ function summarizeSectionFields(fields = {}) {
   return summary;
 }
 
+function normalizeFieldMetadata(fieldMeta = {}) {
+  const normalized = {
+    ...fieldMeta,
+    type: typeof fieldMeta.type === "string" ? fieldMeta.type.toLowerCase() : "string",
+    default: deepClone(fieldMeta.default ?? null),
+  };
+
+  if (typeof fieldMeta.item_type === "string") {
+    normalized.item_type = fieldMeta.item_type.toLowerCase();
+  }
+
+  if (fieldMeta.children && typeof fieldMeta.children === "object") {
+    const normalizedChildren = {};
+    for (const [childKey, childMeta] of Object.entries(fieldMeta.children)) {
+      normalizedChildren[childKey] = normalizeFieldMetadata(childMeta);
+    }
+    normalized.children = normalizedChildren;
+  }
+
+  return normalized;
+}
+
+function metadataMatchesSearch(fieldKey, fieldMeta, term) {
+  if (!term || term.length === 0) {
+    return false;
+  }
+  const matches = (value) =>
+    typeof value === "string" && value.toLowerCase().includes(term);
+
+  if (matches(fieldKey)) {
+    return true;
+  }
+  if (matches(fieldMeta.label) || matches(fieldMeta.hint) || matches(fieldMeta.docs) || matches(fieldMeta.unit)) {
+    return true;
+  }
+
+  if (fieldMeta.children) {
+    for (const [childKey, childMeta] of Object.entries(fieldMeta.children)) {
+      if (matches(childKey) || metadataMatchesSearch(childKey, childMeta, term)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 function transformMetadata(raw) {
   const sections = {};
   for (const [sectionId, fields] of Object.entries(raw || {})) {
     const normalizedFields = {};
     for (const [fieldKey, fieldMeta] of Object.entries(fields || {})) {
-      normalizedFields[fieldKey] = {
-        ...fieldMeta,
-        type: fieldMeta.type || "string",
-        default: deepClone(fieldMeta.default ?? null),
-      };
+      normalizedFields[fieldKey] = normalizeFieldMetadata(fieldMeta);
     }
 
     sections[sectionId] = {
@@ -814,16 +1036,14 @@ function renderCategories(sectionId) {
     let categoryHasMatch = false;
     let pendingCount = 0;
     for (const [fieldKey, fieldMeta] of fieldsList) {
-      const fieldId = `config-${sectionId}-${fieldKey}`;
-      const fieldValue = sectionConfig[fieldKey];
-      const originalValue = originalConfig[fieldKey];
+  const fieldId = `config-${sectionId}-${fieldKey}`;
+  const fieldValue = sectionConfig[fieldKey];
+        const fieldOriginalValue = originalConfig[fieldKey];
   const defaultValue = deepClone(fieldMeta.default);
+  const fieldPath = [sectionId, fieldKey];
+  const fieldPathLabel = fieldPath.join(".");
 
-      const matchesSearch =
-        searchTerm.length > 0 &&
-        (fieldKey.toLowerCase().includes(searchTerm) ||
-          (fieldMeta.label && fieldMeta.label.toLowerCase().includes(searchTerm)) ||
-          (fieldMeta.hint && fieldMeta.hint.toLowerCase().includes(searchTerm)));
+      const matchesSearch = metadataMatchesSearch(fieldKey, fieldMeta, searchTerm);
 
       const fieldEl = create("div", { className: "config-field" });
       if (matchesSearch) {
@@ -831,7 +1051,7 @@ function renderCategories(sectionId) {
         categoryHasMatch = true;
       }
 
-      if (!deepEqual(fieldValue, originalValue)) {
+        if (!deepEqual(fieldValue, fieldOriginalValue)) {
         fieldEl.classList.add("config-field--changed");
         pendingCount += 1;
       }
@@ -840,8 +1060,8 @@ function renderCategories(sectionId) {
       const controlEl = create("div", { className: "config-field-control" });
 
       const labelHtml = [];
-      labelHtml.push(`<div class="config-field-name">${Utils.escapeHtml(fieldMeta.label || fieldKey)}</div>`);
-      labelHtml.push(`<div class="config-field-key">${sectionId}.${fieldKey}</div>`);
+  labelHtml.push(`<div class="config-field-name">${Utils.escapeHtml(fieldMeta.label || fieldKey)}</div>`);
+  labelHtml.push(`<div class="config-field-key">${Utils.escapeHtml(fieldPathLabel)}</div>`);
       if (fieldMeta.hint) {
         labelHtml.push(`<div class="config-field-hint">${Utils.escapeHtml(fieldMeta.hint)}</div>`);
       }
@@ -863,7 +1083,8 @@ function renderCategories(sectionId) {
         labelHtml.push(`<div class="config-field-meta">${metaItems.join(" ")}</div>`);
       }
 
-      if (defaultValue !== null && defaultValue !== undefined) {
+      // Only show default value for non-object types to avoid layout issues
+      if (defaultValue !== null && defaultValue !== undefined && fieldMeta.type !== "object") {
         const defaultText =
           typeof defaultValue === "object"
             ? Utils.escapeHtml(JSON.stringify(defaultValue))
@@ -873,7 +1094,7 @@ function renderCategories(sectionId) {
 
       labelEl.innerHTML = labelHtml.join("\n");
 
-      const isAtDefault = deepEqual(fieldValue, defaultValue);
+  const isAtDefault = deepEqual(fieldValue, defaultValue);
 
       const resetBtn = create("button", {
         type: "button",
@@ -891,8 +1112,11 @@ function renderCategories(sectionId) {
       const control = renderFieldControl(fieldMeta.type, {
         fieldId,
         value: fieldValue,
+          originalValue: fieldOriginalValue,
         metadata: fieldMeta,
         disabled: state.saving,
+        path: fieldPath,
+        searchTerm,
         onChange: (nextValue) => {
           if (!state.draft[sectionId]) {
             state.draft[sectionId] = {};

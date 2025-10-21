@@ -160,7 +160,7 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
     .await;
 
     let trade_size_sol = with_config(|cfg| cfg.trader.trade_size_sol);
-    let slippage_quote_default = with_config(|cfg| cfg.swaps.slippage_quote_default_pct);
+    let slippage_quote_default = with_config(|cfg| cfg.swaps.slippage.quote_default_pct);
 
     let quote = get_best_quote_for_opening(
         SOL_MINT,
@@ -438,7 +438,7 @@ pub async fn close_position_direct(
     // treat it as desired SOL out, causing them to require more tokens than reside in the spending ATA,
     // which leads to SPL Token "insufficient funds" during Transfer. ExactIn avoids that.
     let slippage_exit_retry_steps =
-        with_config(|cfg| cfg.swaps.slippage_exit_retry_steps_pct.clone());
+        with_config(|cfg| cfg.swaps.slippage.exit_retry_steps_pct.clone());
     let quote = get_best_quote(
         token_mint,
         SOL_MINT,

@@ -48,6 +48,8 @@ pub struct FieldMetadata {
     pub docs: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub children: Option<SectionMetadata>,
 }
 
 impl FieldMetadata {
@@ -76,6 +78,7 @@ impl FieldMetadata {
             placeholder: extras.placeholder,
             docs,
             default,
+            children: None,
         }
     }
 }
@@ -239,6 +242,52 @@ where
         FieldType::Object
     }
 }
+
+/// Trait describing whether a field exposes nested metadata for structured rendering.
+pub trait NestedMetadata {
+    fn nested_metadata() -> Option<SectionMetadata> {
+        None
+    }
+}
+
+macro_rules! impl_nested_metadata_for_primitives {
+    ($($ty:ty),+ $(,)?) => {
+        $(impl NestedMetadata for $ty {})+
+    };
+}
+
+impl_nested_metadata_for_primitives!(
+    bool,
+    String,
+    &str,
+    f64,
+    f32,
+    usize,
+    isize,
+    u64,
+    i64,
+    u32,
+    i32,
+    u16,
+    i16,
+    u8,
+    i8
+);
+
+impl<T> NestedMetadata for Option<T>
+where
+    T: NestedMetadata,
+{
+    fn nested_metadata() -> Option<SectionMetadata> {
+        T::nested_metadata()
+    }
+}
+
+impl<T> NestedMetadata for Vec<T> where T: NestedMetadata {}
+
+impl<T> NestedMetadata for std::collections::VecDeque<T> where T: NestedMetadata {}
+
+impl<T> NestedMetadata for std::collections::BTreeMap<String, T> where T: NestedMetadata {}
 
 /// Aggregate metadata for all config sections that expose UI controls.
 pub fn collect_config_metadata() -> ConfigMetadata {

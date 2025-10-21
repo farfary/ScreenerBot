@@ -68,6 +68,12 @@ macro_rules! config_struct {
             }
         }
 
+        impl $crate::config::metadata::NestedMetadata for $name {
+            fn nested_metadata() -> Option<$crate::config::metadata::SectionMetadata> {
+                Some(Self::field_metadata())
+            }
+        }
+
         impl $name {
             /// Generate metadata for all fields defined in this configuration struct.
             pub fn field_metadata() -> $crate::config::metadata::SectionMetadata {
@@ -85,11 +91,12 @@ macro_rules! config_struct {
                     };
 
                     let default_value: $field_type = $default_value;
-                    let metadata = $crate::config::metadata::FieldMetadata::from_parts::<$field_type>(
+                    let mut metadata = $crate::config::metadata::FieldMetadata::from_parts::<$field_type>(
                         &default_value,
                         extras,
                         docs,
                     );
+                    metadata.children = <$field_type as $crate::config::metadata::NestedMetadata>::nested_metadata();
                     fields.insert(stringify!($field_name), metadata);
                 )*
 

@@ -1,0 +1,211 @@
+use crate::config_struct;
+use crate::field_metadata;
+
+// ============================================================================
+// SWAPS CONFIGURATION
+// ============================================================================
+
+config_struct! {
+    /// GMGN router configuration
+    pub struct GmgnConfig {
+        #[metadata(field_metadata! {
+            label: "Enabled",
+            hint: "Enable GMGN router (provides MEV protection)",
+            impact: "high",
+            category: "Router",
+        })]
+        enabled: bool = true,
+        #[metadata(field_metadata! {
+            label: "Quote API",
+            hint: "GMGN API endpoint for quotes",
+            impact: "low",
+            category: "API",
+        })]
+        quote_api: String = "https://gmgn.ai/defi/router/v1/sol/tx/get_swap_route".to_string(),
+        #[metadata(field_metadata! {
+            label: "Partner",
+            hint: "Partner identifier for GMGN",
+            impact: "low",
+            category: "API",
+        })]
+        partner: String = "screenerbot".to_string(),
+        #[metadata(field_metadata! {
+            label: "Anti-MEV",
+            hint: "Enable GMGN MEV protection",
+            impact: "medium",
+            category: "Protection",
+        })]
+        anti_mev: bool = false,
+        #[metadata(field_metadata! {
+            label: "Fee",
+            hint: "Usually 0, check GMGN docs",
+            min: 0,
+            max: 0.1,
+            step: 0.001,
+            unit: "SOL",
+            impact: "low",
+            category: "Fees",
+        })]
+        fee_sol: f64 = 0.0,
+        #[metadata(field_metadata! {
+            label: "Default Swap Mode",
+            hint: "ExactIn or ExactOut",
+            impact: "low",
+            category: "Routing",
+        })]
+        default_swap_mode: String = "ExactIn".to_string(),
+    }
+}
+
+config_struct! {
+    /// Jupiter router configuration
+    pub struct JupiterConfig {
+        #[metadata(field_metadata! {
+            label: "Enabled",
+            hint: "Enable Jupiter router (finds best routes across DEXes)",
+            impact: "high",
+            category: "Router",
+        })]
+        enabled: bool = true,
+        #[metadata(field_metadata! {
+            label: "Quote API",
+            hint: "Jupiter API endpoint for quotes",
+            impact: "low",
+            category: "API",
+        })]
+        quote_api: String = "https://lite-api.jup.ag/swap/v1/quote".to_string(),
+        #[metadata(field_metadata! {
+            label: "Swap API",
+            hint: "Jupiter API endpoint for swaps",
+            impact: "low",
+            category: "API",
+        })]
+        swap_api: String = "https://lite-api.jup.ag/swap/v1/swap".to_string(),
+        #[metadata(field_metadata! {
+            label: "Dynamic CU Limit",
+            hint: "Let Jupiter calculate compute units",
+            impact: "medium",
+            category: "Performance",
+        })]
+        dynamic_compute_unit_limit: bool = false,
+        #[metadata(field_metadata! {
+            label: "Default Priority Fee",
+            hint: "1000 lamports = 0.000001 SOL, higher = faster",
+            min: 0,
+            max: 1000000,
+            step: 100,
+            unit: "lamports",
+            impact: "medium",
+            category: "Fees",
+        })]
+        default_priority_fee: u64 = 1000,
+        #[metadata(field_metadata! {
+            label: "Default Swap Mode",
+            hint: "ExactIn or ExactOut",
+            impact: "low",
+            category: "Routing",
+        })]
+        default_swap_mode: String = "ExactIn".to_string(),
+    }
+}
+
+config_struct! {
+    /// Raydium direct swap configuration
+    pub struct RaydiumConfig {
+        #[metadata(field_metadata! {
+            label: "Enabled",
+            hint: "Enable direct Raydium swaps (bypass aggregators)",
+            impact: "medium",
+            category: "Router",
+        })]
+        enabled: bool = false,
+    }
+}
+
+config_struct! {
+    /// Slippage configuration
+    pub struct SlippageConfig {
+        #[metadata(field_metadata! {
+            label: "Default Slippage",
+            hint: "1% tight, 3-5% for volatile",
+            min: 0.1,
+            max: 25,
+            step: 0.1,
+            unit: "%",
+            impact: "high",
+            category: "Quote",
+        })]
+        quote_default_pct: f64 = 1.0,
+        #[metadata(field_metadata! {
+            label: "Profit Exit Slippage",
+            hint: "Higher ensures exits succeed",
+            min: 0,
+            max: 50,
+            step: 1,
+            unit: "%",
+            impact: "high",
+            category: "Exit",
+        })]
+        exit_profit_shortfall_pct: f64 = 3.0,
+        #[metadata(field_metadata! {
+            label: "Loss Exit Slippage",
+            hint: "Even higher to exit bad positions",
+            min: 0,
+            max: 50,
+            step: 1,
+            unit: "%",
+            impact: "high",
+            category: "Exit",
+        })]
+        exit_loss_shortfall_pct: f64 = 5.0,
+        #[metadata(field_metadata! {
+            label: "Exit Retry Steps",
+            hint: "Comma-separated slippage for retries",
+            unit: "%",
+            impact: "medium",
+            category: "Exit",
+        })]
+        exit_retry_steps_pct: Vec<f64> = vec![3.0, 10.0, 25.0],
+    }
+}
+
+config_struct! {
+    /// Swap router configuration
+    pub struct SwapsConfig {
+        /// GMGN router configuration
+        #[metadata(field_metadata! {
+            label: "GMGN",
+            hint: "GMGN router with MEV protection",
+            impact: "high",
+            category: "Routers",
+        })]
+        gmgn: GmgnConfig = GmgnConfig::default(),
+
+        /// Jupiter router configuration
+        #[metadata(field_metadata! {
+            label: "Jupiter",
+            hint: "Jupiter aggregator router",
+            impact: "high",
+            category: "Routers",
+        })]
+        jupiter: JupiterConfig = JupiterConfig::default(),
+
+        /// Raydium direct swap configuration
+        #[metadata(field_metadata! {
+            label: "Raydium",
+            hint: "Direct Raydium swaps",
+            impact: "medium",
+            category: "Routers",
+        })]
+        raydium: RaydiumConfig = RaydiumConfig::default(),
+
+        /// Slippage configuration
+        #[metadata(field_metadata! {
+            label: "Slippage",
+            hint: "Slippage tolerance settings",
+            impact: "critical",
+            category: "Risk",
+        })]
+        slippage: SlippageConfig = SlippageConfig::default(),
+    }
+}

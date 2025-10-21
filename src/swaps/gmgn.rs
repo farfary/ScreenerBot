@@ -112,10 +112,10 @@ pub async fn get_gmgn_quote(
     swap_mode: &str,
 ) -> Result<SwapData, ScreenerBotError> {
     // Load config values
-    let gmgn_fee_sol = with_config(|cfg| cfg.swaps.gmgn_fee_sol);
-    let gmgn_anti_mev = with_config(|cfg| cfg.swaps.gmgn_anti_mev);
-    let gmgn_quote_api = with_config(|cfg| cfg.swaps.gmgn_quote_api.clone());
-    let gmgn_partner = with_config(|cfg| cfg.swaps.gmgn_partner.clone());
+    let gmgn_fee_sol = with_config(|cfg| cfg.swaps.gmgn.fee_sol);
+    let gmgn_anti_mev = with_config(|cfg| cfg.swaps.gmgn.anti_mev);
+    let gmgn_quote_api = with_config(|cfg| cfg.swaps.gmgn.quote_api.clone());
+    let gmgn_partner = with_config(|cfg| cfg.swaps.gmgn.partner.clone());
     let quote_timeout_secs = QUOTE_TIMEOUT_SECS;
     let retry_attempts = RETRY_ATTEMPTS;
 

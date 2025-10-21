@@ -139,7 +139,7 @@ pub async fn get_jupiter_quote(
         ("swapMode".to_string(), swap_mode.to_string()),
     ];
 
-    let jupiter_quote_api = with_config(|cfg| cfg.swaps.jupiter_quote_api.clone());
+    let jupiter_quote_api = with_config(|cfg| cfg.swaps.jupiter.quote_api.clone());
     let url = format!(
         "{}?{}",
         jupiter_quote_api,
@@ -397,7 +397,7 @@ pub async fn get_jupiter_swap_transaction(
     }
 
     let client = reqwest::Client::new();
-    let jupiter_swap_api = with_config(|cfg| cfg.swaps.jupiter_swap_api.clone());
+    let jupiter_swap_api = with_config(|cfg| cfg.swaps.jupiter.swap_api.clone());
     let api_timeout_secs = API_TIMEOUT_SECS;
 
     if is_debug_swaps_enabled() {
@@ -525,8 +525,8 @@ pub async fn execute_jupiter_swap(
     let start_time = std::time::Instant::now();
 
     let jupiter_dynamic_compute_unit_limit =
-        with_config(|cfg| cfg.swaps.jupiter_dynamic_compute_unit_limit);
-    let jupiter_default_priority_fee = with_config(|cfg| cfg.swaps.jupiter_default_priority_fee);
+        with_config(|cfg| cfg.swaps.jupiter.dynamic_compute_unit_limit);
+    let jupiter_default_priority_fee = with_config(|cfg| cfg.swaps.jupiter.default_priority_fee);
 
     // Get swap transaction from Jupiter
     let jupiter_tx = get_jupiter_swap_transaction(
