@@ -5,6 +5,7 @@
   gap: 16px;
   height: 100%;
   min-height: 0;
+  padding: 8px 8px;
 }
 
 .config-sidebar {

@@ -1012,7 +1012,7 @@ function renderCategories(sectionId) {
   for (const [category, fieldsList] of categories) {
     fieldsList.sort(([keyA], [keyB]) => keyA.localeCompare(keyB));
 
-    const categoryEl = create("div", { className: "config-category" });
+    const categoryEl = create("div", { className: "config-category collapsed" });
     const header = create("button", {
       type: "button",
       className: "config-category-header",
