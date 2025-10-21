@@ -79,8 +79,9 @@ function timeAgoCell(seconds) {
 }
 
 function tokenCell(row) {
-  const logo = row.logo_url
-    ? `<img class="token-logo" alt="" src="${Utils.escapeHtml(row.logo_url)}" />`
+  const src = row.logo_url || row.image_url;
+  const logo = src
+    ? `<img class="token-logo" alt="" src="${Utils.escapeHtml(src)}" />`
     : '<span class="token-logo">N/A</span>';
   const sym = Utils.escapeHtml(row.symbol || "—");
   const name = row.name ? `<div class="token-name">${Utils.escapeHtml(row.name)}</div>` : "";

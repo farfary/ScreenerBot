@@ -280,6 +280,10 @@ pub struct DexScreenerData {
     pub dex_id: Option<String>,
     pub url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub header_image_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub pair_created_at: Option<DateTime<Utc>>,
     pub fetched_at: DateTime<Utc>,
 }
@@ -304,6 +308,8 @@ pub struct GeckoTerminalData {
     pub pool_count: Option<u32>,
     pub top_pool_address: Option<String>,
     pub reserve_in_usd: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_url: Option<String>,
     pub fetched_at: DateTime<Utc>,
 }
 

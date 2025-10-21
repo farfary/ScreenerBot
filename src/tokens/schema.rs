@@ -1,5 +1,5 @@
 /// Database schema for tokens system
-/// No migrations - clean slate implementation
+/// Clean slate implementation (no migrations/ALTER fallbacks)
 use rusqlite::Connection;
 use std::time::Duration;
 
@@ -49,6 +49,8 @@ pub const CREATE_TABLES: &[&str] = &[
         dex_id TEXT,
         url TEXT,
         pair_created_at INTEGER,
+        image_url TEXT,
+        header_image_url TEXT,
         fetched_at INTEGER NOT NULL,
         FOREIGN KEY (mint) REFERENCES tokens(mint) ON DELETE RESTRICT
     )
@@ -74,6 +76,7 @@ pub const CREATE_TABLES: &[&str] = &[
         pool_count INTEGER,
         top_pool_address TEXT,
         reserve_in_usd REAL,
+        image_url TEXT,
         fetched_at INTEGER NOT NULL,
         FOREIGN KEY (mint) REFERENCES tokens(mint) ON DELETE RESTRICT
     )
@@ -154,23 +157,7 @@ pub const CREATE_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_tracking_market_update ON update_tracking(last_market_update ASC)",
 ];
 
-/// ALTER TABLE statements to backfill new columns when upgrading existing databases.
-pub const SECURITY_RUGCHECK_ALTER_STATEMENTS: &[&str] = &[
-    "ALTER TABLE security_rugcheck ADD COLUMN token_decimals INTEGER",
-    "ALTER TABLE security_rugcheck ADD COLUMN total_holders INTEGER",
-    "ALTER TABLE security_rugcheck ADD COLUMN total_lp_providers INTEGER",
-    "ALTER TABLE security_rugcheck ADD COLUMN graph_insiders_detected INTEGER",
-    "ALTER TABLE security_rugcheck ADD COLUMN total_market_liquidity REAL",
-    "ALTER TABLE security_rugcheck ADD COLUMN total_stable_liquidity REAL",
-    "ALTER TABLE security_rugcheck ADD COLUMN creator_balance_pct REAL",
-    "ALTER TABLE security_rugcheck ADD COLUMN transfer_fee_pct REAL",
-    "ALTER TABLE security_rugcheck ADD COLUMN transfer_fee_max_amount INTEGER",
-    "ALTER TABLE security_rugcheck ADD COLUMN transfer_fee_authority TEXT",
-    "ALTER TABLE security_rugcheck ADD COLUMN rugged INTEGER",
-];
-
-pub const MARKET_DEXSCREENER_ALTER_STATEMENTS: &[&str] =
-    &["ALTER TABLE market_dexscreener ADD COLUMN pair_created_at INTEGER"];
+// No ALTER statements: database is recreated when schema changes.
 
 /// Performance PRAGMAs
 // Kept for reference; we now set PRAGMAs via rusqlite APIs to avoid "Execute returned results" errors
@@ -200,13 +187,6 @@ pub fn initialize_schema(conn: &Connection) -> Result<(), String> {
     for statement in CREATE_TABLES {
         conn.execute(statement, [])
             .map_err(|e| format!("Failed to create table: {}", e))?;
-    }
-
-    for statement in SECURITY_RUGCHECK_ALTER_STATEMENTS {
-        let _ = conn.execute(statement, []);
-    }
-    for statement in MARKET_DEXSCREENER_ALTER_STATEMENTS {
-        let _ = conn.execute(statement, []);
     }
 
     // Create indexes

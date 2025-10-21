@@ -2,7 +2,7 @@
 ///
 /// Flow: API -> Parse -> Database -> Store cache
 /// Updates: Every 60 seconds for active tokens
-use crate::apis::geckoterminal::GeckoTerminalPool;
+use crate::apis::geckoterminal::{GeckoTerminalPool, GeckoTerminalTokenInfoResponse};
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::store::{self, CacheMetrics};
 use crate::tokens::types::{GeckoTerminalData, TokenError, TokenResult};
@@ -53,6 +53,7 @@ fn convert_pool_to_data(pool: &GeckoTerminalPool, is_sol_pair: bool) -> GeckoTer
             Some(pool.pool_address.clone())
         },
         reserve_in_usd: pool.reserve_usd,
+        image_url: None,
         fetched_at: Utc::now(),
     }
 }
@@ -161,7 +162,25 @@ pub async fn fetch_geckoterminal_data(
     if let Some(pool) = best_pool {
         const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
         let is_sol_pair = pool.quote_token_id.ends_with(SOL_MINT);
-        let data = convert_pool_to_data(pool, is_sol_pair);
+        let mut data = convert_pool_to_data(pool, is_sol_pair);
+
+        // Try to enrich with token image via token info endpoint (best-effort)
+        // Token IDs in GeckoTerminal include network prefix like "solana_<mint>"
+        // We'll call token info for this mint on Solana network.
+        if data.image_url.is_none() {
+            if let Ok(info_resp) = api_manager
+                .geckoterminal
+                .fetch_token_info("solana", mint)
+                .await
+            {
+                let url = info_resp.data.attributes.image_url;
+                if let Some(url) = url {
+                    if !url.trim().is_empty() {
+                        data.image_url = Some(url);
+                    }
+                }
+            }
+        }
 
         // Store in database
         db.upsert_geckoterminal_data(mint, &data)?;

@@ -74,6 +74,8 @@ fn convert_pool_to_data(pool: &DexScreenerPool, is_sol_pair: bool) -> DexScreene
             Some(pool.dex_id.clone())
         },
         url: pool.url.clone(),
+        image_url: pool.info_image_url.clone(),
+        header_image_url: pool.info_header.clone(),
         pair_created_at: pool
             .pair_created_at
             .and_then(|ts| DateTime::from_timestamp(ts, 0)),

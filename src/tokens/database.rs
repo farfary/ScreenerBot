@@ -45,6 +45,108 @@ impl TokenDatabase {
         })
     }
 
+    /// Store Rugcheck security data (clean schema)
+    pub fn upsert_rugcheck_data(&self, mint: &str, data: &RugcheckData) -> TokenResult<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let risks_json = serde_json::to_string(&data.risks)
+            .map_err(|e| TokenError::Database(format!("Failed to serialize risks: {}", e)))?;
+        let holders_json = serde_json::to_string(&data.top_holders)
+            .map_err(|e| TokenError::Database(format!("Failed to serialize holders: {}", e)))?;
+        let markets_json = data
+            .markets
+            .as_ref()
+            .map(|m| serde_json::to_string(m))
+            .transpose()
+            .map_err(|e| TokenError::Database(format!("Failed to serialize markets: {}", e)))?;
+
+        let rugged_flag = if data.rugged { 1 } else { 0 };
+
+        conn.execute(
+            "INSERT INTO security_rugcheck (
+                mint,
+                token_type,
+                token_decimals,
+                score,
+                score_description,
+                mint_authority,
+                freeze_authority,
+                top_10_holders_pct,
+                total_supply,
+                total_holders,
+                total_lp_providers,
+                graph_insiders_detected,
+                total_market_liquidity,
+                total_stable_liquidity,
+                creator_balance_pct,
+                transfer_fee_pct,
+                transfer_fee_max_amount,
+                transfer_fee_authority,
+                rugged,
+                risks,
+                top_holders,
+                markets,
+                fetched_at
+             ) VALUES (
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11,
+                ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23
+             )
+             ON CONFLICT(mint) DO UPDATE SET
+                token_type = excluded.token_type,
+                token_decimals = excluded.token_decimals,
+                score = excluded.score,
+                score_description = excluded.score_description,
+                mint_authority = excluded.mint_authority,
+                freeze_authority = excluded.freeze_authority,
+                top_10_holders_pct = excluded.top_10_holders_pct,
+                total_supply = excluded.total_supply,
+                total_holders = excluded.total_holders,
+                total_lp_providers = excluded.total_lp_providers,
+                graph_insiders_detected = excluded.graph_insiders_detected,
+                total_market_liquidity = excluded.total_market_liquidity,
+                total_stable_liquidity = excluded.total_stable_liquidity,
+                creator_balance_pct = excluded.creator_balance_pct,
+                transfer_fee_pct = excluded.transfer_fee_pct,
+                transfer_fee_max_amount = excluded.transfer_fee_max_amount,
+                transfer_fee_authority = excluded.transfer_fee_authority,
+                rugged = excluded.rugged,
+                risks = excluded.risks,
+                top_holders = excluded.top_holders,
+                markets = excluded.markets,
+                fetched_at = excluded.fetched_at",
+            params![
+                mint,
+                &data.token_type,
+                data.token_decimals,
+                data.score,
+                &data.score_description,
+                &data.mint_authority,
+                &data.freeze_authority,
+                data.top_10_holders_pct,
+                &data.total_supply,
+                data.total_holders,
+                data.total_lp_providers,
+                data.graph_insiders_detected,
+                data.total_market_liquidity,
+                data.total_stable_liquidity,
+                data.creator_balance_pct,
+                data.transfer_fee_pct,
+                data.transfer_fee_max_amount,
+                &data.transfer_fee_authority,
+                rugged_flag,
+                risks_json,
+                holders_json,
+                markets_json,
+                data.fetched_at.timestamp(),
+            ],
+        )
+        .map_err(|e| TokenError::Database(format!("Failed to upsert Rugcheck data: {}", e)))?;
+
+        Ok(())
+    }
     /// Get connection for external schema operations
     pub fn connection(&self) -> Arc<Mutex<Connection>> {
         self.conn.clone()
@@ -347,9 +449,9 @@ impl TokenDatabase {
                 volume_5m, volume_1h, volume_6h, volume_24h,
                 txns_5m_buys, txns_5m_sells, txns_1h_buys, txns_1h_sells,
                 txns_6h_buys, txns_6h_sells, txns_24h_buys, txns_24h_sells,
-                pair_address, chain_id, dex_id, url, pair_created_at, fetched_at
+                pair_address, chain_id, dex_id, url, pair_created_at, image_url, header_image_url, fetched_at
              ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
-                       ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29)
+                       ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31)
              ON CONFLICT(mint) DO UPDATE SET
                 price_usd = ?2, price_sol = ?3, price_native = ?4,
                 price_change_5m = ?5, price_change_1h = ?6, price_change_6h = ?7, price_change_24h = ?8,
@@ -357,7 +459,7 @@ impl TokenDatabase {
                 volume_5m = ?12, volume_1h = ?13, volume_6h = ?14, volume_24h = ?15,
                 txns_5m_buys = ?16, txns_5m_sells = ?17, txns_1h_buys = ?18, txns_1h_sells = ?19,
                 txns_6h_buys = ?20, txns_6h_sells = ?21, txns_24h_buys = ?22, txns_24h_sells = ?23,
-                pair_address = ?24, chain_id = ?25, dex_id = ?26, url = ?27, pair_created_at = ?28, fetched_at = ?29",
+                pair_address = ?24, chain_id = ?25, dex_id = ?26, url = ?27, pair_created_at = ?28, image_url = ?29, header_image_url = ?30, fetched_at = ?31",
             params![
                 mint, data.price_usd, data.price_sol, &data.price_native,
                 data.price_change_5m, data.price_change_1h, data.price_change_6h, data.price_change_24h,
@@ -368,9 +470,9 @@ impl TokenDatabase {
                 data.txns_6h.map(|t| t.0 as i64), data.txns_6h.map(|t| t.1 as i64),
                 data.txns_24h.map(|t| t.0 as i64), data.txns_24h.map(|t| t.1 as i64),
                 &data.pair_address, &data.chain_id, &data.dex_id, &data.url,
-                data
-                    .pair_created_at
-                    .map(|dt| dt.timestamp()),
+                data.pair_created_at.map(|dt| dt.timestamp()),
+                &data.image_url,
+                &data.header_image_url,
                 data.fetched_at.timestamp(),
             ],
         ).map_err(|e| TokenError::Database(format!("Failed to upsert DexScreener data: {}", e)))?;
@@ -393,7 +495,7 @@ impl TokenDatabase {
                     volume_5m, volume_1h, volume_6h, volume_24h,
                     txns_5m_buys, txns_5m_sells, txns_1h_buys, txns_1h_sells,
                     txns_6h_buys, txns_6h_sells, txns_24h_buys, txns_24h_sells,
-                    pair_address, chain_id, dex_id, url, pair_created_at, fetched_at
+                    pair_address, chain_id, dex_id, url, pair_created_at, image_url, header_image_url, fetched_at
              FROM market_dexscreener WHERE mint = ?1",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
@@ -407,9 +509,11 @@ impl TokenDatabase {
             let txns_6h_sells: Option<i64> = row.get(19)?;
             let txns_24h_buys: Option<i64> = row.get(20)?;
             let txns_24h_sells: Option<i64> = row.get(21)?;
-            // fetched_at is the 27th selected column (0-based index 26)
+            // fetched_at is now the 30th selected column (0-based index 29)
             let pair_created_ts: Option<i64> = row.get(26)?;
-            let fetched_ts: i64 = row.get(27)?;
+            let image_url: Option<String> = row.get(27)?;
+            let header_image_url: Option<String> = row.get(28)?;
+            let fetched_ts: i64 = row.get(29)?;
 
             Ok(DexScreenerData {
                 // Some historical rows may have NULLs; treat missing numeric/text values as defaults
@@ -438,6 +542,8 @@ impl TokenDatabase {
                 dex_id: row.get(24)?,
                 url: row.get(25)?,
                 pair_created_at: pair_created_ts.and_then(|ts| DateTime::from_timestamp(ts, 0)),
+                image_url,
+                header_image_url,
                 fetched_at: DateTime::from_timestamp(fetched_ts, 0).unwrap_or_else(|| Utc::now()),
             })
         });
@@ -464,29 +570,33 @@ impl TokenDatabase {
             .lock()
             .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
 
-        conn.execute(
+    // Clean schema insert (image_url column included)
+    let insert_result = conn.execute(
             "INSERT INTO market_geckoterminal (
                 mint, price_usd, price_sol, price_native,
                 price_change_5m, price_change_1h, price_change_6h, price_change_24h,
                 market_cap, fdv, liquidity_usd,
                 volume_5m, volume_1h, volume_6h, volume_24h,
-                pool_count, top_pool_address, reserve_in_usd, fetched_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
+                pool_count, top_pool_address, reserve_in_usd, image_url, fetched_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
              ON CONFLICT(mint) DO UPDATE SET
                 price_usd = ?2, price_sol = ?3, price_native = ?4,
                 price_change_5m = ?5, price_change_1h = ?6, price_change_6h = ?7, price_change_24h = ?8,
                 market_cap = ?9, fdv = ?10, liquidity_usd = ?11,
                 volume_5m = ?12, volume_1h = ?13, volume_6h = ?14, volume_24h = ?15,
-                pool_count = ?16, top_pool_address = ?17, reserve_in_usd = ?18, fetched_at = ?19",
+                pool_count = ?16, top_pool_address = ?17, reserve_in_usd = ?18, image_url = ?19, fetched_at = ?20",
             params![
                 mint, data.price_usd, data.price_sol, &data.price_native,
                 data.price_change_5m, data.price_change_1h, data.price_change_6h, data.price_change_24h,
                 data.market_cap, data.fdv, data.liquidity_usd,
                 data.volume_5m, data.volume_1h, data.volume_6h, data.volume_24h,
                 data.pool_count.map(|c| c as i64), &data.top_pool_address, data.reserve_in_usd,
-                data.fetched_at.timestamp(),
+                &data.image_url, data.fetched_at.timestamp(),
             ],
-        ).map_err(|e| TokenError::Database(format!("Failed to upsert GeckoTerminal data: {}", e)))?;
+        );
+
+        insert_result
+            .map_err(|e| TokenError::Database(format!("Failed to upsert GeckoTerminal data: {}", e)))?;
 
         Ok(())
     }
@@ -504,14 +614,14 @@ impl TokenDatabase {
                     price_change_5m, price_change_1h, price_change_6h, price_change_24h,
                     market_cap, fdv, liquidity_usd,
                     volume_5m, volume_1h, volume_6h, volume_24h,
-                    pool_count, top_pool_address, reserve_in_usd, fetched_at
+                    pool_count, top_pool_address, reserve_in_usd, image_url, fetched_at
              FROM market_geckoterminal WHERE mint = ?1",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
 
         let result = stmt.query_row(params![mint], |row| {
-            // fetched_at is the last selected column for geckoterminal (0-based index 17)
-            let fetched_ts: i64 = row.get(17)?;
+            // fetched_at is the last selected column for geckoterminal (0-based index 18)
+            let fetched_ts: i64 = row.get(18)?;
 
             Ok(GeckoTerminalData {
                 // Some historical rows may have NULLs; treat missing numeric/text values as defaults
@@ -534,6 +644,7 @@ impl TokenDatabase {
                 pool_count: row.get::<_, Option<i64>>(14)?.map(|c| c as u32),
                 top_pool_address: row.get(15)?,
                 reserve_in_usd: row.get(16)?,
+                image_url: row.get(17)?,
                 fetched_at: DateTime::from_timestamp(fetched_ts, 0).unwrap_or_else(|| Utc::now()),
             })
         });
@@ -543,113 +654,6 @@ impl TokenDatabase {
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(TokenError::Database(format!("Query failed: {}", e))),
         }
-    }
-
-    // ========================================================================
-    // RUGCHECK SECURITY DATA OPERATIONS
-    // ========================================================================
-
-    /// Store Rugcheck security data
-    pub fn upsert_rugcheck_data(&self, mint: &str, data: &RugcheckData) -> TokenResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
-
-        let risks_json = serde_json::to_string(&data.risks)
-            .map_err(|e| TokenError::Database(format!("Failed to serialize risks: {}", e)))?;
-        let holders_json = serde_json::to_string(&data.top_holders)
-            .map_err(|e| TokenError::Database(format!("Failed to serialize holders: {}", e)))?;
-        let markets_json = data
-            .markets
-            .as_ref()
-            .map(|m| serde_json::to_string(m))
-            .transpose()
-            .map_err(|e| TokenError::Database(format!("Failed to serialize markets: {}", e)))?;
-
-        let rugged_flag = if data.rugged { 1 } else { 0 };
-
-        conn.execute(
-            "INSERT INTO security_rugcheck (
-                mint,
-                token_type,
-                token_decimals,
-                score,
-                score_description,
-                mint_authority,
-                freeze_authority,
-                top_10_holders_pct,
-                total_supply,
-                total_holders,
-                total_lp_providers,
-                graph_insiders_detected,
-                total_market_liquidity,
-                total_stable_liquidity,
-                creator_balance_pct,
-                transfer_fee_pct,
-                transfer_fee_max_amount,
-                transfer_fee_authority,
-                rugged,
-                risks,
-                top_holders,
-                markets,
-                fetched_at
-             ) VALUES (
-                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11,
-                ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23
-             )
-             ON CONFLICT(mint) DO UPDATE SET
-                token_type = excluded.token_type,
-                token_decimals = excluded.token_decimals,
-                score = excluded.score,
-                score_description = excluded.score_description,
-                mint_authority = excluded.mint_authority,
-                freeze_authority = excluded.freeze_authority,
-                top_10_holders_pct = excluded.top_10_holders_pct,
-                total_supply = excluded.total_supply,
-                total_holders = excluded.total_holders,
-                total_lp_providers = excluded.total_lp_providers,
-                graph_insiders_detected = excluded.graph_insiders_detected,
-                total_market_liquidity = excluded.total_market_liquidity,
-                total_stable_liquidity = excluded.total_stable_liquidity,
-                creator_balance_pct = excluded.creator_balance_pct,
-                transfer_fee_pct = excluded.transfer_fee_pct,
-                transfer_fee_max_amount = excluded.transfer_fee_max_amount,
-                transfer_fee_authority = excluded.transfer_fee_authority,
-                rugged = excluded.rugged,
-                risks = excluded.risks,
-                top_holders = excluded.top_holders,
-                markets = excluded.markets,
-                fetched_at = excluded.fetched_at",
-            params![
-                mint,
-                &data.token_type,
-                data.token_decimals,
-                data.score,
-                &data.score_description,
-                &data.mint_authority,
-                &data.freeze_authority,
-                data.top_10_holders_pct,
-                &data.total_supply,
-                data.total_holders,
-                data.total_lp_providers,
-                data.graph_insiders_detected,
-                data.total_market_liquidity,
-                data.total_stable_liquidity,
-                data.creator_balance_pct,
-                data.transfer_fee_pct,
-                data.transfer_fee_max_amount,
-                &data.transfer_fee_authority,
-                rugged_flag,
-                risks_json,
-                holders_json,
-                markets_json,
-                data.fetched_at.timestamp(),
-            ],
-        )
-        .map_err(|e| TokenError::Database(format!("Failed to upsert Rugcheck data: {}", e)))?;
-
-        Ok(())
     }
 
     /// Get Rugcheck security data
@@ -1155,6 +1159,15 @@ impl TokenDatabase {
         let is_blacklisted = self.is_blacklisted(mint)?;
         let priority = self.get_priority(mint)?;
 
+        // Prepare fallback images: when using GeckoTerminal, try DexScreener images from DB
+        let (fallback_img, fallback_header) = match data_source {
+            DataSource::GeckoTerminal => match self.get_dexscreener_data(mint)? {
+                Some(ds) => (ds.image_url, ds.header_image_url),
+                None => (None, None),
+            },
+            _ => (None, None),
+        };
+
         let token = assemble_token(
             metadata,
             market_data,
@@ -1162,6 +1175,8 @@ impl TokenDatabase {
             security,
             is_blacklisted,
             priority,
+            fallback_img,
+            fallback_header,
         );
 
         Ok(Some(token))
@@ -1359,7 +1374,10 @@ impl TokenDatabase {
                 let g_reserve_in_usd: Option<f64> = row.get(48)?;
                 let g_fetched_at: Option<i64> = row.get(49)?;
 
-                let d_pair_created_at: Option<i64> = row.get(50)?;
+                // Update tracking and pair creation timestamps
+                let last_market_update_ts: Option<i64> = row.get(50)?;
+                let last_decimals_update_ts: Option<i64> = row.get(51)?;
+                let d_pair_created_at: Option<i64> = row.get(52)?;
 
                 Ok((
                     mint,
@@ -1372,7 +1390,7 @@ impl TokenDatabase {
                     is_rugged,
                     is_blacklisted,
                     priority_value,
-                    // Dex
+                    // Dex (match SELECT order)
                     d_price_usd,
                     d_price_sol,
                     d_price_native,
@@ -1396,7 +1414,7 @@ impl TokenDatabase {
                     d_txn_24h_buys,
                     d_txn_24h_sells,
                     d_fetched_at,
-                    // Gecko
+                    // Gecko (match SELECT order)
                     g_price_usd,
                     g_price_sol,
                     g_price_native,
@@ -1414,8 +1432,8 @@ impl TokenDatabase {
                     g_pool_count,
                     g_reserve_in_usd,
                     g_fetched_at,
-                    row.get::<_, Option<i64>>(50)?,
-                    row.get::<_, Option<i64>>(51)?,
+                    last_market_update_ts,
+                    last_decimals_update_ts,
                     d_pair_created_at,
                 ))
             })
@@ -1591,17 +1609,21 @@ impl TokenDatabase {
                         0.0,
                         0.0,
                         "0".to_string(),
+                        // price changes
                         None,
                         None,
                         None,
                         None,
+                        // market metrics
+                        None,
+                        None,
+                        None,
+                        // volumes
                         None,
                         None,
                         None,
                         None,
-                        None,
-                        None,
-                        None,
+                        // txns (all None for Unknown)
                         None,
                         None,
                         None,
@@ -1889,9 +1911,17 @@ fn assemble_token(
     security: Option<RugcheckData>,
     is_blacklisted: bool,
     priority: Priority,
+    fallback_image_url: Option<String>,
+    fallback_header_url: Option<String>,
 ) -> Token {
     let created_dt = DateTime::from_timestamp(metadata.created_at, 0).unwrap_or_else(|| Utc::now());
     let metadata_updated_dt = DateTime::from_timestamp(metadata.updated_at, 0);
+
+    // Capture primary source images (DexScreener provides them) without moving market_data
+    let (primary_image_url, primary_header_url) = match &market_data {
+        MarketDataType::DexScreener(data) => (data.image_url.clone(), data.header_image_url.clone()),
+        MarketDataType::GeckoTerminal(data) => (data.image_url.clone(), None),
+    };
 
     // Extract market data fields based on source
     let (
@@ -1996,6 +2026,10 @@ fn assemble_token(
         .or(metadata_updated_dt.clone())
         .or(Some(created_dt));
 
+    // For now, only use primary source-provided images. Fallbacks can be added upstream where DB is available.
+    let resolved_image_url = primary_image_url.or(fallback_image_url);
+    let resolved_header_url = primary_header_url.or(fallback_header_url);
+
     Token {
         // Core identity
         mint: metadata.mint.clone(),
@@ -2003,8 +2037,8 @@ fn assemble_token(
         name: metadata.name.unwrap_or_else(|| "Unknown Token".to_string()),
         decimals: resolved_decimals,
         description: None,
-        image_url: None,
-        header_image_url: None,
+        image_url: resolved_image_url,
+        header_image_url: resolved_header_url,
         supply: None,
 
         // Data source
@@ -2131,8 +2165,8 @@ fn assemble_token_without_market_data(
         name: metadata.name.unwrap_or_else(|| "Unknown Token".to_string()),
         decimals: resolved_decimals, // Default to 9 if unknown
         description: None,
-        image_url: None,
-        header_image_url: None,
+    image_url: None,
+    header_image_url: None,
         supply: None,
 
         // Data source
