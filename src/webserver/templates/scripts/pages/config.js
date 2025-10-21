@@ -811,6 +811,8 @@ function renderCategories(sectionId) {
       categoryEl.classList.toggle("collapsed");
     });
 
+    let categoryHasMatch = false;
+    let pendingCount = 0;
     for (const [fieldKey, fieldMeta] of fieldsList) {
       const fieldId = `config-${sectionId}-${fieldKey}`;
       const fieldValue = sectionConfig[fieldKey];
@@ -826,10 +828,12 @@ function renderCategories(sectionId) {
       const fieldEl = create("div", { className: "config-field" });
       if (matchesSearch) {
         fieldEl.classList.add("config-field--match");
+        categoryHasMatch = true;
       }
 
       if (!deepEqual(fieldValue, originalValue)) {
         fieldEl.classList.add("config-field--changed");
+        pendingCount += 1;
       }
 
       const labelEl = create("div", { className: "config-field-label" });
@@ -919,6 +923,27 @@ function renderCategories(sectionId) {
       fieldEl.appendChild(errorEl);
 
       body.appendChild(fieldEl);
+    }
+
+    // Update chip to show pending changes if any
+    const chipEl = header.querySelector(".config-category-chip");
+    if (chipEl) {
+      if (pendingCount > 0) {
+        chipEl.classList.add("pending");
+        chipEl.textContent = `${fieldsList.length} fields · ${pendingCount} pending`;
+      } else {
+        chipEl.classList.remove("pending");
+        chipEl.textContent = `${fieldsList.length} fields`;
+      }
+    }
+
+    if (categoryHasMatch) {
+      categoryEl.classList.add("has-match");
+      // Auto-expand matched categories if collapsed by default
+      categoryEl.classList.remove("collapsed");
+    } else if (searchTerm.length > 0) {
+      // When searching, collapse categories without matches to reduce scroll
+      categoryEl.classList.add("collapsed");
     }
 
     categoryEl.appendChild(header);
@@ -1100,7 +1125,18 @@ function attachEventHandlers(ctx) {
       render();
     };
     on(searchInput, "input", handler);
+    // Press Enter to focus the first matched field if any
+    const enterHandler = (event) => {
+      if (event.key === "Enter") {
+        const firstMatch = document.querySelector(".config-field.config-field--match input, .config-field.config-field--match textarea, .config-field.config-field--match button, .config-section-item.search-match");
+        if (firstMatch) {
+          firstMatch.focus();
+        }
+      }
+    };
+    on(searchInput, "keydown", enterHandler);
     ctx.onDispose(() => off(searchInput, "input", handler));
+    ctx.onDispose(() => off(searchInput, "keydown", enterHandler));
   }
 
   const reloadButton = $("#configReloadButton");
