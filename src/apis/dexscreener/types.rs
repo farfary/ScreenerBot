@@ -341,7 +341,8 @@ impl DexScreenerPairRaw {
 
         pool.fdv = self.fdv;
         pool.market_cap = self.market_cap;
-        pool.pair_created_at = self.pair_created_at;
+        // Convert milliseconds to seconds for pair_created_at
+        pool.pair_created_at = self.pair_created_at.map(|ms| ms / 1000);
 
         if let Some(ref info) = self.info {
             pool.info_image_url = info.image_url.clone();
