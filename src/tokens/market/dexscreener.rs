@@ -2,11 +2,17 @@
 ///
 /// Flow: API -> Parse -> Database -> Store cache
 /// Updates: Every 30 seconds for active tokens
+///
+/// Architecture:
+/// - Uses /tokens/v1 batch endpoint (up to 30 tokens per request)
+/// - Returns ONE best pool per token (DexScreener picks most liquid)
+/// - No pool filtering logic (trust DexScreener API)
 use crate::apis::dexscreener::DexScreenerPool;
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::store::{self, CacheMetrics};
 use crate::tokens::types::{DexScreenerData, TokenError, TokenResult};
 use chrono::{DateTime, Utc};
+use std::collections::HashMap;
 
 /// Convert API pool data to our DexScreenerData type
 fn convert_pool_to_data(pool: &DexScreenerPool, is_sol_pair: bool) -> DexScreenerData {
@@ -83,12 +89,128 @@ fn convert_pool_to_data(pool: &DexScreenerPool, is_sol_pair: bool) -> DexScreene
     }
 }
 
-/// Fetch DexScreener data for a token (with cache + database)
+/// Fetch DexScreener data for multiple tokens in a single batch API call
+///
+/// Uses /tokens/v1 endpoint which returns ONE best pool per token.
+/// DexScreener API automatically picks the most liquid pool.
+///
+/// Flow per token:
+/// 1. Check cache (if fresh, skip API)
+/// 2. Check database (if fresh < 30s, use it)
+/// 3. Fetch from API (batch endpoint)
+/// 4. Store in database + cache
+///
+/// # Arguments
+/// * `mints` - Token mint addresses (up to 30)
+/// * `db` - Database instance
+///
+/// # Returns
+/// HashMap mapping mint -> Option<DexScreenerData>
+/// - Some(data) if token has market data
+/// - None if token not listed on any DEX
+pub async fn fetch_dexscreener_data_batch(
+    mints: &[String],
+    db: &TokenDatabase,
+) -> TokenResult<HashMap<String, Option<DexScreenerData>>> {
+    if mints.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let mut results: HashMap<String, Option<DexScreenerData>> = HashMap::new();
+    let mut to_fetch: Vec<String> = Vec::new();
+
+    // Check cache and database for each token
+    for mint in mints {
+        // 1. Check in-memory cache
+        if let Some(data) = store::get_cached_dexscreener(mint) {
+            results.insert(mint.clone(), Some(data));
+            continue;
+        }
+
+        // 2. Check database (if fresh < 30s)
+        if let Some(db_data) = db.get_dexscreener_data(mint)? {
+            let age = Utc::now()
+                .signed_duration_since(db_data.fetched_at)
+                .num_seconds();
+
+            if age < 30 {
+                store::store_dexscreener(mint, &db_data);
+                if let Err(err) = store::refresh_token_snapshot(mint).await {
+                    eprintln!(
+                        "[TOKENS][STORE] Failed to refresh token snapshot after DB hit mint={} err={:?}",
+                        mint, err
+                    );
+                }
+                results.insert(mint.clone(), Some(db_data));
+                continue;
+            }
+        }
+
+        // Need to fetch from API
+        to_fetch.push(mint.clone());
+    }
+
+    // If all tokens were cached, return early
+    if to_fetch.is_empty() {
+        return Ok(results);
+    }
+
+    // 3. Fetch from batch API endpoint
+    let api_manager = crate::apis::manager::get_api_manager();
+    let pools = api_manager
+        .dexscreener
+        .fetch_token_batch(&to_fetch, None)
+        .await
+        .map_err(|e| TokenError::Api {
+            source: "DexScreener".to_string(),
+            message: format!("{:?}", e),
+        })?;
+
+    // Process pools - DexScreener batch returns ONE best pool per token
+    const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
+    
+    for pool in pools {
+        let mint = &pool.base_token_address;
+        
+        // Skip if not in our request list
+        if !to_fetch.contains(mint) {
+            continue;
+        }
+
+        let is_sol_pair = pool.quote_token_address == SOL_MINT;
+        let data = convert_pool_to_data(&pool, is_sol_pair);
+
+        // Store in database
+        if let Err(e) = db.upsert_dexscreener_data(mint, &data) {
+            eprintln!("[TOKENS][DEXSCREENER] Failed to store data for {}: {}", mint, e);
+        }
+
+        // Cache it
+        store::store_dexscreener(mint, &data);
+        if let Err(err) = store::refresh_token_snapshot(mint).await {
+            eprintln!(
+                "[TOKENS][STORE] Failed to refresh token snapshot after API mint={} err={:?}",
+                mint, err
+            );
+        }
+
+        results.insert(mint.clone(), Some(data));
+    }
+
+    // Mark tokens with no pools as None (not listed)
+    for mint in &to_fetch {
+        results.entry(mint.clone()).or_insert(None);
+    }
+
+    Ok(results)
+}
+
+/// Fetch DexScreener data for a single token (wrapper around batch endpoint)
 ///
 /// Flow:
 /// 1. Check cache (if fresh, return immediately)
 /// 2. Check database (if fresh, cache + return)
-/// 3. Fetch from API (store in database + cache + return)
+/// 3. Fetch from batch API with single token
 ///
 /// # Arguments
 /// * `mint` - Token mint address
@@ -100,114 +222,10 @@ pub async fn fetch_dexscreener_data(
     mint: &str,
     db: &TokenDatabase,
 ) -> TokenResult<Option<DexScreenerData>> {
-    // 1. Check in-memory store cache
-    if let Some(data) = store::get_cached_dexscreener(mint) {
-        return Ok(Some(data));
-    }
-
-    // 2. Check database (if recently updated, use it)
-    if let Some(db_data) = db.get_dexscreener_data(mint)? {
-        // If data is fresh (< 30s old), use it
-        let age = Utc::now()
-            .signed_duration_since(db_data.fetched_at)
-            .num_seconds();
-
-        if age < 30 {
-            store::store_dexscreener(mint, &db_data);
-            if let Err(err) = store::refresh_token_snapshot(mint).await {
-                eprintln!(
-                    "[TOKENS][STORE] Failed to refresh token snapshot after DexScreener DB hit mint={} err={:?}",
-                    mint,
-                    err
-                );
-            }
-            return Ok(Some(db_data));
-        }
-    }
-
-    // 3. Fetch from API
-    let api_manager = crate::apis::manager::get_api_manager();
-    let pools = api_manager
-        .dexscreener
-        .fetch_token_pools(mint, None)
-        .await
-        .map_err(|e| TokenError::Api {
-            source: "DexScreener".to_string(),
-            message: format!("{:?}", e),
-        })?;
-
-    // Find best SOL-paired pool (highest liquidity)
-    // SOL mint address (native SOL and wrapped SOL are the same address)
-    const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
-
-    // CRITICAL: Only consider pools where our token is the BASE token!
-    // The API returns pools where token can be either base OR quote.
-    // We want the price OF the token, not the price IN the token.
-    let valid_pools: Vec<&DexScreenerPool> = pools
-        .iter()
-        .filter(|p| {
-            p.liquidity_usd.is_some() && p.base_token_address == mint // Token must be base, not quote!
-        })
-        .collect();
-
-    // Among valid pools, prefer SOL-paired pools
-    let sol_pools: Vec<&DexScreenerPool> = valid_pools
-        .iter()
-        .filter(|p| p.quote_token_address == SOL_MINT)
-        .copied()
-        .collect();
-
-    // Select best pool: prefer SOL-paired, fallback to highest liquidity
-    let best_pool = if !sol_pools.is_empty() {
-        // Use best SOL-paired pool
-        sol_pools
-            .iter()
-            .max_by(|a, b| {
-                a.liquidity_usd
-                    .unwrap_or(0.0)
-                    .partial_cmp(&b.liquidity_usd.unwrap_or(0.0))
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
-            .copied()
-    } else if !valid_pools.is_empty() {
-        // Fallback: use highest liquidity pool (any quote token, but token is base)
-        valid_pools
-            .iter()
-            .max_by(|a, b| {
-                a.liquidity_usd
-                    .unwrap_or(0.0)
-                    .partial_cmp(&b.liquidity_usd.unwrap_or(0.0))
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
-            .copied()
-    } else {
-        // No valid pools found
-        None
-    };
-
-    if let Some(pool) = best_pool {
-        const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
-        let is_sol_pair = pool.quote_token_address == SOL_MINT;
-        let data = convert_pool_to_data(pool, is_sol_pair);
-
-        // Store in database
-        db.upsert_dexscreener_data(mint, &data)?;
-
-        // Cache it in store and refresh token snapshot
-        store::store_dexscreener(mint, &data);
-        if let Err(err) = store::refresh_token_snapshot(mint).await {
-            eprintln!(
-                "[TOKENS][STORE] Failed to refresh token snapshot after DexScreener API mint={} err={:?}",
-                mint,
-                err
-            );
-        }
-
-        Ok(Some(data))
-    } else {
-        // No pools found
-        Ok(None)
-    }
+    // Use batch endpoint with single token
+    let mut batch_results = fetch_dexscreener_data_batch(&[mint.to_string()], db).await?;
+    
+    Ok(batch_results.remove(mint).flatten())
 }
 
 /// Get cache metrics for monitoring

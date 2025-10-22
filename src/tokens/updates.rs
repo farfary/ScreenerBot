@@ -7,14 +7,18 @@ use crate::config::with_config;
 /// Coordinates fetching from all sources (DexScreener, GeckoTerminal, Rugcheck)
 /// with rate limiting and priority-based scheduling.
 ///
-/// Priority levels:
-/// - Critical (100): Open positions → Update every 30s
-/// - High (50): Filtered/watched tokens → Update every 60s  
-/// - Low (10): Oldest non-blacklisted → Update every 5min
+/// Priority levels (actual loop intervals):
+/// - Critical (100): Open positions → Update every 5s
+/// - High (50): Filtered/watched tokens → Update every 10s  
+/// - Low (10): Oldest non-blacklisted → Update every 30s
+///
+/// Security data (Rugcheck) is fetched in a separate loop, one token per interval (configurable, default 60s),
+/// and only for tokens that don't have security data yet.
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::market::{dexscreener, geckoterminal};
 use crate::tokens::security::rugcheck;
 use crate::tokens::types::{TokenError, TokenResult};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Notify, Semaphore};
@@ -140,9 +144,11 @@ impl Default for RateLimitCoordinator {
 // UPDATE FUNCTIONS
 // ============================================================================
 
-/// Update a single token from all sources with partial failure handling
+/// Update a single token from market data sources (DexScreener + GeckoTerminal)
 ///
-/// Attempts to fetch from all sources, tracks success/failure per source.
+/// Note: Security data (Rugcheck) is handled separately in update_security_data()
+/// and is fetched only once per token, not on every update cycle.
+///
 /// Returns overall success if at least one source succeeds.
 pub async fn update_token(
     mint: &str,
@@ -172,20 +178,8 @@ pub async fn update_token(
         Err(e) => failures.push(format!("GeckoTerminal rate limit: {}", e)),
     }
 
-    // 3. Update Rugcheck security data
-    match coordinator.acquire_rugcheck().await {
-        Ok(_) => match rugcheck::fetch_rugcheck_data(mint, db).await {
-            Ok(Some(_)) => successes.push("Rugcheck".to_string()),
-            Ok(None) => failures.push(format!("Rugcheck: Token not analyzed")),
-            Err(e) => failures.push(format!("Rugcheck: {}", e)),
-        },
-        Err(e) => failures.push(format!("Rugcheck rate limit: {}", e)),
-    }
-
-    // Update tracking timestamp - ONLY for market data updates (not security)
-    let market_data_updated = successes
-        .iter()
-        .any(|s| s.as_str() == "DexScreener" || s.as_str() == "GeckoTerminal");
+    // Update tracking timestamp for market data
+    let market_data_updated = !successes.is_empty();
 
     if market_data_updated {
         let had_errors = !failures.is_empty();
@@ -221,6 +215,165 @@ impl UpdateResult {
     }
 }
 
+/// Update multiple tokens in batch (DexScreener + GeckoTerminal batch endpoints)
+///
+/// Uses batch API for both DexScreener and GeckoTerminal (up to 30 tokens per request),
+/// individual calls only for Rugcheck (no batch endpoint available).
+///
+/// # Arguments
+/// * `mints` - Token addresses to update (up to 30 recommended)
+/// * `db` - Database instance
+/// * `coordinator` - Rate limit coordinator
+///
+/// # Returns
+/// Vec<UpdateResult> - One result per token
+pub async fn update_tokens_batch(
+    mints: &[String],
+    db: &TokenDatabase,
+    coordinator: &RateLimitCoordinator,
+) -> TokenResult<Vec<UpdateResult>> {
+    if mints.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut results = Vec::new();
+
+    // Acquire rate limit permits for both sources in parallel
+    let (dex_permit, gecko_permit) = tokio::join!(
+        coordinator.acquire_dexscreener(),
+        coordinator.acquire_geckoterminal()
+    );
+
+    // 1 & 2. Fetch DexScreener and GeckoTerminal in PARALLEL
+    let (dex_result, gecko_result) = tokio::join!(
+        async {
+            match dex_permit {
+                Ok(_) => dexscreener::fetch_dexscreener_data_batch(mints, db).await,
+                Err(e) => Err(TokenError::RateLimit {
+                    source: "DexScreener".to_string(),
+                    message: e.to_string(),
+                }),
+            }
+        },
+        async {
+            match gecko_permit {
+                Ok(_) => geckoterminal::fetch_geckoterminal_data_batch(mints, db).await,
+                Err(e) => Err(TokenError::RateLimit {
+                    source: "GeckoTerminal".to_string(),
+                    message: e.to_string(),
+                }),
+            }
+        }
+    );
+
+    // Process DexScreener results
+    let (dex_results, dex_global_err): (HashMap<String, Option<()>>, Option<String>) = match dex_result {
+        Ok(data) => (data.into_iter().map(|(k,v)| (k, v.map(|_| ()))) .collect(), None),
+        Err(e) => {
+            let msg = format!("DexScreener batch failed: {}", e);
+            eprintln!("[UPDATES] {}", msg);
+            (HashMap::new(), Some(msg))
+        }
+    };
+
+    // Process GeckoTerminal results
+    let (gecko_results, gecko_global_err): (HashMap<String, Option<()>>, Option<String>) = match gecko_result {
+        Ok(data) => (data.into_iter().map(|(k,v)| (k, v.map(|_| ()))) .collect(), None),
+        Err(e) => {
+            let msg = format!("GeckoTerminal batch failed: {}", e);
+            eprintln!("[UPDATES] {}", msg);
+            (HashMap::new(), Some(msg))
+        }
+    };
+
+    // 3. Process each token with batch results (market data only)
+    for mint in mints {
+        let mut successes = Vec::new();
+        let mut failures = Vec::new();
+
+        // DexScreener result from batch
+        if let Some(Some(_)) = dex_results.get(mint) {
+            successes.push("DexScreener".to_string());
+        } else if dex_results.contains_key(mint) {
+            failures.push("DexScreener: Token not listed".to_string());
+        } else if let Some(err) = &dex_global_err {
+            failures.push(err.clone());
+        }
+
+        // GeckoTerminal result from batch
+        if let Some(Some(_)) = gecko_results.get(mint) {
+            successes.push("GeckoTerminal".to_string());
+        } else if gecko_results.contains_key(mint) {
+            failures.push("GeckoTerminal: Token not listed".to_string());
+        } else if let Some(err) = &gecko_global_err {
+            failures.push(err.clone());
+        }
+
+        // If both maps are empty and no global errors, still mark as failure to avoid ambiguity
+        if successes.is_empty() && failures.is_empty() {
+            failures.push("No market sources responded".to_string());
+        }
+
+        // Update tracking timestamp
+        let market_data_updated = !successes.is_empty();
+
+        if market_data_updated {
+            let had_errors = !failures.is_empty();
+            let _ = db.mark_updated(mint, had_errors);
+        }
+
+        results.push(UpdateResult {
+            mint: mint.clone(),
+            successes,
+            failures,
+        });
+    }
+
+    Ok(results)
+}
+
+// ============================================================================
+// SECURITY DATA UPDATES (ONE-TIME FETCH)
+// ============================================================================
+
+/// Update Rugcheck security data for tokens that don't have it yet
+///
+/// Security data is static/rarely changing - fetch once and cache.
+/// Processes ONE token per cycle for better performance with large backlogs.
+async fn update_security_data(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
+    let tokens = match db.get_tokens_without_security_data(1) {
+        Ok(tokens) => tokens,
+        Err(e) => {
+            eprintln!("[UPDATES] Failed to load tokens without security data: {}", e);
+            return;
+        }
+    };
+
+    if tokens.is_empty() {
+        return;
+    }
+
+    let mint = &tokens[0];
+
+    // Fetch security data for single token
+    match coordinator.acquire_rugcheck().await {
+        Ok(_) => match rugcheck::fetch_rugcheck_data(mint, db).await {
+            Ok(Some(_)) => {
+                println!("[UPDATES] Security data fetched for {}", mint);
+            }
+            Ok(None) => {
+                // Token not analyzed by Rugcheck - this is expected for many tokens
+            }
+            Err(e) => {
+                eprintln!("[UPDATES] Rugcheck error for {}: {}", mint, e);
+            }
+        },
+        Err(e) => {
+            eprintln!("[UPDATES] Rugcheck rate limit: {}", e);
+        }
+    }
+}
+
 // ============================================================================
 // PRIORITY-BASED UPDATE LOOPS
 // ============================================================================
@@ -232,6 +385,22 @@ pub fn start_update_loop(
     coordinator: Arc<RateLimitCoordinator>,
 ) -> Vec<JoinHandle<()>> {
     let mut handles = Vec::new();
+
+    // Security data loop (one-time fetch for tokens without Rugcheck data)
+    let db_security = db.clone();
+    let coord_security = coordinator.clone();
+    let shutdown_security = shutdown.clone();
+    handles.push(tokio::spawn(async move {
+        update_security_data(&db_security, &coord_security).await;
+        loop {
+            tokio::select! {
+                _ = shutdown_security.notified() => break,
+                _ = sleep(Duration::from_secs(with_config(|cfg| cfg.tokens.update_intervals.security_seconds))) => {
+                    update_security_data(&db_security, &coord_security).await;
+                }
+            }
+        }
+    }));
 
     // Immediate seeding loop for tokens that have no market data yet
     let db_seed = db.clone();
@@ -249,7 +418,7 @@ pub fn start_update_loop(
         }
     }));
 
-    // Critical priority loop (every 30s)
+    // Critical priority loop (configurable)
     let db_critical = db.clone();
     let coord_critical = coordinator.clone();
     let shutdown_critical = shutdown.clone();
@@ -257,14 +426,14 @@ pub fn start_update_loop(
         loop {
             tokio::select! {
                 _ = shutdown_critical.notified() => break,
-                _ = sleep(Duration::from_secs(5)) => {
+                _ = sleep(Duration::from_secs(with_config(|cfg| cfg.tokens.update_intervals.critical_seconds))) => {
                     update_critical_tokens(&db_critical, &coord_critical).await;
                 }
             }
         }
     }));
 
-    // High priority loop (every 60s)
+    // High priority loop (configurable)
     let db_high = db.clone();
     let coord_high = coordinator.clone();
     let shutdown_high = shutdown.clone();
@@ -272,14 +441,14 @@ pub fn start_update_loop(
         loop {
             tokio::select! {
                 _ = shutdown_high.notified() => break,
-                _ = sleep(Duration::from_secs(10)) => {
+                _ = sleep(Duration::from_secs(with_config(|cfg| cfg.tokens.update_intervals.high_seconds))) => {
                     update_high_priority_tokens(&db_high, &coord_high).await;
                 }
             }
         }
     }));
 
-    // Low priority loop (every 5min)
+    // Low priority loop (configurable)
     let db_low = db.clone();
     let coord_low = coordinator.clone();
     let shutdown_low = shutdown.clone();
@@ -287,7 +456,7 @@ pub fn start_update_loop(
         loop {
             tokio::select! {
                 _ = shutdown_low.notified() => break,
-                _ = sleep(Duration::from_secs(30)) => {
+                _ = sleep(Duration::from_secs(with_config(|cfg| cfg.tokens.update_intervals.low_seconds))) => {
                     update_low_priority_tokens(&db_low, &coord_low).await;
                 }
             }
@@ -299,7 +468,7 @@ pub fn start_update_loop(
 
 /// Seed market data for tokens that have never been updated
 async fn update_uninitialized_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
-    const MAX_INITIAL_BATCH: usize = 25;
+    const MAX_INITIAL_BATCH: usize = 30;
 
     let tokens = match db.get_tokens_without_market_data(MAX_INITIAL_BATCH) {
         Ok(tokens) => tokens,
@@ -318,34 +487,31 @@ async fn update_uninitialized_tokens(db: &TokenDatabase, coordinator: &RateLimit
         tokens.len()
     );
 
-    for mint in tokens {
-        match update_token(&mint, db, coordinator).await {
-            Ok(result) if result.is_success() => {}
-            Ok(result) if result.is_partial_failure() => {
-                eprintln!(
-                    "[UPDATES] Partial failure while seeding {}: {:?}",
-                    mint, result.failures
-                );
-            }
-            Ok(result) if result.is_total_failure() => {
-                let message = result.failures.join(" | ");
-                if let Err(err) = db.record_market_error(mint.as_str(), message.as_str()) {
-                    eprintln!(
-                        "[UPDATES] Failed to record seed error for {}: {}",
-                        mint, err
-                    );
+    // Process in batches of 30
+    for chunk in tokens.chunks(30) {
+        match update_tokens_batch(chunk, db, coordinator).await {
+            Ok(results) => {
+                for result in results {
+                    if result.is_total_failure() {
+                        let message = result.failures.join(" | ");
+                        if let Err(err) =
+                            db.record_market_error(result.mint.as_str(), message.as_str())
+                        {
+                            eprintln!(
+                                "[UPDATES] Failed to record seed error for {}: {}",
+                                result.mint, err
+                            );
+                        }
+                    } else if result.is_partial_failure() {
+                        eprintln!(
+                            "[UPDATES] Partial failure while seeding {}: {:?}",
+                            result.mint, result.failures
+                        );
+                    }
                 }
             }
-            Ok(_) => {}
             Err(e) => {
-                eprintln!("[UPDATES] Error seeding {}: {}", mint, e);
-                let err_msg = e.to_string();
-                if let Err(err) = db.record_market_error(mint.as_str(), err_msg.as_str()) {
-                    eprintln!(
-                        "[UPDATES] Failed to record seed error for {}: {}",
-                        mint, err
-                    );
-                }
+                eprintln!("[UPDATES] Batch error during seeding: {}", e);
             }
         }
     }
@@ -371,35 +537,34 @@ async fn update_critical_tokens(db: &TokenDatabase, coordinator: &RateLimitCoord
         tokens.len()
     );
 
-    for mint in tokens {
-        match update_token(&mint, db, coordinator).await {
-            Ok(result) if result.is_success() => {
-                // Success - no logging needed
-            }
-            Ok(result) if result.is_partial_failure() => {
-                eprintln!(
-                    "[UPDATES] Partial failure for {}: {} succeeded, {} failed",
-                    mint,
-                    result.successes.len(),
-                    result.failures.len()
-                );
-            }
-            Ok(result) => {
-                eprintln!(
-                    "[UPDATES] Total failure for {}: {:?}",
-                    mint, result.failures
-                );
-                let message = result.failures.join(" | ");
-                if let Err(err) = db.record_market_error(mint.as_str(), message.as_str()) {
-                    eprintln!("[UPDATES] Failed to record error for {}: {}", mint, err);
+    // Process in batches of 30
+    for chunk in tokens.chunks(30) {
+        match update_tokens_batch(chunk, db, coordinator).await {
+            Ok(results) => {
+                for result in results {
+                    if result.is_total_failure() {
+                        eprintln!(
+                            "[UPDATES] Total failure for {}: {:?}",
+                            result.mint, result.failures
+                        );
+                        let message = result.failures.join(" | ");
+                        if let Err(err) =
+                            db.record_market_error(result.mint.as_str(), message.as_str())
+                        {
+                            eprintln!("[UPDATES] Failed to record error for {}: {}", result.mint, err);
+                        }
+                    } else if result.is_partial_failure() {
+                        eprintln!(
+                            "[UPDATES] Partial failure for {}: {} succeeded, {} failed",
+                            result.mint,
+                            result.successes.len(),
+                            result.failures.len()
+                        );
+                    }
                 }
             }
             Err(e) => {
-                eprintln!("[UPDATES] Error updating {}: {}", mint, e);
-                let err_msg = e.to_string();
-                if let Err(err) = db.record_market_error(mint.as_str(), err_msg.as_str()) {
-                    eprintln!("[UPDATES] Failed to record error for {}: {}", mint, err);
-                }
+                eprintln!("[UPDATES] Batch error for critical tokens: {}", e);
             }
         }
     }
@@ -420,43 +585,42 @@ async fn update_high_priority_tokens(db: &TokenDatabase, coordinator: &RateLimit
         return;
     }
 
-    // Limit to 50 tokens per batch
-    let batch = &tokens[..tokens.len().min(50)];
+    // Limit to 60 tokens total, process in batches of 30
+    let batch = &tokens[..tokens.len().min(60)];
     println!("[UPDATES] Updating {} high priority tokens", batch.len());
 
-    for mint in batch {
-        match update_token(mint, db, coordinator).await {
-            Ok(result) if result.is_success() => {}
-            Ok(result) if result.is_partial_failure() => {
-                eprintln!(
-                    "[UPDATES] Partial failure for {}: {} succeeded, {} failed",
-                    mint,
-                    result.successes.len(),
-                    result.failures.len()
-                );
-            }
-            Ok(result) if result.is_total_failure() => {
-                let message = result.failures.join(" | ");
-                if let Err(err) = db.record_market_error(mint.as_str(), message.as_str()) {
-                    eprintln!("[UPDATES] Failed to record error for {}: {}", mint, err);
+    for chunk in batch.chunks(30) {
+        match update_tokens_batch(chunk, db, coordinator).await {
+            Ok(results) => {
+                for result in results {
+                    if result.is_total_failure() {
+                        let message = result.failures.join(" | ");
+                        if let Err(err) =
+                            db.record_market_error(result.mint.as_str(), message.as_str())
+                        {
+                            eprintln!("[UPDATES] Failed to record error for {}: {}", result.mint, err);
+                        }
+                    } else if result.is_partial_failure() {
+                        eprintln!(
+                            "[UPDATES] Partial failure for {}: {} succeeded, {} failed",
+                            result.mint,
+                            result.successes.len(),
+                            result.failures.len()
+                        );
+                    }
                 }
             }
             Err(e) => {
-                eprintln!("[UPDATES] Error updating {}: {}", mint, e);
-                let err_msg = e.to_string();
-                if let Err(err) = db.record_market_error(mint.as_str(), err_msg.as_str()) {
-                    eprintln!("[UPDATES] Failed to record error for {}: {}", mint, err);
-                }
+                eprintln!("[UPDATES] Batch error for high priority tokens: {}", e);
             }
-            Ok(_) => {}
         }
     }
 }
 
 /// Update low priority tokens (oldest non-blacklisted)
 async fn update_low_priority_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
-    // Get oldest 20 non-blacklisted tokens
-    let tokens = match db.get_oldest_non_blacklisted(20) {
+    // Get oldest 30 non-blacklisted tokens (batch size)
+    let tokens = match db.get_oldest_non_blacklisted(30) {
         Ok(tokens) => tokens,
         Err(e) => {
             eprintln!("[UPDATES] Failed to get low priority tokens: {}", e);
@@ -470,31 +634,28 @@ async fn update_low_priority_tokens(db: &TokenDatabase, coordinator: &RateLimitC
 
     println!("[UPDATES] Updating {} low priority tokens", tokens.len());
 
-    for mint in tokens {
-        match update_token(&mint, db, coordinator).await {
-            Ok(result) if result.is_success() => {}
-            Ok(result) if result.is_partial_failure() => {
-                eprintln!(
-                    "[UPDATES] Partial failure for {}: {} succeeded, {} failed",
-                    mint,
-                    result.successes.len(),
-                    result.failures.len()
-                );
-            }
-            Ok(result) if result.is_total_failure() => {
-                let message = result.failures.join(" | ");
-                if let Err(err) = db.record_market_error(mint.as_str(), message.as_str()) {
-                    eprintln!("[UPDATES] Failed to record error for {}: {}", mint, err);
+    // Process all in one batch (already limited to 30)
+    match update_tokens_batch(&tokens, db, coordinator).await {
+        Ok(results) => {
+            for result in results {
+                if result.is_total_failure() {
+                    let message = result.failures.join(" | ");
+                    if let Err(err) = db.record_market_error(result.mint.as_str(), message.as_str())
+                    {
+                        eprintln!("[UPDATES] Failed to record error for {}: {}", result.mint, err);
+                    }
+                } else if result.is_partial_failure() {
+                    eprintln!(
+                        "[UPDATES] Partial failure for {}: {} succeeded, {} failed",
+                        result.mint,
+                        result.successes.len(),
+                        result.failures.len()
+                    );
                 }
             }
-            Err(e) => {
-                eprintln!("[UPDATES] Error updating {}: {}", mint, e);
-                let err_msg = e.to_string();
-                if let Err(err) = db.record_market_error(mint.as_str(), err_msg.as_str()) {
-                    eprintln!("[UPDATES] Failed to record error for {}: {}", mint, err);
-                }
-            }
-            Ok(_) => {}
+        }
+        Err(e) => {
+            eprintln!("[UPDATES] Batch error for low priority tokens: {}", e);
         }
     }
 }

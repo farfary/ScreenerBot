@@ -842,6 +842,33 @@ impl TokenDatabase {
             .map_err(|e| TokenError::Database(format!("Failed to collect: {}", e)))
     }
 
+    /// Get tokens without security (Rugcheck) data
+    pub fn get_tokens_without_security_data(&self, limit: usize) -> TokenResult<Vec<String>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT t.mint FROM tokens t
+             LEFT JOIN security_rugcheck sr ON t.mint = sr.mint
+             WHERE sr.mint IS NULL
+             AND t.blacklisted = 0
+             ORDER BY t.created_at ASC
+             LIMIT ?1",
+            )
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+
+        let mints = stmt
+            .query_map(params![limit], |row| row.get(0))
+            .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+
+        mints
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| TokenError::Database(format!("Failed to collect: {}", e)))
+    }
+
     /// Record a failed market update attempt (used to throttle retries)
     pub fn record_market_error(&self, mint: &str, message: &str) -> TokenResult<()> {
         let conn = self
