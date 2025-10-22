@@ -98,52 +98,6 @@ config_struct! {
         })]
         max_decimal_retry_attempts: i32 = 3,
 
-        // Blacklist
-        #[metadata(field_metadata! {
-            label: "Low Liquidity Threshold",
-            hint: "USD threshold for low liquidity blacklist",
-            min: 10,
-            max: 10000,
-            step: 10,
-            unit: "USD",
-            impact: "high",
-            category: "Blacklist",
-        })]
-        low_liquidity_threshold: f64 = 100.0,
-        #[metadata(field_metadata! {
-            label: "Min Age for Blacklist",
-            hint: "Hours before token can be blacklisted",
-            min: 0,
-            max: 168,
-            step: 1,
-            unit: "hours",
-            impact: "critical",
-            category: "Blacklist",
-        })]
-        min_age_hours: i64 = 2,
-        #[metadata(field_metadata! {
-            label: "Max Low Liq Count",
-            hint: "Times seen with low liquidity before blacklist",
-            min: 1,
-            max: 20,
-            step: 1,
-            unit: "times",
-            impact: "medium",
-            category: "Blacklist",
-        })]
-        max_low_liquidity_count: u32 = 5,
-        #[metadata(field_metadata! {
-            label: "Max No Route Failures",
-            hint: "Route failures before blacklist",
-            min: 1,
-            max: 20,
-            step: 1,
-            unit: "failures",
-            impact: "medium",
-            category: "Blacklist",
-        })]
-        max_no_route_failures: u32 = 5,
-
         // Token monitor
         #[metadata(field_metadata! {
             label: "Max Update Interval",
