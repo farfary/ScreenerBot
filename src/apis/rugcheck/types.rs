@@ -33,7 +33,7 @@ pub struct RugcheckInfo {
     // Creator
     pub creator: Option<String>,
     pub creator_balance: Option<i64>,
-    pub creator_tokens: Option<String>,
+    pub creator_tokens: Option<serde_json::Value>,
 
     // Scoring
     pub score: Option<i32>,
@@ -127,7 +127,7 @@ pub struct RugcheckResponse {
     #[serde(rename = "creatorBalance")]
     pub creator_balance: Option<i64>,
     #[serde(rename = "creatorTokens")]
-    pub creator_tokens: Option<String>,
+    pub creator_tokens: Option<serde_json::Value>,
     pub score: Option<i32>,
     #[serde(rename = "score_normalised")]
     pub score_normalised: Option<i32>,
