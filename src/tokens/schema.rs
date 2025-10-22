@@ -134,6 +134,15 @@ pub const CREATE_TABLES: &[&str] = &[
         FOREIGN KEY (mint) REFERENCES tokens(mint) ON DELETE RESTRICT
     )
     "#,
+    // Security skip markers (to avoid retrying known terminal states like Rugcheck not found)
+    r#"
+    CREATE TABLE IF NOT EXISTS security_skip (
+        mint TEXT PRIMARY KEY,
+        reason TEXT NOT NULL,
+        source TEXT,
+        added_at INTEGER NOT NULL
+    )
+    "#,
 ];
 
 /// All CREATE INDEX statements
@@ -155,6 +164,9 @@ pub const CREATE_INDEXES: &[&str] = &[
 
     "CREATE INDEX IF NOT EXISTS idx_tracking_priority ON update_tracking(priority DESC, last_market_update ASC)",
     "CREATE INDEX IF NOT EXISTS idx_tracking_market_update ON update_tracking(last_market_update ASC)",
+    // Indexes for security_skip
+    "CREATE INDEX IF NOT EXISTS idx_security_skip_added ON security_skip(added_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_security_skip_source ON security_skip(source)",
 ];
 
 // No ALTER statements: database is recreated when schema changes.

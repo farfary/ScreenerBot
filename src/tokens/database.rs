@@ -854,8 +854,10 @@ impl TokenDatabase {
                 "SELECT t.mint FROM tokens t
              LEFT JOIN security_rugcheck sr ON t.mint = sr.mint
              LEFT JOIN blacklist b ON t.mint = b.mint
+             LEFT JOIN security_skip ss ON t.mint = ss.mint
              WHERE sr.mint IS NULL
              AND b.mint IS NULL
+             AND ss.mint IS NULL
              ORDER BY t.created_at ASC
              LIMIT ?1",
             )
@@ -868,6 +870,41 @@ impl TokenDatabase {
         mints
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| TokenError::Database(format!("Failed to collect: {}", e)))
+    }
+
+    /// Mark a token to skip future Rugcheck attempts (e.g., HTTP 400/404 not found)
+    pub fn mark_security_skip(&self, mint: &str, reason: &str, source: &str) -> TokenResult<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let now = Utc::now().timestamp();
+        conn.execute(
+            "INSERT OR REPLACE INTO security_skip (mint, reason, source, added_at) VALUES (?1, ?2, ?3, ?4)",
+            params![mint, reason, source, now],
+        )
+        .map_err(|e| TokenError::Database(format!("Failed to mark security skip: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Check if a token is marked as security skip
+    pub fn is_security_skip(&self, mint: &str) -> TokenResult<bool> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(1) FROM security_skip WHERE mint = ?1",
+                params![mint],
+                |row| row.get(0),
+            )
+            .map_err(|e| TokenError::Database(format!("Failed to check security skip: {}", e)))?;
+
+        Ok(exists > 0)
     }
 
     /// Record a failed market update attempt (used to throttle retries)
@@ -926,6 +963,23 @@ impl TokenDatabase {
             params![now, mint],
         )
         .map_err(|e| TokenError::Database(format!("Failed to update tokens: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Record a successful security (Rugcheck) update in tracking
+    pub fn record_security_update(&self, mint: &str) -> TokenResult<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let now = Utc::now().timestamp();
+        conn.execute(
+            "UPDATE update_tracking SET last_security_update = ?1, security_update_count = security_update_count + 1 WHERE mint = ?2",
+            params![now, mint],
+        )
+        .map_err(|e| TokenError::Database(format!("Failed to record security update: {}", e)))?;
 
         Ok(())
     }
