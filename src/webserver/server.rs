@@ -51,9 +51,35 @@ pub async fn start_server() -> Result<(), String> {
         .map_err(|e| format!("Invalid bind address: {}", e))?;
 
     // Create TCP listener
-    let listener = TcpListener::bind(&addr)
-        .await
-        .map_err(|e| format!("Failed to bind to {}: {}", addr, e))?;
+    let listener = TcpListener::bind(&addr).await.map_err(|e| {
+        // Provide helpful error message for common cases
+        match e.kind() {
+            std::io::ErrorKind::AddrInUse => {
+                format!(
+                    "Failed to bind to {}: Address already in use\n\
+                     \n\
+                     This usually means another instance of ScreenerBot is running.\n\
+                     The process lock should have prevented this - please report this issue.\n\
+                     \n\
+                     To verify and stop other instances:\n\
+                       1. Check: ps aux | grep screenerbot | grep -v grep\n\
+                       2. Stop: pkill -f screenerbot\n\
+                       3. Verify: ps aux | grep screenerbot | grep -v grep",
+                    addr
+                )
+            }
+            std::io::ErrorKind::PermissionDenied => {
+                format!(
+                    "Failed to bind to {}: Permission denied\n\
+                     \n\
+                     Port {} requires elevated privileges on this system.\n\
+                     Consider using a port above 1024 or running with appropriate permissions.",
+                    addr, DEFAULT_PORT
+                )
+            }
+            _ => format!("Failed to bind to {}: {}", addr, e),
+        }
+    })?;
 
     if is_debug_webserver_enabled() {
         log(

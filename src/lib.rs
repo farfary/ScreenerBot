@@ -14,6 +14,7 @@ pub mod logger;
 pub mod ohlcvs;
 pub mod pools;
 pub mod positions;
+pub mod process_lock;
 pub mod profit;
 pub mod rpc;
 pub mod run;

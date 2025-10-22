@@ -1725,6 +1725,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fslock"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04412b8935272e3a9bae6f48c7bfff74c2911f60525404edfdd28e49884c3bfb"
+dependencies = [
+ "libc",
+ "winapi",
+]
+
+[[package]]
 name = "futures"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4117,6 +4127,7 @@ dependencies = [
  "dashmap",
  "dirs",
  "flate2",
+ "fslock",
  "futures",
  "futures-util",
  "hyper 1.6.0",

@@ -16,17 +16,20 @@ pub async fn run_bot() -> Result<(), String> {
     // 0. Initialize profiling if requested (must be done before any tokio tasks)
     init_profiling();
 
-    // 1. Initialize file logging system first
+    // 1. Acquire process lock to prevent multiple instances
+    let _process_lock = crate::process_lock::ProcessLock::acquire()?;
+
+    // 2. Initialize file logging system first
     init_file_logging();
 
     log(LogTag::System, "INFO", "🚀 ScreenerBot starting up...");
 
-    // 2. Load configuration
+    // 3. Load configuration
     crate::config::load_config().map_err(|e| format!("Failed to load config: {}", e))?;
 
     log(LogTag::System, "INFO", "Configuration loaded successfully");
 
-    // 3. Initialize strategy system
+    // 4. Initialize strategy system
     crate::strategies::init_strategy_system(crate::strategies::engine::EngineConfig::default())
         .await
         .map_err(|e| format!("Failed to initialize strategy system: {}", e))?;
@@ -37,18 +40,18 @@ pub async fn run_bot() -> Result<(), String> {
         "Strategy system initialized successfully"
     );
 
-    // 4. Create service manager
+    // 5. Create service manager
     let mut service_manager = ServiceManager::new().await?;
 
     log(LogTag::System, "INFO", "Service manager initialized");
 
-    // 5. Register all services
+    // 6. Register all services
     register_all_services(&mut service_manager);
 
-    // 6. Initialize global ServiceManager for webserver access
+    // 7. Initialize global ServiceManager for webserver access
     crate::services::init_global_service_manager(service_manager).await;
 
-    // 7. Get mutable reference to continue
+    // 8. Get mutable reference to continue
     let manager_ref = crate::services::get_service_manager()
         .await
         .ok_or("Failed to get ServiceManager reference")?;
@@ -58,10 +61,10 @@ pub async fn run_bot() -> Result<(), String> {
         guard.take().ok_or("ServiceManager was already taken")?
     };
 
-    // 8. Start all enabled services
+    // 9. Start all enabled services
     service_manager.start_all().await?;
 
-    // 9. Put it back for webserver access
+    // 10. Put it back for webserver access
     {
         let mut guard = manager_ref.write().await;
         *guard = Some(service_manager);
@@ -73,10 +76,10 @@ pub async fn run_bot() -> Result<(), String> {
         "✅ All services started - ScreenerBot is running",
     );
 
-    // 10. Wait for shutdown signal
+    // 11. Wait for shutdown signal
     wait_for_shutdown_signal().await?;
 
-    // 11. Stop all services gracefully
+    // 12. Stop all services gracefully
     log(LogTag::System, "INFO", "🛑 Initiating graceful shutdown...");
 
     let manager_ref = crate::services::get_service_manager()
