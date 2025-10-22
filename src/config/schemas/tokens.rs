@@ -17,124 +17,6 @@ config_struct! {
         })]
         preferred_market_data_source: String = "dexscreener".to_string(), // "dexscreener" or "geckoterminal"
 
-        // API rate limits
-        #[metadata(field_metadata! {
-            label: "DexScreener Rate Limit",
-            hint: "API calls per minute",
-            min: 10,
-            max: 300,
-            step: 10,
-            unit: "calls/min",
-            impact: "medium",
-            category: "API Limits",
-        })]
-        dexscreener_rate_limit_per_minute: usize = 100,
-        #[metadata(field_metadata! {
-            label: "DexScreener Discovery Limit",
-            hint: "Discovery API calls per minute",
-            min: 10,
-            max: 300,
-            step: 10,
-            unit: "calls/min",
-            impact: "medium",
-            category: "API Limits",
-        })]
-        dexscreener_discovery_rate_limit: usize = 60,
-        #[metadata(field_metadata! {
-            label: "Max Tokens Per Call",
-            hint: "Tokens per API request",
-            min: 10,
-            max: 100,
-            step: 10,
-            unit: "tokens",
-            impact: "low",
-            category: "API Limits",
-        })]
-        max_tokens_per_api_call: usize = 30,
-        #[metadata(field_metadata! {
-            label: "Raydium Rate Limit",
-            hint: "Raydium API calls per minute",
-            min: 10,
-            max: 300,
-            step: 10,
-            unit: "calls/min",
-            impact: "medium",
-            category: "API Limits",
-        })]
-        raydium_rate_limit_per_minute: usize = 120,
-        #[metadata(field_metadata! {
-            label: "Max Tokens Per Batch",
-            hint: "Tokens per batch operation",
-            min: 10,
-            max: 100,
-            step: 10,
-            unit: "tokens",
-            impact: "low",
-            category: "API Limits",
-        })]
-        max_tokens_per_batch: usize = 30,
-
-        // Decimals
-        #[metadata(field_metadata! {
-            label: "Max Accounts Per RPC Call",
-            hint: "Accounts per get_multiple_accounts (max 100)",
-            min: 10,
-            max: 100,
-            step: 10,
-            unit: "accounts",
-            impact: "medium",
-            category: "RPC",
-        })]
-        max_accounts_per_call: usize = 100,
-        #[metadata(field_metadata! {
-            label: "Max Decimal Retry",
-            hint: "Retries for fetching token decimals",
-            min: 1,
-            max: 10,
-            step: 1,
-            unit: "attempts",
-            impact: "low",
-            category: "RPC",
-        })]
-        max_decimal_retry_attempts: i32 = 3,
-
-        // Token monitor
-        #[metadata(field_metadata! {
-            label: "Max Update Interval",
-            hint: "Hours between token updates",
-            min: 1,
-            max: 24,
-            step: 1,
-            unit: "hours",
-            impact: "critical",
-            category: "Monitoring",
-        })]
-        max_update_interval_hours: i64 = 2,
-        #[metadata(field_metadata! {
-            label: "New Token Boost Age",
-            hint: "Minutes to boost new tokens",
-            min: 10,
-            max: 240,
-            step: 10,
-            unit: "minutes",
-            impact: "critical",
-            category: "Monitoring",
-        })]
-        new_token_boost_max_age_minutes: i64 = 60,
-
-        // Patterns
-        #[metadata(field_metadata! {
-            label: "Max Pattern Length",
-            hint: "Max length for pattern detection",
-            min: 3,
-            max: 20,
-            step: 1,
-            unit: "chars",
-            impact: "low",
-            category: "Patterns",
-        })]
-        max_pattern_length: usize = 8,
-
         // Multi-source validation configuration
         #[metadata(field_metadata! {
             label: "Token Sources",
@@ -159,59 +41,24 @@ config_struct! {
 // ----------------------------------------------------------------------------
 
 config_struct! {
-    /// Enable/priority toggle for a specific source
-    pub struct SourceToggleConfig {
+    /// Full API configuration for a data source
+    pub struct SourceApiConfig {
         enabled: bool = true,
-        priority: i32 = 1,
+        rate_limit_per_minute: u32 = 60,
+        timeout_seconds: u64 = 10,
     }
 }
 
 config_struct! {
-    /// Full API configuration for a data source
-    pub struct SourceApiConfig {
+    /// Enable/disable toggle for a specific source
+    pub struct SourceToggleConfig {
         enabled: bool = true,
-        priority: i32 = 1,
-        rate_limit_per_minute: u32 = 60,
-        timeout_seconds: u64 = 10,
-        cache_ttl_seconds: u64 = 60,
     }
 }
 
 config_struct! {
     /// Multi-source validation settings
     pub struct TokenSourcesConfig {
-        #[metadata(field_metadata! {
-            label: "Enable Multi-Source",
-            hint: "Route validation through multi-source consensus",
-            impact: "critical",
-            category: "Sources",
-        })]
-        enable_multi_source: bool = true,
-
-        #[metadata(field_metadata! {
-            label: "Min Sources",
-            hint: "Minimum agreeing sources required",
-            min: 1,
-            max: 5,
-            step: 1,
-            unit: "sources",
-            impact: "high",
-            category: "Sources",
-        })]
-        min_sources: usize = 2,
-
-        #[metadata(field_metadata! {
-            label: "Max Inter-Source Deviation",
-            hint: "Maximum allowed deviation between sources",
-            min: 1,
-            max: 100,
-            step: 1,
-            unit: "%",
-            impact: "high",
-            category: "Sources",
-        })]
-        max_inter_source_deviation: f64 = 20.0,
-
         #[metadata(field_metadata! {
             label: "DexScreener Source",
             hint: "DexScreener API configuration",
@@ -220,10 +67,8 @@ config_struct! {
         })]
         dexscreener: SourceApiConfig = SourceApiConfig {
             enabled: true,
-            priority: 1,
             rate_limit_per_minute: 60,
             timeout_seconds: 10,
-            cache_ttl_seconds: 60,
         },
 
         #[metadata(field_metadata! {
@@ -234,10 +79,8 @@ config_struct! {
         })]
         geckoterminal: SourceApiConfig = SourceApiConfig {
             enabled: true,
-            priority: 2,
             rate_limit_per_minute: 30,
             timeout_seconds: 10,
-            cache_ttl_seconds: 300,
         },
 
         #[metadata(field_metadata! {
@@ -248,10 +91,8 @@ config_struct! {
         })]
         rugcheck: SourceApiConfig = SourceApiConfig {
             enabled: true,
-            priority: 3,
             rate_limit_per_minute: 30,
             timeout_seconds: 15,
-            cache_ttl_seconds: 86400,
         },
     }
 }
