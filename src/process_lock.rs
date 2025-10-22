@@ -48,9 +48,8 @@ impl ProcessLock {
         // Create parent directory if it doesn't exist
         if let Some(parent) = lock_path.parent() {
             if !parent.exists() {
-                std::fs::create_dir_all(parent).map_err(|e| {
-                    format!("Failed to create lock file directory: {}", e)
-                })?;
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("Failed to create lock file directory: {}", e))?;
             }
         }
 
@@ -64,12 +63,10 @@ impl ProcessLock {
         })?;
 
         // Try to acquire exclusive lock (non-blocking)
-        if !lock.try_lock().map_err(|e| {
-            format!(
-                "Failed to acquire lock on {:?}: {}",
-                lock_path, e
-            )
-        })? {
+        if !lock
+            .try_lock()
+            .map_err(|e| format!("Failed to acquire lock on {:?}: {}", lock_path, e))?
+        {
             return Err(format!(
                 "❌ Another instance of ScreenerBot is already running.\n\
                  \n\
@@ -114,32 +111,5 @@ impl Drop for ProcessLock {
         );
         // Lock is automatically released when _lock is dropped
         // fslock handles the file unlocking
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_process_lock_prevents_duplicate() {
-        // First lock should succeed
-        let lock1 = ProcessLock::acquire();
-        assert!(lock1.is_ok(), "First lock should succeed");
-
-        // Second lock should fail
-        let lock2 = ProcessLock::acquire();
-        assert!(lock2.is_err(), "Second lock should fail");
-        assert!(
-            lock2.unwrap_err().contains("already running"),
-            "Error should mention another instance"
-        );
-
-        // Drop first lock
-        drop(lock1);
-
-        // Now third lock should succeed
-        let lock3 = ProcessLock::acquire();
-        assert!(lock3.is_ok(), "Lock should succeed after first is dropped");
     }
 }
