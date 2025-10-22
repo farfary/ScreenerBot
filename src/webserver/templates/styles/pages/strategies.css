@@ -473,23 +473,6 @@
   justify-content: center;
 }
 
-/* No canvas controls */
-.canvas-controls { display: none; }
-
-.control-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.control-group:not(:last-child) {
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--border-color);
-}
-
-/* No minimap */
-.canvas-minimap { display: none; }
-
 /* Search Container */
 .search-container {
   padding: 1rem;
@@ -748,8 +731,6 @@
   border-color: var(--primary-color);
 }
 
-/* removed canvas node styles */
-
 /* Parameter Editor Modal */
 .parameter-editor-modal {
   position: fixed;
@@ -938,23 +919,6 @@
   padding-left: 0.5rem;
   border-left: 3px solid var(--primary-color-light);
   line-height: 1.4;
-}
-
-/* Canvas Connections (for future use) */
-.canvas-connection {
-  position: absolute;
-  pointer-events: none;
-  z-index: 1;
-}
-
-.canvas-connection line {
-  stroke: var(--border-color);
-  stroke-width: 2;
-}
-
-.canvas-connection.selected line {
-  stroke: var(--primary-color);
-  stroke-width: 3;
 }
 
 /* Responsive */

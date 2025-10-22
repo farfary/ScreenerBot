@@ -370,7 +370,7 @@ export function createLifecycle() {
 
       item.addEventListener("click", (e) => {
         if (!e.target.closest(".btn-icon")) {
-          loadStrategyToCanvas(strategyId);
+          loadStrategy(strategyId);
         }
       });
 
@@ -382,7 +382,7 @@ export function createLifecycle() {
       if (editBtn) {
         editBtn.addEventListener("click", (e) => {
           e.stopPropagation();
-          loadStrategyToCanvas(strategyId);
+          loadStrategy(strategyId);
         });
       }
 
@@ -609,7 +609,7 @@ export function createLifecycle() {
     if (modal) modal.classList.add("active");
   }
 
-  // Canvas Operations
+  // Condition Management
   function addCondition(conditionType) {
     const schema = conditionSchemas?.[conditionType];
     if (!schema) return Utils.showToast("Unknown condition type", "error");
@@ -793,8 +793,6 @@ export function createLifecycle() {
     }
   }
 
-  // Removed legacy canvas node rendering/interaction functions
-
   function updateRuleTreeFromEditor() {
     if (!currentStrategy) return;
     if (conditions.length === 0) { currentStrategy.rules = null; return; }
@@ -875,7 +873,6 @@ export function createLifecycle() {
     if (nameInput) {
       nameInput.addEventListener("input", (e) => {
         node.name = e.target.value;
-        // In card layout, re-render conditions instead of canvas
         renderConditionsList();
       });
     }
@@ -1026,7 +1023,6 @@ export function createLifecycle() {
     // Close handlers
     const closeModal = () => {
       modal.classList.remove("active");
-      // No canvas in card layout; nothing else to do on close
     };
 
     closeBtn.onclick = closeModal;
@@ -1089,13 +1085,6 @@ export function createLifecycle() {
     document.addEventListener("keydown", escHandler);
   }
 
-  // Removed canvas view functions in card layout
-
-  // Removed addRootCondition (canvas-era helper)
-
-  // Canvas interaction handlers
-  // Removed setupCanvasInteractions (canvas-era noop)
-
   // Strategy Operations
   function createNewStrategy() {
     currentStrategy = {
@@ -1123,7 +1112,7 @@ export function createLifecycle() {
     Utils.showToast("New strategy created", "success");
   }
 
-  async function loadStrategyToCanvas(strategyId) {
+  async function loadStrategy(strategyId) {
     try {
       const response = await fetch(`/api/strategies/${strategyId}`);
       if (!response.ok) throw new Error("Failed to load strategy");
@@ -1151,9 +1140,9 @@ export function createLifecycle() {
       if (nameInput) nameInput.value = currentStrategy.name;
       if (typeSelect) typeSelect.value = currentStrategy.type;
 
-  // Render strategy into vertical editor
-  parseRuleTreeToConditions(currentStrategy.rules);
-  renderConditionsList();
+      // Render strategy into vertical editor
+      parseRuleTreeToConditions(currentStrategy.rules);
+      renderConditionsList();
 
       // Update active state in list
       $$(".strategy-item").forEach((item) => {
@@ -1499,6 +1488,7 @@ export function createLifecycle() {
       status.classList.add("invalid");
       if (icon) icon.textContent = "✗";
     }
+
 
     if (text) text.textContent = message;
   }
