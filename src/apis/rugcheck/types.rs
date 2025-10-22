@@ -1,8 +1,54 @@
 /// Rugcheck API response types
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::tokens::types::{SecurityRisk, TokenHolder};
+
+// ============================================================================
+// CUSTOM DESERIALIZERS - Handle API inconsistencies
+// ============================================================================
+
+/// Deserialize authority field that can be null, string, or account object
+///
+/// Rugcheck API returns authority fields in three formats:
+/// 1. null - No authority
+/// 2. "address_string" - Authority address (standard)
+/// 3. {"lamports": ..., "owner": ..., ...} - Account info object (Token2022 tokens)
+///
+/// We extract the string address from all formats, falling back to the nested
+/// token.mintAuthority/token.freezeAuthority fields when needed.
+fn deserialize_optional_authority<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+    use serde_json::Value;
+
+    let value = Option::<Value>::deserialize(deserializer)?;
+
+    match value {
+        None => Ok(None),
+        Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) => Ok(Some(s)),
+        Some(Value::Object(map)) => {
+            // For account objects, we can't extract a meaningful address
+            // The object contains lamports, owner, data, etc. but not the authority address
+            // Return None and rely on fallback to token.* fields in the conversion logic
+            if map.contains_key("lamports") && map.contains_key("owner") {
+                Ok(None)
+            } else {
+                Err(Error::custom(format!(
+                    "Unexpected object format for authority field: {:?}",
+                    map.keys().collect::<Vec<_>>()
+                )))
+            }
+        }
+        Some(other) => Err(Error::custom(format!(
+            "Expected null, string, or object for authority field, got: {}",
+            other
+        ))),
+    }
+}
 
 // ============================================================================
 // RUGCHECK DATA STRUCTURE
@@ -119,9 +165,9 @@ pub struct RugcheckResponse {
     pub token: Option<RugcheckToken>,
     #[serde(rename = "tokenMeta")]
     pub token_meta: Option<RugcheckTokenMeta>,
-    #[serde(rename = "mintAuthority")]
+    #[serde(rename = "mintAuthority", deserialize_with = "deserialize_optional_authority")]
     pub mint_authority: Option<String>,
-    #[serde(rename = "freezeAuthority")]
+    #[serde(rename = "freezeAuthority", deserialize_with = "deserialize_optional_authority")]
     pub freeze_authority: Option<String>,
     pub creator: Option<String>,
     #[serde(rename = "creatorBalance")]

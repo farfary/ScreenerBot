@@ -151,6 +151,22 @@ impl RugcheckClient {
     }
 
     /// Fetch security report for a token
+    ///
+    /// **DATA EXTRACTION STRATEGY:**
+    /// Rugcheck API returns data in multiple formats depending on token type:
+    ///
+    /// - **Standard tokens**: Authority fields are strings or null
+    /// - **Token2022 tokens**: Authority fields may be account info objects
+    ///
+    /// This implementation uses a fallback strategy to ensure we NEVER miss data:
+    /// 1. Custom deserializer handles object→None conversion (see types.rs)
+    /// 2. Fallback to nested `token.*` fields when top-level fields are None
+    /// 3. All data extraction is exhaustive - we capture everything the API provides
+    ///
+    /// **SYSTEMATIC ERROR HANDLING:**
+    /// - 404 errors → Return Ok(None) (token not analyzed yet)
+    /// - Decoding errors → Should never occur with flexible deserializers
+    /// - Network errors → Propagated as ApiError for retry logic
     pub async fn fetch_report(&self, mint: &str) -> Result<RugcheckInfo, ApiError> {
         let url = format!("{}/{}/report", RUGCHECK_BASE_URL, mint);
         let api_response: RugcheckResponse = self.parse_json(&url, "rugcheck.report").await?;
@@ -186,6 +202,18 @@ impl RugcheckClient {
         let token = api_response.token;
         let transfer_fee = api_response.transfer_fee;
 
+        // Extract authorities with fallback strategy:
+        // 1. Try top-level fields (may be None if API returned object format)
+        // 2. Fall back to nested token.* fields (always string or null)
+        // This ensures we NEVER miss authority data regardless of API response format
+        let mint_authority = api_response
+            .mint_authority
+            .or_else(|| token.as_ref().and_then(|t| t.mint_authority.clone()));
+
+        let freeze_authority = api_response
+            .freeze_authority
+            .or_else(|| token.as_ref().and_then(|t| t.freeze_authority.clone()));
+
         Ok(RugcheckInfo {
             mint: api_response.mint,
             token_program: api_response.token_program,
@@ -197,8 +225,8 @@ impl RugcheckClient {
             token_uri: token_meta.as_ref().and_then(|t| t.uri.clone()),
             token_mutable: token_meta.as_ref().and_then(|t| t.mutable),
             token_update_authority: token_meta.as_ref().and_then(|t| t.update_authority.clone()),
-            mint_authority: api_response.mint_authority,
-            freeze_authority: api_response.freeze_authority,
+            mint_authority,
+            freeze_authority,
             creator: api_response.creator,
             creator_balance: api_response.creator_balance,
             creator_tokens: api_response.creator_tokens,

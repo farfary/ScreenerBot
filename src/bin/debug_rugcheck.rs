@@ -176,7 +176,12 @@ async fn test_report(client: &RugcheckClient, mint: &str) {
             println!("  Balance: {}", report.creator_balance.unwrap_or(0));
             println!(
                 "  Tokens: {}",
-                report.creator_tokens.as_deref().unwrap_or("N/A")
+                report
+                    .creator_tokens
+                    .as_ref()
+                    .map(|v| v.to_string())
+                    .as_deref()
+                    .unwrap_or("N/A")
             );
 
             // Security score
