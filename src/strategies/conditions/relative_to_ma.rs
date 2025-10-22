@@ -77,6 +77,11 @@ impl ConditionEvaluator for RelativeToMaCondition {
     fn parameter_schema(&self) -> serde_json::Value {
         json!({
             "type": "RelativeToMA",
+            "name": "Relative to Moving Average",
+            "category": "Technical Indicators",
+            "tags": ["ma", "trend"],
+            "icon": "📉",
+            "origin": "strategy",
             "description": "Check price position relative to moving average",
             "parameters": {
                 "period": {

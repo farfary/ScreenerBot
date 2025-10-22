@@ -62,6 +62,11 @@ impl ConditionEvaluator for PositionAgeCondition {
     fn parameter_schema(&self) -> serde_json::Value {
         json!({
             "type": "PositionAge",
+            "name": "Position Age",
+            "category": "Position & Performance",
+            "tags": ["position", "risk"],
+            "icon": "⏱️",
+            "origin": "strategy",
             "description": "Check how long position has been open",
             "parameters": {
                 "hours": {

@@ -62,6 +62,11 @@ impl ConditionEvaluator for PriceThresholdCondition {
     fn parameter_schema(&self) -> serde_json::Value {
         json!({
             "type": "PriceThreshold",
+            "name": "Price Threshold",
+            "category": "Price Patterns",
+            "tags": ["price", "threshold"],
+            "icon": "🎯",
+            "origin": "strategy",
             "description": "Check if current price is above/below a target value",
             "parameters": {
                 "value": {

@@ -91,6 +91,11 @@ impl ConditionEvaluator for PriceMovementCondition {
     fn parameter_schema(&self) -> serde_json::Value {
         json!({
             "type": "PriceMovement",
+            "name": "Price Change in Window",
+            "category": "Price Patterns",
+            "tags": ["momentum", "volatility"],
+            "icon": "📈",
+            "origin": "strategy",
             "description": "Check if price moved by percentage within timeframe",
             "parameters": {
                 "timeframe": {

@@ -63,6 +63,11 @@ impl ConditionEvaluator for LiquidityDepthCondition {
     fn parameter_schema(&self) -> serde_json::Value {
         json!({
             "type": "LiquidityDepth",
+            "name": "Minimum Liquidity (SOL)",
+            "category": "Market Context",
+            "tags": ["liquidity", "safety", "sol"],
+            "icon": "💧",
+            "origin": "strategy",
             "description": "Check pool liquidity level in SOL",
             "parameters": {
                 "threshold": {

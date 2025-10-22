@@ -108,69 +108,54 @@
     </div>
   </aside>
 
-  <!-- Main Canvas Area -->
-  <main class="strategy-canvas-container">
-    <div class="canvas-header">
-      <div class="canvas-title">
+  <!-- Main Editor Area (Centered vertical cards) -->
+  <main class="strategy-editor-container">
+    <div class="editor-header">
+      <div class="editor-title">
         <input type="text" id="strategy-name" placeholder="Untitled Strategy" class="strategy-name-input">
         <select id="strategy-type" class="strategy-type-select">
           <option value="ENTRY">Entry Strategy</option>
           <option value="EXIT">Exit Strategy</option>
         </select>
       </div>
-      <div class="canvas-status" id="canvas-status">
-        <span class="status-indicator"></span>
-        <span class="status-text">Ready</span>
+      <div class="editor-actions">
+        <button class="btn" id="add-condition"><span class="icon">➕</span>Add Condition</button>
+        <button class="btn" id="load-template"><span class="icon">📦</span>Load Template</button>
       </div>
     </div>
-    
-    <div class="canvas-wrapper">
-      <div class="strategy-canvas" id="strategy-canvas">
-        <div class="canvas-empty-state">
-          <div class="empty-state-content">
-            <span class="icon">🎨</span>
-            <h3>Build Your Strategy</h3>
-            <p>Drag conditions from the right sidebar to start building</p>
-            <div class="quick-start">
-              <button class="btn" id="add-root-node">Add Root Condition</button>
-              <button class="btn" id="load-template">Load Template</button>
-            </div>
-          </div>
+
+    <div class="editor-content">
+      <div class="conditions-list" id="conditions-list">
+        <div class="empty-state">
+          <span class="icon">🧩</span>
+          <p>No conditions yet</p>
+          <small>Use "Add Condition" to start building</small>
         </div>
       </div>
-      
-      <div class="canvas-controls">
-        <div class="control-group">
-          <button class="btn-icon" id="zoom-in" title="Zoom In">➕</button>
-          <button class="btn-icon" id="zoom-out" title="Zoom Out">➖</button>
-          <button class="btn-icon" id="reset-view" title="Reset View">🎯</button>
-          <button class="btn-icon" id="fit-view" title="Fit to Screen">⛶</button>
-        </div>
-        <div class="control-group">
-          <button class="btn-icon" id="auto-layout" title="Auto Layout">📐</button>
-          <button class="btn-icon" id="toggle-grid" title="Toggle Grid">▦</button>
-        </div>
-      </div>
-      
-      <div class="canvas-minimap" id="canvas-minimap"></div>
     </div>
   </main>
 
-  <!-- Right Sidebar: Condition Library -->
-  <aside class="strategies-sidebar right">
-    <div class="sidebar-header">
-      <h2>Condition Library</h2>
+  <!-- Add Condition Modal (replaces right sidebar library) -->
+  <div class="condition-catalog-modal" id="condition-catalog-modal">
+    <div class="condition-catalog-content">
+      <div class="condition-catalog-header">
+        <div class="condition-catalog-title">
+          <span class="icon">🧩</span>
+          <h3>Add Condition</h3>
+        </div>
+        <button class="condition-catalog-close" id="close-condition-catalog">✕</button>
+      </div>
+      <div class="condition-catalog-body">
+        <div class="search-container">
+          <input type="text" id="condition-search" placeholder="Search conditions..." class="search-input">
+          <button class="btn-icon" id="clear-search">✕</button>
+        </div>
+        <div class="condition-categories" id="condition-categories">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
     </div>
-    
-    <div class="search-container">
-      <input type="text" id="condition-search" placeholder="Search conditions..." class="search-input">
-      <button class="btn-icon" id="clear-search">✕</button>
-    </div>
-    
-    <div class="condition-categories" id="condition-categories">
-      <!-- Dynamically populated -->
-    </div>
-  </aside>
+  </div>
 
   <!-- Bottom Toolbar -->
   <footer class="strategy-toolbar">

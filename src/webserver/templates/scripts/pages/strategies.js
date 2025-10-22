@@ -10,18 +10,8 @@ export function createLifecycle() {
   let templates = [];
   let conditionSchemas = null;
 
-  // Canvas state
-  let canvasNodes = [];
-  let nextNodeId = 1;
-  let selectedNodeId = null;
-  let isDraggingNode = false;
-  let draggedNode = null;
-  let dragOffset = { x: 0, y: 0 };
-  let canvasZoom = 1.0;
-  let canvasPan = { x: 0, y: 0 };
-  let isDraggingCanvas = false;
-  let canvasDragStart = { x: 0, y: 0 };
-  let canvasPanStart = { x: 0, y: 0 };
+  // Editor state (vertical cards)
+  let conditions = []; // [{ type, name, enabled, required, params: {k: v} }]
 
   // Pollers
   let strategiesPoller = null;
@@ -40,8 +30,8 @@ export function createLifecycle() {
       // Setup sidebar actions
       setupSidebarActions();
 
-      // Setup canvas controls
-      setupCanvasControls();
+  // Setup editor actions
+  setupEditorActions();
 
       // Setup toolbar actions
       setupToolbarActions();
@@ -52,11 +42,8 @@ export function createLifecycle() {
       // Load condition schemas
       await loadConditionSchemas();
 
-      // Initialize condition library
-      initializeConditionLibrary();
-
-      // Setup canvas interactions
-      setupCanvasInteractions();
+  // Initialize condition catalog (modal)
+  initializeConditionCatalog();
     },
 
     async activate(ctx) {
@@ -95,9 +82,7 @@ export function createLifecycle() {
       currentStrategy = null;
       strategies = [];
       templates = [];
-      canvasNodes = [];
-      nextNodeId = 1;
-      selectedNodeId = null;
+      conditions = [];
     },
   };
 
@@ -185,37 +170,26 @@ export function createLifecycle() {
     }
   }
 
-  // Canvas Controls
-  function setupCanvasControls() {
-    const zoomInBtn = $("#zoom-in");
-    const zoomOutBtn = $("#zoom-out");
-    const resetViewBtn = $("#reset-view");
-    const fitViewBtn = $("#fit-view");
-    const autoLayoutBtn = $("#auto-layout");
-    const toggleGridBtn = $("#toggle-grid");
-
-    if (zoomInBtn) zoomInBtn.addEventListener("click", () => zoomCanvas(1.2));
-    if (zoomOutBtn) zoomOutBtn.addEventListener("click", () => zoomCanvas(0.8));
-    if (resetViewBtn) resetViewBtn.addEventListener("click", resetCanvasView);
-    if (fitViewBtn) fitViewBtn.addEventListener("click", fitCanvasToView);
-    if (autoLayoutBtn) autoLayoutBtn.addEventListener("click", autoLayoutNodes);
-    if (toggleGridBtn) toggleGridBtn.addEventListener("click", toggleGrid);
-
-    // Empty state actions
-    const addRootBtn = $("#add-root-node");
+  // Editor actions (add condition, load template)
+  function setupEditorActions() {
+    const addBtn = $("#add-condition");
     const loadTemplateBtn = $("#load-template");
+    const catalog = $("#condition-catalog-modal");
+    const closeCatalog = $("#close-condition-catalog");
 
-    if (addRootBtn) {
-      addRootBtn.addEventListener("click", () => {
-        addRootCondition();
-      });
+    if (addBtn) {
+      addBtn.addEventListener("click", () => openConditionCatalog());
     }
-
     if (loadTemplateBtn) {
       loadTemplateBtn.addEventListener("click", () => {
-        // Switch to templates tab
         const templatesTab = $(".tab-btn[data-tab='templates']");
         if (templatesTab) templatesTab.click();
+      });
+    }
+    if (closeCatalog && catalog) {
+      closeCatalog.addEventListener("click", () => catalog.classList.remove("active"));
+      catalog.addEventListener("click", (e) => {
+        if (e.target === catalog) catalog.classList.remove("active");
       });
     }
   }
@@ -266,7 +240,7 @@ export function createLifecycle() {
     }
   }
 
-  // Search
+  // Search (condition catalog)
   function setupSearch() {
     const searchInput = $("#condition-search");
     const clearBtn = $("#clear-search");
@@ -476,79 +450,64 @@ export function createLifecycle() {
     });
   }
 
-  function initializeConditionLibrary() {
+  function initializeConditionCatalog() {
     const container = $("#condition-categories");
     if (!container || !conditionSchemas) return;
 
-    // Group conditions by category
-    const categories = {
-      "Price Patterns": [],
-      "Technical Indicators": [],
-      "Market Context": [],
-      "Position & Performance": [],
-    };
-
-    // Categorize conditions
+    // Build categories from schema metadata; hide non-strategy origins
+    const categories = {};
     Object.entries(conditionSchemas).forEach(([type, schema]) => {
-      const condition = { type, ...schema };
-
-      if (type.includes("Price")) {
-        categories["Price Patterns"].push(condition);
-      } else if (type.includes("MA") || type.includes("RSI")) {
-        categories["Technical Indicators"].push(condition);
-      } else if (type.includes("Liquidity") || type.includes("Time")) {
-        categories["Market Context"].push(condition);
-      } else {
-        categories["Position & Performance"].push(condition);
-      }
+      if (schema.origin && String(schema.origin).toLowerCase() !== "strategy") return;
+      const cat = schema.category || "General";
+      if (!categories[cat]) categories[cat] = [];
+      categories[cat].push({ type, ...schema });
     });
 
-    // Render categories
+    // Render
     container.innerHTML = Object.entries(categories)
-      .map(
-        ([category, conditions]) => `
-      <div class="condition-category">
-        <div class="category-header" data-category="${category}">
-          <div class="category-title">
-            <span class="icon">${getCategoryIcon(category)}</span>
-            ${category}
+      .map(([category, list]) => `
+        <div class="condition-category">
+          <div class="category-header" data-category="${category}">
+            <div class="category-title">
+              <span class="icon">${getCategoryIcon(category)}</span>
+              ${category}
+            </div>
+            <span class="category-toggle">▼</span>
           </div>
-          <span class="category-toggle">▼</span>
+          <div class="category-items">
+            ${list.map((c) => renderConditionItem(c)).join("")}
+          </div>
         </div>
-        <div class="category-items">
-          ${conditions.map((condition) => renderConditionItem(condition)).join("")}
-        </div>
-      </div>
-    `
-      )
+      `)
       .join("");
 
-    // Setup category toggle
+    // Toggle
     $$(".category-header").forEach((header) => {
       header.addEventListener("click", () => {
         const items = header.nextElementSibling;
         const toggle = header.querySelector(".category-toggle");
-
-        if (items.classList.contains("collapsed")) {
-          items.classList.remove("collapsed");
-          toggle.textContent = "▼";
-        } else {
-          items.classList.add("collapsed");
-          toggle.textContent = "▶";
-        }
+        if (items.classList.contains("collapsed")) { items.classList.remove("collapsed"); toggle.textContent = "▼"; }
+        else { items.classList.add("collapsed"); toggle.textContent = "▶"; }
       });
     });
 
-    // Setup drag and drop
-    setupDragAndDrop();
+    // Click to add
+    $$(".condition-item").forEach((item) => {
+      item.addEventListener("click", () => {
+        const type = item.dataset.conditionType;
+        addCondition(type);
+        const catalog = $("#condition-catalog-modal");
+        if (catalog) catalog.classList.remove("active");
+      });
+    });
   }
 
   function renderConditionItem(condition) {
     return `
       <div class="condition-item" draggable="true" data-condition-type="${condition.type}">
         <div class="condition-item-header">
-          <span class="condition-icon">${getConditionIcon(condition.type)}</span>
-          <span class="condition-name">${condition.name || condition.type}</span>
+          <span class="condition-icon">${condition.icon || getConditionIcon(condition.type)}</span>
+          <span class="condition-name">${Utils.escapeHtml(condition.name || condition.type)}</span>
         </div>
         <div class="condition-description">
           ${condition.description || "No description available"}
@@ -645,236 +604,214 @@ export function createLifecycle() {
     });
   }
 
-  // Drag and Drop
-  function setupDragAndDrop() {
-    const canvas = $("#strategy-canvas");
-    if (!canvas) return;
-
-    // Draggable items
-    $$(".condition-item").forEach((item) => {
-      item.addEventListener("dragstart", (e) => {
-        const conditionType = item.dataset.conditionType;
-        e.dataTransfer.setData("conditionType", conditionType);
-        item.classList.add("dragging");
-      });
-
-      item.addEventListener("dragend", () => {
-        item.classList.remove("dragging");
-      });
-    });
-
-    // Drop zone
-    canvas.addEventListener("dragover", (e) => {
-      e.preventDefault();
-    });
-
-    canvas.addEventListener("drop", (e) => {
-      e.preventDefault();
-      const conditionType = e.dataTransfer.getData("conditionType");
-
-      if (conditionType) {
-        const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-
-        addConditionToCanvas(conditionType, x, y);
-      }
-    });
-
-    // Canvas panning - mousedown on canvas background
-    canvas.addEventListener("mousedown", (e) => {
-      // Only start panning if clicking on the canvas itself, not on a node
-      if (e.target === canvas) {
-        isDraggingCanvas = true;
-        canvasDragStart = { x: e.clientX, y: e.clientY };
-        canvasPanStart = { x: canvasPan.x, y: canvasPan.y };
-        canvas.style.cursor = "grabbing";
-        e.preventDefault();
-      }
-    });
+  function openConditionCatalog() {
+    const modal = $("#condition-catalog-modal");
+    if (modal) modal.classList.add("active");
   }
 
   // Canvas Operations
-  function addConditionToCanvas(conditionType, x, y) {
-    console.log(`Adding condition ${conditionType} at (${x}, ${y})`);
+  function addCondition(conditionType) {
+    const schema = conditionSchemas?.[conditionType];
+    if (!schema) return Utils.showToast("Unknown condition type", "error");
+    const params = {};
+    Object.entries(schema.parameters || {}).forEach(([k, p]) => { params[k] = p.default ?? null; });
+    conditions.push({ type: conditionType, name: schema.name || conditionType, enabled: true, required: true, params });
+    renderConditionsList();
+    updateRuleTreeFromEditor();
+    Utils.showToast(`Added ${schema.name || conditionType}`, "success");
+  }
 
-    // Get condition schema
-    const schema = conditionSchemas[conditionType];
-    if (!schema) {
-      Utils.showToast("Unknown condition type", "error");
+  // Removed createDefaultParameters (unused)
+
+  function renderConditionsList() {
+    const list = $("#conditions-list");
+    if (!list) return;
+    if (!conditions.length) {
+      list.innerHTML = `<div class="empty-state"><span class="icon">🧩</span><p>No conditions yet</p><small>Use "Add Condition" to start building</small></div>`;
       return;
     }
 
-    // Create new node
-    const node = {
-      id: `node-${nextNodeId++}`,
-      type: "condition",
-      conditionType,
-      name: schema.name || conditionType,
-      parameters: createDefaultParameters(schema),
-      position: { x: x / canvasZoom - canvasPan.x, y: y / canvasZoom - canvasPan.y },
-    };
+    list.innerHTML = conditions.map((c, idx) => renderConditionCard(c, idx)).join("");
 
-    canvasNodes.push(node);
-    renderCanvas();
-    selectNode(node.id);
-
-    Utils.showToast(`Added ${node.name}`, "success");
-  }
-
-  function createDefaultParameters(schema) {
-    const params = {};
-    if (schema.parameters) {
-      Object.entries(schema.parameters).forEach(([key, paramSchema]) => {
-        params[key] = paramSchema.default || null;
-      });
-    }
-    return params;
-  }
-
-  function renderCanvas() {
-    const canvas = $("#strategy-canvas");
-    if (!canvas) return;
-
-    // Hide empty state if we have nodes
-    const emptyState = canvas.querySelector(".canvas-empty-state");
-    if (emptyState) {
-      emptyState.style.display = canvasNodes.length > 0 ? "none" : "";
-    }
-
-    // Remove existing nodes (except empty state)
-    canvas.querySelectorAll(".canvas-node").forEach((node) => node.remove());
-    canvas.querySelectorAll(".canvas-connection").forEach((conn) => conn.remove());
-
-    // Render nodes
-    canvasNodes.forEach((node) => {
-      renderNode(node);
+    // Wire actions
+    $$(".condition-card [data-action]").forEach((btn) => {
+      const action = btn.dataset.action;
+      const index = parseInt(btn.closest(".condition-card").dataset.index, 10);
+      if (action === "toggle-expand") {
+        btn.addEventListener("click", () => toggleCardExpand(index));
+      } else if (action === "delete") {
+        btn.addEventListener("click", () => deleteCondition(index));
+      } else if (action === "duplicate") {
+        btn.addEventListener("click", () => duplicateCondition(index));
+      } else if (action === "move-up") {
+        btn.addEventListener("click", () => moveCondition(index, -1));
+      } else if (action === "move-down") {
+        btn.addEventListener("click", () => moveCondition(index, 1));
+      }
     });
 
-    // Update rule tree structure
-    updateRuleTreeFromCanvas();
+    // Toggles and param inputs
+    $$(".condition-card .toggle-enabled").forEach((el) => {
+      el.addEventListener("change", (e) => {
+        const idx = parseInt(el.closest(".condition-card").dataset.index, 10);
+        conditions[idx].enabled = e.target.checked;
+        updateRuleTreeFromEditor();
+      });
+    });
+    $$(".condition-card .toggle-required").forEach((el) => {
+      el.addEventListener("change", (e) => {
+        const idx = parseInt(el.closest(".condition-card").dataset.index, 10);
+        conditions[idx].required = e.target.checked;
+        // For now, required flag is cosmetic; combinator remains global AND
+      });
+    });
+
+    // Param inputs
+    $$(".condition-card .param-field input, .condition-card .param-field select").forEach((input) => {
+      input.addEventListener("change", () => {
+        const card = input.closest(".condition-card");
+        const idx = parseInt(card.dataset.index, 10);
+        const key = input.dataset.key;
+        const schema = conditionSchemas[conditions[idx].type];
+        const spec = schema.parameters?.[key] || {};
+        let value = input.value;
+        if (spec.type === "number" || spec.type === "percent" || spec.type === "sol") value = parseFloat(value);
+        if (spec.type === "boolean") value = input.checked;
+        conditions[idx].params[key] = value;
+        updateRuleTreeFromEditor();
+        // Update summary text
+        const summary = card.querySelector(".condition-summary");
+        if (summary) summary.textContent = buildConditionSummary(conditions[idx]);
+      });
+    });
   }
 
-  function renderNode(node) {
-    const canvas = $("#strategy-canvas");
-    if (!canvas) return;
-
-    const nodeEl = document.createElement("div");
-    nodeEl.className = `canvas-node ${node.type} ${selectedNodeId === node.id ? "selected" : ""}`;
-    nodeEl.dataset.nodeId = node.id;
-    nodeEl.style.left = `${node.position.x * canvasZoom + canvasPan.x}px`;
-    nodeEl.style.top = `${node.position.y * canvasZoom + canvasPan.y}px`;
-    nodeEl.style.transform = `scale(${canvasZoom})`;
-    nodeEl.style.transformOrigin = "top left";
-
-    const icon = getConditionIcon(node.conditionType);
-    const paramCount = Object.keys(node.parameters || {}).length;
-
-    nodeEl.innerHTML = `
-      <div class="node-header">
-        <span class="node-icon">${icon}</span>
-        <span class="node-title">${Utils.escapeHtml(node.name)}</span>
-        <button class="node-delete" title="Delete node">✕</button>
-      </div>
-      <div class="node-body">
-        <div class="node-type">${Utils.escapeHtml(node.conditionType)}</div>
-        ${paramCount > 0 ? `<div class="node-params">${paramCount} parameters</div>` : ""}
+  function renderConditionCard(c, idx) {
+    const schema = conditionSchemas?.[c.type] || {};
+    const icon = schema.icon || getConditionIcon(c.type);
+    const badges = [schema.category || "General"].map((b) => `<span class="condition-badge">${Utils.escapeHtml(b)}</span>`).join("");
+    const summary = buildConditionSummary(c);
+    const body = renderParamEditor(c, schema, idx);
+    return `
+      <div class="condition-card" data-index="${idx}">
+        <div class="card-header">
+          <div class="card-title"><span class="icon">${icon}</span>${Utils.escapeHtml(c.name || c.type)}</div>
+          <div class="card-meta">
+            ${badges}
+            <label><input type="checkbox" class="toggle-enabled" ${c.enabled ? "checked" : ""}/> Enabled</label>
+            <label><input type="checkbox" class="toggle-required" ${c.required ? "checked" : ""}/> Required</label>
+            <div class="condition-actions">
+              <button class="btn-icon" data-action="move-up" title="Move up">▲</button>
+              <button class="btn-icon" data-action="move-down" title="Move down">▼</button>
+              <button class="btn-icon" data-action="duplicate" title="Duplicate">📄</button>
+              <button class="btn-icon" data-action="delete" title="Delete">🗑️</button>
+              <button class="btn-icon" data-action="toggle-expand" title="More">⋯</button>
+            </div>
+          </div>
+        </div>
+        <div class="card-header" style="padding-top:0;">
+          <div class="condition-summary">${Utils.escapeHtml(summary)}</div>
+        </div>
+        <div class="card-body">${body}</div>
       </div>
     `;
+  }
 
-    // Attach event listeners
-    nodeEl.addEventListener("mousedown", (e) => {
-      if (e.target.classList.contains("node-delete")) {
-        deleteNode(node.id);
-        e.stopPropagation();
-        return;
-      }
-      startNodeDrag(node.id, e);
+  function toggleCardExpand(index) {
+    const card = document.querySelector(`.condition-card[data-index="${index}"]`);
+    if (card) card.classList.toggle("expanded");
+  }
+
+  function duplicateCondition(index) {
+    const copy = JSON.parse(JSON.stringify(conditions[index]));
+    conditions.splice(index + 1, 0, copy);
+    renderConditionsList();
+    updateRuleTreeFromEditor();
+  }
+
+  function deleteCondition(index) {
+    conditions.splice(index, 1);
+    renderConditionsList();
+    updateRuleTreeFromEditor();
+  }
+
+  function moveCondition(index, delta) {
+    const newIndex = index + delta;
+    if (newIndex < 0 || newIndex >= conditions.length) return;
+    const [item] = conditions.splice(index, 1);
+    conditions.splice(newIndex, 0, item);
+    renderConditionsList();
+    updateRuleTreeFromEditor();
+  }
+
+  function buildConditionSummary(c) {
+    const schema = conditionSchemas?.[c.type] || {};
+    const keys = Object.keys(schema.parameters || {}).slice(0, 3);
+    const parts = keys.map((k) => `${k}=${formatParamValue(c.params[k])}`);
+    return parts.join(", ") || "No parameters";
+  }
+
+  function formatParamValue(v) {
+    if (v === undefined || v === null) return "";
+    if (typeof v === "number") return String(v);
+    if (typeof v === "boolean") return v ? "true" : "false";
+    return String(v);
+  }
+
+  function renderParamEditor(c, schema, idx) {
+    const entries = Object.entries(schema.parameters || {});
+    if (!entries.length) return "<div class=\"param-row\">No parameters</div>";
+    // Basic approach: show all params; could gate last N as advanced in future
+    const fields = entries.map(([key, spec]) => {
+      const label = spec.name || key;
+      const val = c.params[key] ?? spec.default ?? "";
+      return `
+        <div class="param-field">
+          <label>${Utils.escapeHtml(label)}</label>
+          ${renderParamInput(idx, key, spec, val)}
+          ${spec.description ? `<div class="property-description">${Utils.escapeHtml(spec.description)}</div>` : ""}
+        </div>
+      `;
     });
-
-    nodeEl.addEventListener("click", (e) => {
-      if (!e.target.classList.contains("node-delete")) {
-        selectNode(node.id);
-      }
-    });
-
-    canvas.appendChild(nodeEl);
+    return `<div class="param-row">${fields.join("")}</div>`;
   }
 
-  function selectNode(nodeId) {
-    selectedNodeId = nodeId;
-    renderCanvas();
-
-    // Open parameter editor modal instead of switching tabs
-    const node = canvasNodes.find((n) => n.id === nodeId);
-    if (node) {
-      openParameterEditor(node);
+  function renderParamInput(idx, key, spec, value) {
+    const id = `param-${idx}-${key}`;
+    const data = `data-key="${key}"`;
+    switch (spec.type) {
+      case "number":
+      case "percent":
+      case "sol":
+        return `<input id="${id}" ${data} type="number" value="${value}" ${spec.min !== undefined ? `min="${spec.min}"` : ""} ${spec.max !== undefined ? `max="${spec.max}"` : ""} ${spec.step !== undefined ? `step="${spec.step}"` : ""}>`;
+      case "boolean":
+        return `<input id="${id}" ${data} type="checkbox" ${value ? "checked" : ""}>`;
+      case "enum":
+        return `<select id="${id}" ${data}>${(spec.options || spec.values || []).map((opt) => `<option value="${opt}" ${opt === value ? "selected" : ""}>${opt}</option>`).join("")}</select>`;
+      default:
+        return `<input id="${id}" ${data} type="text" value="${Utils.escapeHtml(String(value))}">`;
     }
   }
 
-  function deleteNode(nodeId) {
-    canvasNodes = canvasNodes.filter((n) => n.id !== nodeId);
-    if (selectedNodeId === nodeId) {
-      selectedNodeId = null;
-      renderPropertiesPanel(null);
-    }
-    renderCanvas();
-    Utils.showToast("Node deleted", "success");
-  }
+  // Removed legacy canvas node rendering/interaction functions
 
-  function startNodeDrag(nodeId, e) {
-    const node = canvasNodes.find((n) => n.id === nodeId);
-    if (!node) return;
-
-    isDraggingNode = true;
-    draggedNode = node;
-    dragOffset = {
-      x: e.clientX / canvasZoom - node.position.x,
-      y: e.clientY / canvasZoom - node.position.y,
-    };
-
-    e.preventDefault();
-  }
-
-  function updateRuleTreeFromCanvas() {
-    if (canvasNodes.length === 0) {
-      if (currentStrategy) {
-        currentStrategy.rules = null;
-      }
-      return;
-    }
-
-    // For now, create a simple AND rule with all conditions
-    // In the future, this could support complex tree structures
-    const conditions = canvasNodes
-      .filter((n) => n.type === "condition")
-      .map((n) => {
-        const schema = conditionSchemas[n.conditionType] || { parameters: {} };
+  function updateRuleTreeFromEditor() {
+    if (!currentStrategy) return;
+    if (conditions.length === 0) { currentStrategy.rules = null; return; }
+    const condNodes = conditions
+      .filter((c) => c.enabled)
+      .map((c) => {
+        const schema = conditionSchemas?.[c.type] || { parameters: {} };
         const params = {};
         Object.keys(schema.parameters || {}).forEach((k) => {
-          const v = n.parameters[k];
-          if (v && typeof v === "object" && "value" in v) {
-            params[k] = v;
-          } else {
-            const defv = schema.parameters[k]?.default;
-            params[k] = { value: v, default: defv };
-          }
+          const v = c.params[k];
+          const defv = schema.parameters[k]?.default;
+          params[k] = { value: v, default: defv };
         });
-        return { condition: { type: n.conditionType, parameters: params } };
+        return { condition: { type: c.type, parameters: params } };
       });
-
-    if (conditions.length === 0) {
-      if (currentStrategy) currentStrategy.rules = null;
-    } else if (conditions.length === 1) {
-      if (currentStrategy) currentStrategy.rules = conditions[0];
-    } else {
-      if (currentStrategy) {
-        currentStrategy.rules = {
-          operator: "AND",
-          conditions,
-        };
-      }
-    }
+    if (condNodes.length === 1) currentStrategy.rules = condNodes[0];
+    else currentStrategy.rules = { operator: "AND", conditions: condNodes };
   }
 
   function renderPropertiesPanel(node) {
@@ -938,7 +875,8 @@ export function createLifecycle() {
     if (nameInput) {
       nameInput.addEventListener("input", (e) => {
         node.name = e.target.value;
-        renderCanvas();
+        // In card layout, re-render conditions instead of canvas
+        renderConditionsList();
       });
     }
 
@@ -965,7 +903,7 @@ export function createLifecycle() {
             } else {
               node.parameters[key] = { value, default: defaultVal };
             }
-            updateRuleTreeFromCanvas();
+            updateRuleTreeFromEditor();
           };
           input.addEventListener("input", handler);
           input.addEventListener("change", handler);
@@ -1027,7 +965,7 @@ export function createLifecycle() {
     `;
   }
 
-  // Parameter Editor Modal Functions
+  // Parameter Editor Modal Functions (kept for potential future use, not auto-opened)
   function openParameterEditor(node) {
     const modal = $("#parameter-editor-modal");
     const body = $("#parameter-editor-body");
@@ -1088,8 +1026,7 @@ export function createLifecycle() {
     // Close handlers
     const closeModal = () => {
       modal.classList.remove("active");
-      selectedNodeId = null;
-      renderCanvas();
+      // No canvas in card layout; nothing else to do on close
     };
 
     closeBtn.onclick = closeModal;
@@ -1136,8 +1073,8 @@ export function createLifecycle() {
         });
       }
 
-      updateRuleTreeFromCanvas();
-      renderCanvas();
+      updateRuleTreeFromEditor();
+      renderConditionsList();
       closeModal();
       Utils.showToast("Parameters updated", "success");
     };
@@ -1152,142 +1089,12 @@ export function createLifecycle() {
     document.addEventListener("keydown", escHandler);
   }
 
-  function zoomCanvas(factor) {
-    canvasZoom = Math.max(0.5, Math.min(2.0, canvasZoom * factor));
-    renderCanvas();
-    Utils.showToast(`Zoom: ${Math.round(canvasZoom * 100)}%`, "info");
-  }
+  // Removed canvas view functions in card layout
 
-  function resetCanvasView() {
-    canvasZoom = 1.0;
-    canvasPan = { x: 0, y: 0 };
-    renderCanvas();
-    Utils.showToast("View reset", "success");
-  }
-
-  function fitCanvasToView() {
-    if (canvasNodes.length === 0) {
-      resetCanvasView();
-      return;
-    }
-
-    // Calculate bounding box
-    let minX = Infinity,
-      minY = Infinity,
-      maxX = -Infinity,
-      maxY = -Infinity;
-
-    canvasNodes.forEach((node) => {
-      minX = Math.min(minX, node.position.x);
-      minY = Math.min(minY, node.position.y);
-      maxX = Math.max(maxX, node.position.x + 200); // Approximate node width
-      maxY = Math.max(maxY, node.position.y + 100); // Approximate node height
-    });
-
-    const canvas = $("#strategy-canvas");
-    if (!canvas) return;
-
-    const width = maxX - minX;
-    const height = maxY - minY;
-    const canvasWidth = canvas.clientWidth;
-    const canvasHeight = canvas.clientHeight;
-
-    const scaleX = canvasWidth / width;
-    const scaleY = canvasHeight / height;
-    canvasZoom = Math.min(scaleX, scaleY, 1.0) * 0.9; // 90% to add padding
-
-    canvasPan = {
-      x: (canvasWidth / canvasZoom - width) / 2 - minX,
-      y: (canvasHeight / canvasZoom - height) / 2 - minY,
-    };
-
-    renderCanvas();
-    Utils.showToast("Fit to view", "success");
-  }
-
-  function autoLayoutNodes() {
-    if (canvasNodes.length === 0) return;
-
-    // Simple grid layout
-    const spacing = { x: 250, y: 150 };
-    const columns = Math.ceil(Math.sqrt(canvasNodes.length));
-
-    canvasNodes.forEach((node, index) => {
-      const col = index % columns;
-      const row = Math.floor(index / columns);
-      node.position = {
-        x: col * spacing.x + 50,
-        y: row * spacing.y + 50,
-      };
-    });
-
-    renderCanvas();
-    Utils.showToast("Auto layout applied", "success");
-  }
-
-  function toggleGrid() {
-    const canvas = $("#strategy-canvas");
-    if (canvas) {
-      canvas.classList.toggle("no-grid");
-      Utils.showToast("Grid toggled", "success");
-    }
-  }
-
-  function addRootCondition() {
-    const canvas = $("#strategy-canvas");
-    if (!canvas) return;
-
-    // Add a condition at the center
-    const rect = canvas.getBoundingClientRect();
-    const x = rect.width / 2;
-    const y = rect.height / 2;
-
-    // Use the first available condition type
-    const firstConditionType = Object.keys(conditionSchemas)[0];
-    if (firstConditionType) {
-      addConditionToCanvas(firstConditionType, x, y);
-    } else {
-      Utils.showToast("No condition types available", "warning");
-    }
-  }
+  // Removed addRootCondition (canvas-era helper)
 
   // Canvas interaction handlers
-  function setupCanvasInteractions() {
-    const canvas = $("#strategy-canvas");
-    if (!canvas) return;
-
-    // Mouse move for dragging nodes and panning canvas
-    document.addEventListener("mousemove", (e) => {
-      if (isDraggingNode && draggedNode) {
-        draggedNode.position = {
-          x: e.clientX / canvasZoom - dragOffset.x,
-          y: e.clientY / canvasZoom - dragOffset.y,
-        };
-        renderCanvas();
-      } else if (isDraggingCanvas) {
-        const deltaX = e.clientX - canvasDragStart.x;
-        const deltaY = e.clientY - canvasDragStart.y;
-        canvasPan = {
-          x: canvasPanStart.x + deltaX,
-          y: canvasPanStart.y + deltaY,
-        };
-        renderCanvas();
-      }
-    });
-
-    // Mouse up to stop dragging
-    document.addEventListener("mouseup", () => {
-      if (isDraggingNode) {
-        isDraggingNode = false;
-        draggedNode = null;
-      }
-      if (isDraggingCanvas) {
-        isDraggingCanvas = false;
-        const canvas = $("#strategy-canvas");
-        if (canvas) canvas.style.cursor = "grab";
-      }
-    });
-  }
+  // Removed setupCanvasInteractions (canvas-era noop)
 
   // Strategy Operations
   function createNewStrategy() {
@@ -1308,12 +1115,10 @@ export function createLifecycle() {
     if (nameInput) nameInput.value = currentStrategy.name;
     if (typeSelect) typeSelect.value = currentStrategy.type;
 
-    // Clear canvas
-    canvasNodes = [];
-    nextNodeId = 1;
-    selectedNodeId = null;
-    renderCanvas();
-    renderPropertiesPanel(null);
+  // Clear editor conditions
+  conditions = [];
+  renderConditionsList();
+  renderPropertiesPanel(null);
 
     Utils.showToast("New strategy created", "success");
   }
@@ -1346,8 +1151,9 @@ export function createLifecycle() {
       if (nameInput) nameInput.value = currentStrategy.name;
       if (typeSelect) typeSelect.value = currentStrategy.type;
 
-      // Render strategy on canvas
-      renderStrategyOnCanvas(currentStrategy.rules);
+  // Render strategy into vertical editor
+  parseRuleTreeToConditions(currentStrategy.rules);
+  renderConditionsList();
 
       // Update active state in list
       $$(".strategy-item").forEach((item) => {
@@ -1364,57 +1170,25 @@ export function createLifecycle() {
       Utils.showToast("Failed to load strategy", "error");
     }
   }
-
-  function renderStrategyOnCanvas(rules) {
-    // Clear existing nodes
-    canvasNodes = [];
-    nextNodeId = 1;
-    selectedNodeId = null;
-
-    if (!rules) {
-      renderCanvas();
-      return;
+  function parseRuleTreeToConditions(rules) {
+    conditions = [];
+    if (!rules) return;
+    const leafs = [];
+    function walk(node) {
+      if (!node) return;
+      if (node.condition) { leafs.push(node.condition); return; }
+      (node.conditions || []).forEach((c) => walk(c));
     }
-
-    // Parse rule tree and create nodes
-    const spacing = { x: 250, y: 150 };
-    let nodeIndex = 0;
-
-    function addRuleNode(rule, depth = 0, index = 0) {
-      const x = index * spacing.x + 50;
-      const y = depth * spacing.y + 50;
-
-      if (rule.operator) {
-        // It's a logical operator node
-        if (rule.conditions && Array.isArray(rule.conditions)) {
-          rule.conditions.forEach((condition) => {
-            addRuleNode(condition, depth, nodeIndex++);
-          });
-        }
-      } else if (rule.condition) {
-        // It's a condition node
-        const cond = rule.condition;
-        const schema = conditionSchemas[cond.type];
-        const node = {
-          id: `node-${nextNodeId++}`,
-          type: "condition",
-          conditionType: cond.type,
-          name: schema?.name || cond.type,
-          parameters: cond.parameters || {},
-          position: { x, y },
-        };
-        canvasNodes.push(node);
-      }
-    }
-
-    addRuleNode(rules);
-
-    // Auto-layout for better visualization
-    if (canvasNodes.length > 0) {
-      autoLayoutNodes();
-    } else {
-      renderCanvas();
-    }
+    walk(rules);
+    leafs.forEach((cond) => {
+      const schema = conditionSchemas?.[cond.type] || { parameters: {} };
+      const params = {};
+      Object.keys(schema.parameters || {}).forEach((k) => {
+        const p = cond.parameters?.[k];
+        params[k] = p && typeof p === "object" && "value" in p ? p.value : (schema.parameters[k]?.default ?? null);
+      });
+      conditions.push({ type: cond.type, name: schema.name || cond.type, enabled: true, required: true, params });
+    });
   }
 
   async function saveStrategy() {
@@ -1430,6 +1204,9 @@ export function createLifecycle() {
 
       if (nameInput) currentStrategy.name = nameInput.value;
       if (typeSelect) currentStrategy.type = typeSelect.value;
+
+      // Sync rule tree from editor
+      updateRuleTreeFromEditor();
 
       const body = {
         name: currentStrategy.name,
@@ -1695,8 +1472,9 @@ export function createLifecycle() {
     if (nameInput) nameInput.value = currentStrategy.name;
     if (typeSelect) typeSelect.value = currentStrategy.type;
 
-  // Render on canvas
-  renderStrategyOnCanvas(currentStrategy.rules);
+  // Render into vertical editor
+  parseRuleTreeToConditions(currentStrategy.rules);
+  renderConditionsList();
 
   // Switch to strategies tab
     const strategiesTab = $(".tab-btn[data-tab='strategies']");
