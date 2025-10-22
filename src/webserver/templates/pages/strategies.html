@@ -1,0 +1,234 @@
+<div class="strategies-page">
+  <!-- Left Sidebar: Strategy Management -->
+  <aside class="strategies-sidebar left">
+    <div class="sidebar-header">
+      <h2>Strategy Management</h2>
+    </div>
+    
+    <div class="tab-container">
+      <!-- Tab Navigation -->
+      <div class="sidebar-tabs">
+        <button class="tab-btn active" data-tab="strategies">
+          <span class="icon">📋</span>
+          Strategies
+        </button>
+        <button class="tab-btn" data-tab="templates">
+          <span class="icon">📦</span>
+          Templates
+        </button>
+        <button class="tab-btn" data-tab="properties">
+          <span class="icon">⚙️</span>
+          Properties
+        </button>
+      </div>
+      
+      <!-- Strategies Tab -->
+      <div class="tab-content active" data-tab="strategies">
+        <div class="sidebar-section">
+          <div class="section-header">
+            <h3>My Strategies</h3>
+            <button class="btn-icon" id="refresh-strategies" title="Refresh">🔄</button>
+          </div>
+          
+          <div class="strategy-filters">
+            <button class="filter-btn active" data-filter="all">All</button>
+            <button class="filter-btn" data-filter="entry">Entry</button>
+            <button class="filter-btn" data-filter="exit">Exit</button>
+          </div>
+          
+          <div class="strategy-list" id="strategy-list">
+            <div class="empty-state">
+              <span class="icon">📝</span>
+              <p>No strategies yet</p>
+              <small>Create your first strategy</small>
+            </div>
+          </div>
+        </div>
+        
+        <div class="sidebar-actions">
+          <button class="btn primary" id="create-strategy">
+            <span class="icon">➕</span>
+            New Strategy
+          </button>
+          <button class="btn" id="import-strategy">
+            <span class="icon">📥</span>
+            Import
+          </button>
+        </div>
+      </div>
+      
+      <!-- Templates Tab -->
+      <div class="tab-content" data-tab="templates">
+        <div class="sidebar-section">
+          <div class="section-header">
+            <h3>Strategy Templates</h3>
+          </div>
+          
+          <div class="template-filters">
+            <select id="template-category">
+              <option value="all">All Categories</option>
+              <option value="momentum">Momentum</option>
+              <option value="mean-reversion">Mean Reversion</option>
+              <option value="breakout">Breakout</option>
+              <option value="swing">Swing Trading</option>
+            </select>
+            <select id="template-risk">
+              <option value="all">All Risk Levels</option>
+              <option value="low">Low Risk</option>
+              <option value="medium">Medium Risk</option>
+              <option value="high">High Risk</option>
+            </select>
+          </div>
+          
+          <div class="template-list" id="template-list">
+            <div class="empty-state">
+              <span class="icon">📦</span>
+              <p>Loading templates...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Properties Tab -->
+      <div class="tab-content" data-tab="properties">
+        <div class="sidebar-section">
+          <div class="section-header">
+            <h3>Properties</h3>
+          </div>
+          
+          <div class="property-editor" id="property-editor">
+            <div class="empty-state">
+              <span class="icon">🎯</span>
+              <p>No selection</p>
+              <small>Select a node or strategy to edit properties</small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Canvas Area -->
+  <main class="strategy-canvas-container">
+    <div class="canvas-header">
+      <div class="canvas-title">
+        <input type="text" id="strategy-name" placeholder="Untitled Strategy" class="strategy-name-input">
+        <select id="strategy-type" class="strategy-type-select">
+          <option value="ENTRY">Entry Strategy</option>
+          <option value="EXIT">Exit Strategy</option>
+        </select>
+      </div>
+      <div class="canvas-status" id="canvas-status">
+        <span class="status-indicator"></span>
+        <span class="status-text">Ready</span>
+      </div>
+    </div>
+    
+    <div class="canvas-wrapper">
+      <div class="strategy-canvas" id="strategy-canvas">
+        <div class="canvas-empty-state">
+          <div class="empty-state-content">
+            <span class="icon">🎨</span>
+            <h3>Build Your Strategy</h3>
+            <p>Drag conditions from the right sidebar to start building</p>
+            <div class="quick-start">
+              <button class="btn" id="add-root-node">Add Root Condition</button>
+              <button class="btn" id="load-template">Load Template</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="canvas-controls">
+        <div class="control-group">
+          <button class="btn-icon" id="zoom-in" title="Zoom In">➕</button>
+          <button class="btn-icon" id="zoom-out" title="Zoom Out">➖</button>
+          <button class="btn-icon" id="reset-view" title="Reset View">🎯</button>
+          <button class="btn-icon" id="fit-view" title="Fit to Screen">⛶</button>
+        </div>
+        <div class="control-group">
+          <button class="btn-icon" id="auto-layout" title="Auto Layout">📐</button>
+          <button class="btn-icon" id="toggle-grid" title="Toggle Grid">▦</button>
+        </div>
+      </div>
+      
+      <div class="canvas-minimap" id="canvas-minimap"></div>
+    </div>
+  </main>
+
+  <!-- Right Sidebar: Condition Library -->
+  <aside class="strategies-sidebar right">
+    <div class="sidebar-header">
+      <h2>Condition Library</h2>
+    </div>
+    
+    <div class="search-container">
+      <input type="text" id="condition-search" placeholder="Search conditions..." class="search-input">
+      <button class="btn-icon" id="clear-search">✕</button>
+    </div>
+    
+    <div class="condition-categories" id="condition-categories">
+      <!-- Dynamically populated -->
+    </div>
+  </aside>
+
+  <!-- Bottom Toolbar -->
+  <footer class="strategy-toolbar">
+    <div class="toolbar-section left">
+      <button class="btn primary" id="save-strategy">
+        <span class="icon">💾</span>
+        Save
+      </button>
+      <button class="btn" id="save-as-strategy">
+        <span class="icon">📋</span>
+        Save As
+      </button>
+      <button class="btn" id="duplicate-strategy">
+        <span class="icon">📄</span>
+        Duplicate
+      </button>
+    </div>
+    
+    <div class="toolbar-section center">
+      <div class="validation-status" id="validation-status">
+        <span class="status-icon">✓</span>
+        <span class="status-text">Valid strategy</span>
+      </div>
+    </div>
+    
+    <div class="toolbar-section right">
+      <button class="btn" id="validate-strategy">
+        <span class="icon">🔍</span>
+        Validate
+      </button>
+      <button class="btn" id="test-strategy">
+        <span class="icon">🧪</span>
+        Test
+      </button>
+      <button class="btn success" id="deploy-strategy">
+        <span class="icon">🚀</span>
+        Deploy
+      </button>
+    </div>
+  </footer>
+
+  <!-- Parameter Editor Modal -->
+  <div class="parameter-editor-modal" id="parameter-editor-modal">
+    <div class="parameter-editor-content">
+      <div class="parameter-editor-header">
+        <div class="parameter-editor-title">
+          <span class="icon">⚙️</span>
+          <h3>Edit Parameters</h3>
+        </div>
+        <button class="parameter-editor-close" id="close-parameter-editor">✕</button>
+      </div>
+      <div class="parameter-editor-body" id="parameter-editor-body">
+        <!-- Dynamic content will be injected here -->
+      </div>
+      <div class="parameter-editor-footer">
+        <button class="btn" id="cancel-parameter-edit">Cancel</button>
+        <button class="btn primary" id="apply-parameter-edit">Apply Changes</button>
+      </div>
+    </div>
+  </div>
+</div>

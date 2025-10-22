@@ -15,6 +15,7 @@ mod sol_price;
 mod events;
 mod services;
 mod monitoring;
+mod strategies;
 
 pub use rpc::*;
 pub use trader::*;
@@ -29,6 +30,7 @@ pub use sol_price::*;
 pub use events::*;
 pub use services::*;
 pub use monitoring::*;
+pub use strategies::*;
 
 // ============================================================================
 // ROOT CONFIGURATION
@@ -78,5 +80,8 @@ config_struct! {
 
         /// Wallet configuration
         wallet: WalletConfig = WalletConfig::default(),
+
+        /// Strategies configuration
+        strategies: StrategiesConfig = StrategiesConfig::default(),
     }
 }

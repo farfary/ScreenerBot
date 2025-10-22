@@ -42,24 +42,110 @@ function createLifecycle() {
   const timeCell = (v) => Utils.formatTimeFromSeconds(v, { includeSeconds: false });
 
   const columnsOpen = [
-    { id: "token", label: "Token", sortable: true, minWidth: 180, wrap: false, render: (_v, r) => tokenCell(r) },
-    { id: "entry_price", label: "Entry Price (SOL)", sortable: true, minWidth: 140, render: (v) => priceCell(v) },
-    { id: "current_price", label: "Current (SOL)", sortable: true, minWidth: 140, render: (v) => (v == null ? "—" : priceCell(v)) },
-    { id: "entry_size_sol", label: "Entry Size", sortable: true, minWidth: 120, render: (v) => solCell(v) },
-    { id: "unrealized_pnl", label: "Unrealized PnL", sortable: true, minWidth: 130, render: (v) => pnlCell(v) },
-    { id: "unrealized_pnl_percent", label: "Unrealized %", sortable: true, minWidth: 110, render: (v) => percentCell(v) },
-    { id: "entry_time", label: "Entry Time", sortable: true, minWidth: 140, render: (v) => timeCell(v) },
+    {
+      id: "token",
+      label: "Token",
+      sortable: true,
+      minWidth: 180,
+      wrap: false,
+      render: (_v, r) => tokenCell(r),
+    },
+    {
+      id: "entry_price",
+      label: "Entry Price (SOL)",
+      sortable: true,
+      minWidth: 140,
+      render: (v) => priceCell(v),
+    },
+    {
+      id: "current_price",
+      label: "Current (SOL)",
+      sortable: true,
+      minWidth: 140,
+      render: (v) => (v == null ? "—" : priceCell(v)),
+    },
+    {
+      id: "entry_size_sol",
+      label: "Entry Size",
+      sortable: true,
+      minWidth: 120,
+      render: (v) => solCell(v),
+    },
+    {
+      id: "unrealized_pnl",
+      label: "Unrealized PnL",
+      sortable: true,
+      minWidth: 130,
+      render: (v) => pnlCell(v),
+    },
+    {
+      id: "unrealized_pnl_percent",
+      label: "Unrealized %",
+      sortable: true,
+      minWidth: 110,
+      render: (v) => percentCell(v),
+    },
+    {
+      id: "entry_time",
+      label: "Entry Time",
+      sortable: true,
+      minWidth: 140,
+      render: (v) => timeCell(v),
+    },
   ];
 
   const columnsClosed = [
-    { id: "token", label: "Token", sortable: true, minWidth: 180, wrap: false, render: (_v, r) => tokenCell(r) },
-    { id: "effective_entry_price", label: "Eff. Entry (SOL)", sortable: true, minWidth: 140, render: (v, r) => priceCell(v ?? r.entry_price) },
-    { id: "effective_exit_price", label: "Eff. Exit (SOL)", sortable: true, minWidth: 140, render: (v, r) => (v == null ? priceCell(r.exit_price) : priceCell(v)) },
-    { id: "entry_size_sol", label: "Size", sortable: true, minWidth: 100, render: (v) => solCell(v) },
-    { id: "sol_received", label: "Proceeds", sortable: true, minWidth: 110, render: (v) => (v == null ? "—" : solCell(v)) },
+    {
+      id: "token",
+      label: "Token",
+      sortable: true,
+      minWidth: 180,
+      wrap: false,
+      render: (_v, r) => tokenCell(r),
+    },
+    {
+      id: "effective_entry_price",
+      label: "Eff. Entry (SOL)",
+      sortable: true,
+      minWidth: 140,
+      render: (v, r) => priceCell(v ?? r.entry_price),
+    },
+    {
+      id: "effective_exit_price",
+      label: "Eff. Exit (SOL)",
+      sortable: true,
+      minWidth: 140,
+      render: (v, r) => (v == null ? priceCell(r.exit_price) : priceCell(v)),
+    },
+    {
+      id: "entry_size_sol",
+      label: "Size",
+      sortable: true,
+      minWidth: 100,
+      render: (v) => solCell(v),
+    },
+    {
+      id: "sol_received",
+      label: "Proceeds",
+      sortable: true,
+      minWidth: 110,
+      render: (v) => (v == null ? "—" : solCell(v)),
+    },
     { id: "pnl", label: "PnL", sortable: true, minWidth: 110, render: (v) => pnlCell(v) },
-    { id: "pnl_percent", label: "PnL %", sortable: true, minWidth: 100, render: (v) => percentCell(v) },
-    { id: "exit_time", label: "Exit Time", sortable: true, minWidth: 140, render: (v) => (v == null ? "—" : timeCell(v)) },
+    {
+      id: "pnl_percent",
+      label: "PnL %",
+      sortable: true,
+      minWidth: 100,
+      render: (v) => percentCell(v),
+    },
+    {
+      id: "exit_time",
+      label: "Exit Time",
+      sortable: true,
+      minWidth: 140,
+      render: (v) => (v == null ? "—" : timeCell(v)),
+    },
   ];
 
   function selectedColumns() {
@@ -70,11 +156,20 @@ function createLifecycle() {
     if (!table) return;
 
     table.updateToolbarSummary([
-      { id: "positions-total", label: state.view === "open" ? "Open" : "Closed", value: Utils.formatNumber(state.total) },
+      {
+        id: "positions-total",
+        label: state.view === "open" ? "Open" : "Closed",
+        value: Utils.formatNumber(state.total),
+      },
     ]);
 
     table.updateToolbarMeta([
-      { id: "positions-last-update", text: state.lastUpdate ? `Last update ${new Date(state.lastUpdate).toLocaleTimeString()}` : "" },
+      {
+        id: "positions-last-update",
+        text: state.lastUpdate
+          ? `Last update ${new Date(state.lastUpdate).toLocaleTimeString()}`
+          : "",
+      },
     ]);
   };
 

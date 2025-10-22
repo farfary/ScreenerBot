@@ -15,6 +15,7 @@ pub mod ohlcv;
 pub mod positions;
 pub mod services;
 pub mod status;
+pub mod strategies;
 pub mod system;
 pub mod tokens;
 pub mod trader;
@@ -32,6 +33,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/transactions", axum::routing::get(transactions_page))
         .route("/filtering", axum::routing::get(filtering_page))
         .route("/config", axum::routing::get(config_page))
+        .route("/strategies", axum::routing::get(strategies_page))
         .route("/scripts/core/:file", axum::routing::get(get_core_script))
         .route("/scripts/pages/:file", axum::routing::get(get_page_script))
         .route("/scripts/ui/:file", axum::routing::get(get_ui_script))
@@ -85,6 +87,12 @@ async fn config_page() -> Html<String> {
     Html(templates::base_template("Config", "config", &content))
 }
 
+/// Strategies page handler
+async fn strategies_page() -> Html<String> {
+    let content = templates::strategies_content();
+    Html(templates::base_template("Strategies", "strategies", &content))
+}
+
 fn api_routes() -> Router<Arc<AppState>> {
     Router::new()
         .merge(status::routes())
@@ -102,6 +110,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .nest("/trader", trader::routes())
         .nest("/system", system::routes())
         .nest("/transactions", transactions::routes())
+        .nest("/strategies", strategies::routes())
         .route("/pages/:page", axum::routing::get(get_page_content))
 }
 
@@ -115,6 +124,7 @@ async fn get_page_content(axum::extract::Path(page): axum::extract::Path<String>
         "transactions" => templates::transactions_content(),
         "filtering" => templates::filtering_content(),
         "config" => templates::config_content(),
+        "strategies" => templates::strategies_content(),
         _ => {
             // Escape page name to prevent XSS
             let escaped_page = page
@@ -172,6 +182,7 @@ async fn get_page_script(axum::extract::Path(file): axum::extract::Path<String>)
         "positions.js" => Some(templates::POSITIONS_PAGE_SCRIPT),
         "filtering.js" => Some(templates::FILTERING_PAGE_SCRIPT),
         "config.js" => Some(templates::CONFIG_PAGE_SCRIPT),
+        "strategies.js" => Some(templates::STRATEGIES_PAGE_SCRIPT),
         _ => None,
     };
 
