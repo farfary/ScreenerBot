@@ -86,8 +86,8 @@ config_struct! {
             hint: "How often to attempt fetching Rugcheck data for tokens without security info",
             impact: "low",
             category: "Updates",
-            min: 10.0,
-            step: 5.0,
+            min: 0.0,
+            step: 1.0,
         })]
         security_seconds: u64 = 2,
     }

@@ -853,8 +853,9 @@ impl TokenDatabase {
             .prepare(
                 "SELECT t.mint FROM tokens t
              LEFT JOIN security_rugcheck sr ON t.mint = sr.mint
+             LEFT JOIN blacklist b ON t.mint = b.mint
              WHERE sr.mint IS NULL
-             AND t.blacklisted = 0
+             AND b.mint IS NULL
              ORDER BY t.created_at ASC
              LIMIT ?1",
             )
