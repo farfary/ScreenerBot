@@ -3,13 +3,13 @@ use crate::strategies::types::{Condition, EvaluationContext};
 use async_trait::async_trait;
 use serde_json::json;
 
-/// Price change percentage condition - check if price moved by percentage from entry/reference
-pub struct PriceThresholdCondition;
+/// Price change percentage condition - check if price moved by % from reference price
+pub struct PriceChangePercentCondition;
 
 #[async_trait]
-impl ConditionEvaluator for PriceThresholdCondition {
+impl ConditionEvaluator for PriceChangePercentCondition {
     fn condition_type(&self) -> &'static str {
-        "PriceThreshold"
+        "PriceChangePercent"
     }
 
     async fn evaluate(
@@ -49,8 +49,8 @@ impl ConditionEvaluator for PriceThresholdCondition {
         if percentage < 0.0 {
             return Err("Percentage must be non-negative".to_string());
         }
-        if percentage > 100.0 {
-            return Err("Percentage must be 100 or less".to_string());
+        if percentage > 1000.0 {
+            return Err("Percentage must be 1000 or less".to_string());
         }
 
         let direction = get_param_string(condition, "direction")?;
@@ -63,21 +63,21 @@ impl ConditionEvaluator for PriceThresholdCondition {
 
     fn parameter_schema(&self) -> serde_json::Value {
         json!({
-            "type": "PriceThreshold",
+            "type": "PriceChangePercent",
             "name": "Price Change %",
-            "category": "Price Patterns",
-            "tags": ["price", "percentage", "threshold"],
-            "icon": "🎯",
+            "category": "Price Analysis",
+            "tags": ["price", "percentage", "change"],
+            "icon": "📈",
             "origin": "strategy",
-            "description": "Check if price changed by a percentage (Entry: vs current, Exit: vs entry price)",
+            "description": "Check if price changed by a percentage threshold (Entry: vs current price, Exit: vs entry price)",
             "parameters": {
                 "percentage": {
                     "type": "percent",
-                    "name": "Price Change %",
-                    "description": "Percentage price change to trigger (1-100%)",
-                    "default": 5.0,
-                    "min": 1.0,
-                    "max": 100.0,
+                    "name": "Change Threshold %",
+                    "description": "Percentage price change to trigger (1-1000%)",
+                    "default": 10.0,
+                    "min": 0.1,
+                    "max": 1000.0,
                     "step": 0.5
                 },
                 "direction": {
@@ -86,13 +86,12 @@ impl ConditionEvaluator for PriceThresholdCondition {
                     "description": "Price movement direction",
                     "default": "ABOVE",
                     "options": [
-                        { "value": "ABOVE", "label": "Above (+%)" },
-                        { "value": "BELOW", "label": "Below (-%)" },
-                        { "value": "WITHIN", "label": "Within (±%)" }
+                        { "value": "ABOVE", "label": "Gain (+%)" },
+                        { "value": "BELOW", "label": "Loss (-%)"},
+                        { "value": "WITHIN", "label": "Within Range (±%)" }
                     ]
                 }
             }
         })
     }
 }
-

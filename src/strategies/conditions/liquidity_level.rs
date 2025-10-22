@@ -3,13 +3,13 @@ use crate::strategies::types::{Condition, EvaluationContext};
 use async_trait::async_trait;
 use serde_json::json;
 
-/// Liquidity depth condition - check pool liquidity level
-pub struct LiquidityDepthCondition;
+/// Pool liquidity level condition - check if pool has sufficient/excessive liquidity
+pub struct LiquidityLevelCondition;
 
 #[async_trait]
-impl ConditionEvaluator for LiquidityDepthCondition {
+impl ConditionEvaluator for LiquidityLevelCondition {
     fn condition_type(&self) -> &'static str {
-        "LiquidityDepth"
+        "LiquidityLevel"
     }
 
     async fn evaluate(
@@ -32,8 +32,8 @@ impl ConditionEvaluator for LiquidityDepthCondition {
         let result = match comparison.as_str() {
             "GREATER_THAN" => liquidity > threshold,
             "LESS_THAN" => liquidity < threshold,
-            "GREATER_THAN_OR_EQUAL" => liquidity >= threshold,
-            "LESS_THAN_OR_EQUAL" => liquidity <= threshold,
+            "GREATER_EQUAL" => liquidity >= threshold,
+            "LESS_EQUAL" => liquidity <= threshold,
             _ => return Err(format!("Invalid comparison: {}", comparison)),
         };
 
@@ -47,12 +47,7 @@ impl ConditionEvaluator for LiquidityDepthCondition {
         }
 
         let comparison = get_param_string(condition, "comparison")?;
-        let valid_comparisons = [
-            "GREATER_THAN",
-            "LESS_THAN",
-            "GREATER_THAN_OR_EQUAL",
-            "LESS_THAN_OR_EQUAL",
-        ];
+        let valid_comparisons = ["GREATER_THAN", "LESS_THAN", "GREATER_EQUAL", "LESS_EQUAL"];
         if !valid_comparisons.contains(&comparison.as_str()) {
             return Err(format!("Invalid comparison: {}", comparison));
         }
@@ -62,22 +57,22 @@ impl ConditionEvaluator for LiquidityDepthCondition {
 
     fn parameter_schema(&self) -> serde_json::Value {
         json!({
-            "type": "LiquidityDepth",
+            "type": "LiquidityLevel",
             "name": "Pool Liquidity Level",
             "category": "Market Context",
-            "tags": ["liquidity", "safety", "sol"],
+            "tags": ["liquidity", "safety", "sol", "risk"],
             "icon": "💧",
             "origin": "strategy",
-            "description": "Check pool liquidity level in SOL. Used for both entry (ensure sufficient liquidity) and exit (check if liquidity dried up).",
+            "description": "Check pool liquidity in SOL (Entry: ensure sufficient liquidity, Exit: detect liquidity drain)",
             "parameters": {
                 "threshold": {
                     "type": "number",
                     "name": "Liquidity Threshold (SOL)",
-                    "description": "Minimum/maximum liquidity in SOL",
+                    "description": "Pool liquidity level in SOL",
                     "default": 50.0,
                     "min": 0.0,
-                    "max": 10000.0,
-                    "step": 1.0
+                    "max": 100000.0,
+                    "step": 10.0
                 },
                 "comparison": {
                     "type": "enum",
@@ -86,9 +81,9 @@ impl ConditionEvaluator for LiquidityDepthCondition {
                     "default": "GREATER_THAN",
                     "options": [
                         { "value": "GREATER_THAN", "label": "Greater Than (>)" },
-                        { "value": "GREATER_THAN_OR_EQUAL", "label": "Greater or Equal (≥)" },
+                        { "value": "GREATER_EQUAL", "label": "Greater or Equal (≥)" },
                         { "value": "LESS_THAN", "label": "Less Than (<)" },
-                        { "value": "LESS_THAN_OR_EQUAL", "label": "Less or Equal (≤)" }
+                        { "value": "LESS_EQUAL", "label": "Less or Equal (≤)" }
                     ]
                 }
             }

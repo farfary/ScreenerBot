@@ -3,13 +3,13 @@ use crate::strategies::types::{Condition, EvaluationContext};
 use async_trait::async_trait;
 use serde_json::json;
 
-/// Relative to moving average condition - check price position relative to MA
-pub struct RelativeToMaCondition;
+/// Price position relative to moving average
+pub struct PriceToMaCondition;
 
 #[async_trait]
-impl ConditionEvaluator for RelativeToMaCondition {
+impl ConditionEvaluator for PriceToMaCondition {
     fn condition_type(&self) -> &'static str {
-        "RelativeToMA"
+        "PriceToMA"
     }
 
     async fn evaluate(
@@ -18,8 +18,8 @@ impl ConditionEvaluator for RelativeToMaCondition {
         context: &EvaluationContext,
     ) -> Result<bool, String> {
         let period = get_param_f64(condition, "period")? as usize;
-        let comparison = get_param_string(condition, "comparison")?;
-        let percentage = get_param_f64(condition, "percentage")?;
+        let position = get_param_string(condition, "position")?;
+        let distance = get_param_f64(condition, "distance")?;
 
         let ohlcv_data = context
             .ohlcv_data
@@ -42,14 +42,14 @@ impl ConditionEvaluator for RelativeToMaCondition {
             .current_price
             .ok_or_else(|| "Current price not available".to_string())?;
 
-        // Calculate percentage difference from MA
-        let diff_pct = ((current_price - ma) / ma) * 100.0;
+        // Calculate percentage distance from MA
+        let distance_pct = ((current_price - ma) / ma) * 100.0;
 
-        let result = match comparison.as_str() {
-            "ABOVE" => diff_pct >= percentage,
-            "BELOW" => diff_pct <= -percentage,
-            "WITHIN" => diff_pct.abs() <= percentage,
-            _ => return Err(format!("Invalid comparison: {}", comparison)),
+        let result = match position.as_str() {
+            "ABOVE" => distance_pct >= distance,
+            "BELOW" => distance_pct <= -distance,
+            "WITHIN" => distance_pct.abs() <= distance,
+            _ => return Err(format!("Invalid position: {}", position)),
         };
 
         Ok(result)
@@ -60,15 +60,21 @@ impl ConditionEvaluator for RelativeToMaCondition {
         if period < 2.0 {
             return Err("Period must be at least 2".to_string());
         }
-
-        let percentage = get_param_f64(condition, "percentage")?;
-        if percentage < 0.0 {
-            return Err("Percentage must be non-negative".to_string());
+        if period > 200.0 {
+            return Err("Period must be 200 or less".to_string());
         }
 
-        let comparison = get_param_string(condition, "comparison")?;
-        if !["ABOVE", "BELOW", "WITHIN"].contains(&comparison.as_str()) {
-            return Err(format!("Invalid comparison: {}", comparison));
+        let distance = get_param_f64(condition, "distance")?;
+        if distance < 0.0 {
+            return Err("Distance must be non-negative".to_string());
+        }
+        if distance > 100.0 {
+            return Err("Distance must be 100% or less".to_string());
+        }
+
+        let position = get_param_string(condition, "position")?;
+        if !["ABOVE", "BELOW", "WITHIN"].contains(&position.as_str()) {
+            return Err(format!("Invalid position: {}", position));
         }
 
         Ok(())
@@ -76,13 +82,13 @@ impl ConditionEvaluator for RelativeToMaCondition {
 
     fn parameter_schema(&self) -> serde_json::Value {
         json!({
-            "type": "RelativeToMA",
+            "type": "PriceToMA",
             "name": "Price vs Moving Average",
             "category": "Technical Indicators",
-            "tags": ["ma", "trend", "technical"],
-            "icon": "📉",
+            "tags": ["ma", "sma", "trend", "technical"],
+            "icon": "📊",
             "origin": "strategy",
-            "description": "Check if price is above/below/within range of its moving average",
+            "description": "Check if price is above, below, or within range of its Simple Moving Average",
             "parameters": {
                 "period": {
                     "type": "number",
@@ -93,7 +99,7 @@ impl ConditionEvaluator for RelativeToMaCondition {
                     "max": 200,
                     "step": 1
                 },
-                "comparison": {
+                "position": {
                     "type": "enum",
                     "name": "Position",
                     "description": "Price position relative to MA",
@@ -104,13 +110,13 @@ impl ConditionEvaluator for RelativeToMaCondition {
                         { "value": "WITHIN", "label": "Within Range" }
                     ]
                 },
-                "percentage": {
+                "distance": {
                     "type": "percent",
                     "name": "Distance %",
-                    "description": "Percentage distance from MA (for ABOVE/BELOW: minimum, WITHIN: maximum)",
-                    "default": 1.0,
+                    "description": "Minimum distance from MA (for ABOVE/BELOW) or maximum range (for WITHIN)",
+                    "default": 2.0,
                     "min": 0.1,
-                    "max": 50.0,
+                    "max": 100.0,
                     "step": 0.5
                 }
             }

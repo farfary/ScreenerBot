@@ -1,14 +1,20 @@
-mod price_threshold;
-mod price_movement;
-mod relative_to_ma;
-mod liquidity_depth;
-mod position_age;
+mod price_change_percent;
+mod price_to_ma;
+mod consecutive_candles;
+mod candle_size;
+mod price_breakout;
+mod volume_spike;
+mod liquidity_level;
+mod position_holding_time;
 
-pub use price_threshold::PriceThresholdCondition;
-pub use price_movement::PriceMovementCondition;
-pub use relative_to_ma::RelativeToMaCondition;
-pub use liquidity_depth::LiquidityDepthCondition;
-pub use position_age::PositionAgeCondition;
+pub use price_change_percent::PriceChangePercentCondition;
+pub use price_to_ma::PriceToMaCondition;
+pub use consecutive_candles::ConsecutiveCandlesCondition;
+pub use candle_size::CandleSizeCondition;
+pub use price_breakout::PriceBreakoutCondition;
+pub use volume_spike::VolumeSpikeCondition;
+pub use liquidity_level::LiquidityLevelCondition;
+pub use position_holding_time::PositionHoldingTimeCondition;
 
 use crate::strategies::types::{Condition, EvaluationContext};
 use async_trait::async_trait;
@@ -42,11 +48,14 @@ impl ConditionRegistry {
         };
 
         // Register all built-in conditions
-        registry.register(Box::new(PriceThresholdCondition));
-        registry.register(Box::new(PriceMovementCondition));
-        registry.register(Box::new(RelativeToMaCondition));
-        registry.register(Box::new(LiquidityDepthCondition));
-        registry.register(Box::new(PositionAgeCondition));
+        registry.register(Box::new(PriceChangePercentCondition));
+        registry.register(Box::new(PriceToMaCondition));
+        registry.register(Box::new(ConsecutiveCandlesCondition));
+        registry.register(Box::new(CandleSizeCondition));
+        registry.register(Box::new(PriceBreakoutCondition));
+        registry.register(Box::new(VolumeSpikeCondition));
+        registry.register(Box::new(LiquidityLevelCondition));
+        registry.register(Box::new(PositionHoldingTimeCondition));
 
         registry
     }

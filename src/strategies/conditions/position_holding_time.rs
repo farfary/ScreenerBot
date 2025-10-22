@@ -1,16 +1,15 @@
 use crate::strategies::conditions::{get_param_f64, get_param_string, ConditionEvaluator};
 use crate::strategies::types::{Condition, EvaluationContext};
 use async_trait::async_trait;
-use chrono::Utc;
 use serde_json::json;
 
-/// Position age condition - check how long position has been open
-pub struct PositionAgeCondition;
+/// Position holding time condition - check how long position has been held
+pub struct PositionHoldingTimeCondition;
 
 #[async_trait]
-impl ConditionEvaluator for PositionAgeCondition {
+impl ConditionEvaluator for PositionHoldingTimeCondition {
     fn condition_type(&self) -> &'static str {
-        "PositionAge"
+        "PositionHoldingTime"
     }
 
     async fn evaluate(
@@ -31,8 +30,8 @@ impl ConditionEvaluator for PositionAgeCondition {
         let result = match comparison.as_str() {
             "GREATER_THAN" => position_age_hours > hours,
             "LESS_THAN" => position_age_hours < hours,
-            "GREATER_THAN_OR_EQUAL" => position_age_hours >= hours,
-            "LESS_THAN_OR_EQUAL" => position_age_hours <= hours,
+            "GREATER_EQUAL" => position_age_hours >= hours,
+            "LESS_EQUAL" => position_age_hours <= hours,
             _ => return Err(format!("Invalid comparison: {}", comparison)),
         };
 
@@ -46,12 +45,7 @@ impl ConditionEvaluator for PositionAgeCondition {
         }
 
         let comparison = get_param_string(condition, "comparison")?;
-        let valid_comparisons = [
-            "GREATER_THAN",
-            "LESS_THAN",
-            "GREATER_THAN_OR_EQUAL",
-            "LESS_THAN_OR_EQUAL",
-        ];
+        let valid_comparisons = ["GREATER_THAN", "LESS_THAN", "GREATER_EQUAL", "LESS_EQUAL"];
         if !valid_comparisons.contains(&comparison.as_str()) {
             return Err(format!("Invalid comparison: {}", comparison));
         }
@@ -61,13 +55,13 @@ impl ConditionEvaluator for PositionAgeCondition {
 
     fn parameter_schema(&self) -> serde_json::Value {
         json!({
-            "type": "PositionAge",
+            "type": "PositionHoldingTime",
             "name": "Position Holding Time",
             "category": "Position & Performance",
-            "tags": ["position", "risk"],
+            "tags": ["position", "time", "duration", "exit"],
             "icon": "⏱️",
             "origin": "strategy",
-            "description": "Check how long a position has been open. Only used for exit strategies to time exits based on holding period.",
+            "description": "Check how long a position has been held (for exit strategies - time-based exits)",
             "parameters": {
                 "hours": {
                     "type": "number",
@@ -75,7 +69,7 @@ impl ConditionEvaluator for PositionAgeCondition {
                     "description": "Duration in hours since position opened",
                     "default": 1.0,
                     "min": 0.0,
-                    "max": 168.0,
+                    "max": 720.0,
                     "step": 0.25
                 },
                 "comparison": {
@@ -85,9 +79,9 @@ impl ConditionEvaluator for PositionAgeCondition {
                     "default": "GREATER_THAN",
                     "options": [
                         { "value": "GREATER_THAN", "label": "Older Than (>)" },
-                        { "value": "GREATER_THAN_OR_EQUAL", "label": "At Least (≥)" },
+                        { "value": "GREATER_EQUAL", "label": "At Least (≥)" },
                         { "value": "LESS_THAN", "label": "Younger Than (<)" },
-                        { "value": "LESS_THAN_OR_EQUAL", "label": "At Most (≤)" }
+                        { "value": "LESS_EQUAL", "label": "At Most (≤)" }
                     ]
                 }
             }
