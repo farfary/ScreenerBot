@@ -30,8 +30,8 @@ export function createLifecycle() {
       // Setup sidebar actions
       setupSidebarActions();
 
-  // Setup editor actions
-  setupEditorActions();
+      // Setup editor actions
+      setupEditorActions();
 
       // Setup toolbar actions
       setupToolbarActions();
@@ -42,8 +42,8 @@ export function createLifecycle() {
       // Load condition schemas
       await loadConditionSchemas();
 
-  // Initialize condition catalog (modal)
-  initializeConditionCatalog();
+      // Initialize condition catalog (modal)
+      initializeConditionCatalog();
     },
 
     async activate(ctx) {
@@ -176,6 +176,7 @@ export function createLifecycle() {
     const loadTemplateBtn = $("#load-template");
     const catalog = $("#condition-catalog-modal");
     const closeCatalog = $("#close-condition-catalog");
+    const searchInput = $("#condition-search");
 
     if (addBtn) {
       addBtn.addEventListener("click", () => openConditionCatalog());
@@ -192,6 +193,75 @@ export function createLifecycle() {
         if (e.target === catalog) catalog.classList.remove("active");
       });
     }
+
+    // Search conditions
+    if (searchInput) {
+      searchInput.addEventListener("input", (e) => {
+        const query = e.target.value.toLowerCase().trim();
+        filterConditions(query);
+      });
+    }
+  }
+
+  function filterConditions(query) {
+    const categories = $$(".condition-category");
+
+    if (!query) {
+      // Show all, restore saved states
+      categories.forEach((cat) => {
+        cat.style.display = "block";
+        const categoryName = cat.querySelector(".category-header").dataset.category;
+        const savedStates = JSON.parse(
+          localStorage.getItem("condition-category-states") || "{}"
+        );
+        const items = cat.querySelector(".category-items");
+        const header = cat.querySelector(".category-header");
+        const isCollapsed = savedStates[categoryName] !== false;
+
+        if (isCollapsed) {
+          items.classList.add("collapsed");
+          header.classList.add("collapsed");
+        } else {
+          items.classList.remove("collapsed");
+          header.classList.remove("collapsed");
+        }
+      });
+
+      $$(".condition-item").forEach((item) => {
+        item.style.display = "block";
+      });
+      return;
+    }
+
+    // Filter conditions
+    categories.forEach((cat) => {
+      const items = cat.querySelectorAll(".condition-item");
+      const categoryItems = cat.querySelector(".category-items");
+      const header = cat.querySelector(".category-header");
+      let hasVisibleItems = false;
+
+      items.forEach((item) => {
+        const name = item.querySelector(".condition-name").textContent.toLowerCase();
+        const desc = item.querySelector(".condition-description").textContent.toLowerCase();
+        const matches = name.includes(query) || desc.includes(query);
+
+        if (matches) {
+          item.style.display = "block";
+          hasVisibleItems = true;
+        } else {
+          item.style.display = "none";
+        }
+      });
+
+      // Show/hide category based on matches
+      if (hasVisibleItems) {
+        cat.style.display = "block";
+        categoryItems.classList.remove("collapsed");
+        header.classList.remove("collapsed");
+      } else {
+        cat.style.display = "none";
+      }
+    });
   }
 
   // Toolbar Actions
@@ -463,31 +533,52 @@ export function createLifecycle() {
       categories[cat].push({ type, ...schema });
     });
 
+    // Load saved category states (default: all collapsed)
+    const savedStates = JSON.parse(localStorage.getItem("condition-category-states") || "{}");
+
     // Render
     container.innerHTML = Object.entries(categories)
-      .map(([category, list]) => `
-        <div class="condition-category">
-          <div class="category-header" data-category="${category}">
-            <div class="category-title">
-              <span class="icon">${getCategoryIcon(category)}</span>
-              ${category}
+      .map(([category, list]) => {
+        const isCollapsed = savedStates[category] !== false; // Default to collapsed
+        return `
+          <div class="condition-category">
+            <div class="category-header ${isCollapsed ? "collapsed" : ""}" data-category="${category}">
+              <div class="category-title">
+                <span class="icon">${getCategoryIcon(category)}</span>
+                ${category}
+              </div>
+              <span class="category-toggle">▶</span>
             </div>
-            <span class="category-toggle">▼</span>
+            <div class="category-items ${isCollapsed ? "collapsed" : ""}">
+              ${list.map((c) => renderConditionItem(c)).join("")}
+            </div>
           </div>
-          <div class="category-items">
-            ${list.map((c) => renderConditionItem(c)).join("")}
-          </div>
-        </div>
-      `)
+        `;
+      })
       .join("");
 
-    // Toggle
+    // Toggle with state persistence
     $$(".category-header").forEach((header) => {
       header.addEventListener("click", () => {
+        const category = header.dataset.category;
         const items = header.nextElementSibling;
         const toggle = header.querySelector(".category-toggle");
-        if (items.classList.contains("collapsed")) { items.classList.remove("collapsed"); toggle.textContent = "▼"; }
-        else { items.classList.add("collapsed"); toggle.textContent = "▶"; }
+        const isCollapsed = items.classList.contains("collapsed");
+
+        if (isCollapsed) {
+          items.classList.remove("collapsed");
+          header.classList.remove("collapsed");
+          toggle.textContent = "▼";
+        } else {
+          items.classList.add("collapsed");
+          header.classList.add("collapsed");
+          toggle.textContent = "▶";
+        }
+
+        // Save state
+        const states = JSON.parse(localStorage.getItem("condition-category-states") || "{}");
+        states[category] = !isCollapsed;
+        localStorage.setItem("condition-category-states", JSON.stringify(states));
       });
     });
 
@@ -582,25 +673,6 @@ export function createLifecycle() {
   const matchesRisk = risk === "all" || (template.risk_level || "").toLowerCase() === risk;
 
       item.style.display = matchesCategory && matchesRisk ? "" : "none";
-    });
-  }
-
-  function filterConditions(query) {
-    const items = $$(".condition-item");
-    items.forEach((item) => {
-      const name = item.querySelector(".condition-name")?.textContent.toLowerCase() || "";
-      const description =
-        item.querySelector(".condition-description")?.textContent.toLowerCase() || "";
-
-      const matches = name.includes(query) || description.includes(query);
-      item.style.display = matches ? "" : "none";
-    });
-
-    // Hide empty categories
-    $$(".condition-category").forEach((cat) => {
-      const items = Array.from(cat.querySelectorAll(".condition-item"));
-      const visibleItems = items.filter((el) => el.style.display !== "none").length;
-      cat.style.display = visibleItems > 0 ? "" : "none";
     });
   }
 
