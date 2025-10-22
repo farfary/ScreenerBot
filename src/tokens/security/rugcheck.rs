@@ -5,7 +5,7 @@
 use crate::apis::rugcheck::RugcheckInfo;
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::store::{self, CacheMetrics};
-use crate::tokens::types::{ApiError as TokenApiError, RugcheckData, TokenError, TokenResult};
+use crate::tokens::types::{RugcheckData, TokenError, TokenResult};
 use chrono::Utc;
 
 /// Convert API rugcheck info to our RugcheckData type
@@ -97,10 +97,6 @@ pub async fn fetch_rugcheck_data(
     mint: &str,
     db: &TokenDatabase,
 ) -> TokenResult<Option<RugcheckData>> {
-    // Short-circuit if this mint is marked as security skip (e.g., 400/404 not found)
-    if db.is_security_skip(mint)? {
-        return Ok(None);
-    }
     // 1. Check in-memory store cache
     if let Some(data) = store::get_cached_rugcheck(mint) {
         return Ok(Some(data));
@@ -132,42 +128,17 @@ pub async fn fetch_rugcheck_data(
     let rugcheck_info = match api_manager.rugcheck.fetch_report(mint).await {
         Ok(info) => info,
         Err(e) => {
-            // Handle terminal not-found cases: 404 NotFound or 400 with a not-found style body
-            match e {
-                TokenApiError::NotFound => {
-                    if let Err(perr) = db.mark_security_skip(mint, "rugcheck_not_found_404", "Rugcheck") {
-                        eprintln!(
-                            "[TOKENS][SECURITY] Failed to mark security skip mint={} reason={} err={}",
-                            mint, "rugcheck_not_found_404", perr
-                        );
-                    }
-                    return Ok(None);
-                }
-                TokenApiError::InvalidResponse(msg) => {
-                    let lower = msg.to_ascii_lowercase();
-                    let is_400 = lower.contains("http 400");
-                    let mentions_not_found = lower.contains("not found")
-                        || lower.contains("no analysis")
-                        || lower.contains("no token analysis")
-                        || lower.contains("unknown token")
-                        || lower.contains("does not exist")
-                        || lower.contains("not analyzed");
-                    if is_400 && mentions_not_found {
-                        if let Err(perr) = db.mark_security_skip(mint, "rugcheck_not_found_400", "Rugcheck") {
-                            eprintln!(
-                                "[TOKENS][SECURITY] Failed to mark security skip mint={} reason={} err={}",
-                                mint, "rugcheck_not_found_400", perr
-                            );
-                        }
-                        return Ok(None);
-                    }
-                    return Err(TokenError::Api { source: "Rugcheck".to_string(), message: msg });
-                }
-                other => {
-                    let err_str = other.to_string();
-                    return Err(TokenError::Api { source: "Rugcheck".to_string(), message: err_str });
-                }
+            // Check if it's a "not found" error (token not analyzed yet)
+            let err_str = format!("{:?}", e);
+            if err_str.contains("404") || err_str.contains("NotFound") {
+                return Ok(None);
             }
+
+            // Other errors
+            return Err(TokenError::Api {
+                source: "Rugcheck".to_string(),
+                message: err_str,
+            });
         }
     };
 
@@ -175,14 +146,6 @@ pub async fn fetch_rugcheck_data(
 
     // Store in database
     db.upsert_rugcheck_data(mint, &data)?;
-
-    // Record last security update in tracking (best-effort)
-    if let Err(perr) = db.record_security_update(mint) {
-        eprintln!(
-            "[TOKENS][SECURITY] Failed to record security update mint={} err={}",
-            mint, perr
-        );
-    }
 
     // Cache it in store and refresh token snapshot
     store::store_rugcheck(mint, &data);
