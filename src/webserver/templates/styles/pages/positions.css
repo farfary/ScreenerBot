@@ -1,0 +1,45 @@
+/* Positions page-specific styles */
+
+.positions-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+#positions-root {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.position-token {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.position-token .token-logo {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg-secondary);
+  display: inline-block;
+  font-size: 9px;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 28px;
+  font-weight: 600;
+}
+
+.position-token .token-symbol {
+  font-weight: 600;
+}
+
+.position-token .token-name {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}

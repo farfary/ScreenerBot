@@ -257,7 +257,7 @@ pub fn start_update_loop(
         loop {
             tokio::select! {
                 _ = shutdown_critical.notified() => break,
-                _ = sleep(Duration::from_secs(30)) => {
+                _ = sleep(Duration::from_secs(5)) => {
                     update_critical_tokens(&db_critical, &coord_critical).await;
                 }
             }
@@ -272,7 +272,7 @@ pub fn start_update_loop(
         loop {
             tokio::select! {
                 _ = shutdown_high.notified() => break,
-                _ = sleep(Duration::from_secs(60)) => {
+                _ = sleep(Duration::from_secs(10)) => {
                     update_high_priority_tokens(&db_high, &coord_high).await;
                 }
             }
@@ -287,7 +287,7 @@ pub fn start_update_loop(
         loop {
             tokio::select! {
                 _ = shutdown_low.notified() => break,
-                _ = sleep(Duration::from_secs(300)) => {
+                _ = sleep(Duration::from_secs(30)) => {
                     update_low_priority_tokens(&db_low, &coord_low).await;
                 }
             }

@@ -27,6 +27,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/", axum::routing::get(services_page))
         .route("/services", axum::routing::get(services_page))
         .route("/tokens", axum::routing::get(tokens_page))
+        .route("/positions", axum::routing::get(positions_page))
         .route("/events", axum::routing::get(events_page))
         .route("/transactions", axum::routing::get(transactions_page))
         .route("/filtering", axum::routing::get(filtering_page))
@@ -42,6 +43,12 @@ pub fn create_router(state: Arc<AppState>) -> Router {
 async fn tokens_page() -> Html<String> {
     let content = templates::tokens_content();
     Html(templates::base_template("Tokens", "tokens", &content))
+}
+
+/// Positions page handler
+async fn positions_page() -> Html<String> {
+    let content = templates::positions_content();
+    Html(templates::base_template("Positions", "positions", &content))
 }
 
 /// Events page handler
@@ -102,6 +109,7 @@ fn api_routes() -> Router<Arc<AppState>> {
 async fn get_page_content(axum::extract::Path(page): axum::extract::Path<String>) -> Html<String> {
     let content = match page.as_str() {
         "tokens" => templates::tokens_content(),
+        "positions" => templates::positions_content(),
         "events" => templates::events_content(),
         "services" => templates::services_content(),
         "transactions" => templates::transactions_content(),
@@ -161,6 +169,7 @@ async fn get_page_script(axum::extract::Path(file): axum::extract::Path<String>)
         "transactions.js" => Some(templates::TRANSACTIONS_PAGE_SCRIPT),
         "events.js" => Some(templates::EVENTS_PAGE_SCRIPT),
         "tokens.js" => Some(templates::TOKENS_PAGE_SCRIPT),
+        "positions.js" => Some(templates::POSITIONS_PAGE_SCRIPT),
         "filtering.js" => Some(templates::FILTERING_PAGE_SCRIPT),
         "config.js" => Some(templates::CONFIG_PAGE_SCRIPT),
         _ => None,
