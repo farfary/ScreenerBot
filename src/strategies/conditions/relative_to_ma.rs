@@ -77,30 +77,41 @@ impl ConditionEvaluator for RelativeToMaCondition {
     fn parameter_schema(&self) -> serde_json::Value {
         json!({
             "type": "RelativeToMA",
-            "name": "Relative to Moving Average",
+            "name": "Price vs Moving Average",
             "category": "Technical Indicators",
-            "tags": ["ma", "trend"],
+            "tags": ["ma", "trend", "technical"],
             "icon": "📉",
             "origin": "strategy",
-            "description": "Check price position relative to moving average",
+            "description": "Check if price is above/below/within range of its moving average",
             "parameters": {
                 "period": {
                     "type": "number",
-                    "description": "Moving average period (number of candles)",
+                    "name": "MA Period",
+                    "description": "Number of candles for moving average calculation",
                     "default": 20,
-                    "min": 2
+                    "min": 2,
+                    "max": 200,
+                    "step": 1
                 },
                 "comparison": {
-                    "type": "string",
-                    "description": "Comparison type",
+                    "type": "enum",
+                    "name": "Position",
+                    "description": "Price position relative to MA",
                     "default": "ABOVE",
-                    "options": ["ABOVE", "BELOW", "WITHIN"]
+                    "options": [
+                        { "value": "ABOVE", "label": "Above MA" },
+                        { "value": "BELOW", "label": "Below MA" },
+                        { "value": "WITHIN", "label": "Within Range" }
+                    ]
                 },
                 "percentage": {
-                    "type": "number",
-                    "description": "Percentage difference from MA",
+                    "type": "percent",
+                    "name": "Distance %",
+                    "description": "Percentage distance from MA (for ABOVE/BELOW: minimum, WITHIN: maximum)",
                     "default": 1.0,
-                    "min": 0.0
+                    "min": 0.1,
+                    "max": 50.0,
+                    "step": 0.5
                 }
             }
         })

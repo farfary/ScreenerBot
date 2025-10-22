@@ -786,8 +786,18 @@ export function createLifecycle() {
         return `<input id="${id}" ${data} type="number" value="${value}" ${spec.min !== undefined ? `min="${spec.min}"` : ""} ${spec.max !== undefined ? `max="${spec.max}"` : ""} ${spec.step !== undefined ? `step="${spec.step}"` : ""}>`;
       case "boolean":
         return `<input id="${id}" ${data} type="checkbox" ${value ? "checked" : ""}>`;
-      case "enum":
-        return `<select id="${id}" ${data}>${(spec.options || spec.values || []).map((opt) => `<option value="${opt}" ${opt === value ? "selected" : ""}>${opt}</option>`).join("")}</select>`;
+      case "enum": {
+        // Handle both old format (string array) and new format (object array with value/label)
+        const options = spec.options || spec.values || [];
+        const optionsHtml = options.map((opt) => {
+          // Check if option is an object with value/label or a simple string
+          const optValue = typeof opt === "object" ? opt.value : opt;
+          const optLabel = typeof opt === "object" ? opt.label : opt;
+          const selected = optValue === value ? "selected" : "";
+          return `<option value="${Utils.escapeHtml(String(optValue))}" ${selected}>${Utils.escapeHtml(String(optLabel))}</option>`;
+        }).join("");
+        return `<select id="${id}" ${data}>${optionsHtml}</select>`;
+      }
       default:
         return `<input id="${id}" ${data} type="text" value="${Utils.escapeHtml(String(value))}">`;
     }

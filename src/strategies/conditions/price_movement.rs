@@ -91,30 +91,47 @@ impl ConditionEvaluator for PriceMovementCondition {
     fn parameter_schema(&self) -> serde_json::Value {
         json!({
             "type": "PriceMovement",
-            "name": "Price Change in Window",
+            "name": "Price Movement in Timeframe",
             "category": "Price Patterns",
-            "tags": ["momentum", "volatility"],
+            "tags": ["momentum", "volatility", "timeframe"],
             "icon": "📈",
             "origin": "strategy",
-            "description": "Check if price moved by percentage within timeframe",
+            "description": "Check if price moved by percentage within a specific timeframe",
             "parameters": {
                 "timeframe": {
-                    "type": "string",
-                    "description": "Timeframe for price movement (e.g., '5m', '1h')",
+                    "type": "enum",
+                    "name": "Timeframe",
+                    "description": "Time window to measure price movement",
                     "default": "5m",
-                    "options": ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
+                    "options": [
+                        { "value": "1m", "label": "1 minute" },
+                        { "value": "5m", "label": "5 minutes" },
+                        { "value": "15m", "label": "15 minutes" },
+                        { "value": "30m", "label": "30 minutes" },
+                        { "value": "1h", "label": "1 hour" },
+                        { "value": "4h", "label": "4 hours" },
+                        { "value": "1d", "label": "1 day" }
+                    ]
                 },
                 "percentage": {
-                    "type": "number",
-                    "description": "Minimum price change percentage",
+                    "type": "percent",
+                    "name": "Price Change %",
+                    "description": "Minimum percentage price movement",
                     "default": 5.0,
-                    "min": 0.0
+                    "min": 0.1,
+                    "max": 100.0,
+                    "step": 0.5
                 },
                 "direction": {
-                    "type": "string",
-                    "description": "Direction of price movement",
+                    "type": "enum",
+                    "name": "Direction",
+                    "description": "Required movement direction",
                     "default": "UP",
-                    "options": ["UP", "DOWN", "ANY"]
+                    "options": [
+                        { "value": "UP", "label": "Upward (Gain)" },
+                        { "value": "DOWN", "label": "Downward (Loss)" },
+                        { "value": "ANY", "label": "Either Direction" }
+                    ]
                 }
             }
         })

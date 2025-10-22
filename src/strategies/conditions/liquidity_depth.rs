@@ -63,24 +63,33 @@ impl ConditionEvaluator for LiquidityDepthCondition {
     fn parameter_schema(&self) -> serde_json::Value {
         json!({
             "type": "LiquidityDepth",
-            "name": "Minimum Liquidity (SOL)",
+            "name": "Pool Liquidity Level",
             "category": "Market Context",
             "tags": ["liquidity", "safety", "sol"],
             "icon": "💧",
             "origin": "strategy",
-            "description": "Check pool liquidity level in SOL",
+            "description": "Check pool liquidity level in SOL. Used for both entry (ensure sufficient liquidity) and exit (check if liquidity dried up).",
             "parameters": {
                 "threshold": {
                     "type": "number",
-                    "description": "Liquidity threshold in SOL",
+                    "name": "Liquidity Threshold (SOL)",
+                    "description": "Minimum/maximum liquidity in SOL",
                     "default": 50.0,
-                    "min": 0.0
+                    "min": 0.0,
+                    "max": 10000.0,
+                    "step": 1.0
                 },
                 "comparison": {
-                    "type": "string",
-                    "description": "Comparison operator",
+                    "type": "enum",
+                    "name": "Comparison",
+                    "description": "How to compare pool liquidity to threshold",
                     "default": "GREATER_THAN",
-                    "options": ["GREATER_THAN", "LESS_THAN", "GREATER_THAN_OR_EQUAL", "LESS_THAN_OR_EQUAL"]
+                    "options": [
+                        { "value": "GREATER_THAN", "label": "Greater Than (>)" },
+                        { "value": "GREATER_THAN_OR_EQUAL", "label": "Greater or Equal (≥)" },
+                        { "value": "LESS_THAN", "label": "Less Than (<)" },
+                        { "value": "LESS_THAN_OR_EQUAL", "label": "Less or Equal (≤)" }
+                    ]
                 }
             }
         })
