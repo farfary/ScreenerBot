@@ -267,24 +267,32 @@ pub async fn update_tokens_batch(
     );
 
     // Process DexScreener results
-    let (dex_results, dex_global_err): (HashMap<String, Option<()>>, Option<String>) = match dex_result {
-        Ok(data) => (data.into_iter().map(|(k,v)| (k, v.map(|_| ()))) .collect(), None),
-        Err(e) => {
-            let msg = format!("DexScreener batch failed: {}", e);
-            eprintln!("[UPDATES] {}", msg);
-            (HashMap::new(), Some(msg))
-        }
-    };
+    let (dex_results, dex_global_err): (HashMap<String, Option<()>>, Option<String>) =
+        match dex_result {
+            Ok(data) => (
+                data.into_iter().map(|(k, v)| (k, v.map(|_| ()))).collect(),
+                None,
+            ),
+            Err(e) => {
+                let msg = format!("DexScreener batch failed: {}", e);
+                eprintln!("[UPDATES] {}", msg);
+                (HashMap::new(), Some(msg))
+            }
+        };
 
     // Process GeckoTerminal results
-    let (gecko_results, gecko_global_err): (HashMap<String, Option<()>>, Option<String>) = match gecko_result {
-        Ok(data) => (data.into_iter().map(|(k,v)| (k, v.map(|_| ()))) .collect(), None),
-        Err(e) => {
-            let msg = format!("GeckoTerminal batch failed: {}", e);
-            eprintln!("[UPDATES] {}", msg);
-            (HashMap::new(), Some(msg))
-        }
-    };
+    let (gecko_results, gecko_global_err): (HashMap<String, Option<()>>, Option<String>) =
+        match gecko_result {
+            Ok(data) => (
+                data.into_iter().map(|(k, v)| (k, v.map(|_| ()))).collect(),
+                None,
+            ),
+            Err(e) => {
+                let msg = format!("GeckoTerminal batch failed: {}", e);
+                eprintln!("[UPDATES] {}", msg);
+                (HashMap::new(), Some(msg))
+            }
+        };
 
     // 3. Process each token with batch results (market data only)
     for mint in mints {
@@ -344,7 +352,10 @@ async fn update_security_data(db: &TokenDatabase, coordinator: &RateLimitCoordin
     let tokens = match db.get_tokens_without_security_data(1) {
         Ok(tokens) => tokens,
         Err(e) => {
-            eprintln!("[UPDATES] Failed to load tokens without security data: {}", e);
+            eprintln!(
+                "[UPDATES] Failed to load tokens without security data: {}",
+                e
+            );
             return;
         }
     };
@@ -360,12 +371,34 @@ async fn update_security_data(db: &TokenDatabase, coordinator: &RateLimitCoordin
         Ok(_) => match rugcheck::fetch_rugcheck_data(mint, db).await {
             Ok(Some(_)) => {
                 println!("[UPDATES] Security data fetched for {}", mint);
+                // Clear any previous error tracking
+                let _ = db.clear_security_error(mint);
             }
             Ok(None) => {
-                // Token not analyzed by Rugcheck - this is expected for many tokens
+                // Token not analyzed by Rugcheck - this is PERMANENT (404/400 not found)
+                let _ = db.record_security_error(
+                    mint,
+                    "Token not analyzed by Rugcheck (404/400)",
+                    "permanent",
+                );
             }
             Err(e) => {
-                eprintln!("[UPDATES] Rugcheck error for {}: {}", mint, e);
+                // Classify error type
+                let err_str = format!("{:?}", e);
+                let error_type = if err_str.contains("404")
+                    || err_str.contains("NotFound")
+                    || err_str.contains("not found")
+                {
+                    "permanent"
+                } else {
+                    "temporary"
+                };
+
+                eprintln!(
+                    "[UPDATES] Rugcheck error ({}) for {}: {}",
+                    error_type, mint, e
+                );
+                let _ = db.record_security_error(mint, &e.to_string(), error_type);
             }
         },
         Err(e) => {
@@ -551,7 +584,10 @@ async fn update_critical_tokens(db: &TokenDatabase, coordinator: &RateLimitCoord
                         if let Err(err) =
                             db.record_market_error(result.mint.as_str(), message.as_str())
                         {
-                            eprintln!("[UPDATES] Failed to record error for {}: {}", result.mint, err);
+                            eprintln!(
+                                "[UPDATES] Failed to record error for {}: {}",
+                                result.mint, err
+                            );
                         }
                     } else if result.is_partial_failure() {
                         eprintln!(
@@ -598,7 +634,10 @@ async fn update_high_priority_tokens(db: &TokenDatabase, coordinator: &RateLimit
                         if let Err(err) =
                             db.record_market_error(result.mint.as_str(), message.as_str())
                         {
-                            eprintln!("[UPDATES] Failed to record error for {}: {}", result.mint, err);
+                            eprintln!(
+                                "[UPDATES] Failed to record error for {}: {}",
+                                result.mint, err
+                            );
                         }
                     } else if result.is_partial_failure() {
                         eprintln!(
@@ -642,7 +681,10 @@ async fn update_low_priority_tokens(db: &TokenDatabase, coordinator: &RateLimitC
                     let message = result.failures.join(" | ");
                     if let Err(err) = db.record_market_error(result.mint.as_str(), message.as_str())
                     {
-                        eprintln!("[UPDATES] Failed to record error for {}: {}", result.mint, err);
+                        eprintln!(
+                            "[UPDATES] Failed to record error for {}: {}",
+                            result.mint, err
+                        );
                     }
                 } else if result.is_partial_failure() {
                     eprintln!(

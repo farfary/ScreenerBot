@@ -125,7 +125,13 @@ impl RugcheckClient {
                 .record_error(format!("{} HTTP {}: {}", endpoint, status, body))
                 .await;
 
+            // Check for 404 Not Found
             if status == StatusCode::NOT_FOUND {
+                return Err(ApiError::NotFound);
+            }
+
+            // Check for 400 Bad Request with "not found" in body (Rugcheck returns this for unanalyzed tokens)
+            if status == StatusCode::BAD_REQUEST && body.contains("not found") {
                 return Err(ApiError::NotFound);
             }
 

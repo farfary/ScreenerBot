@@ -89,7 +89,7 @@ config_struct! {
             min: 0.0,
             step: 1.0,
         })]
-        security_seconds: u64 = 2,
+        security_seconds: u64 = 60,
     }
 }
 

@@ -80,8 +80,13 @@ impl ConditionEvaluator for CandleSizeCondition {
 
     fn validate(&self, condition: &Condition) -> Result<(), String> {
         let pattern = get_param_string(condition, "pattern")?;
-        if !["LARGE_BODY", "SMALL_BODY", "LONG_UPPER_WICK", "LONG_LOWER_WICK"]
-            .contains(&pattern.as_str())
+        if ![
+            "LARGE_BODY",
+            "SMALL_BODY",
+            "LONG_UPPER_WICK",
+            "LONG_LOWER_WICK",
+        ]
+        .contains(&pattern.as_str())
         {
             return Err(format!("Invalid pattern: {}", pattern));
         }

@@ -1,20 +1,20 @@
-mod price_change_percent;
-mod price_to_ma;
-mod consecutive_candles;
 mod candle_size;
-mod price_breakout;
-mod volume_spike;
+mod consecutive_candles;
 mod liquidity_level;
 mod position_holding_time;
+mod price_breakout;
+mod price_change_percent;
+mod price_to_ma;
+mod volume_spike;
 
-pub use price_change_percent::PriceChangePercentCondition;
-pub use price_to_ma::PriceToMaCondition;
-pub use consecutive_candles::ConsecutiveCandlesCondition;
 pub use candle_size::CandleSizeCondition;
-pub use price_breakout::PriceBreakoutCondition;
-pub use volume_spike::VolumeSpikeCondition;
+pub use consecutive_candles::ConsecutiveCandlesCondition;
 pub use liquidity_level::LiquidityLevelCondition;
 pub use position_holding_time::PositionHoldingTimeCondition;
+pub use price_breakout::PriceBreakoutCondition;
+pub use price_change_percent::PriceChangePercentCondition;
+pub use price_to_ma::PriceToMaCondition;
+pub use volume_spike::VolumeSpikeCondition;
 
 use crate::strategies::types::{Condition, EvaluationContext};
 use async_trait::async_trait;
@@ -26,7 +26,11 @@ pub trait ConditionEvaluator: Send + Sync {
     fn condition_type(&self) -> &'static str;
 
     /// Evaluate the condition against the context
-    async fn evaluate(&self, condition: &Condition, context: &EvaluationContext) -> Result<bool, String>;
+    async fn evaluate(
+        &self,
+        condition: &Condition,
+        context: &EvaluationContext,
+    ) -> Result<bool, String>;
 
     /// Validate condition parameters
     fn validate(&self, condition: &Condition) -> Result<(), String>;

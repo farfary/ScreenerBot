@@ -131,6 +131,10 @@ pub const CREATE_TABLES: &[&str] = &[
         security_update_count INTEGER DEFAULT 0,
         last_error TEXT,
         last_error_at INTEGER,
+        security_error_count INTEGER DEFAULT 0,
+        last_security_error TEXT,
+        last_security_error_at INTEGER,
+        security_error_type TEXT,
         FOREIGN KEY (mint) REFERENCES tokens(mint) ON DELETE RESTRICT
     )
     "#,
@@ -157,7 +161,13 @@ pub const CREATE_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_tracking_market_update ON update_tracking(last_market_update ASC)",
 ];
 
-// No ALTER statements: database is recreated when schema changes.
+/// ALTER TABLE statements for adding new columns to existing databases
+pub const ALTER_STATEMENTS: &[&str] = &[
+    "ALTER TABLE update_tracking ADD COLUMN security_error_count INTEGER DEFAULT 0",
+    "ALTER TABLE update_tracking ADD COLUMN last_security_error TEXT",
+    "ALTER TABLE update_tracking ADD COLUMN last_security_error_at INTEGER",
+    "ALTER TABLE update_tracking ADD COLUMN security_error_type TEXT",
+];
 
 /// Performance PRAGMAs
 // Kept for reference; we now set PRAGMAs via rusqlite APIs to avoid "Execute returned results" errors
@@ -193,6 +203,11 @@ pub fn initialize_schema(conn: &Connection) -> Result<(), String> {
     for statement in CREATE_INDEXES {
         conn.execute(statement, [])
             .map_err(|e| format!("Failed to create index: {}", e))?;
+    }
+
+    // Apply ALTER statements (for existing databases - ignore errors if column already exists)
+    for statement in ALTER_STATEMENTS {
+        let _ = conn.execute(statement, []);
     }
 
     Ok(())

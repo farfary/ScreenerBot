@@ -119,14 +119,20 @@ pub async fn get(mint: &str) -> Option<u8> {
         log(
             LogTag::Tokens,
             "DECIMALS_RUGCHECK_FALLBACK",
-            &format!("Resolved decimals via RugCheck: mint={} decimals={}", mint, d),
+            &format!(
+                "Resolved decimals via RugCheck: mint={} decimals={}",
+                mint, d
+            ),
         );
         cache(mint, d);
         if let Err(e) = persist_to_db(mint, d).await {
             log(
                 LogTag::Tokens,
                 "WARN",
-                &format!("Failed to persist RugCheck decimals to DB: mint={} err={}", mint, e),
+                &format!(
+                    "Failed to persist RugCheck decimals to DB: mint={} err={}",
+                    mint, e
+                ),
             );
         }
         drop(guard);
@@ -137,7 +143,10 @@ pub async fn get(mint: &str) -> Option<u8> {
     log(
         LogTag::Tokens,
         "DECIMALS_UNRESOLVED",
-        &format!("Unable to resolve decimals after all fallbacks: mint={}", mint),
+        &format!(
+            "Unable to resolve decimals after all fallbacks: mint={}",
+            mint
+        ),
     );
     mark_failure(mint);
     drop(guard);
@@ -202,7 +211,10 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
         ) {
             Ok(state) => return Ok(state.base.decimals),
             Err(e) => {
-                return Err(format!("Failed to unpack Token-2022 mint with extensions: {}", e))
+                return Err(format!(
+                    "Failed to unpack Token-2022 mint with extensions: {}",
+                    e
+                ))
             }
         }
     }

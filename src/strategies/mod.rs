@@ -272,6 +272,6 @@ pub async fn get_condition_schemas() -> Result<serde_json::Value, String> {
 
 // Re-export commonly used types for convenience
 pub use types::{
-    Condition, LogicalOperator, Parameter, ParameterConstraints, RiskLevel,
-    RuleTree, StrategyPerformance, StrategyTemplate,
+    Condition, LogicalOperator, Parameter, ParameterConstraints, RiskLevel, RuleTree,
+    StrategyPerformance, StrategyTemplate,
 };

@@ -300,7 +300,10 @@ pub fn update_strategy(strategy: &Strategy) -> Result<(), String> {
         log(
             LogTag::System,
             "INFO",
-            &format!("Updated strategy: id={}, name={}", strategy.id, strategy.name),
+            &format!(
+                "Updated strategy: id={}, name={}",
+                strategy.id, strategy.name
+            ),
         );
     }
 
@@ -353,7 +356,20 @@ pub fn get_strategy(strategy_id: &str) -> Result<Option<Strategy>, String> {
         .map_err(|e| format!("Failed to get strategy: {}", e))?;
 
     match result {
-        Some((rules_json, parameters_json, type_str, created_at_str, updated_at_str, id, name, description, enabled, priority, author, version)) => {
+        Some((
+            rules_json,
+            parameters_json,
+            type_str,
+            created_at_str,
+            updated_at_str,
+            id,
+            name,
+            description,
+            enabled,
+            priority,
+            author,
+            version,
+        )) => {
             let rules = serde_json::from_str(&rules_json)
                 .map_err(|e| format!("Failed to deserialize rules: {}", e))?;
             let parameters = serde_json::from_str(&parameters_json)
@@ -428,7 +444,21 @@ pub fn get_all_strategies() -> Result<Vec<Strategy>, String> {
         .map_err(|e| format!("Failed to collect strategies: {}", e))?;
 
     let mut result = Vec::new();
-    for (id, name, description, type_str, enabled, priority, rules_json, parameters_json, created_at_str, updated_at_str, author, version) in strategies {
+    for (
+        id,
+        name,
+        description,
+        type_str,
+        enabled,
+        priority,
+        rules_json,
+        parameters_json,
+        created_at_str,
+        updated_at_str,
+        author,
+        version,
+    ) in strategies
+    {
         let rules = serde_json::from_str(&rules_json)
             .map_err(|e| format!("Failed to deserialize rules for {}: {}", id, e))?;
         let parameters = serde_json::from_str(&parameters_json)
@@ -503,7 +533,21 @@ pub fn get_enabled_strategies(strategy_type: StrategyType) -> Result<Vec<Strateg
         .map_err(|e| format!("Failed to collect strategies: {}", e))?;
 
     let mut result = Vec::new();
-    for (id, name, description, type_str, enabled, priority, rules_json, parameters_json, created_at_str, updated_at_str, author, version) in strategies {
+    for (
+        id,
+        name,
+        description,
+        type_str,
+        enabled,
+        priority,
+        rules_json,
+        parameters_json,
+        created_at_str,
+        updated_at_str,
+        author,
+        version,
+    ) in strategies
+    {
         let rules = serde_json::from_str(&rules_json)
             .map_err(|e| format!("Failed to deserialize rules for {}: {}", id, e))?;
         let parameters = serde_json::from_str(&parameters_json)

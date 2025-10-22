@@ -165,9 +165,15 @@ pub struct RugcheckResponse {
     pub token: Option<RugcheckToken>,
     #[serde(rename = "tokenMeta")]
     pub token_meta: Option<RugcheckTokenMeta>,
-    #[serde(rename = "mintAuthority", deserialize_with = "deserialize_optional_authority")]
+    #[serde(
+        rename = "mintAuthority",
+        deserialize_with = "deserialize_optional_authority"
+    )]
     pub mint_authority: Option<String>,
-    #[serde(rename = "freezeAuthority", deserialize_with = "deserialize_optional_authority")]
+    #[serde(
+        rename = "freezeAuthority",
+        deserialize_with = "deserialize_optional_authority"
+    )]
     pub freeze_authority: Option<String>,
     pub creator: Option<String>,
     #[serde(rename = "creatorBalance")]

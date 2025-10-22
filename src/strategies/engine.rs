@@ -145,7 +145,8 @@ impl StrategyEngine {
         &'a self,
         rule_tree: &'a RuleTree,
         context: &'a EvaluationContext,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<bool, String>> + Send + 'a>> {
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<bool, String>> + Send + 'a>>
+    {
         Box::pin(async move {
             // Leaf node - evaluate condition
             if rule_tree.is_leaf() {
@@ -341,11 +342,31 @@ fn context_fingerprint(ctx: &EvaluationContext) -> u64 {
 
     // Market data inputs commonly used by conditions
     if let Some(m) = &ctx.market_data {
-        if let Some(v) = m.liquidity_sol { format!("{:.6}", v).hash(&mut s); } else { "nlq".hash(&mut s); }
-        if let Some(v) = m.volume_24h { format!("{:.2}", v).hash(&mut s); } else { "nvol".hash(&mut s); }
-        if let Some(v) = m.market_cap { format!("{:.2}", v).hash(&mut s); } else { "nmc".hash(&mut s); }
-        if let Some(v) = m.holder_count { v.hash(&mut s); } else { 0u32.hash(&mut s); }
-        if let Some(v) = m.token_age_hours { format!("{:.2}", v).hash(&mut s); } else { "ntag".hash(&mut s); }
+        if let Some(v) = m.liquidity_sol {
+            format!("{:.6}", v).hash(&mut s);
+        } else {
+            "nlq".hash(&mut s);
+        }
+        if let Some(v) = m.volume_24h {
+            format!("{:.2}", v).hash(&mut s);
+        } else {
+            "nvol".hash(&mut s);
+        }
+        if let Some(v) = m.market_cap {
+            format!("{:.2}", v).hash(&mut s);
+        } else {
+            "nmc".hash(&mut s);
+        }
+        if let Some(v) = m.holder_count {
+            v.hash(&mut s);
+        } else {
+            0u32.hash(&mut s);
+        }
+        if let Some(v) = m.token_age_hours {
+            format!("{:.2}", v).hash(&mut s);
+        } else {
+            "ntag".hash(&mut s);
+        }
     } else {
         "no_market".hash(&mut s);
     }

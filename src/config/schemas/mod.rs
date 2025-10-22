@@ -2,35 +2,35 @@
 
 use crate::config_struct;
 
-mod rpc;
-mod trader;
-mod wallet;
+mod events;
+mod filtering;
+mod monitoring;
+mod ohlcv;
 mod pools;
 mod positions;
-mod filtering;
+mod rpc;
+mod services;
+mod sol_price;
+mod strategies;
 mod swaps;
 mod tokens;
-mod ohlcv;
-mod sol_price;
-mod events;
-mod services;
-mod monitoring;
-mod strategies;
+mod trader;
+mod wallet;
 
-pub use rpc::*;
-pub use trader::*;
-pub use wallet::*;
+pub use events::*;
+pub use filtering::*;
+pub use monitoring::*;
+pub use ohlcv::*;
 pub use pools::*;
 pub use positions::*;
-pub use filtering::*;
+pub use rpc::*;
+pub use services::*;
+pub use sol_price::*;
+pub use strategies::*;
 pub use swaps::*;
 pub use tokens::*;
-pub use ohlcv::*;
-pub use sol_price::*;
-pub use events::*;
-pub use services::*;
-pub use monitoring::*;
-pub use strategies::*;
+pub use trader::*;
+pub use wallet::*;
 
 // ============================================================================
 // ROOT CONFIGURATION

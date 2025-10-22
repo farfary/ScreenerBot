@@ -14,13 +14,12 @@ use crate::{
     global::is_debug_webserver_enabled,
     logger::{log, LogTag},
     strategies::{
-        self,
+        self, db,
         db::{
             delete_strategy, get_all_strategies, get_enabled_strategies, get_strategy,
             get_strategy_performance, insert_strategy, update_strategy,
         },
         engine::{EngineConfig, StrategyEngine},
-        db,
         types::*,
     },
     webserver::{
@@ -228,9 +227,7 @@ pub struct StrategyTemplateItem {
 // =============================================================================
 
 /// GET /api/strategies - List all strategies
-async fn list_strategies(
-    Query(query): Query<StrategyListQuery>,
-) -> Response {
+async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response {
     if is_debug_webserver_enabled() {
         log(
             LogTag::Webserver,
@@ -344,9 +341,7 @@ async fn list_strategies(
 }
 
 /// GET /api/strategies/:id - Get strategy details
-async fn get_strategy_detail(
-    Path(id): Path<String>,
-) -> Response {
+async fn get_strategy_detail(Path(id): Path<String>) -> Response {
     if is_debug_webserver_enabled() {
         log(
             LogTag::Webserver,
@@ -395,9 +390,7 @@ async fn get_strategy_detail(
 }
 
 /// POST /api/strategies - Create new strategy
-async fn create_strategy(
-    Json(request): Json<StrategyRequest>,
-) -> Response {
+async fn create_strategy(Json(request): Json<StrategyRequest>) -> Response {
     if is_debug_webserver_enabled() {
         log(
             LogTag::Webserver,
@@ -481,7 +474,10 @@ async fn create_strategy(
     log(
         LogTag::Webserver,
         "SUCCESS",
-        &format!("Strategy created: id={}, name={}", strategy.id, strategy.name),
+        &format!(
+            "Strategy created: id={}, name={}",
+            strategy.id, strategy.name
+        ),
     );
 
     success_response(serde_json::json!({
@@ -581,7 +577,10 @@ async fn update_strategy_handler(
     log(
         LogTag::Webserver,
         "SUCCESS",
-        &format!("Strategy updated: id={}, version={}", strategy.id, strategy.version),
+        &format!(
+            "Strategy updated: id={}, version={}",
+            strategy.id, strategy.version
+        ),
     );
 
     success_response(serde_json::json!({
@@ -592,9 +591,7 @@ async fn update_strategy_handler(
 }
 
 /// DELETE /api/strategies/:id - Delete strategy
-async fn delete_strategy_handler(
-    Path(id): Path<String>,
-) -> Response {
+async fn delete_strategy_handler(Path(id): Path<String>) -> Response {
     if is_debug_webserver_enabled() {
         log(
             LogTag::Webserver,
@@ -645,9 +642,7 @@ async fn delete_strategy_handler(
 }
 
 /// GET /api/strategies/:id/performance - Get strategy performance stats
-async fn get_strategy_performance_stats(
-    Path(id): Path<String>,
-) -> Response {
+async fn get_strategy_performance_stats(Path(id): Path<String>) -> Response {
     if is_debug_webserver_enabled() {
         log(
             LogTag::Webserver,
@@ -855,8 +850,8 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/:id/performance", get(get_strategy_performance_stats))
         .route("/:id/test", post(test_strategy))
         // Validate / Deploy
-        .route( "/:id/validate", post(validate_strategy_handler))
-        .route( "/:id/deploy", post(deploy_strategy_handler))
+        .route("/:id/validate", post(validate_strategy_handler))
+        .route("/:id/deploy", post(deploy_strategy_handler))
         // Condition schemas
         .route("/conditions/schemas", get(get_condition_schemas))
         // Templates
@@ -885,8 +880,10 @@ async fn list_templates() -> Response {
             .query_map([], |row| {
                 let rules_json: String = row.get(5)?;
                 let params_json: String = row.get(6)?;
-                let rules_val: serde_json::Value = serde_json::from_str(&rules_json).unwrap_or(serde_json::Value::Null);
-                let params_val: HashMap<String, serde_json::Value> = serde_json::from_str(&params_json).unwrap_or_default();
+                let rules_val: serde_json::Value =
+                    serde_json::from_str(&rules_json).unwrap_or(serde_json::Value::Null);
+                let params_val: HashMap<String, serde_json::Value> =
+                    serde_json::from_str(&params_json).unwrap_or_default();
                 Ok(StrategyTemplateItem {
                     id: row.get(0)?,
                     name: row.get(1)?,
@@ -924,7 +921,12 @@ async fn validate_strategy_handler(Path(id): Path<String>) -> Response {
     let strategy = match get_strategy(&id) {
         Ok(Some(s)) => s,
         Ok(None) => return err(StatusCode::NOT_FOUND, "Strategy not found"),
-        Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, &format!("Failed to get strategy: {}", e)),
+        Err(e) => {
+            return err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                &format!("Failed to get strategy: {}", e),
+            )
+        }
     };
 
     match strategies::validate_strategy(&strategy).await {
@@ -938,7 +940,12 @@ async fn deploy_strategy_handler(Path(id): Path<String>) -> Response {
     let mut strategy = match get_strategy(&id) {
         Ok(Some(s)) => s,
         Ok(None) => return err(StatusCode::NOT_FOUND, "Strategy not found"),
-        Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, &format!("Failed to get strategy: {}", e)),
+        Err(e) => {
+            return err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                &format!("Failed to get strategy: {}", e),
+            )
+        }
     };
 
     // Enable and bump version
@@ -947,12 +954,19 @@ async fn deploy_strategy_handler(Path(id): Path<String>) -> Response {
     strategy.updated_at = Utc::now();
 
     if let Err(e) = update_strategy(&strategy) {
-        return err(StatusCode::INTERNAL_SERVER_ERROR, &format!("Failed to deploy strategy: {}", e));
+        return err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            &format!("Failed to deploy strategy: {}", e),
+        );
     }
 
     // Clear evaluation cache after deployment
     if let Err(e) = strategies::clear_evaluation_cache().await {
-        log(LogTag::Webserver, "WARN", &format!("Failed to clear evaluation cache: {}", e));
+        log(
+            LogTag::Webserver,
+            "WARN",
+            &format!("Failed to clear evaluation cache: {}", e),
+        );
     }
 
     success_response(serde_json::json!({"id": strategy.id, "message": "Strategy deployed"}))

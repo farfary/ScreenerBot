@@ -257,21 +257,7 @@ macro_rules! impl_nested_metadata_for_primitives {
 }
 
 impl_nested_metadata_for_primitives!(
-    bool,
-    String,
-    &str,
-    f64,
-    f32,
-    usize,
-    isize,
-    u64,
-    i64,
-    u32,
-    i32,
-    u16,
-    i16,
-    u8,
-    i8
+    bool, String, &str, f64, f32, usize, isize, u64, i64, u32, i32, u16, i16, u8, i8
 );
 
 impl<T> NestedMetadata for Option<T>

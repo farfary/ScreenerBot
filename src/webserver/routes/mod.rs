@@ -90,7 +90,11 @@ async fn config_page() -> Html<String> {
 /// Strategies page handler
 async fn strategies_page() -> Html<String> {
     let content = templates::strategies_content();
-    Html(templates::base_template("Strategies", "strategies", &content))
+    Html(templates::base_template(
+        "Strategies",
+        "strategies",
+        &content,
+    ))
 }
 
 fn api_routes() -> Router<Arc<AppState>> {

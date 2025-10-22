@@ -168,10 +168,10 @@ pub async fn fetch_dexscreener_data_batch(
 
     // Process pools - DexScreener batch returns ONE best pool per token
     const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
-    
+
     for pool in pools {
         let mint = &pool.base_token_address;
-        
+
         // Skip if not in our request list
         if !to_fetch.contains(mint) {
             continue;
@@ -182,7 +182,10 @@ pub async fn fetch_dexscreener_data_batch(
 
         // Store in database
         if let Err(e) = db.upsert_dexscreener_data(mint, &data) {
-            eprintln!("[TOKENS][DEXSCREENER] Failed to store data for {}: {}", mint, e);
+            eprintln!(
+                "[TOKENS][DEXSCREENER] Failed to store data for {}: {}",
+                mint, e
+            );
         }
 
         // Cache it
@@ -224,7 +227,7 @@ pub async fn fetch_dexscreener_data(
 ) -> TokenResult<Option<DexScreenerData>> {
     // Use batch endpoint with single token
     let mut batch_results = fetch_dexscreener_data_batch(&[mint.to_string()], db).await?;
-    
+
     Ok(batch_results.remove(mint).flatten())
 }
 

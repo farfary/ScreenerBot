@@ -569,8 +569,8 @@ impl TokenDatabase {
             .lock()
             .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
 
-    // Clean schema insert (image_url column included)
-    let insert_result = conn.execute(
+        // Clean schema insert (image_url column included)
+        let insert_result = conn.execute(
             "INSERT INTO market_geckoterminal (
                 mint, price_usd, price_sol, price_native,
                 price_change_5m, price_change_1h, price_change_6h, price_change_24h,
@@ -594,8 +594,9 @@ impl TokenDatabase {
             ],
         );
 
-        insert_result
-            .map_err(|e| TokenError::Database(format!("Failed to upsert GeckoTerminal data: {}", e)))?;
+        insert_result.map_err(|e| {
+            TokenError::Database(format!("Failed to upsert GeckoTerminal data: {}", e))
+        })?;
 
         Ok(())
     }
@@ -842,27 +843,54 @@ impl TokenDatabase {
             .map_err(|e| TokenError::Database(format!("Failed to collect: {}", e)))
     }
 
-    /// Get tokens without security (Rugcheck) data
+    /// Get tokens without security (Rugcheck) data with exponential backoff for errors
     pub fn get_tokens_without_security_data(&self, limit: usize) -> TokenResult<Vec<String>> {
         let conn = self
             .conn
             .lock()
             .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
 
+        let now = Utc::now().timestamp();
+
+        // Base backoff interval: 2 minutes (120 seconds)
+        // Max backoff: 24 hours (86400 seconds)
+        // Formula: min(120 * 2^(error_count - 1), 86400)
         let mut stmt = conn
             .prepare(
                 "SELECT t.mint FROM tokens t
              LEFT JOIN security_rugcheck sr ON t.mint = sr.mint
              LEFT JOIN blacklist b ON t.mint = b.mint
+             LEFT JOIN update_tracking ut ON t.mint = ut.mint
              WHERE sr.mint IS NULL
              AND b.mint IS NULL
-             ORDER BY t.created_at ASC
-             LIMIT ?1",
+             AND (
+                 -- Never tried
+                 ut.security_error_type IS NULL
+                 -- Temporary errors with exponential backoff
+                 OR (ut.security_error_type = 'temporary' 
+                     AND ut.last_security_error_at < ?1 - (120 * (1 << MIN(ut.security_error_count - 1, 10))))
+                 -- Permanent errors retry after 7 days
+                 OR (ut.security_error_type = 'permanent' 
+                     AND ut.last_security_error_at < ?1 - 604800)
+             )
+             ORDER BY 
+                 CASE 
+                     -- Priority 1: New tokens (created in last 24h, no errors)
+                     WHEN ut.security_error_type IS NULL AND t.created_at > ?1 - 86400 THEN 1
+                     -- Priority 2: Tokens without errors
+                     WHEN ut.security_error_type IS NULL THEN 2
+                     -- Priority 3: Temporary errors (with backoff)
+                     WHEN ut.security_error_type = 'temporary' THEN 3
+                     -- Priority 4: Permanent errors (very rare retry)
+                     ELSE 4
+                 END,
+                 t.created_at ASC
+             LIMIT ?2",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
 
         let mints = stmt
-            .query_map(params![limit], |row| row.get(0))
+            .query_map(params![now, limit], |row| row.get(0))
             .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
 
         mints
@@ -926,6 +954,55 @@ impl TokenDatabase {
             params![now, mint],
         )
         .map_err(|e| TokenError::Database(format!("Failed to update tokens: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Record a security fetch error with exponential backoff tracking
+    pub fn record_security_error(
+        &self,
+        mint: &str,
+        message: &str,
+        error_type: &str,
+    ) -> TokenResult<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let now = Utc::now().timestamp();
+
+        conn.execute(
+            "UPDATE update_tracking SET 
+                security_error_count = security_error_count + 1,
+                last_security_error = ?1,
+                last_security_error_at = ?2,
+                security_error_type = ?3
+             WHERE mint = ?4",
+            params![message, now, error_type, mint],
+        )
+        .map_err(|e| TokenError::Database(format!("Failed to record security error: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Clear security error tracking (called after successful fetch)
+    pub fn clear_security_error(&self, mint: &str) -> TokenResult<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        conn.execute(
+            "UPDATE update_tracking SET 
+                security_error_count = 0,
+                last_security_error = NULL,
+                last_security_error_at = NULL,
+                security_error_type = NULL
+             WHERE mint = ?1",
+            params![mint],
+        )
+        .map_err(|e| TokenError::Database(format!("Failed to clear security error: {}", e)))?;
 
         Ok(())
     }
@@ -1176,7 +1253,10 @@ impl TokenDatabase {
                 None => return Ok(None),
             },
             DataSource::GeckoTerminal => match self.get_geckoterminal_data(mint)? {
-                Some(data) => (MarketDataType::GeckoTerminal(data), DataSource::GeckoTerminal),
+                Some(data) => (
+                    MarketDataType::GeckoTerminal(data),
+                    DataSource::GeckoTerminal,
+                ),
                 None => return Ok(None),
             },
             _ => return Ok(None),
@@ -1945,7 +2025,9 @@ fn assemble_token(
 
     // Capture primary source images (DexScreener provides them) without moving market_data
     let (primary_image_url, primary_header_url) = match &market_data {
-        MarketDataType::DexScreener(data) => (data.image_url.clone(), data.header_image_url.clone()),
+        MarketDataType::DexScreener(data) => {
+            (data.image_url.clone(), data.header_image_url.clone())
+        }
         MarketDataType::GeckoTerminal(data) => (data.image_url.clone(), None),
     };
 
@@ -2191,8 +2273,8 @@ fn assemble_token_without_market_data(
         name: metadata.name.unwrap_or_else(|| "Unknown Token".to_string()),
         decimals: resolved_decimals, // Default to 9 if unknown
         description: None,
-    image_url: None,
-    header_image_url: None,
+        image_url: None,
+        header_image_url: None,
         supply: None,
 
         // Data source

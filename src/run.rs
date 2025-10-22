@@ -37,7 +37,7 @@ pub async fn run_bot() -> Result<(), String> {
     log(
         LogTag::System,
         "INFO",
-        "Strategy system initialized successfully"
+        "Strategy system initialized successfully",
     );
 
     // 5. Create service manager

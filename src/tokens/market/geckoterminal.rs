@@ -83,7 +83,7 @@ pub async fn fetch_geckoterminal_data_batch(
     // 3. Fetch from batch API endpoint
     let api_manager = crate::apis::manager::get_api_manager();
     let addresses_str = to_fetch.join(",");
-    
+
     let tokens_response = api_manager
         .geckoterminal
         .fetch_tokens_multi("solana", &addresses_str, None, None)
@@ -97,12 +97,20 @@ pub async fn fetch_geckoterminal_data_batch(
     for token_info in tokens_response.data {
         let mint = &token_info.attributes.address;
         let attrs = &token_info.attributes;
-        
-        let price_usd = attrs.price_usd.as_ref().and_then(|s| s.parse::<f64>().ok()).unwrap_or(0.0);
+
+        let price_usd = attrs
+            .price_usd
+            .as_ref()
+            .and_then(|s| s.parse::<f64>().ok())
+            .unwrap_or(0.0);
         let sol_price = crate::sol_price::get_sol_price();
-        let price_sol = if sol_price > 0.0 { price_usd / sol_price } else { 0.0 };
+        let price_sol = if sol_price > 0.0 {
+            price_usd / sol_price
+        } else {
+            0.0
+        };
         let volume_usd = attrs.volume_usd.as_ref();
-        
+
         let data = GeckoTerminalData {
             price_usd,
             price_sol,
@@ -113,14 +121,20 @@ pub async fn fetch_geckoterminal_data_batch(
             price_change_24h: None,
             market_cap: attrs.market_cap_usd.as_ref().and_then(|s| s.parse().ok()),
             fdv: attrs.fdv_usd.as_ref().and_then(|s| s.parse().ok()),
-            liquidity_usd: attrs.total_reserve_in_usd.as_ref().and_then(|s| s.parse().ok()),
+            liquidity_usd: attrs
+                .total_reserve_in_usd
+                .as_ref()
+                .and_then(|s| s.parse().ok()),
             volume_5m: volume_usd.and_then(|v| v.m5.as_ref().and_then(|s| s.parse().ok())),
             volume_1h: volume_usd.and_then(|v| v.h1.as_ref().and_then(|s| s.parse().ok())),
             volume_6h: volume_usd.and_then(|v| v.h6.as_ref().and_then(|s| s.parse().ok())),
             volume_24h: volume_usd.and_then(|v| v.h24.as_ref().and_then(|s| s.parse().ok())),
             pool_count: None,
             top_pool_address: None,
-            reserve_in_usd: attrs.total_reserve_in_usd.as_ref().and_then(|s| s.parse().ok()),
+            reserve_in_usd: attrs
+                .total_reserve_in_usd
+                .as_ref()
+                .and_then(|s| s.parse().ok()),
             image_url: None,
             fetched_at: Utc::now(),
         };
@@ -159,7 +173,7 @@ pub async fn fetch_geckoterminal_data(
 ) -> TokenResult<Option<GeckoTerminalData>> {
     // Use batch endpoint with single token
     let mut batch_results = fetch_geckoterminal_data_batch(&[mint.to_string()], db).await?;
-    
+
     Ok(batch_results.remove(mint).flatten())
 }
 
