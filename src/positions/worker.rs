@@ -457,22 +457,21 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                             }
                             VerificationOutcome::RetryTransient(reason) => {
                                 // Check if we should give up on this verification
-                                if item.should_give_up() {
+                                if let Some(give_up_reason) = item.should_give_up() {
                                     log(
                                         LogTag::Positions,
                                         "ERROR",
                                         &format!(
-                                            "⏰ Giving up on verification for {} (mint {} kind {:?}): {} attempts over {} hours - {}",
+                                            "⏰ Abandoning verification for {} (mint={}, kind={:?}): {:?} - last error: {}",
                                             item.signature,
                                             item.mint,
                                             item.kind,
-                                            item.attempts,
-                                            (chrono::Utc::now() - item.created_at).num_hours(),
+                                            give_up_reason,
                                             reason
                                         )
                                     );
                                     
-                                    // Record abandoned verification event
+                                    // Record abandoned verification event with detailed reason
                                     crate::events::record_safe(
                                         crate::events::Event::new(
                                             crate::events::EventCategory::Position,
@@ -481,11 +480,13 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                             Some(item.mint.clone()),
                                             Some(item.signature.clone()),
                                             serde_json::json!({
-                                                "reason": reason,
+                                                "give_up_reason": give_up_reason,
+                                                "last_error": reason,
                                                 "attempts": item.attempts,
                                                 "age_hours": (chrono::Utc::now() - item.created_at).num_hours(),
                                                 "kind": format!("{:?}", item.kind),
-                                                "position_id": item.position_id
+                                                "position_id": item.position_id,
+                                                "created_at": item.created_at.to_rfc3339()
                                             })
                                         )
                                     ).await;
@@ -493,19 +494,27 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                     // Handle abandoned verification based on kind
                                     match item.kind {
                                         VerificationKind::Entry => {
-                                            // Remove orphan entry position
+                                            // Remove orphan entry position AND release semaphore permit
                                             if let Some(position_id) = item.position_id {
                                                 log(LogTag::Positions, "WARN", 
-                                                    &format!("Removing orphan entry position {} after verification timeout", position_id));
+                                                    &format!("Removing orphan entry position {} after verification abandonment (will release semaphore permit)", position_id));
                                                 let transition = super::transitions::PositionTransition::RemoveOrphanEntry { position_id };
-                                                let _ = super::apply::apply_transition(transition).await;
+                                                if let Ok(_) = super::apply::apply_transition(transition).await {
+                                                    // Permit is released in RemoveOrphanEntry transition handler
+                                                    log(LogTag::Positions, "INFO", 
+                                                        &format!("Successfully removed orphan entry {} and released permit", position_id));
+                                                } else {
+                                                    log(LogTag::Positions, "ERROR", 
+                                                        &format!("Failed to remove orphan entry {}, manual reconciliation may be needed", position_id));
+                                                }
                                             }
                                         }
                                         VerificationKind::Exit => {
                                             // Force synthetic exit after timeout
                                             if let Some(position_id) = item.position_id {
                                                 log(LogTag::Positions, "WARN", 
-                                                    &format!("Forcing synthetic exit for position {} after verification timeout", position_id));
+                                                    &format!("Forcing synthetic exit for position {} after verification abandonment - manual wallet check recommended", position_id));
+                                                
                                                 let transition = super::transitions::PositionTransition::ExitPermanentFailureSynthetic {
                                                     position_id,
                                                     exit_time: chrono::Utc::now(),
@@ -515,7 +524,7 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                         }
                                     }
                                     
-                                    // Don't requeue - give up
+                                    // Don't requeue - abandon this verification
                                     continue;
                                 }
                                 

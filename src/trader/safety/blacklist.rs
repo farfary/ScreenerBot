@@ -23,26 +23,26 @@ pub async fn init_blacklist() -> Result<(), String> {
 
 /// Update the blacklist cache from the filtering system
 async fn update_blacklist_cache() -> Result<(), String> {
-    // TODO: CRITICAL - Integrate with filtering module
-    // 
-    // This function should call:
-    //   let blacklist = crate::filtering::get_blacklisted_tokens().await?;
-    //
-    // CURRENT STATUS: Returns empty list - blacklist checks are NON-FUNCTIONAL
-    // IMPACT: Dangerous tokens are never force-exited, emergency exit logic never triggers
-    // PRIORITY: P0 - Implement before production use
-    // 
-    // Implementation steps:
-    // 1. Add get_blacklisted_tokens() to filtering module
-    // 2. Return Vec<String> of blacklisted mint addresses
-    // 3. Replace empty Vec below with actual filtering call
-    // 4. Add periodic cache refresh (every 60s recommended)
-    
-    let blacklist: Vec<String> = Vec::new(); // ⚠️ STUB - Always empty!
+    // Get blacklisted tokens from tokens module
+    let blacklist = crate::tokens::get_blacklisted_tokens();
     
     let mut cache = get_blacklist_cache().write().await;
+    let previous_count = cache.len();
     cache.clear();
-    cache.extend(blacklist.into_iter());
+    cache.extend(blacklist.iter().cloned());
+    
+    if cache.len() != previous_count {
+        log(
+            LogTag::Trader,
+            "INFO",
+            &format!(
+                "🚫 Blacklist cache updated: {} tokens (was {})",
+                cache.len(),
+                previous_count
+            ),
+        );
+    }
+    
     Ok(())
 }
 
@@ -65,47 +65,27 @@ pub async fn is_blacklisted(mint: &str) -> Result<bool, String> {
 
 /// Check if a position should be exited due to blacklist
 ///
-/// # ⚠️ BLACKLIST INTEGRATION STATUS: NOT IMPLEMENTED
-///
-/// This function exists in the architecture but is currently non-functional because:
-/// 1. `update_blacklist_cache()` always returns an empty list (no population logic)
-/// 2. Integration with `filtering` module is incomplete
-/// 3. No source of blacklisted tokens is configured
-///
-/// # To Enable Blacklist:
-/// 1. Implement token blacklist population from filtering module or external source
-/// 2. Call `populate_blacklist_cache()` during startup and periodically
-/// 3. Remove the early return check below
-/// 4. Test thoroughly to avoid false positives
-///
-/// # Current Behavior:
-/// Always returns `Ok(None)` (no exit signal) because cache is always empty.
-///
-/// # Future Integration:
-/// ```rust,ignore
-/// // Populate from filtering module
-/// let blacklisted = crate::filtering::get_blacklisted_tokens().await?;
-/// let mut cache = get_blacklist_cache().write().await;
-/// cache.clear();
-/// cache.extend(blacklisted);
-/// ```
+/// Returns an immediate exit decision if the position's token is blacklisted.
+/// This is a critical safety check that overrides all other exit conditions.
 pub async fn check_blacklist_exit(
     position: &Position,
     current_price: f64,
 ) -> Result<Option<TradeDecision>, String> {
-    // Early return - blacklist not functional (cache is never populated)
-    // This prevents false positives while the feature is incomplete
-    if get_blacklist_cache().read().await.is_empty() {
-        return Ok(None);
-    }
+    // Check if token is in blacklist cache
+    let is_blacklisted = {
+        let cache = get_blacklist_cache().read().await;
+        cache.contains(&position.mint)
+    };
     
-    if is_blacklisted(&position.mint).await? {
+    if is_blacklisted {
         log(
             LogTag::Trader,
             "WARN",
             &format!(
-                "Position {:?} for token {} is blacklisted - triggering emergency exit",
-                position.id, position.mint
+                "⛔ BLACKLISTED: {} (mint={}) - Triggering emergency exit at {:.9} SOL",
+                position.symbol,
+                position.mint,
+                current_price
             ),
         );
 
@@ -123,4 +103,10 @@ pub async fn check_blacklist_exit(
     }
 
     Ok(None)
+}
+
+/// Refresh blacklist cache periodically
+/// Should be called by the trader controller on a schedule (e.g., every 60s)
+pub async fn refresh_blacklist() -> Result<(), String> {
+    update_blacklist_cache().await
 }

@@ -32,11 +32,8 @@ pub async fn execute_sell(decision: &TradeDecision) -> Result<TradeResult, Strin
     let exit_reason = format!("{:?}", decision.reason);
 
     if partial_exit_enabled && !is_emergency_exit {
-        // Partial exit enabled - get percentage from config with validation
-        let exit_percentage = with_config(|cfg| {
-            // Clamp to safe range to prevent invalid config values
-            cfg.positions.partial_exit_default_pct.clamp(10.0, 90.0)
-        });
+        // Partial exit enabled - get percentage from config (validated at load time)
+        let exit_percentage = with_config(|cfg| cfg.positions.partial_exit_default_pct);
 
         match positions::partial_close_position(&decision.mint, exit_percentage, &exit_reason.clone())
             .await

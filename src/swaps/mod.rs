@@ -124,16 +124,37 @@ pub async fn get_best_quote(
 
             match quote_result {
                 Ok(Ok(gmgn_data)) => {
-                    // Quote succeeded within timeout
+                    // Quote succeeded within timeout - validate numeric fields
+                    let output_amount = gmgn_data.quote.out_amount.parse::<u64>()
+                        .map_err(|e| ScreenerBotError::invalid_amount(
+                            format!("GMGN.out_amount={}", gmgn_data.quote.out_amount),
+                            format!("Failed to parse as u64: {}", e)
+                        ))?;
+                    
+                    // Validate output amount is non-zero
+                    if output_amount == 0 {
+                        log(LogTag::Swap, "QUOTE_GMGN_INVALID", 
+                            "⚠️ GMGN quote returned zero output amount - rejecting");
+                        return Err(ScreenerBotError::invalid_amount(
+                            "0",
+                            "GMGN quote returned zero output - invalid quote"
+                        ));
+                    }
+                    
+                    let price_impact_pct = gmgn_data.quote.price_impact_pct.parse::<f64>()
+                        .unwrap_or(0.0); // Non-critical, default to 0
+                    let slippage_bps = gmgn_data.quote.slippage_bps.parse::<u16>()
+                        .unwrap_or(0); // Non-critical, default to 0
+                    
                     let unified_quote = UnifiedQuote {
                         router: RouterType::GMGN,
                         input_mint: input_mint.to_string(),
                         output_mint: output_mint.to_string(),
                         input_amount,
-                        output_amount: gmgn_data.quote.out_amount.parse().unwrap_or(0),
-                        price_impact_pct: gmgn_data.quote.price_impact_pct.parse().unwrap_or(0.0),
+                        output_amount,
+                        price_impact_pct,
                         fee_lamports: gmgn_data.raw_tx.prioritization_fee_lamports,
-                        slippage_bps: gmgn_data.quote.slippage_bps.parse().unwrap_or(0),
+                        slippage_bps,
                         route_plan: format!(
                             "GMGN Route: {}",
                             serde_json::to_string(&gmgn_data.quote.route_plan).unwrap_or_default()
@@ -210,20 +231,37 @@ pub async fn get_best_quote(
 
             match quote_result {
                 Ok(Ok(jupiter_data)) => {
-                    // Quote succeeded within timeout
+                    // Quote succeeded within timeout - validate numeric fields
+                    let output_amount = jupiter_data.quote.out_amount.parse::<u64>()
+                        .map_err(|e| ScreenerBotError::invalid_amount(
+                            format!("Jupiter.out_amount={}", jupiter_data.quote.out_amount),
+                            format!("Failed to parse as u64: {}", e)
+                        ))?;
+                    
+                    // Validate output amount is non-zero
+                    if output_amount == 0 {
+                        log(LogTag::Swap, "QUOTE_JUPITER_INVALID", 
+                            "⚠️ Jupiter quote returned zero output amount - rejecting");
+                        return Err(ScreenerBotError::invalid_amount(
+                            "0",
+                            "Jupiter quote returned zero output - invalid quote"
+                        ));
+                    }
+                    
+                    let price_impact_pct = jupiter_data.quote.price_impact_pct.parse::<f64>()
+                        .unwrap_or(0.0); // Non-critical, default to 0
+                    let slippage_bps = jupiter_data.quote.slippage_bps.parse::<u16>()
+                        .unwrap_or(0); // Non-critical, default to 0
+                    
                     let unified_quote = UnifiedQuote {
                         router: RouterType::Jupiter,
                         input_mint: input_mint.to_string(),
                         output_mint: output_mint.to_string(),
                         input_amount,
-                        output_amount: jupiter_data.quote.out_amount.parse().unwrap_or(0),
-                        price_impact_pct: jupiter_data
-                            .quote
-                            .price_impact_pct
-                            .parse()
-                            .unwrap_or(0.0),
+                        output_amount,
+                        price_impact_pct,
                         fee_lamports: jupiter_data.raw_tx.prioritization_fee_lamports,
-                        slippage_bps: jupiter_data.quote.slippage_bps.parse().unwrap_or(0),
+                        slippage_bps,
                         route_plan: format!(
                             "Jupiter Route: {}",
                             serde_json::to_string(&jupiter_data.quote.route_plan)

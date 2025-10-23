@@ -6,11 +6,13 @@
 //! 3. DCA implementation
 
 mod dca;
+mod dca_evaluation;
 mod entry_monitor;
 mod exit_monitor;
 mod strategy_manager;
 
 pub use dca::process_dca_opportunities;
+pub use dca_evaluation::{DcaCalculations, DcaConfigSnapshot, DcaEvaluation};
 pub use entry_monitor::monitor_entries;
 pub use exit_monitor::monitor_positions;
 pub use strategy_manager::StrategyManager;

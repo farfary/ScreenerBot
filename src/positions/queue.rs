@@ -16,6 +16,12 @@ pub enum VerificationKind {
     Exit,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub enum GiveUpReason {
+    MaxAttemptsReached { attempts: u8, max: u8 },
+    MaxAgeReached { age_hours: i64, max: i64 },
+}
+
 #[derive(Debug, Clone)]
 pub struct VerificationItem {
     pub signature: String,
@@ -79,19 +85,26 @@ impl VerificationItem {
     }
 
     /// Check if verification should be abandoned due to excessive retries or age
-    pub fn should_give_up(&self) -> bool {
-        // Check attempt limit
+    /// Returns Some(reason) if should give up, None otherwise
+    pub fn should_give_up(&self) -> Option<GiveUpReason> {
+        // Check attempt limit first
         if self.attempts >= MAX_VERIFICATION_ATTEMPTS {
-            return true;
+            return Some(GiveUpReason::MaxAttemptsReached {
+                attempts: self.attempts,
+                max: MAX_VERIFICATION_ATTEMPTS,
+            });
         }
 
         // Check age limit
         let age_hours = (Utc::now() - self.created_at).num_hours();
         if age_hours >= MAX_VERIFICATION_AGE_HOURS {
-            return true;
+            return Some(GiveUpReason::MaxAgeReached {
+                age_hours,
+                max: MAX_VERIFICATION_AGE_HOURS,
+            });
         }
 
-        false
+        None
     }
 
     pub fn with_retry(&self) -> Self {

@@ -689,11 +689,8 @@ impl PositionsDatabase {
 
     /// Update existing position by ID
     pub async fn update_position(&self, position: &Position) -> Result<(), String> {
-        if position.id.is_none() {
-            return Err("Cannot update position without ID".to_string());
-        }
-
-        let position_id = position.id.unwrap();
+        let position_id = position.id
+            .ok_or_else(|| "Cannot update position without ID".to_string())?;
 
         if is_debug_positions_enabled() {
             log(

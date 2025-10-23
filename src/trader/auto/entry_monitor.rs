@@ -8,7 +8,38 @@ use crate::trader::execution::execute_trade;
 use crate::trader::safety::{
     check_position_limits, has_open_position, is_blacklisted, is_in_reentry_cooldown,
 };
+use std::collections::HashMap;
+use std::sync::LazyLock;
+use tokio::sync::RwLock;
 use tokio::time::{sleep, Duration, Instant};
+
+/// Entry cycle reservations to prevent duplicate concurrent entries for same token
+/// Expires after 30 seconds to handle cases where entry fails
+static ENTRY_CYCLE_RESERVATIONS: LazyLock<RwLock<HashMap<String, Instant>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
+
+/// Try to reserve a token for entry processing in this cycle
+/// Returns true if reservation successful, false if already reserved
+async fn try_reserve_token_for_cycle(mint: &str) -> bool {
+    let mut reservations = ENTRY_CYCLE_RESERVATIONS.write().await;
+    
+    // Clean expired reservations (older than 30s)
+    reservations.retain(|_, instant| instant.elapsed() < Duration::from_secs(30));
+    
+    // Try to reserve
+    if reservations.contains_key(mint) {
+        return false; // Already reserved by another thread
+    }
+    
+    reservations.insert(mint.to_string(), Instant::now());
+    true
+}
+
+/// Clear reservation for a token (called after entry attempt completes)
+async fn clear_token_reservation(mint: &str) {
+    let mut reservations = ENTRY_CYCLE_RESERVATIONS.write().await;
+    reservations.remove(mint);
+}
 
 /// Constants for entry monitoring
 const ENTRY_MONITOR_INTERVAL_SECS: u64 = 3;
@@ -84,11 +115,22 @@ pub async fn monitor_entries(
             if is_in_reentry_cooldown(&token).await? {
                 continue;
             }
+            
+            // Try to reserve token for this cycle - prevents duplicate concurrent entries
+            if !try_reserve_token_for_cycle(&token).await {
+                log(
+                    LogTag::Trader,
+                    "DEBUG",
+                    &format!("Token {} already reserved by another thread, skipping", token),
+                );
+                continue;
+            }
 
             // Get latest price info
             if let Some(price_info) = pools::get_pool_price(&token) {
-                // Check if token is blacklisted
-                if is_blacklisted(&token).await? {
+                // Check if token is blacklisted - sync call
+                if is_blacklisted(&token) {
+                    clear_token_reservation(&token).await;
                     continue;
                 }
 
@@ -168,8 +210,12 @@ pub async fn monitor_entries(
                 .await;
 
                 // Execute the trade
+                let mint_for_cleanup = decision.mint.clone();
                 match execute_trade(&decision).await {
                     Ok(result) => {
+                        // Clear reservation after execution attempt
+                        clear_token_reservation(&mint_for_cleanup).await;
+                        
                         if result.success {
                             let tx_sig = result.tx_signature.clone();
                             log(
@@ -225,6 +271,9 @@ pub async fn monitor_entries(
                         }
                     }
                     Err(e) => {
+                        // Clear reservation on error
+                        clear_token_reservation(&mint_for_cleanup).await;
+                        
                         log(
                             LogTag::Trader,
                             "ERROR",

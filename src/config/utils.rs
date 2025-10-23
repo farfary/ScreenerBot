@@ -112,6 +112,22 @@ fn validate_config(config: &Config) -> Result<(), String> {
     if !config.trader.trade_size_sol.is_finite() {
         return Err("trader.trade_size_sol must be a finite number".to_string());
     }
+    if config.trader.entry_check_concurrency == 0 {
+        return Err("trader.entry_check_concurrency must be at least 1".to_string());
+    }
+
+    // DCA validation
+    if config.trader.dca_enabled {
+        if config.trader.dca_threshold_pct >= 0.0 {
+            return Err("trader.dca_threshold_pct must be negative (represents price drop percentage)".to_string());
+        }
+        if config.trader.dca_size_percentage <= 0.0 || config.trader.dca_size_percentage > 100.0 {
+            return Err("trader.dca_size_percentage must be between 0 and 100 (exclusive)".to_string());
+        }
+        if config.trader.dca_max_count == 0 {
+            return Err("trader.dca_max_count must be at least 1 when DCA is enabled".to_string());
+        }
+    }
 
     // Positions validation
     if config.positions.profit_extra_needed_sol < 0.0 || !config.positions.profit_extra_needed_sol.is_finite() {
@@ -119,6 +135,30 @@ fn validate_config(config: &Config) -> Result<(), String> {
     }
     if config.positions.position_open_cooldown_secs < 0 {
         return Err("positions.position_open_cooldown_secs cannot be negative".to_string());
+    }
+    
+    // Partial exit validation
+    if config.positions.partial_exit_enabled {
+        if config.positions.partial_exit_default_pct < 10.0 || config.positions.partial_exit_default_pct > 90.0 {
+            return Err("positions.partial_exit_default_pct must be between 10 and 90".to_string());
+        }
+    }
+    
+    // Trailing stop validation
+    if config.positions.trailing_stop_enabled {
+        if config.positions.trailing_stop_activation_pct <= 0.0 || config.positions.trailing_stop_activation_pct > 100.0 {
+            return Err("positions.trailing_stop_activation_pct must be between 0 and 100 (exclusive)".to_string());
+        }
+        if config.positions.trailing_stop_distance_pct <= 0.0 || config.positions.trailing_stop_distance_pct > 100.0 {
+            return Err("positions.trailing_stop_distance_pct must be between 0 and 100 (exclusive)".to_string());
+        }
+        if config.positions.trailing_stop_distance_pct >= config.positions.trailing_stop_activation_pct {
+            return Err(format!(
+                "positions.trailing_stop_distance_pct ({:.1}%) must be less than trailing_stop_activation_pct ({:.1}%)",
+                config.positions.trailing_stop_distance_pct,
+                config.positions.trailing_stop_activation_pct
+            ));
+        }
     }
 
     // Slippage validation
@@ -130,6 +170,14 @@ fn validate_config(config: &Config) -> Result<(), String> {
     }
     if config.swaps.slippage.exit_loss_shortfall_pct < 0.0 || config.swaps.slippage.exit_loss_shortfall_pct > 100.0 {
         return Err("swaps.slippage.exit_loss_shortfall_pct must be between 0 and 100".to_string());
+    }
+    if config.swaps.slippage.exit_retry_steps_pct.is_empty() {
+        return Err("swaps.slippage.exit_retry_steps_pct cannot be empty - at least one slippage step is required".to_string());
+    }
+    
+    // Router availability check
+    if !config.swaps.gmgn.enabled && !config.swaps.jupiter.enabled {
+        return Err("At least one swap router (GMGN or Jupiter) must be enabled".to_string());
     }
 
     // RPC validation
