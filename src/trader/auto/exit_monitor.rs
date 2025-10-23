@@ -98,28 +98,43 @@ pub async fn monitor_positions(
                 }
             };
 
-            // Update position price (for tracking and trailing stop)
+            // CRITICAL: Update position price BEFORE checking trailing stop
+            // This ensures price_highest is current when trailing stop logic evaluates
             if let Err(e) = positions::update_position_price(&position.mint, current_price).await {
                 log(
                     LogTag::Trader,
                     "ERROR",
                     &format!("Failed to update price for {}: {}", position.symbol, e),
                 );
+                // Continue anyway - we can still check exits with current price
             }
 
+            // Get fresh position with updated price_highest for accurate trailing stop calculation
+            let fresh_position = match positions::get_position_by_mint(&position.mint).await {
+                Some(pos) => pos,
+                None => {
+                    log(
+                        LogTag::Trader,
+                        "WARN",
+                        &format!("Position disappeared for {}", position.symbol),
+                    );
+                    continue;
+                }
+            };
+
             // Check for blacklist (emergency exit)
-            match check_blacklist_exit(&position, current_price).await {
+            match check_blacklist_exit(&fresh_position, current_price).await {
                 Ok(Some(decision)) => {
                     log(
                         LogTag::Trader,
                         "EMERGENCY",
-                        &format!("🚨 Token {} blacklisted! Executing emergency exit", position.symbol),
+                        &format!("🚨 Token {} blacklisted! Executing emergency exit", fresh_position.symbol),
                     );
                     if let Err(e) = execute_trade(&decision).await {
                         log(
                             LogTag::Trader,
                             "ERROR",
-                            &format!("Failed to execute blacklist exit for {}: {}", position.symbol, e),
+                            &format!("Failed to execute blacklist exit for {}: {}", fresh_position.symbol, e),
                         );
                     }
                     continue;
@@ -129,24 +144,24 @@ pub async fn monitor_positions(
                     log(
                         LogTag::Trader,
                         "ERROR",
-                        &format!("Error checking blacklist for {}: {}", position.symbol, e),
+                        &format!("Error checking blacklist for {}: {}", fresh_position.symbol, e),
                     );
                 }
             }
 
-            // Check trailing stop (highest priority)
-            match check_trailing_stop(&position, current_price).await {
+            // Check trailing stop (highest priority) - now using fresh_position with updated price_highest
+            match check_trailing_stop(&fresh_position, current_price).await {
                 Ok(Some(decision)) => {
                     log(
                         LogTag::Trader,
                         "SIGNAL",
-                        &format!("📉 Trailing stop triggered for {}", position.symbol),
+                        &format!("📉 Trailing stop triggered for {}", fresh_position.symbol),
                     );
                     if let Err(e) = execute_trade(&decision).await {
                         log(
                             LogTag::Trader,
                             "ERROR",
-                            &format!("Failed to execute trailing stop for {}: {}", position.symbol, e),
+                            &format!("Failed to execute trailing stop for {}: {}", fresh_position.symbol, e),
                         );
                     }
                     continue;
@@ -156,24 +171,24 @@ pub async fn monitor_positions(
                     log(
                         LogTag::Trader,
                         "ERROR",
-                        &format!("Error checking trailing stop for {}: {}", position.symbol, e),
+                        &format!("Error checking trailing stop for {}: {}", fresh_position.symbol, e),
                     );
                 }
             }
 
             // Check ROI target exit
-            match check_roi_exit(&position, current_price).await {
+            match check_roi_exit(&fresh_position, current_price).await {
                 Ok(Some(decision)) => {
                     log(
                         LogTag::Trader,
                         "SIGNAL",
-                        &format!("🎯 ROI target reached for {}", position.symbol),
+                        &format!("🎯 ROI target reached for {}", fresh_position.symbol),
                     );
                     if let Err(e) = execute_trade(&decision).await {
                         log(
                             LogTag::Trader,
                             "ERROR",
-                            &format!("Failed to execute ROI exit for {}: {}", position.symbol, e),
+                            &format!("Failed to execute ROI exit for {}: {}", fresh_position.symbol, e),
                         );
                     }
                     continue;
@@ -183,13 +198,13 @@ pub async fn monitor_positions(
                     log(
                         LogTag::Trader,
                         "ERROR",
-                        &format!("Error checking ROI exit for {}: {}", position.symbol, e),
+                        &format!("Error checking ROI exit for {}: {}", fresh_position.symbol, e),
                     );
                 }
             }
 
             // Check time override (forced exit for old positions)
-            match check_time_override(&position, current_price).await {
+            match check_time_override(&fresh_position, current_price).await {
                 Ok(Some(decision)) => {
                     log(
                         LogTag::Trader,
@@ -200,7 +215,7 @@ pub async fn monitor_positions(
                         log(
                             LogTag::Trader,
                             "ERROR",
-                            &format!("Failed to execute time override for {}: {}", position.symbol, e),
+                            &format!("Failed to execute time override exit for {}: {}", fresh_position.symbol, e),
                         );
                     }
                     continue;
@@ -210,27 +225,27 @@ pub async fn monitor_positions(
                     log(
                         LogTag::Trader,
                         "ERROR",
-                        &format!("Error checking time override for {}: {}", position.symbol, e),
+                        &format!("Error checking time override for {}: {}", fresh_position.symbol, e),
                     );
                 }
             }
 
             // Check strategy-based exit signals
-            match StrategyManager::check_exit_strategies(&position, current_price).await {
+            match StrategyManager::check_exit_strategies(&fresh_position, current_price).await {
                 Ok(Some(decision)) => {
                     log(
                         LogTag::Trader,
                         "SIGNAL",
                         &format!(
                             "📊 Strategy exit signal for {} (strategy: {:?})",
-                            position.symbol, decision.strategy_id
+                            fresh_position.symbol, decision.strategy_id
                         ),
                     );
                     if let Err(e) = execute_trade(&decision).await {
                         log(
                             LogTag::Trader,
                             "ERROR",
-                            &format!("Failed to execute strategy exit for {}: {}", position.symbol, e),
+                            &format!("Failed to execute strategy exit for {}: {}", fresh_position.symbol, e),
                         );
                     }
                     continue;
@@ -240,7 +255,7 @@ pub async fn monitor_positions(
                     log(
                         LogTag::Trader,
                         "ERROR",
-                        &format!("Error checking strategy exit for {}: {}", position.symbol, e),
+                        &format!("Error checking strategy exit for {}: {}", fresh_position.symbol, e),
                     );
                 }
             }

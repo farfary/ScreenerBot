@@ -35,16 +35,21 @@ impl StrategyManager {
             token_age_hours: None,
         };
 
-        // Call strategies module for evaluation
-        match strategies::evaluate_entry_strategies(
-            token_mint,
-            price_info.price_sol,
-            Some(market_data),
-            None, // OHLCV data could be added later
+        // Call strategies module for evaluation with timeout
+        let strategy_timeout = std::time::Duration::from_secs(5);
+        let evaluation_result = tokio::time::timeout(
+            strategy_timeout,
+            strategies::evaluate_entry_strategies(
+                token_mint,
+                price_info.price_sol,
+                Some(market_data),
+                None, // OHLCV data could be added later
+            )
         )
-        .await
-        {
-            Ok(Some(strategy_id)) => {
+        .await;
+
+        match evaluation_result {
+            Ok(Ok(Some(strategy_id))) => {
                 log(
                     LogTag::Trader,
                     "SUCCESS",
@@ -66,14 +71,22 @@ impl StrategyManager {
                     size_sol: None, // Will use config default
                 }))
             }
-            Ok(None) => Ok(None),
-            Err(e) => {
+            Ok(Ok(None)) => Ok(None),
+            Ok(Err(e)) => {
                 log(
                     LogTag::Trader,
                     "ERROR",
                     &format!("Strategy evaluation error for {}: {}", token_mint, e),
                 );
                 Ok(None) // Don't fail trading on strategy errors
+            }
+            Err(_timeout) => {
+                log(
+                    LogTag::Trader,
+                    "WARNING",
+                    &format!("⏰ Strategy evaluation timeout for {} (exceeded {}s)", token_mint, strategy_timeout.as_secs()),
+                );
+                Ok(None) // Skip this token on timeout
             }
         }
     }
@@ -116,17 +129,22 @@ impl StrategyManager {
             token_age_hours: None,
         };
 
-        // Call strategies module for evaluation
-        match strategies::evaluate_exit_strategies(
-            &position.mint,
-            current_price,
-            position_data,
-            Some(market_data),
-            None, // OHLCV data could be added later
+        // Call strategies module for evaluation with timeout
+        let strategy_timeout = std::time::Duration::from_secs(5);
+        let evaluation_result = tokio::time::timeout(
+            strategy_timeout,
+            strategies::evaluate_exit_strategies(
+                &position.mint,
+                current_price,
+                position_data,
+                Some(market_data),
+                None, // OHLCV data could be added later
+            )
         )
-        .await
-        {
-            Ok(Some(strategy_id)) => {
+        .await;
+
+        match evaluation_result {
+            Ok(Ok(Some(strategy_id))) => {
                 log(
                     LogTag::Trader,
                     "SUCCESS",
@@ -148,14 +166,25 @@ impl StrategyManager {
                     size_sol: None, // Will sell full position or use config
                 }))
             }
-            Ok(None) => Ok(None),
-            Err(e) => {
+            Ok(Ok(None)) => Ok(None),
+            Ok(Err(e)) => {
                 log(
                     LogTag::Trader,
                     "ERROR",
                     &format!("Strategy evaluation error for position {:?}: {}", position.id, e),
                 );
                 Ok(None) // Don't fail trading on strategy errors
+            }
+            Err(_timeout) => {
+                log(
+                    LogTag::Trader,
+                    "WARNING",
+                    &format!(
+                        "⏰ Strategy evaluation timeout for position {:?} (exceeded {}s)",
+                        position.id, strategy_timeout.as_secs()
+                    ),
+                );
+                Ok(None) // Skip this position on timeout
             }
         }
     }

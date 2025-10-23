@@ -456,6 +456,69 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                 }
                             }
                             VerificationOutcome::RetryTransient(reason) => {
+                                // Check if we should give up on this verification
+                                if item.should_give_up() {
+                                    log(
+                                        LogTag::Positions,
+                                        "ERROR",
+                                        &format!(
+                                            "⏰ Giving up on verification for {} (mint {} kind {:?}): {} attempts over {} hours - {}",
+                                            item.signature,
+                                            item.mint,
+                                            item.kind,
+                                            item.attempts,
+                                            (chrono::Utc::now() - item.created_at).num_hours(),
+                                            reason
+                                        )
+                                    );
+                                    
+                                    // Record abandoned verification event
+                                    crate::events::record_safe(
+                                        crate::events::Event::new(
+                                            crate::events::EventCategory::Position,
+                                            Some("verification_abandoned".to_string()),
+                                            crate::events::Severity::Error,
+                                            Some(item.mint.clone()),
+                                            Some(item.signature.clone()),
+                                            serde_json::json!({
+                                                "reason": reason,
+                                                "attempts": item.attempts,
+                                                "age_hours": (chrono::Utc::now() - item.created_at).num_hours(),
+                                                "kind": format!("{:?}", item.kind),
+                                                "position_id": item.position_id
+                                            })
+                                        )
+                                    ).await;
+                                    
+                                    // Handle abandoned verification based on kind
+                                    match item.kind {
+                                        VerificationKind::Entry => {
+                                            // Remove orphan entry position
+                                            if let Some(position_id) = item.position_id {
+                                                log(LogTag::Positions, "WARN", 
+                                                    &format!("Removing orphan entry position {} after verification timeout", position_id));
+                                                let transition = super::transitions::PositionTransition::RemoveOrphanEntry { position_id };
+                                                let _ = super::apply::apply_transition(transition).await;
+                                            }
+                                        }
+                                        VerificationKind::Exit => {
+                                            // Force synthetic exit after timeout
+                                            if let Some(position_id) = item.position_id {
+                                                log(LogTag::Positions, "WARN", 
+                                                    &format!("Forcing synthetic exit for position {} after verification timeout", position_id));
+                                                let transition = super::transitions::PositionTransition::ExitPermanentFailureSynthetic {
+                                                    position_id,
+                                                    exit_time: chrono::Utc::now(),
+                                                };
+                                                let _ = super::apply::apply_transition(transition).await;
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Don't requeue - give up
+                                    continue;
+                                }
+                                
                                 if is_debug_positions_enabled() {
                                     log(
                                         LogTag::Positions,

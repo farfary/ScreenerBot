@@ -23,9 +23,23 @@ pub async fn init_blacklist() -> Result<(), String> {
 
 /// Update the blacklist cache from the filtering system
 async fn update_blacklist_cache() -> Result<(), String> {
-    // TODO: Implement get_blacklist from filtering module
-    // For now, return empty blacklist
-    let blacklist: Vec<String> = Vec::new();
+    // TODO: CRITICAL - Integrate with filtering module
+    // 
+    // This function should call:
+    //   let blacklist = crate::filtering::get_blacklisted_tokens().await?;
+    //
+    // CURRENT STATUS: Returns empty list - blacklist checks are NON-FUNCTIONAL
+    // IMPACT: Dangerous tokens are never force-exited, emergency exit logic never triggers
+    // PRIORITY: P0 - Implement before production use
+    // 
+    // Implementation steps:
+    // 1. Add get_blacklisted_tokens() to filtering module
+    // 2. Return Vec<String> of blacklisted mint addresses
+    // 3. Replace empty Vec below with actual filtering call
+    // 4. Add periodic cache refresh (every 60s recommended)
+    
+    let blacklist: Vec<String> = Vec::new(); // ⚠️ STUB - Always empty!
+    
     let mut cache = get_blacklist_cache().write().await;
     cache.clear();
     cache.extend(blacklist.into_iter());

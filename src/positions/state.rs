@@ -440,18 +440,48 @@ pub async fn reconcile_global_position_semaphore(max_open: usize) {
     let open_positions = get_open_positions().await; // clones but infrequent (startup)
     let open_count = open_positions.len();
     let available_before = semaphore.available_permits();
+    let consumed_before = max_open - available_before;
 
+    // Check for leaked permits (consumed > open positions)
+    if consumed_before > open_count {
+        let leaked = consumed_before - open_count;
+        log(
+            LogTag::Positions,
+            "WARNING",
+            &format!(
+                "⚠️ Semaphore audit: {} leaked permits detected ({} consumed, {} open positions). Releasing leaked permits...",
+                leaked, consumed_before, open_count
+            )
+        );
+        
+        // Release leaked permits
+        for _ in 0..leaked {
+            release_global_position_permit();
+        }
+        
+        log(
+            LogTag::Positions,
+            "INFO",
+            &format!("✅ Released {} leaked permits. Available: {} -> {}", 
+                     leaked, available_before, semaphore.available_permits())
+        );
+        
+        return;
+    }
+
+    // No open positions - nothing to reconcile
     if open_count == 0 {
         if is_debug_positions_enabled() {
             log(
                 LogTag::Positions,
                 "DEBUG",
-                "Semaphore reconcile: no open positions",
+                "Semaphore reconcile: no open positions, all permits available",
             );
         }
         return;
     }
 
+    // Consume permits for existing open positions
     let mut consumed = 0usize;
     for _ in 0..open_count {
         match semaphore.try_acquire() {
@@ -471,19 +501,19 @@ pub async fn reconcile_global_position_semaphore(max_open: usize) {
             LogTag::Positions,
             "WARNING",
             &format!(
-                "Semaphore reconcile: {} open positions exceed capacity (consumed {} of {}, available after {})",
+                "⚠️ Semaphore reconcile: {} open positions exceed capacity (consumed {} of {}, available after {})",
                 open_count,
                 consumed,
                 max_open,
                 available_after
             )
         );
-    } else if is_debug_positions_enabled() {
+    } else {
         log(
             LogTag::Positions,
-            "DEBUG",
+            "INFO",
             &format!(
-                "Semaphore reconcile: consumed {} permits for {} open positions (avail {} -> {})",
+                "✅ Semaphore reconcile: consumed {} permits for {} open positions (avail {} -> {})",
                 consumed, open_count, available_before, available_after
             ),
         );

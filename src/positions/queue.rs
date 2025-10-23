@@ -4,6 +4,12 @@ use std::collections::VecDeque;
 use std::sync::LazyLock;
 use tokio::sync::RwLock;
 
+/// Maximum verification attempts before giving up
+const MAX_VERIFICATION_ATTEMPTS: u8 = 20;
+
+/// Maximum age for verification item in hours before giving up
+const MAX_VERIFICATION_AGE_HOURS: i64 = 2;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum VerificationKind {
     Entry,
@@ -70,6 +76,22 @@ impl VerificationItem {
             is_partial_exit: true,
             expected_exit_amount: Some(expected_exit_amount),
         }
+    }
+
+    /// Check if verification should be abandoned due to excessive retries or age
+    pub fn should_give_up(&self) -> bool {
+        // Check attempt limit
+        if self.attempts >= MAX_VERIFICATION_ATTEMPTS {
+            return true;
+        }
+
+        // Check age limit
+        let age_hours = (Utc::now() - self.created_at).num_hours();
+        if age_hours >= MAX_VERIFICATION_AGE_HOURS {
+            return true;
+        }
+
+        false
     }
 
     pub fn with_retry(&self) -> Self {
