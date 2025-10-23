@@ -358,12 +358,42 @@ fn print_help() {
 
 /// Data files to be removed during reset
 const DATA_FILES_TO_REMOVE: &[&str] = &[
+    // JSON cache files
     "data/rpc_stats.json",
     "data/ata_failed_cache.json",
+    
+    // Database files - state and cache
     "data/positions.db",
+    "data/positions.db-shm",
+    "data/positions.db-wal",
+    
     "data/events.db",
     "data/events.db-shm",
     "data/events.db-wal",
+    
+    // "data/transactions.db",
+    // "data/transactions.db-shm",
+    // "data/transactions.db-wal",
+    
+    // "data/wallet.db",
+    // "data/wallet.db-shm",
+    // "data/wallet.db-wal",
+    
+    // "data/ohlcvs.db",
+    // "data/ohlcvs.db-shm",
+    // "data/ohlcvs.db-wal",
+    
+    // "data/pools.db",
+    // "data/pools.db-shm",
+    // "data/pools.db-wal",
+    
+    // "data/filtering_decisions.db",
+    // "data/filtering_decisions.db-shm",
+    // "data/filtering_decisions.db-wal",
+    
+    // "data/strategies.db",
+    // "data/strategies.db-shm",
+    // "data/strategies.db-wal",
 ];
 
 /// Configuration for retry logic
@@ -1551,38 +1581,85 @@ async fn attempt_single_sell(account: &TokenAccountInfo) -> Result<String, Strin
     }
 
     // Create minimal Token struct for the sell operation
+    let now = chrono::Utc::now();
     let token = Token {
+        // Core identity
         mint: account.mint.clone(),
-        symbol: format!("TOKEN_{}", &account.mint),
-        name: format!("Unknown Token {}", &account.mint),
-        chain: "solana".to_string(),
-
-        // Set all optional fields to defaults
-        logo_url: None,
-        coingecko_id: None,
-        website: None,
+        symbol: format!("TOKEN_{}", &account.mint[..8]),
+        name: format!("Unknown Token {}", &account.mint[..8]),
+        decimals: 9, // Default decimals, actual value doesn't matter for liquidation
+        
+        // Optional metadata
         description: None,
-        tags: vec![],
-        is_verified: false,
-        created_at: None,
-        price_dexscreener_sol: None,
-        price_dexscreener_usd: None,
-        price_pool_sol: None,
-        price_pool_usd: None,
-        dex_id: None,
-        pair_address: None,
-        pair_url: None,
-        labels: vec![],
-        fdv: None,
+        image_url: None,
+        header_image_url: None,
+        supply: None,
+        
+        // Data source configuration
+        data_source: screenerbot::tokens::types::DataSource::Unknown,
+        fetched_at: now,
+        updated_at: now,
+        created_at: now,
+        metadata_updated_at: None,
+        token_birth_at: None,
+        
+        // Price information (zeros for liquidation)
+        price_usd: 0.0,
+        price_sol: 0.0,
+        price_native: "0".to_string(),
+        price_change_m5: None,
+        price_change_h1: None,
+        price_change_h6: None,
+        price_change_h24: None,
+        
+        // Market metrics
         market_cap: None,
-        txns: None,
-        volume: None,
-        price_change: None,
-        liquidity: None,
-        info: None,
-        boosts: None,
-        decimals: None,
-        last_updated: chrono::Utc::now(),
+        fdv: None,
+        liquidity_usd: None,
+        
+        // Volume data
+        volume_m5: None,
+        volume_h1: None,
+        volume_h6: None,
+        volume_h24: None,
+        pool_count: None,
+        reserve_in_usd: None,
+        
+        // Transaction activity
+        txns_m5_buys: None,
+        txns_m5_sells: None,
+        txns_h1_buys: None,
+        txns_h1_sells: None,
+        txns_h6_buys: None,
+        txns_h6_sells: None,
+        txns_h24_buys: None,
+        txns_h24_sells: None,
+        
+        // Social & links
+        websites: vec![],
+        socials: vec![],
+        
+        // Security information
+        mint_authority: None,
+        freeze_authority: None,
+        security_score: None,
+        is_rugged: false,
+        token_type: None,
+        graph_insiders_detected: None,
+        lp_provider_count: None,
+        security_risks: vec![],
+        total_holders: None,
+        top_holders: vec![],
+        creator_balance_pct: None,
+        transfer_fee_pct: None,
+        transfer_fee_max_amount: None,
+        transfer_fee_authority: None,
+        
+        // Bot-specific state
+        is_blacklisted: false,
+        priority: screenerbot::tokens::priorities::Priority::Low,
+        first_seen_at: now,
+        last_price_update: now,
     };
 
     // Get quote and execute swap
@@ -1593,7 +1670,7 @@ async fn attempt_single_sell(account: &TokenAccountInfo) -> Result<String, Strin
         actual_balance,
         &wallet_address,
         quote_slippage,
-        "ExactIn", // Use ExactOut for selling to completely liquidate tokens
+        "ExactIn", // ExactIn mode: sell exact token amount, receive variable SOL
     )
     .await
     .map_err(|e| format!("Failed to get quote: {}", e))?;

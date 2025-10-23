@@ -863,7 +863,9 @@ impl PositionsDatabase {
                    profit_target_min, profit_target_max, liquidity_tier,
                    transaction_entry_verified, transaction_exit_verified,
                    entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
-                   phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason
+                   phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
+                   remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
+                   dca_count, average_entry_price, last_dca_time
             FROM positions WHERE entry_transaction_signature = ?1
             "#,
                 params![signature],
@@ -892,7 +894,9 @@ impl PositionsDatabase {
                    profit_target_min, profit_target_max, liquidity_tier,
                    transaction_entry_verified, transaction_exit_verified,
                    entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
-                   phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason
+                   phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
+                   remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
+                   dca_count, average_entry_price, last_dca_time
             FROM positions WHERE exit_transaction_signature = ?1
             "#,
                 params![signature],
@@ -920,7 +924,9 @@ impl PositionsDatabase {
                    profit_target_min, profit_target_max, liquidity_tier,
                    transaction_entry_verified, transaction_exit_verified,
                    entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
-                   phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason
+                   phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
+                   remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
+                   dca_count, average_entry_price, last_dca_time
             FROM positions ORDER BY entry_time DESC
         "#
         .to_string();
@@ -963,7 +969,9 @@ impl PositionsDatabase {
                    profit_target_min, profit_target_max, liquidity_tier,
                    transaction_entry_verified, transaction_exit_verified,
                    entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
-                   phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason
+                   phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
+                   remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
+                   dca_count, average_entry_price, last_dca_time
             FROM positions WHERE transaction_exit_verified = 0 ORDER BY entry_time DESC
             "#,
             )
@@ -996,7 +1004,9 @@ impl PositionsDatabase {
                    profit_target_min, profit_target_max, liquidity_tier,
                    transaction_entry_verified, transaction_exit_verified,
                    entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
-                   phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason
+                   phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
+                   remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
+                   dca_count, average_entry_price, last_dca_time
             FROM positions WHERE transaction_exit_verified = 1 ORDER BY exit_time DESC
             "#,
             )
@@ -1057,7 +1067,9 @@ impl PositionsDatabase {
                    profit_target_min, profit_target_max, liquidity_tier,
                    transaction_entry_verified, transaction_exit_verified,
                    entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
-                   phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason
+                   phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
+                   remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
+                   dca_count, average_entry_price, last_dca_time
             FROM positions WHERE mint = ?1 AND transaction_exit_verified = 1
               AND exit_price IS NOT NULL AND exit_time IS NOT NULL
             ORDER BY datetime(exit_time) DESC
@@ -1134,7 +1146,9 @@ impl PositionsDatabase {
                    p.profit_target_min, p.profit_target_max, p.liquidity_tier,
                    p.transaction_entry_verified, p.transaction_exit_verified,
                    p.entry_fee_lamports, p.exit_fee_lamports, p.current_price, p.current_price_updated,
-                   p.phantom_confirmations, p.phantom_first_seen, p.synthetic_exit, p.closed_reason
+                   p.phantom_confirmations, p.phantom_first_seen, p.synthetic_exit, p.closed_reason,
+                   p.remaining_token_amount, p.total_exited_amount, p.average_exit_price, p.partial_exit_count,
+                   p.dca_count, p.average_entry_price, p.last_dca_time
             FROM positions p
             INNER JOIN (
                 SELECT position_id, state, MAX(changed_at) as latest_change
@@ -1174,7 +1188,9 @@ impl PositionsDatabase {
                    profit_target_min, profit_target_max, liquidity_tier,
                    transaction_entry_verified, transaction_exit_verified,
                    entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
-                   phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason
+                   phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
+                   remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
+                   dca_count, average_entry_price, last_dca_time
             FROM positions 
             WHERE transaction_entry_verified = false 
                OR (exit_transaction_signature IS NOT NULL AND transaction_exit_verified = false)
