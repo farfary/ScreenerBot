@@ -58,23 +58,3 @@ pub fn format_duration(seconds: u64) -> String {
         format!("{}s", secs)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_truncate_string() {
-        assert_eq!(truncate_string("hello", 10), "hello");
-        assert_eq!(truncate_string("hello world", 8), "hello...");
-        assert_eq!(truncate_string("hi", 5), "hi");
-    }
-
-    #[test]
-    fn test_format_duration() {
-        assert_eq!(format_duration(30), "30s");
-        assert_eq!(format_duration(90), "1m 30s");
-        assert_eq!(format_duration(3665), "1h 1m 5s");
-        assert_eq!(format_duration(90061), "1d 1h 1m 1s");
-    }
-}

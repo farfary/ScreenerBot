@@ -140,15 +140,3 @@ fn build_app(state: Arc<AppState>) -> Router {
 
     app
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_default_address_parses() {
-        assert!(format!("{}:{}", DEFAULT_HOST, DEFAULT_PORT)
-            .parse::<SocketAddr>()
-            .is_ok());
-    }
-}

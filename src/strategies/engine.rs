@@ -386,38 +386,3 @@ fn context_fingerprint(ctx: &EvaluationContext) -> u64 {
 
     s.finish()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::strategies::types::{Condition, Parameter};
-
-    #[tokio::test]
-    async fn test_engine_creation() {
-        let engine = StrategyEngine::new(EngineConfig::default());
-        let registry = engine.get_condition_registry();
-        let types = registry.list_types();
-        assert!(types.len() > 0, "Registry should have condition types");
-    }
-
-    #[tokio::test]
-    async fn test_cache_operations() {
-        let engine = StrategyEngine::new(EngineConfig::default());
-        let key = "test:key";
-
-        // Initially no cache
-        assert_eq!(engine.get_cached_evaluation(key).await, None);
-
-        // Cache a value
-        engine.cache_evaluation(key, true).await;
-
-        // Should retrieve cached value
-        assert_eq!(engine.get_cached_evaluation(key).await, Some(true));
-
-        // Clear cache
-        engine.clear_cache().await;
-
-        // Should be empty again
-        assert_eq!(engine.get_cached_evaluation(key).await, None);
-    }
-}

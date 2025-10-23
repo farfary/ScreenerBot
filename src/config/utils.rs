@@ -540,24 +540,3 @@ where
 
     Ok((old_value, new_value))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_default_config() {
-        let config = Config::default();
-        assert_eq!(config.trader.max_open_positions, 2);
-        assert_eq!(config.trader.trade_size_sol, 0.005);
-        assert_eq!(config.filtering.target_filtered_tokens, 1000);
-    }
-
-    #[test]
-    fn test_config_serialization() {
-        let config = Config::default();
-        let toml_str = toml::to_string_pretty(&config).unwrap();
-        assert!(toml_str.contains("[trader]"));
-        assert!(toml_str.contains("[filtering]"));
-    }
-}

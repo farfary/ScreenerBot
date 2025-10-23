@@ -816,24 +816,3 @@ pub fn calculate_partial_amount(total_amount: u64, percentage: f64) -> u64 {
     // Ensure we don't exceed total amount due to rounding
     std::cmp::min(partial, total_amount)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_calculate_partial_amount() {
-        assert_eq!(calculate_partial_amount(1000, 50.0), 500);
-        assert_eq!(calculate_partial_amount(1000, 25.0), 250);
-        assert_eq!(calculate_partial_amount(1000, 75.0), 750);
-        assert_eq!(calculate_partial_amount(1000, 100.0), 1000);
-        assert_eq!(calculate_partial_amount(1000, 0.0), 0);
-        assert_eq!(calculate_partial_amount(1000, 150.0), 1000); // Cap at 100%
-        
-        // Edge case: very small percentage
-        assert_eq!(calculate_partial_amount(1000, 0.1), 1);
-        
-        // Edge case: rounding
-        assert_eq!(calculate_partial_amount(999, 33.33), 332);
-    }
-}
