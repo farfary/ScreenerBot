@@ -17,7 +17,13 @@ pub async fn check_risk_limits(
     // - Volatility-based position sizing adjustments
 
     // Check for extreme losses (as a basic safety measure)
-    let loss_pct = (1.0 - current_price / position.entry_price) * 100.0;
+    // Use average_entry_price which accounts for DCA entries
+    let entry_price = position.average_entry_price;
+    if entry_price <= 0.0 || !entry_price.is_finite() {
+        return Ok(None); // Invalid entry price, skip risk check
+    }
+    
+    let loss_pct = (1.0 - current_price / entry_price) * 100.0;
 
     // If loss exceeds 90%, trigger emergency exit
     if loss_pct >= 90.0 {

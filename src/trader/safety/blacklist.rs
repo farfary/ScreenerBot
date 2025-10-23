@@ -68,6 +68,16 @@ pub async fn check_blacklist_exit(
     position: &Position,
     current_price: f64,
 ) -> Result<Option<TradeDecision>, String> {
+    // IMPORTANT: Blacklist integration not implemented yet
+    // This function currently always returns None because update_blacklist_cache() returns empty list
+    // To enable blacklist, implement filtering::get_blacklisted_tokens() first
+    // For now, skip check to avoid false triggers
+    
+    // Early return - blacklist not functional
+    if get_blacklist_cache().read().await.is_empty() {
+        return Ok(None);
+    }
+    
     if is_blacklisted(&position.mint).await? {
         log(
             LogTag::Trader,

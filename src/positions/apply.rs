@@ -442,10 +442,24 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     pos.total_size_sol += sol_spent;
                     
                     // Recalculate average entry price (weighted average) with actual decimals
-                    let total_tokens_normalized = pos.remaining_token_amount.unwrap_or(0) as f64 
-                        / 10_f64.powi(decimals as i32);
-                    if total_tokens_normalized > 0.0 {
-                        pos.average_entry_price = pos.total_size_sol / total_tokens_normalized;
+                    // CRITICAL: Check for zero tokens to prevent division by zero
+                    let remaining_tokens = pos.remaining_token_amount.unwrap_or(0);
+                    if remaining_tokens > 0 {
+                        let total_tokens_normalized = remaining_tokens as f64 
+                            / 10_f64.powi(decimals as i32);
+                        if total_tokens_normalized > 0.0 {
+                            pos.average_entry_price = pos.total_size_sol / total_tokens_normalized;
+                        }
+                    } else {
+                        // Edge case: DCA happened but no remaining tokens (should never happen)
+                        log(
+                            LogTag::Positions,
+                            "ERROR",
+                            &format!(
+                                "⚠️ DCA verified but remaining_token_amount is 0 for position {}",
+                                position_id
+                            ),
+                        );
                     }
                     
                     // Increment DCA count

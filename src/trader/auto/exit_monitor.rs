@@ -272,12 +272,29 @@ pub async fn monitor_positions(
                         "SIGNAL",
                         &format!("📈 DCA opportunity for position {}", decision.position_id.as_ref().unwrap_or(&"unknown".to_string())),
                     );
-                    if let Err(e) = execute_trade(&decision).await {
-                        log(
-                            LogTag::Trader,
-                            "ERROR",
-                            &format!("Failed to execute DCA: {}", e),
-                        );
+                    match execute_trade(&decision).await {
+                        Ok(result) => {
+                            if result.success {
+                                log(
+                                    LogTag::Trader,
+                                    "SUCCESS",
+                                    &format!("✅ DCA executed for {}", decision.mint),
+                                );
+                            } else {
+                                log(
+                                    LogTag::Trader,
+                                    "ERROR",
+                                    &format!("❌ DCA failed for {}: {}", decision.mint, result.error.unwrap_or_default()),
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            log(
+                                LogTag::Trader,
+                                "ERROR",
+                                &format!("Failed to execute DCA: {}", e),
+                            );
+                        }
                     }
                 }
             }
