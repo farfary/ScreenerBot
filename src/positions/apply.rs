@@ -422,8 +422,15 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             fee_lamports,
             dca_time,
         } => {
+            let mint = find_mint_by_position_id(position_id).await?;
+            
+            // Get token decimals for accurate price calculation
+            let decimals = crate::tokens::get_decimals(&mint)
+                .await
+                .unwrap_or(9); // Default to 9 if not found
+            
             let updated =
-                update_position_state(&find_mint_by_position_id(position_id).await?, |pos| {
+                update_position_state(&mint, |pos| {
                     // Update remaining token amount (add new tokens)
                     if let Some(remaining) = pos.remaining_token_amount {
                         pos.remaining_token_amount = Some(remaining + tokens_bought);
@@ -434,10 +441,12 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     // Update total SOL invested
                     pos.total_size_sol += sol_spent;
                     
-                    // Recalculate average entry price (weighted average)
-                    let old_total = pos.total_size_sol - sol_spent;
-                    pos.average_entry_price = pos.total_size_sol / 
-                        (pos.remaining_token_amount.unwrap_or(0) as f64 / 10_f64.powi(9)); // Assuming 9 decimals
+                    // Recalculate average entry price (weighted average) with actual decimals
+                    let total_tokens_normalized = pos.remaining_token_amount.unwrap_or(0) as f64 
+                        / 10_f64.powi(decimals as i32);
+                    if total_tokens_normalized > 0.0 {
+                        pos.average_entry_price = pos.total_size_sol / total_tokens_normalized;
+                    }
                     
                     // Increment DCA count
                     pos.dca_count += 1;

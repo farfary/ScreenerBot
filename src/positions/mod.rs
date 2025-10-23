@@ -16,6 +16,7 @@ pub mod worker;
 // Public API exports
 pub use operations::{
     add_to_position, close_position_direct, open_position_direct, partial_close_position,
+    update_position_price,
 };
 
 pub use state::{

@@ -499,12 +499,61 @@ impl PositionsDatabase {
         )
         .map_err(|e| format!("Failed to set positions schema version: {}", e))?;
 
+        // Run migrations for existing positions (one-time data migration)
+        self.run_data_migrations(&conn, log_initialization)?;
+
         if log_initialization {
             log(
                 LogTag::Positions,
                 "SCHEMA",
                 "Positions database schema initialized with all tables and indexes",
             );
+        }
+
+        Ok(())
+    }
+
+    /// Run data migrations for existing positions
+    fn run_data_migrations(&self, conn: &Connection, log: bool) -> Result<(), String> {
+        // Migration: Initialize remaining_token_amount and average_entry_price for existing open positions
+        // This is a one-time migration for positions created before partial sell/DCA support
+        let migration_result = conn.execute(
+            r#"
+            UPDATE positions 
+            SET 
+                remaining_token_amount = token_amount,
+                average_entry_price = COALESCE(effective_entry_price, entry_price)
+            WHERE remaining_token_amount IS NULL 
+              AND token_amount IS NOT NULL
+              AND exit_time IS NULL
+              AND position_type = 'buy'
+            "#,
+            [],
+        );
+
+        match migration_result {
+            Ok(updated_count) => {
+                if updated_count > 0 && log {
+                    crate::logger::log(
+                        crate::logger::LogTag::Positions,
+                        "MIGRATION",
+                        &format!(
+                            "Migrated {} existing open positions with partial sell/DCA fields",
+                            updated_count
+                        ),
+                    );
+                }
+            }
+            Err(e) => {
+                // Non-fatal: columns might not exist yet (fresh install)
+                if log {
+                    crate::logger::log(
+                        crate::logger::LogTag::Positions,
+                        "DEBUG",
+                        &format!("Position migration skipped (expected on fresh install): {}", e),
+                    );
+                }
+            }
         }
 
         Ok(())

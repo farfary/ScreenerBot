@@ -742,14 +742,13 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
         .id
         .ok_or_else(|| "Position has no ID".to_string())?;
 
-    // Check DCA limits from config (TODO: Add these fields to config in Phase 6)
-    // For now, use hardcoded defaults
-    let dca_enabled = false; // TODO: with_config(|cfg| cfg.trader.dca_enabled.unwrap_or(false));
+    // Check DCA limits from config
+    let dca_enabled = with_config(|cfg| cfg.trader.dca_enabled);
     if !dca_enabled {
-        return Err("DCA is disabled in configuration (TODO: enable in Phase 6)".to_string());
+        return Err("DCA is disabled in configuration".to_string());
     }
 
-    let max_dca_count = 2; // TODO: with_config(|cfg| cfg.trader.dca_max_count.unwrap_or(2));
+    let max_dca_count = with_config(|cfg| cfg.trader.dca_max_count);
     if position.dca_count >= max_dca_count as u32 {
         return Err(format!(
             "Maximum DCA count reached: {} (max: {})",
@@ -759,7 +758,7 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
 
     // Check DCA cooldown
     if let Some(last_dca) = position.last_dca_time {
-        let cooldown_minutes = 30; // TODO: with_config(|cfg| cfg.trader.dca_cooldown_minutes.unwrap_or(30));
+        let cooldown_minutes = with_config(|cfg| cfg.trader.dca_cooldown_minutes);
         let elapsed = Utc::now()
             .signed_duration_since(last_dca)
             .num_minutes();
@@ -915,4 +914,38 @@ pub fn calculate_average_exit_price(
         }
         None => new_price,
     }
+}
+
+/// Update position's current price and track high/low for trailing stop
+pub async fn update_position_price(token_mint: &str, current_price: f64) -> Result<(), String> {
+    if !current_price.is_finite() || current_price <= 0.0 {
+        return Err(format!("Invalid price: {}", current_price));
+    }
+
+    let updated = super::state::update_position_state(token_mint, |pos| {
+        pos.current_price = Some(current_price);
+        pos.current_price_updated = Some(Utc::now());
+        
+        // Update highest price for trailing stop
+        if current_price > pos.price_highest {
+            pos.price_highest = current_price;
+        }
+        
+        // Update lowest price tracking
+        if current_price < pos.price_lowest || pos.price_lowest == 0.0 {
+            pos.price_lowest = current_price;
+        }
+    })
+    .await;
+
+    if !updated {
+        return Err(format!("Position not found for mint: {}", token_mint));
+    }
+
+    // Save to database (async)
+    if let Some(position) = super::state::get_position_by_mint(token_mint).await {
+        save_position(&position).await?;
+    }
+
+    Ok(())
 }
