@@ -88,6 +88,17 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     pos.sol_received = Some(sol_received);
                     pos.exit_fee_lamports = Some(fee_lamports);
                     pos.exit_time = Some(exit_time);
+                    
+                    // CRITICAL FIX: Update closed_reason to remove "_pending_verification" suffix
+                    // This ensures database state matches verification status
+                    if let Some(reason) = &pos.closed_reason {
+                        if reason.ends_with("_pending_verification") {
+                            pos.closed_reason = Some(
+                                reason.trim_end_matches("_pending_verification").to_string()
+                            );
+                        }
+                    }
+                    
                     // Note: exit_price is already set by close_position_direct to market price
                 })
                 .await;

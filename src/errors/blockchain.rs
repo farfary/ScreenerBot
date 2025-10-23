@@ -925,3 +925,28 @@ fn map_instruction_error_code(code: u32) -> String {
         _ => format!("UnknownError({})", code),
     }
 }
+
+/// Check if an error message indicates RPC indexing delay
+/// These are temporary delays where the transaction exists on-chain but RPC nodes
+/// haven't indexed it yet. Should be retried with longer delays, not treated as permanent failures.
+pub fn is_rpc_indexing_delay(error_msg: &str) -> bool {
+    let msg = error_msg.to_lowercase();
+    msg.contains("not yet indexed")
+        || msg.contains("transaction not found")
+        || msg.contains("not available yet")
+        || msg.contains("still being indexed")
+        || msg.contains("indexing in progress")
+}
+
+/// Check if an error is transient and should be retried
+pub fn is_transient_rpc_error(error_msg: &str) -> bool {
+    let msg = error_msg.to_lowercase();
+    msg.contains("rpc error")
+        || msg.contains("network error")
+        || msg.contains("connection")
+        || msg.contains("timeout")
+        || msg.contains("rate limit")
+        || msg.contains("503")
+        || msg.contains("502")
+        || msg.contains("429")
+}

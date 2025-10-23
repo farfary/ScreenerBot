@@ -281,12 +281,15 @@ impl TransactionFetcher {
     }
 
     /// Fetch transaction details with automatic retry
+    /// Enhanced with special handling for RPC indexing delays
     async fn fetch_transaction_details_with_retry(
         &self,
         signature: &str,
     ) -> Result<crate::rpc::TransactionDetails, String> {
         let mut attempts = 0;
         let mut delay = self.config.retry_base_delay_ms;
+        let mut indexing_delay_attempts = 0;
+        const MAX_INDEXING_DELAY_ATTEMPTS: usize = 5;
 
         loop {
             match self.fetch_single_transaction_details(signature).await {
@@ -304,17 +307,71 @@ impl TransactionFetcher {
                     return Ok(details);
                 }
                 Err(e) => {
+                    // Check if this is an RPC indexing delay (temporary, needs longer wait)
+                    if crate::errors::is_rpc_indexing_delay(&e) {
+                        indexing_delay_attempts += 1;
+                        
+                        if indexing_delay_attempts >= MAX_INDEXING_DELAY_ATTEMPTS {
+                            // After 5 attempts with indexing delays, return special error for deferral
+                            return Err(format!(
+                                "RPC indexing delay after {} attempts - transaction likely needs deferral: {}",
+                                indexing_delay_attempts, e
+                            ));
+                        }
+
+                        // Use longer delays for indexing: 2s, 4s, 8s, 16s, 32s
+                        let indexing_delay = 2000 * (2_u64.pow(indexing_delay_attempts as u32 - 1));
+                        
+                        log(
+                            LogTag::Transactions,
+                            "WARN",
+                            &format!(
+                                "Transaction details fetch attempt {} failed, retrying in {}ms: {}",
+                                indexing_delay_attempts, indexing_delay, e
+                            ),
+                        );
+
+                        sleep(Duration::from_millis(indexing_delay)).await;
+                        attempts += 1;
+                        continue;
+                    }
+
+                    // Check if this is a transient RPC error (network, rate limit, etc)
+                    if crate::errors::is_transient_rpc_error(&e) {
+                        attempts += 1;
+                        if attempts >= self.config.max_retries {
+                            return Err(format!(
+                                "Failed to fetch transaction details after {} attempts: {}",
+                                attempts, e
+                            ));
+                        }
+
+                        log(
+                            LogTag::Transactions,
+                            "WARN",
+                            &format!(
+                                "Transient RPC error on attempt {}, retrying in {}ms: {}",
+                                attempts, delay, e
+                            ),
+                        );
+
+                        sleep(Duration::from_millis(delay)).await;
+                        delay *= 2; // Exponential backoff
+                        continue;
+                    }
+
+                    // For genuine "not found" or other permanent errors, fail immediately
+                    if e.contains("no longer available") || e.contains("too old") {
+                        return Err(e);
+                    }
+
+                    // Default retry logic for other errors
                     attempts += 1;
                     if attempts >= self.config.max_retries {
                         return Err(format!(
                             "Failed to fetch transaction details after {} attempts: {}",
                             attempts, e
                         ));
-                    }
-
-                    // Don't retry for "not found" errors
-                    if e.contains("not found") || e.contains("no longer available") {
-                        return Err(e);
                     }
 
                     log(
