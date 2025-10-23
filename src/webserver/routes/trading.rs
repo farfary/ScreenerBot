@@ -3,7 +3,8 @@ use serde::Serialize;
 use std::sync::Arc;
 
 use crate::config::with_config;
-use crate::profit::STOP_LOSS_PERCENT;
+// TODO: Re-enable when profit module is refactored
+// use crate::profit::STOP_LOSS_PERCENT;
 use crate::webserver::{state::AppState, utils::success_response};
 
 #[derive(Debug, Serialize)]
@@ -53,7 +54,7 @@ async fn get_trading_config() -> Response {
             position_monitor_interval_secs: crate::trader::POSITION_MONITOR_INTERVAL_SECS,
         },
         risk_management: RiskManagement {
-            stop_loss_percent: STOP_LOSS_PERCENT,
+            stop_loss_percent: 0.0, // TODO: Get from config when profit module is refactored
             time_override_loss_threshold_percent: cfg.trader.time_override_loss_threshold_percent,
             time_override_duration_hours: cfg.trader.time_override_duration_hours,
             debug_force_sell_mode: crate::trader::DEBUG_FORCE_SELL_MODE,

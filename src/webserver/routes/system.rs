@@ -2,14 +2,14 @@ use axum::{extract::State, http::StatusCode, response::Response, routing::post, 
 use serde::Serialize;
 use std::env;
 use std::process::Command;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::Instant;
 
 use crate::arguments::is_debug_webserver_enabled;
 use crate::logger::{log, LogTag};
-use crate::trader::CRITICAL_OPERATIONS_IN_PROGRESS;
+// TODO: Re-enable when trader module is fully integrated
+// use crate::trader::CRITICAL_OPERATIONS_IN_PROGRESS;
 use crate::webserver::state::AppState;
 use crate::webserver::utils::{error_response, success_response};
 
@@ -33,19 +33,20 @@ async fn reboot_system() -> Response {
         log(LogTag::Webserver, "INFO", "System reboot requested via API");
     }
 
+    // TODO: Re-enable critical operations check when trader module is integrated
     // Wait for critical operations to complete (max 30 seconds)
-    let timeout = Instant::now() + Duration::from_secs(30);
-    while CRITICAL_OPERATIONS_IN_PROGRESS.load(Ordering::SeqCst) > 0 {
-        if Instant::now() > timeout {
-            log(
-                LogTag::Webserver,
-                "WARN",
-                "Timeout waiting for critical operations during reboot",
-            );
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(500)).await;
-    }
+    // let timeout = Instant::now() + Duration::from_secs(30);
+    // while CRITICAL_OPERATIONS_IN_PROGRESS.load(Ordering::SeqCst) > 0 {
+    //     if Instant::now() > timeout {
+    //         log(
+    //             LogTag::Webserver,
+    //             "WARN",
+    //             "Timeout waiting for critical operations during reboot",
+    //         );
+    //         break;
+    //     }
+    //     tokio::time::sleep(Duration::from_millis(500)).await;
+    // }
 
     // Get current executable path and arguments
     let current_exe = match env::current_exe() {

@@ -1,4 +1,8 @@
-use crate::services::{Service, ServiceHealth, ServiceMetrics};
+// TODO: Integrate with new trader module structure
+// This file needs to be updated to use the new trader::auto module functions
+// For now, commented out to allow compilation
+
+use crate::services::{Service, ServiceHealth};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
@@ -17,7 +21,6 @@ impl Service for TraderService {
     }
 
     fn dependencies(&self) -> Vec<&'static str> {
-        // Depend on actual working services, not empty coordinator services
         vec![
             "positions",
             "pool_discovery",
@@ -35,23 +38,17 @@ impl Service for TraderService {
 
     async fn start(
         &mut self,
-        shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor,
+        _shutdown: Arc<Notify>,
+        _monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
-        // Start entry monitor (instrumented)
-        let shutdown_entry = shutdown.clone();
-        let monitor_entry = monitor.clone();
-        let entry_handle = tokio::spawn(monitor_entry.instrument(async move {
-            crate::trader::monitor_new_entries(shutdown_entry).await;
-        }));
-
-        // Start positions monitor (instrumented)
-        let shutdown_positions = shutdown.clone();
-        let positions_handle = tokio::spawn(monitor.instrument(async move {
-            crate::trader::monitor_open_positions(shutdown_positions).await;
-        }));
-
-        Ok(vec![entry_handle, positions_handle])
+        // TODO: Integrate with new trader module when ready
+        // For now, return empty handles
+        crate::logger::log(
+            crate::logger::LogTag::Trader,
+            "WARN",
+            "Trader service stub - new trader module not yet integrated with services",
+        );
+        Ok(vec![])
     }
 
     async fn health(&self) -> ServiceHealth {
