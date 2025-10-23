@@ -21,6 +21,9 @@ pub struct VerificationItem {
     pub next_retry_at: Option<DateTime<Utc>>, // backoff scheduling
     pub attempts: u8,
     pub expiry_height: Option<u64>,
+    // Partial exit support
+    pub is_partial_exit: bool,
+    pub expected_exit_amount: Option<u64>,
 }
 
 impl VerificationItem {
@@ -41,6 +44,31 @@ impl VerificationItem {
             next_retry_at: None,
             attempts: 0,
             expiry_height,
+            is_partial_exit: false,
+            expected_exit_amount: None,
+        }
+    }
+
+    /// Create verification item for partial exit
+    pub fn new_partial_exit(
+        signature: String,
+        mint: String,
+        position_id: Option<i64>,
+        expected_exit_amount: u64,
+        expiry_height: Option<u64>,
+    ) -> Self {
+        Self {
+            signature,
+            mint,
+            position_id,
+            kind: VerificationKind::Exit,
+            created_at: Utc::now(),
+            last_attempt_at: None,
+            next_retry_at: None,
+            attempts: 0,
+            expiry_height,
+            is_partial_exit: true,
+            expected_exit_amount: Some(expected_exit_amount),
         }
     }
 
@@ -89,6 +117,8 @@ impl VerificationItem {
             next_retry_at: Some(Utc::now() + ChronoDuration::seconds(backoff_with_jitter)),
             attempts: next_attempts,
             expiry_height: self.expiry_height,
+            is_partial_exit: self.is_partial_exit,
+            expected_exit_amount: self.expected_exit_amount,
         }
     }
 

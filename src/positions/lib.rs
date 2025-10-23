@@ -72,14 +72,19 @@ async fn find_position_by_signature(signature: &str) -> Option<(String, usize)> 
 // ==================== P&L CALCULATION ====================
 
 /// Unified profit/loss calculation for both open and closed positions
-/// Uses effective prices and actual token amounts when available
-/// For closed positions with sol_received, uses actual SOL invested vs SOL received
-/// NOTE: sol_received should contain ONLY the SOL from token sale, excluding ATA rent reclaim
+/// Supports partial exits and DCA with average entry price
+/// Returns (realized_pnl_sol, unrealized_pnl_sol, total_pnl_sol, total_pnl_percent)
+/// For open positions: calculates both realized (from partial exits) and unrealized P&L
+/// For closed positions: returns only realized P&L
 pub async fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -> (f64, f64) {
-    // Safety check: validate position has valid entry price
-    let entry_price = position
-        .effective_entry_price
-        .unwrap_or(position.entry_price);
+    // Use average_entry_price for positions with DCA support
+    let entry_price = if position.average_entry_price > 0.0 && position.average_entry_price.is_finite() {
+        position.average_entry_price
+    } else {
+        // Fallback to legacy prices
+        position.effective_entry_price.unwrap_or(position.entry_price)
+    };
+
     if entry_price <= 0.0 || !entry_price.is_finite() {
         if is_debug_positions_enabled() {
             log(
@@ -240,14 +245,12 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
         return (net_pnl_sol, net_pnl_percent);
     }
 
-    // For open positions, use current price
+    // For open positions (including those with partial exits), use current price
     if let Some(current) = current_price {
-        let entry_price = position
-            .effective_entry_price
-            .unwrap_or(position.entry_price);
-
-        // For open positions: current value vs entry cost
-        if let Some(token_amount) = position.token_amount {
+        // Use remaining_token_amount for positions with partial exits, fallback to token_amount
+        let remaining_amount = position.remaining_token_amount.or(position.token_amount);
+        
+        if let Some(token_amount) = remaining_amount {
             // Get token decimals from cache (async)
             let token_decimals_opt = get_decimals(&position.mint).await;
 
@@ -269,7 +272,9 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
 
             let ui_token_amount = (token_amount as f64) / (10_f64).powi(token_decimals as i32);
             let current_value = ui_token_amount * current;
-            let entry_cost = position.entry_size_sol;
+            
+            // Use total_size_sol (includes DCA) instead of entry_size_sol
+            let entry_cost = position.total_size_sol;
 
             // Account for actual buy fee (already paid) + estimated sell fee + profit buffer
             let buy_fee = position
@@ -634,4 +639,74 @@ pub async fn sync_position_to_database(position: &Position) -> Result<(), String
         );
         Ok(())
     }
+}
+
+// ==================== SPLIT P&L CALCULATION (PARTIAL EXIT SUPPORT) ====================
+
+/// Calculate split P&L for positions with partial exits
+/// Returns (realized_pnl_sol, unrealized_pnl_sol, total_pnl_sol, total_pnl_percent)
+pub async fn calculate_split_pnl(
+    position: &Position,
+    current_price: Option<f64>,
+) -> (f64, f64, f64, f64) {
+    let entry_price = if position.average_entry_price > 0.0 && position.average_entry_price.is_finite() {
+        position.average_entry_price
+    } else {
+        position.effective_entry_price.unwrap_or(position.entry_price)
+    };
+
+    if entry_price <= 0.0 || !entry_price.is_finite() {
+        return (0.0, 0.0, 0.0, 0.0);
+    }
+
+    // Calculate realized P&L from partial exits
+    let realized_pnl_sol = if position.total_exited_amount > 0 {
+        if let Some(avg_exit_price) = position.average_exit_price {
+            let sol_received = position.sol_received.unwrap_or(0.0);
+            let exit_portion = position.total_exited_amount as f64 
+                / (position.token_amount.unwrap_or(1) as f64);
+            let invested_in_exited = position.total_size_sol * exit_portion;
+            let exit_fees = lamports_to_sol(position.exit_fee_lamports.unwrap_or(0));
+            sol_received - invested_in_exited - exit_fees
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    };
+
+    // Calculate unrealized P&L from remaining holdings
+    let unrealized_pnl_sol = if let Some(remaining) = position.remaining_token_amount {
+        if let Some(current) = current_price {
+            if let Some(decimals) = get_decimals(&position.mint).await {
+                let ui_remaining = (remaining as f64) / (10_f64).powi(decimals as i32);
+                let current_value = ui_remaining * current;
+                let remaining_portion = remaining as f64 
+                    / (position.token_amount.unwrap_or(1) as f64);
+                let invested_in_remaining = position.total_size_sol * remaining_portion;
+                let entry_fees_portion = lamports_to_sol(position.entry_fee_lamports.unwrap_or(0)) 
+                    * remaining_portion;
+                current_value - invested_in_remaining - entry_fees_portion
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        }
+    } else if position.exit_time.is_none() {
+        // No partial exits yet, full position unrealized
+        if let Some(current) = current_price {
+            let (total_pnl, _) = calculate_position_pnl(position, Some(current)).await;
+            total_pnl
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    };
+
+    let total_pnl_sol = realized_pnl_sol + unrealized_pnl_sol;
+    let total_pnl_percent = (total_pnl_sol / position.total_size_sol) * 100.0;
+
+    (realized_pnl_sol, unrealized_pnl_sol, total_pnl_sol, total_pnl_percent)
 }

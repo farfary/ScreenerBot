@@ -23,15 +23,20 @@ pub async fn check_trailing_stop(
 
     // Get trailing percentages
     let activation_pct = config::get_trailing_stop_activation_pct();
-    let trailing_pct = config::get_trailing_stop_pct();
+    let distance_pct = config::get_trailing_stop_distance_pct();
 
-    // Calculate unrealized profit percentage
-    let profit_pct = (current_price / position.entry_price - 1.0) * 100.0;
+    // Calculate unrealized profit percentage using average entry price
+    let entry_price = position.average_entry_price;
+    if entry_price <= 0.0 || !entry_price.is_finite() {
+        return Ok(None);
+    }
+
+    let profit_pct = (current_price / entry_price - 1.0) * 100.0;
 
     // Check if profit exceeds activation threshold
     if profit_pct >= activation_pct {
         // Calculate stop price based on highest recorded price
-        let stop_price = position.price_highest * (1.0 - trailing_pct / 100.0);
+        let stop_price = position.price_highest * (1.0 - distance_pct / 100.0);
 
         // Check if current price fell below stop price
         if current_price <= stop_price {

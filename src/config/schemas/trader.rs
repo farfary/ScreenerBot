@@ -106,5 +106,58 @@ config_struct! {
 
         // Sell concurrency
         sell_concurrency: usize = 5,
+
+        // ==================== DCA CONFIGURATION ====================
+        #[metadata(field_metadata! {
+            label: "Enable DCA",
+            hint: "Enable Dollar Cost Averaging for positions",
+            impact: "high",
+            category: "DCA",
+        })]
+        dca_enabled: bool = false,
+        #[metadata(field_metadata! {
+            label: "DCA Threshold %",
+            hint: "Enter DCA when position down by this % (-10 = DCA at -10%)",
+            min: -100,
+            max: 0,
+            step: 1,
+            unit: "%",
+            impact: "high",
+            category: "DCA",
+        })]
+        dca_threshold_pct: f64 = -10.0,
+        #[metadata(field_metadata! {
+            label: "Max DCA Count",
+            hint: "Maximum number of additional DCA entries per position",
+            min: 1,
+            max: 5,
+            step: 1,
+            unit: "entries",
+            impact: "critical",
+            category: "DCA",
+        })]
+        dca_max_count: usize = 2,
+        #[metadata(field_metadata! {
+            label: "DCA Size %",
+            hint: "Size of each DCA entry as % of initial position size",
+            min: 10,
+            max: 200,
+            step: 10,
+            unit: "%",
+            impact: "high",
+            category: "DCA",
+        })]
+        dca_size_percentage: f64 = 50.0,
+        #[metadata(field_metadata! {
+            label: "DCA Cooldown",
+            hint: "Minimum minutes between DCA entries",
+            min: 1,
+            max: 1440,
+            step: 5,
+            unit: "minutes",
+            impact: "medium",
+            category: "DCA",
+        })]
+        dca_cooldown_minutes: i64 = 30,
     }
 }

@@ -594,8 +594,19 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                 Utc::now()
             };
 
-            // CRITICAL: Check if any tokens remain after exit. If so, clear for retry instead of
-            // marking exit verified. This ensures we re-attempt until ATA is zero and closable.
+            // Calculate exit amount from transaction
+            let exit_amount = if let Some(decimals) = get_decimals(&item.mint).await {
+                let scale = (10_f64).powi(decimals as i32);
+                let units = (swap_info.token_amount.abs() * scale).round();
+                units.max(0.0) as u64
+            } else {
+                return VerificationOutcome::RetryTransient(
+                    "Token decimals not cached for exit".to_string(),
+                );
+            };
+
+            // CRITICAL: For PARTIAL exits, we expect remaining balance
+            // For FULL exits, we must ensure complete closure (ATA closable)
             if let Ok(wallet_address) = get_wallet_address() {
                 // Throttle token accounts query to reduce RPC load
                 if should_throttle_token_accounts(&item.mint).await {
@@ -615,6 +626,49 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                 }
                 match get_total_token_balance(&wallet_address, &item.mint).await {
                     Ok(remaining_balance) => {
+                        // PARTIAL EXIT: Verify expected amount was sold, balance check is informational
+                        if item.is_partial_exit {
+                            if let Some(expected) = item.expected_exit_amount {
+                                let tolerance = std::cmp::max(expected / 1000, 10); // 0.1% tolerance or 10 units
+                                if exit_amount < expected.saturating_sub(tolerance)
+                                    || exit_amount > expected + tolerance
+                                {
+                                    log(
+                                        LogTag::Positions,
+                                        "PARTIAL_EXIT_AMOUNT_MISMATCH",
+                                        &format!(
+                                            "⚠️ Partial exit amount mismatch for mint {}: expected={} actual={} tolerance={}",
+                                            item.mint, expected, exit_amount, tolerance
+                                        ),
+                                    );
+                                    return VerificationOutcome::RetryTransient(
+                                        "Partial exit amount mismatch - will verify again".to_string(),
+                                    );
+                                }
+                            }
+
+                            log(
+                                LogTag::Positions,
+                                "PARTIAL_EXIT_VERIFIED",
+                                &format!(
+                                    "✅ Partial exit verified for mint {}: sold={} remaining={}",
+                                    item.mint, exit_amount, remaining_balance
+                                ),
+                            );
+
+                            return VerificationOutcome::Transition(
+                                PositionTransition::PartialExitVerified {
+                                    position_id,
+                                    exit_amount,
+                                    sol_received: swap_info.effective_sol_received.abs(),
+                                    effective_exit_price: swap_info.calculated_price_sol,
+                                    fee_lamports: sol_to_lamports(swap_info.fee_sol),
+                                    exit_time,
+                                },
+                            );
+                        }
+
+                        // FULL EXIT: Ensure complete closure (check for residual)
                         if residual_balance_requires_retry(item.position_id, remaining_balance)
                             .await
                         {
@@ -669,6 +723,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                 }
             }
 
+            // FULL EXIT: Standard verification
             VerificationOutcome::Transition(PositionTransition::ExitVerified {
                 position_id,
                 effective_exit_price: swap_info.calculated_price_sol,

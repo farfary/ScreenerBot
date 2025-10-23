@@ -1,6 +1,7 @@
 //! Buy operation execution
 
 use crate::logger::{log, LogTag};
+use crate::positions;
 use crate::trader::config;
 use crate::trader::types::{TradeDecision, TradeResult};
 
@@ -15,17 +16,39 @@ pub async fn execute_buy(decision: &TradeDecision) -> Result<TradeResult, String
         ),
     );
 
-    // Determine trade size
+    // Note: Trade size is read from config by open_position_direct
+    // decision.size_sol is informational only - actual size comes from cfg.trader.trade_size_sol
     let trade_size_sol = decision
         .size_sol
         .unwrap_or_else(|| config::get_trade_size_sol());
 
-    // TODO: Implement actual buy execution when wallet and swaps modules are ready
-    // For now, return a failure result
-    let error = "Buy execution not yet implemented - waiting for swaps module integration".to_string();
-    log(LogTag::Trader, "WARN", &error);
-    
-    Ok(TradeResult::failure(decision.clone(), error, 0))
+    // Call positions::open_position_direct to handle the entire entry flow
+    // (it reads trade size from config internally)
+    match positions::open_position_direct(&decision.mint).await {
+        Ok(transaction_signature) => {
+            log(
+                LogTag::Trader,
+                "SUCCESS",
+                &format!(
+                    "✅ Buy executed: {} | ~{} SOL | TX: {}",
+                    decision.mint, trade_size_sol, transaction_signature
+                ),
+            );
+
+            Ok(TradeResult::success(
+                decision.clone(),
+                transaction_signature,
+                decision.price_sol.unwrap_or(0.0), // Will be updated by verification
+                trade_size_sol,
+                None, // Position ID will be set by verification
+            ))
+        }
+        Err(e) => {
+            let error = format!("Buy execution failed: {}", e);
+            log(LogTag::Trader, "ERROR", &error);
+            Ok(TradeResult::failure(decision.clone(), error, 0))
+        }
+    }
 }
 
 /// Execute a DCA (dollar cost averaging) buy
@@ -35,15 +58,43 @@ pub async fn execute_dca(decision: &TradeDecision) -> Result<TradeResult, String
         "INFO",
         &format!(
             "Executing DCA for position {} token {}",
-            decision.position_id.as_ref().unwrap_or(&"unknown".to_string()),
+            decision
+                .position_id
+                .as_ref()
+                .unwrap_or(&"unknown".to_string()),
             decision.mint
         ),
     );
 
-    // TODO: Implement actual DCA execution when positions, wallet and swaps modules are ready
-    // For now, return a failure result
-    let error = "DCA execution not yet implemented - waiting for positions/swaps module integration".to_string();
-    log(LogTag::Trader, "WARN", &error);
-    
-    Ok(TradeResult::failure(decision.clone(), error, 0))
+    // Determine DCA amount from decision or config
+    let dca_amount_sol = decision
+        .size_sol
+        .unwrap_or_else(|| config::get_trade_size_sol() * 0.5); // Default to 50% of initial size
+
+    // Call positions::add_to_position to handle DCA entry
+    match positions::add_to_position(&decision.mint, dca_amount_sol).await {
+        Ok(transaction_signature) => {
+            log(
+                LogTag::Trader,
+                "SUCCESS",
+                &format!(
+                    "✅ DCA executed: {} | {} SOL | TX: {}",
+                    decision.mint, dca_amount_sol, transaction_signature
+                ),
+            );
+
+            Ok(TradeResult::success(
+                decision.clone(),
+                transaction_signature,
+                decision.price_sol.unwrap_or(0.0),
+                dca_amount_sol,
+                decision.position_id.clone(),
+            ))
+        }
+        Err(e) => {
+            let error = format!("DCA execution failed: {}", e);
+            log(LogTag::Trader, "ERROR", &error);
+            Ok(TradeResult::failure(decision.clone(), error, 0))
+        }
+    }
 }

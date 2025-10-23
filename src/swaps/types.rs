@@ -9,6 +9,13 @@ pub enum RouterType {
     Jupiter,
 }
 
+/// Exit type for position closing
+#[derive(Debug, Clone, PartialEq)]
+pub enum ExitType {
+    Full,                        // Sell all remaining tokens
+    Partial { percentage: f64 }, // Sell a percentage (0.0-100.0)
+}
+
 /// Enhanced swap result with comprehensive routing information
 #[derive(Debug)]
 pub struct SwapResult {

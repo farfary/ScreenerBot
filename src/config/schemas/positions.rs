@@ -30,5 +30,78 @@ config_struct! {
             category: "Timing",
         })]
         position_open_cooldown_secs: i64 = 5,
+
+        // ==================== PARTIAL EXIT CONFIGURATION ====================
+        #[metadata(field_metadata! {
+            label: "Enable Partial Exits",
+            hint: "Allow selling portions of a position instead of all-or-nothing",
+            impact: "high",
+            category: "Partial Exit",
+        })]
+        partial_exit_enabled: bool = false,
+        #[metadata(field_metadata! {
+            label: "Default Partial Exit %",
+            hint: "Default percentage to sell on partial exits",
+            min: 10,
+            max: 90,
+            step: 5,
+            unit: "%",
+            impact: "medium",
+            category: "Partial Exit",
+        })]
+        partial_exit_default_pct: f64 = 50.0,
+        #[metadata(field_metadata! {
+            label: "Min Partial Exit %",
+            hint: "Minimum percentage allowed for partial exits",
+            min: 1,
+            max: 50,
+            step: 1,
+            unit: "%",
+            impact: "low",
+            category: "Partial Exit",
+        })]
+        partial_exit_min_pct: f64 = 10.0,
+        #[metadata(field_metadata! {
+            label: "Max Partial Exit %",
+            hint: "Maximum percentage allowed for partial exits",
+            min: 50,
+            max: 99,
+            step: 1,
+            unit: "%",
+            impact: "low",
+            category: "Partial Exit",
+        })]
+        partial_exit_max_pct: f64 = 90.0,
+
+        // ==================== TRAILING STOP CONFIGURATION ====================
+        #[metadata(field_metadata! {
+            label: "Enable Trailing Stop",
+            hint: "Enable trailing stop-loss after profit threshold",
+            impact: "high",
+            category: "Trailing Stop",
+        })]
+        trailing_stop_enabled: bool = false,
+        #[metadata(field_metadata! {
+            label: "Trailing Stop Activation %",
+            hint: "Activate trailing stop after this profit % (10 = activate at +10%)",
+            min: 0,
+            max: 100,
+            step: 1,
+            unit: "%",
+            impact: "high",
+            category: "Trailing Stop",
+        })]
+        trailing_stop_activation_pct: f64 = 10.0,
+        #[metadata(field_metadata! {
+            label: "Trailing Stop Distance %",
+            hint: "How far to trail below peak (5 = exit if price drops 5% from peak)",
+            min: 1,
+            max: 50,
+            step: 1,
+            unit: "%",
+            impact: "critical",
+            category: "Trailing Stop",
+        })]
+        trailing_stop_distance_pct: f64 = 5.0,
     }
 }

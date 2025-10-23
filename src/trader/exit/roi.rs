@@ -19,8 +19,13 @@ pub async fn check_roi_exit(
     // Get target ROI percentage
     let target_profit_pct = config::get_target_profit_pct();
 
-    // Calculate unrealized profit percentage
-    let profit_pct = (current_price / position.entry_price - 1.0) * 100.0;
+    // Calculate unrealized profit percentage using average entry price
+    let entry_price = position.average_entry_price;
+    if entry_price <= 0.0 || !entry_price.is_finite() {
+        return Ok(None);
+    }
+
+    let profit_pct = (current_price / entry_price - 1.0) * 100.0;
 
     // Check if profit exceeds target
     if profit_pct >= target_profit_pct {

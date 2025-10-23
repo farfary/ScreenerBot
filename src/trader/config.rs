@@ -23,52 +23,53 @@ pub fn is_trader_enabled() -> bool {
 }
 
 /// Check if DCA is enabled
-/// TODO: Add DCA fields to trader config schema
 pub fn is_dca_enabled() -> bool {
-    // with_config(|cfg| cfg.trader.dca_enabled)
-    false // Stubbed until config field added
+    with_config(|cfg| cfg.trader.dca_enabled)
 }
 
 /// Get DCA threshold percentage
-/// TODO: Add DCA fields to trader config schema
 pub fn get_dca_threshold_pct() -> f64 {
-    // with_config(|cfg| cfg.trader.dca_threshold_pct)
-    -10.0 // Stubbed: trigger DCA at -10% loss
+    with_config(|cfg| cfg.trader.dca_threshold_pct)
 }
 
 /// Get maximum DCA count per position
-/// TODO: Add DCA fields to trader config schema
-pub fn get_dca_max_count() -> u32 {
-    // with_config(|cfg| cfg.trader.dca_max_count)
-    2 // Stubbed: max 2 DCA entries
+pub fn get_dca_max_count() -> usize {
+    with_config(|cfg| cfg.trader.dca_max_count)
 }
 
 /// Get DCA size as percentage of initial position
-/// TODO: Add DCA fields to trader config schema
 pub fn get_dca_size_percentage() -> f64 {
-    // with_config(|cfg| cfg.trader.dca_size_percentage)
-    50.0 // Stubbed: 50% of initial size
+    with_config(|cfg| cfg.trader.dca_size_percentage)
+}
+
+/// Get DCA cooldown in minutes
+pub fn get_dca_cooldown_minutes() -> i64 {
+    with_config(|cfg| cfg.trader.dca_cooldown_minutes)
 }
 
 /// Check if trailing stop is enabled
-/// TODO: Add trailing stop fields to positions config schema
 pub fn is_trailing_stop_enabled() -> bool {
-    // with_config(|cfg| cfg.positions.trailing_stop_enabled)
-    false // Stubbed until config field added
+    with_config(|cfg| cfg.positions.trailing_stop_enabled)
 }
 
 /// Get trailing stop activation percentage
-/// TODO: Add trailing stop fields to positions config schema
 pub fn get_trailing_stop_activation_pct() -> f64 {
-    // with_config(|cfg| cfg.positions.trailing_stop_activation_pct)
-    10.0 // Stubbed: activate at +10% profit
+    with_config(|cfg| cfg.positions.trailing_stop_activation_pct)
 }
 
-/// Get trailing stop percentage
-/// TODO: Add trailing stop fields to positions config schema
-pub fn get_trailing_stop_pct() -> f64 {
-    // with_config(|cfg| cfg.positions.trailing_stop_pct)
-    5.0 // Stubbed: 5% trailing stop
+/// Get trailing stop distance percentage
+pub fn get_trailing_stop_distance_pct() -> f64 {
+    with_config(|cfg| cfg.positions.trailing_stop_distance_pct)
+}
+
+/// Check if partial exits are enabled
+pub fn is_partial_exit_enabled() -> bool {
+    with_config(|cfg| cfg.positions.partial_exit_enabled)
+}
+
+/// Get default partial exit percentage
+pub fn get_partial_exit_default_pct() -> f64 {
+    with_config(|cfg| cfg.positions.partial_exit_default_pct)
 }
 
 /// Check if ROI-based exit is enabled

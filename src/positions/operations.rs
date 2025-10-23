@@ -222,6 +222,14 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
         phantom_first_seen: None,
         synthetic_exit: false,
         closed_reason: None,
+        // Initialize partial exit and DCA fields
+        remaining_token_amount: None, // Will be set after entry verification
+        total_exited_amount: 0,
+        average_exit_price: None,
+        partial_exit_count: 0,
+        dca_count: 0,
+        average_entry_price: entry_price, // Initial entry price
+        last_dca_time: None,
     };
 
     // Save to database and get ID
@@ -568,4 +576,343 @@ pub async fn close_position_direct(
     );
 
     Ok(transaction_signature)
+}
+
+// =============================================================================
+// PARTIAL EXIT & DCA OPERATIONS
+// =============================================================================
+
+/// Partially close a position by selling a percentage of remaining tokens
+/// CRITICAL: This does NOT release the semaphore permit - position stays open
+pub async fn partial_close_position(
+    token_mint: &str,
+    exit_percentage: f64,
+    exit_reason: &str,
+) -> Result<String, String> {
+    use crate::swaps::{calculate_partial_amount, ExitType};
+
+    // Validate percentage
+    if exit_percentage <= 0.0 || exit_percentage >= 100.0 {
+        return Err(format!(
+            "Invalid exit percentage: {}. Must be between 0 and 100 (exclusive)",
+            exit_percentage
+        ));
+    }
+
+    // Get position
+    let position = super::state::get_position_by_mint(token_mint)
+        .await
+        .ok_or_else(|| format!("No open position found for token: {}", token_mint))?;
+
+    let position_id = position
+        .id
+        .ok_or_else(|| "Position has no ID".to_string())?;
+
+    // Get remaining token amount
+    let remaining_amount = position
+        .remaining_token_amount
+        .or(position.token_amount)
+        .ok_or_else(|| "Position has no token amount".to_string())?;
+
+    // Calculate partial exit amount
+    let exit_amount = calculate_partial_amount(remaining_amount, exit_percentage);
+
+    if exit_amount == 0 {
+        return Err("Calculated exit amount is zero".to_string());
+    }
+
+    log(
+        LogTag::Positions,
+        "INFO",
+        &format!(
+            "Partial exit initiated: {} | {}% ({} of {} tokens) | Reason: {}",
+            position.symbol, exit_percentage, exit_amount, remaining_amount, exit_reason
+        ),
+    );
+
+    // Get API token for swap
+    let api_token = crate::tokens::get_full_token_async(token_mint)
+        .await
+        .map_err(|e| format!("Failed to get token: {}", e))?
+        .ok_or_else(|| format!("Token not found: {}", token_mint))?;
+
+    // Get quote for partial exit
+    let wallet_address = get_wallet_address().map_err(|e| e.to_string())?;
+    let slippage_exit_retry_steps =
+        with_config(|cfg| cfg.swaps.slippage.exit_retry_steps_pct.clone());
+    let quote = get_best_quote(
+        token_mint,
+        SOL_MINT,
+        exit_amount,
+        &wallet_address,
+        slippage_exit_retry_steps[0],
+        "ExactIn",
+    )
+    .await
+    .map_err(|e| format!("Failed to get quote: {}", e))?;
+
+    log(
+        LogTag::Positions,
+        "INFO",
+        &format!(
+            "Partial exit quote: {} tokens → {} SOL",
+            exit_amount,
+            quote.output_amount as f64 / 1_000_000_000.0
+        ),
+    );
+
+    // Execute swap
+    let swap_result = execute_best_swap(&api_token, token_mint, SOL_MINT, exit_amount, quote)
+        .await
+        .map_err(|e| format!("Partial exit swap failed: {}", e))?;
+
+    let transaction_signature = swap_result
+        .transaction_signature
+        .ok_or("No transaction signature")?;
+
+    // Update position state (mark as partial exit pending)
+    super::state::update_position_state(token_mint, |pos| {
+        pos.exit_transaction_signature = Some(transaction_signature.clone());
+        // Do NOT set exit_time - position is still open!
+    })
+    .await;
+
+    // Save updated position to DB
+    if let Some(updated_pos) = super::state::get_position_by_mint(token_mint).await {
+        save_position(&updated_pos).await?;
+    }
+
+    // Add signature to index
+    add_signature_to_index(&transaction_signature, token_mint).await;
+
+    // Create partial exit transition
+    let transition = super::transitions::PositionTransition::PartialExitSubmitted {
+        position_id,
+        exit_signature: transaction_signature.clone(),
+        exit_amount,
+        exit_percentage,
+        market_price: position.current_price.unwrap_or(position.entry_price),
+    };
+
+    // Apply transition
+    super::apply::apply_transition(transition)
+        .await
+        .map_err(|e| format!("Failed to apply partial exit transition: {}", e))?;
+
+    // Enqueue for verification with partial exit flag
+    let expiry_height = get_rpc_client()
+        .get_block_height()
+        .await
+        .unwrap_or(0)
+        + SOLANA_BLOCKHASH_VALIDITY_SLOTS;
+
+    let verification_item = VerificationItem::new_partial_exit(
+        transaction_signature.clone(),
+        token_mint.to_string(),
+        Some(position_id),
+        exit_amount,
+        Some(expiry_height),
+    );
+
+    enqueue_verification(verification_item).await;
+
+    log(
+        LogTag::Positions,
+        "SUCCESS",
+        &format!(
+            "✅ Partial exit submitted: {} | {}% | TX: {} | Reason: {}",
+            api_token.symbol, exit_percentage, transaction_signature, exit_reason
+        ),
+    );
+
+    // CRITICAL: Do NOT release semaphore permit - position still open!
+
+    Ok(transaction_signature)
+}
+
+/// Add to an existing position (Dollar Cost Averaging)
+/// CRITICAL: This does NOT consume a new semaphore permit - same position
+pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<String, String> {
+    // Get position
+    let position = super::state::get_position_by_mint(token_mint)
+        .await
+        .ok_or_else(|| format!("No open position found for token: {}", token_mint))?;
+
+    let position_id = position
+        .id
+        .ok_or_else(|| "Position has no ID".to_string())?;
+
+    // Check DCA limits from config (TODO: Add these fields to config in Phase 6)
+    // For now, use hardcoded defaults
+    let dca_enabled = false; // TODO: with_config(|cfg| cfg.trader.dca_enabled.unwrap_or(false));
+    if !dca_enabled {
+        return Err("DCA is disabled in configuration (TODO: enable in Phase 6)".to_string());
+    }
+
+    let max_dca_count = 2; // TODO: with_config(|cfg| cfg.trader.dca_max_count.unwrap_or(2));
+    if position.dca_count >= max_dca_count as u32 {
+        return Err(format!(
+            "Maximum DCA count reached: {} (max: {})",
+            position.dca_count, max_dca_count
+        ));
+    }
+
+    // Check DCA cooldown
+    if let Some(last_dca) = position.last_dca_time {
+        let cooldown_minutes = 30; // TODO: with_config(|cfg| cfg.trader.dca_cooldown_minutes.unwrap_or(30));
+        let elapsed = Utc::now()
+            .signed_duration_since(last_dca)
+            .num_minutes();
+        if elapsed < cooldown_minutes {
+            return Err(format!(
+                "DCA cooldown active: {} minutes remaining",
+                cooldown_minutes - elapsed
+            ));
+        }
+    }
+
+    log(
+        LogTag::Positions,
+        "INFO",
+        &format!(
+            "DCA entry initiated: {} | {} SOL | DCA #{} ",
+            position.symbol,
+            dca_amount_sol,
+            position.dca_count + 1
+        ),
+    );
+
+    // Get API token for swap
+    let api_token = crate::tokens::get_full_token_async(token_mint)
+        .await
+        .map_err(|e| format!("Failed to get token: {}", e))?
+        .ok_or_else(|| format!("Token not found: {}", token_mint))?;
+
+    // Get quote for DCA entry
+    let wallet_address = get_wallet_address().map_err(|e| e.to_string())?;
+    let slippage = with_config(|cfg| cfg.swaps.slippage.quote_default_pct);
+    let quote = get_best_quote_for_opening(
+        SOL_MINT,
+        token_mint,
+        sol_to_lamports(dca_amount_sol),
+        &wallet_address,
+        slippage,
+        &api_token.symbol,
+    )
+    .await
+    .map_err(|e| format!("Failed to get DCA quote: {}", e))?;
+
+    log(
+        LogTag::Positions,
+        "INFO",
+        &format!(
+            "DCA quote: {} SOL → {} tokens",
+            dca_amount_sol,
+            quote.output_amount as f64 / 10_f64.powi(api_token.decimals as i32)
+        ),
+    );
+
+    // Execute swap
+    let swap_result = execute_best_swap(
+        &api_token,
+        SOL_MINT,
+        token_mint,
+        sol_to_lamports(dca_amount_sol),
+        quote,
+    )
+    .await
+    .map_err(|e| format!("DCA swap failed: {}", e))?;
+
+    let transaction_signature = swap_result
+        .transaction_signature
+        .ok_or("No transaction signature")?;
+
+    // Create DCA transition
+    let price_info = get_pool_price(token_mint)
+        .ok_or_else(|| format!("No price data for token: {}", token_mint))?;
+
+    let transition = super::transitions::PositionTransition::DcaSubmitted {
+        position_id,
+        dca_signature: transaction_signature.clone(),
+        dca_amount_sol,
+        market_price: price_info.price_sol,
+    };
+
+    // Apply transition
+    super::apply::apply_transition(transition)
+        .await
+        .map_err(|e| format!("Failed to apply DCA transition: {}", e))?;
+
+    // Enqueue for verification
+    let expiry_height = get_rpc_client()
+        .get_block_height()
+        .await
+        .unwrap_or(0)
+        + SOLANA_BLOCKHASH_VALIDITY_SLOTS;
+
+    let verification_item = VerificationItem::new(
+        transaction_signature.clone(),
+        token_mint.to_string(),
+        Some(position_id),
+        VerificationKind::Entry, // DCA is another entry
+        Some(expiry_height),
+    );
+
+    enqueue_verification(verification_item).await;
+
+    log(
+        LogTag::Positions,
+        "SUCCESS",
+        &format!(
+            "✅ DCA entry submitted: {} | {} SOL | TX: {} | DCA #{}",
+            api_token.symbol,
+            dca_amount_sol,
+            transaction_signature,
+            position.dca_count + 1
+        ),
+    );
+
+    // CRITICAL: Do NOT consume a new semaphore permit - same position!
+
+    Ok(transaction_signature)
+}
+
+/// Calculate weighted average entry price
+pub fn calculate_average_entry_price(
+    current_total_sol: f64,
+    current_total_tokens: u64,
+    new_sol: f64,
+    new_tokens: u64,
+    decimals: u8,
+) -> f64 {
+    let new_total_sol = current_total_sol + new_sol;
+    let new_total_tokens_float =
+        (current_total_tokens + new_tokens) as f64 / 10_f64.powi(decimals as i32);
+
+    if new_total_tokens_float > 0.0 {
+        new_total_sol / new_total_tokens_float
+    } else {
+        0.0
+    }
+}
+
+/// Calculate weighted average exit price
+pub fn calculate_average_exit_price(
+    current_average: Option<f64>,
+    current_total_exited: u64,
+    new_exited: u64,
+    new_price: f64,
+) -> f64 {
+    match current_average {
+        Some(avg) => {
+            let total_tokens = current_total_exited + new_exited;
+            if total_tokens == 0 {
+                return new_price;
+            }
+            let current_weight = current_total_exited as f64 / total_tokens as f64;
+            let new_weight = new_exited as f64 / total_tokens as f64;
+            (avg * current_weight) + (new_price * new_weight)
+        }
+        None => new_price,
+    }
 }

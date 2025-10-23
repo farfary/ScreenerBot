@@ -20,8 +20,13 @@ pub async fn check_time_override(
 
     // Check if position has exceeded duration threshold
     if position_age_hours >= duration_hours {
-        // Calculate current loss percentage
-        let loss_pct = (1.0 - current_price / position.entry_price) * 100.0;
+        // Calculate current loss percentage using average entry price
+        let entry_price = position.average_entry_price;
+        if entry_price <= 0.0 || !entry_price.is_finite() {
+            return Ok(None);
+        }
+
+        let loss_pct = (1.0 - current_price / entry_price) * 100.0;
 
         // Check if loss exceeds threshold
         if loss_pct >= loss_threshold_pct {

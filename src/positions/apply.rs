@@ -283,6 +283,223 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             }
         }
 
+        // ==================== PARTIAL EXIT TRANSITIONS ====================
+        PositionTransition::PartialExitSubmitted {
+            position_id,
+            exit_signature,
+            exit_amount,
+            exit_percentage,
+            market_price,
+        } => {
+            log(
+                LogTag::Positions,
+                "INFO",
+                &format!(
+                    "Partial exit submitted for position {}: {}% ({} tokens) at price {:.11}",
+                    position_id, exit_percentage, exit_amount, market_price
+                ),
+            );
+            // No state update needed for submission - just logging
+        }
+
+        PositionTransition::PartialExitVerified {
+            position_id,
+            exit_amount,
+            sol_received,
+            effective_exit_price,
+            fee_lamports,
+            exit_time,
+        } => {
+            let updated =
+                update_position_state(&find_mint_by_position_id(position_id).await?, |pos| {
+                    // Update remaining token amount
+                    if let Some(remaining) = pos.remaining_token_amount {
+                        pos.remaining_token_amount = Some(remaining.saturating_sub(exit_amount));
+                    }
+                    
+                    // Update total exited amount
+                    pos.total_exited_amount += exit_amount;
+                    
+                    // Calculate new average exit price (weighted average)
+                    let total_exited = pos.total_exited_amount;
+                    if let Some(prev_avg) = pos.average_exit_price {
+                        let prev_weight = (total_exited - exit_amount) as f64 / total_exited as f64;
+                        let new_weight = exit_amount as f64 / total_exited as f64;
+                        pos.average_exit_price = Some((prev_avg * prev_weight) + (effective_exit_price * new_weight));
+                    } else {
+                        pos.average_exit_price = Some(effective_exit_price);
+                    }
+                    
+                    // Increment partial exit count
+                    pos.partial_exit_count += 1;
+                    
+                    // Update SOL received (cumulative)
+                    pos.sol_received = Some(pos.sol_received.unwrap_or(0.0) + sol_received);
+                    
+                    // CRITICAL: Do NOT set exit_time or exit_signature - position still open!
+                })
+                .await;
+
+            if updated && transition.requires_db_update() {
+                if let Some(position) = get_position_by_id(position_id).await {
+                    match update_position(&position).await {
+                        Ok(_) => {
+                            effects.db_updated = true;
+                            let _ = force_database_sync().await;
+                            
+                            crate::events::record_position_event(
+                                &position_id.to_string(),
+                                &position.mint,
+                                "partial_exit_verified",
+                                position.entry_transaction_signature.as_deref(),
+                                None,
+                                sol_received,
+                                exit_amount,
+                                Some(sol_received - (exit_amount as f64 / 10_f64.powi(9) * position.average_entry_price)), // Quick P&L estimate
+                                None,
+                            )
+                            .await;
+                            
+                            log(
+                                LogTag::Positions,
+                                "SUCCESS",
+                                &format!(
+                                    "✅ Partial exit verified for position {}: {} tokens sold, {} remaining",
+                                    position_id,
+                                    exit_amount,
+                                    position.remaining_token_amount.unwrap_or(0)
+                                ),
+                            );
+                            
+                            // IMPORTANT: Do NOT release semaphore permit - position still open!
+                        }
+                        Err(e) => {
+                            return Err(format!("Failed to update database: {}", e));
+                        }
+                    }
+                }
+            }
+        }
+
+        PositionTransition::PartialExitFailed {
+            position_id,
+            reason,
+        } => {
+            log(
+                LogTag::Positions,
+                "ERROR",
+                &format!(
+                    "Partial exit failed for position {}: {}",
+                    position_id, reason
+                ),
+            );
+            // TODO: Implement retry logic if needed
+        }
+
+        // ==================== DCA TRANSITIONS ====================
+        PositionTransition::DcaSubmitted {
+            position_id,
+            dca_signature,
+            dca_amount_sol,
+            market_price,
+        } => {
+            log(
+                LogTag::Positions,
+                "INFO",
+                &format!(
+                    "DCA submitted for position {}: {} SOL at price {:.11}",
+                    position_id, dca_amount_sol, market_price
+                ),
+            );
+            // No state update needed for submission - just logging
+        }
+
+        PositionTransition::DcaVerified {
+            position_id,
+            tokens_bought,
+            sol_spent,
+            effective_price,
+            fee_lamports,
+            dca_time,
+        } => {
+            let updated =
+                update_position_state(&find_mint_by_position_id(position_id).await?, |pos| {
+                    // Update remaining token amount (add new tokens)
+                    if let Some(remaining) = pos.remaining_token_amount {
+                        pos.remaining_token_amount = Some(remaining + tokens_bought);
+                    } else {
+                        pos.remaining_token_amount = Some(tokens_bought);
+                    }
+                    
+                    // Update total SOL invested
+                    pos.total_size_sol += sol_spent;
+                    
+                    // Recalculate average entry price (weighted average)
+                    let old_total = pos.total_size_sol - sol_spent;
+                    pos.average_entry_price = pos.total_size_sol / 
+                        (pos.remaining_token_amount.unwrap_or(0) as f64 / 10_f64.powi(9)); // Assuming 9 decimals
+                    
+                    // Increment DCA count
+                    pos.dca_count += 1;
+                    
+                    // Update last DCA time
+                    pos.last_dca_time = Some(dca_time);
+                })
+                .await;
+
+            if updated && transition.requires_db_update() {
+                if let Some(position) = get_position_by_id(position_id).await {
+                    match update_position(&position).await {
+                        Ok(_) => {
+                            effects.db_updated = true;
+                            let _ = force_database_sync().await;
+                            
+                            crate::events::record_position_event(
+                                &position_id.to_string(),
+                                &position.mint,
+                                "dca_verified",
+                                position.entry_transaction_signature.as_deref(),
+                                None,
+                                sol_spent,
+                                tokens_bought,
+                                None,
+                                None,
+                            )
+                            .await;
+                            
+                            log(
+                                LogTag::Positions,
+                                "SUCCESS",
+                                &format!(
+                                    "✅ DCA verified for position {}: {} tokens bought, new average entry: {:.11}",
+                                    position_id,
+                                    tokens_bought,
+                                    position.average_entry_price
+                                ),
+                            );
+                            
+                            // IMPORTANT: Do NOT consume another semaphore permit - same position!
+                        }
+                        Err(e) => {
+                            return Err(format!("Failed to update database: {}", e));
+                        }
+                    }
+                }
+            }
+        }
+
+        PositionTransition::DcaFailed {
+            position_id,
+            reason,
+        } => {
+            log(
+                LogTag::Positions,
+                "ERROR",
+                &format!("DCA failed for position {}: {}", position_id, reason),
+            );
+            // TODO: Implement retry logic if needed
+        }
+
         PositionTransition::UpdatePriceTracking {
             mint,
             current_price,

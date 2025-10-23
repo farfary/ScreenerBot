@@ -19,7 +19,7 @@ use tokio::sync::Mutex;
 
 use crate::arguments::is_debug_positions_enabled;
 use crate::logger::{log, LogTag};
-use crate::positions::types::Position;
+use crate::positions::types::{EntryRecord, ExitRecord, Position};
 
 // Static flag to track if database has been initialized (to reduce log noise)
 static POSITIONS_DB_INITIALIZED: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
@@ -30,6 +30,20 @@ const POSITIONS_SCHEMA_VERSION: u32 = 1;
 // =============================================================================
 // DATABASE SCHEMA DEFINITIONS
 // =============================================================================
+
+// Column list for SELECT queries (DRY principle)
+const POSITION_SELECT_COLUMNS: &str = r#"
+    id, mint, symbol, name, entry_price, entry_time, exit_price, exit_time,
+    position_type, entry_size_sol, total_size_sol, price_highest, price_lowest,
+    entry_transaction_signature, exit_transaction_signature, token_amount,
+    effective_entry_price, effective_exit_price, sol_received,
+    profit_target_min, profit_target_max, liquidity_tier,
+    transaction_entry_verified, transaction_exit_verified,
+    entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
+    phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
+    remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
+    dca_count, average_entry_price, last_dca_time
+"#;
 
 const SCHEMA_POSITIONS: &str = r#"
 CREATE TABLE IF NOT EXISTS positions (
@@ -42,17 +56,17 @@ CREATE TABLE IF NOT EXISTS positions (
     exit_price REAL,
     exit_time TEXT,
     position_type TEXT NOT NULL, -- 'buy' or 'sell'
-    entry_size_sol REAL NOT NULL,
-    total_size_sol REAL NOT NULL,
+    entry_size_sol REAL NOT NULL,  -- Initial SOL spent on first entry
+    total_size_sol REAL NOT NULL,  -- Cumulative SOL invested (includes DCA)
     price_highest REAL NOT NULL,
     price_lowest REAL NOT NULL,
     -- Real swap tracking
     entry_transaction_signature TEXT,
     exit_transaction_signature TEXT,
-    token_amount INTEGER, -- Amount of tokens bought/sold (raw amount)
-    effective_entry_price REAL, -- Actual price from on-chain transaction
-    effective_exit_price REAL, -- Actual exit price from on-chain transaction
-    sol_received REAL, -- Actual SOL received after sell
+    token_amount INTEGER, -- Initial amount of tokens bought (first entry)
+    effective_entry_price REAL, -- Initial entry price (deprecated, use average_entry_price)
+    effective_exit_price REAL, -- Final exit price (deprecated, use average_exit_price)
+    sol_received REAL, -- Total SOL received after all exits
     -- Smart profit targeting
     profit_target_min REAL, -- Minimum profit target percentage
     profit_target_max REAL, -- Maximum profit target percentage
@@ -71,6 +85,15 @@ CREATE TABLE IF NOT EXISTS positions (
     phantom_first_seen TEXT, -- When first confirmed phantom
     synthetic_exit BOOLEAN NOT NULL DEFAULT false,
     closed_reason TEXT, -- Optional reason for closure
+    -- Partial exit tracking
+    remaining_token_amount INTEGER, -- Current holdings after partial exits
+    total_exited_amount INTEGER NOT NULL DEFAULT 0, -- Cumulative tokens sold
+    average_exit_price REAL, -- Weighted average exit price
+    partial_exit_count INTEGER NOT NULL DEFAULT 0, -- Number of partial exits
+    -- DCA tracking
+    dca_count INTEGER NOT NULL DEFAULT 0, -- Number of additional entries (DCA)
+    average_entry_price REAL NOT NULL DEFAULT 0, -- Weighted average entry price
+    last_dca_time TEXT, -- Last DCA timestamp for cooldown
     -- Timestamps
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -84,6 +107,37 @@ CREATE TABLE IF NOT EXISTS position_states (
     state TEXT NOT NULL, -- 'Open', 'Closing', 'Closed', 'ExitPending', 'ExitFailed', 'Phantom', 'Reconciling'
     changed_at TEXT NOT NULL DEFAULT (datetime('now')),
     reason TEXT, -- Optional reason for state change
+    FOREIGN KEY (position_id) REFERENCES positions(id) ON DELETE CASCADE
+);
+"#;
+
+const SCHEMA_POSITION_EXITS: &str = r#"
+CREATE TABLE IF NOT EXISTS position_exits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    position_id INTEGER NOT NULL,
+    timestamp TEXT NOT NULL,
+    amount INTEGER NOT NULL, -- Tokens sold
+    price REAL NOT NULL, -- Exit price per token
+    sol_received REAL NOT NULL, -- SOL received
+    transaction_signature TEXT NOT NULL,
+    is_partial BOOLEAN NOT NULL, -- true if partial, false if full exit
+    percentage REAL NOT NULL, -- % of position sold
+    fees_lamports INTEGER, -- Transaction fee
+    FOREIGN KEY (position_id) REFERENCES positions(id) ON DELETE CASCADE
+);
+"#;
+
+const SCHEMA_POSITION_ENTRIES: &str = r#"
+CREATE TABLE IF NOT EXISTS position_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    position_id INTEGER NOT NULL,
+    timestamp TEXT NOT NULL,
+    amount INTEGER NOT NULL, -- Tokens bought
+    price REAL NOT NULL, -- Entry price per token
+    sol_spent REAL NOT NULL, -- SOL spent
+    transaction_signature TEXT NOT NULL,
+    is_dca BOOLEAN NOT NULL, -- true if DCA, false if initial entry
+    fees_lamports INTEGER, -- Transaction fee
     FOREIGN KEY (position_id) REFERENCES positions(id) ON DELETE CASCADE
 );
 "#;
@@ -182,6 +236,11 @@ const POSITIONS_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_token_snapshots_position_id ON token_snapshots(position_id, snapshot_type);",
     "CREATE INDEX IF NOT EXISTS idx_token_snapshots_mint ON token_snapshots(mint, snapshot_time DESC);",
     "CREATE INDEX IF NOT EXISTS idx_token_snapshots_type ON token_snapshots(snapshot_type, snapshot_time DESC);",
+    // New indexes for partial exit and DCA tracking
+    "CREATE INDEX IF NOT EXISTS idx_position_exits_position_id ON position_exits(position_id, timestamp DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_position_exits_timestamp ON position_exits(timestamp DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_position_entries_position_id ON position_entries(position_id, timestamp DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_position_entries_timestamp ON position_entries(timestamp DESC);",
 ];
 
 // =============================================================================
@@ -412,6 +471,12 @@ impl PositionsDatabase {
         conn.execute(SCHEMA_POSITION_STATES, [])
             .map_err(|e| format!("Failed to create position_states table: {}", e))?;
 
+        conn.execute(SCHEMA_POSITION_EXITS, [])
+            .map_err(|e| format!("Failed to create position_exits table: {}", e))?;
+
+        conn.execute(SCHEMA_POSITION_ENTRIES, [])
+            .map_err(|e| format!("Failed to create position_entries table: {}", e))?;
+
         conn.execute(SCHEMA_POSITION_TRACKING, [])
             .map_err(|e| format!("Failed to create position_tracking table: {}", e))?;
 
@@ -488,10 +553,13 @@ impl PositionsDatabase {
                 profit_target_min, profit_target_max, liquidity_tier,
                 transaction_entry_verified, transaction_exit_verified,
                 entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
-                phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason
+                phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
+                remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
+                dca_count, average_entry_price, last_dca_time
             ) VALUES (
                 ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
-                ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31
+                ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31,
+                ?32, ?33, ?34, ?35, ?36, ?37, ?38
             ) RETURNING id
             "#,
                 params![
@@ -525,7 +593,14 @@ impl PositionsDatabase {
                     position.phantom_confirmations as i64,
                     position.phantom_first_seen.map(|t| t.to_rfc3339()),
                     position.synthetic_exit,
-                    position.closed_reason
+                    position.closed_reason,
+                    position.remaining_token_amount.map(|t| t as i64),
+                    position.total_exited_amount as i64,
+                    position.average_exit_price,
+                    position.partial_exit_count as i64,
+                    position.dca_count as i64,
+                    position.average_entry_price,
+                    position.last_dca_time.map(|t| t.to_rfc3339())
                 ],
                 |row| row.get::<_, i64>(0),
             )
@@ -599,7 +674,10 @@ impl PositionsDatabase {
                 liquidity_tier = ?22, transaction_entry_verified = ?23, transaction_exit_verified = ?24,
                 entry_fee_lamports = ?25, exit_fee_lamports = ?26, current_price = ?27,
                 current_price_updated = ?28, phantom_confirmations = ?29, phantom_first_seen = ?30,
-                synthetic_exit = ?31, closed_reason = ?32, updated_at = datetime('now')
+                synthetic_exit = ?31, closed_reason = ?32,
+                remaining_token_amount = ?33, total_exited_amount = ?34, average_exit_price = ?35,
+                partial_exit_count = ?36, dca_count = ?37, average_entry_price = ?38, last_dca_time = ?39,
+                updated_at = datetime('now')
             WHERE id = ?1
             "#,
                 params![
@@ -634,7 +712,14 @@ impl PositionsDatabase {
                     position.phantom_confirmations as i64,
                     position.phantom_first_seen.map(|t| t.to_rfc3339()),
                     position.synthetic_exit,
-                    position.closed_reason
+                    position.closed_reason,
+                    position.remaining_token_amount.map(|t| t as i64),
+                    position.total_exited_amount as i64,
+                    position.average_exit_price,
+                    position.partial_exit_count as i64,
+                    position.dca_count as i64,
+                    position.average_entry_price,
+                    position.last_dca_time.map(|t| t.to_rfc3339())
                 ]
             )
             .map_err(|e| format!("Failed to update position: {}", e))?;
@@ -685,19 +770,10 @@ impl PositionsDatabase {
     pub async fn get_position_by_id(&self, id: i64) -> Result<Option<Position>, String> {
         let conn = self.get_connection()?;
 
+        let query = format!("SELECT {} FROM positions WHERE id = ?1", POSITION_SELECT_COLUMNS);
         let result = conn
             .query_row(
-                r#"
-            SELECT id, mint, symbol, name, entry_price, entry_time, exit_price, exit_time,
-                   position_type, entry_size_sol, total_size_sol, price_highest, price_lowest,
-                   entry_transaction_signature, exit_transaction_signature, token_amount,
-                   effective_entry_price, effective_exit_price, sol_received,
-                   profit_target_min, profit_target_max, liquidity_tier,
-                   transaction_entry_verified, transaction_exit_verified,
-                   entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
-                   phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason
-            FROM positions WHERE id = ?1
-            "#,
+                &query,
                 params![id],
                 |row| self.row_to_position(row),
             )
@@ -711,19 +787,10 @@ impl PositionsDatabase {
     pub async fn get_position_by_mint(&self, mint: &str) -> Result<Option<Position>, String> {
         let conn = self.get_connection()?;
 
+        let query = format!("SELECT {} FROM positions WHERE mint = ?1 ORDER BY entry_time DESC LIMIT 1", POSITION_SELECT_COLUMNS);
         let result = conn
             .query_row(
-                r#"
-            SELECT id, mint, symbol, name, entry_price, entry_time, exit_price, exit_time,
-                   position_type, entry_size_sol, total_size_sol, price_highest, price_lowest,
-                   entry_transaction_signature, exit_transaction_signature, token_amount,
-                   effective_entry_price, effective_exit_price, sol_received,
-                   profit_target_min, profit_target_max, liquidity_tier,
-                   transaction_entry_verified, transaction_exit_verified,
-                   entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
-                   phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason
-            FROM positions WHERE mint = ?1 ORDER BY entry_time DESC LIMIT 1
-            "#,
+                &query,
                 params![mint],
                 |row| self.row_to_position(row),
             )
@@ -1708,6 +1775,23 @@ impl PositionsDatabase {
                 None
             };
 
+        let last_dca_time =
+            if let Some(dca_str) = row.get::<_, Option<String>>("last_dca_time")? {
+                Some(
+                    DateTime::parse_from_rfc3339(&dca_str)
+                        .map_err(|e| {
+                            rusqlite::Error::InvalidColumnType(
+                                35,
+                                "Invalid last_dca_time".to_string(),
+                                rusqlite::types::Type::Text,
+                            )
+                        })?
+                        .with_timezone(&Utc),
+                )
+            } else {
+                None
+            };
+
         Ok(Position {
             id: Some(row.get("id")?),
             mint: row.get("mint")?,
@@ -1746,6 +1830,14 @@ impl PositionsDatabase {
             phantom_first_seen,
             synthetic_exit: row.get("synthetic_exit")?,
             closed_reason: row.get("closed_reason")?,
+            // New fields for partial exit and DCA support
+            remaining_token_amount: row.get::<_, Option<i64>>("remaining_token_amount")?.map(|t| t as u64),
+            total_exited_amount: row.get::<_, i64>("total_exited_amount")? as u64,
+            average_exit_price: row.get("average_exit_price")?,
+            partial_exit_count: row.get::<_, i64>("partial_exit_count")? as u32,
+            dca_count: row.get::<_, i64>("dca_count")? as u32,
+            average_entry_price: row.get("average_entry_price")?,
+            last_dca_time,
         })
     }
 }
@@ -2077,4 +2169,195 @@ pub async fn get_recent_closed_positions_for_mint(
         Some(db) => db.get_recent_closed_positions_for_mint(mint, limit).await,
         None => Err("Positions database not initialized".to_string()),
     }
+}
+
+// ==================== EXIT/ENTRY HISTORY FUNCTIONS ====================
+
+/// Save an exit record to history
+pub async fn save_exit_record(
+    position_id: i64,
+    timestamp: DateTime<Utc>,
+    amount: u64,
+    price: f64,
+    sol_received: f64,
+    transaction_signature: &str,
+    is_partial: bool,
+    percentage: f64,
+    fees_lamports: Option<u64>,
+) -> Result<(), String> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    let db = db_guard
+        .as_ref()
+        .ok_or("Positions database not initialized")?;
+
+    let conn = db
+        .pool
+        .get()
+        .map_err(|e| format!("Failed to get connection: {}", e))?;
+
+    conn.execute(
+        "INSERT INTO position_exits (position_id, timestamp, amount, price, sol_received, 
+         transaction_signature, is_partial, percentage, fees_lamports) 
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![
+            position_id,
+            timestamp.to_rfc3339(),
+            amount as i64,
+            price,
+            sol_received,
+            transaction_signature,
+            is_partial,
+            percentage,
+            fees_lamports.map(|f| f as i64),
+        ],
+    )
+    .map_err(|e| format!("Failed to save exit record: {}", e))?;
+
+    log(
+        LogTag::Positions,
+        "DB_EXIT_RECORD",
+        &format!(
+            "Saved exit record: position={} amount={} partial={} tx={}",
+            position_id, amount, is_partial, transaction_signature
+        ),
+    );
+
+    Ok(())
+}
+
+/// Get exit history for a position
+pub async fn get_exit_history(position_id: i64) -> Result<Vec<ExitRecord>, String> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    let db = db_guard
+        .as_ref()
+        .ok_or("Positions database not initialized")?;
+
+    let conn = db
+        .pool
+        .get()
+        .map_err(|e| format!("Failed to get connection: {}", e))?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, position_id, timestamp, amount, price, sol_received, 
+             transaction_signature, is_partial, percentage, fees_lamports 
+             FROM position_exits WHERE position_id = ?1 ORDER BY timestamp DESC",
+        )
+        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+
+    let records = stmt
+        .query_map(params![position_id], |row| {
+            Ok(ExitRecord {
+                id: row.get(0)?,
+                position_id: row.get(1)?,
+                timestamp: DateTime::parse_from_rfc3339(&row.get::<_, String>(2)?)
+                    .unwrap()
+                    .with_timezone(&Utc),
+                amount: row.get::<_, i64>(3)? as u64,
+                price: row.get(4)?,
+                sol_received: row.get(5)?,
+                transaction_signature: row.get(6)?,
+                is_partial: row.get(7)?,
+                percentage: row.get(8)?,
+                fees_lamports: row.get::<_, Option<i64>>(9)?.map(|f| f as u64),
+            })
+        })
+        .map_err(|e| format!("Failed to query exit records: {}", e))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("Failed to collect exit records: {}", e))?;
+
+    Ok(records)
+}
+
+/// Save an entry record to history
+pub async fn save_entry_record(
+    position_id: i64,
+    timestamp: DateTime<Utc>,
+    amount: u64,
+    price: f64,
+    sol_spent: f64,
+    transaction_signature: &str,
+    is_dca: bool,
+    fees_lamports: Option<u64>,
+) -> Result<(), String> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    let db = db_guard
+        .as_ref()
+        .ok_or("Positions database not initialized")?;
+
+    let conn = db
+        .pool
+        .get()
+        .map_err(|e| format!("Failed to get connection: {}", e))?;
+
+    conn.execute(
+        "INSERT INTO position_entries (position_id, timestamp, amount, price, sol_spent, 
+         transaction_signature, is_dca, fees_lamports) 
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![
+            position_id,
+            timestamp.to_rfc3339(),
+            amount as i64,
+            price,
+            sol_spent,
+            transaction_signature,
+            is_dca,
+            fees_lamports.map(|f| f as i64),
+        ],
+    )
+    .map_err(|e| format!("Failed to save entry record: {}", e))?;
+
+    log(
+        LogTag::Positions,
+        "DB_ENTRY_RECORD",
+        &format!(
+            "Saved entry record: position={} amount={} dca={} tx={}",
+            position_id, amount, is_dca, transaction_signature
+        ),
+    );
+
+    Ok(())
+}
+
+/// Get entry history for a position
+pub async fn get_entry_history(position_id: i64) -> Result<Vec<EntryRecord>, String> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    let db = db_guard
+        .as_ref()
+        .ok_or("Positions database not initialized")?;
+
+    let conn = db
+        .pool
+        .get()
+        .map_err(|e| format!("Failed to get connection: {}", e))?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, position_id, timestamp, amount, price, sol_spent, 
+             transaction_signature, is_dca, fees_lamports 
+             FROM position_entries WHERE position_id = ?1 ORDER BY timestamp ASC",
+        )
+        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+
+    let records = stmt
+        .query_map(params![position_id], |row| {
+            Ok(EntryRecord {
+                id: row.get(0)?,
+                position_id: row.get(1)?,
+                timestamp: DateTime::parse_from_rfc3339(&row.get::<_, String>(2)?)
+                    .unwrap()
+                    .with_timezone(&Utc),
+                amount: row.get::<_, i64>(3)? as u64,
+                price: row.get(4)?,
+                sol_spent: row.get(5)?,
+                transaction_signature: row.get(6)?,
+                is_dca: row.get(7)?,
+                fees_lamports: row.get::<_, Option<i64>>(8)?.map(|f| f as u64),
+            })
+        })
+        .map_err(|e| format!("Failed to query entry records: {}", e))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("Failed to collect entry records: {}", e))?;
+
+    Ok(records)
 }

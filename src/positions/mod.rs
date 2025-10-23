@@ -14,7 +14,9 @@ pub mod verifier;
 pub mod worker;
 
 // Public API exports
-pub use operations::{close_position_direct, open_position_direct};
+pub use operations::{
+    add_to_position, close_position_direct, open_position_direct, partial_close_position,
+};
 
 pub use state::{
     acquire_position_lock, get_active_frozen_cooldowns, get_closed_positions, get_open_mints,
@@ -37,19 +39,20 @@ pub use loss_detection::{
 pub use db::{
     delete_position_by_id, force_database_sync, get_closed_positions as get_db_closed_positions,
     get_closed_positions_count_since as get_db_closed_positions_count_since,
-    get_open_positions as get_db_open_positions, get_position_by_id as get_db_position_by_id,
+    get_entry_history, get_exit_history, get_open_positions as get_db_open_positions,
+    get_position_by_id as get_db_position_by_id,
     get_position_by_mint as get_db_position_by_mint, get_positions_database,
     get_recent_closed_positions_for_mint, get_token_snapshot, get_token_snapshots,
-    initialize_positions_database, load_all_positions, save_position, save_token_snapshot,
-    update_position, with_positions_database, with_positions_database_async, PositionState,
-    PositionStateHistory, PositionTracking, PositionsDatabase, PositionsDatabaseStats,
-    TokenSnapshot,
+    initialize_positions_database, load_all_positions, save_entry_record, save_exit_record,
+    save_position, save_token_snapshot, update_position, with_positions_database,
+    with_positions_database_async, PositionState, PositionStateHistory, PositionTracking,
+    PositionsDatabase, PositionsDatabaseStats, TokenSnapshot,
 };
 
 pub use lib::{
     add_signature_to_index, calculate_position_pnl, calculate_position_total_fees,
-    get_position_index_by_mint, remove_position_by_signature, save_position_token_snapshot,
-    sync_position_to_database, update_mint_position_index,
+    calculate_split_pnl, get_position_index_by_mint, remove_position_by_signature,
+    save_position_token_snapshot, sync_position_to_database, update_mint_position_index,
 };
 
 // Core types re-exports
@@ -57,4 +60,4 @@ pub use metrics::ProceedsMetricsSnapshot;
 pub use queue::{enqueue_verification, VerificationItem, VerificationKind};
 pub use state::PositionLockGuard;
 pub use transitions::PositionTransition;
-pub use types::Position;
+pub use types::{EntryRecord, ExitRecord, Position};
