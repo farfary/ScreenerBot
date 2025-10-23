@@ -299,7 +299,10 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     position_id, exit_percentage, exit_amount, market_price
                 ),
             );
-            // No state update needed for submission - just logging
+            // Mark pending partial exit in in-memory registry
+            if let Ok(mint) = find_mint_by_position_id(position_id).await {
+                super::state::mark_partial_exit_pending(&mint).await;
+            }
         }
 
         PositionTransition::PartialExitVerified {
@@ -370,6 +373,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                     position.remaining_token_amount.unwrap_or(0)
                                 ),
                             );
+                            // Clear pending mark
+                            super::state::clear_partial_exit_pending(&position.mint).await;
                             
                             // IMPORTANT: Do NOT release semaphore permit - position still open!
                         }

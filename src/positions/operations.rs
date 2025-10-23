@@ -25,8 +25,8 @@ use serde_json::json;
 
 const SOLANA_BLOCKHASH_VALIDITY_SLOTS: u64 = 150;
 
-/// Open a new position
-pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
+/// Internal helper to open a new position with an explicit SOL size
+async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<String, String> {
     let api_token = crate::tokens::get_full_token_async(token_mint)
         .await
         .map_err(|e| format!("Failed to get token: {}", e))?
@@ -160,7 +160,6 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
     ))
     .await;
 
-    let trade_size_sol = with_config(|cfg| cfg.trader.trade_size_sol);
     let slippage_quote_default = with_config(|cfg| cfg.swaps.slippage.quote_default_pct);
 
     let quote = get_best_quote_for_opening(
@@ -316,6 +315,20 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
     Ok(transaction_signature)
 }
 
+/// Open a new position using trade size from configuration
+pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
+    let trade_size_sol = with_config(|cfg| cfg.trader.trade_size_sol);
+    open_position_impl(token_mint, trade_size_sol).await
+}
+
+/// Open a new position with an explicit SOL size (used by manual buys)
+pub async fn open_position_with_size(token_mint: &str, trade_size_sol: f64) -> Result<String, String> {
+    if !trade_size_sol.is_finite() || trade_size_sol <= 0.0 {
+        return Err(format!("Invalid trade size: {}", trade_size_sol));
+    }
+    open_position_impl(token_mint, trade_size_sol).await
+}
+
 /// Close an existing position
 pub async fn close_position_direct(
     token_mint: &str,
@@ -338,7 +351,8 @@ pub async fn close_position_direct(
 
     let _lock = acquire_position_lock(token_mint).await;
 
-    // RACE CONDITION PREVENTION: Check if position already has pending exit
+    // RACE CONDITION PREVENTION: Only block if a FULL exit is pending.
+    // Partial exits are tracked separately via PENDING_PARTIAL_EXITS and serialized.
     if let Some(existing_position) = super::state::get_position_by_mint(token_mint).await {
         if let Some(pending_sig) = &existing_position.exit_transaction_signature {
             log(
@@ -447,37 +461,52 @@ pub async fn close_position_direct(
     // which leads to SPL Token "insufficient funds" during Transfer. ExactIn avoids that.
     let slippage_exit_retry_steps =
         with_config(|cfg| cfg.swaps.slippage.exit_retry_steps_pct.clone());
-    let quote = get_best_quote(
-        token_mint,
-        SOL_MINT,
-        sell_amount,
-        &wallet_address,
-        slippage_exit_retry_steps[0], // Use first step (3.0%) for initial exit attempt
-        "ExactIn", // Spend exactly the available input tokens; router computes SOL out
-    )
-    .await
-    .map_err(|e| format!("Quote failed: {}", e))?;
-
-    let swap_result = execute_best_swap(
-        &api_token,
-        token_mint,
-        SOL_MINT,
-        sell_amount,
-        quote
-    ).await.map_err(|e| {
-        // If we attempted to sell the aggregated total and failed with insufficient funds,
-        // hint at likely multi-account cause for easier diagnosis.
-        let msg = e.to_string();
-        if
-            msg.to_lowercase().contains("insufficient funds") &&
-            multi_account_note.is_none() &&
-            total_token_balance > sell_amount
+    // Slippage retry loop for exit
+    let mut last_err: Option<String> = None;
+    let mut swap_result = None;
+    for (i, slippage) in slippage_exit_retry_steps.iter().enumerate() {
+        let quote = match get_best_quote(
+            token_mint,
+            SOL_MINT,
+            sell_amount,
+            &wallet_address,
+            *slippage,
+            "ExactIn",
+        )
+        .await
         {
-            format!("Swap failed (insufficient funds) - aggregated balance mismatch; consider consolidating ATAs: {}", msg)
-        } else {
-            format!("Swap failed: {}", msg)
+            Ok(q) => q,
+            Err(e) => {
+                last_err = Some(format!("Quote failed at step {} ({}%): {}", i + 1, slippage, e));
+                continue;
+            }
+        };
+
+        match execute_best_swap(&api_token, token_mint, SOL_MINT, sell_amount, quote).await {
+            Ok(res) => {
+                swap_result = Some(res);
+                last_err = None;
+                break;
+            }
+            Err(e) => {
+                // If we attempted to sell the aggregated total and failed with insufficient funds,
+                // hint at likely multi-account cause for easier diagnosis.
+                let msg = e.to_string();
+                let enriched = if msg.to_lowercase().contains("insufficient funds")
+                    && multi_account_note.is_none()
+                    && total_token_balance > sell_amount
+                {
+                    format!("Swap failed (insufficient funds) - aggregated balance mismatch; consider consolidating ATAs: {}", msg)
+                } else {
+                    format!("Swap failed: {}", msg)
+                };
+                last_err = Some(format!("{} (step {} slippage {}%)", enriched, i + 1, slippage));
+                continue;
+            }
         }
-    })?;
+    }
+
+    let swap_result = swap_result.ok_or_else(|| last_err.unwrap_or_else(|| "Exit swap failed".to_string()))?;
 
     let transaction_signature = swap_result
         .transaction_signature
@@ -589,6 +618,8 @@ pub async fn partial_close_position(
     exit_percentage: f64,
     exit_reason: &str,
 ) -> Result<String, String> {
+    // Serialize per-mint operations to avoid overlapping partials/full exits
+    let _lock = acquire_position_lock(token_mint).await;
     use crate::swaps::{calculate_partial_amount, ExitType};
 
     // Validate percentage
@@ -640,16 +671,32 @@ pub async fn partial_close_position(
     let wallet_address = get_wallet_address().map_err(|e| e.to_string())?;
     let slippage_exit_retry_steps =
         with_config(|cfg| cfg.swaps.slippage.exit_retry_steps_pct.clone());
-    let quote = get_best_quote(
-        token_mint,
-        SOL_MINT,
-        exit_amount,
-        &wallet_address,
-        slippage_exit_retry_steps[0],
-        "ExactIn",
-    )
-    .await
-    .map_err(|e| format!("Failed to get quote: {}", e))?;
+    // Slippage retry loop for partial exit
+    let mut last_err: Option<String> = None;
+    let mut quote_opt = None;
+    for (i, slippage) in slippage_exit_retry_steps.iter().enumerate() {
+        match get_best_quote(
+            token_mint,
+            SOL_MINT,
+            exit_amount,
+            &wallet_address,
+            *slippage,
+            "ExactIn",
+        )
+        .await
+        {
+            Ok(q) => {
+                quote_opt = Some(q);
+                last_err = None;
+                break;
+            }
+            Err(e) => {
+                last_err = Some(format!("Quote failed at step {} ({}%): {}", i + 1, slippage, e));
+                continue;
+            }
+        }
+    }
+    let quote = quote_opt.ok_or_else(|| last_err.unwrap_or_else(|| "Failed to get exit quote".to_string()))?;
 
     log(
         LogTag::Positions,
@@ -661,10 +708,52 @@ pub async fn partial_close_position(
         ),
     );
 
+    // Mark pending partial BEFORE executing swap to serialize concurrent attempts
+    super::state::mark_partial_exit_pending(token_mint).await;
+
     // Execute swap
-    let swap_result = execute_best_swap(&api_token, token_mint, SOL_MINT, exit_amount, quote)
+    // Try execute with the selected quote; if it fails, iterate remaining slippage steps
+    let mut swap_result = execute_best_swap(&api_token, token_mint, SOL_MINT, exit_amount, quote)
         .await
-        .map_err(|e| format!("Partial exit swap failed: {}", e))?;
+        .map_err(|e| e.to_string());
+    if swap_result.is_err() {
+        for (i, slippage) in slippage_exit_retry_steps.iter().enumerate() {
+            // We already tried first successful quote attempt; attempt new quotes with higher slippage
+            let q = match get_best_quote(
+                token_mint,
+                SOL_MINT,
+                exit_amount,
+                &wallet_address,
+                *slippage,
+                "ExactIn",
+            )
+            .await
+            {
+                Ok(q) => q,
+                Err(e) => {
+                    last_err = Some(format!("Quote failed at step {} ({}%): {}", i + 1, slippage, e));
+                    continue;
+                }
+            };
+            match execute_best_swap(&api_token, token_mint, SOL_MINT, exit_amount, q).await {
+                Ok(res) => {
+                    swap_result = Ok(res);
+                    last_err = None;
+                    break;
+                }
+                Err(e) => {
+                    last_err = Some(format!("Partial exit swap failed at step {} ({}%): {}", i + 1, slippage, e));
+                }
+            }
+        }
+    }
+    let swap_result = match swap_result {
+        Ok(res) => res,
+        Err(e) => {
+            super::state::clear_partial_exit_pending(token_mint).await;
+            return Err(format!("Partial exit swap failed: {}", e));
+        }
+    };
 
     let transaction_signature = swap_result
         .transaction_signature
@@ -733,6 +822,8 @@ pub async fn partial_close_position(
 /// Add to an existing position (Dollar Cost Averaging)
 /// CRITICAL: This does NOT consume a new semaphore permit - same position
 pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<String, String> {
+    // Serialize per-mint DCA operations
+    let _lock = acquire_position_lock(token_mint).await;
     // Get position
     let position = super::state::get_position_by_mint(token_mint)
         .await

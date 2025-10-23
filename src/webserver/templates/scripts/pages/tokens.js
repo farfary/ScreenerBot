@@ -636,6 +636,47 @@ function createLifecycle() {
           wrap: false,
           render: (_v, row) => tokenCell(row),
         },
+          // Conditionally add Actions column for Pool view
+          ...(state.view === "pool"
+            ? [
+                {
+                  id: "actions",
+                  label: "Actions",
+                  sortable: false,
+                  minWidth: 180,
+                  wrap: false,
+                  render: (_v, row) => {
+                    const mint = row?.mint || "";
+                    const isBlacklisted = Boolean(row?.blacklisted);
+                    const hasOpen = Boolean(row?.has_open_position);
+                    const disabledAttr = isBlacklisted ? " disabled aria-disabled=\"true\"" : "";
+
+                    if (!mint) return "—";
+
+                    if (hasOpen) {
+                      return `
+                        <div class="row-actions">
+                          <button class="btn row-action" data-action="add" data-mint="${Utils.escapeHtml(
+                            mint
+                          )}" title="Add to position (DCA)"${disabledAttr}>Add</button>
+                          <button class="btn warning row-action" data-action="sell" data-mint="${Utils.escapeHtml(
+                            mint
+                          )}" title="Sell (full or % partial)"${disabledAttr}>Sell</button>
+                        </div>
+                      `;
+                    }
+
+                    return `
+                      <div class="row-actions">
+                        <button class="btn success row-action" data-action="buy" data-mint="${Utils.escapeHtml(
+                          mint
+                        )}" title="Buy position"${disabledAttr}>Buy</button>
+                      </div>
+                    `;
+                  },
+                },
+              ]
+            : []),
         {
           id: "price_sol",
           label: "Price (SOL)",
@@ -909,6 +950,85 @@ function createLifecycle() {
           ],
         },
       });
+      // Row actions: delegate clicks on the table container
+      const containerEl = document.querySelector("#tokens-root");
+      const handleRowActionClick = async (e) => {
+        const btn = e.target?.closest?.(".row-action");
+        if (!btn) return;
+        const action = btn.getAttribute("data-action");
+        const mint = btn.getAttribute("data-mint");
+        if (!action || !mint) return;
+
+        try {
+          if (action === "buy") {
+            let sizeStr = prompt("Buy size (SOL) — leave empty for default");
+            let size = sizeStr != null && String(sizeStr).trim() !== "" ? Number(sizeStr) : null;
+            if (size != null && (!Number.isFinite(size) || size <= 0)) {
+              return Utils.showToast("Invalid size", "error");
+            }
+            btn.disabled = true;
+            const res = await fetch("/api/trader/manual/buy", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ mint, ...(size ? { size_sol: size } : {}) }),
+            });
+            const data = await res.json();
+            btn.disabled = false;
+            if (!res.ok) throw new Error(data?.error?.message || "Buy failed");
+            Utils.showToast("✅ Buy placed", "success");
+            requestReload("manual", { silent: false, preserveScroll: true }).catch(() => {});
+          } else if (action === "add") {
+            let sizeStr = prompt("Add size (SOL) — leave empty for default (50%)");
+            let size = sizeStr != null && String(sizeStr).trim() !== "" ? Number(sizeStr) : null;
+            if (size != null && (!Number.isFinite(size) || size <= 0)) {
+              return Utils.showToast("Invalid size", "error");
+            }
+            btn.disabled = true;
+            const res = await fetch("/api/trader/manual/add", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ mint, ...(size ? { size_sol: size } : {}) }),
+            });
+            const data = await res.json();
+            btn.disabled = false;
+            if (!res.ok) throw new Error(data?.error?.message || "Add failed");
+            Utils.showToast("✅ Added to position", "success");
+            requestReload("manual", { silent: false, preserveScroll: true }).catch(() => {});
+          } else if (action === "sell") {
+            let pctStr = prompt("Sell percentage (1-100). Leave empty to sell 100%.");
+            let body;
+            if (pctStr == null || String(pctStr).trim() === "") {
+              body = { mint, close_all: true };
+            } else {
+              const pct = Number(pctStr);
+              if (!Number.isFinite(pct) || pct <= 0 || pct > 100) {
+                return Utils.showToast("Invalid percentage", "error");
+              }
+              body = { mint, percentage: pct };
+            }
+            btn.disabled = true;
+            const res = await fetch("/api/trader/manual/sell", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            });
+            const data = await res.json();
+            btn.disabled = false;
+            if (!res.ok) throw new Error(data?.error?.message || "Sell failed");
+            Utils.showToast("✅ Sell placed", "success");
+            requestReload("manual", { silent: false, preserveScroll: true }).catch(() => {});
+          }
+        } catch (err) {
+          btn.disabled = false;
+          Utils.showToast(err?.message || "Action failed", "error");
+        }
+      };
+
+      if (containerEl) {
+        containerEl.addEventListener("click", handleRowActionClick);
+        // Clean up on dispose
+        ctx.addCleanup(() => containerEl.removeEventListener("click", handleRowActionClick));
+      }
       applyViewPreferences();
 
       // Sync state from DataTable's restored server state

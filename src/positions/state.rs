@@ -24,6 +24,11 @@ pub static MINT_TO_POSITION_INDEX: LazyLock<RwLock<HashMap<String, usize>>> =
 static POSITION_LOCKS: LazyLock<RwLock<HashMap<String, Arc<Mutex<()>>>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
 
+// Pending partial exits registry (mint -> count of pending partial exits)
+// We serialize to a single pending at a time, but using a count keeps API flexible
+static PENDING_PARTIAL_EXITS: LazyLock<RwLock<HashMap<String, u32>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
+
 // Pending open-swap registry: guards against duplicate opens when the first swap lands on-chain
 // but local flow fails before persisting a position. Keys are token mints; values are expiry times.
 static PENDING_OPEN_SWAPS: LazyLock<RwLock<HashMap<String, DateTime<Utc>>>> =
@@ -71,6 +76,31 @@ impl Drop for PositionLockGuard {
             );
         }
     }
+}
+
+/// Mark that a partial exit is pending for a mint (increments count)
+pub async fn mark_partial_exit_pending(mint: &str) {
+    let mut map = PENDING_PARTIAL_EXITS.write().await;
+    let counter = map.entry(mint.to_string()).or_insert(0);
+    *counter = counter.saturating_add(1);
+}
+
+/// Clear pending mark for a partial exit for a mint (decrements count and removes if zero)
+pub async fn clear_partial_exit_pending(mint: &str) {
+    let mut map = PENDING_PARTIAL_EXITS.write().await;
+    if let Some(counter) = map.get_mut(mint) {
+        if *counter > 1 {
+            *counter -= 1;
+        } else {
+            map.remove(mint);
+        }
+    }
+}
+
+/// Check if a mint currently has an in-flight partial exit pending
+pub async fn has_partial_exit_pending(mint: &str) -> bool {
+    let map = PENDING_PARTIAL_EXITS.read().await;
+    map.get(mint).copied().unwrap_or(0) > 0
 }
 
 impl PositionLockGuard {

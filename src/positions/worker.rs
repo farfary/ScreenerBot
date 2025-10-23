@@ -79,6 +79,16 @@ pub async fn initialize_positions_system() -> Result<(), String> {
                         unverified_count += 1;
                     }
                 }
+
+                // Rehydrate partial-exit pending registry: if a position has an unverified
+                // exit signature but remains open (no exit_time), mark as pending partial.
+                // Full closure transitions would release the permit; partial exits should not.
+                if position.exit_transaction_signature.is_some()
+                    && !position.transaction_exit_verified
+                    && position.exit_time.is_none()
+                {
+                    super::state::mark_partial_exit_pending(&position.mint).await;
+                }
             }
 
             // Populate state

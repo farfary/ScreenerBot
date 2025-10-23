@@ -22,9 +22,8 @@ pub async fn execute_buy(decision: &TradeDecision) -> Result<TradeResult, String
         .size_sol
         .unwrap_or_else(|| config::get_trade_size_sol());
 
-    // Call positions::open_position_direct to handle the entire entry flow
-    // (it reads trade size from config internally)
-    match positions::open_position_direct(&decision.mint).await {
+    // Call positions open with size so manual size is honored
+    match positions::open_position_with_size(&decision.mint, trade_size_sol).await {
         Ok(transaction_signature) => {
             log(
                 LogTag::Trader,
