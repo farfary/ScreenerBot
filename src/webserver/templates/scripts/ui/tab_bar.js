@@ -335,10 +335,39 @@ export class TabBar {
     });
   }
 
+  _remountButtons() {
+    if (!this.mounted) return;
+
+    // Regenerate HTML for current tabs
+    const html = this.tabs
+      .map((tab) => {
+        const active = tab.id === this.activeTab;
+        return `
+          <button
+            class="sub-tab"
+            data-tab-id="${this._escapeHtml(tab.id)}"
+            role="tab"
+            aria-selected="${active}"
+            tabindex="${active ? "0" : "-1"}"
+            type="button"
+          >
+            ${this._escapeHtml(tab.label)}
+          </button>
+        `;
+      })
+      .join("");
+
+    // Update container content
+    this.container.innerHTML = html;
+  }
+
   show(options = {}) {
     const { silent = false } = options;
 
     if (this.visible) return;
+
+    // Remount to ensure correct buttons are displayed (important for shared containers)
+    this._remountButtons();
 
     this.container.style.display = "flex";
     this.visible = true;
@@ -360,6 +389,10 @@ export class TabBar {
 
     this.container.style.display = "none";
     this.visible = false;
+
+    // Clear container content when hiding to prevent visual artifacts
+    // This is important for shared containers across pages
+    this.container.innerHTML = "";
 
     if (!silent) {
       this.context.emit("hide");
