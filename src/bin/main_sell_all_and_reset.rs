@@ -745,6 +745,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ),
     );
 
+    // Initialize configuration
+    log(
+        LogTag::System,
+        "INFO",
+        "Loading configuration...",
+    );
+    if let Err(e) = screenerbot::config::load_config() {
+        log(
+            LogTag::System,
+            "ERROR",
+            &format!("Failed to load configuration: {}", e),
+        );
+        std::process::exit(1);
+    }
+
     let wallet_address = match get_wallet_address() {
         Ok(addr) => addr,
         Err(e) => {
