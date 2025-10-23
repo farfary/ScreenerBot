@@ -134,8 +134,9 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
             LogTag::Positions,
             "DRY-RUN",
             &format!(
-                "🚫 DRY-RUN: Would open position for {} at {:.6} SOL",
-                api_token.symbol, entry_price
+                "🚫 DRY-RUN: Would open position for {} at {} SOL",
+                api_token.symbol,
+                crate::utils::format_price_adaptive(entry_price)
             ),
         );
         return Err("DRY-RUN: Position would be opened".to_string());
@@ -339,8 +340,7 @@ pub async fn close_position_direct(
 
     // RACE CONDITION PREVENTION: Check if position already has pending exit
     if let Some(existing_position) = super::state::get_position_by_mint(token_mint).await {
-        if existing_position.exit_transaction_signature.is_some() {
-            let pending_sig = existing_position.exit_transaction_signature.unwrap();
+        if let Some(pending_sig) = &existing_position.exit_transaction_signature {
             log(
                 LogTag::Positions,
                 "RACE_PREVENTION",

@@ -14,18 +14,49 @@ pub async fn update_position_tracking(
         return false;
     }
 
-    // Try to acquire lock with timeout to avoid blocking
-    let lock_result = tokio::time::timeout(
-        Duration::from_millis(100),
-        super::state::acquire_position_lock(mint),
-    )
-    .await;
+    // Try to acquire lock with retry and exponential backoff
+    const MAX_RETRIES: u32 = 3;
+    const BASE_TIMEOUT_MS: u64 = 100;
+    
+    let mut _lock = None;
+    
+    for attempt in 1..=MAX_RETRIES {
+        let timeout_ms = BASE_TIMEOUT_MS * attempt as u64;
+        let lock_result = tokio::time::timeout(
+            Duration::from_millis(timeout_ms),
+            super::state::acquire_position_lock(mint),
+        )
+        .await;
 
-    let _lock = match lock_result {
-        Ok(lock) => lock,
-        Err(_) => {
-            return false;
-        } // Don't block tracking updates
+        match lock_result {
+            Ok(lock) => {
+                _lock = Some(lock);
+                break;
+            }
+            Err(_) if attempt < MAX_RETRIES => {
+                // Brief pause before retry
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                continue;
+            }
+            Err(_) => {
+                if is_debug_positions_enabled() {
+                    crate::logger::log(
+                        crate::logger::LogTag::Positions,
+                        "WARN",
+                        &format!(
+                            "⚠️ Failed to acquire position lock for price update after {} attempts (mint={})",
+                            MAX_RETRIES, mint
+                        ),
+                    );
+                }
+                return false;
+            }
+        }
+    }
+    
+    let _lock = match _lock {
+        Some(lock) => lock,
+        None => return false,
     };
 
     let mut needs_update = false;

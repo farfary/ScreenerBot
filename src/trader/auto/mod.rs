@@ -23,6 +23,20 @@ pub async fn start_auto_trading(
 ) -> Result<(), String> {
     log(LogTag::Trader, "INFO", "Starting auto trading monitors...");
 
+    // Record auto trading start event
+    crate::events::record_safe(crate::events::Event::new(
+        crate::events::EventCategory::Trader,
+        Some("auto_trading_started".to_string()),
+        crate::events::Severity::Info,
+        None,
+        None,
+        serde_json::json!({
+            "system": "auto_trading",
+            "message": "Auto trading monitors starting up",
+        }),
+    ))
+    .await;
+
     // Clone shutdown receiver for multiple tasks
     let entry_shutdown = shutdown.clone();
     let exit_shutdown = shutdown.clone();
@@ -35,6 +49,20 @@ pub async fn start_auto_trading(
                 "ERROR",
                 &format!("Entry monitor error: {}", e),
             );
+            
+            // Record entry monitor error
+            crate::events::record_safe(crate::events::Event::new(
+                crate::events::EventCategory::Trader,
+                Some("entry_monitor_error".to_string()),
+                crate::events::Severity::Error,
+                None,
+                None,
+                serde_json::json!({
+                    "monitor": "entry",
+                    "error": e.to_string(),
+                }),
+            ))
+            .await;
         }
     });
 
@@ -46,6 +74,20 @@ pub async fn start_auto_trading(
                 "ERROR",
                 &format!("Exit monitor error: {}", e),
             );
+            
+            // Record exit monitor error
+            crate::events::record_safe(crate::events::Event::new(
+                crate::events::EventCategory::Trader,
+                Some("exit_monitor_error".to_string()),
+                crate::events::Severity::Error,
+                None,
+                None,
+                serde_json::json!({
+                    "monitor": "exit",
+                    "error": e.to_string(),
+                }),
+            ))
+            .await;
         }
     });
 
@@ -53,5 +95,20 @@ pub async fn start_auto_trading(
     let _ = tokio::try_join!(entry_task, exit_task);
 
     log(LogTag::Trader, "INFO", "Auto trading monitors stopped");
+    
+    // Record auto trading stop event
+    crate::events::record_safe(crate::events::Event::new(
+        crate::events::EventCategory::Trader,
+        Some("auto_trading_stopped".to_string()),
+        crate::events::Severity::Info,
+        None,
+        None,
+        serde_json::json!({
+            "system": "auto_trading",
+            "message": "Auto trading monitors stopped",
+        }),
+    ))
+    .await;
+    
     Ok(())
 }

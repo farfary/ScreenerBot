@@ -100,6 +100,52 @@ pub fn format_mint_for_log(mint: &str) -> String {
     format!("{}...", mint)
 }
 
+/// Format price with adaptive precision for Solana tokens
+/// 
+/// Solana tokens can have prices with 12+ decimal places (e.g., 0.000000001234567890).
+/// This function uses adaptive formatting to preserve precision:
+/// - Very small prices (< 1e-6): scientific notation with 15 decimals
+/// - Small prices (< 0.01): 12 decimal places
+/// - Medium prices (< 1.0): 9 decimal places
+/// - Larger prices: 6 decimal places
+///
+/// # Arguments
+/// * `price` - Price value in SOL or USD
+///
+/// # Returns
+/// Formatted string with appropriate precision
+///
+/// # Example
+/// ```
+/// use screenerbot::utils::format_price_adaptive;
+///
+/// assert_eq!(format_price_adaptive(0.00000000123), "1.230000000000000e-9");
+/// assert_eq!(format_price_adaptive(0.000123), "0.000123000000");
+/// assert_eq!(format_price_adaptive(0.123), "0.123000000");
+/// assert_eq!(format_price_adaptive(123.456), "123.456000");
+/// ```
+pub fn format_price_adaptive(price: f64) -> String {
+    if !price.is_finite() {
+        return price.to_string(); // Handle NaN/Inf
+    }
+    
+    let abs_price = price.abs();
+    
+    if abs_price < 1e-6 {
+        // Very small: use scientific notation
+        format!("{:.15e}", price)
+    } else if abs_price < 0.01 {
+        // Small: 12 decimals
+        format!("{:.12}", price)
+    } else if abs_price < 1.0 {
+        // Medium: 9 decimals
+        format!("{:.9}", price)
+    } else {
+        // Large: 6 decimals
+        format!("{:.6}", price)
+    }
+}
+
 // Re-export SwapResult for convenience
 pub use crate::swaps::SwapResult;
 

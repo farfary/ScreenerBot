@@ -442,22 +442,31 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     pos.total_size_sol += sol_spent;
                     
                     // Recalculate average entry price (weighted average) with actual decimals
-                    // CRITICAL: Check for zero tokens to prevent division by zero
+                    // CRITICAL: Validate all inputs to prevent division by zero or invalid calculations
                     let remaining_tokens = pos.remaining_token_amount.unwrap_or(0);
-                    if remaining_tokens > 0 {
+                    if remaining_tokens > 0 && pos.total_size_sol > 0.0 && pos.total_size_sol.is_finite() {
                         let total_tokens_normalized = remaining_tokens as f64 
                             / 10_f64.powi(decimals as i32);
-                        if total_tokens_normalized > 0.0 {
+                        if total_tokens_normalized > 0.0 && total_tokens_normalized.is_finite() {
                             pos.average_entry_price = pos.total_size_sol / total_tokens_normalized;
+                        } else {
+                            log(
+                                LogTag::Positions,
+                                "ERROR",
+                                &format!(
+                                    "⚠️ DCA: Invalid token normalization for position {} (remaining={}, decimals={})",
+                                    position_id, remaining_tokens, decimals
+                                ),
+                            );
                         }
                     } else {
-                        // Edge case: DCA happened but no remaining tokens (should never happen)
+                        // Edge case: Invalid state for average price calculation
                         log(
                             LogTag::Positions,
                             "ERROR",
                             &format!(
-                                "⚠️ DCA verified but remaining_token_amount is 0 for position {}",
-                                position_id
+                                "⚠️ DCA: Invalid position state for average price calculation - position_id={}, remaining_tokens={}, total_size_sol={}",
+                                position_id, remaining_tokens, pos.total_size_sol
                             ),
                         );
                     }

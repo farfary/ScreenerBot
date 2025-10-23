@@ -100,7 +100,7 @@ pub async fn get_best_quote(
     let gmgn_enabled = with_config(|cfg| cfg.swaps.gmgn.enabled);
     let jupiter_enabled = with_config(|cfg| cfg.swaps.jupiter.enabled);
 
-    // Prepare GMGN quote future
+    // Prepare GMGN quote future with timeout
     if gmgn_enabled {
         log(
             LogTag::Swap,
@@ -108,17 +108,23 @@ pub async fn get_best_quote(
             "🔵 Starting GMGN quote request...",
         );
         let gmgn_future = async {
-            match gmgn::get_gmgn_quote(
-                input_mint,
-                output_mint,
-                input_amount,
-                from_address,
-                slippage,
-                swap_mode,
+            // Apply 15-second timeout to GMGN quote
+            let quote_result = tokio::time::timeout(
+                tokio::time::Duration::from_secs(15),
+                gmgn::get_gmgn_quote(
+                    input_mint,
+                    output_mint,
+                    input_amount,
+                    from_address,
+                    slippage,
+                    swap_mode,
+                ),
             )
-            .await
-            {
-                Ok(gmgn_data) => {
+            .await;
+
+            match quote_result {
+                Ok(Ok(gmgn_data)) => {
+                    // Quote succeeded within timeout
                     let unified_quote = UnifiedQuote {
                         router: RouterType::GMGN,
                         input_mint: input_mint.to_string(),
@@ -149,13 +155,26 @@ pub async fn get_best_quote(
 
                     Ok(unified_quote)
                 }
-                Err(e) => {
+                Ok(Err(e)) => {
+                    // Quote failed (API error, not timeout)
                     log(
                         LogTag::Swap,
                         "QUOTE_GMGN_ERROR",
                         &format!("❌ GMGN quote failed: {}", e),
                     );
                     Err(e)
+                }
+                Err(_timeout) => {
+                    // Quote timed out - use network error
+                    let error = ScreenerBotError::network_error(
+                        "GMGN quote request exceeded 15 second timeout",
+                    );
+                    log(
+                        LogTag::Swap,
+                        "QUOTE_GMGN_TIMEOUT",
+                        "⏰ GMGN quote timed out after 15s",
+                    );
+                    Err(error)
                 }
             }
         };
@@ -168,7 +187,7 @@ pub async fn get_best_quote(
         );
     }
 
-    // Prepare Jupiter quote future
+    // Prepare Jupiter quote future with timeout
     if jupiter_enabled {
         log(
             LogTag::Swap,
@@ -176,16 +195,22 @@ pub async fn get_best_quote(
             "🟡 Starting Jupiter quote request...",
         );
         let jupiter_future = async {
-            match jupiter::get_jupiter_quote(
-                input_mint,
-                output_mint,
-                input_amount,
-                slippage,
-                swap_mode,
+            // Apply 15-second timeout to Jupiter quote
+            let quote_result = tokio::time::timeout(
+                tokio::time::Duration::from_secs(15),
+                jupiter::get_jupiter_quote(
+                    input_mint,
+                    output_mint,
+                    input_amount,
+                    slippage,
+                    swap_mode,
+                ),
             )
-            .await
-            {
-                Ok(jupiter_data) => {
+            .await;
+
+            match quote_result {
+                Ok(Ok(jupiter_data)) => {
+                    // Quote succeeded within timeout
                     let unified_quote = UnifiedQuote {
                         router: RouterType::Jupiter,
                         input_mint: input_mint.to_string(),
@@ -221,13 +246,26 @@ pub async fn get_best_quote(
 
                     Ok(unified_quote)
                 }
-                Err(e) => {
+                Ok(Err(e)) => {
+                    // Quote failed (API error, not timeout)
                     log(
                         LogTag::Swap,
                         "QUOTE_JUPITER_ERROR",
                         &format!("❌ Jupiter quote failed: {}", e),
                     );
                     Err(e)
+                }
+                Err(_timeout) => {
+                    // Quote timed out - use network error
+                    let error = ScreenerBotError::network_error(
+                        "Jupiter quote request exceeded 15 second timeout",
+                    );
+                    log(
+                        LogTag::Swap,
+                        "QUOTE_JUPITER_TIMEOUT",
+                        "⏰ Jupiter quote timed out after 15s",
+                    );
+                    Err(error)
                 }
             }
         };

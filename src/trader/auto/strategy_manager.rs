@@ -83,9 +83,28 @@ impl StrategyManager {
             Err(_timeout) => {
                 log(
                     LogTag::Trader,
-                    "WARNING",
-                    &format!("⏰ Strategy evaluation timeout for {} (exceeded {}s)", token_mint, strategy_timeout.as_secs()),
+                    "ERROR",
+                    &format!(
+                        "⚠️ STRATEGY_TIMEOUT: Entry evaluation for {} exceeded {}s - Consider increasing timeout or optimizing strategies. This timeout is distinct from 'no signal' case.",
+                        token_mint,
+                        strategy_timeout.as_secs()
+                    ),
                 );
+                
+                // Record event for metrics tracking
+                crate::events::record_safe(crate::events::Event::new(
+                    crate::events::EventCategory::Entry,
+                    Some("strategy_evaluation_timeout".to_string()),
+                    crate::events::Severity::Error,
+                    Some(token_mint.to_string()),
+                    None,
+                    serde_json::json!({
+                        "timeout_seconds": strategy_timeout.as_secs(),
+                        "evaluation_type": "entry",
+                    }),
+                ))
+                .await;
+                
                 Ok(None) // Skip this token on timeout
             }
         }
@@ -178,12 +197,30 @@ impl StrategyManager {
             Err(_timeout) => {
                 log(
                     LogTag::Trader,
-                    "WARNING",
+                    "ERROR",
                     &format!(
-                        "⏰ Strategy evaluation timeout for position {:?} (exceeded {}s)",
-                        position.id, strategy_timeout.as_secs()
+                        "⚠️ STRATEGY_TIMEOUT: Exit evaluation for position {:?} (mint={}) exceeded {}s - Consider increasing timeout or optimizing strategies. This timeout is distinct from 'no signal' case.",
+                        position.id,
+                        position.mint,
+                        strategy_timeout.as_secs()
                     ),
                 );
+                
+                // Record event for metrics tracking
+                crate::events::record_safe(crate::events::Event::new(
+                    crate::events::EventCategory::Position,
+                    Some("strategy_evaluation_timeout".to_string()),
+                    crate::events::Severity::Error,
+                    Some(position.mint.clone()),
+                    None,
+                    serde_json::json!({
+                        "timeout_seconds": strategy_timeout.as_secs(),
+                        "evaluation_type": "exit",
+                        "position_id": position.id,
+                    }),
+                ))
+                .await;
+                
                 Ok(None) // Skip this position on timeout
             }
         }

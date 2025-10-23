@@ -21,6 +21,20 @@ pub async fn monitor_entries(
 ) -> Result<(), String> {
     log(LogTag::Trader, "INFO", "Starting entry opportunity monitor");
 
+    // Record monitor start event
+    crate::events::record_safe(crate::events::Event::new(
+        crate::events::EventCategory::Trader,
+        Some("entry_monitor_started".to_string()),
+        crate::events::Severity::Info,
+        None,
+        None,
+        serde_json::json!({
+            "monitor": "entry",
+            "message": "Entry opportunity monitor started",
+        }),
+    ))
+    .await;
+
     // Create semaphore for concurrent entry checks
     let entry_check_concurrency = config::get_entry_check_concurrency();
     let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(entry_check_concurrency));
@@ -136,29 +150,78 @@ pub async fn monitor_entries(
         // Collect results and process trade decisions
         for future in futures {
             if let Ok(Some(decision)) = future.await {
+                // Record entry signal event
+                crate::events::record_safe(crate::events::Event::new(
+                    crate::events::EventCategory::Trader,
+                    Some("entry_signal_generated".to_string()),
+                    crate::events::Severity::Info,
+                    Some(decision.mint.clone()),
+                    None,
+                    serde_json::json!({
+                        "action": "entry_signal",
+                        "mint": decision.mint,
+                        "strategy_id": decision.strategy_id,
+                        "reason": format!("{:?}", decision.reason),
+                        "priority": format!("{:?}", decision.priority),
+                    }),
+                ))
+                .await;
+
                 // Execute the trade
                 match execute_trade(&decision).await {
                     Ok(result) => {
                         if result.success {
+                            let tx_sig = result.tx_signature.clone();
                             log(
                                 LogTag::Trader,
                                 "SUCCESS",
                                 &format!(
                                     "Entry executed for {}: tx={}",
                                     decision.mint,
-                                    result.tx_signature.unwrap_or_default()
+                                    tx_sig.clone().unwrap_or_default()
                                 ),
                             );
+                            
+                            // Record successful entry event
+                            crate::events::record_safe(crate::events::Event::new(
+                                crate::events::EventCategory::Trader,
+                                Some("entry_executed".to_string()),
+                                crate::events::Severity::Info,
+                                Some(decision.mint.clone()),
+                                tx_sig.clone(),
+                                serde_json::json!({
+                                    "success": true,
+                                    "mint": decision.mint,
+                                    "tx_signature": tx_sig,
+                                }),
+                            ))
+                            .await;
                         } else {
+                            let error_msg = result.error.clone().unwrap_or_default();
                             log(
                                 LogTag::Trader,
                                 "ERROR",
                                 &format!(
                                     "Entry failed for {}: {}",
                                     decision.mint,
-                                    result.error.unwrap_or_default()
+                                    error_msg
                                 ),
                             );
+                            
+                            // Record failed entry event
+                            crate::events::record_safe(crate::events::Event::new(
+                                crate::events::EventCategory::Trader,
+                                Some("entry_failed".to_string()),
+                                crate::events::Severity::Error,
+                                Some(decision.mint.clone()),
+                                None,
+                                serde_json::json!({
+                                    "success": false,
+                                    "mint": decision.mint,
+                                    "error": result.error,
+                                }),
+                            ))
+                            .await;
                         }
                     }
                     Err(e) => {
@@ -167,6 +230,20 @@ pub async fn monitor_entries(
                             "ERROR",
                             &format!("Failed to execute entry for {}: {}", decision.mint, e),
                         );
+                        
+                        // Record execution error event
+                        crate::events::record_safe(crate::events::Event::new(
+                            crate::events::EventCategory::Trader,
+                            Some("entry_execution_error".to_string()),
+                            crate::events::Severity::Error,
+                            Some(decision.mint.clone()),
+                            None,
+                            serde_json::json!({
+                                "mint": decision.mint,
+                                "error": e.to_string(),
+                            }),
+                        ))
+                        .await;
                     }
                 }
             }

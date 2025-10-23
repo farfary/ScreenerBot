@@ -93,6 +93,53 @@ pub fn reload_config() -> Result<(), String> {
     reload_config_from_path(CONFIG_FILE_PATH)
 }
 
+/// Validate configuration values before applying
+///
+/// # Arguments
+/// * `config` - Configuration to validate
+///
+/// # Returns
+/// - `Ok(())` - Configuration is valid
+/// - `Err(String)` - Validation error message
+fn validate_config(config: &Config) -> Result<(), String> {
+    // Trader validation
+    if config.trader.max_open_positions == 0 {
+        return Err("trader.max_open_positions must be greater than 0".to_string());
+    }
+    if config.trader.trade_size_sol <= 0.0 {
+        return Err("trader.trade_size_sol must be greater than 0".to_string());
+    }
+    if !config.trader.trade_size_sol.is_finite() {
+        return Err("trader.trade_size_sol must be a finite number".to_string());
+    }
+
+    // Positions validation
+    if config.positions.profit_extra_needed_sol < 0.0 || !config.positions.profit_extra_needed_sol.is_finite() {
+        return Err("positions.profit_extra_needed_sol must be non-negative and finite".to_string());
+    }
+    if config.positions.position_open_cooldown_secs < 0 {
+        return Err("positions.position_open_cooldown_secs cannot be negative".to_string());
+    }
+
+    // Slippage validation
+    if config.swaps.slippage.quote_default_pct < 0.0 || config.swaps.slippage.quote_default_pct > 100.0 {
+        return Err("swaps.slippage.quote_default_pct must be between 0 and 100".to_string());
+    }
+    if config.swaps.slippage.exit_profit_shortfall_pct < 0.0 || config.swaps.slippage.exit_profit_shortfall_pct > 100.0 {
+        return Err("swaps.slippage.exit_profit_shortfall_pct must be between 0 and 100".to_string());
+    }
+    if config.swaps.slippage.exit_loss_shortfall_pct < 0.0 || config.swaps.slippage.exit_loss_shortfall_pct > 100.0 {
+        return Err("swaps.slippage.exit_loss_shortfall_pct must be between 0 and 100".to_string());
+    }
+
+    // RPC validation
+    if config.rpc.urls.is_empty() {
+        return Err("rpc.urls cannot be empty - at least one RPC endpoint is required".to_string());
+    }
+
+    Ok(())
+}
+
 /// Reload configuration from a specific file path
 ///
 /// # Arguments
@@ -107,6 +154,9 @@ pub fn reload_config_from_path(path: &str) -> Result<(), String> {
 
     let new_config = toml::from_str::<Config>(&contents)
         .map_err(|e| format!("Failed to parse config file '{}': {}", path, e))?;
+
+    // Validate configuration before applying
+    validate_config(&new_config)?;
 
     if let Some(config_lock) = CONFIG.get() {
         let mut config = config_lock

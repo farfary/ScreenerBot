@@ -21,6 +21,20 @@ pub async fn monitor_positions(
 ) -> Result<(), String> {
     log(LogTag::Trader, "INFO", "Starting position monitor");
 
+    // Record monitor start event
+    crate::events::record_safe(crate::events::Event::new(
+        crate::events::EventCategory::Trader,
+        Some("exit_monitor_started".to_string()),
+        crate::events::Severity::Info,
+        None,
+        None,
+        serde_json::json!({
+            "monitor": "exit",
+            "message": "Exit/position monitor started",
+        }),
+    ))
+    .await;
+
     loop {
         // Check if we should shutdown
         if *shutdown.borrow() {
@@ -157,6 +171,23 @@ pub async fn monitor_positions(
                         "SIGNAL",
                         &format!("📉 Trailing stop triggered for {}", fresh_position.symbol),
                     );
+                    
+                    // Record exit signal event
+                    crate::events::record_safe(crate::events::Event::new(
+                        crate::events::EventCategory::Trader,
+                        Some("exit_signal_trailing_stop".to_string()),
+                        crate::events::Severity::Info,
+                        Some(fresh_position.mint.clone()),
+                        None,
+                        serde_json::json!({
+                            "exit_type": "trailing_stop",
+                            "mint": fresh_position.mint,
+                            "symbol": fresh_position.symbol,
+                            "current_price": current_price,
+                        }),
+                    ))
+                    .await;
+                    
                     if let Err(e) = execute_trade(&decision).await {
                         log(
                             LogTag::Trader,
@@ -184,6 +215,22 @@ pub async fn monitor_positions(
                         "SIGNAL",
                         &format!("🎯 ROI target reached for {}", fresh_position.symbol),
                     );
+                    
+                    // Record ROI exit signal event
+                    crate::events::record_safe(crate::events::Event::new(
+                        crate::events::EventCategory::Trader,
+                        Some("exit_signal_roi_target".to_string()),
+                        crate::events::Severity::Info,
+                        Some(fresh_position.mint.clone()),
+                        None,
+                        serde_json::json!({
+                            "exit_type": "roi_target",
+                            "mint": fresh_position.mint,
+                            "symbol": fresh_position.symbol,
+                            "current_price": current_price,
+                        }),
+                    ))
+                    .await;
                     if let Err(e) = execute_trade(&decision).await {
                         log(
                             LogTag::Trader,
@@ -211,6 +258,23 @@ pub async fn monitor_positions(
                         "SIGNAL",
                         &format!("⏰ Time override triggered for {}", position.symbol),
                     );
+                    
+                    // Record time override exit signal event
+                    crate::events::record_safe(crate::events::Event::new(
+                        crate::events::EventCategory::Trader,
+                        Some("exit_signal_time_override".to_string()),
+                        crate::events::Severity::Info,
+                        Some(fresh_position.mint.clone()),
+                        None,
+                        serde_json::json!({
+                            "exit_type": "time_override",
+                            "mint": fresh_position.mint,
+                            "symbol": fresh_position.symbol,
+                            "current_price": current_price,
+                        }),
+                    ))
+                    .await;
+                    
                     if let Err(e) = execute_trade(&decision).await {
                         log(
                             LogTag::Trader,
@@ -241,6 +305,23 @@ pub async fn monitor_positions(
                             fresh_position.symbol, decision.strategy_id
                         ),
                     );
+                    
+                    // Record strategy exit signal event
+                    crate::events::record_safe(crate::events::Event::new(
+                        crate::events::EventCategory::Trader,
+                        Some("exit_signal_strategy".to_string()),
+                        crate::events::Severity::Info,
+                        Some(fresh_position.mint.clone()),
+                        None,
+                        serde_json::json!({
+                            "exit_type": "strategy",
+                            "mint": fresh_position.mint,
+                            "symbol": fresh_position.symbol,
+                            "strategy_id": decision.strategy_id,
+                            "current_price": current_price,
+                        }),
+                    ))
+                    .await;
                     if let Err(e) = execute_trade(&decision).await {
                         log(
                             LogTag::Trader,

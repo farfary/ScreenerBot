@@ -5609,18 +5609,30 @@ pub fn init_rpc_client() -> Result<&'static RpcClient, String> {
         if let Some(error) = init_error {
             Err(error)
         } else {
-            Ok(GLOBAL_RPC_CLIENT.as_ref().unwrap())
+            GLOBAL_RPC_CLIENT
+                .as_ref()
+                .ok_or_else(|| "RPC client initialization failed: client is None after init".to_string())
+                .map(|client| client as &'static RpcClient)
         }
     }
 }
 
 /// Get global RPC client instance
+/// 
+/// # Panics
+/// Panics if RPC client is not initialized. This should only be called after startup.
+/// For initialization-safe code, use `init_rpc_client()` first.
 pub fn get_rpc_client() -> &'static RpcClient {
     unsafe {
         if GLOBAL_RPC_CLIENT.is_none() {
-            let _ = init_rpc_client(); // Initialize if not already done
+            match init_rpc_client() {
+                Ok(client) => return client,
+                Err(e) => panic!("Failed to initialize RPC client: {}", e),
+            }
         }
-        GLOBAL_RPC_CLIENT.as_ref().unwrap()
+        GLOBAL_RPC_CLIENT
+            .as_ref()
+            .expect("RPC client must be initialized at this point in program flow")
     }
 }
 
