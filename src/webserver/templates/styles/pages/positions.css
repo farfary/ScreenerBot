@@ -43,3 +43,33 @@
   color: var(--text-secondary);
   font-size: 0.85rem;
 }
+
+/* Row actions buttons */
+.row-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.row-actions .btn {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  min-width: 60px;
+}
+
+.row-actions .btn.warning {
+  background: var(--badge-error);
+  color: #ffffff;
+}
+
+.row-actions .btn.warning:hover {
+  background: #dc2626;
+}
+
+.row-actions .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+

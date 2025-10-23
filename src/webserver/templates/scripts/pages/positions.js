@@ -1,3 +1,4 @@
+/* global prompt */
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import * as Utils from "../core/utils.js";
@@ -21,14 +22,14 @@ function createLifecycle() {
   };
 
   const tokenCell = (row) => {
-    const logo = row.logo_url || "";
+    const logo = row.logo_url || row.image_url || "";
     const symbol = row.symbol || "?";
     const name = row.name || "";
     const logoHtml = logo
       ? `<img class="token-logo" src="${Utils.escapeHtml(logo)}" alt="${Utils.escapeHtml(
           symbol
         )}"/>`
-      : `<span class="token-logo">🪙</span>`;
+      : '<span class="token-logo">🪙</span>';
     return `<div class="position-token">${logoHtml}<div>
       <div class="token-symbol">${Utils.escapeHtml(symbol)}</div>
       <div class="token-name">${Utils.escapeHtml(name)}</div>
@@ -49,6 +50,30 @@ function createLifecycle() {
       minWidth: 180,
       wrap: false,
       render: (_v, r) => tokenCell(r),
+    },
+    {
+      id: "actions",
+      label: "Actions",
+      sortable: false,
+      minWidth: 180,
+      wrap: false,
+      render: (_v, row) => {
+        const mint = row?.mint || "";
+        const isOpen = !row?.transaction_exit_verified;
+        
+        if (!mint || !isOpen) return "—";
+
+        return `
+          <div class="row-actions">
+            <button class="btn row-action" data-action="add" data-mint="${Utils.escapeHtml(
+              mint
+            )}" title="Add to position (DCA)">Add</button>
+            <button class="btn warning row-action" data-action="sell" data-mint="${Utils.escapeHtml(
+              mint
+            )}" title="Sell (full or % partial)">Sell</button>
+          </div>
+        `;
+      },
     },
     {
       id: "entry_price",
@@ -284,6 +309,68 @@ function createLifecycle() {
       });
 
       updateToolbar();
+
+      // Row actions: delegate clicks on the table container
+      const containerEl = document.querySelector("#positions-root");
+      const handleRowActionClick = async (e) => {
+        const btn = e.target?.closest?.(".row-action");
+        if (!btn) return;
+        const action = btn.getAttribute("data-action");
+        const mint = btn.getAttribute("data-mint");
+        if (!action || !mint) return;
+
+        try {
+          if (action === "add") {
+            let sizeStr = prompt("Add size (SOL) — leave empty for default (50%)");
+            let size = sizeStr != null && String(sizeStr).trim() !== "" ? Number(sizeStr) : null;
+            if (size != null && (!Number.isFinite(size) || size <= 0)) {
+              return Utils.showToast("Invalid size", "error");
+            }
+            btn.disabled = true;
+            const res = await fetch("/api/trader/manual/add", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ mint, ...(size ? { size_sol: size } : {}) }),
+            });
+            const data = await res.json();
+            btn.disabled = false;
+            if (!res.ok) throw new Error(data?.error?.message || "Add failed");
+            Utils.showToast("✅ Added to position", "success");
+            table.refresh({ reason: "manual", preserveScroll: true });
+          } else if (action === "sell") {
+            let pctStr = prompt("Sell percentage (1-100). Leave empty to sell 100%.");
+            let body;
+            if (pctStr == null || String(pctStr).trim() === "") {
+              body = { mint, close_all: true };
+            } else {
+              const pct = Number(pctStr);
+              if (!Number.isFinite(pct) || pct <= 0 || pct > 100) {
+                return Utils.showToast("Invalid percentage", "error");
+              }
+              body = { mint, percentage: pct };
+            }
+            btn.disabled = true;
+            const res = await fetch("/api/trader/manual/sell", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            });
+            const data = await res.json();
+            btn.disabled = false;
+            if (!res.ok) throw new Error(data?.error?.message || "Sell failed");
+            Utils.showToast("✅ Sell placed", "success");
+            table.refresh({ reason: "manual", preserveScroll: true });
+          }
+        } catch (err) {
+          btn.disabled = false;
+          Utils.showToast(err?.message || "Action failed", "error");
+        }
+      };
+
+      if (containerEl) {
+        containerEl.addEventListener("click", handleRowActionClick);
+        ctx.addCleanup(() => containerEl.removeEventListener("click", handleRowActionClick));
+      }
     },
 
     activate(ctx) {

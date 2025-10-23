@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use crate::logger::{log, LogTag};
 use crate::positions;
+use crate::tokens;
 // Security database deprecated; security info is on Token when available
 // Use crate::tokens::store accessors for token data
 use crate::transactions::{
@@ -34,6 +35,7 @@ pub struct PositionResponse {
     pub mint: String,
     pub symbol: String,
     pub name: String,
+    pub logo_url: Option<String>,
     pub entry_price: f64,
     pub entry_time: i64, // Unix timestamp
     pub exit_price: Option<f64>,
@@ -197,13 +199,23 @@ pub async fn load_positions_with_filters(
         filtered_positions.truncate(limit);
     }
 
-    filtered_positions
-        .iter()
-        .map(map_position_to_response)
-        .collect()
+    // Map positions to responses with logo fetching
+    let mut responses = Vec::new();
+    for position in filtered_positions.iter() {
+        let response = map_position_to_response_async(position).await;
+        responses.push(response);
+    }
+    responses
 }
 
-fn map_position_to_response(p: &positions::Position) -> PositionResponse {
+async fn map_position_to_response_async(p: &positions::Position) -> PositionResponse {
+    // Fetch logo from tokens database
+    let logo_url = match tokens::database::get_full_token_async(&p.mint).await {
+        Ok(Some(token)) => token.image_url.clone(),
+        Ok(None) => None,
+        Err(_) => None,
+    };
+
     let entry_time_ts = p.entry_time.timestamp();
     let exit_time_ts = p.exit_time.map(|dt| dt.timestamp());
     let current_price_updated_ts = p.current_price_updated.map(|dt| dt.timestamp());
@@ -251,6 +263,7 @@ fn map_position_to_response(p: &positions::Position) -> PositionResponse {
         mint: p.mint.clone(),
         symbol: p.symbol.clone(),
         name: p.name.clone(),
+        logo_url,
         entry_price: p.entry_price,
         entry_time: entry_time_ts,
         exit_price: p.exit_price,
@@ -288,7 +301,7 @@ fn map_position_to_response(p: &positions::Position) -> PositionResponse {
 async fn get_position_details(Path(key): Path<String>) -> Response {
     match resolve_position_by_key(&key).await {
         Ok(Some(position)) => {
-            let detail = map_position_to_detail(&position);
+            let detail = map_position_to_detail(&position).await;
             let executions = build_execution_rows(&position);
             let transactions = build_transaction_summaries(&position).await;
             let state_history = load_state_history_entries(&position).await;
@@ -339,9 +352,9 @@ async fn resolve_position_by_key(key: &str) -> Result<Option<positions::Position
     positions::db::get_position_by_mint(key).await
 }
 
-fn map_position_to_detail(position: &positions::Position) -> PositionDetail {
+async fn map_position_to_detail(position: &positions::Position) -> PositionDetail {
     PositionDetail {
-        summary: map_position_to_response(position),
+        summary: map_position_to_response_async(position).await,
         phantom_remove: position.phantom_remove,
         phantom_first_seen: position.phantom_first_seen.map(|dt| dt.timestamp()),
     }
