@@ -138,7 +138,10 @@ pub async fn get(mint: &str) -> Option<u8> {
 
     logger::warning(
         LogTag::Tokens,
-        &format!("Unable to resolve decimals after all fallbacks: mint={}", mint),
+        &format!(
+            "Unable to resolve decimals after all fallbacks: mint={}",
+            mint
+        ),
     );
     mark_failure(mint);
     drop(guard);

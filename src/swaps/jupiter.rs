@@ -67,7 +67,10 @@ pub async fn jupiter_sign_and_send_transaction(
         ),
     );
 
-    logger::debug(LogTag::Swap, "✍️ Jupiter: Signing transaction with wallet keypair...");
+    logger::debug(
+        LogTag::Swap,
+        "✍️ Jupiter: Signing transaction with wallet keypair...",
+    );
 
     // Get RPC client and sign+send+confirm transaction
     let rpc_client = crate::rpc::get_rpc_client();
@@ -76,7 +79,10 @@ pub async fn jupiter_sign_and_send_transaction(
         .await?;
 
     // Confirmed signature returned
-    logger::debug(LogTag::Swap, &format!("✅ Jupiter: Transaction confirmed: {}", &signature[..8]));
+    logger::debug(
+        LogTag::Swap,
+        &format!("✅ Jupiter: Transaction confirmed: {}", &signature[..8]),
+    );
 
     Ok(signature)
 }
@@ -134,7 +140,10 @@ pub async fn get_jupiter_quote(
 
     logger::debug(LogTag::Swap, &format!("🌐 Jupiter API URL: {}", url));
 
-    logger::debug(LogTag::Swap, &format!("🔗 Final Jupiter URL being called: {}", url));
+    logger::debug(
+        LogTag::Swap,
+        &format!("🔗 Final Jupiter URL being called: {}", url),
+    );
 
     logger::debug(LogTag::Swap, &format!("Jupiter Quote URL: {}", url));
 
@@ -183,7 +192,10 @@ pub async fn get_jupiter_quote(
         ScreenerBotError::network_error(e.to_string())
     })?;
 
-    logger::debug(LogTag::Swap, &format!("📡 Jupiter API Response - Status: {}", response.status()));
+    logger::debug(
+        LogTag::Swap,
+        &format!("📡 Jupiter API Response - Status: {}", response.status()),
+    );
 
     if !response.status().is_success() {
         let status = response.status();
@@ -210,7 +222,10 @@ pub async fn get_jupiter_quote(
     logger::debug(LogTag::Swap, "🔄 Jupiter: Parsing JSON response...");
 
     let quote_response: JupiterQuoteResponse = response.json().await.map_err(|e| {
-        logger::debug(LogTag::Swap, &format!("❌ Jupiter Response parsing failed: {}", e));
+        logger::debug(
+            LogTag::Swap,
+            &format!("❌ Jupiter Response parsing failed: {}", e),
+        );
         ScreenerBotError::invalid_response(format!("Failed to parse Jupiter quote response: {}", e))
     })?;
 
@@ -289,7 +304,10 @@ pub async fn get_jupiter_swap_transaction(
     if let Some(fee) = priority_fee_lamports {
         request_body["prioritizationFeeLamports"] = serde_json::json!(fee);
 
-        logger::debug(LogTag::Swap, &format!("💰 Jupiter: Adding priority fee: {} lamports", fee));
+        logger::debug(
+            LogTag::Swap,
+            &format!("💰 Jupiter: Adding priority fee: {} lamports", fee),
+        );
     }
 
     logger::debug(
@@ -309,7 +327,10 @@ pub async fn get_jupiter_swap_transaction(
 
     logger::debug(
         LogTag::Swap,
-        &format!("📡 Jupiter: Sending transaction build request to {}", jupiter_swap_api),
+        &format!(
+            "📡 Jupiter: Sending transaction build request to {}",
+            jupiter_swap_api
+        ),
     );
 
     let response = timeout(
@@ -322,20 +343,32 @@ pub async fn get_jupiter_swap_transaction(
         ScreenerBotError::api_error("Jupiter swap transaction timeout".to_string())
     })?
     .map_err(|e| {
-        logger::debug(LogTag::Swap, &format!("❌ Jupiter build network error: {}", e));
+        logger::debug(
+            LogTag::Swap,
+            &format!("❌ Jupiter build network error: {}", e),
+        );
         ScreenerBotError::network_error(e.to_string())
     })?;
 
     let response_status = response.status();
 
-    logger::debug(LogTag::Swap, &format!("📡 Jupiter Build API Response - Status: {}", response_status));
+    logger::debug(
+        LogTag::Swap,
+        &format!(
+            "📡 Jupiter Build API Response - Status: {}",
+            response_status
+        ),
+    );
 
     if !response_status.is_success() {
         let error_text = response.text().await.unwrap_or_default();
 
         logger::debug(
             LogTag::Swap,
-            &format!("❌ Jupiter Build API Error: {} - {}", response_status, error_text),
+            &format!(
+                "❌ Jupiter Build API Error: {} - {}",
+                response_status, error_text
+            ),
         );
 
         return Err(ScreenerBotError::api_error(format!(
@@ -344,7 +377,10 @@ pub async fn get_jupiter_swap_transaction(
         )));
     }
     let swap_response: JupiterSwapResponse = response.json().await.map_err(|e| {
-        logger::debug(LogTag::Swap, &format!("❌ Jupiter Build Response parsing failed: {}", e));
+        logger::debug(
+            LogTag::Swap,
+            &format!("❌ Jupiter Build Response parsing failed: {}", e),
+        );
         ScreenerBotError::invalid_response(format!("Failed to parse Jupiter swap response: {}", e))
     })?;
 

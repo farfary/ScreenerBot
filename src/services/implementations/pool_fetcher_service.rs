@@ -27,7 +27,10 @@ impl Service for PoolFetcherService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
-        logger::info(LogTag::PoolService, &"Initializing pool fetcher service...".to_string());
+        logger::info(
+            LogTag::PoolService,
+            &"Initializing pool fetcher service...".to_string(),
+        );
         Ok(())
     }
 
@@ -36,7 +39,10 @@ impl Service for PoolFetcherService {
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
-    logger::info(LogTag::PoolService, &"Starting pool fetcher service...".to_string());
+        logger::info(
+            LogTag::PoolService,
+            &"Starting pool fetcher service...".to_string(),
+        );
 
         // Get the AccountFetcher component from global state
         let fetcher = crate::pools::get_account_fetcher()
@@ -47,7 +53,10 @@ impl Service for PoolFetcherService {
             fetcher.start_fetcher_task(shutdown).await;
         }));
 
-    logger::info(LogTag::PoolService, &"✅ Pool fetcher service started (instrumented)".to_string());
+        logger::info(
+            LogTag::PoolService,
+            &"✅ Pool fetcher service started (instrumented)".to_string(),
+        );
 
         Ok(vec![handle])
     }

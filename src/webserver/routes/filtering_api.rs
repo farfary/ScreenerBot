@@ -56,7 +56,7 @@ async fn get_stats() -> Response {
         }),
         Err(err) => {
             logger::info(
-        LogTag::Filtering,
+                LogTag::Filtering,
                 &format!("Failed to fetch filtering stats: {}", err),
             );
 
@@ -77,7 +77,7 @@ async fn trigger_refresh() -> Response {
     match filtering::refresh().await {
         Ok(()) => {
             logger::info(
-        LogTag::Filtering,
+                LogTag::Filtering,
                 "Filtering snapshot rebuilt via API request",
             );
 
@@ -88,7 +88,7 @@ async fn trigger_refresh() -> Response {
         }
         Err(err) => {
             logger::info(
-        LogTag::Filtering,
+                LogTag::Filtering,
                 &format!("Filtering refresh failed: {}", err),
             );
 

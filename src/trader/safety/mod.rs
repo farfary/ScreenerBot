@@ -29,23 +29,18 @@ pub fn is_blacklisted(mint: &str) -> bool {
 ///
 /// Returns an immediate exit decision if the position's token is blacklisted.
 /// This is a critical safety check that overrides all other exit conditions.
-/// 
+///
 /// Uses tokens module as single source of truth (no cache layer).
-pub fn check_blacklist_exit(
-    position: &Position,
-    current_price: f64,
-) -> Option<TradeDecision> {
+pub fn check_blacklist_exit(position: &Position, current_price: f64) -> Option<TradeDecision> {
     // Direct check against tokens module (no cache)
     let blacklisted_tokens = crate::tokens::get_blacklisted_tokens();
-    
+
     if blacklisted_tokens.contains(&position.mint) {
         logger::warning(
             LogTag::Trader,
             &format!(
                 "⛔ BLACKLISTED: {} (mint={}) - Triggering emergency exit at {:.9} SOL",
-                position.symbol,
-                position.mint,
-                current_price
+                position.symbol, position.mint, current_price
             ),
         );
 

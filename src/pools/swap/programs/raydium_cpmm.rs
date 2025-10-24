@@ -34,7 +34,10 @@ impl ProgramSwap for RaydiumCpmmSwap {
         request: SwapRequest,
         pool_data: AccountData,
     ) -> Result<SwapResult, SwapError> {
-        logger::info(LogTag::System, &format!("🔄 Executing Raydium CPMM {:?} swap", request.direction));
+        logger::info(
+            LogTag::System,
+            &format!("🔄 Executing Raydium CPMM {:?} swap", request.direction),
+        );
 
         // Decode pool state using centralized decoder
         let pool_info = Self::decode_pool_state(&pool_data)?;

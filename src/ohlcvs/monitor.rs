@@ -176,7 +176,10 @@ impl OhlcvMonitor {
                     Err(e) => {
                         // If discovery fails, still allow monitoring but with empty pools
                         // The monitor loop will retry discovery later
-                        logger::warning(LogTag::Ohlcv, &format!("Warning: Pool discovery failed for {}: {}", mint, e));
+                        logger::warning(
+                            LogTag::Ohlcv,
+                            &format!("Warning: Pool discovery failed for {}: {}", mint, e),
+                        );
                         Vec::new()
                     }
                 }
@@ -471,10 +474,7 @@ impl OhlcvMonitor {
                             }),
                         )
                         .await;
-                        logger::error(
-                            LogTag::Ohlcv,
-                            &format!("Error processing {}: {}", mint, e),
-                        );
+                        logger::error(LogTag::Ohlcv, &format!("Error processing {}: {}", mint, e));
                     }
                 }
 
@@ -823,12 +823,18 @@ impl OhlcvMonitor {
                 if level == "WARN" {
                     logger::warning(
                         LogTag::Ohlcv,
-                        &format!("Failed to fetch {} using pool {}: {}", mint, pool_address, e),
+                        &format!(
+                            "Failed to fetch {} using pool {}: {}",
+                            mint, pool_address, e
+                        ),
                     );
                 } else {
                     logger::error(
                         LogTag::Ohlcv,
-                        &format!("Failed to fetch {} using pool {}: {}", mint, pool_address, e),
+                        &format!(
+                            "Failed to fetch {} using pool {}: {}",
+                            mint, pool_address, e
+                        ),
                     );
                 }
             }
@@ -1452,10 +1458,7 @@ impl OhlcvMonitor {
 
             // Clean up expired cache entries
             if let Err(e) = self.cache.cleanup_expired() {
-                logger::error(
-                    LogTag::Ohlcv,
-                    &format!("Cache cleanup error: {}", e),
-                );
+                logger::error(LogTag::Ohlcv, &format!("Cache cleanup error: {}", e));
                 record_ohlcv_event(
                     "cache_cleanup_failed",
                     Severity::Error,

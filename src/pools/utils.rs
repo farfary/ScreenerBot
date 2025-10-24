@@ -47,7 +47,10 @@ pub struct PoolMintVaultInfo {
 impl TokenPairInfo {
     /// Create a new TokenPairInfo for invalid pairs (non-SOL)
     pub fn invalid(reason: String) -> Self {
-        logger::debug(LogTag::PoolService, &format!("Invalid token pair: {}", reason));
+        logger::debug(
+            LogTag::PoolService,
+            &format!("Invalid token pair: {}", reason),
+        );
 
         Self {
             token_mint: String::new(),

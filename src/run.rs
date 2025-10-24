@@ -63,7 +63,10 @@ pub async fn run_bot() -> Result<(), String> {
         *guard = Some(service_manager);
     }
 
-    logger::info(LogTag::System, "✅ All services started - ScreenerBot is running");
+    logger::info(
+        LogTag::System,
+        "✅ All services started - ScreenerBot is running",
+    );
 
     // 11. Wait for shutdown signal
     wait_for_shutdown_signal().await?;
@@ -130,7 +133,10 @@ fn register_all_services(manager: &mut ServiceManager) {
 
 /// Wait for shutdown signal (Ctrl+C)
 async fn wait_for_shutdown_signal() -> Result<(), String> {
-    logger::info(LogTag::System, "Waiting for Ctrl+C (press twice to force kill)");
+    logger::info(
+        LogTag::System,
+        "Waiting for Ctrl+C (press twice to force kill)",
+    );
 
     // First Ctrl+C triggers graceful shutdown
     tokio::signal::ctrl_c()

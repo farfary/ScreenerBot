@@ -30,7 +30,10 @@ impl PoolDecoder for RaydiumCpmmDecoder {
     ) -> Option<PriceResult> {
         logger::debug(
             LogTag::PoolDecoder,
-            &format!("Decoding Raydium CPMM pool for {}/{}", base_mint, quote_mint),
+            &format!(
+                "Decoding Raydium CPMM pool for {}/{}",
+                base_mint, quote_mint
+            ),
         );
 
         // Find the pool account by checking owner program ID (like CLMM decoder)
@@ -92,7 +95,10 @@ impl RaydiumCpmmDecoder {
         if data.len() < 8 + 32 * 10 + 8 * 10 {
             logger::error(
                 LogTag::PoolDecoder,
-                &format!("Invalid Raydium CPMM pool account data length: {}", data.len()),
+                &format!(
+                    "Invalid Raydium CPMM pool account data length: {}",
+                    data.len()
+                ),
             );
             return None;
         }

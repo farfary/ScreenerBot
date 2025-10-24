@@ -22,7 +22,10 @@ impl Service for PoolAnalyzerService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
-        logger::info(LogTag::PoolService, &"Initializing pool analyzer service...".to_string());
+        logger::info(
+            LogTag::PoolService,
+            &"Initializing pool analyzer service...".to_string(),
+        );
         Ok(())
     }
 
@@ -31,7 +34,10 @@ impl Service for PoolAnalyzerService {
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
-        logger::info(LogTag::PoolService, &"Starting pool analyzer service...".to_string());
+        logger::info(
+            LogTag::PoolService,
+            &"Starting pool analyzer service...".to_string(),
+        );
 
         // Get the PoolAnalyzer component from global state
         let analyzer = crate::pools::get_pool_analyzer()

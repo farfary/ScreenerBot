@@ -141,7 +141,10 @@ impl PoolDecoder for RaydiumClmmDecoder {
 
         logger::info(
             LogTag::PoolDecoder,
-            &format!("CLMM decimals: token={}, sol={}", token_decimals, sol_decimals),
+            &format!(
+                "CLMM decimals: token={}, sol={}",
+                token_decimals, sol_decimals
+            ),
         );
 
         // Calculate price using sqrt_price_x64

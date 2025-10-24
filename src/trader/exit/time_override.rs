@@ -15,8 +15,7 @@ pub async fn check_time_override(
     let duration_hours = config::get_time_override_duration_hours();
 
     // Calculate position age in hours
-    let position_age_hours =
-        (Utc::now() - position.entry_time).num_seconds() as f64 / 3600.0;
+    let position_age_hours = (Utc::now() - position.entry_time).num_seconds() as f64 / 3600.0;
 
     // Check if position has exceeded duration threshold
     if position_age_hours >= duration_hours {

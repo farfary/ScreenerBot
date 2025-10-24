@@ -347,7 +347,10 @@ pub async fn get_gmgn_quote(
                         Err(e) => {
                             logger::debug(
                                 LogTag::Swap,
-                                &format!("GMGN_PARSE_ERROR: ❌ GMGN Response parsing failed: {}", e),
+                                &format!(
+                                    "GMGN_PARSE_ERROR: ❌ GMGN Response parsing failed: {}",
+                                    e
+                                ),
                             );
                             last_error = Some(ScreenerBotError::invalid_response(format!(
                                 "GMGN API JSON parse error: {}",
@@ -373,7 +376,10 @@ pub async fn get_gmgn_quote(
             Err(e) => {
                 logger::debug(
                     LogTag::Swap,
-                    &format!("GMGN_NETWORK_ERROR: ❌ GMGN Network error on attempt {}: {}", attempt, e),
+                    &format!(
+                        "GMGN_NETWORK_ERROR: ❌ GMGN Network error on attempt {}: {}",
+                        attempt, e
+                    ),
                 );
                 last_error = Some(ScreenerBotError::network_error(e.to_string()));
             }

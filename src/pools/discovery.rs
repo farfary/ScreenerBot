@@ -188,11 +188,17 @@ impl PoolDiscovery {
         .collect();
 
         if enabled_sources.is_empty() {
-            logger::warning(LogTag::PoolDiscovery, "⚠️ No pool discovery sources enabled!");
+            logger::warning(
+                LogTag::PoolDiscovery,
+                "⚠️ No pool discovery sources enabled!",
+            );
         } else {
             logger::info(
                 LogTag::PoolDiscovery,
-                &format!("🔍 Pool discovery sources enabled: {}", enabled_sources.join(", ")),
+                &format!(
+                    "🔍 Pool discovery sources enabled: {}",
+                    enabled_sources.join(", ")
+                ),
             );
         }
 
@@ -348,7 +354,10 @@ impl PoolDiscovery {
         if added_count > 0 {
             logger::info(
                 LogTag::PoolDiscovery,
-                &format!("Added {} open position tokens to monitoring set", added_count),
+                &format!(
+                    "Added {} open position tokens to monitoring set",
+                    added_count
+                ),
             );
         }
 
@@ -459,7 +468,7 @@ impl PoolDiscovery {
                     &format!("DexScreener batched pools for {mint}: added {added}"),
                 );
             }
-            } else {
+        } else {
             logger::debug(LogTag::PoolDiscovery, "DexScreener discovery disabled");
         }
 
@@ -716,7 +725,10 @@ impl PoolDiscovery {
 
     /// Discover pools for a specific token
     pub async fn discover_pools_for_token(&self, mint: &str) -> Vec<PoolDescriptor> {
-        logger::info(LogTag::PoolDiscovery, &format!("Starting pool discovery for token {mint}"));
+        logger::info(
+            LogTag::PoolDiscovery,
+            &format!("Starting pool discovery for token {mint}"),
+        );
 
         // Early stablecoin filtering - reject stablecoin tokens immediately
         if is_stablecoin_mint(mint) {
@@ -780,7 +792,10 @@ impl PoolDiscovery {
                 }
             }
         } else {
-            logger::debug(LogTag::PoolDiscovery, &format!("DexScreener discovery disabled for {mint}"));
+            logger::debug(
+                LogTag::PoolDiscovery,
+                &format!("DexScreener discovery disabled for {mint}"),
+            );
         }
 
         // Discover from GeckoTerminal API only if enabled
@@ -801,7 +816,10 @@ impl PoolDiscovery {
                 }
             }
         } else {
-            logger::debug(LogTag::PoolDiscovery, &format!("GeckoTerminal discovery disabled for {mint}"));
+            logger::debug(
+                LogTag::PoolDiscovery,
+                &format!("GeckoTerminal discovery disabled for {mint}"),
+            );
         }
 
         // Raydium discovery path removed here (not implemented)
@@ -1014,7 +1032,10 @@ pub async fn get_canonical_pool_address(mint: &str) -> Option<String> {
                         ),
                     );
                 } else {
-                    logger::warning(LogTag::PoolDiscovery, &format!("No pools discovered for mint {}", mint));
+                    logger::warning(
+                        LogTag::PoolDiscovery,
+                        &format!("No pools discovered for mint {}", mint),
+                    );
                 }
 
                 // Prepare return value without moving `result`

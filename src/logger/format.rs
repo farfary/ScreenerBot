@@ -30,7 +30,7 @@ pub fn format_and_log(tag: LogTag, log_type: &str, message: &str) {
     let now = Local::now();
     let date = now.format("%Y-%m-%d").to_string();
     let time = now.format("%H:%M:%S").to_string();
-    
+
     let mut prefix = String::new();
     if LOG_SHOW_DATE && LOG_SHOW_TIME {
         prefix = format!("{} {} ", date, time);
@@ -39,7 +39,7 @@ pub fn format_and_log(tag: LogTag, log_type: &str, message: &str) {
     } else if LOG_SHOW_TIME {
         prefix = format!("{} ", time);
     }
-    
+
     let prefix = if !prefix.is_empty() {
         prefix.dimmed().to_string()
     } else {

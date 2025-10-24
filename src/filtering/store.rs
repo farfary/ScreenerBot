@@ -51,7 +51,7 @@ impl FilteringStore {
                 if let Some(existing) = stale_snapshot {
                     let age_secs = snapshot_age_secs(existing.as_ref());
                     logger::info(
-        LogTag::Filtering,
+                        LogTag::Filtering,
                         &format!(
                             "refresh_failed={} using_stale_snapshot age_secs={}",
                             err, age_secs

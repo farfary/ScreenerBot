@@ -4,7 +4,6 @@
 /// - Checks if a log should be displayed based on level and tag
 /// - Delegates to the old logger.rs formatting/writing code
 /// - Implements the filtering rules
-
 use super::config::{get_logger_config, is_debug_enabled_for_tag, is_verbose_enabled_for_tag};
 use super::levels::LogLevel;
 use super::tags::LogTag;

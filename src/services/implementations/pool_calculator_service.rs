@@ -22,7 +22,10 @@ impl Service for PoolCalculatorService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
-        logger::info(LogTag::PoolService, &"Initializing pool calculator service...".to_string());
+        logger::info(
+            LogTag::PoolService,
+            &"Initializing pool calculator service...".to_string(),
+        );
         Ok(())
     }
 
@@ -31,7 +34,10 @@ impl Service for PoolCalculatorService {
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
-        logger::info(LogTag::PoolService, &"Starting pool calculator service...".to_string());
+        logger::info(
+            LogTag::PoolService,
+            &"Starting pool calculator service...".to_string(),
+        );
 
         // Get the PriceCalculator component from global state
         let calculator = crate::pools::get_price_calculator()

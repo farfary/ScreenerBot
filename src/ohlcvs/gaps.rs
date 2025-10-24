@@ -1,6 +1,7 @@
 // Gap detection and filling system
 
 use crate::config::with_config;
+use crate::logger::{self, LogTag};
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::database::OhlcvDatabase;
 use crate::ohlcvs::fetcher::OhlcvFetcher;
@@ -8,7 +9,6 @@ use crate::ohlcvs::types::{OhlcvDataPoint, OhlcvError, OhlcvResult, Priority, Ti
 use chrono::Utc;
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
-use crate::logger::{self, LogTag};
 
 pub struct GapManager {
     db: Arc<OhlcvDatabase>,

@@ -177,8 +177,8 @@ pub async fn detect_patterns(
 ) -> Result<PatternAnalysis, String> {
     logger::debug(
         LogTag::Transactions,
-            &format!("Detecting patterns for tx: {}", transaction.signature),
-        );
+        &format!("Detecting patterns for tx: {}", transaction.signature),
+    );
 
     // Step 1: Detect specific patterns
     let detected_patterns = detect_specific_patterns(

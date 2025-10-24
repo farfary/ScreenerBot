@@ -100,10 +100,10 @@ async fn residual_balance_requires_retry(position_id: Option<i64>, balance: u64)
 
 /// Verify a transaction and produce the appropriate transition
 pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome {
-        logger::debug(
+    logger::debug(
         LogTag::Positions,
         &format!("🔍 Verifying transaction: {}", item.signature),
-        );
+    );
 
     // Get transaction
     let transaction = match get_transaction(&item.signature).await {
@@ -620,7 +620,8 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                         ),
                                     );
                                     return VerificationOutcome::RetryTransient(
-                                        "Partial exit amount mismatch - will verify again".to_string(),
+                                        "Partial exit amount mismatch - will verify again"
+                                            .to_string(),
                                     );
                                 }
                             }

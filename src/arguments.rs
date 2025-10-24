@@ -509,14 +509,19 @@ pub fn get_enabled_debug_modes() -> Vec<&'static str> {
 /// Prints debug information about current arguments and enabled debug modes
 pub fn print_debug_info() {
     let args = get_cmd_args();
-    logger::debug(LogTag::System, &format!("Command-line arguments: {:?}", args),
+    logger::debug(
+        LogTag::System,
+        &format!("Command-line arguments: {:?}", args),
     );
 
     let enabled_modes = get_enabled_debug_modes();
     if enabled_modes.is_empty() {
         logger::debug(LogTag::System, "No debug modes enabled");
     } else {
-        logger::debug(LogTag::System, &format!("Enabled debug modes: {:?}", enabled_modes));
+        logger::debug(
+            LogTag::System,
+            &format!("Enabled debug modes: {:?}", enabled_modes),
+        );
     }
 }
 

@@ -126,10 +126,7 @@ pub async fn init() -> Result<(), String> {
         _handle: handle,
     });
 
-    logger::info(
-        LogTag::System,
-        "Events system initialized successfully",
-    );
+    logger::info(LogTag::System, "Events system initialized successfully");
     Ok(())
 }
 
@@ -154,10 +151,7 @@ pub async fn record(event: Event) -> Result<(), String> {
 /// Logs errors instead of propagating them to avoid disrupting main operations
 pub async fn record_safe(event: Event) {
     if let Err(e) = record(event).await {
-        logger::warning(
-            LogTag::System,
-            &format!("Failed to record event: {}", e),
-        );
+        logger::warning(LogTag::System, &format!("Failed to record event: {}", e));
     }
 }
 

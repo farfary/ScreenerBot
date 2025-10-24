@@ -544,7 +544,10 @@ impl PositionsDatabase {
                 if log {
                     crate::logger::debug(
                         crate::logger::LogTag::Positions,
-                        &format!("Position migration skipped (expected on fresh install): {}", e),
+                        &format!(
+                            "Position migration skipped (expected on fresh install): {}",
+                            e
+                        ),
                     );
                 }
             }
@@ -573,12 +576,12 @@ impl PositionsDatabase {
     /// Insert new position and return the assigned ID
     pub async fn insert_position(&self, position: &Position) -> Result<i64, String> {
         logger::debug(
-                LogTag::Positions,
-                &format!(
-                    "Inserting new position for mint {} with entry price {:.6} SOL",
-                    position.mint, position.entry_price
-                ),
-            );
+            LogTag::Positions,
+            &format!(
+                "Inserting new position for mint {} with entry price {:.6} SOL",
+                position.mint, position.entry_price
+            ),
+        );
 
         let conn = self.get_connection()?;
 
@@ -651,17 +654,17 @@ impl PositionsDatabase {
             .await?;
 
         logger::debug(
-                LogTag::Positions,
-                &format!(
-                    "Successfully inserted position ID {} for mint {} with entry signature {}",
-                    position_id,
-                    position.mint,
-                    position
-                        .entry_transaction_signature
-                        .as_deref()
-                        .unwrap_or("None")
-                ),
-            );
+            LogTag::Positions,
+            &format!(
+                "Successfully inserted position ID {} for mint {} with entry signature {}",
+                position_id,
+                position.mint,
+                position
+                    .entry_transaction_signature
+                    .as_deref()
+                    .unwrap_or("None")
+            ),
+        );
 
         logger::info(
             LogTag::Positions,
@@ -676,18 +679,19 @@ impl PositionsDatabase {
 
     /// Update existing position by ID
     pub async fn update_position(&self, position: &Position) -> Result<(), String> {
-        let position_id = position.id
+        let position_id = position
+            .id
             .ok_or_else(|| "Cannot update position without ID".to_string())?;
 
         logger::debug(
-                LogTag::Positions,
-                &format!(
-                    "Updating position ID {} for mint {} with current price {:.11} SOL",
-                    position_id,
-                    position.mint,
-                    position.current_price.unwrap_or(0.0)
-                ),
-            );
+            LogTag::Positions,
+            &format!(
+                "Updating position ID {} for mint {} with current price {:.11} SOL",
+                position_id,
+                position.mint,
+                position.current_price.unwrap_or(0.0)
+            ),
+        );
 
         let conn = self.get_connection()?;
 
@@ -759,12 +763,12 @@ impl PositionsDatabase {
         }
 
         logger::debug(
-                LogTag::Positions,
-                &format!(
-                    "Successfully updated position ID {} ({} rows affected)",
-                    position_id, rows_affected
-                ),
-            );
+            LogTag::Positions,
+            &format!(
+                "Successfully updated position ID {} ({} rows affected)",
+                position_id, rows_affected
+            ),
+        );
 
         // Force WAL checkpoint to ensure all connections see the update immediately
         // This is critical for preventing race conditions in concurrent read operations
@@ -797,13 +801,12 @@ impl PositionsDatabase {
     pub async fn get_position_by_id(&self, id: i64) -> Result<Option<Position>, String> {
         let conn = self.get_connection()?;
 
-        let query = format!("SELECT {} FROM positions WHERE id = ?1", POSITION_SELECT_COLUMNS);
+        let query = format!(
+            "SELECT {} FROM positions WHERE id = ?1",
+            POSITION_SELECT_COLUMNS
+        );
         let result = conn
-            .query_row(
-                &query,
-                params![id],
-                |row| self.row_to_position(row),
-            )
+            .query_row(&query, params![id], |row| self.row_to_position(row))
             .optional()
             .map_err(|e| format!("Failed to get position by ID: {}", e))?;
 
@@ -814,13 +817,12 @@ impl PositionsDatabase {
     pub async fn get_position_by_mint(&self, mint: &str) -> Result<Option<Position>, String> {
         let conn = self.get_connection()?;
 
-        let query = format!("SELECT {} FROM positions WHERE mint = ?1 ORDER BY entry_time DESC LIMIT 1", POSITION_SELECT_COLUMNS);
+        let query = format!(
+            "SELECT {} FROM positions WHERE mint = ?1 ORDER BY entry_time DESC LIMIT 1",
+            POSITION_SELECT_COLUMNS
+        );
         let result = conn
-            .query_row(
-                &query,
-                params![mint],
-                |row| self.row_to_position(row),
-            )
+            .query_row(&query, params![mint], |row| self.row_to_position(row))
             .optional()
             .map_err(|e| format!("Failed to get position by mint: {}", e))?;
 
@@ -1236,14 +1238,14 @@ impl PositionsDatabase {
         reason: Option<&str>,
     ) -> Result<(), String> {
         logger::debug(
-                LogTag::Positions,
-                &format!(
-                    "Recording state change for position ID {}: {} (reason: {})",
-                    position_id,
-                    state,
-                    reason.unwrap_or("None")
-                ),
-            );
+            LogTag::Positions,
+            &format!(
+                "Recording state change for position ID {}: {} (reason: {})",
+                position_id,
+                state,
+                reason.unwrap_or("None")
+            ),
+        );
 
         let conn = self.get_connection()?;
 
@@ -1254,12 +1256,12 @@ impl PositionsDatabase {
         .map_err(|e| format!("Failed to record state change: {}", e))?;
 
         logger::debug(
-                LogTag::Positions,
-                &format!(
-                    "Successfully recorded state change for position ID {}: {}",
-                    position_id, state
-                ),
-            );
+            LogTag::Positions,
+            &format!(
+                "Successfully recorded state change for position ID {}: {}",
+                position_id, state
+            ),
+        );
 
         Ok(())
     }
@@ -1498,14 +1500,14 @@ impl PositionsDatabase {
     /// Save token snapshot to database
     pub async fn save_token_snapshot(&self, snapshot: &TokenSnapshot) -> Result<i64, String> {
         logger::debug(
-                LogTag::Positions,
-                &format!(
-                    "Saving token snapshot for position ID {} (type: {}) with price {:.6} SOL",
-                    snapshot.position_id,
-                    snapshot.snapshot_type,
-                    snapshot.price_sol.unwrap_or(0.0)
-                ),
-            );
+            LogTag::Positions,
+            &format!(
+                "Saving token snapshot for position ID {} (type: {}) with price {:.6} SOL",
+                snapshot.position_id,
+                snapshot.snapshot_type,
+                snapshot.price_sol.unwrap_or(0.0)
+            ),
+        );
 
         let conn = self.get_connection()?;
 
@@ -1578,12 +1580,12 @@ impl PositionsDatabase {
         let snapshot_id = conn.last_insert_rowid();
 
         logger::debug(
-                LogTag::Positions,
-                &format!(
-                    "Successfully saved token snapshot ID {} for position ID {} (type: {})",
-                    snapshot_id, snapshot.position_id, snapshot.snapshot_type
-                ),
-            );
+            LogTag::Positions,
+            &format!(
+                "Successfully saved token snapshot ID {} for position ID {} (type: {})",
+                snapshot_id, snapshot.position_id, snapshot.snapshot_type
+            ),
+        );
 
         Ok(snapshot_id)
     }
@@ -1801,22 +1803,21 @@ impl PositionsDatabase {
                 None
             };
 
-        let last_dca_time =
-            if let Some(dca_str) = row.get::<_, Option<String>>("last_dca_time")? {
-                Some(
-                    DateTime::parse_from_rfc3339(&dca_str)
-                        .map_err(|e| {
-                            rusqlite::Error::InvalidColumnType(
-                                35,
-                                "Invalid last_dca_time".to_string(),
-                                rusqlite::types::Type::Text,
-                            )
-                        })?
-                        .with_timezone(&Utc),
-                )
-            } else {
-                None
-            };
+        let last_dca_time = if let Some(dca_str) = row.get::<_, Option<String>>("last_dca_time")? {
+            Some(
+                DateTime::parse_from_rfc3339(&dca_str)
+                    .map_err(|e| {
+                        rusqlite::Error::InvalidColumnType(
+                            35,
+                            "Invalid last_dca_time".to_string(),
+                            rusqlite::types::Type::Text,
+                        )
+                    })?
+                    .with_timezone(&Utc),
+            )
+        } else {
+            None
+        };
 
         Ok(Position {
             id: Some(row.get("id")?),
@@ -1857,7 +1858,9 @@ impl PositionsDatabase {
             synthetic_exit: row.get("synthetic_exit")?,
             closed_reason: row.get("closed_reason")?,
             // New fields for partial exit and DCA support
-            remaining_token_amount: row.get::<_, Option<i64>>("remaining_token_amount")?.map(|t| t as u64),
+            remaining_token_amount: row
+                .get::<_, Option<i64>>("remaining_token_amount")?
+                .map(|t| t as u64),
             total_exited_amount: row.get::<_, i64>("total_exited_amount")? as u64,
             average_exit_price: row.get("average_exit_price")?,
             partial_exit_count: row.get::<_, i64>("partial_exit_count")? as u32,
@@ -1942,12 +1945,12 @@ pub async fn load_all_positions() -> Result<Vec<Position>, String> {
 /// Save position to database
 pub async fn save_position(position: &Position) -> Result<i64, String> {
     logger::debug(
-            LogTag::Positions,
-            &format!(
-                "Saving position for mint {} (ID: {:?}) with entry price {:.6} SOL",
-                position.mint, position.id, position.entry_price
-            ),
-        );
+        LogTag::Positions,
+        &format!(
+            "Saving position for mint {} (ID: {:?}) with entry price {:.6} SOL",
+            position.mint, position.id, position.entry_price
+        ),
+    );
 
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
@@ -1955,22 +1958,22 @@ pub async fn save_position(position: &Position) -> Result<i64, String> {
             if let Some(id) = position.id {
                 db.update_position(position).await?;
                 logger::debug(
-                        LogTag::Positions,
-                        &format!(
-                            "Updated existing position ID {} for mint {}",
-                            id, position.mint
-                        ),
-                    );
+                    LogTag::Positions,
+                    &format!(
+                        "Updated existing position ID {} for mint {}",
+                        id, position.mint
+                    ),
+                );
                 Ok(id)
             } else {
                 let new_id = db.insert_position(position).await?;
                 logger::debug(
-                        LogTag::Positions,
-                        &format!(
-                            "Created new position ID {} for mint {}",
-                            new_id, position.mint
-                        ),
-                    );
+                    LogTag::Positions,
+                    &format!(
+                        "Created new position ID {} for mint {}",
+                        new_id, position.mint
+                    ),
+                );
                 Ok(new_id)
             }
         }
@@ -1990,14 +1993,14 @@ pub async fn delete_position_by_id(id: i64) -> Result<bool, String> {
 /// Update position in database
 pub async fn update_position(position: &Position) -> Result<(), String> {
     logger::debug(
-            LogTag::Positions,
-            &format!(
-                "Updating position ID {:?} for mint {} with current price {:.11} SOL",
-                position.id,
-                position.mint,
-                position.current_price.unwrap_or(0.0)
-            ),
-        );
+        LogTag::Positions,
+        &format!(
+            "Updating position ID {:?} for mint {} with current price {:.11} SOL",
+            position.id,
+            position.mint,
+            position.current_price.unwrap_or(0.0)
+        ),
+    );
 
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
@@ -2027,10 +2030,7 @@ pub async fn update_position(position: &Position) -> Result<(), String> {
 
 /// Force database synchronization after critical updates
 pub async fn force_database_sync() -> Result<(), String> {
-    logger::debug(
-            LogTag::Positions,
-            "Forcing database synchronization...",
-        );
+    logger::debug(LogTag::Positions, "Forcing database synchronization...");
 
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
@@ -2100,12 +2100,12 @@ pub async fn get_position_by_id(id: i64) -> Result<Option<Position>, String> {
 /// Save token snapshot to database
 pub async fn save_token_snapshot(snapshot: &TokenSnapshot) -> Result<i64, String> {
     logger::debug(
-            LogTag::Positions,
-            &format!(
-                "Saving token snapshot for position ID {} (type: {}) with mint {}",
-                snapshot.position_id, snapshot.snapshot_type, snapshot.mint
-            ),
-        );
+        LogTag::Positions,
+        &format!(
+            "Saving token snapshot for position ID {} (type: {}) with mint {}",
+            snapshot.position_id, snapshot.snapshot_type, snapshot.mint
+        ),
+    );
 
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {

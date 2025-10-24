@@ -24,10 +24,7 @@ pub async fn start_maintenance_task() {
             cleanup_interval.tick().await;
 
             if let Err(e) = perform_maintenance().await {
-                logger::info(
-        LogTag::System,
-                    &format!("Events maintenance failed: {}", e),
-                );
+                logger::info(LogTag::System, &format!("Events maintenance failed: {}", e));
             }
         }
     });
@@ -44,7 +41,7 @@ async fn perform_maintenance() -> Result<(), String> {
     let deleted_count = db.cleanup_old_events().await?;
     if deleted_count > 0 {
         logger::info(
-        LogTag::System,
+            LogTag::System,
             &format!("Cleaned up {} old events", deleted_count),
         );
     }

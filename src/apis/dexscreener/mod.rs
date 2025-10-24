@@ -294,10 +294,7 @@ impl DexScreenerClient {
         let endpoint = "token-profiles/latest/v1";
         let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
 
-        logger::debug(
-            LogTag::Api,
-            "[DEXSCREENER] Fetching latest token profiles",
-        );
+        logger::debug(LogTag::Api, "[DEXSCREENER] Fetching latest token profiles");
 
         let (mut response, elapsed) = self
             .execute_request(endpoint, self.client.get(&url))
@@ -359,10 +356,7 @@ impl DexScreenerClient {
             self.client.get(&url)
         };
 
-        logger::debug(
-            LogTag::Api,
-            "[DEXSCREENER] Fetching top boosted tokens",
-        );
+        logger::debug(LogTag::Api, "[DEXSCREENER] Fetching top boosted tokens");
 
         self.get_json(endpoint, builder).await
     }
@@ -376,10 +370,7 @@ impl DexScreenerClient {
         let endpoint = "token-boosts/latest/v1";
         let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
 
-        logger::debug(
-            LogTag::Api,
-            "[DEXSCREENER] Fetching latest boosted tokens",
-        );
+        logger::debug(LogTag::Api, "[DEXSCREENER] Fetching latest boosted tokens");
 
         self.get_json(endpoint, self.client.get(&url)).await
     }
@@ -529,10 +520,7 @@ impl DexScreenerClient {
         let endpoint = "chains/v1";
         let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
 
-        logger::debug(
-            LogTag::Api,
-            "[DEXSCREENER] Fetching supported chains",
-        );
+        logger::debug(LogTag::Api, "[DEXSCREENER] Fetching supported chains");
 
         self.get_json(endpoint, self.client.get(&url)).await
     }

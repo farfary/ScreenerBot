@@ -82,9 +82,9 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
     use crate::services::get_service_manager;
 
     logger::debug(
-            LogTag::Webserver,
-            "Collecting services overview snapshot from ServiceManager",
-        );
+        LogTag::Webserver,
+        "Collecting services overview snapshot from ServiceManager",
+    );
 
     let mut services = Vec::new();
     let mut dependency_graph = Vec::new();
@@ -100,9 +100,9 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
 
     if let Some(manager_ref) = get_service_manager().await {
         logger::debug(
-                LogTag::Webserver,
-                "ServiceManager reference obtained, attempting non-blocking read lock",
-            );
+            LogTag::Webserver,
+            "ServiceManager reference obtained, attempting non-blocking read lock",
+        );
 
         // Use try_read() to avoid deadlock - returns immediately if lock is held
         match manager_ref.try_read() {
@@ -200,9 +200,9 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
                     }
                 } else {
                     logger::debug(
-                            LogTag::Webserver,
-                            "ServiceManager read lock acquired but manager is None",
-                        );
+                        LogTag::Webserver,
+                        "ServiceManager read lock acquired but manager is None",
+                    );
                 }
             }
             Err(_) => {
@@ -214,9 +214,9 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
         }
     } else {
         logger::debug(
-                LogTag::Webserver,
-                "ServiceManager reference not available (get_service_manager returned None)",
-            );
+            LogTag::Webserver,
+            "ServiceManager reference not available (get_service_manager returned None)",
+        );
     }
 
     services.sort_by_key(|service| service.priority);
@@ -327,10 +327,7 @@ async fn services_overview(State(_state): State<Arc<AppState>>) -> Response {
 
     let start = Instant::now();
 
-    logger::debug(
-        LogTag::Webserver,
-        "Fetching complete services overview",
-    );
+    logger::debug(LogTag::Webserver, "Fetching complete services overview");
 
     let overview = gather_services_overview_snapshot().await;
     let gather_duration = start.elapsed();

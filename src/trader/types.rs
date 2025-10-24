@@ -45,10 +45,10 @@ pub enum TradeReason {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TradePriority {
-    Emergency,  // Immediate execution (stop loss, blacklist)
-    High,       // Next available execution slot
-    Normal,     // Standard execution
-    Low,        // Can be delayed if needed
+    Emergency, // Immediate execution (stop loss, blacklist)
+    High,      // Next available execution slot
+    Normal,    // Standard execution
+    Low,       // Can be delayed if needed
 }
 
 #[derive(Debug, Clone)]

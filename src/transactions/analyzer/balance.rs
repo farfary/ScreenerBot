@@ -86,11 +86,11 @@ pub async fn analyze_balance_changes(
 ) -> Result<BalanceAnalysis, String> {
     logger::debug(
         LogTag::Transactions,
-            &format!(
-                "Analyzing balance changes for tx: {}",
-                transaction.signature
-            ),
-        );
+        &format!(
+            "Analyzing balance changes for tx: {}",
+            transaction.signature
+        ),
+    );
 
     // Extract raw balance changes
     let sol_changes = extract_sol_balance_changes(transaction, tx_data).await?;
@@ -189,8 +189,8 @@ async fn extract_sol_balance_changes(
 
     logger::debug(
         LogTag::Transactions,
-            &format!("Extracted {} account keys from message", account_keys.len()),
-        );
+        &format!("Extracted {} account keys from message", account_keys.len()),
+    );
 
     // Get balance arrays
     let pre_balances: &Vec<u64> = tx_data
@@ -355,13 +355,13 @@ async fn extract_token_balance_changes(
     // Diagnostic: summarize aggregation distribution
     logger::debug(
         LogTag::Transactions,
-            &format!(
-                "Token changes aggregated across {} owners/accounts (pre={} post={})",
-                token_changes.len(),
-                pre_token_balances.len(),
-                post_token_balances.len()
-            ),
-        );
+        &format!(
+            "Token changes aggregated across {} owners/accounts (pre={} post={})",
+            token_changes.len(),
+            pre_token_balances.len(),
+            post_token_balances.len()
+        ),
+    );
 
     Ok(token_changes)
 }

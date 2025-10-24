@@ -229,11 +229,11 @@ pub struct StrategyTemplateItem {
 async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response {
     logger::info(
         LogTag::Webserver,
-            &format!(
-                "GET /api/strategies - type={:?}, enabled={:?}",
-                query.strategy_type, query.enabled
-            ),
-        );
+        &format!(
+            "GET /api/strategies - type={:?}, enabled={:?}",
+            query.strategy_type, query.enabled
+        ),
+    );
 
     // Get strategies based on filters
     let strategies = if let Some(type_str) = query.strategy_type {
@@ -338,10 +338,7 @@ async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response {
 
 /// GET /api/strategies/:id - Get strategy details
 async fn get_strategy_detail(Path(id): Path<String>) -> Response {
-    logger::info(
-        LogTag::Webserver,
-            &format!("GET /api/strategies/{}", id),
-        );
+    logger::info(LogTag::Webserver, &format!("GET /api/strategies/{}", id));
 
     let strategy = match get_strategy(&id) {
         Ok(Some(s)) => s,
@@ -386,8 +383,8 @@ async fn get_strategy_detail(Path(id): Path<String>) -> Response {
 async fn create_strategy(Json(request): Json<StrategyRequest>) -> Response {
     logger::info(
         LogTag::Webserver,
-            &format!("POST /api/strategies - name={}", request.name),
-        );
+        &format!("POST /api/strategies - name={}", request.name),
+    );
 
     // Parse strategy type
     let strategy_type = match request.strategy_type.to_uppercase().as_str() {
@@ -480,10 +477,7 @@ async fn update_strategy_handler(
     Path(id): Path<String>,
     Json(request): Json<StrategyRequest>,
 ) -> Response {
-    logger::info(
-        LogTag::Webserver,
-            &format!("PUT /api/strategies/{}", id),
-        );
+    logger::info(LogTag::Webserver, &format!("PUT /api/strategies/{}", id));
 
     // Check if strategy exists
     let existing = match get_strategy(&id) {
@@ -554,7 +548,7 @@ async fn update_strategy_handler(
     // Clear evaluation cache after update
     if let Err(e) = strategies::clear_evaluation_cache().await {
         logger::info(
-        LogTag::Webserver,
+            LogTag::Webserver,
             &format!("Failed to clear evaluation cache: {}", e),
         );
     }
@@ -576,10 +570,7 @@ async fn update_strategy_handler(
 
 /// DELETE /api/strategies/:id - Delete strategy
 async fn delete_strategy_handler(Path(id): Path<String>) -> Response {
-    logger::info(
-        LogTag::Webserver,
-            &format!("DELETE /api/strategies/{}", id),
-        );
+    logger::info(LogTag::Webserver, &format!("DELETE /api/strategies/{}", id));
 
     // Check if strategy exists
     match get_strategy(&id) {
@@ -604,15 +595,12 @@ async fn delete_strategy_handler(Path(id): Path<String>) -> Response {
     // Clear evaluation cache after deletion
     if let Err(e) = strategies::clear_evaluation_cache().await {
         logger::info(
-        LogTag::Webserver,
+            LogTag::Webserver,
             &format!("Failed to clear evaluation cache: {}", e),
         );
     }
 
-    logger::info(
-        LogTag::Webserver,
-        &format!("Strategy deleted: id={}", id),
-    );
+    logger::info(LogTag::Webserver, &format!("Strategy deleted: id={}", id));
 
     success_response(serde_json::json!({
         "id": id,
@@ -624,8 +612,8 @@ async fn delete_strategy_handler(Path(id): Path<String>) -> Response {
 async fn get_strategy_performance_stats(Path(id): Path<String>) -> Response {
     logger::info(
         LogTag::Webserver,
-            &format!("GET /api/strategies/{}/performance", id),
-        );
+        &format!("GET /api/strategies/{}/performance", id),
+    );
 
     // Check if strategy exists
     match get_strategy(&id) {
@@ -681,11 +669,11 @@ async fn test_strategy(
 ) -> Response {
     logger::info(
         LogTag::Webserver,
-            &format!(
-                "POST /api/strategies/{}/test - token={}",
-                id, request.token_mint
-            ),
-        );
+        &format!(
+            "POST /api/strategies/{}/test - token={}",
+            id, request.token_mint
+        ),
+    );
 
     // Get strategy
     let strategy = match get_strategy(&id) {
@@ -778,10 +766,7 @@ async fn test_strategy(
 
 /// GET /api/strategies/conditions/schemas - Get all condition schemas
 async fn get_condition_schemas() -> Response {
-    logger::info(
-        LogTag::Webserver,
-            "GET /api/strategies/conditions/schemas",
-        );
+    logger::info(LogTag::Webserver, "GET /api/strategies/conditions/schemas");
 
     let schemas = match strategies::get_condition_schemas().await {
         Ok(s) => s,
@@ -933,7 +918,7 @@ async fn deploy_strategy_handler(Path(id): Path<String>) -> Response {
     // Clear evaluation cache after deployment
     if let Err(e) = strategies::clear_evaluation_cache().await {
         logger::info(
-        LogTag::Webserver,
+            LogTag::Webserver,
             &format!("Failed to clear evaluation cache: {}", e),
         );
     }

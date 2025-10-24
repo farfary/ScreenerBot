@@ -66,7 +66,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     &format!("Failed to record test event: {}", e),
                 );
             } else {
-                logger::debug(LogTag::System, &format!("✅ Recorded test event #{}", counter));
+                logger::debug(
+                    LogTag::System,
+                    &format!("✅ Recorded test event #{}", counter),
+                );
             }
 
             counter += 1;

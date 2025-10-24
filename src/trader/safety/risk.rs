@@ -22,7 +22,7 @@ pub async fn check_risk_limits(
     if entry_price <= 0.0 || !entry_price.is_finite() {
         return Ok(None); // Invalid entry price, skip risk check
     }
-    
+
     let loss_pct = (1.0 - current_price / entry_price) * 100.0;
 
     // If loss exceeds 90%, trigger emergency exit

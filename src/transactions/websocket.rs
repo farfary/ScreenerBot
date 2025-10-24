@@ -357,10 +357,7 @@ pub async fn start_websocket_monitoring(
                 Ok(_) => {
                     // Normal exit (shutdown received) or successful long-running connection
                     reconnect_attempts = 0; // Reset attempt counter on successful connection
-                    logger::info(
-                        LogTag::Websocket,
-                        "WebSocket monitoring exited normally",
-                    );
+                    logger::info(LogTag::Websocket, "WebSocket monitoring exited normally");
                     break;
                 }
                 Err(e) => {
@@ -394,10 +391,7 @@ pub async fn start_websocket_monitoring(
             }
         }
 
-        logger::info(
-            LogTag::Websocket,
-            "WebSocket background task exiting",
-        );
+        logger::info(LogTag::Websocket, "WebSocket background task exiting");
     });
 
     Ok(tx_receiver)

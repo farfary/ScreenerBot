@@ -173,7 +173,10 @@ impl OhlcvServiceImpl {
 async fn get_or_init_service() -> OhlcvResult<Arc<OhlcvServiceImpl>> {
     let service = OHLCV_SERVICE
         .get_or_try_init(|| async {
-            logger::info(LogTag::Ohlcv, &"INIT: Initializing OHLCV runtime".to_string());
+            logger::info(
+                LogTag::Ohlcv,
+                &"INIT: Initializing OHLCV runtime".to_string(),
+            );
 
             // Use config for DB path
             let db_path = PathBuf::from("data").join("ohlcvs.db");
@@ -202,13 +205,22 @@ impl OhlcvService {
 
         // Start background monitoring tasks before awaiting shutdown
         monitor_instance.clone().start().await?;
-        logger::info(LogTag::Ohlcv, &"TASK_START: OHLCV monitoring tasks started".to_string());
+        logger::info(
+            LogTag::Ohlcv,
+            &"TASK_START: OHLCV monitoring tasks started".to_string(),
+        );
 
         let shutdown_task = tokio::spawn(monitor.instrument(async move {
             shutdown.notified().await;
-            logger::info(LogTag::Ohlcv, &"TASK_STOP: Shutdown signal received for OHLCV monitoring".to_string());
+            logger::info(
+                LogTag::Ohlcv,
+                &"TASK_STOP: Shutdown signal received for OHLCV monitoring".to_string(),
+            );
             monitor_instance.stop().await;
-            logger::info(LogTag::Ohlcv, &"TASK_END: OHLCV monitoring tasks stopped".to_string());
+            logger::info(
+                LogTag::Ohlcv,
+                &"TASK_END: OHLCV monitoring tasks stopped".to_string(),
+            );
         }));
 
         Ok(vec![shutdown_task])

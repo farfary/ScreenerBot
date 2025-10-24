@@ -355,10 +355,7 @@ async fn update_security_data(db: &TokenDatabase, coordinator: &RateLimitCoordin
         Err(e) => {
             logger::error(
                 LogTag::Tokens,
-                &format!(
-                    "Failed to load tokens without security data: {}",
-                    e
-                ),
+                &format!("Failed to load tokens without security data: {}", e),
             );
             return;
         }
@@ -374,7 +371,10 @@ async fn update_security_data(db: &TokenDatabase, coordinator: &RateLimitCoordin
     match coordinator.acquire_rugcheck().await {
         Ok(_) => match rugcheck::fetch_rugcheck_data(mint, db).await {
             Ok(Some(_)) => {
-                logger::debug(LogTag::Tokens, &format!("Security data fetched for {}", mint));
+                logger::debug(
+                    LogTag::Tokens,
+                    &format!("Security data fetched for {}", mint),
+                );
                 // Clear any previous error tracking
                 let _ = db.clear_security_error(mint);
             }
@@ -400,10 +400,7 @@ async fn update_security_data(db: &TokenDatabase, coordinator: &RateLimitCoordin
 
                 logger::error(
                     LogTag::Tokens,
-                    &format!(
-                        "Rugcheck error ({}) for {}: {}",
-                        error_type, mint, e
-                    ),
+                    &format!("Rugcheck error ({}) for {}: {}", error_type, mint, e),
                 );
                 let _ = db.record_security_error(mint, &e.to_string(), error_type);
             }
@@ -513,7 +510,10 @@ async fn update_uninitialized_tokens(db: &TokenDatabase, coordinator: &RateLimit
     let tokens = match db.get_tokens_without_market_data(MAX_INITIAL_BATCH) {
         Ok(tokens) => tokens,
         Err(e) => {
-            logger::error(LogTag::Tokens, &format!("Failed to load uninitialized tokens: {}", e));
+            logger::error(
+                LogTag::Tokens,
+                &format!("Failed to load uninitialized tokens: {}", e),
+            );
             return;
         }
     };
@@ -560,7 +560,10 @@ async fn update_uninitialized_tokens(db: &TokenDatabase, coordinator: &RateLimit
                 }
             }
             Err(e) => {
-                logger::error(LogTag::Tokens, &format!("Batch error during seeding: {}", e));
+                logger::error(
+                    LogTag::Tokens,
+                    &format!("Batch error during seeding: {}", e),
+                );
             }
         }
     }
@@ -572,7 +575,10 @@ async fn update_critical_tokens(db: &TokenDatabase, coordinator: &RateLimitCoord
     let tokens = match db.get_tokens_by_priority(100, 200) {
         Ok(tokens) => tokens,
         Err(e) => {
-            logger::error(LogTag::Tokens, &format!("Failed to get critical tokens: {}", e));
+            logger::error(
+                LogTag::Tokens,
+                &format!("Failed to get critical tokens: {}", e),
+            );
             return;
         }
     };
@@ -583,10 +589,7 @@ async fn update_critical_tokens(db: &TokenDatabase, coordinator: &RateLimitCoord
 
     logger::info(
         LogTag::Tokens,
-        &format!(
-            "Updating {} critical priority tokens",
-            tokens.len()
-        ),
+        &format!("Updating {} critical priority tokens", tokens.len()),
     );
 
     // Process in batches of 30
@@ -597,10 +600,7 @@ async fn update_critical_tokens(db: &TokenDatabase, coordinator: &RateLimitCoord
                     if result.is_total_failure() {
                         logger::error(
                             LogTag::Tokens,
-                            &format!(
-                                "Total failure for {}: {:?}",
-                                result.mint, result.failures
-                            ),
+                            &format!("Total failure for {}: {:?}", result.mint, result.failures),
                         );
                         let message = result.failures.join(" | ");
                         if let Err(err) =
@@ -608,10 +608,7 @@ async fn update_critical_tokens(db: &TokenDatabase, coordinator: &RateLimitCoord
                         {
                             logger::error(
                                 LogTag::Tokens,
-                                &format!(
-                                    "Failed to record error for {}: {}",
-                                    result.mint, err
-                                ),
+                                &format!("Failed to record error for {}: {}", result.mint, err),
                             );
                         }
                     } else if result.is_partial_failure() {
@@ -628,7 +625,10 @@ async fn update_critical_tokens(db: &TokenDatabase, coordinator: &RateLimitCoord
                 }
             }
             Err(e) => {
-                logger::error(LogTag::Tokens, &format!("Batch error for critical tokens: {}", e));
+                logger::error(
+                    LogTag::Tokens,
+                    &format!("Batch error for critical tokens: {}", e),
+                );
             }
         }
     }
@@ -640,7 +640,10 @@ async fn update_high_priority_tokens(db: &TokenDatabase, coordinator: &RateLimit
     let tokens = match db.get_tokens_by_priority(50, 200) {
         Ok(tokens) => tokens,
         Err(e) => {
-            logger::error(LogTag::Tokens, &format!("Failed to get high priority tokens: {}", e));
+            logger::error(
+                LogTag::Tokens,
+                &format!("Failed to get high priority tokens: {}", e),
+            );
             return;
         }
     };
@@ -667,10 +670,7 @@ async fn update_high_priority_tokens(db: &TokenDatabase, coordinator: &RateLimit
                         {
                             logger::error(
                                 LogTag::Tokens,
-                                &format!(
-                                    "Failed to record error for {}: {}",
-                                    result.mint, err
-                                ),
+                                &format!("Failed to record error for {}: {}", result.mint, err),
                             );
                         }
                     } else if result.is_partial_failure() {
@@ -687,7 +687,10 @@ async fn update_high_priority_tokens(db: &TokenDatabase, coordinator: &RateLimit
                 }
             }
             Err(e) => {
-                logger::error(LogTag::Tokens, &format!("Batch error for high priority tokens: {}", e));
+                logger::error(
+                    LogTag::Tokens,
+                    &format!("Batch error for high priority tokens: {}", e),
+                );
             }
         }
     }
@@ -699,7 +702,10 @@ async fn update_low_priority_tokens(db: &TokenDatabase, coordinator: &RateLimitC
     let tokens = match db.get_oldest_non_blacklisted(30) {
         Ok(tokens) => tokens,
         Err(e) => {
-            logger::error(LogTag::Tokens, &format!("Failed to get low priority tokens: {}", e));
+            logger::error(
+                LogTag::Tokens,
+                &format!("Failed to get low priority tokens: {}", e),
+            );
             return;
         }
     };
@@ -723,10 +729,7 @@ async fn update_low_priority_tokens(db: &TokenDatabase, coordinator: &RateLimitC
                     {
                         logger::error(
                             LogTag::Tokens,
-                            &format!(
-                                "Failed to record error for {}: {}",
-                                result.mint, err
-                            ),
+                            &format!("Failed to record error for {}: {}", result.mint, err),
                         );
                     }
                 } else if result.is_partial_failure() {
@@ -743,8 +746,10 @@ async fn update_low_priority_tokens(db: &TokenDatabase, coordinator: &RateLimitC
             }
         }
         Err(e) => {
-            logger::error(LogTag::Tokens, &format!("Batch error for low priority tokens: {}", e));
+            logger::error(
+                LogTag::Tokens,
+                &format!("Batch error for low priority tokens: {}", e),
+            );
         }
     }
 }
-

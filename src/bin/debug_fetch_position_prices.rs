@@ -78,12 +78,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // Step 1: Initialize databases
-    logger::info(
-        LogTag::System, "📊 Initializing databases...");
+    logger::info(LogTag::System, "📊 Initializing databases...");
 
     if let Err(e) = initialize_positions_database().await {
         logger::info(
-        LogTag::Positions,
+            LogTag::Positions,
             &format!("Failed to initialize positions database: {}", e),
         );
         return Err(format!("Positions database initialization failed: {}", e).into());
@@ -94,13 +93,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("⚠️  OHLCV functionality temporarily disabled - needs rewrite for new system");
 
     // Step 2: Load open positions
-    logger::info(
-        LogTag::System, "📋 Loading open positions...");
+    logger::info(LogTag::System, "📋 Loading open positions...");
     let open_positions = match get_db_open_positions().await {
         Ok(positions) => positions,
         Err(e) => {
             logger::info(
-        LogTag::Positions,
+                LogTag::Positions,
                 &format!("Failed to load open positions: {}", e),
             );
             return Err(format!("Failed to load open positions: {}", e).into());
@@ -130,12 +128,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     set_debug_token_override(Some(tokens_to_monitor.clone()));
 
     // Step 4: Initialize pool service
-    logger::info(
-        LogTag::System, "🏊 Starting pool service...");
+    logger::info(LogTag::System, "🏊 Starting pool service...");
     let shutdown_pools = Arc::new(Notify::new());
     if let Err(e) = init_pool_service(shutdown_pools.clone()).await {
         logger::info(
-        LogTag::PoolService,
+            LogTag::PoolService,
             &format!("Failed to start pool service: {}", e),
         );
         return Err(format!("Pool service start failed: {}", e).into());
@@ -154,10 +151,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if !validate_only {
         // Step 7: Fetch OHLCV data for each position
-        logger::info(
-        LogTag::System,
-            "📊 Fetching OHLCV data for positions...",
-        );
+        logger::info(LogTag::System, "📊 Fetching OHLCV data for positions...");
         println!("📊 Fetching OHLCV data for each position...");
 
         let candles_per_day = 1440; // 1-minute candles
@@ -189,7 +183,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Err(e) => {
                     println!("  ❌ Failed: {}", e);
                     logger::info(
-        LogTag::Ohlcv,
+                        LogTag::Ohlcv,
                         &format!("Failed to fetch OHLCV for {}: {}", position.mint, e),
                     );
                 }
@@ -203,10 +197,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Step 8: Validate price calculations
-    logger::info(
-        LogTag::System,
-        "🔍 Validating price calculations...",
-    );
+    logger::info(LogTag::System, "🔍 Validating price calculations...");
     println!("\n🔍 Validating price calculations...");
 
     for position in &open_positions {
@@ -255,11 +246,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🎯 Positions analyzed: {}", open_positions.len());
 
     // Gracefully stop pool service
-    logger::info(
-        LogTag::System, "🛑 Shutting down services...");
+    logger::info(LogTag::System, "🛑 Shutting down services...");
     if let Err(e) = stop_pool_service(3).await {
         logger::info(
-        LogTag::PoolService,
+            LogTag::PoolService,
             &format!("Pool service stop warning: {}", e),
         );
     }
@@ -305,10 +295,7 @@ async fn validate_position_prices(
     for row_result in rows {
         match row_result {
             Ok((timestamp, price)) => price_data.push((timestamp, price)),
-            Err(e) => logger::info(
-        LogTag::Ohlcv,
-                &format!("Failed to parse row: {}", e),
-            ),
+            Err(e) => logger::info(LogTag::Ohlcv, &format!("Failed to parse row: {}", e)),
         }
     }
 

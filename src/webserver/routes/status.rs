@@ -47,30 +47,24 @@ async fn health_check() -> Response {
 
 /// GET /api/status
 async fn system_status() -> Response {
-    logger::info(
-        LogTag::Webserver,
-            "Fetching system status snapshot",
-        );
+    logger::info(LogTag::Webserver, "Fetching system status snapshot");
 
     let snapshot: StatusSnapshot = gather_status_snapshot().await;
 
     logger::info(
         LogTag::Webserver,
-            &format!(
-                "Status snapshot ready (uptime={}s, trading_enabled={}, open_positions={})",
-                snapshot.uptime_seconds, snapshot.trading_enabled, snapshot.open_positions
-            ),
-        );
+        &format!(
+            "Status snapshot ready (uptime={}s, trading_enabled={}, open_positions={})",
+            snapshot.uptime_seconds, snapshot.trading_enabled, snapshot.open_positions
+        ),
+    );
 
     success_response(snapshot)
 }
 
 /// GET /api/status/services
 async fn service_status() -> Response {
-    logger::info(
-        LogTag::Webserver,
-            "Fetching service status snapshot",
-        );
+    logger::info(LogTag::Webserver, "Fetching service status snapshot");
 
     let services: ServiceStatusSnapshot = gather_status_snapshot().await.services;
     success_response(services)
@@ -78,10 +72,7 @@ async fn service_status() -> Response {
 
 /// GET /api/status/metrics
 async fn system_metrics() -> Response {
-    logger::info(
-        LogTag::Webserver,
-            "Fetching system metrics snapshot",
-        );
+    logger::info(LogTag::Webserver, "Fetching system metrics snapshot");
 
     let metrics: SystemMetricsSnapshot = gather_status_snapshot().await.metrics;
     success_response(metrics)

@@ -36,10 +36,7 @@ impl Service for WebserverService {
     ) -> Result<Vec<JoinHandle<()>>, String> {
         let handle = tokio::spawn(monitor.instrument(async move {
             if let Err(e) = crate::webserver::start_server().await {
-                logger::error(
-                    LogTag::System,
-                    &format!("Webserver failed to start: {}", e),
-                );
+                logger::error(LogTag::System, &format!("Webserver failed to start: {}", e));
             }
         }));
 

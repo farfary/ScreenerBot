@@ -537,10 +537,7 @@ async fn warmup_dashboard_metrics() {
         compute_and_cache_metrics_internal(key, hours).await;
     }
 
-    logger::info(
-        LogTag::Wallet,
-        "Wallet dashboard metrics warm-up complete",
-    );
+    logger::info(LogTag::Wallet, "Wallet dashboard metrics warm-up complete");
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -721,10 +718,7 @@ async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, St
                 }
             }
             Err(e) => {
-                logger::debug(
-                    LogTag::Wallet,
-                    &format!("Cache aggregation failed: {}", e),
-                );
+                logger::debug(LogTag::Wallet, &format!("Cache aggregation failed: {}", e));
             }
         }
     }
@@ -1363,10 +1357,7 @@ impl WalletDatabase {
         // Initialize database schema
         db.initialize_schema().await?;
 
-        logger::debug(
-            LogTag::Wallet,
-            "Wallet database initialized successfully",
-        );
+        logger::debug(LogTag::Wallet, "Wallet database initialized successfully");
         Ok(db)
     }
 

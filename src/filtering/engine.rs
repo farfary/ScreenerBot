@@ -17,7 +17,8 @@ use super::types::{
 
 const TOKEN_FETCH_CONCURRENCY: usize = 24;
 
-pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapshot, String> {    let start = StdInstant::now();
+pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapshot, String> {
+    let start = StdInstant::now();
 
     let max_candidates = config.max_tokens_to_process.max(100);
     let fetch_limit = if config.target_filtered_tokens > 0 {
@@ -31,7 +32,10 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
         .map_err(|e| format!("Failed to list tokens: {}", e))?;
 
     if metadata.is_empty() {
-        logger::debug(LogTag::Filtering, "Token store empty - snapshot remains empty");
+        logger::debug(
+            LogTag::Filtering,
+            "Token store empty - snapshot remains empty",
+        );
         return Ok(FilteringSnapshot::empty());
     }
 
@@ -57,8 +61,13 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
         .await;
 
     if tokens_with_index.is_empty() {
-        logger::info(LogTag::Filtering, &format!("Unable to load full tokens for any candidates (total_candidates={})",
-                total_candidates));
+        logger::info(
+            LogTag::Filtering,
+            &format!(
+                "Unable to load full tokens for any candidates (total_candidates={})",
+                total_candidates
+            ),
+        );
         return Ok(FilteringSnapshot::empty());
     }
 
@@ -219,7 +228,10 @@ async fn apply_all_filters(
                 }
                 Ok(None) => None,
                 Err(err) => {
-                    logger::info(LogTag::Filtering, &format!("mint={} err={}", token.mint, err));
+                    logger::info(
+                        LogTag::Filtering,
+                        &format!("mint={} err={}", token.mint, err),
+                    );
                     None
                 }
             }
@@ -248,7 +260,10 @@ async fn apply_all_filters(
                 }
                 Ok(None) => None,
                 Err(err) => {
-                    logger::info(LogTag::Filtering, &format!("mint={} err={}", token.mint, err));
+                    logger::info(
+                        LogTag::Filtering,
+                        &format!("mint={} err={}", token.mint, err),
+                    );
                     None
                 }
             }

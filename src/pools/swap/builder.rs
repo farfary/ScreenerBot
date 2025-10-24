@@ -119,7 +119,10 @@ impl SwapBuilder {
             }
         };
 
-        logger::info(LogTag::System, &format!("📊 Detected pool program: {:?}", program_kind));
+        logger::info(
+            LogTag::System,
+            &format!("📊 Detected pool program: {:?}", program_kind),
+        );
 
         Ok((account_data, program_kind))
     }

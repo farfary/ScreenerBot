@@ -6,13 +6,13 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+use crate::logger::{self, LogTag};
 use crate::wallet::{
     clear_dashboard_api_cache, get_current_wallet_status, get_dashboard_cache_metrics,
     get_flow_cache_stats, get_wallet_dashboard_data, refresh_dashboard_cache,
     CachePerformanceMetrics, WalletDashboardData, WalletFlowCacheStats,
 };
 use crate::webserver::state::AppState;
-use crate::logger::{self, LogTag};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WalletCurrentResponse {
@@ -132,8 +132,7 @@ async fn refresh_wallet_dashboard(
                 LogTag::Wallet,
                 &format!(
                     "Failed to refresh dashboard cache for {}h: {}",
-                    request.window_hours,
-                    err
+                    request.window_hours, err
                 ),
             );
         }

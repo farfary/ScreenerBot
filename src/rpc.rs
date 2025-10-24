@@ -32,10 +32,8 @@ use crate::constants::LAMPORTS_PER_SOL;
 use crate::errors::blockchain::CommitmentLevel;
 use crate::errors::{parse_solana_error, BlockchainError, ScreenerBotError};
 use crate::errors::{ConfigurationError, DataError, NetworkError, RpcProviderError};
-use crate::global::{
-    RPC_STATS,
-};
-use crate::logger::{LogTag, self as logger};
+use crate::global::RPC_STATS;
+use crate::logger::{self as logger, LogTag};
 use crate::utils::lamports_to_sol;
 use base64::Engine as _;
 use bincode;
@@ -295,10 +293,7 @@ pub async fn get_ata_rent_lamports() -> Result<u64, ScreenerBotError> {
                             }
                         }
 
-                        logger::warning(
-                            LogTag::Rpc,
-                            "RPC response missing result for ATA rent",
-                        );
+                        logger::warning(LogTag::Rpc, "RPC response missing result for ATA rent");
                     }
                     Err(e) => {
                         logger::warning(
@@ -319,10 +314,7 @@ pub async fn get_ata_rent_lamports() -> Result<u64, ScreenerBotError> {
             }
         }
         Err(e) => {
-            logger::warning(
-                LogTag::Rpc,
-                &format!("Failed to connect to RPC: {}", e),
-            );
+            logger::warning(LogTag::Rpc, &format!("Failed to connect to RPC: {}", e));
         }
     }
 
@@ -403,9 +395,9 @@ pub fn get_websocket_url_from_http(http_url: &str) -> Result<String, ScreenerBot
         "http" => "ws",
         other => {
             logger::warning(
-                    LogTag::Rpc,
-                    &format!("Unknown scheme '{}', defaulting to wss", other),
-                );
+                LogTag::Rpc,
+                &format!("Unknown scheme '{}', defaulting to wss", other),
+            );
             "wss"
         }
     };
@@ -1050,10 +1042,7 @@ impl RpcClient {
         match self.current_url.lock() {
             Ok(url) => url.clone(),
             Err(_) => {
-                logger::warning(
-                    LogTag::Rpc,
-                    "Failed to lock current_url - using first URL",
-                );
+                logger::warning(LogTag::Rpc, "Failed to lock current_url - using first URL");
                 self.rpc_urls.get(0).unwrap_or(&"".to_string()).clone()
             }
         }
@@ -1108,10 +1097,7 @@ impl RpcClient {
                 new_url
             }
             _ => {
-                logger::warning(
-                    LogTag::Rpc,
-                    "Failed to rotate URL - lock contention",
-                );
+                logger::warning(LogTag::Rpc, "Failed to rotate URL - lock contention");
                 self.rpc_urls.get(0).unwrap_or(&"".to_string()).clone()
             }
         };
@@ -1137,10 +1123,7 @@ impl RpcClient {
                     .clone()
             }
             Err(_) => {
-                logger::warning(
-                    LogTag::Rpc,
-                    "Failed to get next URL - lock contention",
-                );
+                logger::warning(LogTag::Rpc, "Failed to get next URL - lock contention");
                 self.rpc_urls.get(0).unwrap_or(&"".to_string()).clone()
             }
         }
@@ -1151,10 +1134,7 @@ impl RpcClient {
         match self.current_url_index.lock() {
             Ok(index) => *index,
             Err(_) => {
-                logger::warning(
-                    LogTag::Rpc,
-                    "Failed to get URL index - lock contention",
-                );
+                logger::warning(LogTag::Rpc, "Failed to get URL index - lock contention");
                 0
             }
         }
@@ -1525,7 +1505,7 @@ impl RpcClient {
             }
             Err(e) => {
                 self.record_error(&current_url, "get_multiple_accounts");
-                    if e.starts_with("rate_limit:") {
+                if e.starts_with("rate_limit:") {
                     self.record_429_error(Some(&current_url));
                     logger::debug(LogTag::Rpc, "Rate limited on RPC for batch request");
                 } else {
@@ -1645,7 +1625,7 @@ impl RpcClient {
                 let error_msg = e.to_string();
 
                 // Check for rate limiting errors
-                    if Self::is_rate_limit_error(&error_msg) {
+                if Self::is_rate_limit_error(&error_msg) {
                     self.record_429_error(Some(&current_url));
                     logger::warning(LogTag::Rpc, "Rate limited on RPC for SOL balance");
                 } else {
@@ -1689,12 +1669,12 @@ impl RpcClient {
         let current_url = self.rotate_to_next_url();
 
         logger::debug(
-                LogTag::Rpc,
-                &format!(
-                    "Fetching token balance for wallet {} mint {} from RPC: {}",
-                    wallet_address, mint, current_url
-                ),
-            );
+            LogTag::Rpc,
+            &format!(
+                "Fetching token balance for wallet {} mint {} from RPC: {}",
+                wallet_address, mint, current_url
+            ),
+        );
 
         // Apply rate limiting
         self.wait_for_rate_limit().await;
@@ -1775,13 +1755,13 @@ impl RpcClient {
                             }
                         }
 
-                                logger::warning(
-                                    LogTag::Rpc,
-                                    &format!(
-                                        "Invalid response format for token balance from RPC {}",
-                                        current_url
-                                    ),
-                                );
+                        logger::warning(
+                            LogTag::Rpc,
+                            &format!(
+                                "Invalid response format for token balance from RPC {}",
+                                current_url
+                            ),
+                        );
                     }
                 } else if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
                     self.record_429_error(Some(&current_url));
@@ -1804,7 +1784,7 @@ impl RpcClient {
                 let error_msg = e.to_string();
 
                 // Check for rate limiting errors
-                    if Self::is_rate_limit_error(&error_msg) {
+                if Self::is_rate_limit_error(&error_msg) {
                     self.record_429_error(Some(&current_url));
                     logger::warning(
                         LogTag::Rpc,
@@ -1877,8 +1857,11 @@ impl RpcClient {
                                 // Check if it's a rate limit error
                                 if Self::is_rate_limit_error(&error_str) {
                                     self.record_429_error(Some(&current_url));
-                                    logger::warning(LogTag::Rpc, "Rate limited on RPC for blockhash");
-                                    } else {
+                                    logger::warning(
+                                        LogTag::Rpc,
+                                        "Rate limited on RPC for blockhash",
+                                    );
+                                } else {
                                     let blockchain_error = parse_solana_error(
                                         &error_str,
                                         None,
@@ -1912,12 +1895,12 @@ impl RpcClient {
                                             self.record_success(Some(&current_url));
 
                                             logger::debug(
-                                                    LogTag::Rpc,
-                                                    &format!(
-                                                        "Successfully fetched blockhash {}",
-                                                        blockhash
-                                                    ),
-                                                );
+                                                LogTag::Rpc,
+                                                &format!(
+                                                    "Successfully fetched blockhash {}",
+                                                    blockhash
+                                                ),
+                                            );
 
                                             return Ok(blockhash);
                                         }
@@ -1928,7 +1911,10 @@ impl RpcClient {
                             logger::warning(LogTag::Rpc, "No valid blockhash found in response");
                         }
                         Err(e) => {
-                            logger::warning(LogTag::Rpc, &format!("Failed to parse blockhash response: {}", e));
+                            logger::warning(
+                                LogTag::Rpc,
+                                &format!("Failed to parse blockhash response: {}", e),
+                            );
                         }
                     }
                 } else if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
@@ -1950,9 +1936,15 @@ impl RpcClient {
                 let error_msg = e.to_string();
                 if Self::is_rate_limit_error(&error_msg) {
                     self.record_429_error(Some(&current_url));
-                    logger::warning(LogTag::Rpc, &format!("Rate limited on RPC for blockhash: {}", error_msg));
+                    logger::warning(
+                        LogTag::Rpc,
+                        &format!("Rate limited on RPC for blockhash: {}", error_msg),
+                    );
                 } else {
-                    logger::error(LogTag::Rpc, &format!("Failed to connect to RPC for blockhash: {}", e));
+                    logger::error(
+                        LogTag::Rpc,
+                        &format!("Failed to connect to RPC for blockhash: {}", e),
+                    );
                     return Err(ScreenerBotError::Network(
                         crate::errors::NetworkError::Generic {
                             message: format!("Failed to get latest blockhash from RPC: {}", e),
@@ -1991,7 +1983,13 @@ impl RpcClient {
 
         let current_url = self.rotate_to_next_url();
 
-        logger::debug(LogTag::Rpc, &format!("Fetching latest blockhash with height from RPC: {}", current_url));
+        logger::debug(
+            LogTag::Rpc,
+            &format!(
+                "Fetching latest blockhash with height from RPC: {}",
+                current_url
+            ),
+        );
 
         self.wait_for_rate_limit().await;
         self.record_call("getLatestBlockhash");
@@ -2078,13 +2076,13 @@ impl RpcClient {
             if let (Some(height), Some(fetched_at)) = (cache_guard.height, cache_guard.fetched_at) {
                 if fetched_at.elapsed().as_secs() < BLOCK_HEIGHT_CACHE_TTL_SECS {
                     logger::debug(
-                            LogTag::Rpc,
-                            &format!(
-                                "Using cached block height {} (age {:.3}s)",
-                                height,
-                                fetched_at.elapsed().as_secs_f32()
-                            ),
-                        );
+                        LogTag::Rpc,
+                        &format!(
+                            "Using cached block height {} (age {:.3}s)",
+                            height,
+                            fetched_at.elapsed().as_secs_f32()
+                        ),
+                    );
                     return Ok(height);
                 }
             }
@@ -2103,7 +2101,10 @@ impl RpcClient {
 
         let current_url = self.rotate_to_next_url();
 
-        logger::debug(LogTag::Rpc, &format!("Fetching current block height from RPC: {}", current_url));
+        logger::debug(
+            LogTag::Rpc,
+            &format!("Fetching current block height from RPC: {}", current_url),
+        );
 
         self.wait_for_rate_limit().await;
         self.record_call("getBlockHeight");
@@ -2143,12 +2144,12 @@ impl RpcClient {
                                     }
 
                                     logger::debug(
-                                            LogTag::Rpc,
-                                            &format!(
-                                                "Successfully fetched block height {} from {}",
-                                                block_height, current_url
-                                            ),
-                                        );
+                                        LogTag::Rpc,
+                                        &format!(
+                                            "Successfully fetched block height {} from {}",
+                                            block_height, current_url
+                                        ),
+                                    );
 
                                     return Ok(block_height);
                                 }
@@ -2280,7 +2281,7 @@ impl RpcClient {
                 let error_msg = e.to_string();
 
                 // Check for rate limiting errors
-                    if Self::is_rate_limit_error(&error_msg) {
+                if Self::is_rate_limit_error(&error_msg) {
                     self.record_429_error(Some(&current_url));
                     logger::warning(LogTag::Rpc, "Rate limited on RPC for transaction send");
                 } else {
@@ -2314,12 +2315,12 @@ impl RpcClient {
         swap_transaction_base64: &str,
     ) -> Result<String, ScreenerBotError> {
         logger::debug(
-                LogTag::Rpc,
-                &format!(
-                    "Starting transaction signing: tx_length={} bytes",
-                    swap_transaction_base64.len()
-                ),
-            );
+            LogTag::Rpc,
+            &format!(
+                "Starting transaction signing: tx_length={} bytes",
+                swap_transaction_base64.len()
+            ),
+        );
 
         logger::info(
             LogTag::Rpc,
@@ -2330,12 +2331,12 @@ impl RpcClient {
         );
 
         logger::debug(
-                LogTag::Rpc,
-                &format!(
-                    "🚀 Starting sign_and_send_transaction process with {} byte transaction",
-                    swap_transaction_base64.len()
-                ),
-            );
+            LogTag::Rpc,
+            &format!(
+                "🚀 Starting sign_and_send_transaction process with {} byte transaction",
+                swap_transaction_base64.len()
+            ),
+        );
 
         // Decode the base64 transaction once (we will mutate & re-sign on retries)
         let original_tx_bytes = base64::engine::general_purpose::STANDARD
@@ -2373,13 +2374,13 @@ impl RpcClient {
                     tx.signatures[0] = sig;
                 }
                 logger::debug(
-                        LogTag::Rpc,
-                        &format!(
-                            "Transaction signed: wallet_pubkey={}, signature={}",
-                            keypair.pubkey(),
-                            sig
-                        ),
-                    );
+                    LogTag::Rpc,
+                    &format!(
+                        "Transaction signed: wallet_pubkey={}, signature={}",
+                        keypair.pubkey(),
+                        sig
+                    ),
+                );
                 let bytes = bincode::serialize(tx).map_err(|e| {
                     ScreenerBotError::Data(crate::errors::DataError::ParseError {
                         data_type: "signed_transaction".to_string(),
@@ -2408,7 +2409,10 @@ impl RpcClient {
 
         while attempt < MAX_ATTEMPTS {
             if attempt > 0 {
-                logger::info(LogTag::Rpc, &format!("Retrying transaction send attempt {}", attempt + 1));
+                logger::info(
+                    LogTag::Rpc,
+                    &format!("Retrying transaction send attempt {}", attempt + 1),
+                );
             }
 
             // Re-sign (possibly after blockhash update)
@@ -2428,7 +2432,10 @@ impl RpcClient {
             // Use round-robin RPC rotation - get next URL from client
             let current_url = self.rotate_to_next_url();
 
-            logger::debug(LogTag::Rpc, &format!("Attempt {} -> RPC: {}", attempt + 1, current_url));
+            logger::debug(
+                LogTag::Rpc,
+                &format!("Attempt {} -> RPC: {}", attempt + 1, current_url),
+            );
 
             // Apply rate limiting
             self.wait_for_rate_limit().await;
@@ -2467,7 +2474,10 @@ impl RpcClient {
                                         .and_then(|m| m.as_str())
                                         .unwrap_or("Unknown RPC error");
 
-                                    logger::debug(LogTag::Rpc, &format!("RPC {} error: {}", current_url, msg));
+                                    logger::debug(
+                                        LogTag::Rpc,
+                                        &format!("RPC {} error: {}", current_url, msg),
+                                    );
 
                                     // Parse Solana-specific error using new structured approach
                                     let blockchain_error =
@@ -2488,12 +2498,12 @@ impl RpcClient {
                                                 match self.get_latest_blockhash().await {
                                                     Ok(new_bh) => {
                                                         logger::debug(
-                                                                LogTag::Rpc,
-                                                                &format!(
-                                                                    "Fetched fresh blockhash: {}",
-                                                                    new_bh
-                                                                ),
-                                                            );
+                                                            LogTag::Rpc,
+                                                            &format!(
+                                                                "Fetched fresh blockhash: {}",
+                                                                new_bh
+                                                            ),
+                                                        );
                                                         // Update message blockhash
                                                         match &mut transaction.message {
                                                             solana_sdk::message::VersionedMessage::Legacy(
@@ -2634,12 +2644,12 @@ impl RpcClient {
         swap_transaction_base64: &str,
     ) -> Result<String, ScreenerBotError> {
         logger::info(
-                LogTag::Rpc,
-                &format!(
-                    "🚀 Starting sign_send_and_confirm_transaction with {} byte transaction",
-                    swap_transaction_base64.len()
-                ),
-            );
+            LogTag::Rpc,
+            &format!(
+                "🚀 Starting sign_send_and_confirm_transaction with {} byte transaction",
+                swap_transaction_base64.len()
+            ),
+        );
 
         // Decode base64 transaction
         let original_tx_bytes = base64::engine::general_purpose::STANDARD
@@ -2676,25 +2686,25 @@ impl RpcClient {
         }
 
         logger::info(
-                LogTag::Rpc,
-                &format!(
-                    "Transaction signed, wallet={}, sig={}",
-                    keypair.pubkey(),
-                    sig
-                ),
-            );
+            LogTag::Rpc,
+            &format!(
+                "Transaction signed, wallet={}, sig={}",
+                keypair.pubkey(),
+                sig
+            ),
+        );
 
         // Use current round-robin URL
         let url = self.url();
         let commitment = CommitmentConfig::confirmed();
 
         logger::debug(
-                LogTag::Rpc,
-                &format!(
-                    "Creating blocking RpcClient for send_and_confirm at {}",
-                    url
-                ),
-            );
+            LogTag::Rpc,
+            &format!(
+                "Creating blocking RpcClient for send_and_confirm at {}",
+                url
+            ),
+        );
 
         // Build blocking client and send+confirm in blocking thread
         // Record submission event (no signature yet)
@@ -2784,12 +2794,12 @@ impl RpcClient {
         };
 
         logger::info(
-                LogTag::Rpc,
-                &format!(
-                    "Creating blocking RpcClient for send_and_confirm at {}",
-                    &url[..50]
-                ),
-            );
+            LogTag::Rpc,
+            &format!(
+                "Creating blocking RpcClient for send_and_confirm at {}",
+                &url[..50]
+            ),
+        );
 
         // Build blocking client and send+confirm in blocking thread
         // Record submission event (no signature yet)
@@ -2813,9 +2823,9 @@ impl RpcClient {
                 let signature_str = sig_result.to_string();
 
                 logger::debug(
-                        LogTag::Rpc,
-                        &format!("✅ Transaction confirmed: {}", &signature_str[..8]),
-                    );
+                    LogTag::Rpc,
+                    &format!("✅ Transaction confirmed: {}", &signature_str[..8]),
+                );
 
                 logger::info(
                     LogTag::Rpc,
@@ -2910,9 +2920,9 @@ impl RpcClient {
         let current_url = self.rotate_to_next_url();
 
         logger::debug(
-                LogTag::Rpc,
-                &format!("Fetching token accounts from RPC: {}", current_url),
-            );
+            LogTag::Rpc,
+            &format!("Fetching token accounts from RPC: {}", current_url),
+        );
 
         // Apply rate limiting
         self.wait_for_rate_limit().await;
@@ -2955,13 +2965,13 @@ impl RpcClient {
                                             }
 
                                             logger::debug(
-                                                    LogTag::Rpc,
-                                                    &format!(
-                                                        "Found {} {} accounts for wallet",
-                                                        accounts.len(),
-                                                        token_type
-                                                    ),
-                                                );
+                                                LogTag::Rpc,
+                                                &format!(
+                                                    "Found {} {} accounts for wallet",
+                                                    accounts.len(),
+                                                    token_type
+                                                ),
+                                            );
                                         }
                                     } else {
                                         logger::warning(
@@ -3023,12 +3033,12 @@ impl RpcClient {
         }
 
         logger::debug(
-                LogTag::Rpc,
-                &format!(
-                    "Found {} total token accounts for wallet",
-                    all_accounts.len()
-                ),
-            );
+            LogTag::Rpc,
+            &format!(
+                "Found {} total token accounts for wallet",
+                all_accounts.len()
+            ),
+        );
 
         Ok(all_accounts)
     }
@@ -3054,12 +3064,12 @@ impl RpcClient {
         let current_url = self.rotate_to_next_url();
 
         logger::debug(
-                LogTag::Rpc,
-                &format!(
-                    "Checking if token account {} is Token-2022 using RPC: {}",
-                    token_account, current_url
-                ),
-            );
+            LogTag::Rpc,
+            &format!(
+                "Checking if token account {} is Token-2022 using RPC: {}",
+                token_account, current_url
+            ),
+        );
 
         // Apply rate limiting
         self.wait_for_rate_limit().await;
@@ -3088,19 +3098,19 @@ impl RpcClient {
                                         self.record_success(Some(&current_url));
 
                                         logger::info(
-                                                LogTag::Rpc,
-                                                &format!(
-                                                    "Token account {} is {} (owner: {}) from RPC: {}",
-                                                    token_account,
-                                                    if is_token_2022 {
-                                                        "Token-2022"
-                                                    } else {
-                                                        "SPL Token"
-                                                    },
-                                                    owner_str,
-                                                    current_url
-                                                )
-                                            );
+                                            LogTag::Rpc,
+                                            &format!(
+                                                "Token account {} is {} (owner: {}) from RPC: {}",
+                                                token_account,
+                                                if is_token_2022 {
+                                                    "Token-2022"
+                                                } else {
+                                                    "SPL Token"
+                                                },
+                                                owner_str,
+                                                current_url
+                                            ),
+                                        );
 
                                         return Ok(is_token_2022);
                                     }
@@ -3108,13 +3118,13 @@ impl RpcClient {
                             }
                         }
 
-                            logger::warning(
-                                LogTag::Rpc,
-                                &format!(
-                                    "Could not determine owner for token account {} on RPC {}",
-                                    token_account, current_url
-                                ),
-                            );
+                        logger::warning(
+                            LogTag::Rpc,
+                            &format!(
+                                "Could not determine owner for token account {} on RPC {}",
+                                token_account, current_url
+                            ),
+                        );
                     }
                 } else if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
                     self.record_429_error(Some(&current_url));
@@ -3188,12 +3198,12 @@ impl RpcClient {
         let current_url = self.rotate_to_next_url();
 
         logger::debug(
-                LogTag::Rpc,
-                &format!(
-                    "Checking if mint {} is Token-2022 using RPC: {}",
-                    mint, current_url
-                ),
-            );
+            LogTag::Rpc,
+            &format!(
+                "Checking if mint {} is Token-2022 using RPC: {}",
+                mint, current_url
+            ),
+        );
 
         // Apply rate limiting
         self.wait_for_rate_limit().await;
@@ -3223,15 +3233,12 @@ impl RpcClient {
                                             == "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 
                                         logger::info(
-                                                LogTag::Rpc,
-                                                &format!(
-                                                    "Mint {} owner: {} (Token-2022: {}) from RPC: {}",
-                                                    mint,
-                                                    owner_str,
-                                                    is_token_2022,
-                                                    current_url
-                                                )
-                                            );
+                                            LogTag::Rpc,
+                                            &format!(
+                                                "Mint {} owner: {} (Token-2022: {}) from RPC: {}",
+                                                mint, owner_str, is_token_2022, current_url
+                                            ),
+                                        );
 
                                         return Ok(is_token_2022);
                                     }
@@ -3299,12 +3306,12 @@ impl RpcClient {
         let start = std::time::Instant::now();
 
         logger::debug(
-                LogTag::Rpc,
-                &format!(
-                    "Fetching transaction details for {} from RPC: {}",
-                    transaction_signature, current_url
-                ),
-            );
+            LogTag::Rpc,
+            &format!(
+                "Fetching transaction details for {} from RPC: {}",
+                transaction_signature, current_url
+            ),
+        );
 
         // Apply rate limiting
         self.wait_for_rate_limit().await;
@@ -3441,12 +3448,12 @@ impl RpcClient {
                     self.record_success(Some(&current_url));
 
                     logger::debug(
-                            LogTag::Rpc,
-                            &format!(
-                                "Successfully fetched transaction details for {} from RPC: {}",
-                                transaction_signature, current_url
-                            ),
-                        );
+                        LogTag::Rpc,
+                        &format!(
+                            "Successfully fetched transaction details for {} from RPC: {}",
+                            transaction_signature, current_url
+                        ),
+                    );
 
                     return Ok(transaction_details);
                 }
@@ -3508,12 +3515,12 @@ impl RpcClient {
         let current_url = self.rotate_to_next_url();
 
         logger::info(
-                LogTag::Rpc,
-                &format!(
-                    "Fetching associated token account for wallet {} mint {} from RPC: {}",
-                    wallet_address, mint, current_url
-                ),
-            );
+            LogTag::Rpc,
+            &format!(
+                "Fetching associated token account for wallet {} mint {} from RPC: {}",
+                wallet_address, mint, current_url
+            ),
+        );
 
         // Apply rate limiting
         self.wait_for_rate_limit().await;
@@ -3653,23 +3660,23 @@ impl RpcClient {
         let current_url = self.rotate_to_next_url();
 
         logger::info(
-                LogTag::Rpc,
-                &format!(
-                    "🔍 Checking signature status for {} using RPC: {}",
-                    &signature[..8],
-                    current_url
-                ),
-            );
+            LogTag::Rpc,
+            &format!(
+                "🔍 Checking signature status for {} using RPC: {}",
+                &signature[..8],
+                current_url
+            ),
+        );
 
-            logger::info(
-                LogTag::Rpc,
-                &format!(
-                    "📤 Request payload for {}: {}",
-                    &signature[..8],
-                    serde_json::to_string(&rpc_payload)
-                        .unwrap_or_else(|_| "Failed to serialize".to_string())
-                ),
-            );
+        logger::info(
+            LogTag::Rpc,
+            &format!(
+                "📤 Request payload for {}: {}",
+                &signature[..8],
+                serde_json::to_string(&rpc_payload)
+                    .unwrap_or_else(|_| "Failed to serialize".to_string())
+            ),
+        );
 
         logger::info(
             LogTag::Rpc,
@@ -3704,22 +3711,22 @@ impl RpcClient {
                     ),
                 );
                 logger::info(
-                        LogTag::Rpc,
-                        &format!("❌ Detailed network error for {}: {}", &signature[..8], e),
-                    );
+                    LogTag::Rpc,
+                    &format!("❌ Detailed network error for {}: {}", &signature[..8], e),
+                );
                 ScreenerBotError::Network(crate::errors::NetworkError::Generic {
                     message: format!("Network error in getSignatureStatuses: {}", e),
                 })
             })?;
 
         logger::info(
-                LogTag::Rpc,
-                &format!(
-                    "📡 HTTP status for signature status check {}: {}",
-                    &signature[..8],
-                    response.status()
-                ),
-            );
+            LogTag::Rpc,
+            &format!(
+                "📡 HTTP status for signature status check {}: {}",
+                &signature[..8],
+                response.status()
+            ),
+        );
 
         if !response.status().is_success() {
             if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
@@ -3754,26 +3761,26 @@ impl RpcClient {
 
         let response_text = response.text().await.map_err(|e| {
             logger::info(
-                    LogTag::Rpc,
-                    &format!(
-                        "❌ Failed to get response text for {}: {}",
-                        &signature[..8],
-                        e
-                    ),
-                );
+                LogTag::Rpc,
+                &format!(
+                    "❌ Failed to get response text for {}: {}",
+                    &signature[..8],
+                    e
+                ),
+            );
             ScreenerBotError::Network(crate::errors::NetworkError::Generic {
                 message: format!("Failed to get response text for signature status: {}", e),
             })
         })?;
 
         logger::info(
-                LogTag::Rpc,
-                &format!(
-                    "📄 Raw response for {}: {}",
-                    &signature[..8],
-                    &response_text
-                ),
-            );
+            LogTag::Rpc,
+            &format!(
+                "📄 Raw response for {}: {}",
+                &signature[..8],
+                &response_text
+            ),
+        );
 
         let rpc_response: SignatureStatusResponse =
             serde_json::from_str(&response_text).map_err(|e| {
@@ -3786,13 +3793,13 @@ impl RpcClient {
                     ),
                 );
                 logger::info(
-                        LogTag::Rpc,
-                        &format!(
-                            "❌ Parse error detail for {}: Response was: {}",
-                            &signature[..8],
-                            &response_text
-                        ),
-                    );
+                    LogTag::Rpc,
+                    &format!(
+                        "❌ Parse error detail for {}: Response was: {}",
+                        &signature[..8],
+                        &response_text
+                    ),
+                );
                 ScreenerBotError::invalid_response(format!(
                     "Failed to parse signature status: {}",
                     e
@@ -3880,26 +3887,26 @@ impl RpcClient {
 
         // Initial delay to allow transaction to propagate
         logger::info(
-                LogTag::Rpc,
-                &format!(
-                    "⏳ Waiting {}s before first propagation check for {}",
-                    FIRST_DELAY_SECS,
-                    &signature[..8]
-                ),
-            );
+            LogTag::Rpc,
+            &format!(
+                "⏳ Waiting {}s before first propagation check for {}",
+                FIRST_DELAY_SECS,
+                &signature[..8]
+            ),
+        );
         tokio::time::sleep(Duration::from_secs(FIRST_DELAY_SECS)).await;
 
         let start = Instant::now();
         for attempt in 1..=ATTEMPTS {
             logger::info(
-                    LogTag::Rpc,
-                    &format!(
-                        "📋 Starting attempt {}/{} for signature {}",
-                        attempt,
-                        ATTEMPTS,
-                        &signature[..8]
-                    ),
-                );
+                LogTag::Rpc,
+                &format!(
+                    "📋 Starting attempt {}/{} for signature {}",
+                    attempt,
+                    ATTEMPTS,
+                    &signature[..8]
+                ),
+            );
 
             match self.get_signature_status(signature).await {
                 Ok(Some(status)) => {
@@ -3916,13 +3923,13 @@ impl RpcClient {
                     );
 
                     logger::info(
-                            LogTag::Rpc,
-                            &format!(
-                                "✅ Propagation successful for {}: Found status after {:.2}s",
-                                &signature[..8],
-                                start.elapsed().as_secs_f64()
-                            ),
-                        );
+                        LogTag::Rpc,
+                        &format!(
+                            "✅ Propagation successful for {}: Found status after {:.2}s",
+                            &signature[..8],
+                            start.elapsed().as_secs_f64()
+                        ),
+                    );
 
                     return Ok(true);
                 }
@@ -3939,15 +3946,15 @@ impl RpcClient {
                     );
 
                     logger::info(
-                            LogTag::Rpc,
-                            &format!(
-                                "⏳ Attempt {}/{} returned null for {} - trying again in {}s",
-                                attempt,
-                                ATTEMPTS,
-                                &signature[..8],
-                                SLEEP_SECS
-                            ),
-                        );
+                        LogTag::Rpc,
+                        &format!(
+                            "⏳ Attempt {}/{} returned null for {} - trying again in {}s",
+                            attempt,
+                            ATTEMPTS,
+                            &signature[..8],
+                            SLEEP_SECS
+                        ),
+                    );
                 }
                 Err(e) => {
                     logger::info(
@@ -3962,27 +3969,27 @@ impl RpcClient {
                     );
 
                     logger::info(
-                            LogTag::Rpc,
-                            &format!(
-                                "❌ Detailed error on attempt {}/{} for {}: {}",
-                                attempt,
-                                ATTEMPTS,
-                                &signature[..8],
-                                e
-                            ),
-                        );
+                        LogTag::Rpc,
+                        &format!(
+                            "❌ Detailed error on attempt {}/{} for {}: {}",
+                            attempt,
+                            ATTEMPTS,
+                            &signature[..8],
+                            e
+                        ),
+                    );
                 }
             }
 
             if attempt < ATTEMPTS {
                 logger::info(
-                        LogTag::Rpc,
-                        &format!(
-                            "😴 Sleeping {}s before next attempt for {}",
-                            SLEEP_SECS,
-                            &signature[..8]
-                        ),
-                    );
+                    LogTag::Rpc,
+                    &format!(
+                        "😴 Sleeping {}s before next attempt for {}",
+                        SLEEP_SECS,
+                        &signature[..8]
+                    ),
+                );
                 tokio::time::sleep(Duration::from_secs(SLEEP_SECS)).await;
             }
         }
@@ -3998,12 +4005,12 @@ impl RpcClient {
         );
 
         logger::info(
-                LogTag::Rpc,
-                &format!(
-                    "❌ Transaction {} failed to propagate - likely dropped by network",
-                    &signature[..8]
-                ),
-            );
+            LogTag::Rpc,
+            &format!(
+                "❌ Transaction {} failed to propagate - likely dropped by network",
+                &signature[..8]
+            ),
+        );
 
         Ok(false)
     }
@@ -4030,9 +4037,9 @@ impl RpcClient {
         let current_url = self.rotate_to_next_url();
 
         logger::debug(
-                LogTag::Rpc,
-                &format!("Fetching {} signatures from RPC: {}", limit, current_url),
-            );
+            LogTag::Rpc,
+            &format!("Fetching {} signatures from RPC: {}", limit, current_url),
+        );
 
         // Apply rate limiting
         self.wait_for_rate_limit().await;
@@ -4099,12 +4106,12 @@ impl RpcClient {
         }
 
         logger::info(
-                LogTag::Rpc,
-                &format!(
-                    "Fetching {} transaction details in batch",
-                    transaction_signatures.len()
-                ),
-            );
+            LogTag::Rpc,
+            &format!(
+                "Fetching {} transaction details in batch",
+                transaction_signatures.len()
+            ),
+        );
 
         // Process transactions individually but efficiently
         for signature in transaction_signatures {
@@ -4113,9 +4120,9 @@ impl RpcClient {
                     results.push((signature.clone(), tx_details));
 
                     logger::info(
-                            LogTag::Rpc,
-                            &format!("Retrieved transaction details for {}", signature),
-                        );
+                        LogTag::Rpc,
+                        &format!("Retrieved transaction details for {}", signature),
+                    );
                 }
                 Err(e) => {
                     logger::info(
@@ -4178,12 +4185,12 @@ impl RpcClient {
         let current_url = self.rotate_to_next_url();
 
         logger::info(
-                LogTag::Rpc,
-                &format!(
-                    "Getting program accounts for program: {} from RPC: {}",
-                    program_id, current_url
-                ),
-            );
+            LogTag::Rpc,
+            &format!(
+                "Getting program accounts for program: {} from RPC: {}",
+                program_id, current_url
+            ),
+        );
 
         // Apply rate limiting
         self.wait_for_rate_limit().await;
@@ -4283,13 +4290,13 @@ impl RpcClient {
                         self.record_success(Some(&current_url));
 
                         logger::info(
-                                LogTag::Rpc,
-                                &format!(
-                                    "Retrieved {} program accounts from RPC: {}",
-                                    accounts.len(),
-                                    current_url
-                                ),
-                            );
+                            LogTag::Rpc,
+                            &format!(
+                                "Retrieved {} program accounts from RPC: {}",
+                                accounts.len(),
+                                current_url
+                            ),
+                        );
 
                         return Ok(accounts.clone());
                     }
@@ -4368,12 +4375,12 @@ impl RpcClient {
         let current_url = self.rotate_to_next_url();
 
         logger::info(
-                LogTag::Rpc,
-                &format!(
-                    "Getting program accounts with dataSlice for program: {} from RPC: {}",
-                    program_id, current_url
-                ),
-            );
+            LogTag::Rpc,
+            &format!(
+                "Getting program accounts with dataSlice for program: {} from RPC: {}",
+                program_id, current_url
+            ),
+        );
 
         // Apply rate limiting
         self.wait_for_rate_limit().await;
@@ -4462,13 +4469,13 @@ impl RpcClient {
                         self.record_success(Some(&current_url));
 
                         logger::info(
-                                LogTag::Rpc,
-                                &format!(
-                                    "Retrieved {} program accounts (with dataSlice) from RPC: {}",
-                                    accounts.len(),
-                                    current_url
-                                ),
-                            );
+                            LogTag::Rpc,
+                            &format!(
+                                "Retrieved {} program accounts (with dataSlice) from RPC: {}",
+                                accounts.len(),
+                                current_url
+                            ),
+                        );
 
                         return Ok(accounts.clone());
                     }
@@ -4578,14 +4585,14 @@ impl RpcClient {
         let current_url = self.rotate_to_next_url();
 
         logger::info(
-                LogTag::Rpc,
-                &format!(
-                    "Getting program accounts V2 (paginated) for program: {} limit: {} from RPC: {}",
-                    program_id,
-                    limit.unwrap_or(1000),
-                    current_url
-                )
-            );
+            LogTag::Rpc,
+            &format!(
+                "Getting program accounts V2 (paginated) for program: {} limit: {} from RPC: {}",
+                program_id,
+                limit.unwrap_or(1000),
+                current_url
+            ),
+        );
 
         // Apply rate limiting
         self.wait_for_rate_limit().await;
@@ -4697,14 +4704,14 @@ impl RpcClient {
                     self.record_success(Some(&current_url));
 
                     logger::info(
-                            LogTag::Rpc,
-                            &format!(
-                                "Retrieved {} program accounts V2 from RPC: {} (hasMore: {})",
-                                accounts.len(),
-                                current_url,
-                                next_pagination_key.is_some()
-                            ),
-                        );
+                        LogTag::Rpc,
+                        &format!(
+                            "Retrieved {} program accounts V2 from RPC: {} (hasMore: {})",
+                            accounts.len(),
+                            current_url,
+                            next_pagination_key.is_some()
+                        ),
+                    );
 
                     return Ok(PaginatedAccountsResponse {
                         accounts,
@@ -4785,12 +4792,12 @@ impl RpcClient {
                 pagination_key = Some(next_key);
 
                 logger::info(
-                        LogTag::Rpc,
-                        &format!(
-                            "Fetched {} accounts so far, continuing pagination...",
-                            all_accounts.len()
-                        ),
-                    );
+                    LogTag::Rpc,
+                    &format!(
+                        "Fetched {} accounts so far, continuing pagination...",
+                        all_accounts.len()
+                    ),
+                );
             } else {
                 // No more pages
                 break;
@@ -4798,13 +4805,13 @@ impl RpcClient {
         }
 
         logger::info(
-                LogTag::Rpc,
-                &format!(
-                    "Completed pagination fetch: {} total accounts for program {}",
-                    all_accounts.len(),
-                    program_id
-                ),
-            );
+            LogTag::Rpc,
+            &format!(
+                "Completed pagination fetch: {} total accounts for program {}",
+                all_accounts.len(),
+                program_id
+            ),
+        );
 
         Ok(all_accounts)
     }
@@ -4825,9 +4832,9 @@ impl RpcClient {
         });
 
         logger::info(
-                LogTag::Rpc,
-                &format!("Requesting holder count for mint {}", mint_address),
-            );
+            LogTag::Rpc,
+            &format!("Requesting holder count for mint {}", mint_address),
+        );
 
         // Use round-robin RPC rotation to get the current Helius URL
         let current_url = self.rotate_to_next_url();
@@ -4868,12 +4875,12 @@ impl RpcClient {
             // If total is provided, use it directly
             if let Some(total) = result.get("total").and_then(|t| t.as_u64()) {
                 logger::info(
-                        LogTag::Rpc,
-                        &format!(
-                            "Helius DAS returned total holder count: {} for mint {}",
-                            total, mint_address
-                        ),
-                    );
+                    LogTag::Rpc,
+                    &format!(
+                        "Helius DAS returned total holder count: {} for mint {}",
+                        total, mint_address
+                    ),
+                );
                 return Ok(total as u32);
             }
 
@@ -4894,12 +4901,12 @@ impl RpcClient {
                 }
 
                 logger::info(
-                        LogTag::Rpc,
-                        &format!(
-                            "Helius DAS counted {} holders for mint {}",
-                            initial_count, mint_address
-                        ),
-                    );
+                    LogTag::Rpc,
+                    &format!(
+                        "Helius DAS counted {} holders for mint {}",
+                        initial_count, mint_address
+                    ),
+                );
                 return Ok(initial_count);
             }
         }
@@ -4934,12 +4941,12 @@ impl RpcClient {
             });
 
             logger::info(
-                    LogTag::Rpc,
-                    &format!(
-                        "Requesting {} holders from Helius DAS for mint {}",
-                        page_limit, mint_address
-                    ),
-                );
+                LogTag::Rpc,
+                &format!(
+                    "Requesting {} holders from Helius DAS for mint {}",
+                    page_limit, mint_address
+                ),
+            );
 
             // Use round-robin RPC rotation
             let current_url = self.rotate_to_next_url();
@@ -5005,13 +5012,13 @@ impl RpcClient {
         }
 
         logger::info(
-                LogTag::Rpc,
-                &format!(
-                    "Retrieved {} holders from Helius DAS for mint {}",
-                    all_holders.len(),
-                    mint_address
-                ),
-            );
+            LogTag::Rpc,
+            &format!(
+                "Retrieved {} holders from Helius DAS for mint {}",
+                all_holders.len(),
+                mint_address
+            ),
+        );
 
         Ok(all_holders)
     }
@@ -5039,12 +5046,12 @@ impl RpcClient {
         let current_url = self.rotate_to_next_url();
 
         logger::info(
-                LogTag::Rpc,
-                &format!(
-                    "Getting mint account data for: {} from RPC: {}",
-                    mint, current_url
-                ),
-            );
+            LogTag::Rpc,
+            &format!(
+                "Getting mint account data for: {} from RPC: {}",
+                mint, current_url
+            ),
+        );
 
         // Apply rate limiting
         self.wait_for_rate_limit().await;
@@ -5067,12 +5074,9 @@ impl RpcClient {
                             self.record_success(Some(&current_url));
 
                             logger::info(
-                                    LogTag::Rpc,
-                                    &format!(
-                                        "Retrieved mint account data from RPC: {}",
-                                        current_url
-                                    ),
-                                );
+                                LogTag::Rpc,
+                                &format!("Retrieved mint account data from RPC: {}", current_url),
+                            );
 
                             return Ok(result.clone());
                         }
@@ -5154,14 +5158,16 @@ pub fn init_rpc_client() -> Result<&'static RpcClient, String> {
         } else {
             GLOBAL_RPC_CLIENT
                 .as_ref()
-                .ok_or_else(|| "RPC client initialization failed: client is None after init".to_string())
+                .ok_or_else(|| {
+                    "RPC client initialization failed: client is None after init".to_string()
+                })
                 .map(|client| client as &'static RpcClient)
         }
     }
 }
 
 /// Get global RPC client instance
-/// 
+///
 /// # Panics
 /// Panics if RPC client is not initialized. This should only be called after startup.
 /// For initialization-safe code, use `init_rpc_client()` first.

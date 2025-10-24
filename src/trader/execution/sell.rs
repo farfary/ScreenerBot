@@ -34,8 +34,12 @@ pub async fn execute_sell(decision: &TradeDecision) -> Result<TradeResult, Strin
         // Partial exit enabled - get percentage from config (validated at load time)
         let exit_percentage = with_config(|cfg| cfg.positions.partial_exit_default_pct);
 
-        match positions::partial_close_position(&decision.mint, exit_percentage, &exit_reason.clone())
-            .await
+        match positions::partial_close_position(
+            &decision.mint,
+            exit_percentage,
+            &exit_reason.clone(),
+        )
+        .await
         {
             Ok(transaction_signature) => {
                 logger::info(

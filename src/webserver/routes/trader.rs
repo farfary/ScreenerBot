@@ -15,8 +15,7 @@ use crate::webserver::utils::{error_response, success_response};
 use crate::{
     global::{are_core_services_ready, get_pending_services},
     logger::{self, LogTag},
-    positions,
-    trader,
+    positions, trader,
 };
 use axum::Json;
 use solana_sdk::pubkey::Pubkey;
@@ -268,7 +267,12 @@ async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
 
     logger::info(
         LogTag::Webserver,
-        &format!("mint={} size_sol={} force={}", req.mint, size, req.force.unwrap_or(false)),
+        &format!(
+            "mint={} size_sol={} force={}",
+            req.mint,
+            size,
+            req.force.unwrap_or(false)
+        ),
     );
 
     // Use standard manual_buy; force mode is not exposed publicly via manual module
@@ -363,12 +367,7 @@ async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
             message: "Added to position".to_string(),
             timestamp: chrono::Utc::now().to_rfc3339(),
         }),
-        Err(e) => error_response(
-            StatusCode::BAD_REQUEST,
-            "ManualAddFailed",
-            &e,
-            None,
-        ),
+        Err(e) => error_response(StatusCode::BAD_REQUEST, "ManualAddFailed", &e, None),
     }
 }
 
@@ -391,7 +390,9 @@ async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response {
     }
 
     let close_all = req.close_all.unwrap_or(false);
-    let pct = req.percentage.unwrap_or_else(|| with_config(|cfg| cfg.positions.partial_exit_default_pct));
+    let pct = req
+        .percentage
+        .unwrap_or_else(|| with_config(|cfg| cfg.positions.partial_exit_default_pct));
 
     // Normalize and validate percentage
     let pct = if close_all { 100.0 } else { pct };
@@ -429,12 +430,7 @@ async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response {
                 message: "Full position closed".to_string(),
                 timestamp: chrono::Utc::now().to_rfc3339(),
             }),
-            Err(e) => error_response(
-                StatusCode::BAD_REQUEST,
-                "ManualSellFailed",
-                &e,
-                None,
-            ),
+            Err(e) => error_response(StatusCode::BAD_REQUEST, "ManualSellFailed", &e, None),
         }
     } else {
         match positions::partial_close_position(&req.mint, pct, &exit_reason).await {
@@ -448,12 +444,7 @@ async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response {
                 message: format!("Partial sell executed ({}%)", pct),
                 timestamp: chrono::Utc::now().to_rfc3339(),
             }),
-            Err(e) => error_response(
-                StatusCode::BAD_REQUEST,
-                "ManualSellFailed",
-                &e,
-                None,
-            ),
+            Err(e) => error_response(StatusCode::BAD_REQUEST, "ManualSellFailed", &e, None),
         }
     }
 }

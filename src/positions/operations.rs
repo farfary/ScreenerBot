@@ -319,7 +319,10 @@ pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
 }
 
 /// Open a new position with an explicit SOL size (used by manual buys)
-pub async fn open_position_with_size(token_mint: &str, trade_size_sol: f64) -> Result<String, String> {
+pub async fn open_position_with_size(
+    token_mint: &str,
+    trade_size_sol: f64,
+) -> Result<String, String> {
     if !trade_size_sol.is_finite() || trade_size_sol <= 0.0 {
         return Err(format!("Invalid trade size: {}", trade_size_sol));
     }
@@ -470,7 +473,12 @@ pub async fn close_position_direct(
         {
             Ok(q) => q,
             Err(e) => {
-                last_err = Some(format!("Quote failed at step {} ({}%): {}", i + 1, slippage, e));
+                last_err = Some(format!(
+                    "Quote failed at step {} ({}%): {}",
+                    i + 1,
+                    slippage,
+                    e
+                ));
                 continue;
             }
         };
@@ -493,13 +501,19 @@ pub async fn close_position_direct(
                 } else {
                     format!("Swap failed: {}", msg)
                 };
-                last_err = Some(format!("{} (step {} slippage {}%)", enriched, i + 1, slippage));
+                last_err = Some(format!(
+                    "{} (step {} slippage {}%)",
+                    enriched,
+                    i + 1,
+                    slippage
+                ));
                 continue;
             }
         }
     }
 
-    let swap_result = swap_result.ok_or_else(|| last_err.unwrap_or_else(|| "Exit swap failed".to_string()))?;
+    let swap_result =
+        swap_result.ok_or_else(|| last_err.unwrap_or_else(|| "Exit swap failed".to_string()))?;
 
     let transaction_signature = swap_result
         .transaction_signature
@@ -679,12 +693,18 @@ pub async fn partial_close_position(
                 break;
             }
             Err(e) => {
-                last_err = Some(format!("Quote failed at step {} ({}%): {}", i + 1, slippage, e));
+                last_err = Some(format!(
+                    "Quote failed at step {} ({}%): {}",
+                    i + 1,
+                    slippage,
+                    e
+                ));
                 continue;
             }
         }
     }
-    let quote = quote_opt.ok_or_else(|| last_err.unwrap_or_else(|| "Failed to get exit quote".to_string()))?;
+    let quote = quote_opt
+        .ok_or_else(|| last_err.unwrap_or_else(|| "Failed to get exit quote".to_string()))?;
 
     logger::info(
         LogTag::Positions,
@@ -718,7 +738,12 @@ pub async fn partial_close_position(
             {
                 Ok(q) => q,
                 Err(e) => {
-                    last_err = Some(format!("Quote failed at step {} ({}%): {}", i + 1, slippage, e));
+                    last_err = Some(format!(
+                        "Quote failed at step {} ({}%): {}",
+                        i + 1,
+                        slippage,
+                        e
+                    ));
                     continue;
                 }
             };
@@ -729,7 +754,12 @@ pub async fn partial_close_position(
                     break;
                 }
                 Err(e) => {
-                    last_err = Some(format!("Partial exit swap failed at step {} ({}%): {}", i + 1, slippage, e));
+                    last_err = Some(format!(
+                        "Partial exit swap failed at step {} ({}%): {}",
+                        i + 1,
+                        slippage,
+                        e
+                    ));
                 }
             }
         }
@@ -776,11 +806,8 @@ pub async fn partial_close_position(
         .map_err(|e| format!("Failed to apply partial exit transition: {}", e))?;
 
     // Enqueue for verification with partial exit flag
-    let expiry_height = get_rpc_client()
-        .get_block_height()
-        .await
-        .unwrap_or(0)
-        + SOLANA_BLOCKHASH_VALIDITY_SLOTS;
+    let expiry_height =
+        get_rpc_client().get_block_height().await.unwrap_or(0) + SOLANA_BLOCKHASH_VALIDITY_SLOTS;
 
     let verification_item = VerificationItem::new_partial_exit(
         transaction_signature.clone(),
@@ -836,9 +863,7 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
     // Check DCA cooldown
     if let Some(last_dca) = position.last_dca_time {
         let cooldown_minutes = with_config(|cfg| cfg.trader.dca_cooldown_minutes);
-        let elapsed = Utc::now()
-            .signed_duration_since(last_dca)
-            .num_minutes();
+        let elapsed = Utc::now().signed_duration_since(last_dca).num_minutes();
         if elapsed < cooldown_minutes {
             return Err(format!(
                 "DCA cooldown active: {} minutes remaining",
@@ -918,11 +943,8 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
         .map_err(|e| format!("Failed to apply DCA transition: {}", e))?;
 
     // Enqueue for verification
-    let expiry_height = get_rpc_client()
-        .get_block_height()
-        .await
-        .unwrap_or(0)
-        + SOLANA_BLOCKHASH_VALIDITY_SLOTS;
+    let expiry_height =
+        get_rpc_client().get_block_height().await.unwrap_or(0) + SOLANA_BLOCKHASH_VALIDITY_SLOTS;
 
     let verification_item = VerificationItem::new(
         transaction_signature.clone(),
@@ -999,12 +1021,12 @@ pub async fn update_position_price(token_mint: &str, current_price: f64) -> Resu
     let updated = super::state::update_position_state(token_mint, |pos| {
         pos.current_price = Some(current_price);
         pos.current_price_updated = Some(Utc::now());
-        
+
         // Update highest price for trailing stop
         if current_price > pos.price_highest {
             pos.price_highest = current_price;
         }
-        
+
         // Update lowest price tracking
         if current_price < pos.price_lowest || pos.price_lowest == 0.0 {
             pos.price_lowest = current_price;

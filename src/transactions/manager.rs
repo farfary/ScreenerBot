@@ -116,14 +116,14 @@ impl TransactionsManager {
                     self.total_transactions = count;
                     if self.debug_enabled {
                         logger::info(
-        LogTag::Transactions,
+                            LogTag::Transactions,
                             &format!("Loaded {} known signatures from database", count),
                         );
                     }
                 }
                 Err(e) => {
                     logger::info(
-        LogTag::Transactions,
+                        LogTag::Transactions,
                         &format!("Failed to load known signatures count: {}", e),
                     );
                 }
@@ -137,7 +137,7 @@ impl TransactionsManager {
                     self.pending_transactions = pending;
                     if self.debug_enabled && !self.pending_transactions.is_empty() {
                         logger::info(
-        LogTag::Transactions,
+                            LogTag::Transactions,
                             &format!(
                                 "Loaded {} pending transactions from database",
                                 self.pending_transactions.len()
@@ -147,7 +147,7 @@ impl TransactionsManager {
                 }
                 Err(e) => {
                     logger::info(
-        LogTag::Transactions,
+                        LogTag::Transactions,
                         &format!("Failed to load pending transactions: {}", e),
                     );
                 }
@@ -161,7 +161,7 @@ impl TransactionsManager {
 
         if self.debug_enabled {
             logger::info(
-        LogTag::Transactions,
+                LogTag::Transactions,
                 &format!(
                     "TransactionsManager initialized for wallet: {} (known transactions: {})",
                     &self.wallet_pubkey.to_string(),
@@ -180,7 +180,7 @@ impl TransactionsManager {
 
         if self.debug_enabled {
             logger::info(
-        LogTag::Transactions,
+                LogTag::Transactions,
                 "WebSocket initialization skipped (will be integrated in service module)",
             );
         }
@@ -190,10 +190,7 @@ impl TransactionsManager {
 
     /// Shutdown the manager and cleanup resources
     pub async fn shutdown(&mut self) -> Result<(), String> {
-        logger::info(
-        LogTag::Transactions,
-            "TransactionsManager shutting down...",
-        );
+        logger::info(LogTag::Transactions, "TransactionsManager shutting down...");
 
         self.is_running = false;
 
@@ -203,10 +200,7 @@ impl TransactionsManager {
         // Close WebSocket connection if active
         if let Some(shutdown) = self.websocket_shutdown.take() {
             shutdown.notify_waiters();
-            logger::info(
-        LogTag::Transactions,
-                "WebSocket shutdown signal sent",
-            );
+            logger::info(LogTag::Transactions, "WebSocket shutdown signal sent");
         }
 
         // Cleanup deferred retries
@@ -219,14 +213,14 @@ impl TransactionsManager {
                 .await
             {
                 logger::info(
-        LogTag::Transactions,
+                    LogTag::Transactions,
                     &format!("Failed to save pending transactions during shutdown: {}", e),
                 );
             }
         }
 
         logger::info(
-        LogTag::Transactions,
+            LogTag::Transactions,
             "TransactionsManager shutdown complete",
         );
         Ok(())
@@ -296,7 +290,7 @@ impl TransactionsManager {
             if let Err(e) = db.add_known_signature(&signature).await {
                 if self.debug_enabled {
                     logger::info(
-        LogTag::Transactions,
+                        LogTag::Transactions,
                         &format!("Failed to add signature to database: {}", e),
                     );
                 }
@@ -343,7 +337,7 @@ impl TransactionsManager {
 
         if self.debug_enabled {
             logger::info(
-        LogTag::Transactions,
+                LogTag::Transactions,
                 &format!("Added pending transaction: {}", &signature),
             );
         }
@@ -357,7 +351,7 @@ impl TransactionsManager {
 
             if self.debug_enabled {
                 logger::info(
-        LogTag::Transactions,
+                    LogTag::Transactions,
                     &format!("Removed pending transaction: {}", signature),
                 );
             }
@@ -379,7 +373,7 @@ impl TransactionsManager {
             if age_secs > PENDING_MAX_AGE_SECS {
                 if self.debug_enabled {
                     logger::info(
-        LogTag::Transactions,
+                        LogTag::Transactions,
                         &format!(
                             "Expired pending transaction: {} (age: {}s)",
                             signature, age_secs
@@ -395,7 +389,7 @@ impl TransactionsManager {
 
         if expired_count > 0 {
             logger::info(
-        LogTag::Transactions,
+                LogTag::Transactions,
                 &format!("Cleaned up {} expired pending transactions", expired_count),
             );
 
@@ -426,7 +420,7 @@ impl TransactionsManager {
 
         if self.debug_enabled {
             logger::info(
-        LogTag::Transactions,
+                LogTag::Transactions,
                 &format!("Added deferred retry for signature: {}", &signature),
             );
         }
@@ -456,7 +450,7 @@ impl TransactionsManager {
                         to_remove.push(signature.clone());
                         if self.debug_enabled {
                             logger::info(
-        LogTag::Transactions,
+                                LogTag::Transactions,
                                 &format!("Exhausted retries for signature: {}", signature),
                             );
                         }
@@ -483,7 +477,7 @@ impl TransactionsManager {
         if self.deferred_retries.remove(signature).is_some() {
             if self.debug_enabled {
                 logger::info(
-        LogTag::Transactions,
+                    LogTag::Transactions,
                     &format!("Removed deferred retry for signature: {}", signature),
                 );
             }

@@ -49,10 +49,7 @@ pub async fn monitor_positions(
         // Check if trader is enabled
         let trader_enabled = config::is_trader_enabled();
         if !trader_enabled {
-            logger::info(
-                LogTag::Trader,
-                "Position monitor paused - trader disabled",
-            );
+            logger::info(LogTag::Trader, "Position monitor paused - trader disabled");
             sleep(Duration::from_secs(5)).await;
             continue;
         }
@@ -79,7 +76,10 @@ pub async fn monitor_positions(
 
         logger::info(
             LogTag::Trader,
-            &format!("Checking {} open positions for exit opportunities", open_positions.len()),
+            &format!(
+                "Checking {} open positions for exit opportunities",
+                open_positions.len()
+            ),
         );
 
         // Create semaphore for concurrent position evaluation (max 5 concurrent)
@@ -124,7 +124,7 @@ pub async fn monitor_positions(
                 Ok(None) => None,
                 Err(e) => {
                     logger::info(
-        LogTag::Trader,
+                        LogTag::Trader,
                         &format!("Position evaluation task failed: {}", e),
                     );
                     None
@@ -170,7 +170,13 @@ pub async fn monitor_positions(
                 for decision in dca_decisions {
                     logger::info(
                         LogTag::Trader,
-                        &format!("📈 DCA opportunity for position {}", decision.position_id.as_ref().unwrap_or(&"unknown".to_string())),
+                        &format!(
+                            "📈 DCA opportunity for position {}",
+                            decision
+                                .position_id
+                                .as_ref()
+                                .unwrap_or(&"unknown".to_string())
+                        ),
                     );
                     match execute_trade(&decision).await {
                         Ok(result) => {
@@ -182,15 +188,16 @@ pub async fn monitor_positions(
                             } else {
                                 logger::error(
                                     LogTag::Trader,
-                                    &format!("❌ DCA failed for {}: {}", decision.mint, result.error.unwrap_or_default()),
+                                    &format!(
+                                        "❌ DCA failed for {}: {}",
+                                        decision.mint,
+                                        result.error.unwrap_or_default()
+                                    ),
                                 );
                             }
                         }
                         Err(e) => {
-                            logger::error(
-                                LogTag::Trader,
-                                &format!("Failed to execute DCA: {}", e),
-                            );
+                            logger::error(LogTag::Trader, &format!("Failed to execute DCA: {}", e));
                         }
                     }
                 }
@@ -244,15 +251,18 @@ async fn evaluate_position_for_exit(
                 price_info.price_sol
             } else {
                 logger::info(
-        LogTag::Trader,
-                    &format!("Invalid price for {}: {:.9}", position.symbol, price_info.price_sol),
+                    LogTag::Trader,
+                    &format!(
+                        "Invalid price for {}: {:.9}",
+                        position.symbol, price_info.price_sol
+                    ),
                 );
                 return None;
             }
         }
         None => {
             logger::info(
-        LogTag::Trader,
+                LogTag::Trader,
                 &format!("No price data for {}", position.symbol),
             );
             return None;
@@ -262,7 +272,7 @@ async fn evaluate_position_for_exit(
     // CRITICAL: Update position price BEFORE checking trailing stop
     if let Err(e) = positions::update_position_price(&position.mint, current_price).await {
         logger::info(
-        LogTag::Trader,
+            LogTag::Trader,
             &format!("Failed to update price for {}: {}", position.symbol, e),
         );
         // Continue anyway - we can still check exits with current price
@@ -273,7 +283,7 @@ async fn evaluate_position_for_exit(
         Some(pos) => pos,
         None => {
             logger::info(
-        LogTag::Trader,
+                LogTag::Trader,
                 &format!("Position disappeared for {}", position.symbol),
             );
             return None;
@@ -283,8 +293,11 @@ async fn evaluate_position_for_exit(
     // Check for blacklist (emergency exit) - sync call, highest priority
     if let Some(decision) = check_blacklist_exit(&fresh_position, current_price) {
         logger::info(
-        LogTag::Trader,
-            &format!("🚨 Token {} blacklisted! Emergency exit signal", fresh_position.symbol),
+            LogTag::Trader,
+            &format!(
+                "🚨 Token {} blacklisted! Emergency exit signal",
+                fresh_position.symbol
+            ),
         );
         return Some(PositionEvaluation {
             mint: fresh_position.mint.clone(),
@@ -298,10 +311,10 @@ async fn evaluate_position_for_exit(
     match check_trailing_stop(&fresh_position, current_price).await {
         Ok(Some(decision)) => {
             logger::info(
-        LogTag::Trader,
+                LogTag::Trader,
                 &format!("📉 Trailing stop triggered for {}", fresh_position.symbol),
             );
-            
+
             // Record exit signal event
             crate::events::record_safe(crate::events::Event::new(
                 crate::events::EventCategory::Trader,
@@ -317,7 +330,7 @@ async fn evaluate_position_for_exit(
                 }),
             ))
             .await;
-            
+
             return Some(PositionEvaluation {
                 mint: fresh_position.mint.clone(),
                 symbol: fresh_position.symbol.clone(),
@@ -328,8 +341,11 @@ async fn evaluate_position_for_exit(
         Ok(None) => {} // No trailing stop signal
         Err(e) => {
             logger::info(
-        LogTag::Trader,
-                &format!("Error checking trailing stop for {}: {}", fresh_position.symbol, e),
+                LogTag::Trader,
+                &format!(
+                    "Error checking trailing stop for {}: {}",
+                    fresh_position.symbol, e
+                ),
             );
         }
     }
@@ -338,10 +354,10 @@ async fn evaluate_position_for_exit(
     match check_roi_exit(&fresh_position, current_price).await {
         Ok(Some(decision)) => {
             logger::info(
-        LogTag::Trader,
+                LogTag::Trader,
                 &format!("🎯 ROI target reached for {}", fresh_position.symbol),
             );
-            
+
             // Record ROI exit signal event
             crate::events::record_safe(crate::events::Event::new(
                 crate::events::EventCategory::Trader,
@@ -357,7 +373,7 @@ async fn evaluate_position_for_exit(
                 }),
             ))
             .await;
-            
+
             return Some(PositionEvaluation {
                 mint: fresh_position.mint.clone(),
                 symbol: fresh_position.symbol.clone(),
@@ -368,8 +384,11 @@ async fn evaluate_position_for_exit(
         Ok(None) => {} // No ROI signal
         Err(e) => {
             logger::info(
-        LogTag::Trader,
-                &format!("Error checking ROI exit for {}: {}", fresh_position.symbol, e),
+                LogTag::Trader,
+                &format!(
+                    "Error checking ROI exit for {}: {}",
+                    fresh_position.symbol, e
+                ),
             );
         }
     }
@@ -378,10 +397,10 @@ async fn evaluate_position_for_exit(
     match check_time_override(&fresh_position, current_price).await {
         Ok(Some(decision)) => {
             logger::info(
-        LogTag::Trader,
+                LogTag::Trader,
                 &format!("⏰ Time override triggered for {}", fresh_position.symbol),
             );
-            
+
             // Record time override exit signal event
             crate::events::record_safe(crate::events::Event::new(
                 crate::events::EventCategory::Trader,
@@ -397,7 +416,7 @@ async fn evaluate_position_for_exit(
                 }),
             ))
             .await;
-            
+
             return Some(PositionEvaluation {
                 mint: fresh_position.mint.clone(),
                 symbol: fresh_position.symbol.clone(),
@@ -408,8 +427,11 @@ async fn evaluate_position_for_exit(
         Ok(None) => {} // No time override signal
         Err(e) => {
             logger::info(
-        LogTag::Trader,
-                &format!("Error checking time override for {}: {}", fresh_position.symbol, e),
+                LogTag::Trader,
+                &format!(
+                    "Error checking time override for {}: {}",
+                    fresh_position.symbol, e
+                ),
             );
         }
     }
@@ -418,13 +440,13 @@ async fn evaluate_position_for_exit(
     match StrategyManager::check_exit_strategies(&fresh_position, current_price).await {
         Ok(Some(decision)) => {
             logger::info(
-        LogTag::Trader,
+                LogTag::Trader,
                 &format!(
                     "📊 Strategy exit signal for {} (strategy: {:?})",
                     fresh_position.symbol, decision.strategy_id
                 ),
             );
-            
+
             // Record strategy exit signal event
             crate::events::record_safe(crate::events::Event::new(
                 crate::events::EventCategory::Trader,
@@ -441,7 +463,7 @@ async fn evaluate_position_for_exit(
                 }),
             ))
             .await;
-            
+
             return Some(PositionEvaluation {
                 mint: fresh_position.mint.clone(),
                 symbol: fresh_position.symbol.clone(),
@@ -452,8 +474,11 @@ async fn evaluate_position_for_exit(
         Ok(None) => {} // No strategy signal
         Err(e) => {
             logger::info(
-        LogTag::Trader,
-                &format!("Error checking strategy exit for {}: {}", fresh_position.symbol, e),
+                LogTag::Trader,
+                &format!(
+                    "Error checking strategy exit for {}: {}",
+                    fresh_position.symbol, e
+                ),
             );
         }
     }

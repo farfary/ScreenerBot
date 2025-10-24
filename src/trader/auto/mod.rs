@@ -46,11 +46,8 @@ pub async fn start_auto_trading(
     // Spawn entry monitor
     let entry_task = tokio::spawn(async move {
         if let Err(e) = monitor_entries(entry_shutdown).await {
-            logger::error(
-                LogTag::Trader,
-                &format!("Entry monitor error: {}", e),
-            );
-            
+            logger::error(LogTag::Trader, &format!("Entry monitor error: {}", e));
+
             // Record entry monitor error
             crate::events::record_safe(crate::events::Event::new(
                 crate::events::EventCategory::Trader,
@@ -70,11 +67,8 @@ pub async fn start_auto_trading(
     // Spawn exit monitor
     let exit_task = tokio::spawn(async move {
         if let Err(e) = monitor_positions(exit_shutdown).await {
-            logger::error(
-                LogTag::Trader,
-                &format!("Exit monitor error: {}", e),
-            );
-            
+            logger::error(LogTag::Trader, &format!("Exit monitor error: {}", e));
+
             // Record exit monitor error
             crate::events::record_safe(crate::events::Event::new(
                 crate::events::EventCategory::Trader,
@@ -95,7 +89,7 @@ pub async fn start_auto_trading(
     let _ = tokio::try_join!(entry_task, exit_task);
 
     logger::info(LogTag::Trader, "Auto trading monitors stopped");
-    
+
     // Record auto trading stop event
     crate::events::record_safe(crate::events::Event::new(
         crate::events::EventCategory::Trader,
@@ -109,6 +103,6 @@ pub async fn start_auto_trading(
         }),
     ))
     .await;
-    
+
     Ok(())
 }

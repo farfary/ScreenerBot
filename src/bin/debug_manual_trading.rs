@@ -243,10 +243,7 @@ async fn execute(cli: Cli) -> Result<(), String> {
         wait_for_services_ready().await?;
     }
 
-    logger::info(
-        LogTag::System,
-        "✅ System initialized - executing command",
-    );
+    logger::info(LogTag::System, "✅ System initialized - executing command");
 
     // Execute the requested command
     match cli.command {
@@ -300,11 +297,9 @@ async fn initialize_system() -> Result<(), String> {
         .map_err(|e| format!("Failed to create data directories: {}", e))?;
 
     // 2. Load configuration
-    screenerbot::config::load_config()
-        .map_err(|e| format!("Failed to load config: {}", e))?;
+    screenerbot::config::load_config().map_err(|e| format!("Failed to load config: {}", e))?;
 
-    logger::info(
-        LogTag::System, "Configuration loaded successfully");
+    logger::info(LogTag::System, "Configuration loaded successfully");
 
     // 3. Initialize strategy system
     screenerbot::strategies::init_strategy_system(
@@ -313,16 +308,12 @@ async fn initialize_system() -> Result<(), String> {
     .await
     .map_err(|e| format!("Failed to initialize strategy system: {}", e))?;
 
-    logger::info(
-        LogTag::System,
-        "Strategy system initialized successfully",
-    );
+    logger::info(LogTag::System, "Strategy system initialized successfully");
 
     // 4. Create service manager
     let mut service_manager = ServiceManager::new().await?;
 
-    logger::info(
-        LogTag::System, "Service manager created");
+    logger::info(LogTag::System, "Service manager created");
 
     // 5. Register all services (same as run.rs)
     register_all_services(&mut service_manager);
@@ -341,8 +332,7 @@ async fn initialize_system() -> Result<(), String> {
     };
 
     // 8. Start all enabled services
-    logger::info(
-        LogTag::System, "Starting services...");
+    logger::info(LogTag::System, "Starting services...");
     service_manager.start_all().await?;
 
     // 9. Put it back for other components
@@ -351,10 +341,7 @@ async fn initialize_system() -> Result<(), String> {
         *guard = Some(service_manager);
     }
 
-    logger::info(
-        LogTag::System,
-        "✅ All services started successfully",
-    );
+    logger::info(LogTag::System, "✅ All services started successfully");
 
     Ok(())
 }
@@ -363,8 +350,7 @@ async fn initialize_system() -> Result<(), String> {
 fn register_all_services(manager: &mut ServiceManager) {
     use screenerbot::services::implementations::*;
 
-    logger::info(
-        LogTag::System, "Registering services...");
+    logger::info(LogTag::System, "Registering services...");
 
     // Core infrastructure services
     manager.register(Box::new(EventsService));
@@ -401,20 +387,14 @@ fn register_all_services(manager: &mut ServiceManager) {
 
 /// Wait for core services to be ready
 async fn wait_for_services_ready() -> Result<(), String> {
-    logger::info(
-        LogTag::System,
-        "Waiting for core services to be ready...",
-    );
+    logger::info(LogTag::System, "Waiting for core services to be ready...");
 
     let timeout = tokio::time::Duration::from_secs(60);
     let start = tokio::time::Instant::now();
 
     loop {
         if screenerbot::global::are_core_services_ready() {
-            logger::info(
-        LogTag::System,
-                "✅ Core services are ready",
-            );
+            logger::info(LogTag::System, "✅ Core services are ready");
             return Ok(());
         }
 
@@ -424,7 +404,7 @@ async fn wait_for_services_ready() -> Result<(), String> {
 
         let pending = screenerbot::global::get_pending_services();
         logger::info(
-        LogTag::System,
+            LogTag::System,
             &format!("Waiting for services: {:?}", pending),
         );
 
@@ -543,8 +523,7 @@ async fn handle_partial_exit(mint: &str, percentage: f64, reason: &str) -> Resul
 
 /// Handle list positions command
 async fn handle_list_positions(detailed: bool, strategy: Option<String>) -> Result<(), String> {
-    logger::info(
-        LogTag::Positions, "📋 Listing positions");
+    logger::info(LogTag::Positions, "📋 Listing positions");
 
     // TODO: Implement list positions logic
     // - Get all open positions from DB
@@ -621,8 +600,7 @@ async fn handle_interactive_mode() -> Result<(), String> {
 
 /// Handle reconcile command
 async fn handle_reconcile(mint: Option<String>, auto_fix: bool) -> Result<(), String> {
-    logger::info(
-        LogTag::Positions, "🔄 Reconciling positions");
+    logger::info(LogTag::Positions, "🔄 Reconciling positions");
 
     // TODO: Implement reconcile logic
     // - If mint specified, reconcile single position
@@ -648,7 +626,10 @@ async fn handle_reconcile(mint: Option<String>, auto_fix: bool) -> Result<(), St
 async fn handle_test_quote(mint: &str, amount: f64, operation: &str) -> Result<(), String> {
     logger::info(
         LogTag::Swap,
-        &format!("💱 Testing quote: {} {} SOL for {}", operation, amount, mint),
+        &format!(
+            "💱 Testing quote: {} {} SOL for {}",
+            operation, amount, mint
+        ),
     );
 
     // TODO: Implement quote testing logic

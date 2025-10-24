@@ -101,7 +101,7 @@ pub fn format_mint_for_log(mint: &str) -> String {
 }
 
 /// Format price with adaptive precision for Solana tokens
-/// 
+///
 /// Solana tokens can have prices with 12+ decimal places (e.g., 0.000000001234567890).
 /// This function uses adaptive formatting to preserve precision:
 /// - Very small prices (< 1e-6): scientific notation with 15 decimals
@@ -128,9 +128,9 @@ pub fn format_price_adaptive(price: f64) -> String {
     if !price.is_finite() {
         return price.to_string(); // Handle NaN/Inf
     }
-    
+
     let abs_price = price.abs();
-    
+
     if abs_price < 1e-6 {
         // Very small: use scientific notation
         format!("{:.15e}", price)
@@ -404,7 +404,11 @@ pub async fn get_total_token_balance(
                     "📊 Found account {} with {} tokens ({})",
                     &account.account,
                     account.balance,
-                    if account.is_token_2022 { "Token-2022" } else { "SPL Token" }
+                    if account.is_token_2022 {
+                        "Token-2022"
+                    } else {
+                        "SPL Token"
+                    }
                 ),
             );
         }
@@ -447,7 +451,10 @@ pub async fn close_single_ata(
 ) -> Result<String, ScreenerBotError> {
     logger::info(
         LogTag::Wallet,
-        &format!("Attempting to close single ATA for mint {}", format_mint_for_log(&mint)),
+        &format!(
+            "Attempting to close single ATA for mint {}",
+            format_mint_for_log(&mint)
+        ),
     );
 
     // Get all token accounts to find the specific one
@@ -459,10 +466,14 @@ pub async fn close_single_ata(
         .find(|account| account.mint == mint && account.balance == 0);
 
     match target_account {
-            Some(account) => {
+        Some(account) => {
             logger::info(
                 LogTag::Wallet,
-                &format!("Found empty ATA {} for mint {}", account.account, &mint[..8]),
+                &format!(
+                    "Found empty ATA {} for mint {}",
+                    account.account,
+                    &mint[..8]
+                ),
             );
 
             // Close the ATA
@@ -477,14 +488,24 @@ pub async fn close_single_ata(
                 Ok(signature) => {
                     logger::info(
                         LogTag::Wallet,
-                        &format!("Closed ATA {} for mint {}. TX: {}", account.account, &mint[..8], signature),
+                        &format!(
+                            "Closed ATA {} for mint {}. TX: {}",
+                            account.account,
+                            &mint[..8],
+                            signature
+                        ),
                     );
                     Ok(signature)
                 }
                 Err(e) => {
                     logger::error(
                         LogTag::Wallet,
-                        &format!("Failed to close ATA {} for mint {}: {}", account.account, &mint[..8], e),
+                        &format!(
+                            "Failed to close ATA {} for mint {}: {}",
+                            account.account,
+                            &mint[..8],
+                            e
+                        ),
                     );
                     Err(e)
                 }
@@ -507,7 +528,10 @@ pub async fn close_single_ata(
 pub async fn close_all_empty_atas(
     wallet_address: &str,
 ) -> Result<(u32, Vec<String>), ScreenerBotError> {
-    logger::info(LogTag::Wallet, "🔍 Checking for empty token accounts to close...");
+    logger::info(
+        LogTag::Wallet,
+        "🔍 Checking for empty token accounts to close...",
+    );
 
     // Get all token accounts for the wallet
     let all_accounts = get_all_token_accounts(wallet_address).await?;
@@ -530,7 +554,10 @@ pub async fn close_all_empty_atas(
 
     logger::info(
         LogTag::Wallet,
-        &format!("Found {} empty token accounts to close", empty_accounts.len()),
+        &format!(
+            "Found {} empty token accounts to close",
+            empty_accounts.len()
+        ),
     );
 
     let mut signatures = Vec::new();
@@ -563,7 +590,10 @@ pub async fn close_all_empty_atas(
             Ok(signature) => {
                 logger::info(
                     LogTag::Wallet,
-                    &format!("✅ Closed empty ATA {}. TX: {}", account_info.account, signature),
+                    &format!(
+                        "✅ Closed empty ATA {}. TX: {}",
+                        account_info.account, signature
+                    ),
                 );
                 signatures.push(signature);
                 closed_count += 1;
@@ -691,8 +721,7 @@ pub async fn close_token_account_with_context(
                             LogTag::Wallet,
                             &format!(
                                 "❌ ATA_BALANCE_FAILED: {} tokens still present after {} attempts",
-                                balance,
-                                max_checks
+                                balance, max_checks
                             ),
                         );
                         return Err(
@@ -719,7 +748,10 @@ pub async fn close_token_account_with_context(
 
                 logger::info(
                     LogTag::Wallet,
-                    &format!("Verified zero balance for {}, proceeding to close ATA", mint),
+                    &format!(
+                        "Verified zero balance for {}, proceeding to close ATA",
+                        mint
+                    ),
                 );
                 break;
             }
@@ -738,7 +770,7 @@ pub async fn close_token_account_with_context(
                         &format!(
                             "🔄 ATA_BALANCE_RETRY: waiting {}ms before retry due to error",
                             delay_ms
-                    ),
+                        ),
                     );
                     tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
                     continue;
@@ -761,14 +793,21 @@ pub async fn close_token_account_with_context(
     // Get the associated token account address
     logger::debug(
         LogTag::Wallet,
-        &format!("🔍 ATA_DISCOVER: finding associated token account for mint {}", &mint[..8]),
+        &format!(
+            "🔍 ATA_DISCOVER: finding associated token account for mint {}",
+            &mint[..8]
+        ),
     );
 
     let token_account = match get_associated_token_account(wallet_address, mint).await {
         Ok(account) => {
             logger::debug(
                 LogTag::Wallet,
-                &format!("✅ ATA_FOUND: token_account={} for mint={}", &account[..8], &mint[..8]),
+                &format!(
+                    "✅ ATA_FOUND: token_account={} for mint={}",
+                    &account[..8],
+                    &mint[..8]
+                ),
             );
             account
         }
@@ -781,12 +820,21 @@ pub async fn close_token_account_with_context(
                     e
                 ),
             );
-            logger::warning(LogTag::Wallet, &format!("Could not find associated token account for {}: {}", mint, e));
+            logger::warning(
+                LogTag::Wallet,
+                &format!(
+                    "Could not find associated token account for {}: {}",
+                    mint, e
+                ),
+            );
             return Err(e);
         }
     };
 
-    logger::info(LogTag::Wallet, &format!("Found token account to close: {}", token_account));
+    logger::info(
+        LogTag::Wallet,
+        &format!("Found token account to close: {}", token_account),
+    );
 
     // Determine if this is a Token-2022 account by checking the token ACCOUNT's program (not the mint)
     logger::debug(
@@ -811,7 +859,10 @@ pub async fn close_token_account_with_context(
                 &token_account[..8]
             ),
         );
-        logger::info(LogTag::Wallet, "Detected Token-2022, using Token Extensions program");
+        logger::info(
+            LogTag::Wallet,
+            "Detected Token-2022, using Token Extensions program",
+        );
     } else {
         logger::debug(
             LogTag::Wallet,
@@ -844,7 +895,10 @@ pub async fn close_token_account_with_context(
             );
             logger::info(
                 LogTag::Wallet,
-                &format!("Successfully closed token account for {}. TX: {}", mint, signature),
+                &format!(
+                    "Successfully closed token account for {}. TX: {}",
+                    mint, signature
+                ),
             );
             Ok(signature)
         }
@@ -858,7 +912,10 @@ pub async fn close_token_account_with_context(
                     e
                 ),
             );
-            logger::error(LogTag::Wallet, &format!("Failed to close token account for {}: {}", mint, e));
+            logger::error(
+                LogTag::Wallet,
+                &format!("Failed to close token account for {}: {}", mint, e),
+            );
             Err(e)
         }
     }
@@ -929,7 +986,10 @@ async fn close_ata(
                     &signature[..8]
                 ),
             );
-            logger::info(LogTag::Wallet, &format!("ATA closed successfully. TX: {}", signature));
+            logger::info(
+                LogTag::Wallet,
+                &format!("ATA closed successfully. TX: {}", signature),
+            );
             Ok(signature)
         }
         Err(e) => {
@@ -985,7 +1045,10 @@ async fn build_and_send_close_instruction(
     })?;
 
     // Load keypair from config
-    logger::debug(LogTag::Wallet, &format!("🔐 ATA_KEYPAIR: creating keypair from config"));
+    logger::debug(
+        LogTag::Wallet,
+        &format!("🔐 ATA_KEYPAIR: creating keypair from config"),
+    );
 
     let keypair = crate::config::get_wallet_keypair().map_err(|e| {
         ScreenerBotError::Configuration(crate::errors::ConfigurationError::InvalidPrivateKey {
@@ -998,7 +1061,11 @@ async fn build_and_send_close_instruction(
         LogTag::Wallet,
         &format!(
             "⚙️ ATA_INSTRUCTION_BUILD: creating {} close instruction",
-            if is_token_2022 { "Token-2022" } else { "SPL Token" }
+            if is_token_2022 {
+                "Token-2022"
+            } else {
+                "SPL Token"
+            }
         ),
     );
 
@@ -1027,7 +1094,11 @@ async fn build_and_send_close_instruction(
         LogTag::Wallet,
         &format!(
             "✅ ATA_INSTRUCTION_BUILT: close instruction created for {} program",
-            if is_token_2022 { "Token-2022" } else { "SPL Token" }
+            if is_token_2022 {
+                "Token-2022"
+            } else {
+                "SPL Token"
+            }
         ),
     );
 
@@ -1035,23 +1106,36 @@ async fn build_and_send_close_instruction(
         LogTag::Wallet,
         &format!(
             "Built close instruction for {} account",
-            if is_token_2022 { "Token-2022" } else { "SPL Token" }
+            if is_token_2022 {
+                "Token-2022"
+            } else {
+                "SPL Token"
+            }
         ),
     );
 
     // Get recent blockhash via RPC
-    logger::debug(LogTag::Wallet, &format!("🌐 ATA_BLOCKHASH: fetching recent blockhash via RPC"));
+    logger::debug(
+        LogTag::Wallet,
+        &format!("🌐 ATA_BLOCKHASH: fetching recent blockhash via RPC"),
+    );
 
     let rpc_client = crate::rpc::get_rpc_client();
     let recent_blockhash = rpc_client.get_latest_blockhash().await?;
 
     logger::debug(
         LogTag::Wallet,
-        &format!("📦 ATA_BLOCKHASH_OK: blockhash={}", &recent_blockhash.to_string()[..8]),
+        &format!(
+            "📦 ATA_BLOCKHASH_OK: blockhash={}",
+            &recent_blockhash.to_string()[..8]
+        ),
     );
 
     // Build transaction
-    logger::debug(LogTag::Wallet, &format!("📝 ATA_TRANSACTION_BUILD: creating signed transaction"));
+    logger::debug(
+        LogTag::Wallet,
+        &format!("📝 ATA_TRANSACTION_BUILD: creating signed transaction"),
+    );
 
     let transaction = Transaction::new_signed_with_payer(
         &[close_instruction],
@@ -1060,7 +1144,10 @@ async fn build_and_send_close_instruction(
         recent_blockhash,
     );
 
-    logger::debug(LogTag::Wallet, &format!("✅ ATA_TRANSACTION_READY: transaction built and signed"));
+    logger::debug(
+        LogTag::Wallet,
+        &format!("✅ ATA_TRANSACTION_READY: transaction built and signed"),
+    );
 
     logger::info(LogTag::Wallet, "Built and signed close transaction");
 
@@ -1087,7 +1174,10 @@ async fn build_and_send_close_instruction(
         Err(e) => {
             let blockchain_error =
                 parse_solana_error(&e.to_string(), None, "create_ata_transaction");
-            logger::debug(LogTag::Wallet, &format!("❌ ATA_TRANSACTION_FAILED: {}", blockchain_error));
+            logger::debug(
+                LogTag::Wallet,
+                &format!("❌ ATA_TRANSACTION_FAILED: {}", blockchain_error),
+            );
         }
     }
 

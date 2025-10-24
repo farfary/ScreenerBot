@@ -123,10 +123,10 @@ pub async fn acquire_position_lock(mint: &str) -> PositionLockGuard {
 
     let owned_guard = lock.clone().lock_owned().await;
 
-        logger::debug(
+    logger::debug(
         LogTag::Positions,
         &format!("🔒 Acquired position lock for mint: {}", &mint_key),
-        );
+    );
 
     PositionLockGuard {
         mint: mint_key,
@@ -165,13 +165,13 @@ pub async fn acquire_global_position_permit(
 pub fn release_global_position_permit() {
     let semaphore = get_global_position_semaphore();
     semaphore.add_permits(1);
-        logger::debug(
+    logger::debug(
         LogTag::Positions,
         &format!(
             "🔴 Released global position permit (available: {})",
             semaphore.available_permits()
         ),
-        );
+    );
 }
 
 /// Add position to state
@@ -201,7 +201,7 @@ pub async fn add_position(position: Position) -> usize {
     // Clear any pending-open flag for this mint now that the position exists
     {
         let mut pending = PENDING_OPEN_SWAPS.write().await;
-            if pending.remove(&position.mint).is_some() && is_debug_positions_enabled() {
+        if pending.remove(&position.mint).is_some() && is_debug_positions_enabled() {
             logger::debug(
                 LogTag::Positions,
                 &format!(
@@ -413,13 +413,13 @@ pub async fn set_pending_open(mint: &str, ttl_secs: i64) {
     let expires_at = Utc::now() + chrono::Duration::seconds(ttl_secs);
     let mut pending = PENDING_OPEN_SWAPS.write().await;
     pending.insert(mint.to_string(), expires_at);
-        logger::debug(
+    logger::debug(
         LogTag::Positions,
         &format!(
             "⏳ Set pending-open for mint: {} (ttl {}s, until {})",
             mint, ttl_secs, expires_at
         ),
-        );
+    );
 }
 
 /// Clear a mint's pending open swap state, if present
@@ -439,7 +439,7 @@ pub async fn clear_pending_open(mint: &str) {
 /// permit per open position (up to capacity). If there are more open positions than
 /// MAX_OPEN_POSITIONS we log a warning and consume all available permits.
 pub async fn reconcile_global_position_semaphore(max_open: usize) {
-        use crate::logger::{self, LogTag};
+    use crate::logger::{self, LogTag};
 
     let semaphore = get_global_position_semaphore();
     let open_positions = get_open_positions().await; // clones but infrequent (startup)
@@ -457,18 +457,22 @@ pub async fn reconcile_global_position_semaphore(max_open: usize) {
                 leaked, consumed_before, open_count
             )
         );
-        
+
         // Release leaked permits
         for _ in 0..leaked {
             release_global_position_permit();
         }
-        
+
         logger::info(
             LogTag::Positions,
-            &format!("✅ Released {} leaked permits. Available: {} -> {}", 
-                     leaked, available_before, semaphore.available_permits())
+            &format!(
+                "✅ Released {} leaked permits. Available: {} -> {}",
+                leaked,
+                available_before,
+                semaphore.available_permits()
+            ),
         );
-        
+
         return;
     }
 

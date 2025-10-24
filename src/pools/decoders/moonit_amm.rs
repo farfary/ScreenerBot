@@ -228,7 +228,10 @@ impl MoonitAmmDecoder {
         if token_decimals != curve_info.decimals {
             logger::warning(
                 LogTag::PoolDecoder,
-                &format!("Decimals mismatch: cached={}, curve={}", token_decimals, curve_info.decimals),
+                &format!(
+                    "Decimals mismatch: cached={}, curve={}",
+                    token_decimals, curve_info.decimals
+                ),
             );
         }
 
@@ -243,7 +246,10 @@ impl MoonitAmmDecoder {
 
         logger::debug(
             LogTag::PoolDecoder,
-            &format!("Moonit reserves: SOL={:.6}, Token={:.6}", sol_reserves, token_reserves),
+            &format!(
+                "Moonit reserves: SOL={:.6}, Token={:.6}",
+                sol_reserves, token_reserves
+            ),
         );
 
         // Avoid division by zero

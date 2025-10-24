@@ -197,8 +197,13 @@ pub fn init_strategies_db() -> Result<(), String> {
         )
         .map_err(|e| format!("Failed to update schema version: {}", e))?;
 
-        logger::info(LogTag::System, &format!("Strategies database initialized with schema version {}",
-                STRATEGIES_SCHEMA_VERSION));
+        logger::info(
+            LogTag::System,
+            &format!(
+                "Strategies database initialized with schema version {}",
+                STRATEGIES_SCHEMA_VERSION
+            ),
+        );
     }
 
     STRATEGIES_DB_INITIALIZED.store(true, Ordering::Relaxed);
@@ -239,8 +244,13 @@ pub fn insert_strategy(strategy: &Strategy) -> Result<(), String> {
     )
     .map_err(|e| format!("Failed to insert strategy: {}", e))?;
 
-        logger::info(LogTag::System, &format!("Inserted strategy: id={}, name={}, type={}",
-            strategy.id, strategy.name, strategy.strategy_type));
+    logger::info(
+        LogTag::System,
+        &format!(
+            "Inserted strategy: id={}, name={}, type={}",
+            strategy.id, strategy.name, strategy.strategy_type
+        ),
+    );
 
     Ok(())
 }
@@ -281,8 +291,13 @@ pub fn update_strategy(strategy: &Strategy) -> Result<(), String> {
         return Err(format!("Strategy not found: {}", strategy.id));
     }
 
-        logger::info(LogTag::System, &format!("Updated strategy: id={}, name={}",
-            strategy.id, strategy.name));
+    logger::info(
+        LogTag::System,
+        &format!(
+            "Updated strategy: id={}, name={}",
+            strategy.id, strategy.name
+        ),
+    );
 
     Ok(())
 }
@@ -299,7 +314,10 @@ pub fn delete_strategy(strategy_id: &str) -> Result<(), String> {
         return Err(format!("Strategy not found: {}", strategy_id));
     }
 
-        logger::info(LogTag::System, &format!("Deleted strategy: id={}", strategy_id));
+    logger::info(
+        LogTag::System,
+        &format!("Deleted strategy: id={}", strategy_id),
+    );
 
     Ok(())
 }

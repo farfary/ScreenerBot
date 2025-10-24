@@ -52,7 +52,10 @@ impl SwapExecutor {
             .parse()
             .map_err(|e| SwapError::ExecutionError(format!("Invalid signature format: {}", e)))?;
 
-        logger::info(LogTag::System, &format!("✅ Transaction sent: {}", signature));
+        logger::info(
+            LogTag::System,
+            &format!("✅ Transaction sent: {}", signature),
+        );
 
         Ok(SwapResult {
             signature: Some(signature),

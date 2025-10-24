@@ -36,7 +36,11 @@ impl PoolDecoder for MeteoraDammDecoder {
 
         logger::info(
             LogTag::PoolDecoder,
-            &format!("Found DAMM pool account {} with {} bytes", pool_account.pubkey, pool_account.data.len()),
+            &format!(
+                "Found DAMM pool account {} with {} bytes",
+                pool_account.pubkey,
+                pool_account.data.len()
+            ),
         );
 
         // Parse DAMM pool structure
@@ -157,7 +161,10 @@ impl PoolDecoder for MeteoraDammDecoder {
 
         logger::info(
             LogTag::PoolDecoder,
-            &format!("DAMM decimals: token={}, sol={}", token_decimals, sol_decimals),
+            &format!(
+                "DAMM decimals: token={}, sol={}",
+                token_decimals, sol_decimals
+            ),
         );
 
         // Diagnostic instrumentation for low-liquidity Meteora DAMM pools.
@@ -310,10 +317,7 @@ impl PoolDecoder for MeteoraDammDecoder {
         if price_sol <= 0.0 || !price_sol.is_finite() {
             logger::error(
                 LogTag::PoolDecoder,
-                &format!(
-                    "DAMM: Invalid price calculation result: {}",
-                    price_sol
-                ),
+                &format!("DAMM: Invalid price calculation result: {}", price_sol),
             );
             return None;
         }
@@ -347,7 +351,10 @@ impl PoolDecoder for MeteoraDammDecoder {
             } else {
                 logger::debug(
                     LogTag::Pool,
-                    &format!("DAMM low_liq_empirical: conditions not met (sol_raw_lamports={}, R={:.4})", sol_balance_raw, r)
+                    &format!(
+                        "DAMM low_liq_empirical: conditions not met (sol_raw_lamports={}, R={:.4})",
+                        sol_balance_raw, r
+                    ),
                 );
             }
         }

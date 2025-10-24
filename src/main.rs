@@ -27,7 +27,10 @@ async fn main() {
 
     // Validate argument combinations
     if let Err(e) = validate_arguments() {
-        logger::error(LogTag::System, &format!("Argument validation failed: {}", e));
+        logger::error(
+            LogTag::System,
+            &format!("Argument validation failed: {}", e),
+        );
         logger::error(LogTag::System, &format!("Error: {}", e));
         logger::info(LogTag::System, "Use --help to see all available options");
         std::process::exit(1);

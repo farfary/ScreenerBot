@@ -61,10 +61,7 @@ impl Service for TokensServiceNew {
 
         logger::info(
             LogTag::Tokens,
-            &format!(
-                "Service initialized with database at {}",
-                TOKENS_DATABASE
-            ),
+            &format!("Service initialized with database at {}", TOKENS_DATABASE),
         );
         // Mark tokens system ready after successful initialization
         TOKENS_SYSTEM_READY.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -113,10 +110,7 @@ impl Service for TokensServiceNew {
 
         logger::info(
             LogTag::Tokens,
-            &format!(
-                "Service started with {} background tasks",
-                handles.len()
-            ),
+            &format!("Service started with {} background tasks", handles.len()),
         );
         Ok(handles)
     }

@@ -27,7 +27,10 @@ impl PoolDecoder for MeteoraDlmmDecoder {
     ) -> Option<PriceResult> {
         logger::info(
             LogTag::PoolDecoder,
-            &format!("Meteora DLMM decoder: base={} quote={}", base_mint, quote_mint),
+            &format!(
+                "Meteora DLMM decoder: base={} quote={}",
+                base_mint, quote_mint
+            ),
         );
 
         // Find the pool account
@@ -38,7 +41,11 @@ impl PoolDecoder for MeteoraDlmmDecoder {
 
         logger::info(
             LogTag::PoolDecoder,
-            &format!("Found DLMM pool account {} with {} bytes", pool_account.pubkey, pool_account.data.len()),
+            &format!(
+                "Found DLMM pool account {} with {} bytes",
+                pool_account.pubkey,
+                pool_account.data.len()
+            ),
         );
 
         // Parse DLMM pool structure
@@ -116,19 +123,27 @@ impl PoolDecoder for MeteoraDlmmDecoder {
                 LogTag::PoolDecoder,
                 &format!(
                     "Vault verification: SOL vault mint correct={}, Token vault mint correct={}",
-                    sol_mint_correct,
-                    token_mint_correct
+                    sol_mint_correct, token_mint_correct
                 ),
             );
 
             if !sol_mint_correct || !token_mint_correct {
-                logger::error(LogTag::PoolDecoder, "VAULT ASSIGNMENT ERROR - swapping vaults");
+                logger::error(
+                    LogTag::PoolDecoder,
+                    "VAULT ASSIGNMENT ERROR - swapping vaults",
+                );
                 return None;
             }
         }
 
-        logger::debug(LogTag::PoolDecoder, &format!("SOL vault {} balance: {}", sol_vault, sol_balance));
-        logger::debug(LogTag::PoolDecoder, &format!("Token vault {} balance: {}", token_vault, token_balance));
+        logger::debug(
+            LogTag::PoolDecoder,
+            &format!("SOL vault {} balance: {}", sol_vault, sol_balance),
+        );
+        logger::debug(
+            LogTag::PoolDecoder,
+            &format!("Token vault {} balance: {}", token_vault, token_balance),
+        );
 
         if token_balance == 0 {
             logger::error(LogTag::PoolDecoder, "Token reserve is zero");
@@ -153,7 +168,10 @@ impl PoolDecoder for MeteoraDlmmDecoder {
 
         logger::debug(
             LogTag::PoolDecoder,
-            &format!("Token {} has {} decimals (cached/fallback)", token_mint, token_decimals),
+            &format!(
+                "Token {} has {} decimals (cached/fallback)",
+                token_mint, token_decimals
+            ),
         );
 
         // Calculate price using DLMM theoretical price (more accurate than vault balances)
@@ -219,7 +237,10 @@ impl MeteoraDlmmDecoder {
 
         // Extract DLMM-specific fields
         // Run debug scan for DLMM values (centralized logger will filter output)
-        logger::debug(LogTag::PoolDecoder, "Running DLMM debug scan for offsets and values");
+        logger::debug(
+            LogTag::PoolDecoder,
+            "Running DLMM debug scan for offsets and values",
+        );
         Self::debug_scan_for_dlmm_values(data);
 
         // Use the correct offsets found by scanning
@@ -352,12 +373,12 @@ impl MeteoraDlmmDecoder {
         // Scan for active_id = -485
         for offset in (0..data.len().saturating_sub(4)).step_by(4) {
             if let Some(value) = Self::extract_i32_at_offset(data, offset) {
-                    if value == -485 {
-                        logger::debug(
-                            LogTag::PoolDecoder,
-                            &format!("Found active_id=-485 at offset {}", offset),
-                        );
-                    }
+                if value == -485 {
+                    logger::debug(
+                        LogTag::PoolDecoder,
+                        &format!("Found active_id=-485 at offset {}", offset),
+                    );
+                }
             }
         }
 

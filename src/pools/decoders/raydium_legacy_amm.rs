@@ -296,11 +296,17 @@ fn adjust_vaults(
                 let mint = Pubkey::new_from_array(mint_bytes).to_string();
                 if mint == info.coin_mint && (need_coin || coin_vault_wrong_mint) {
                     coin_vault = k.clone();
-                    logger::debug(LogTag::PoolDecoder, &format!("Found coin_vault: {}", coin_vault));
+                    logger::debug(
+                        LogTag::PoolDecoder,
+                        &format!("Found coin_vault: {}", coin_vault),
+                    );
                 }
                 if mint == info.pc_mint && (need_pc || pc_vault_wrong_mint) {
                     pc_vault = k.clone();
-                    logger::debug(LogTag::PoolDecoder, &format!("Found pc_vault: {}", pc_vault));
+                    logger::debug(
+                        LogTag::PoolDecoder,
+                        &format!("Found pc_vault: {}", pc_vault),
+                    );
                 }
             }
         }
@@ -317,7 +323,10 @@ fn adjust_vaults(
 
     logger::info(
         LogTag::PoolDecoder,
-        &format!("Adjusted vaults: coin_vault={} pc_vault={}", coin_vault, pc_vault),
+        &format!(
+            "Adjusted vaults: coin_vault={} pc_vault={}",
+            coin_vault, pc_vault
+        ),
     );
 
     Some(LegacyPoolInfo {

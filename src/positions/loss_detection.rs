@@ -58,7 +58,7 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<(), 
             // Add to database-backed blacklist
             if let Some(db) = get_global_database() {
                 match cleanup::blacklist_token(&position.mint, "PoorPerformance", &db) {
-                        Ok(_) => {
+                    Ok(_) => {
                         logger::info(
                             LogTag::Positions,
                             &format!(

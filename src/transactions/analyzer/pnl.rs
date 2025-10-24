@@ -119,8 +119,8 @@ pub async fn calculate_pnl(
 ) -> Result<PnLAnalysis, String> {
     logger::debug(
         LogTag::Transactions,
-            &format!("Calculating P&L for tx: {}", transaction.signature),
-        );
+        &format!("Calculating P&L for tx: {}", transaction.signature),
+    );
 
     // Step 1: Calculate fee breakdown
     let fee_breakdown = calculate_fee_breakdown(tx_data, balance_analysis, ata_analysis).await?;

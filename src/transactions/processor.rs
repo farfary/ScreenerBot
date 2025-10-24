@@ -66,7 +66,7 @@ impl TransactionProcessor {
 
         if self.debug_enabled {
             logger::info(
-        LogTag::Transactions,
+                LogTag::Transactions,
                 &format!(
                     "Processing transaction: {} for wallet: {}",
                     signature,
@@ -98,7 +98,7 @@ impl TransactionProcessor {
 
         if self.debug_enabled {
             logger::info(
-        LogTag::Transactions,
+                LogTag::Transactions,
                 &format!(
                     "✅ Processed {}: type={:?}, direction={:?}, duration={}ms",
                     signature,
@@ -125,13 +125,13 @@ impl TransactionProcessor {
             if let Err(e) = database.store_processed_transaction(&transaction).await {
                 if self.debug_enabled {
                     logger::info(
-        LogTag::Transactions,
+                        LogTag::Transactions,
                         &format!("Failed to cache processed transaction: {}", e),
                     );
                 }
             } else if self.debug_enabled {
                 logger::info(
-        LogTag::Transactions,
+                    LogTag::Transactions,
                     &format!("Cached processed transaction: {}", signature),
                 );
             }
@@ -177,7 +177,7 @@ impl TransactionProcessor {
             if let Some(cached_details) = database.get_raw_transaction_details(signature).await? {
                 if self.debug_enabled {
                     logger::info(
-        LogTag::Transactions,
+                        LogTag::Transactions,
                         &format!(
                             "Using cached raw transaction data (cache-only mode): {}",
                             signature
@@ -197,7 +197,7 @@ impl TransactionProcessor {
         if self.force_refresh {
             if self.debug_enabled {
                 logger::info(
-        LogTag::Transactions,
+                    LogTag::Transactions,
                     &format!("Force fetching fresh transaction data: {}", signature),
                 );
             }
@@ -206,7 +206,7 @@ impl TransactionProcessor {
             if let Some(cached_details) = database.get_raw_transaction_details(signature).await? {
                 if self.debug_enabled {
                     logger::info(
-        LogTag::Transactions,
+                        LogTag::Transactions,
                         &format!("Using cached raw transaction data for: {}", signature),
                     );
                 }
@@ -215,7 +215,7 @@ impl TransactionProcessor {
 
             if self.debug_enabled {
                 logger::info(
-        LogTag::Transactions,
+                    LogTag::Transactions,
                     &format!("Fetching fresh transaction data for: {}", signature),
                 );
             }
@@ -254,7 +254,7 @@ impl TransactionProcessor {
             if let Err(e) = database.store_raw_transaction(&temp_transaction).await {
                 if self.debug_enabled {
                     logger::info(
-        LogTag::Transactions,
+                        LogTag::Transactions,
                         &format!(
                             "Failed to cache raw transaction data for {}: {}",
                             signature, e
@@ -263,7 +263,7 @@ impl TransactionProcessor {
                 }
             } else if self.debug_enabled {
                 logger::info(
-        LogTag::Transactions,
+                    LogTag::Transactions,
                     &format!("Cached raw transaction data for: {}", signature),
                 );
             }
@@ -301,7 +301,7 @@ impl TransactionProcessor {
                 };
 
             logger::info(
-        LogTag::Transactions,
+                LogTag::Transactions,
                 &format!("Transaction {} structure: {}", signature, instructions_info),
             );
 
@@ -323,13 +323,13 @@ impl TransactionProcessor {
                     };
 
                     logger::info(
-        LogTag::Transactions,
+                        LogTag::Transactions,
                         &format!("Transaction {} {}", signature, log_preview),
                     );
                 }
 
                 logger::info(
-        LogTag::Transactions,
+                    LogTag::Transactions,
                     &format!(
                         "Transaction {} balance changes: pre_count={}, post_count={}",
                         signature,
@@ -352,7 +352,7 @@ impl TransactionProcessor {
                 };
 
             logger::info(
-        LogTag::Transactions,
+                LogTag::Transactions,
                 &format!("Transaction {} accounts: {}", signature, account_keys_info),
             );
         }
@@ -834,7 +834,7 @@ impl TransactionProcessor {
                         ) {
                             if corrected_amount != input_raw {
                                 logger::info(
-        LogTag::Transactions,
+                                    LogTag::Transactions,
                                     &format!(
                                         "Applied {router} correction: {} -> {} ({:.2}% diff)",
                                         input_raw,
@@ -966,7 +966,7 @@ impl TransactionProcessor {
                         ) {
                             if corrected_amount != output_raw {
                                 logger::info(
-        LogTag::Transactions,
+                                    LogTag::Transactions,
                                     &format!(
                                         "Applied {router} correction: {} -> {} ({:.2}% diff)",
                                         output_raw,
@@ -984,7 +984,7 @@ impl TransactionProcessor {
 
                         if self.debug_enabled {
                             logger::info(
-        LogTag::Transactions,
+                                LogTag::Transactions,
                                 &format!(
                                     "Final swap calculation: output_ui={:.9} SOL (raw={})",
                                     output_ui, output_raw
@@ -1197,7 +1197,7 @@ impl TransactionProcessor {
                         );
                     }
                     logger::info(
-        LogTag::Transactions,
+                        LogTag::Transactions,
                         &format!(
                             "Mapped swap: dir={:?} router={} in {} (ui={:.9}) -> out {} (ui={:.6})",
                             direction, router_str, input_raw, input_ui, output_raw, output_ui
@@ -1206,7 +1206,7 @@ impl TransactionProcessor {
                 }
             } else if self.debug_enabled {
                 logger::info(
-        LogTag::Transactions,
+                    LogTag::Transactions,
                     &"Skipping swap mapping: missing direction or primary token".to_string(),
                 );
             }

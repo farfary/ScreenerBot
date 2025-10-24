@@ -28,10 +28,7 @@ const VERIFICATION_BATCH_SIZE: usize = 10;
 
 /// Initialize positions system
 pub async fn initialize_positions_system() -> Result<(), String> {
-    logger::info(
-        LogTag::Positions,
-        "🚀 Initializing positions system",
-    );
+    logger::info(LogTag::Positions, "🚀 Initializing positions system");
 
     // Initialize database
     initialize_positions_database()
@@ -138,10 +135,7 @@ pub async fn initialize_positions_system() -> Result<(), String> {
         reconcile_global_position_semaphore(max_open_positions).await;
     }
 
-    logger::info(
-        LogTag::Positions,
-        "✅ Positions system initialized",
-    );
+    logger::info(LogTag::Positions, "✅ Positions system initialized");
 
     Ok(())
 }
@@ -168,10 +162,7 @@ pub async fn start_positions_manager_service(
 
 /// Verification worker loop
 async fn verification_worker(shutdown: Arc<Notify>) {
-    logger::info(
-        LogTag::Positions,
-        "🔍 Starting verification worker",
-    );
+    logger::info(LogTag::Positions, "🔍 Starting verification worker");
 
     // Wait for Transactions and Pool services to be ready before starting verification
     let mut last_log = std::time::Instant::now();
@@ -192,7 +183,7 @@ async fn verification_worker(shutdown: Arc<Notify>) {
         }
 
         // Log only every 15 seconds
-            if last_log.elapsed() >= Duration::from_secs(15) {
+        if last_log.elapsed() >= Duration::from_secs(15) {
             logger::info(
                 LogTag::Positions,
                 &format!(
@@ -462,7 +453,7 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                             reason
                                         )
                                     );
-                                    
+
                                     // Record abandoned verification event with detailed reason
                                     crate::events::record_safe(
                                         crate::events::Event::new(
@@ -482,7 +473,7 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                             })
                                         )
                                     ).await;
-                                    
+
                                     // Handle abandoned verification based on kind
                                     match item.kind {
                                         VerificationKind::Entry => {
@@ -502,7 +493,7 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                             // Force synthetic exit after timeout
                                             if let Some(position_id) = item.position_id {
                                                 logger::warning(LogTag::Positions, &format!("Forcing synthetic exit for position {} after verification abandonment - manual wallet check recommended", position_id));
-                                                
+
                                                 let transition = super::transitions::PositionTransition::ExitPermanentFailureSynthetic {
                                                     position_id,
                                                     exit_time: chrono::Utc::now(),
@@ -511,11 +502,11 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                             }
                                         }
                                     }
-                                    
+
                                     // Don't requeue - abandon this verification
                                     continue;
                                 }
-                                
+
                                 logger::debug(
                                     LogTag::Positions,
                                     &format!(

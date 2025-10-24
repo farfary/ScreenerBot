@@ -174,8 +174,8 @@ pub async fn detect_dex_and_router(
 ) -> Result<DexAnalysis, String> {
     logger::debug(
         LogTag::Transactions,
-            &format!("Detecting DEX/router for tx: {}", transaction.signature),
-        );
+        &format!("Detecting DEX/router for tx: {}", transaction.signature),
+    );
 
     // Step 1: Extract all program IDs from instructions
     let program_ids = extract_program_ids(tx_data)?;

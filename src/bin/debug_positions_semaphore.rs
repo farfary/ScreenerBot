@@ -21,7 +21,7 @@ async fn main() -> Result<(), String> {
     );
     if arguments::is_debug_positions_enabled() {
         logger::info(
-        LogTag::Positions,
+            LogTag::Positions,
             &format!(
                 "Enabled debug modes: {:?}",
                 arguments::get_enabled_debug_modes()

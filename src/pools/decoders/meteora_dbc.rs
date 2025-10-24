@@ -197,7 +197,10 @@ fn extract_sqrt_price_from_pool_data(data: &[u8]) -> Option<u128> {
     }
 
     // Fallback: scan entire account for any plausible u128 (very permissive)
-    logger::debug(LogTag::Pool, "Scanning for sqrt_price u128 value (fallback)");
+    logger::debug(
+        LogTag::Pool,
+        "Scanning for sqrt_price u128 value (fallback)",
+    );
     for offset in (0..data.len().saturating_sub(16)).step_by(8) {
         if let Ok(val) = read_u128_le(&data[offset..offset + 16]) {
             // Basic plausibility: value should be non-zero and < 2^80 (to avoid random big numbers)

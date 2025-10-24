@@ -36,16 +36,16 @@ pub enum PositionTransition {
     PartialExitSubmitted {
         position_id: i64,
         exit_signature: String,
-        exit_amount: u64,           // Tokens to sell
-        exit_percentage: f64,       // % of position
-        market_price: f64,          // Price at submission
+        exit_amount: u64,     // Tokens to sell
+        exit_percentage: f64, // % of position
+        market_price: f64,    // Price at submission
     },
     PartialExitVerified {
         position_id: i64,
-        exit_amount: u64,           // Actual tokens sold
-        sol_received: f64,          // Actual SOL received
-        effective_exit_price: f64,  // Actual price
-        fee_lamports: u64,          // Transaction fee
+        exit_amount: u64,          // Actual tokens sold
+        sol_received: f64,         // Actual SOL received
+        effective_exit_price: f64, // Actual price
+        fee_lamports: u64,         // Transaction fee
         exit_time: DateTime<Utc>,
     },
     PartialExitFailed {
@@ -56,15 +56,15 @@ pub enum PositionTransition {
     DcaSubmitted {
         position_id: i64,
         dca_signature: String,
-        dca_amount_sol: f64,        // Additional SOL invested
-        market_price: f64,          // Price at DCA
+        dca_amount_sol: f64, // Additional SOL invested
+        market_price: f64,   // Price at DCA
     },
     DcaVerified {
         position_id: i64,
-        tokens_bought: u64,         // Additional tokens
-        sol_spent: f64,             // Actual SOL spent
-        effective_price: f64,       // Actual price
-        fee_lamports: u64,          // Transaction fee
+        tokens_bought: u64,   // Additional tokens
+        sol_spent: f64,       // Actual SOL spent
+        effective_price: f64, // Actual price
+        fee_lamports: u64,    // Transaction fee
         dca_time: DateTime<Utc>,
     },
     DcaFailed {

@@ -181,7 +181,10 @@ pub async fn load_positions_with_filters(
     let positions = match positions_result {
         Ok(pos) => pos,
         Err(e) => {
-            logger::error(LogTag::Positions, &format!("Failed to load positions: {}", e));
+            logger::error(
+                LogTag::Positions,
+                &format!("Failed to load positions: {}", e),
+            );
             return Vec::new();
         }
     };
@@ -322,7 +325,7 @@ async fn get_position_details(Path(key): Path<String>) -> Response {
         ),
         Err(err) => {
             logger::info(
-        LogTag::Webserver,
+                LogTag::Webserver,
                 &format!("Failed to resolve position for key {}: {}", key, err),
             );
 
@@ -441,7 +444,7 @@ async fn fetch_transaction_summary(
             ),
             Err(err) => {
                 logger::info(
-        LogTag::Webserver,
+                    LogTag::Webserver,
                     &format!("Failed to load {} transaction {}: {}", kind, sig, err),
                 );
                 PositionTransactionSummary::missing(kind, Some(sig), Some(err))
@@ -469,7 +472,7 @@ async fn load_state_history_entries(
         Ok(db) => db,
         Err(err) => {
             logger::info(
-        LogTag::Webserver,
+                LogTag::Webserver,
                 &format!(
                     "Failed to access positions database for position {}: {}",
                     id, err
@@ -486,7 +489,7 @@ async fn load_state_history_entries(
 
     let Some(db) = db_clone else {
         logger::info(
-        LogTag::Webserver,
+            LogTag::Webserver,
             &format!(
                 "Positions database not initialized when loading history for position {}",
                 id
@@ -506,7 +509,7 @@ async fn load_state_history_entries(
             .collect(),
         Err(err) => {
             logger::info(
-        LogTag::Webserver,
+                LogTag::Webserver,
                 &format!("Failed to load state history for position {}: {}", id, err),
             );
             Vec::new()

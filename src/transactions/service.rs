@@ -68,11 +68,12 @@ async fn defer_transaction_retry(signature: String, delay_secs: i64, reason: Str
     };
 
     let mut deferred = DEFERRED_RETRIES.lock().await;
-    
+
     // Check if already exists, increment attempts if so
     if let Some(existing) = deferred.get_mut(&signature) {
         existing.attempts += 1;
-        existing.retry_after = Utc::now() + chrono::Duration::seconds(delay_secs * (existing.attempts as i64));
+        existing.retry_after =
+            Utc::now() + chrono::Duration::seconds(delay_secs * (existing.attempts as i64));
         existing.reason = reason;
     } else {
         deferred.insert(signature, retry);
@@ -267,10 +268,7 @@ pub async fn stop_global_transaction_service() -> Result<(), String> {
         manager.shutdown().await?;
     }
 
-    logger::info(
-        LogTag::Transactions,
-        "Global transaction service stopped",
-    );
+    logger::info(LogTag::Transactions, "Global transaction service stopped");
     Ok(())
 }
 
@@ -318,7 +316,6 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
                         || el.contains("not found")
                         || el.contains("transaction not available");
 
-
                     if indexing_delay && attempts < max_attempts - 1 {
                         tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                         attempts += 1;
@@ -330,7 +327,6 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
             }
         }
     }
-
 
     Ok(None)
 }
@@ -874,7 +870,6 @@ async fn perform_initial_transaction_bootstrap(
                     permanently_failed, MAX_RETRY_ATTEMPTS
                 ),
             );
-
         }
     }
 
@@ -979,7 +974,6 @@ async fn perform_initial_transaction_bootstrap(
     };
 
     logger::info(LogTag::Transactions, &summary);
-
 
     Ok(stats)
 }
@@ -1143,10 +1137,7 @@ async fn run_transaction_service(config: ServiceConfig) -> Result<(), String> {
         }
     }
 
-    logger::info(
-        LogTag::Transactions,
-        "Transaction service loop ended",
-    );
+    logger::info(LogTag::Transactions, "Transaction service loop ended");
     Ok(())
 }
 
@@ -1228,16 +1219,17 @@ async fn process_deferred_retries(
         let age_secs = (now - retry.first_seen).num_seconds();
         let signature_short = retry.signature[..8].to_string();
         let attempts = retry.attempts;
-        
+
         match processor.process_transaction(&retry.signature).await {
             Ok(_) => {
                 add_signature_to_known_globally(retry.signature.clone()).await;
                 remove_pending_transaction_globally(&retry.signature).await;
                 processed += 1;
-
             }
-            Err(e) if (crate::errors::is_rpc_indexing_delay(&e) || e.contains("RPC indexing delay"))
-                && retry.attempts < 3 =>
+            Err(e)
+                if (crate::errors::is_rpc_indexing_delay(&e)
+                    || e.contains("RPC indexing delay"))
+                    && retry.attempts < 3 =>
             {
                 // Still having indexing issues, retry again with exponential backoff
                 let current_attempts = retry.attempts;
@@ -1249,17 +1241,13 @@ async fn process_deferred_retries(
                 let mut deferred = DEFERRED_RETRIES.lock().await;
                 deferred.insert(retry.signature.clone(), retry);
                 re_deferred += 1;
-
             }
             Err(e) => {
                 logger::info(
                     LogTag::Transactions,
                     &format!(
                         "Deferred retry failed permanently for {} after {} attempts (age: {}s): {}",
-                        signature_short,
-                        attempts,
-                        age_secs,
-                        e
+                        signature_short, attempts, age_secs, e
                     ),
                 );
             }
@@ -1308,7 +1296,7 @@ async fn perform_fallback_transaction_check(
 
     let mut new_count = 0;
     let mut db_persistence_failures = 0;
-    
+
     // Get database reference for verification
     let transaction_db = crate::transactions::database::get_transaction_database().await;
 
@@ -1320,7 +1308,7 @@ async fn perform_fallback_transaction_check(
                 Ok(_) => {
                     // Add to in-memory global state
                     add_signature_to_known_globally(signature.clone()).await;
-                    
+
                     // CRITICAL FIX: Verify persistence to database
                     if let Some(db) = transaction_db.as_ref() {
                         // Ensure it's persisted to known_signatures table
@@ -1329,15 +1317,15 @@ async fn perform_fallback_transaction_check(
                                 LogTag::Transactions,
                                 &format!(
                                     "Failed to persist known signature {} to database: {}",
-                                    &signature[..8], e
+                                    &signature[..8],
+                                    e
                                 ),
                             );
                             db_persistence_failures += 1;
                         } else {
                             // Double-check it's actually there
                             match db.is_signature_known(&signature).await {
-                                Ok(true) => {
-                                }
+                                Ok(true) => {}
                                 Ok(false) => {
                                     logger::info(
                                         LogTag::Transactions,
@@ -1353,14 +1341,15 @@ async fn perform_fallback_transaction_check(
                                         LogTag::Transactions,
                                         &format!(
                                             "Failed to verify signature {} in database: {}",
-                                            &signature[..8], e
+                                            &signature[..8],
+                                            e
                                         ),
                                     );
                                 }
                             }
                         }
                     }
-                    
+
                     new_count += 1;
                 }
                 Err(e) => {
@@ -1368,7 +1357,8 @@ async fn perform_fallback_transaction_check(
                         LogTag::Transactions,
                         &format!(
                             "Failed to process fallback transaction {}: {}",
-                            &signature[..8], e
+                            &signature[..8],
+                            e
                         ),
                     );
                 }
@@ -1385,7 +1375,7 @@ async fn perform_fallback_transaction_check(
         } else {
             format!("Fallback check found {} new transactions", new_count)
         };
-        
+
         logger::info(LogTag::Transactions, &summary);
     }
 
@@ -1477,7 +1467,7 @@ async fn handle_websocket_transaction(
             if crate::errors::is_rpc_indexing_delay(&e) || e.contains("RPC indexing delay") {
                 // Defer this transaction for retry after 5 seconds
                 defer_transaction_retry(signature.clone(), 5, e.clone()).await;
-                
+
                 logger::info(
                     LogTag::Transactions,
                     &format!(
@@ -1491,7 +1481,8 @@ async fn handle_websocket_transaction(
                     LogTag::Transactions,
                     &format!(
                         "Failed to process WebSocket transaction {}: {}",
-                        &signature[..8], e
+                        &signature[..8],
+                        e
                     ),
                 );
             }

@@ -96,19 +96,32 @@ pub async fn evaluate_entry_strategies(
             Ok(eval_result) => {
                 // Record evaluation
                 if let Err(e) = record_evaluation(&eval_result, token_mint) {
-                    logger::warning(LogTag::System, &format!("Failed to record evaluation: {}", e));
+                    logger::warning(
+                        LogTag::System,
+                        &format!("Failed to record evaluation: {}", e),
+                    );
                 }
 
                 // If strategy signals entry, return it
                 if eval_result.result {
-                    logger::info(LogTag::System, &format!("Entry strategy triggered: strategy={}, token={}, price={:.9}",
-                            strategy.name, token_mint, current_price));
+                    logger::info(
+                        LogTag::System,
+                        &format!(
+                            "Entry strategy triggered: strategy={}, token={}, price={:.9}",
+                            strategy.name, token_mint, current_price
+                        ),
+                    );
                     return Ok(Some(strategy.id.clone()));
                 }
             }
             Err(e) => {
-                logger::error(LogTag::System, &format!("Entry strategy evaluation error: strategy={}, error={}",
-                        strategy.name, e));
+                logger::error(
+                    LogTag::System,
+                    &format!(
+                        "Entry strategy evaluation error: strategy={}, error={}",
+                        strategy.name, e
+                    ),
+                );
             }
         }
     }
@@ -169,7 +182,10 @@ pub async fn evaluate_exit_strategies(
             Ok(eval_result) => {
                 // Record evaluation
                 if let Err(e) = record_evaluation(&eval_result, token_mint) {
-                    logger::warning(LogTag::System, &format!("Failed to record evaluation: {}", e));
+                    logger::warning(
+                        LogTag::System,
+                        &format!("Failed to record evaluation: {}", e),
+                    );
                 }
 
                 // If strategy signals exit, return it
@@ -182,8 +198,13 @@ pub async fn evaluate_exit_strategies(
                 }
             }
             Err(e) => {
-                logger::error(LogTag::System, &format!("Exit strategy evaluation error: strategy={}, error={}",
-                        strategy.name, e));
+                logger::error(
+                    LogTag::System,
+                    &format!(
+                        "Exit strategy evaluation error: strategy={}, error={}",
+                        strategy.name, e
+                    ),
+                );
             }
         }
     }

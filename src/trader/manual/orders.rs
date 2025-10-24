@@ -2,16 +2,17 @@
 
 use crate::logger::{self, LogTag};
 use crate::trader::execution::execute_trade;
-use crate::trader::types::{
-    TradeAction, TradeDecision, TradePriority, TradeReason, TradeResult,
-};
+use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason, TradeResult};
 use chrono::Utc;
 
 /// Execute a manual buy order
 pub async fn manual_buy(mint: &str, size_sol: f64) -> Result<TradeResult, String> {
     logger::info(
         LogTag::Trader,
-        &format!("Processing manual buy: mint={}, size={} SOL", mint, size_sol),
+        &format!(
+            "Processing manual buy: mint={}, size={} SOL",
+            mint, size_sol
+        ),
     );
 
     let decision = TradeDecision {
@@ -22,7 +23,7 @@ pub async fn manual_buy(mint: &str, size_sol: f64) -> Result<TradeResult, String
         strategy_id: None,
         timestamp: Utc::now(),
         priority: TradePriority::High, // Manual orders have high priority
-        price_sol: None,                // Will be determined during execution
+        price_sol: None,               // Will be determined during execution
         size_sol: Some(size_sol),
     };
 

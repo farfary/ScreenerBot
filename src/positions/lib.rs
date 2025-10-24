@@ -21,9 +21,9 @@ pub async fn add_signature_to_index(signature: &str, mint: &str) {
     index.insert(signature.to_string(), mint.to_string());
 
     logger::debug(
-            LogTag::Positions,
-            &format!("📋 Added signature {} -> mint {} to index", signature, mint),
-        );
+        LogTag::Positions,
+        &format!("📋 Added signature {} -> mint {} to index", signature, mint),
+    );
 }
 
 /// Remove signature from mint mapping
@@ -75,18 +75,24 @@ async fn find_position_by_signature(signature: &str) -> Option<(String, usize)> 
 /// For closed positions: returns only realized P&L
 pub async fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -> (f64, f64) {
     // Use average_entry_price for positions with DCA support
-    let entry_price = if position.average_entry_price > 0.0 && position.average_entry_price.is_finite() {
-        position.average_entry_price
-    } else {
-        // Fallback to legacy prices
-        position.effective_entry_price.unwrap_or(position.entry_price)
-    };
+    let entry_price =
+        if position.average_entry_price > 0.0 && position.average_entry_price.is_finite() {
+            position.average_entry_price
+        } else {
+            // Fallback to legacy prices
+            position
+                .effective_entry_price
+                .unwrap_or(position.entry_price)
+        };
 
     if entry_price <= 0.0 || !entry_price.is_finite() {
         // Log invalid entry price for diagnostics; logger will filter by level
         logger::debug(
             LogTag::Positions,
-            &format!("❌ Invalid entry price for {}: {}", position.symbol, entry_price),
+            &format!(
+                "❌ Invalid entry price for {}: {}",
+                position.symbol, entry_price
+            ),
         );
         // Invalid entry price - return neutral P&L to avoid triggering emergency exits
         return (0.0, 0.0);
@@ -240,7 +246,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
     if let Some(current) = current_price {
         // Use remaining_token_amount for positions with partial exits, fallback to token_amount
         let remaining_amount = position.remaining_token_amount.or(position.token_amount);
-        
+
         if let Some(token_amount) = remaining_amount {
             // Get token decimals from cache (async)
             let token_decimals_opt = get_decimals(&position.mint).await;
@@ -262,7 +268,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
 
             let ui_token_amount = (token_amount as f64) / (10_f64).powi(token_decimals as i32);
             let current_value = ui_token_amount * current;
-            
+
             // Use total_size_sol (includes DCA) instead of entry_size_sol
             let entry_cost = position.total_size_sol;
 
@@ -628,11 +634,14 @@ pub async fn calculate_split_pnl(
     position: &Position,
     current_price: Option<f64>,
 ) -> (f64, f64, f64, f64) {
-    let entry_price = if position.average_entry_price > 0.0 && position.average_entry_price.is_finite() {
-        position.average_entry_price
-    } else {
-        position.effective_entry_price.unwrap_or(position.entry_price)
-    };
+    let entry_price =
+        if position.average_entry_price > 0.0 && position.average_entry_price.is_finite() {
+            position.average_entry_price
+        } else {
+            position
+                .effective_entry_price
+                .unwrap_or(position.entry_price)
+        };
 
     if entry_price <= 0.0 || !entry_price.is_finite() {
         return (0.0, 0.0, 0.0, 0.0);
@@ -642,8 +651,8 @@ pub async fn calculate_split_pnl(
     let realized_pnl_sol = if position.total_exited_amount > 0 {
         if let Some(avg_exit_price) = position.average_exit_price {
             let sol_received = position.sol_received.unwrap_or(0.0);
-            let exit_portion = position.total_exited_amount as f64 
-                / (position.token_amount.unwrap_or(1) as f64);
+            let exit_portion =
+                position.total_exited_amount as f64 / (position.token_amount.unwrap_or(1) as f64);
             let invested_in_exited = position.total_size_sol * exit_portion;
             let exit_fees = lamports_to_sol(position.exit_fee_lamports.unwrap_or(0));
             sol_received - invested_in_exited - exit_fees
@@ -660,11 +669,11 @@ pub async fn calculate_split_pnl(
             if let Some(decimals) = get_decimals(&position.mint).await {
                 let ui_remaining = (remaining as f64) / (10_f64).powi(decimals as i32);
                 let current_value = ui_remaining * current;
-                let remaining_portion = remaining as f64 
-                    / (position.token_amount.unwrap_or(1) as f64);
+                let remaining_portion =
+                    remaining as f64 / (position.token_amount.unwrap_or(1) as f64);
                 let invested_in_remaining = position.total_size_sol * remaining_portion;
-                let entry_fees_portion = lamports_to_sol(position.entry_fee_lamports.unwrap_or(0)) 
-                    * remaining_portion;
+                let entry_fees_portion =
+                    lamports_to_sol(position.entry_fee_lamports.unwrap_or(0)) * remaining_portion;
                 current_value - invested_in_remaining - entry_fees_portion
             } else {
                 0.0
@@ -687,5 +696,10 @@ pub async fn calculate_split_pnl(
     let total_pnl_sol = realized_pnl_sol + unrealized_pnl_sol;
     let total_pnl_percent = (total_pnl_sol / position.total_size_sol) * 100.0;
 
-    (realized_pnl_sol, unrealized_pnl_sol, total_pnl_sol, total_pnl_percent)
+    (
+        realized_pnl_sol,
+        unrealized_pnl_sol,
+        total_pnl_sol,
+        total_pnl_percent,
+    )
 }

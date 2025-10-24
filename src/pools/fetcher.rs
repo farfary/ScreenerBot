@@ -468,7 +468,10 @@ impl AccountFetcher {
                 account_data_list.push(account_data);
             } else {
                 missing_accounts.push(accounts[i].to_string());
-                logger::warning(LogTag::PoolFetcher, &format!("Account not found: {}", accounts[i]));
+                logger::warning(
+                    LogTag::PoolFetcher,
+                    &format!("Account not found: {}", accounts[i]),
+                );
             }
         }
 
@@ -637,7 +640,10 @@ impl AccountFetcher {
         bundles.retain(|pool_id, bundle| {
             let should_keep = !bundle.is_stale(max_age_seconds);
             if !should_keep {
-                logger::debug(LogTag::PoolFetcher, &format!("Removing stale bundle for pool: {}", pool_id));
+                logger::debug(
+                    LogTag::PoolFetcher,
+                    &format!("Removing stale bundle for pool: {}", pool_id),
+                );
             }
             should_keep
         });

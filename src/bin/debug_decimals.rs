@@ -35,7 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = Arc::new(TokenDatabase::new(TOKENS_DATABASE)?);
     if let Err(err) = init_global_database(db.clone()) {
         logger::info(
-        LogTag::Tokens,
+            LogTag::Tokens,
             &format!("Global token database already initialised: {}", err),
         );
     }
@@ -56,21 +56,18 @@ async fn inspect_single_mint(mint: &str) {
     );
 
     let cached = get_cached_decimals(mint);
-    logger::info(
-        LogTag::Tokens,
-        &format!("Cached decimals: {:?}", cached),
-    );
+    logger::info(LogTag::Tokens, &format!("Cached decimals: {:?}", cached));
 
     match get_decimals_async(mint).await {
         Some(value) => {
             logger::info(
-        LogTag::Tokens,
+                LogTag::Tokens,
                 &format!("Resolved decimals for mint={} value={}", mint, value),
             );
         }
         None => {
             logger::info(
-        LogTag::Tokens,
+                LogTag::Tokens,
                 &format!("Unable to resolve decimals for mint={}", mint),
             );
         }
@@ -86,10 +83,7 @@ async fn inspect_missing_decimals(limit: usize, fetch: bool) {
     let tokens = match list_tokens_async(limit * 5).await {
         Ok(tokens) => tokens,
         Err(err) => {
-            logger::info(
-        LogTag::Tokens,
-                &format!("Failed to list tokens: {}", err),
-            );
+            logger::info(LogTag::Tokens, &format!("Failed to list tokens: {}", err));
             return;
         }
     };
@@ -105,10 +99,7 @@ async fn inspect_missing_decimals(limit: usize, fetch: bool) {
     }
 
     if missing.is_empty() {
-        logger::info(
-        LogTag::Tokens,
-            "All recent tokens have decimals populated",
-        );
+        logger::info(LogTag::Tokens, "All recent tokens have decimals populated");
         return;
     }
 
@@ -121,7 +112,7 @@ async fn inspect_missing_decimals(limit: usize, fetch: bool) {
         let mint = &token.mint;
         let cached = get_cached_decimals(mint);
         logger::info(
-        LogTag::Tokens,
+            LogTag::Tokens,
             &format!(
                 "mint={} symbol={:?} cached={:?}",
                 mint, token.symbol, cached
@@ -132,13 +123,13 @@ async fn inspect_missing_decimals(limit: usize, fetch: bool) {
             match get_decimals_async(mint).await {
                 Some(value) => {
                     logger::info(
-        LogTag::Tokens,
+                        LogTag::Tokens,
                         &format!("mint={} decimals={} (stored)", mint, value),
                     );
                 }
                 None => {
                     logger::info(
-        LogTag::Tokens,
+                        LogTag::Tokens,
                         &format!("mint={} still missing decimals", mint),
                     );
                 }

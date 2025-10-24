@@ -26,9 +26,9 @@ static SHUTDOWN_NOTIFY: once_cell::sync::Lazy<Arc<Notify>> =
 /// This function blocks until the server is shut down
 pub async fn start_server() -> Result<(), String> {
     logger::debug(
-            LogTag::Webserver,
-            &format!("🌐 Starting webserver on {}:{}", DEFAULT_HOST, DEFAULT_PORT),
-        );
+        LogTag::Webserver,
+        &format!("🌐 Starting webserver on {}:{}", DEFAULT_HOST, DEFAULT_PORT),
+    );
 
     // Create application state
     let state = Arc::new(AppState::new());
@@ -77,21 +77,21 @@ pub async fn start_server() -> Result<(), String> {
     })?;
 
     logger::debug(
-            LogTag::Webserver,
-            &format!("✅ Webserver listening on http://{}", addr),
-        );
-        logger::debug(
-            LogTag::Webserver,
-            &format!("📊 API endpoints available at http://{}/api", addr),
-        );
+        LogTag::Webserver,
+        &format!("✅ Webserver listening on http://{}", addr),
+    );
+    logger::debug(
+        LogTag::Webserver,
+        &format!("📊 API endpoints available at http://{}/api", addr),
+    );
 
     // Run the server with graceful shutdown
     let shutdown_signal = async {
         SHUTDOWN_NOTIFY.notified().await;
         logger::debug(
-                LogTag::Webserver,
-                "Received shutdown signal, stopping webserver...",
-            );
+            LogTag::Webserver,
+            "Received shutdown signal, stopping webserver...",
+        );
     };
 
     axum::serve(listener, app)
@@ -106,10 +106,7 @@ pub async fn start_server() -> Result<(), String> {
 
 /// Trigger webserver shutdown
 pub fn shutdown() {
-    logger::debug(
-            LogTag::Webserver,
-            "Triggering webserver shutdown...",
-        );
+    logger::debug(LogTag::Webserver, "Triggering webserver shutdown...");
     SHUTDOWN_NOTIFY.notify_one();
 }
 

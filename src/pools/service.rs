@@ -264,7 +264,7 @@ pub async fn stop_pool_service(timeout_seconds: u64) -> Result<(), PoolError> {
         if let Some(ref handle) = GLOBAL_SHUTDOWN_HANDLE {
             handle.notify_waiters();
         }
-}    // Wait for shutdown with timeout
+    } // Wait for shutdown with timeout
     let shutdown_result =
         tokio::time::timeout(tokio::time::Duration::from_secs(timeout_seconds), async {
             // Give tasks time to shutdown gracefully
@@ -285,10 +285,7 @@ pub async fn stop_pool_service(timeout_seconds: u64) -> Result<(), PoolError> {
                 PRICE_CALCULATOR = None;
             }
 
-            logger::info(
-                LogTag::PoolService,
-                "✅ Pool service stopped successfully",
-            );
+            logger::info(LogTag::PoolService, "✅ Pool service stopped successfully");
 
             record_safe(Event::info(
                 EventCategory::System,
@@ -306,10 +303,7 @@ pub async fn stop_pool_service(timeout_seconds: u64) -> Result<(), PoolError> {
             Ok(())
         }
         Err(_) => {
-            logger::warning(
-                LogTag::PoolService,
-                "Pool service shutdown timed out",
-            );
+            logger::warning(LogTag::PoolService, "Pool service shutdown timed out");
 
             record_safe(Event::error(
                 EventCategory::System,

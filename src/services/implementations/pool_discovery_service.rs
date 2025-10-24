@@ -34,10 +34,7 @@ impl Service for PoolDiscoveryService {
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
-        logger::debug(
-            LogTag::PoolService,
-            "Starting pool discovery service...",
-        );
+        logger::debug(LogTag::PoolService, "Starting pool discovery service...");
 
         // Get the PoolDiscovery component from global state
         let discovery = crate::pools::get_pool_discovery()

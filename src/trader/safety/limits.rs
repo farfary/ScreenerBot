@@ -8,7 +8,7 @@ use chrono::Utc;
 pub async fn check_position_limits() -> Result<bool, String> {
     let max_positions = config::get_max_open_positions();
     let open_positions = positions::get_open_positions().await;
-    
+
     // Check if we're under the limit
     Ok(open_positions.len() < max_positions)
 }

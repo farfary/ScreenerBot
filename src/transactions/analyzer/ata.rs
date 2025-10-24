@@ -139,10 +139,10 @@ pub async fn analyze_ata_operations(
     transaction: &Transaction,
     tx_data: &crate::rpc::TransactionDetails,
 ) -> Result<AtaAnalysis, String> {
-    logger::info(
+    logger::debug(
         LogTag::Transactions,
-            &format!("Analyzing ATA operations for tx: {}", transaction.signature),
-        );
+        &format!("Analyzing ATA operations for tx: {}", transaction.signature),
+    );
 
     // Step 1: Extract ATA operations from instructions
     let ata_operations = extract_ata_operations(transaction, tx_data).await?;
@@ -245,13 +245,13 @@ async fn extract_from_balance_changes(
                     rent_amount: lamports_to_sol(change_lamports.abs() as u64),
                     success: true,
                 });
-                logger::info(
-        LogTag::Transactions,
-                        &format!(
-                            "account={} change_lamports={} type=Create",
-                            account_key, change_lamports
-                        ),
-                    );
+                logger::debug(
+                    LogTag::Transactions,
+                    &format!(
+                        "account={} change_lamports={} type=Create",
+                        account_key, change_lamports
+                    ),
+                );
                 continue;
             }
 
@@ -265,13 +265,13 @@ async fn extract_from_balance_changes(
                     rent_amount: lamports_to_sol(change_lamports.abs() as u64),
                     success: true,
                 });
-                logger::info(
-        LogTag::Transactions,
-                        &format!(
-                            "account={} change_lamports={} type=Close",
-                            account_key, change_lamports
-                        ),
-                    );
+                logger::debug(
+                    LogTag::Transactions,
+                    &format!(
+                        "account={} change_lamports={} type=Close",
+                        account_key, change_lamports
+                    ),
+                );
                 continue;
             }
         }

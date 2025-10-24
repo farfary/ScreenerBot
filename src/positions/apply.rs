@@ -88,17 +88,16 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     pos.sol_received = Some(sol_received);
                     pos.exit_fee_lamports = Some(fee_lamports);
                     pos.exit_time = Some(exit_time);
-                    
+
                     // CRITICAL FIX: Update closed_reason to remove "_pending_verification" suffix
                     // This ensures database state matches verification status
                     if let Some(reason) = &pos.closed_reason {
                         if reason.ends_with("_pending_verification") {
-                            pos.closed_reason = Some(
-                                reason.trim_end_matches("_pending_verification").to_string()
-                            );
+                            pos.closed_reason =
+                                Some(reason.trim_end_matches("_pending_verification").to_string());
                         }
                     }
-                    
+
                     // Note: exit_price is already set by close_position_direct to market price
                 })
                 .await;
@@ -318,26 +317,27 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     if let Some(remaining) = pos.remaining_token_amount {
                         pos.remaining_token_amount = Some(remaining.saturating_sub(exit_amount));
                     }
-                    
+
                     // Update total exited amount
                     pos.total_exited_amount += exit_amount;
-                    
+
                     // Calculate new average exit price (weighted average)
                     let total_exited = pos.total_exited_amount;
                     if let Some(prev_avg) = pos.average_exit_price {
                         let prev_weight = (total_exited - exit_amount) as f64 / total_exited as f64;
                         let new_weight = exit_amount as f64 / total_exited as f64;
-                        pos.average_exit_price = Some((prev_avg * prev_weight) + (effective_exit_price * new_weight));
+                        pos.average_exit_price =
+                            Some((prev_avg * prev_weight) + (effective_exit_price * new_weight));
                     } else {
                         pos.average_exit_price = Some(effective_exit_price);
                     }
-                    
+
                     // Increment partial exit count
                     pos.partial_exit_count += 1;
-                    
+
                     // Update SOL received (cumulative)
                     pos.sol_received = Some(pos.sol_received.unwrap_or(0.0) + sol_received);
-                    
+
                     // CRITICAL: Do NOT set exit_time or exit_signature - position still open!
                 })
                 .await;
@@ -348,7 +348,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                         Ok(_) => {
                             effects.db_updated = true;
                             let _ = force_database_sync().await;
-                            
+
                             crate::events::record_position_event(
                                 &position_id.to_string(),
                                 &position.mint,
@@ -357,11 +357,15 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 None,
                                 sol_received,
                                 exit_amount,
-                                Some(sol_received - (exit_amount as f64 / 10_f64.powi(9) * position.average_entry_price)), // Quick P&L estimate
+                                Some(
+                                    sol_received
+                                        - (exit_amount as f64 / 10_f64.powi(9)
+                                            * position.average_entry_price),
+                                ), // Quick P&L estimate
                                 None,
                             )
                             .await;
-                            
+
                             logger::info(
                                 LogTag::Positions,
                                 &format!(
@@ -373,7 +377,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             );
                             // Clear pending mark
                             super::state::clear_partial_exit_pending(&position.mint).await;
-                            
+
                             // IMPORTANT: Do NOT release semaphore permit - position still open!
                         }
                         Err(e) => {
@@ -424,12 +428,10 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             dca_time,
         } => {
             let mint = find_mint_by_position_id(position_id).await?;
-            
+
             // Get token decimals for accurate price calculation
-            let decimals = crate::tokens::get_decimals(&mint)
-                .await
-                .unwrap_or(9); // Default to 9 if not found
-            
+            let decimals = crate::tokens::get_decimals(&mint).await.unwrap_or(9); // Default to 9 if not found
+
             let updated =
                 update_position_state(&mint, |pos| {
                     // Update remaining token amount (add new tokens)
@@ -438,15 +440,15 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     } else {
                         pos.remaining_token_amount = Some(tokens_bought);
                     }
-                    
+
                     // Update total SOL invested
                     pos.total_size_sol += sol_spent;
-                    
+
                     // Recalculate average entry price (weighted average) with actual decimals
                     // CRITICAL: Validate all inputs to prevent division by zero or invalid calculations
                     let remaining_tokens = pos.remaining_token_amount.unwrap_or(0);
                     if remaining_tokens > 0 && pos.total_size_sol > 0.0 && pos.total_size_sol.is_finite() {
-                        let total_tokens_normalized = remaining_tokens as f64 
+                        let total_tokens_normalized = remaining_tokens as f64
                             / 10_f64.powi(decimals as i32);
                         if total_tokens_normalized > 0.0 && total_tokens_normalized.is_finite() {
                             pos.average_entry_price = pos.total_size_sol / total_tokens_normalized;
@@ -469,10 +471,10 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             ),
                         );
                     }
-                    
+
                     // Increment DCA count
                     pos.dca_count += 1;
-                    
+
                     // Update last DCA time
                     pos.last_dca_time = Some(dca_time);
                 })
@@ -484,7 +486,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                         Ok(_) => {
                             effects.db_updated = true;
                             let _ = force_database_sync().await;
-                            
+
                             crate::events::record_position_event(
                                 &position_id.to_string(),
                                 &position.mint,
@@ -497,7 +499,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 None,
                             )
                             .await;
-                            
+
                             logger::info(
                                 LogTag::Positions,
                                 &format!(
@@ -507,7 +509,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                     position.average_entry_price
                                 ),
                             );
-                            
+
                             // IMPORTANT: Do NOT consume another semaphore permit - same position!
                         }
                         Err(e) => {

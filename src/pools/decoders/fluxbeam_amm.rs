@@ -34,14 +34,21 @@ impl PoolDecoder for FluxbeamAmmDecoder {
 
         logger::info(
             LogTag::PoolDecoder,
-            &format!("Found FluxBeam pool account {} with {} bytes", pool_account.pubkey, pool_account.data.len()),
+            &format!(
+                "Found FluxBeam pool account {} with {} bytes",
+                pool_account.pubkey,
+                pool_account.data.len()
+            ),
         );
 
         // FluxBeam pools are expected to be 324 bytes
         if pool_account.data.len() != 324 {
             logger::error(
                 LogTag::PoolDecoder,
-                &format!("FluxBeam pool has unexpected size: {} bytes (expected 324)", pool_account.data.len()),
+                &format!(
+                    "FluxBeam pool has unexpected size: {} bytes (expected 324)",
+                    pool_account.data.len()
+                ),
             );
             return None;
         }
@@ -78,7 +85,10 @@ impl PoolDecoder for FluxbeamAmmDecoder {
         } else {
             logger::error(
                 LogTag::PoolDecoder,
-                &format!("FluxBeam pool has no SOL token: {} / {}", pool_info.token_a_mint, pool_info.token_b_mint),
+                &format!(
+                    "FluxBeam pool has no SOL token: {} / {}",
+                    pool_info.token_a_mint, pool_info.token_b_mint
+                ),
             );
             return None;
         };
@@ -104,7 +114,10 @@ impl PoolDecoder for FluxbeamAmmDecoder {
 
         logger::info(
             LogTag::PoolDecoder,
-            &format!("FluxBeam vault balances: SOL={}, token={}", sol_balance, token_balance),
+            &format!(
+                "FluxBeam vault balances: SOL={}, token={}",
+                sol_balance, token_balance
+            ),
         );
 
         if token_balance == 0 {
@@ -116,13 +129,13 @@ impl PoolDecoder for FluxbeamAmmDecoder {
         let token_decimals = match get_cached_decimals(&token_mint) {
             Some(decimals) => decimals,
             None => {
-                        logger::error(
-                            LogTag::PoolDecoder,
-                            &format!(
-                                "FluxBeam: Token decimals not found for {}, skipping price calculation",
-                                token_mint
-                            ),
-                        );
+                logger::error(
+                    LogTag::PoolDecoder,
+                    &format!(
+                        "FluxBeam: Token decimals not found for {}, skipping price calculation",
+                        token_mint
+                    ),
+                );
                 return None;
             }
         };
@@ -130,7 +143,10 @@ impl PoolDecoder for FluxbeamAmmDecoder {
 
         logger::info(
             LogTag::PoolDecoder,
-            &format!("FluxBeam decimals: token={}, sol={}", token_decimals, sol_decimals),
+            &format!(
+                "FluxBeam decimals: token={}, sol={}",
+                token_decimals, sol_decimals
+            ),
         );
 
         // FluxBeam uses standard AMM constant product formula for pricing

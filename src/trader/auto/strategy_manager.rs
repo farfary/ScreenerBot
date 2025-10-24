@@ -18,7 +18,7 @@ impl StrategyManager {
         price_info: &PriceResult,
     ) -> Result<Option<TradeDecision>, String> {
         logger::info(
-        LogTag::Trader,
+            LogTag::Trader,
             &format!(
                 "Checking entry strategies for token {} (price={:.9} SOL, liquidity={:.2} SOL)",
                 token_mint, price_info.price_sol, price_info.sol_reserves
@@ -43,14 +43,14 @@ impl StrategyManager {
                 price_info.price_sol,
                 Some(market_data),
                 None, // OHLCV data could be added later
-            )
+            ),
         )
         .await;
 
         match evaluation_result {
             Ok(Ok(Some(strategy_id))) => {
                 logger::info(
-        LogTag::Trader,
+                    LogTag::Trader,
                     &format!(
                         "✅ Entry strategy signal: token={}, strategy={}, price={:.9} SOL",
                         token_mint, strategy_id, price_info.price_sol
@@ -72,7 +72,7 @@ impl StrategyManager {
             Ok(Ok(None)) => Ok(None),
             Ok(Err(e)) => {
                 logger::info(
-        LogTag::Trader,
+                    LogTag::Trader,
                     &format!("Strategy evaluation error for {}: {}", token_mint, e),
                 );
                 Ok(None) // Don't fail trading on strategy errors
@@ -86,7 +86,7 @@ impl StrategyManager {
                         strategy_timeout.as_secs()
                     ),
                 );
-                
+
                 // Record event for metrics tracking
                 crate::events::record_safe(crate::events::Event::new(
                     crate::events::EventCategory::Entry,
@@ -100,7 +100,7 @@ impl StrategyManager {
                     }),
                 ))
                 .await;
-                
+
                 Ok(None) // Skip this token on timeout
             }
         }
@@ -112,7 +112,7 @@ impl StrategyManager {
         current_price: f64,
     ) -> Result<Option<TradeDecision>, String> {
         logger::info(
-        LogTag::Trader,
+            LogTag::Trader,
             &format!(
                 "Checking exit strategies for position {:?} token {} (current_price={:.9} SOL)",
                 position.id, position.mint, current_price
@@ -121,7 +121,10 @@ impl StrategyManager {
 
         // Build position data
         let unrealized_profit_pct = if position.average_entry_price > 0.0 {
-            Some(((current_price - position.average_entry_price) / position.average_entry_price) * 100.0)
+            Some(
+                ((current_price - position.average_entry_price) / position.average_entry_price)
+                    * 100.0,
+            )
         } else {
             None
         };
@@ -153,14 +156,14 @@ impl StrategyManager {
                 position_data,
                 Some(market_data),
                 None, // OHLCV data could be added later
-            )
+            ),
         )
         .await;
 
         match evaluation_result {
             Ok(Ok(Some(strategy_id))) => {
                 logger::info(
-        LogTag::Trader,
+                    LogTag::Trader,
                     &format!(
                         "✅ Exit strategy signal: position={:?}, strategy={}, price={:.9} SOL",
                         position.id, strategy_id, current_price
@@ -182,8 +185,11 @@ impl StrategyManager {
             Ok(Ok(None)) => Ok(None),
             Ok(Err(e)) => {
                 logger::info(
-        LogTag::Trader,
-                    &format!("Strategy evaluation error for position {:?}: {}", position.id, e),
+                    LogTag::Trader,
+                    &format!(
+                        "Strategy evaluation error for position {:?}: {}",
+                        position.id, e
+                    ),
                 );
                 Ok(None) // Don't fail trading on strategy errors
             }
@@ -197,7 +203,7 @@ impl StrategyManager {
                         strategy_timeout.as_secs()
                     ),
                 );
-                
+
                 // Record event for metrics tracking
                 crate::events::record_safe(crate::events::Event::new(
                     crate::events::EventCategory::Position,
@@ -212,7 +218,7 @@ impl StrategyManager {
                     }),
                 ))
                 .await;
-                
+
                 Ok(None) // Skip this position on timeout
             }
         }

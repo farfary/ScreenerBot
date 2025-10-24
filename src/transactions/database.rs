@@ -307,7 +307,7 @@ impl TransactionDatabase {
 
         if log_details {
             logger::info(
-        LogTag::Transactions,
+                LogTag::Transactions,
                 &format!("Initializing TransactionDatabase at: {}", database_path_str),
             );
         }
@@ -337,7 +337,7 @@ impl TransactionDatabase {
 
         if log_details {
             logger::info(
-        LogTag::Transactions,
+                LogTag::Transactions,
                 "TransactionDatabase initialization complete",
             );
         }
@@ -504,7 +504,7 @@ impl TransactionDatabase {
 
         if total_updated > 0 {
             logger::info(
-        LogTag::Transactions,
+                LogTag::Transactions,
                 &format!(
                     "Backfilled sol_delta for {} processed transactions",
                     total_updated
@@ -528,9 +528,9 @@ impl TransactionDatabase {
             Ok(changes) => changes.iter().map(|change| change.change).sum(),
             Err(err) => {
                 logger::info(
-        LogTag::Transactions,
-                        &format!("Failed to parse sol_balance_change payload: {}", err),
-                    );
+                    LogTag::Transactions,
+                    &format!("Failed to parse sol_balance_change payload: {}", err),
+                );
                 0.0
             }
         }
@@ -793,7 +793,8 @@ impl TransactionDatabase {
     }
 
     /// Store raw transaction data
-    pub async fn store_raw_transaction(&self, transaction: &Transaction) -> Result<(), String> {        let conn = self.get_connection()?;
+    pub async fn store_raw_transaction(&self, transaction: &Transaction) -> Result<(), String> {
+        let conn = self.get_connection()?;
 
         let status_str = match &transaction.status {
             TransactionStatus::Pending => "Pending",
@@ -830,7 +831,6 @@ impl TransactionDatabase {
             )
             .map_err(|e| format!("Failed to store raw transaction: {}", e))?;
 
-
         Ok(())
     }
 
@@ -838,7 +838,8 @@ impl TransactionDatabase {
     pub async fn store_processed_transaction(
         &self,
         transaction: &Transaction,
-    ) -> Result<(), String> {        let conn = self.get_connection()?;
+    ) -> Result<(), String> {
+        let conn = self.get_connection()?;
 
         // Serialize complex fields as JSON strings
         let sol_balance_change_json = serde_json::to_string(&transaction.sol_balance_changes)
@@ -899,7 +900,6 @@ impl TransactionDatabase {
             )
             .map_err(|e| format!("Failed to store processed transaction: {}", e))?;
 
-
         Ok(())
     }
 
@@ -931,7 +931,8 @@ impl TransactionDatabase {
     }
 
     /// Get transaction by signature
-    pub async fn get_transaction(&self, signature: &str) -> Result<Option<Transaction>, String> {        let conn = self.get_connection()?;
+    pub async fn get_transaction(&self, signature: &str) -> Result<Option<Transaction>, String> {
+        let conn = self.get_connection()?;
 
         let result = conn.query_row(
             r#"SELECT signature, slot, block_time, timestamp, status, success, error_message,
@@ -978,9 +979,7 @@ impl TransactionDatabase {
         );
 
         match result {
-            Ok(transaction) => {
-                Ok(Some(transaction))
-            }
+            Ok(transaction) => Ok(Some(transaction)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(format!("Failed to get transaction: {}", e)),
         }
@@ -1077,10 +1076,7 @@ impl TransactionDatabase {
     pub async fn perform_maintenance(&self) -> Result<(), String> {
         let conn = self.get_connection()?;
 
-        logger::info(
-        LogTag::Transactions,
-            "Starting database maintenance",
-        );
+        logger::info(LogTag::Transactions, "Starting database maintenance");
 
         // Vacuum to reclaim space
         conn.execute("VACUUM", [])
@@ -1107,7 +1103,7 @@ impl TransactionDatabase {
             .map_err(|e| format!("Failed to cleanup old deferred retries: {}", e))?;
 
         logger::info(
-        LogTag::Transactions,
+            LogTag::Transactions,
             &format!(
                 "Database maintenance complete: cleaned {} pending, {} retries",
                 cleaned_pending, cleaned_retries
@@ -1608,13 +1604,13 @@ impl TransactionDatabase {
             .map_err(|e| format!("Failed to get wallet address: {}", e))?;
 
         logger::info(
-        LogTag::Transactions,
-                &format!(
-                    "Aggregating SOL flows for wallet {} from {}",
-                    wallet_address,
-                    from.to_rfc3339()
-                ),
-            );
+            LogTag::Transactions,
+            &format!(
+                "Aggregating SOL flows for wallet {} from {}",
+                wallet_address,
+                from.to_rfc3339()
+            ),
+        );
 
         // Change query to get all rows so we can parse JSON
         let row_query = query.replace(

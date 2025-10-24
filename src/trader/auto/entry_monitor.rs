@@ -22,15 +22,15 @@ static ENTRY_CYCLE_RESERVATIONS: LazyLock<RwLock<HashMap<String, Instant>>> =
 /// Returns true if reservation successful, false if already reserved
 async fn try_reserve_token_for_cycle(mint: &str) -> bool {
     let mut reservations = ENTRY_CYCLE_RESERVATIONS.write().await;
-    
+
     // Clean expired reservations (older than 30s)
     reservations.retain(|_, instant| instant.elapsed() < Duration::from_secs(30));
-    
+
     // Try to reserve
     if reservations.contains_key(mint) {
         return false; // Already reserved by another thread
     }
-    
+
     reservations.insert(mint.to_string(), Instant::now());
     true
 }
@@ -114,12 +114,15 @@ pub async fn monitor_entries(
             if is_in_reentry_cooldown(&token).await? {
                 continue;
             }
-            
+
             // Try to reserve token for this cycle - prevents duplicate concurrent entries
             if !try_reserve_token_for_cycle(&token).await {
                 logger::debug(
                     LogTag::Trader,
-                    &format!("Token {} already reserved by another thread, skipping", token),
+                    &format!(
+                        "Token {} already reserved by another thread, skipping",
+                        token
+                    ),
                 );
                 continue;
             }
@@ -170,10 +173,7 @@ pub async fn monitor_entries(
                         Err(e) => {
                             logger::error(
                                 LogTag::Trader,
-                                &format!(
-                                    "Entry strategy check failed for {}: {}",
-                                    token_clone, e
-                                ),
+                                &format!("Entry strategy check failed for {}: {}", token_clone, e),
                             );
                             None
                         }
@@ -210,7 +210,7 @@ pub async fn monitor_entries(
                     Ok(result) => {
                         // Clear reservation after execution attempt
                         clear_token_reservation(&mint_for_cleanup).await;
-                        
+
                         if result.success {
                             let tx_sig = result.tx_signature.clone();
                             logger::info(
@@ -221,7 +221,7 @@ pub async fn monitor_entries(
                                     tx_sig.clone().unwrap_or_default()
                                 ),
                             );
-                            
+
                             // Record successful entry event
                             crate::events::record_safe(crate::events::Event::new(
                                 crate::events::EventCategory::Trader,
@@ -240,13 +240,9 @@ pub async fn monitor_entries(
                             let error_msg = result.error.clone().unwrap_or_default();
                             logger::error(
                                 LogTag::Trader,
-                                &format!(
-                                    "Entry failed for {}: {}",
-                                    decision.mint,
-                                    error_msg
-                                ),
+                                &format!("Entry failed for {}: {}", decision.mint, error_msg),
                             );
-                            
+
                             // Record failed entry event
                             crate::events::record_safe(crate::events::Event::new(
                                 crate::events::EventCategory::Trader,
@@ -266,12 +262,12 @@ pub async fn monitor_entries(
                     Err(e) => {
                         // Clear reservation on error
                         clear_token_reservation(&mint_for_cleanup).await;
-                        
+
                         logger::error(
                             LogTag::Trader,
                             &format!("Failed to execute entry for {}: {}", decision.mint, e),
                         );
-                        
+
                         // Record execution error event
                         crate::events::record_safe(crate::events::Event::new(
                             crate::events::EventCategory::Trader,

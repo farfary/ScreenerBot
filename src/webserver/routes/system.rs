@@ -60,9 +60,14 @@ async fn reboot_system() -> Response {
 
     let args: Vec<String> = env::args().skip(1).collect();
 
-    logger::info(LogTag::Webserver, &format!("Restarting process: {} with args: {:?}",
+    logger::info(
+        LogTag::Webserver,
+        &format!(
+            "Restarting process: {} with args: {:?}",
             current_exe.display(),
-            args));
+            args
+        ),
+    );
 
     // Spawn async task to perform restart after response is sent
     tokio::spawn(async move {
@@ -73,26 +78,41 @@ async fn reboot_system() -> Response {
         #[cfg(unix)]
         {
             use std::os::unix::process::CommandExt;
-            logger::info(LogTag::Webserver, "Executing Unix exec() for process replacement");
+            logger::info(
+                LogTag::Webserver,
+                "Executing Unix exec() for process replacement",
+            );
 
             let error = Command::new(current_exe).args(&args).exec(); // This replaces the current process
 
             // If exec returns, it failed
-            logger::error(LogTag::Webserver, &format!("Failed to exec new process: {}", error));
+            logger::error(
+                LogTag::Webserver,
+                &format!("Failed to exec new process: {}", error),
+            );
             std::process::exit(1);
         }
 
         #[cfg(windows)]
         {
-            logger::info(LogTag::Webserver, "Spawning new process on Windows and exiting current");
+            logger::info(
+                LogTag::Webserver,
+                "Spawning new process on Windows and exiting current",
+            );
 
             match Command::new(current_exe).args(&args).spawn() {
                 Ok(_) => {
-                    logger::info(LogTag::Webserver, "New process spawned successfully, exiting current process");
+                    logger::info(
+                        LogTag::Webserver,
+                        "New process spawned successfully, exiting current process",
+                    );
                     std::process::exit(0);
                 }
                 Err(e) => {
-                    logger::error(LogTag::Webserver, &format!("Failed to spawn new process: {}", e));
+                    logger::error(
+                        LogTag::Webserver,
+                        &format!("Failed to spawn new process: {}", e),
+                    );
                     std::process::exit(1);
                 }
             }

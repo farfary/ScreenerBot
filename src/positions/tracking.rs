@@ -1,7 +1,11 @@
 use super::{
     apply::apply_transition, state::update_position_state, transitions::PositionTransition,
 };
-use crate::{arguments::is_debug_positions_enabled, pools::PriceResult, logger::{self, LogTag}};
+use crate::{
+    arguments::is_debug_positions_enabled,
+    logger::{self, LogTag},
+    pools::PriceResult,
+};
 use tokio::time::Duration;
 
 /// Update position price tracking
@@ -17,9 +21,9 @@ pub async fn update_position_tracking(
     // Try to acquire lock with retry and exponential backoff
     const MAX_RETRIES: u32 = 3;
     const BASE_TIMEOUT_MS: u64 = 100;
-    
+
     let mut _lock = None;
-    
+
     for attempt in 1..=MAX_RETRIES {
         let timeout_ms = BASE_TIMEOUT_MS * attempt as u64;
         let lock_result = tokio::time::timeout(

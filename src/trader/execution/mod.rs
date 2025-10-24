@@ -6,9 +6,7 @@ mod retry;
 mod sell;
 
 pub use buy::{execute_buy, execute_dca};
-pub use decision_cache::{
-    cache_sell_decision, get_pending_sell_decisions, mark_sell_complete,
-};
+pub use decision_cache::{cache_sell_decision, get_pending_sell_decisions, mark_sell_complete};
 pub use retry::retry_trade;
 pub use sell::execute_sell;
 

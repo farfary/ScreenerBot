@@ -121,21 +121,24 @@ static SERVICE_RUNNING: Lazy<Arc<std::sync::atomic::AtomicBool>> =
 pub fn get_sol_price() -> f64 {
     match SOL_PRICE_CACHE.read() {
         Ok(cache) => {
-                    if cache.is_fresh() {
-                        cache.price_usd
-                    } else {
-                        logger::warning(
-                            LogTag::SolPrice,
-                            &format!(
-                                "SOL price cache stale (age: {}s), returning 0.0",
-                                cache.age_seconds()
-                            ),
-                        );
-                        0.0
-                    }
+            if cache.is_fresh() {
+                cache.price_usd
+            } else {
+                logger::warning(
+                    LogTag::SolPrice,
+                    &format!(
+                        "SOL price cache stale (age: {}s), returning 0.0",
+                        cache.age_seconds()
+                    ),
+                );
+                0.0
+            }
         }
         Err(e) => {
-            logger::error(LogTag::SolPrice, &format!("Failed to read SOL price cache: {}", e));
+            logger::error(
+                LogTag::SolPrice,
+                &format!("Failed to read SOL price cache: {}", e),
+            );
             0.0
         }
     }
@@ -281,13 +284,13 @@ async fn fetch_and_update_sol_price(consecutive_errors: &mut u32) {
 
     match fetch_sol_price_from_jupiter().await {
         Ok(price) => {
-                if validate_price_change(price) {
+            if validate_price_change(price) {
                 update_price_cache(price, "jupiter_api".to_string(), true).await;
                 *consecutive_errors = 0; // Reset error counter on success
-                    logger::info(
-                        LogTag::SolPrice,
-                        &format!("💰 SOL price updated: ${:.4}", price),
-                    );
+                logger::info(
+                    LogTag::SolPrice,
+                    &format!("💰 SOL price updated: ${:.4}", price),
+                );
             } else {
                 logger::warning(
                     LogTag::SolPrice,

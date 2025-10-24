@@ -55,7 +55,7 @@ impl TraderService {
                 LogTag::Trader,
                 "Trader service started but trading is disabled in config",
             );
-            
+
             // Record disabled state event
             crate::events::record_safe(crate::events::Event::new(
                 crate::events::EventCategory::Trader,
@@ -92,11 +92,8 @@ impl TraderService {
         // Start auto trading monitors
         let _auto_task = tokio::spawn(async move {
             if let Err(e) = auto::start_auto_trading(shutdown_rx).await {
-                logger::error(
-                    LogTag::Trader,
-                    &format!("Auto trading error: {}", e),
-                );
-                
+                logger::error(LogTag::Trader, &format!("Auto trading error: {}", e));
+
                 // Record auto trading error event
                 crate::events::record_safe(crate::events::Event::new(
                     crate::events::EventCategory::Trader,
@@ -114,7 +111,7 @@ impl TraderService {
         });
 
         logger::info(LogTag::Trader, "Trader Service started successfully");
-        
+
         // Record successful start event
         crate::events::record_safe(crate::events::Event::new(
             crate::events::EventCategory::Trader,
@@ -128,7 +125,7 @@ impl TraderService {
             }),
         ))
         .await;
-        
+
         Ok(())
     }
 
@@ -158,7 +155,7 @@ impl TraderService {
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
         logger::info(LogTag::Trader, "Trader Service stopped");
-        
+
         // Record stopped event
         crate::events::record_safe(crate::events::Event::new(
             crate::events::EventCategory::Trader,
@@ -172,7 +169,7 @@ impl TraderService {
             }),
         ))
         .await;
-        
+
         Ok(())
     }
 }

@@ -74,17 +74,11 @@ impl Service for FilteringService {
 
         let handle = tokio::spawn(monitor.instrument(async move {
             // Do first refresh immediately on start (async, doesn't block other services)
-            logger::info(
-                LogTag::Filtering,
-                "Starting initial filtering refresh...",
-            );
+            logger::info(LogTag::Filtering, "Starting initial filtering refresh...");
             match filtering::refresh().await {
                 Ok(_) => {
                     operations.fetch_add(1, Ordering::Relaxed);
-                    logger::info(
-                        LogTag::Filtering,
-                        "Initial filtering refresh complete",
-                    );
+                    logger::info(LogTag::Filtering, "Initial filtering refresh complete");
                 }
                 Err(err) => {
                     errors.fetch_add(1, Ordering::Relaxed);

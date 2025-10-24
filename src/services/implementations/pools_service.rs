@@ -23,14 +23,20 @@ impl Service for PoolsService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
-        logger::info(LogTag::PoolService, &"Initializing pool components...".to_string());
+        logger::info(
+            LogTag::PoolService,
+            &"Initializing pool components...".to_string(),
+        );
 
         // Initialize all pool components (database, cache, RPC, components)
         crate::pools::initialize_pool_components()
             .await
             .map_err(|e| format!("Failed to initialize pool components: {:?}", e))?;
 
-        logger::info(LogTag::PoolService, &"✅ Pool components initialized".to_string());
+        logger::info(
+            LogTag::PoolService,
+            &"✅ Pool components initialized".to_string(),
+        );
         Ok(())
     }
 
@@ -39,7 +45,10 @@ impl Service for PoolsService {
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
-        logger::info(LogTag::PoolService, &"Starting pool helper tasks...".to_string());
+        logger::info(
+            LogTag::PoolService,
+            &"Starting pool helper tasks...".to_string(),
+        );
 
         // Start helper background tasks (health monitor, database cleanup, gap cleanup)
         // Note: Main pool tasks (discovery, fetcher, calculator, analyzer) are started by separate services
@@ -47,7 +56,10 @@ impl Service for PoolsService {
 
         logger::info(
             LogTag::PoolService,
-            &format!("✅ Pool helper tasks started ({} instrumented handles)", handles.len()),
+            &format!(
+                "✅ Pool helper tasks started ({} instrumented handles)",
+                handles.len()
+            ),
         );
 
         // Return handles so ServiceManager can wait for graceful shutdown

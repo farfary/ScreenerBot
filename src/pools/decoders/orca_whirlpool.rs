@@ -26,7 +26,10 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
     ) -> Option<PriceResult> {
         logger::info(
             LogTag::PoolDecoder,
-            &format!("Orca Whirlpool decoder: base={} quote={}", base_mint, quote_mint),
+            &format!(
+                "Orca Whirlpool decoder: base={} quote={}",
+                base_mint, quote_mint
+            ),
         );
 
         // Find the pool account
@@ -72,19 +75,22 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
                 );
                 logger::debug(
                     LogTag::PoolDecoder,
-                    &format!("Available accounts: {:?}", accounts.keys().collect::<Vec<_>>()),
+                    &format!(
+                        "Available accounts: {:?}",
+                        accounts.keys().collect::<Vec<_>>()
+                    ),
                 );
 
                 let sol_vault_account = match accounts.get(&pool_info.token_vault_a) {
                     Some(account) => account,
                     None => {
-                            logger::error(
-                                LogTag::PoolDecoder,
-                                &format!(
-                                    "SOL vault account {} not found in fetched accounts",
-                                    pool_info.token_vault_a
-                                ),
-                            );
+                        logger::error(
+                            LogTag::PoolDecoder,
+                            &format!(
+                                "SOL vault account {} not found in fetched accounts",
+                                pool_info.token_vault_a
+                            ),
+                        );
                         return None;
                     }
                 };
@@ -92,13 +98,13 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
                 let token_vault_account = match accounts.get(&pool_info.token_vault_b) {
                     Some(account) => account,
                     None => {
-                            logger::error(
-                                LogTag::PoolDecoder,
-                                &format!(
-                                    "Token vault account {} not found in fetched accounts",
-                                    pool_info.token_vault_b
-                                ),
-                            );
+                        logger::error(
+                            LogTag::PoolDecoder,
+                            &format!(
+                                "Token vault account {} not found in fetched accounts",
+                                pool_info.token_vault_b
+                            ),
+                        );
                         return None;
                     }
                 };
@@ -124,7 +130,10 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
                 );
                 logger::debug(
                     LogTag::PoolDecoder,
-                    &format!("Available accounts: {:?}", accounts.keys().collect::<Vec<_>>()),
+                    &format!(
+                        "Available accounts: {:?}",
+                        accounts.keys().collect::<Vec<_>>()
+                    ),
                 );
 
                 let sol_vault_account = match accounts.get(&pool_info.token_vault_b) {

@@ -101,10 +101,7 @@ pub async fn get_best_quote(
 
     // Prepare GMGN quote future with timeout
     if gmgn_enabled {
-        logger::debug(
-            LogTag::Swap,
-            "🔵 Starting GMGN quote request...",
-        );
+        logger::debug(LogTag::Swap, "🔵 Starting GMGN quote request...");
         let gmgn_future = async {
             // Apply 15-second timeout to GMGN quote
             let quote_result = tokio::time::timeout(
@@ -123,27 +120,32 @@ pub async fn get_best_quote(
             match quote_result {
                 Ok(Ok(gmgn_data)) => {
                     // Quote succeeded within timeout - validate numeric fields
-                    let output_amount = gmgn_data.quote.out_amount.parse::<u64>()
-                        .map_err(|e| ScreenerBotError::invalid_amount(
+                    let output_amount = gmgn_data.quote.out_amount.parse::<u64>().map_err(|e| {
+                        ScreenerBotError::invalid_amount(
                             format!("GMGN.out_amount={}", gmgn_data.quote.out_amount),
-                            format!("Failed to parse as u64: {}", e)
-                        ))?;
-                    
+                            format!("Failed to parse as u64: {}", e),
+                        )
+                    })?;
+
                     // Validate output amount is non-zero
                     if output_amount == 0 {
-                        logger::warning(LogTag::Swap, 
-                            "⚠️ GMGN quote returned zero output amount - rejecting");
+                        logger::warning(
+                            LogTag::Swap,
+                            "⚠️ GMGN quote returned zero output amount - rejecting",
+                        );
                         return Err(ScreenerBotError::invalid_amount(
                             "0",
-                            "GMGN quote returned zero output - invalid quote"
+                            "GMGN quote returned zero output - invalid quote",
                         ));
                     }
-                    
-                    let price_impact_pct = gmgn_data.quote.price_impact_pct.parse::<f64>()
+
+                    let price_impact_pct = gmgn_data
+                        .quote
+                        .price_impact_pct
+                        .parse::<f64>()
                         .unwrap_or(0.0); // Non-critical, default to 0
-                    let slippage_bps = gmgn_data.quote.slippage_bps.parse::<u16>()
-                        .unwrap_or(0); // Non-critical, default to 0
-                    
+                    let slippage_bps = gmgn_data.quote.slippage_bps.parse::<u16>().unwrap_or(0); // Non-critical, default to 0
+
                     let unified_quote = UnifiedQuote {
                         router: RouterType::GMGN,
                         input_mint: input_mint.to_string(),
@@ -161,10 +163,15 @@ pub async fn get_best_quote(
                         swap_mode: swap_mode.to_string(),
                     };
 
-                    logger::info(LogTag::Swap, &format!("✅ GMGN quote: {} tokens, impact: {:.2}%, fee: {} lamports",
+                    logger::info(
+                        LogTag::Swap,
+                        &format!(
+                            "✅ GMGN quote: {} tokens, impact: {:.2}%, fee: {} lamports",
                             unified_quote.output_amount,
                             unified_quote.price_impact_pct,
-                            unified_quote.fee_lamports));
+                            unified_quote.fee_lamports
+                        ),
+                    );
 
                     Ok(unified_quote)
                 }
@@ -208,27 +215,33 @@ pub async fn get_best_quote(
             match quote_result {
                 Ok(Ok(jupiter_data)) => {
                     // Quote succeeded within timeout - validate numeric fields
-                    let output_amount = jupiter_data.quote.out_amount.parse::<u64>()
-                        .map_err(|e| ScreenerBotError::invalid_amount(
-                            format!("Jupiter.out_amount={}", jupiter_data.quote.out_amount),
-                            format!("Failed to parse as u64: {}", e)
-                        ))?;
-                    
+                    let output_amount =
+                        jupiter_data.quote.out_amount.parse::<u64>().map_err(|e| {
+                            ScreenerBotError::invalid_amount(
+                                format!("Jupiter.out_amount={}", jupiter_data.quote.out_amount),
+                                format!("Failed to parse as u64: {}", e),
+                            )
+                        })?;
+
                     // Validate output amount is non-zero
                     if output_amount == 0 {
-                        logger::warning(LogTag::Swap, 
-                            "⚠️ Jupiter quote returned zero output amount - rejecting");
+                        logger::warning(
+                            LogTag::Swap,
+                            "⚠️ Jupiter quote returned zero output amount - rejecting",
+                        );
                         return Err(ScreenerBotError::invalid_amount(
                             "0",
-                            "Jupiter quote returned zero output - invalid quote"
+                            "Jupiter quote returned zero output - invalid quote",
                         ));
                     }
-                    
-                    let price_impact_pct = jupiter_data.quote.price_impact_pct.parse::<f64>()
+
+                    let price_impact_pct = jupiter_data
+                        .quote
+                        .price_impact_pct
+                        .parse::<f64>()
                         .unwrap_or(0.0); // Non-critical, default to 0
-                    let slippage_bps = jupiter_data.quote.slippage_bps.parse::<u16>()
-                        .unwrap_or(0); // Non-critical, default to 0
-                    
+                    let slippage_bps = jupiter_data.quote.slippage_bps.parse::<u16>().unwrap_or(0); // Non-critical, default to 0
+
                     let unified_quote = UnifiedQuote {
                         router: RouterType::Jupiter,
                         input_mint: input_mint.to_string(),
@@ -247,10 +260,15 @@ pub async fn get_best_quote(
                         swap_mode: swap_mode.to_string(),
                     };
 
-                    logger::info(LogTag::Swap, &format!("✅ Jupiter quote: {} tokens, impact: {:.2}%, fee: {} lamports",
+                    logger::info(
+                        LogTag::Swap,
+                        &format!(
+                            "✅ Jupiter quote: {} tokens, impact: {:.2}%, fee: {} lamports",
                             unified_quote.output_amount,
                             unified_quote.price_impact_pct,
-                            unified_quote.fee_lamports));
+                            unified_quote.fee_lamports
+                        ),
+                    );
 
                     Ok(unified_quote)
                 }
@@ -275,8 +293,12 @@ pub async fn get_best_quote(
     }
 
     // Execute all quote requests concurrently
-    logger::info(LogTag::Swap, &format!("⚡ Executing {} quote requests concurrently...",
-            futures.len()),
+    logger::info(
+        LogTag::Swap,
+        &format!(
+            "⚡ Executing {} quote requests concurrently...",
+            futures.len()
+        ),
     );
 
     let results = future::join_all(futures).await;
@@ -319,21 +341,36 @@ pub async fn get_best_quote(
 
     // Log comparison results if we have multiple quotes
     if quotes.len() > 1 {
-        logger::info(LogTag::Swap, &format!("⚖️ Quote comparison: GMGN vs Jupiter - Winner: {:?}",
-                best_quote.router));
+        logger::info(
+            LogTag::Swap,
+            &format!(
+                "⚖️ Quote comparison: GMGN vs Jupiter - Winner: {:?}",
+                best_quote.router
+            ),
+        );
 
         // Show detailed comparison
         for quote in &quotes {
-            logger::info(LogTag::Swap, &format!("  • {:?}: {} tokens (impact: {:.2}%, fee: {} lamports)",
-                    quote.router, quote.output_amount, quote.price_impact_pct, quote.fee_lamports));
+            logger::info(
+                LogTag::Swap,
+                &format!(
+                    "  • {:?}: {} tokens (impact: {:.2}%, fee: {} lamports)",
+                    quote.router, quote.output_amount, quote.price_impact_pct, quote.fee_lamports
+                ),
+            );
         }
     }
 
-    logger::info(LogTag::Swap, &format!("🏆 Best route selected: {:?} with {} tokens (impact: {:.2}%, fee: {} lamports)",
+    logger::info(
+        LogTag::Swap,
+        &format!(
+            "🏆 Best route selected: {:?} with {} tokens (impact: {:.2}%, fee: {} lamports)",
             best_quote.router,
             best_quote.output_amount,
             best_quote.price_impact_pct,
-            best_quote.fee_lamports));
+            best_quote.fee_lamports
+        ),
+    );
 
     Ok(best_quote)
 }
@@ -346,7 +383,10 @@ pub async fn execute_best_swap(
     input_amount: u64,
     quote: UnifiedQuote,
 ) -> Result<SwapResult, ScreenerBotError> {
-    logger::info(LogTag::Swap, &format!("🚀 Executing swap via {:?}: {} -> {} (amount: {})",
+    logger::info(
+        LogTag::Swap,
+        &format!(
+            "🚀 Executing swap via {:?}: {} -> {} (amount: {})",
             quote.router,
             if input_mint == SOL_MINT {
                 "SOL"
@@ -358,7 +398,9 @@ pub async fn execute_best_swap(
             } else {
                 &output_mint[..8]
             },
-            input_amount));
+            input_amount
+        ),
+    );
 
     // Try primary router first
     let primary_result = match quote.execution_data {
@@ -417,8 +459,13 @@ pub async fn execute_best_swap(
 
     // Check if primary router failed and fallback is available
     if let Err(ref primary_error) = primary_result {
-        logger::info(LogTag::Swap, &format!("⚠️ Primary router {:?} failed: {}",
-                quote.router, primary_error));
+        logger::info(
+            LogTag::Swap,
+            &format!(
+                "⚠️ Primary router {:?} failed: {}",
+                quote.router, primary_error
+            ),
+        );
 
         // Only try fallback for certain error types (propagation failures, transaction errors)
         let should_fallback = match primary_error {
@@ -433,7 +480,10 @@ pub async fn execute_best_swap(
         };
 
         if should_fallback {
-            logger::info(LogTag::Swap, "🔄 Attempting fallback to alternative router...");
+            logger::info(
+                LogTag::Swap,
+                "🔄 Attempting fallback to alternative router...",
+            );
 
             // Get fallback quote from the other router
             let wallet_address = match crate::config::get_wallet_pubkey_string() {
@@ -463,18 +513,25 @@ pub async fn execute_best_swap(
                         .await
                         {
                             Ok(gmgn_data) => {
-                                logger::info(LogTag::Swap, &format!("✅ GMGN fallback quote: {} tokens, impact: {:.2}%",
+                                logger::info(
+                                    LogTag::Swap,
+                                    &format!(
+                                        "✅ GMGN fallback quote: {} tokens, impact: {:.2}%",
                                         gmgn_data.quote.out_amount,
                                         gmgn_data
                                             .quote
                                             .price_impact_pct
                                             .parse::<f64>()
-                                            .unwrap_or(0.0)),
+                                            .unwrap_or(0.0)
+                                    ),
                                 );
                                 Some(gmgn_data)
                             }
                             Err(e) => {
-                                logger::info(LogTag::Swap, &format!("❌ GMGN fallback quote failed: {}", e));
+                                logger::info(
+                                    LogTag::Swap,
+                                    &format!("❌ GMGN fallback quote failed: {}", e),
+                                );
                                 None
                             }
                         }
@@ -498,18 +555,25 @@ pub async fn execute_best_swap(
                         .await
                         {
                             Ok(jupiter_data) => {
-                                logger::info(LogTag::Swap, &format!("✅ Jupiter fallback quote: {} tokens, impact: {:.2}%",
+                                logger::info(
+                                    LogTag::Swap,
+                                    &format!(
+                                        "✅ Jupiter fallback quote: {} tokens, impact: {:.2}%",
                                         jupiter_data.quote.out_amount,
                                         jupiter_data
                                             .quote
                                             .price_impact_pct
                                             .parse::<f64>()
-                                            .unwrap_or(0.0)),
+                                            .unwrap_or(0.0)
+                                    ),
                                 );
                                 Some(jupiter_data)
                             }
                             Err(e) => {
-                                logger::info(LogTag::Swap, &format!("❌ Jupiter fallback quote failed: {}", e));
+                                logger::info(
+                                    LogTag::Swap,
+                                    &format!("❌ Jupiter fallback quote failed: {}", e),
+                                );
                                 None
                             }
                         }
@@ -582,17 +646,24 @@ pub async fn execute_best_swap(
 
                 match fallback_result {
                     Ok(result) => {
-                        logger::info(LogTag::Swap, &format!("✅ Fallback swap succeeded via {:?}! TX: {}",
+                        logger::info(
+                            LogTag::Swap,
+                            &format!(
+                                "✅ Fallback swap succeeded via {:?}! TX: {}",
                                 result.router_used.as_ref().unwrap(),
                                 result
                                     .transaction_signature
                                     .as_ref()
-                                    .unwrap_or(&"None".to_string())),
+                                    .unwrap_or(&"None".to_string())
+                            ),
                         );
                         return Ok(result);
                     }
                     Err(fallback_error) => {
-                        logger::info(LogTag::Swap, &format!("❌ Fallback swap also failed: {}", fallback_error));
+                        logger::info(
+                            LogTag::Swap,
+                            &format!("❌ Fallback swap also failed: {}", fallback_error),
+                        );
                         // Return the original error, not the fallback error
                         return primary_result;
                     }
@@ -643,10 +714,15 @@ pub async fn get_best_quote_for_opening(
                     let _ = crate::tokens::cleanup::blacklist_token(output_mint, "NoRoute", &db);
                 }
 
-                logger::info(LogTag::Swap, &format!("🚫 No route error tracked for {} ({}): {}",
+                logger::info(
+                    LogTag::Swap,
+                    &format!(
+                        "🚫 No route error tracked for {} ({}): {}",
                         token_symbol,
                         &output_mint[..8],
-                        error_msg));
+                        error_msg
+                    ),
+                );
             }
 
             Err(e)
@@ -666,9 +742,9 @@ pub fn calculate_partial_amount(total_amount: u64, percentage: f64) -> u64 {
     if percentage >= 100.0 {
         return total_amount;
     }
-    
+
     let partial = (total_amount as f64 * percentage / 100.0) as u64;
-    
+
     // Ensure we don't exceed total amount due to rounding
     std::cmp::min(partial, total_amount)
 }

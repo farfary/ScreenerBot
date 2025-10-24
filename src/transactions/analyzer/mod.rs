@@ -100,7 +100,7 @@ impl TransactionAnalyzer {
     ) -> Result<CompleteAnalysis, String> {
         if self.debug_enabled {
             logger::debug(
-        LogTag::Transactions,
+                LogTag::Transactions,
                 &format!(
                     "Starting complete analysis for tx: {}",
                     transaction.signature
@@ -156,7 +156,7 @@ impl TransactionAnalyzer {
 
         if self.debug_enabled {
             logger::debug(
-        LogTag::Transactions,
+                LogTag::Transactions,
                 &format!(
                     "Analysis complete for {}: confidence={:?}, patterns={}, classification={:?}",
                     transaction.signature,

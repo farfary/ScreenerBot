@@ -4,7 +4,6 @@
 /// - Which log levels to show
 /// - Which modules have debug mode enabled (from --debug-<module> flags)
 /// - Output settings (console, file, colors)
-
 use super::levels::LogLevel;
 use super::tags::LogTag;
 use once_cell::sync::Lazy;
@@ -198,5 +197,9 @@ pub fn is_debug_enabled_for_tag(tag: &LogTag) -> bool {
 pub fn is_verbose_enabled_for_tag(tag: &LogTag) -> bool {
     let config = get_logger_config();
     let tag_name = tag.to_debug_key();
-    config.verbose_modes.get(&tag_name).copied().unwrap_or(false)
+    config
+        .verbose_modes
+        .get(&tag_name)
+        .copied()
+        .unwrap_or(false)
 }

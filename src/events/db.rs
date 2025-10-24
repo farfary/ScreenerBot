@@ -85,7 +85,7 @@ impl EventsDatabase {
         db.initialize_schema().await?;
 
         logger::info(
-        LogTag::System,
+            LogTag::System,
             &format!("Events database initialized at {}", database_path_str),
         );
 
@@ -569,7 +569,7 @@ impl EventsDatabase {
 
         if deleted_count > 0 {
             logger::info(
-        LogTag::System,
+                LogTag::System,
                 &format!("Cleaned up {} old events", deleted_count),
             );
         }

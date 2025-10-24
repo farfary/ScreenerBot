@@ -83,14 +83,14 @@ pub fn update_price(price: PriceResult) {
                 let mint_for_cleanup = mint.clone();
                 tokio::spawn(async move {
                     if let Err(e) = db::cleanup_gapped_data_for_token(&mint_for_cleanup).await {
-                            logger::error(
-                                LogTag::PoolCache,
-                                &format!(
-                                    "Failed to cleanup gapped data in database for {}: {}",
-                                    mint_for_cleanup, e
-                                ),
-                            );
-                        }
+                        logger::error(
+                            LogTag::PoolCache,
+                            &format!(
+                                "Failed to cleanup gapped data in database for {}: {}",
+                                mint_for_cleanup, e
+                            ),
+                        );
+                    }
                 });
             }
 
@@ -209,17 +209,14 @@ async fn load_historical_data_into_cache() {
     // Instead, we'll load based on tokens that exist in the database
     // For now, we'll load on-demand when prices are requested
 
-    logger::debug(
-        LogTag::PoolCache,
-        "Historical data loading setup completed",
-    );
+    logger::debug(LogTag::PoolCache, "Historical data loading setup completed");
 }
 
 /// Load historical data for a specific token from database
 pub async fn load_token_history_from_database(mint: &str) -> Result<(), String> {
     match db::load_historical_data_for_token(mint).await {
         Ok(historical_prices) => {
-                    if !historical_prices.is_empty() {
+            if !historical_prices.is_empty() {
                 // Create or update history entry
                 if let Ok(mut history_map) = PRICE_HISTORY.write() {
                     let mut new_history =

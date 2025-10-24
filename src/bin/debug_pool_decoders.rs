@@ -149,7 +149,7 @@ async fn fetch_pool_account_data(pool_address: &str) -> Result<PoolAccountData, 
     match client.get_account(&pool_pubkey) {
         Ok(account) => {
             logger::info(
-        LogTag::PoolService,
+                LogTag::PoolService,
                 &format!(
                     "Fetched account: {} bytes, owner: {}",
                     account.data.len(),
@@ -226,17 +226,14 @@ async fn test_raydium_cpmm_decoder(
     Option<ReservesInfo>,
 ) {
     if verbose {
-        logger::info(
-        LogTag::PoolService,
-            "Testing Raydium CPMM decoder",
-        );
+        logger::info(LogTag::PoolService, "Testing Raydium CPMM decoder");
     }
 
     match RaydiumCpmmDecoder::decode_raydium_cpmm_pool(&pool_data.data, &pool_data.address) {
         Some(pool_info) => {
             if verbose {
                 logger::info(
-        LogTag::PoolService,
+                    LogTag::PoolService,
                     &format!(
                         "Raydium CPMM decoded successfully: token0={}, token1={}",
                         &pool_info.token_0_mint[..8],
@@ -253,7 +250,7 @@ async fn test_raydium_cpmm_decoder(
             if let Some(ref reserves) = reserves_info {
                 if verbose {
                     logger::info(
-        LogTag::PoolService,
+                        LogTag::PoolService,
                         &format!(
                             "Reserves extracted: SOL={}, Token={}, Token mint={}",
                             reserves.sol_reserve,
@@ -292,10 +289,7 @@ async fn test_raydium_clmm_decoder(
     Option<ReservesInfo>,
 ) {
     if verbose {
-        logger::info(
-        LogTag::PoolService,
-            "Testing Raydium CLMM decoder",
-        );
+        logger::info(LogTag::PoolService, "Testing Raydium CLMM decoder");
     }
 
     // Note: This is a placeholder - actual CLMM decoder implementation would go here
@@ -317,10 +311,7 @@ async fn test_raydium_legacy_decoder(
     Option<ReservesInfo>,
 ) {
     if verbose {
-        logger::info(
-        LogTag::PoolService,
-            "Testing Raydium Legacy AMM decoder",
-        );
+        logger::info(LogTag::PoolService, "Testing Raydium Legacy AMM decoder");
     }
 
     // Note: This is a placeholder - actual Legacy AMM decoder implementation would go here
@@ -342,10 +333,7 @@ async fn test_orca_whirlpool_decoder(
     Option<ReservesInfo>,
 ) {
     if verbose {
-        logger::info(
-        LogTag::PoolService,
-            "Testing Orca Whirlpool decoder",
-        );
+        logger::info(LogTag::PoolService, "Testing Orca Whirlpool decoder");
     }
 
     // Note: This is a placeholder - actual Whirlpool decoder implementation would go here
@@ -367,10 +355,7 @@ async fn test_meteora_damm_decoder(
     Option<ReservesInfo>,
 ) {
     if verbose {
-        logger::info(
-        LogTag::PoolService,
-            "Testing Meteora DAMM decoder",
-        );
+        logger::info(LogTag::PoolService, "Testing Meteora DAMM decoder");
     }
 
     // Note: This is a placeholder - actual DAMM decoder implementation would go here
@@ -392,10 +377,7 @@ async fn test_meteora_dlmm_decoder(
     Option<ReservesInfo>,
 ) {
     if verbose {
-        logger::info(
-        LogTag::PoolService,
-            "Testing Meteora DLMM decoder",
-        );
+        logger::info(LogTag::PoolService, "Testing Meteora DLMM decoder");
     }
 
     // Note: This is a placeholder - actual DLMM decoder implementation would go here
@@ -417,10 +399,7 @@ async fn test_pumpfun_amm_decoder(
     Option<ReservesInfo>,
 ) {
     if verbose {
-        logger::info(
-        LogTag::PoolService,
-            "Testing PumpFun AMM decoder",
-        );
+        logger::info(LogTag::PoolService, "Testing PumpFun AMM decoder");
     }
 
     // Note: This is a placeholder - actual PumpFun AMM decoder implementation would go here
@@ -442,10 +421,7 @@ async fn test_pumpfun_legacy_decoder(
     Option<ReservesInfo>,
 ) {
     if verbose {
-        logger::info(
-        LogTag::PoolService,
-            "Testing PumpFun Legacy decoder",
-        );
+        logger::info(LogTag::PoolService, "Testing PumpFun Legacy decoder");
     }
 
     // Note: This is a placeholder - actual PumpFun Legacy decoder implementation would go here
@@ -467,10 +443,7 @@ async fn test_moonit_amm_decoder(
     Option<ReservesInfo>,
 ) {
     if verbose {
-        logger::info(
-        LogTag::PoolService,
-            "Testing Moonit AMM decoder",
-        );
+        logger::info(LogTag::PoolService, "Testing Moonit AMM decoder");
     }
 
     // Note: This is a placeholder - actual Moonit AMM decoder implementation would go here
@@ -492,17 +465,14 @@ async fn test_fluxbeam_amm_decoder(
     Option<ReservesInfo>,
 ) {
     if verbose {
-        logger::info(
-        LogTag::PoolService,
-            "Testing FluxBeam AMM decoder",
-        );
+        logger::info(LogTag::PoolService, "Testing FluxBeam AMM decoder");
     }
 
     match FluxbeamAmmDecoder::parse_fluxbeam_pool(&pool_data.data) {
         Some(pool_info) => {
             if verbose {
                 logger::info(
-        LogTag::PoolService,
+                    LogTag::PoolService,
                     &format!(
                         "FluxBeam AMM decoded successfully: tokenA={}, tokenB={}",
                         &pool_info.token_a_mint[..8],
@@ -518,7 +488,7 @@ async fn test_fluxbeam_amm_decoder(
             if let Some(ref reserves) = reserves_info {
                 if verbose {
                     logger::info(
-        LogTag::PoolService,
+                        LogTag::PoolService,
                         &format!(
                             "Reserves extracted: SOL vault={}, Token vault={}, Token mint={}",
                             &reserves.sol_reserve,
@@ -556,7 +526,7 @@ async fn extract_fluxbeam_reserves_from_info(
 ) -> Option<ReservesInfo> {
     if verbose {
         logger::info(
-        LogTag::PoolService,
+            LogTag::PoolService,
             &format!(
                 "Extracting reserves from FluxBeam pool: tokenA={}, tokenB={}",
                 &pool_info.token_a_mint[..8],
@@ -601,7 +571,7 @@ async fn extract_fluxbeam_reserves_from_info(
     } else {
         if verbose {
             logger::info(
-        LogTag::PoolService,
+                LogTag::PoolService,
                 "Pool does not contain SOL - cannot extract SOL reserves",
             );
         }
@@ -616,7 +586,7 @@ async fn extract_raydium_cpmm_reserves_from_info(
 ) -> Option<ReservesInfo> {
     if verbose {
         logger::info(
-        LogTag::PoolService,
+            LogTag::PoolService,
             &format!(
                 "Extracting reserves from CPMM pool: token0={}, token1={}",
                 &pool_info.token_0_mint[..8],
@@ -661,7 +631,7 @@ async fn extract_raydium_cpmm_reserves_from_info(
     } else {
         if verbose {
             logger::info(
-        LogTag::PoolService,
+                LogTag::PoolService,
                 "Pool does not contain SOL - cannot extract SOL reserves",
             );
         }
@@ -769,10 +739,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // Fetch pool account data from RPC
-    logger::info(
-        LogTag::PoolService,
-        "Fetching pool account data from RPC",
-    );
+    logger::info(LogTag::PoolService, "Fetching pool account data from RPC");
     let pool_data = match fetch_pool_account_data(&args.pool).await {
         Ok(data) => data,
         Err(e) => {

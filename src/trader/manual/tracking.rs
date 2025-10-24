@@ -69,11 +69,7 @@ pub async fn get_manual_trade_history(limit: usize) -> Vec<ManualTradeRecord> {
         0
     };
 
-    history[start..]
-        .iter()
-        .rev()
-        .cloned()
-        .collect()
+    history[start..].iter().rev().cloned().collect()
 }
 
 /// Clear manual trade history

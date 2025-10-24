@@ -33,7 +33,10 @@ impl PoolDecoder for PumpFunLegacyDecoder {
     ) -> Option<PriceResult> {
         logger::debug(
             LogTag::PoolDecoder,
-            &format!("PumpFun Legacy: Processing for {} vs {}", base_mint, quote_mint),
+            &format!(
+                "PumpFun Legacy: Processing for {} vs {}",
+                base_mint, quote_mint
+            ),
         );
 
         // Find the pool account by looking for the legacy PumpFun program account
@@ -205,7 +208,10 @@ impl PumpFunLegacyDecoder {
             base_mint
         };
 
-        logger::debug(LogTag::PoolDecoder, &format!("Using target mint: {}", target_mint));
+        logger::debug(
+            LogTag::PoolDecoder,
+            &format!("Using target mint: {}", target_mint),
+        );
 
         // Get vault balances
         let token_vault_balance =

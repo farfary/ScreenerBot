@@ -87,13 +87,23 @@ impl StrategyEngine {
         let result = match timeout(timeout_duration, evaluation_future).await {
             Ok(Ok(res)) => res,
             Ok(Err(e)) => {
-                logger::error(LogTag::System, &format!("Strategy evaluation failed: strategy_id={}, error={}",
-                        strategy.id, e));
+                logger::error(
+                    LogTag::System,
+                    &format!(
+                        "Strategy evaluation failed: strategy_id={}, error={}",
+                        strategy.id, e
+                    ),
+                );
                 return Err(e);
             }
             Err(_) => {
-                logger::warning(LogTag::System, &format!("Strategy evaluation timeout: strategy_id={}, timeout_ms={}",
-                        strategy.id, self.config.evaluation_timeout_ms));
+                logger::warning(
+                    LogTag::System,
+                    &format!(
+                        "Strategy evaluation timeout: strategy_id={}, timeout_ms={}",
+                        strategy.id, self.config.evaluation_timeout_ms
+                    ),
+                );
                 return Err("Evaluation timeout".to_string());
             }
         };
@@ -105,8 +115,13 @@ impl StrategyEngine {
             self.cache_evaluation(key, result).await;
         }
 
-        logger::info(LogTag::System, &format!("Strategy evaluated: strategy_id={}, result={}, time_ms={}",
-                strategy.id, result, execution_time));
+        logger::info(
+            LogTag::System,
+            &format!(
+                "Strategy evaluated: strategy_id={}, result={}, time_ms={}",
+                strategy.id, result, execution_time
+            ),
+        );
 
         Ok(EvaluationResult {
             strategy_id: strategy.id.clone(),
@@ -224,7 +239,7 @@ impl StrategyEngine {
     pub async fn clear_cache(&self) {
         let mut cache = self.evaluation_cache.write().await;
         cache.clear();
-    logger::info(LogTag::System, "Strategy evaluation cache cleared");
+        logger::info(LogTag::System, "Strategy evaluation cache cleared");
     }
 
     /// Get condition registry for UI/debugging

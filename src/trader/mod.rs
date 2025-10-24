@@ -6,24 +6,20 @@
 //! 3. Position management and exit strategies
 //! 4. Trade execution and retry mechanisms
 
-mod service;
-mod types;
+pub mod auto;
 mod config;
 mod controller;
-pub mod auto;
-pub mod manual;
 pub mod execution;
-pub mod safety;
 pub mod exit;
+pub mod manual;
+pub mod safety;
+mod service;
+mod types;
 
 // Re-exports for common usage
-pub use controller::{
-    is_trader_running, start_trader, stop_trader_gracefully, TraderControlError,
-};
+pub use controller::{is_trader_running, start_trader, stop_trader_gracefully, TraderControlError};
 pub use service::TraderService;
-pub use types::{
-    TradeAction, TradeDecision, TradePriority, TradeReason, TradeResult,
-};
+pub use types::{TradeAction, TradeDecision, TradePriority, TradeReason, TradeResult};
 
 // Constants for webserver/external modules
 pub const ENTRY_MONITOR_INTERVAL_SECS: u64 = 3;
