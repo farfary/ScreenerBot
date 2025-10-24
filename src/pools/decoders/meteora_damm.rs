@@ -1,15 +1,8 @@
 use super::super::utils::is_sol_mint;
-use crate::constants::WRAPPED_SOL_MINT;
-/// Meteora DAMM decoder (fixed offsets & price math)
-///
-/// Fixes:
-/// - Use the correct absolute offsets from the Pool struct comments (no -8 shift).
-/// - Use decimal_adj_factor = 10^(sol_decimals - token_decimals).
-/// - Prefer sqrt_price at offset 464 (theoretical), keep optional fallback to 456 only if 464 == 0.
 use super::{AccountData, PoolDecoder};
-use crate::constants::SOL_DECIMALS;
+use crate::constants::{WRAPPED_SOL_MINT, SOL_DECIMALS, SOL_MINT, METEORA_DAMM_PROGRAM_ID};
 use crate::logger::{self, LogTag};
-use crate::pools::types::{PriceResult, ProgramKind, METEORA_DAMM_PROGRAM_ID};
+use crate::pools::types::{PriceResult, ProgramKind};
 use crate::tokens::get_cached_decimals;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;

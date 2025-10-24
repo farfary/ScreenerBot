@@ -4,13 +4,13 @@
 /// It integrates with the centralized Raydium CLMM decoder and provides proper
 /// account derivation and swap calculations based on the Uniswap V3 model.
 use super::ProgramSwap;
+use crate::constants::RAYDIUM_CLMM_PROGRAM_ID;
 use crate::logger::{self, LogTag};
 use crate::pools::decoders::raydium_clmm::{ClmmPoolInfo, RaydiumClmmDecoder};
 use crate::pools::swap::executor::SwapExecutor;
 use crate::pools::swap::types::{
     constants::*, SwapDirection, SwapError, SwapParams, SwapRequest, SwapResult,
 };
-use crate::pools::types::RAYDIUM_CLMM_PROGRAM_ID;
 use crate::pools::AccountData;
 use crate::rpc::get_rpc_client;
 use crate::utils::sol_to_lamports;
@@ -27,9 +27,7 @@ use spl_token;
 use spl_token_2022;
 use std::collections::HashMap;
 use std::str::FromStr;
-
-/// Token-2022 program ID
-const TOKEN_2022_PROGRAM_ID: &str = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+use crate::constants::TOKEN_2022_PROGRAM_ID;
 
 /// Raydium CLMM swap implementation
 pub struct RaydiumClmmSwap;

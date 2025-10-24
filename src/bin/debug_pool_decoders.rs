@@ -19,10 +19,11 @@
 
 use base64::Engine as _;
 use clap::Parser;
+use screenerbot::constants::SOL_MINT;
 use screenerbot::logger::{self as logger, LogTag};
 use screenerbot::pools::decoders::fluxbeam_amm::{FluxbeamAmmDecoder, FluxbeamPoolInfo};
 use screenerbot::pools::decoders::raydium_cpmm::{RaydiumCpmmDecoder, RaydiumCpmmPoolInfo};
-use screenerbot::pools::types::{PriceResult, ProgramKind, SOL_MINT};
+use screenerbot::pools::types::{PriceResult, ProgramKind};
 use screenerbot::rpc::{get_rpc_client, parse_pubkey};
 use screenerbot::tokens::decimals::SOL_DECIMALS;
 use solana_sdk::account::Account;

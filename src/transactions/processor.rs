@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use crate::logger::{self, LogTag};
-use crate::pools::types::SOL_MINT;
+use crate::constants::SOL_MINT;
 use crate::tokens::get_decimals;
 use crate::transactions::{
     analyzer::TransactionAnalyzer, fetcher::TransactionFetcher, program_ids::*, types::*, utils::*,
@@ -2213,8 +2213,8 @@ impl TransactionProcessor {
     ) -> Option<u64> {
         // Detect PumpFun by presence of legacy or AMM program IDs among outer instructions
         let pumpfun_programs = [
-            crate::pools::types::PUMP_FUN_LEGACY_PROGRAM_ID,
-            crate::pools::types::PUMP_FUN_AMM_PROGRAM_ID,
+            crate::constants::PUMP_FUN_LEGACY_PROGRAM_ID,
+            crate::constants::PUMP_FUN_AMM_PROGRAM_ID,
         ];
 
         let has_pumpfun = if let Some(ixs) = tx_data
@@ -2266,8 +2266,6 @@ impl TransactionProcessor {
             _ => None,
         }
     }
-
-    // Removed magic-number based heuristic; rely on explicit instruction-derived adjustments only.
 
     /// Check if adjustment pattern is likely for Pumpfun
     fn is_likely_pumpfun_pattern(

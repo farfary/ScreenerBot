@@ -9,9 +9,9 @@ use super::super::utils::read_pubkey_at;
 /// - Fetch vault token account balances from provided accounts map
 /// - Compute SOL price for target token
 use super::{AccountData, PoolDecoder};
-use crate::constants::SOL_DECIMALS;
+use crate::constants::{SOL_DECIMALS, SOL_MINT};
 use crate::logger::{self, LogTag};
-use crate::pools::types::{PriceResult, ProgramKind, SOL_MINT};
+use crate::pools::types::{PriceResult, ProgramKind};
 use crate::tokens::get_cached_decimals;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;

@@ -1,7 +1,7 @@
 use super::{AccountData, PoolDecoder};
-use crate::constants::SOL_DECIMALS;
+use crate::constants::{SOL_MINT, SOL_DECIMALS, PUMP_FUN_LEGACY_PROGRAM_ID};
 use crate::logger::{self, LogTag};
-use crate::pools::types::{PriceResult, ProgramKind, SOL_MINT};
+use crate::pools::types::{PriceResult, ProgramKind};
 use crate::tokens::get_cached_decimals;
 use solana_sdk::pubkey::Pubkey;
 /// PumpFun Legacy decoder for the original PumpFun program
@@ -13,8 +13,6 @@ use std::time::Instant;
 use super::super::utils::{
     analyze_token_pair, is_sol_mint, read_pubkey_at_offset, PoolMintVaultInfo,
 };
-
-const PUMP_FUN_LEGACY_PROGRAM_ID: &str = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
 
 /// PumpFun Legacy pool decoder and calculator
 pub struct PumpFunLegacyDecoder;

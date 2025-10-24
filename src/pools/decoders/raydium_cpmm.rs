@@ -4,9 +4,9 @@
 /// It extracts reserve data and calculates token prices using the proven logic
 /// from the old pool system.
 use super::{AccountData, PoolDecoder};
-use crate::constants::SOL_DECIMALS;
+use crate::constants::{SOL_DECIMALS, SOL_MINT, RAYDIUM_CPMM_PROGRAM_ID};
 use crate::logger::{self, LogTag};
-use crate::pools::types::{PriceResult, ProgramKind, RAYDIUM_CPMM_PROGRAM_ID, SOL_MINT};
+use crate::pools::types::{PriceResult, ProgramKind};
 use crate::pools::utils::{
     read_bool_at_offset, read_pubkey_at_offset, read_u64_at_offset, read_u8_at_offset,
 };

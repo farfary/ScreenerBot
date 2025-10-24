@@ -10,8 +10,9 @@
 // =============================================================================
 // POOL DISCOVERY SOURCE CONFIGURATION
 // =============================================================================
-use super::types::{max_watched_tokens, PoolDescriptor, ProgramKind, SOL_MINT};
+use super::types::{max_watched_tokens, PoolDescriptor, ProgramKind};
 use super::utils::is_stablecoin_mint;
+use crate::constants::SOL_MINT;
 use crate::apis::{
     dexscreener_types::DexScreenerPool, geckoterminal_types::GeckoTerminalPool, get_api_manager,
     DexScreenerClient, GeckoTerminalClient,

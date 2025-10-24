@@ -7,9 +7,10 @@ use super::programs::ProgramSwap;
 /// It handles validation, parameter calculation, and delegates to appropriate
 /// program-specific implementations.
 use super::types::{constants::*, SwapDirection, SwapError, SwapRequest, SwapResult};
+use crate::constants::{RAYDIUM_CLMM_PROGRAM_ID, RAYDIUM_CPMM_PROGRAM_ID};
 use crate::logger::{self, LogTag};
 use crate::pools::decoders::PoolDecoder;
-use crate::pools::types::{ProgramKind, RAYDIUM_CLMM_PROGRAM_ID, RAYDIUM_CPMM_PROGRAM_ID};
+use crate::pools::types::ProgramKind;
 use crate::pools::AccountData;
 use crate::rpc::get_rpc_client;
 

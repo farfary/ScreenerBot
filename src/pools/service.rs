@@ -465,12 +465,6 @@ async fn initialize_service_components() -> Result<(), String> {
     Ok(())
 }
 
-// REMOVED: start_background_tasks() - background tasks are now managed by separate services
-// REMOVED: run_pool_monitoring_supervisor() - no longer needed (empty supervisor)
-// REMOVED: run_monitoring_cycle() - no longer needed
-// REMOVED: run_price_calculation_pipeline() - components now started by separate services
-// REMOVED: wait_for_transactions_ready() - handled by service dependencies
-
 /// Service health monitor
 async fn run_service_health_monitor(shutdown: Arc<Notify>) {
     logger::info(LogTag::PoolService, "Starting service health monitor");

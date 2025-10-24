@@ -4,9 +4,9 @@
 /// Based on the official Orca Whirlpool program structure from
 /// https://github.com/orca-so/whirlpools/blob/main/programs/whirlpool/src/state/whirlpool.rs
 use super::{AccountData, PoolDecoder};
-use crate::constants::SOL_DECIMALS;
+use crate::constants::{SOL_DECIMALS, SOL_MINT, ORCA_WHIRLPOOL_PROGRAM_ID};
 use crate::logger::{self, LogTag};
-use crate::pools::types::{PriceResult, ProgramKind, ORCA_WHIRLPOOL_PROGRAM_ID, SOL_MINT};
+use crate::pools::types::{PriceResult, ProgramKind};
 use crate::tokens::get_cached_decimals;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;

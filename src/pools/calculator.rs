@@ -1,8 +1,8 @@
 use super::cache;
 use super::decoders;
 use super::fetcher::{AccountData, PoolAccountBundle};
-use super::types::{PoolDescriptor, PriceResult, ProgramKind, SOL_MINT};
-use crate::constants::SOL_DECIMALS;
+use super::types::{PoolDescriptor, PriceResult, ProgramKind};
+use crate::constants::{SOL_DECIMALS, SOL_MINT};
 use crate::events::{record_safe, Event, EventCategory, Severity};
 /// Price calculator module
 ///

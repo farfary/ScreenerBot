@@ -1,8 +1,7 @@
 use super::{AccountData, PoolDecoder};
-// debug flags removed; use centralized logger which respects runtime flags
-use crate::constants::SOL_DECIMALS;
+use crate::constants::{SOL_DECIMALS, SOL_MINT};
 use crate::logger::{self, LogTag};
-use crate::pools::types::{PriceResult, ProgramKind, SOL_MINT};
+use crate::pools::types::{PriceResult, ProgramKind};
 use crate::tokens::get_cached_decimals;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;

@@ -1,14 +1,8 @@
 use super::super::utils::is_sol_mint;
-use crate::constants::WRAPPED_SOL_MINT;
-/// FluxBeam AMM decoder
-///
-/// This decoder handles FluxBeam pools which are Token2022-based AMM pools.
-/// FluxBeam is a DEX that pioneers Token2022 standard integration on Solana.
-/// Based on analysis of pool structure at 324 bytes with standard AMM vault ratio pricing.
 use super::{AccountData, PoolDecoder};
-use crate::constants::SOL_DECIMALS;
+use crate::constants::{WRAPPED_SOL_MINT, SOL_DECIMALS, FLUXBEAM_AMM_PROGRAM_ID};
 use crate::logger::{self, LogTag};
-use crate::pools::types::{PriceResult, ProgramKind, FLUXBEAM_AMM_PROGRAM_ID};
+use crate::pools::types::{PriceResult, ProgramKind};
 use crate::tokens::get_cached_decimals;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;

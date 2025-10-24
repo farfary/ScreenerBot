@@ -56,22 +56,3 @@ pub mod swap;
 
 // Temporary re-exports for debug tooling (consider gating with a feature flag)
 pub use fetcher::AccountData;
-
-/// Initialize the pool service - this is the main entry point
-///
-/// DEPRECATED: Use ServiceManager instead. This function is kept for compatibility only.
-///
-/// This function initializes pool components only (no background tasks).
-/// Background tasks are now managed by separate services via ServiceManager.
-pub async fn init_pool_service(
-    shutdown: Arc<Notify>,
-) -> Result<tokio::task::JoinHandle<()>, PoolError> {
-    initialize_pool_components().await?;
-
-    // Return a dummy handle for compatibility - ServiceManager handles lifecycle
-    let handle = tokio::spawn(async move {
-        shutdown.notified().await;
-    });
-
-    Ok(handle)
-}

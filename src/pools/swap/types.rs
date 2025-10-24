@@ -1,6 +1,7 @@
 /// Swap types and common structures
 ///
 /// This module defines the core types used across the swap system.
+use crate::constants::{SOL_MINT, TOKEN_2022_PROGRAM_ID, SPL_TOKEN_PROGRAM_ID};
 use solana_sdk::{pubkey::Pubkey, signature::Signature, transaction::Transaction};
 use std::fmt;
 
@@ -106,18 +107,11 @@ impl From<solana_sdk::program_error::ProgramError> for SwapError {
 
 /// Common constants
 pub mod constants {
-    /// WSOL mint address (Wrapped SOL)
-    pub const WSOL_MINT: &str = "So11111111111111111111111111111111111111112";
+    use crate::constants::SOL_MINT;
 
-    /// Token-2022 program ID
-    pub const TOKEN_2022_PROGRAM_ID: &str = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
-
-    /// Legacy SPL Token program ID
-    pub const SPL_TOKEN_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
-
-    /// Default slippage in basis points (1% = 100 bps)
+    pub const WSOL_MINT: &str = SOL_MINT;
     pub const DEFAULT_SLIPPAGE_BPS: u16 = 100;
-
-    /// Minimum SOL to keep in wallet (for fees)
     pub const MIN_SOL_BALANCE: f64 = 0.01;
+
+    pub use crate::constants::{TOKEN_2022_PROGRAM_ID, SPL_TOKEN_PROGRAM_ID};
 }

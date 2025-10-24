@@ -6,9 +6,9 @@ use crate::constants::WRAPPED_SOL_MINT;
 /// DLMM uses a different account structure from CPMM with token reserves stored
 /// in separate vault accounts.
 use super::{AccountData, PoolDecoder};
-use crate::constants::SOL_DECIMALS;
+use crate::constants::{SOL_DECIMALS, SOL_MINT, METEORA_DLMM_PROGRAM_ID};
 use crate::logger::{self, LogTag};
-use crate::pools::types::{PriceResult, ProgramKind, METEORA_DLMM_PROGRAM_ID};
+use crate::pools::types::{PriceResult, ProgramKind};
 use crate::tokens::get_cached_decimals;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;

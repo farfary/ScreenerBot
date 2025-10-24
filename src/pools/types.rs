@@ -3,6 +3,12 @@
 /// This file contains all the essential data structures used throughout the pools system.
 /// These types are designed to be minimal, efficient, and focused on the core functionality.
 use crate::config::with_config;
+use crate::constants::{
+    RAYDIUM_CPMM_PROGRAM_ID, RAYDIUM_LEGACY_AMM_PROGRAM_ID, RAYDIUM_CLMM_PROGRAM_ID,
+    ORCA_WHIRLPOOL_PROGRAM_ID, METEORA_DAMM_PROGRAM_ID, METEORA_DLMM_PROGRAM_ID,
+    METEORA_DBC_PROGRAM_ID, PUMP_FUN_AMM_PROGRAM_ID, PUMP_FUN_LEGACY_PROGRAM_ID,
+    MOONIT_AMM_PROGRAM_ID, FLUXBEAM_AMM_PROGRAM_ID,
+};
 use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
 use std::collections::VecDeque;
@@ -412,19 +418,3 @@ pub fn max_watched_tokens() -> usize {
 /// Maximum allowable gap between consecutive price updates (1 minute)
 /// If gap is larger, older data becomes invalid and should be removed
 pub const MAX_PRICE_GAP_SECONDS: u64 = 60;
-
-/// SOL mint address (primary trading currency)
-pub const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
-
-/// Program ID constants for centralized reference
-pub const RAYDIUM_CPMM_PROGRAM_ID: &str = "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C";
-pub const RAYDIUM_LEGACY_AMM_PROGRAM_ID: &str = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8";
-pub const RAYDIUM_CLMM_PROGRAM_ID: &str = "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK";
-pub const ORCA_WHIRLPOOL_PROGRAM_ID: &str = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
-pub const METEORA_DAMM_PROGRAM_ID: &str = "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG";
-pub const METEORA_DLMM_PROGRAM_ID: &str = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo";
-pub const METEORA_DBC_PROGRAM_ID: &str = "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN";
-pub const PUMP_FUN_AMM_PROGRAM_ID: &str = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA";
-pub const PUMP_FUN_LEGACY_PROGRAM_ID: &str = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
-pub const MOONIT_AMM_PROGRAM_ID: &str = "MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG";
-pub const FLUXBEAM_AMM_PROGRAM_ID: &str = "FLUXubRmkEi2q6K3Y9kBPg9248ggaZVsoSFhtJHSrm1X";

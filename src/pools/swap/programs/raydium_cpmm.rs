@@ -3,13 +3,13 @@
 /// This module implements direct swaps for Raydium Constant Product Market Maker pools.
 /// It integrates with the centralized Raydium CPMM decoder and provides both buy and sell operations.
 use super::ProgramSwap;
+use crate::constants::RAYDIUM_CPMM_PROGRAM_ID;
 use crate::logger::{self, LogTag};
 use crate::pools::decoders::raydium_cpmm::{RaydiumCpmmDecoder, RaydiumCpmmPoolInfo};
 use crate::pools::swap::executor::SwapExecutor;
 use crate::pools::swap::types::{
     constants::*, SwapDirection, SwapError, SwapParams, SwapRequest, SwapResult,
 };
-use crate::pools::types::RAYDIUM_CPMM_PROGRAM_ID;
 use crate::pools::AccountData;
 use crate::rpc::get_rpc_client;
 use crate::utils::sol_to_lamports;
