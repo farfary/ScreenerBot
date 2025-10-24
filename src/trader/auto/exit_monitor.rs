@@ -269,14 +269,8 @@ async fn evaluate_position_for_exit(
         }
     };
 
-    // CRITICAL: Update position price BEFORE checking trailing stop
-    if let Err(e) = positions::update_position_price(&position.mint, current_price).await {
-        logger::info(
-            LogTag::Trader,
-            &format!("Failed to update price for {}: {}", position.symbol, e),
-        );
-        // Continue anyway - we can still check exits with current price
-    }
+    // NOTE: Position price is now updated by positions::price_updater module (every 1s)
+    // No need to update here - just use current_price for exit evaluation
 
     // Get fresh position with updated price_highest for accurate trailing stop calculation
     let fresh_position = match positions::get_position_by_mint(&position.mint).await {

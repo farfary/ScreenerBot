@@ -153,10 +153,21 @@ pub async fn start_positions_manager_service(
 
     initialize_positions_system().await?;
 
-    // Start verification worker and return handle
-    let handle = tokio::spawn(monitor.instrument(verification_worker(shutdown)));
+    // Create shutdown watch channel for price updater
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
-    Ok(handle)
+    // Start price updater task
+    let price_updater_handle = tokio::spawn(super::price_updater::start_price_updater(shutdown_rx));
+
+    // Start verification worker
+    let verification_handle = tokio::spawn(monitor.instrument(async move {
+        verification_worker(shutdown).await;
+        // Signal price updater to shutdown when verification worker exits
+        let _ = shutdown_tx.send(true);
+    }));
+
+    // Return verification handle (price updater will be cleaned up automatically)
+    Ok(verification_handle)
 }
 
 /// Verification worker loop

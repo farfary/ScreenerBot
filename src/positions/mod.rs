@@ -5,6 +5,7 @@ pub mod lib;
 pub mod loss_detection;
 pub mod metrics;
 pub mod operations;
+pub mod price_updater;
 pub mod queue;
 pub mod state;
 pub mod tracking;
@@ -31,6 +32,8 @@ pub use tracking::update_position_tracking;
 pub use metrics::get_proceeds_metrics_snapshot;
 
 pub use worker::{initialize_positions_system, start_positions_manager_service};
+
+pub use price_updater::start_price_updater;
 
 pub use loss_detection::{
     get_loss_thresholds, is_loss_blacklisting_enabled, process_position_loss_detection,

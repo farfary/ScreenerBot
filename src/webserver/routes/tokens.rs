@@ -375,7 +375,7 @@ fn resolve_page_and_size(
     (computed_page.max(1), effective_limit)
 }
 
-fn build_token_list_response(result: FilteringQueryResult) -> TokenListResponse {
+fn build_token_list_response(result: FilteringQueryResult, view: FilteringView) -> TokenListResponse {
     let start_index = result
         .page
         .saturating_sub(1)
@@ -394,8 +394,39 @@ fn build_token_list_response(result: FilteringQueryResult) -> TokenListResponse 
         Some(start_index.saturating_sub(result.page_size))
     };
 
+    // For Pool Service view, overlay real-time pool prices from pools module
+    let items = if matches!(view, FilteringView::Pool) {
+        result
+            .items
+            .into_iter()
+            .map(|mut token| {
+                if let Some(price_result) = pools::get_pool_price(&token.mint) {
+                    let old_price = token.price_sol;
+                    let new_price = price_result.price_sol;
+                    // Overlay pool price (real-time chain data) over database price
+                    token.price_sol = new_price;
+                    logger::debug(
+                        LogTag::Webserver,
+                        &format!(
+                            "Pool price overlay: mint={} symbol={} old_price={:.12} new_price={:.12} diff={:.12}",
+                            token.mint,
+                            token.symbol,
+                            old_price,
+                            new_price,
+                            (new_price - old_price).abs()
+                        ),
+                    );
+                }
+                token
+            })
+            .collect()
+    } else {
+        // For other views, use database prices as-is
+        result.items
+    };
+
     TokenListResponse {
-        items: result.items,
+        items,
         page: result.page,
         page_size: result.page_size,
         total: result.total,
@@ -496,6 +527,7 @@ pub(crate) async fn get_tokens_list(
     let max_page_size = MAX_PAGE_SIZE;
     let request_view = query.view.clone();
     let filtering_query = query.into_filtering_query(max_page_size);
+    let view = FilteringView::from_str(&request_view);
 
     match filtering::query_tokens(filtering_query).await {
         Ok(result) => {
@@ -511,7 +543,7 @@ pub(crate) async fn get_tokens_list(
                 ),
             );
 
-            Json(build_token_list_response(result))
+            Json(build_token_list_response(result, view))
         }
         Err(err) => {
             logger::info(
@@ -1167,10 +1199,11 @@ async fn filter_tokens(
     );
 
     let max_page_size = MAX_PAGE_SIZE;
+    let view = FilteringView::from_str(&filter.view);
     let filtering_query = filter.into_filtering_query(max_page_size);
 
     match filtering::query_tokens(filtering_query).await {
-        Ok(result) => Ok(Json(build_token_list_response(result))),
+        Ok(result) => Ok(Json(build_token_list_response(result, view))),
         Err(err) => {
             logger::info(
                 LogTag::Webserver,
