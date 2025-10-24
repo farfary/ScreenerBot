@@ -172,7 +172,7 @@ impl RaydiumCpmmDecoder {
             }
         };
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "Decimal Analysis:\n\n                     Token0 {} decimals: {} (cached) vs {} (pool)\n\n                     Token1 {} decimals: {} (cached) vs {} (pool)",
@@ -338,7 +338,7 @@ impl RaydiumCpmmDecoder {
             return None;
         }
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "Raydium CPMM Price Calculation for {}:\n\n                     SOL Reserve: {} ({:.9} adjusted, {} decimals)\n\n                     Token Reserve: {} ({:.9} adjusted, {} decimals)\n\n                     Price: {:.9} SOL",

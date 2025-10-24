@@ -115,7 +115,7 @@ impl StrategyEngine {
             self.cache_evaluation(key, result).await;
         }
 
-        logger::info(
+        logger::debug(
             LogTag::System,
             &format!(
                 "Strategy evaluated: strategy_id={}, result={}, time_ms={}",

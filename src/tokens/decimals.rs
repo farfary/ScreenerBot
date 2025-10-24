@@ -114,7 +114,7 @@ pub async fn get(mint: &str) -> Option<u8> {
     }
 
     if let Some(d) = get_from_rugcheck(mint).await {
-        logger::info(
+        logger::debug(
             LogTag::Tokens,
             &format!(
                 "Resolved decimals via RugCheck: mint={} decimals={}",

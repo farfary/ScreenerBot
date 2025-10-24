@@ -151,7 +151,7 @@ impl PriceCalculator {
                                         })
                                     )).await;
 
-                                    logger::info(
+                                    logger::debug(
                                         LogTag::PoolCalculator,
                                         &format!(
                                             "Calculated price for token {} in pool {}: {} SOL",

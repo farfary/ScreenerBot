@@ -137,7 +137,7 @@ pub async fn cleanup_expired_pending_transactions() -> usize {
     pending.retain(|signature, timestamp| {
         let age_secs = (now - *timestamp).num_seconds();
         if age_secs > PENDING_MAX_AGE_SECS {
-            logger::info(
+            logger::debug(
                 LogTag::Transactions,
                 &format!(
                     "Expired pending transaction: {} (age: {}s)",
@@ -374,7 +374,7 @@ impl DurationMeasure {
     pub fn finish_and_log(self) -> u64 {
         let operation = self.operation.clone();
         let ms = self.finish();
-        logger::info(
+        logger::debug(
             LogTag::Transactions,
             &format!("Operation '{}' completed in {}ms", operation, ms),
         );

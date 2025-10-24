@@ -147,7 +147,7 @@ impl PumpFunAmmDecoder {
             }
         };
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "Valid PumpFun SOL pool: token={}, sol_is_first={}, token_vault={}, sol_vault={}",
@@ -272,7 +272,7 @@ impl PumpFunAmmDecoder {
             return None;
         }
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "PumpFun price calculation:\n\

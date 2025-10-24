@@ -25,14 +25,14 @@ impl PoolDecoder for FluxbeamAmmDecoder {
         base_mint: &str,
         quote_mint: &str,
     ) -> Option<PriceResult> {
-        logger::info(LogTag::PoolDecoder, "Starting FluxBeam AMM pool decoding");
+        logger::debug(LogTag::PoolDecoder, "Starting FluxBeam AMM pool decoding");
 
         // Find the pool account owned by FluxBeam program
         let pool_account = accounts
             .values()
             .find(|acc| acc.owner.to_string() == FLUXBEAM_AMM_PROGRAM_ID)?;
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "Found FluxBeam pool account {} with {} bytes",
@@ -56,7 +56,7 @@ impl PoolDecoder for FluxbeamAmmDecoder {
         // Parse FluxBeam pool structure
         let pool_info = Self::parse_fluxbeam_pool(&pool_account.data)?;
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "FluxBeam pool parsed: token_a={}, token_b={}, vault_a={}, vault_b={}",
@@ -112,7 +112,7 @@ impl PoolDecoder for FluxbeamAmmDecoder {
         let sol_balance = Self::decode_token_account_amount(&sol_account.data).ok()?;
         let token_balance = Self::decode_token_account_amount(&token_account.data).ok()?;
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "FluxBeam vault balances: SOL={}, token={}",
@@ -141,7 +141,7 @@ impl PoolDecoder for FluxbeamAmmDecoder {
         };
         let sol_decimals = SOL_DECIMALS;
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "FluxBeam decimals: token={}, sol={}",
@@ -165,7 +165,7 @@ impl PoolDecoder for FluxbeamAmmDecoder {
             return None;
         }
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "FluxBeam price calculation: {:.12} SOL per token (sol_reserves={:.6}, token_reserves={:.6})",
@@ -236,7 +236,7 @@ impl FluxbeamAmmDecoder {
         let token_a_vault = Self::extract_pubkey_at_offset(data, 35)?;
         let token_b_vault = Self::extract_pubkey_at_offset(data, 67)?;
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "FluxBeam parsed: token_a@131={}, token_b@163={}, vault_a@35={}, vault_b@67={}",

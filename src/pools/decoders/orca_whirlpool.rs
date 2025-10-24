@@ -24,7 +24,7 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
         base_mint: &str,
         quote_mint: &str,
     ) -> Option<PriceResult> {
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "Orca Whirlpool decoder: base={} quote={}",
@@ -37,7 +37,7 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
             .values()
             .find(|acc| acc.owner.to_string() == ORCA_WHIRLPOOL_PROGRAM_ID)?;
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "Found Orca Whirlpool pool account {} with {} bytes",
@@ -49,7 +49,7 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
         // Parse Orca Whirlpool structure
         let pool_info = Self::parse_whirlpool_data(&pool_account.data)?;
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "Parsed Orca Whirlpool:\n  token_mint_a: {}\n  token_mint_b: {}\n  token_vault_a: {}\n  token_vault_b: {}\n  sqrt_price: {}\n  liquidity: {}",
@@ -235,7 +235,7 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
                 * (10_f64).powi((token_decimals as i32) - (sol_decimals as i32))
         };
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "Orca Whirlpool price calculated: {:.12} SOL per token\n  SOL vault: {}\n  Token vault: {}\n  sqrt_price: {}\n  Token A is SOL: {}",

@@ -49,7 +49,7 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
                     Ok(Some(token)) => Some((index, token)),
                     Ok(None) => None,
                     Err(err) => {
-                        logger::info(LogTag::Filtering, &format!("mint={} error={}", mint, err));
+                        logger::debug(LogTag::Filtering, &format!("mint={} error={}", mint, err));
                         None
                     }
                 }
@@ -228,7 +228,7 @@ async fn apply_all_filters(
                 }
                 Ok(None) => None,
                 Err(err) => {
-                    logger::info(
+                    logger::debug(
                         LogTag::Filtering,
                         &format!("mint={} err={}", token.mint, err),
                     );

@@ -76,7 +76,7 @@ pub async fn verify_transaction_for_position(
 ) -> Result<TransactionVerificationResult, String> {
     let processor = TransactionProcessor::new(wallet_pubkey);
 
-    logger::info(
+    logger::debug(
         LogTag::Transactions,
         &format!(
             "Verifying transaction {} for position (expected: {:?})",
@@ -111,7 +111,7 @@ pub async fn verify_transaction_for_position(
     let verification_result =
         perform_comprehensive_verification(&transaction, expected_type, wallet_pubkey).await?;
 
-    logger::info(
+    logger::debug(
         LogTag::Transactions,
         &format!(
             "Verification complete for {}: verified={}, confidence={:.2}, issues={}",

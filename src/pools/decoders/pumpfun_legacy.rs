@@ -166,7 +166,7 @@ impl PumpFunLegacyDecoder {
 
         let pair_info = analyze_token_pair(pool_info);
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "Valid PumpFun Legacy SOL pool: token={}, sol_is_first={}, token_vault={}, sol_vault={}",
@@ -277,7 +277,7 @@ impl PumpFunLegacyDecoder {
 
         let price_sol = sol_reserve_f64 / token_reserve_f64;
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "PumpFun Legacy price calculation:\n                                              - SOL Reserve: {} (decimals: {}, adjusted: {:.8})\n                                              - Token Reserve: {} (decimals: {}, adjusted: {:.8})\n                                              - Price SOL: {:.12}\n                                              - Target Token: {}",

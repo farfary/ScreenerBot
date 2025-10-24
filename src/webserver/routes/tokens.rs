@@ -499,7 +499,7 @@ pub(crate) async fn get_tokens_list(
 
     match filtering::query_tokens(filtering_query).await {
         Ok(result) => {
-            logger::info(
+            logger::debug(
                 LogTag::Webserver,
                 &format!(
                     "view={} page={}/{} items={}/{}",
@@ -543,7 +543,7 @@ pub(crate) async fn get_tokens_list(
 async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse> {
     let request_start = std::time::Instant::now();
 
-    logger::info(LogTag::Webserver, &format!("mint={}", mint));
+    logger::debug(LogTag::Webserver, &format!("mint={}", mint));
 
     // Fetch token from database (with market data)
     let lookup_start = std::time::Instant::now();

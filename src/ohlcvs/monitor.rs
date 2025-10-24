@@ -545,7 +545,7 @@ impl OhlcvMonitor {
                     if let Some((previous_failures, config)) = updated_config {
                         self.db.upsert_monitor_config(&config)?;
 
-                        logger::info(
+                        logger::debug(
                             LogTag::Ohlcv,
                             &format!(
                                 "✅ Pool discovery succeeded for {} after {} failures",
@@ -989,7 +989,7 @@ impl OhlcvMonitor {
         let mint_owned = mint.to_string();
         let pool_owned = pool_address.to_string();
 
-        logger::info(
+        logger::debug(
             LogTag::Ohlcv,
             &format!(
                 "Scheduling retention backfill for {} via {} (target start: {}, current oldest requested: {})",
@@ -1006,7 +1006,7 @@ impl OhlcvMonitor {
                 .await
             {
                 Ok(points) => {
-                    logger::info(
+                    logger::debug(
                         LogTag::Ohlcv,
                         &format!(
                             "Retention backfill for {} via {} completed (points inserted: {})",

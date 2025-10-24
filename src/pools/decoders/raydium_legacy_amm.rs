@@ -59,7 +59,7 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
         // If vault fetch failed, try extracting reserves directly from pool data
         let (coin_reserve, pc_reserve) = match (coin_reserve, pc_reserve) {
             (Some(c), Some(p)) => {
-                logger::info(
+                logger::debug(
                     LogTag::PoolDecoder,
                     &format!("Using vault reserves: coin={} pc={}", c, p),
                 );
@@ -124,7 +124,7 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
             return None;
         }
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "Legacy AMM price: {:.12} SOL (sol_reserve={} token_reserve={} token_dec={} coin_mint={} pc_mint={})",

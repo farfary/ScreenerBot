@@ -406,7 +406,7 @@ impl PoolAnalyzer {
             }
 
             ProgramKind::MeteoraDbc => {
-                logger::info(
+                logger::debug(
                     LogTag::PoolAnalyzer,
                     &format!("Extracting DBC accounts for pool {}", pool_id),
                 );
@@ -427,7 +427,7 @@ impl PoolAnalyzer {
                             }
                         }
 
-                        logger::info(
+                        logger::debug(
                             LogTag::PoolAnalyzer,
                             &format!(
                                 "DBC pool {} extracted {} vault accounts",
@@ -526,7 +526,7 @@ impl PoolAnalyzer {
         quote_mint: &Pubkey,
         rpc_client: &RpcClient,
     ) -> Option<Vec<Pubkey>> {
-        logger::info(
+        logger::debug(
             LogTag::PoolAnalyzer,
             &format!(
                 "Extracting Raydium Legacy AMM accounts for pool {}",
@@ -548,7 +548,7 @@ impl PoolAnalyzer {
                     }
                 }
 
-                logger::info(
+                logger::debug(
                     LogTag::PoolAnalyzer,
                     &format!(
                         "Raydium Legacy AMM pool {} extracted {} vault accounts",
@@ -584,7 +584,7 @@ impl PoolAnalyzer {
         // - Pool account itself
         // - Token vaults (extracted from pool data)
 
-        logger::info(
+        logger::debug(
             LogTag::PoolAnalyzer,
             &format!("Extracting CLMM accounts for pool {}", pool_id),
         );
@@ -603,7 +603,7 @@ impl PoolAnalyzer {
                     }
                 }
 
-                logger::info(
+                logger::debug(
                     LogTag::PoolAnalyzer,
                     &format!(
                         "CLMM pool {} extracted {} vault accounts",
@@ -627,7 +627,7 @@ impl PoolAnalyzer {
         quote_mint: &Pubkey,
         rpc_client: &RpcClient,
     ) -> Option<Vec<Pubkey>> {
-        logger::info(
+        logger::debug(
             LogTag::PoolAnalyzer,
             &format!("Extracting Orca Whirlpool accounts for pool {}", pool_id),
         );
@@ -646,7 +646,7 @@ impl PoolAnalyzer {
                     }
                 }
 
-                logger::info(
+                logger::debug(
                     LogTag::PoolAnalyzer,
                     &format!(
                         "Orca Whirlpool pool {} extracted {} vault accounts",
@@ -678,7 +678,7 @@ impl PoolAnalyzer {
         quote_mint: &Pubkey,
         rpc_client: &RpcClient,
     ) -> Option<Vec<Pubkey>> {
-        logger::info(
+        logger::debug(
             LogTag::PoolAnalyzer,
             &format!("Extracting DAMM accounts for pool {}", pool_id),
         );
@@ -697,7 +697,7 @@ impl PoolAnalyzer {
                     }
                 }
 
-                logger::info(
+                logger::debug(
                     LogTag::PoolAnalyzer,
                     &format!(
                         "DAMM pool {} extracted {} vault accounts",
@@ -759,7 +759,7 @@ impl PoolAnalyzer {
         quote_mint: &Pubkey,
         rpc_client: &RpcClient,
     ) -> Option<Vec<Pubkey>> {
-        logger::info(
+        logger::debug(
             LogTag::PoolAnalyzer,
             &format!("Extracting PumpFun AMM accounts for pool {}", pool_id),
         );
@@ -778,7 +778,7 @@ impl PoolAnalyzer {
                     }
                 }
 
-                logger::info(
+                logger::debug(
                     LogTag::PoolAnalyzer,
                     &format!(
                         "PumpFun AMM pool {} extracted {} vault accounts",

@@ -39,7 +39,7 @@ impl PoolDecoder for MeteoraDbcDecoder {
             .values()
             .find(|a| a.owner.to_string() == METEORA_DBC_PROGRAM_ID)?;
 
-        logger::info(
+        logger::debug(
             LogTag::Pool,
             &format!("Pool {} bytes:{}", pool_acc.pubkey, pool_acc.data.len()),
         );

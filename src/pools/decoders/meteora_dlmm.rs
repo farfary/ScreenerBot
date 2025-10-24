@@ -25,7 +25,7 @@ impl PoolDecoder for MeteoraDlmmDecoder {
         base_mint: &str,
         quote_mint: &str,
     ) -> Option<PriceResult> {
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "Meteora DLMM decoder: base={} quote={}",
@@ -39,7 +39,7 @@ impl PoolDecoder for MeteoraDlmmDecoder {
             acc.owner.to_string() == METEORA_DLMM_PROGRAM_ID
         })?;
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "Found DLMM pool account {} with {} bytes",
@@ -119,7 +119,7 @@ impl PoolDecoder for MeteoraDlmmDecoder {
             let sol_mint_correct = is_sol_mint(&sol_mint);
             let token_mint_correct = token_mint_check == token_mint;
 
-            logger::info(
+            logger::debug(
                 LogTag::PoolDecoder,
                 &format!(
                     "Vault verification: SOL vault mint correct={}, Token vault mint correct={}",
@@ -181,7 +181,7 @@ impl PoolDecoder for MeteoraDlmmDecoder {
         let sol_reserves_display = (sol_balance as f64) / (10_f64).powi(sol_decimals as i32);
         let token_reserves_display = (token_balance as f64) / (10_f64).powi(token_decimals as i32);
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "DLMM theoretical price: {:.12} SOL per token (active_id={} bin_step={})",

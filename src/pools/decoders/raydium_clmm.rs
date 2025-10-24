@@ -24,7 +24,7 @@ impl PoolDecoder for RaydiumClmmDecoder {
         base_mint: &str,
         quote_mint: &str,
     ) -> Option<PriceResult> {
-        logger::info(LogTag::PoolDecoder, "Starting Raydium CLMM pool decoding");
+        logger::debug(LogTag::PoolDecoder, "Starting Raydium CLMM pool decoding");
 
         // Find the pool account
         let pool_account = accounts.values().find(|acc| {
@@ -32,7 +32,7 @@ impl PoolDecoder for RaydiumClmmDecoder {
             acc.owner.to_string() == RAYDIUM_CLMM_PROGRAM_ID
         })?;
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "Found CLMM pool account {} with {} bytes",
@@ -44,7 +44,7 @@ impl PoolDecoder for RaydiumClmmDecoder {
         // Parse CLMM pool structure
         let clmm_info = Self::parse_clmm_pool(&pool_account.data)?;
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "CLMM pool parsed: token_mint_0={}, token_mint_1={}, vault_0={}, vault_1={}, sqrt_price_x64={}",
@@ -106,7 +106,7 @@ impl PoolDecoder for RaydiumClmmDecoder {
         let sol_balance = Self::decode_token_account_amount(&sol_account.data).ok()?;
         let token_balance = Self::decode_token_account_amount(&token_account.data).ok()?;
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "CLMM vault balances: SOL={}, token={}, is_token_0={}",
@@ -117,7 +117,7 @@ impl PoolDecoder for RaydiumClmmDecoder {
         // Note: In CLMM pools, zero vault balances are normal when liquidity is concentrated
         // outside the current price range. We can still calculate price using sqrt_price_x64.
         if token_balance == 0 && sol_balance == 0 {
-            logger::info(
+            logger::debug(
                 LogTag::PoolDecoder,
                 "CLMM pool has zero vault balances, using sqrt_price for calculation",
             );
@@ -139,7 +139,7 @@ impl PoolDecoder for RaydiumClmmDecoder {
         };
         let sol_decimals = SOL_DECIMALS;
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "CLMM decimals: token={}, sol={}",
@@ -154,7 +154,7 @@ impl PoolDecoder for RaydiumClmmDecoder {
         let sqrt_price = (clmm_info.sqrt_price_x64 as f64) / (2_f64).powi(64);
         let raw_price = sqrt_price * sqrt_price; // price = sqrt_price^2
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "CLMM sqrt_price_x64={}, sqrt_price={}, raw_price={}",
@@ -178,7 +178,7 @@ impl PoolDecoder for RaydiumClmmDecoder {
         let sol_reserves = (sol_balance as f64) / (10_f64).powi(sol_decimals as i32);
         let token_reserves = (token_balance as f64) / (10_f64).powi(token_decimals as i32);
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "CLMM price calculation: {:.12} SOL per token (sol_reserves={:.6}, token_reserves={:.6})",

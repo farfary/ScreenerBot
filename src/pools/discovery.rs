@@ -725,7 +725,7 @@ impl PoolDiscovery {
 
     /// Discover pools for a specific token
     pub async fn discover_pools_for_token(&self, mint: &str) -> Vec<PoolDescriptor> {
-        logger::info(
+        logger::debug(
             LogTag::PoolDiscovery,
             &format!("Starting pool discovery for token {mint}"),
         );
@@ -1024,7 +1024,7 @@ pub async fn get_canonical_pool_address(mint: &str) -> Option<String> {
                 // Update cache and notify waiters
                 if let Some(desc) = result.as_ref() {
                     discovery_cache().insert(mint_pk, (desc.clone(), Instant::now()));
-                    logger::info(
+                    logger::debug(
                         LogTag::PoolDiscovery,
                         &format!(
                             "Cached canonical pool for mint {} -> {} (program: {:?})",

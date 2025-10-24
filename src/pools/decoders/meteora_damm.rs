@@ -26,7 +26,7 @@ impl PoolDecoder for MeteoraDammDecoder {
         base_mint: &str,
         quote_mint: &str,
     ) -> Option<PriceResult> {
-        logger::info(LogTag::PoolDecoder, "Starting Meteora DAMM pool decoding");
+        logger::debug(LogTag::PoolDecoder, "Starting Meteora DAMM pool decoding");
 
         // Find the pool account
         let pool_account = accounts.values().find(|acc| {
@@ -34,7 +34,7 @@ impl PoolDecoder for MeteoraDammDecoder {
             acc.owner.to_string() == METEORA_DAMM_PROGRAM_ID
         })?;
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "Found DAMM pool account {} with {} bytes",
@@ -46,7 +46,7 @@ impl PoolDecoder for MeteoraDammDecoder {
         // Parse DAMM pool structure
         let damm_info = Self::parse_damm_pool(&pool_account.data)?;
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "DAMM pool parsed: token_a={}, token_b={}, vault_a={}, vault_b={}",
@@ -117,7 +117,7 @@ impl PoolDecoder for MeteoraDammDecoder {
         // Verify vault mints to ensure correct assignment
         let sol_vault_mint = Self::decode_token_account_mint(&sol_account.data).ok()?;
         let token_vault_mint = Self::decode_token_account_mint(&token_account.data).ok()?;
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "DAMM vault verification: sol_vault {} mint={}, token_vault {} mint={}",
@@ -125,7 +125,7 @@ impl PoolDecoder for MeteoraDammDecoder {
             ),
         );
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "DAMM vault balances: SOL_raw={}, SOL_effective={} (fees={}), token_raw={}, token_effective={} (fees={})",
@@ -159,7 +159,7 @@ impl PoolDecoder for MeteoraDammDecoder {
         };
         let sol_decimals = SOL_DECIMALS;
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "DAMM decimals: token={}, sol={}",
@@ -453,7 +453,7 @@ impl MeteoraDammDecoder {
         let sqrt_min_price = Self::extract_u128_at_offset(data, 424).unwrap_or(0);
         let sqrt_max_price = Self::extract_u128_at_offset(data, 440).unwrap_or(0);
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "DAMM empirical offsets: token_a@168={}, token_b@200={}, vault_a@232={}, vault_b@264={}",
@@ -464,7 +464,7 @@ impl MeteoraDammDecoder {
             ),
         );
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "DAMM liquidity values: @296={}, @304={}, @320={}, selected={}",
@@ -472,7 +472,7 @@ impl MeteoraDammDecoder {
             ),
         );
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "DAMM pricing: sqrt_price={}, range=[{}, {}]",
