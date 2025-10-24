@@ -22,6 +22,8 @@ const DATA_TABLE_STYLES: &str = include_str!("templates/styles/ui/data_table.css
 const TABLE_TOOLBAR_STYLES: &str = include_str!("templates/styles/ui/table_toolbar.css");
 const EVENTS_DIALOG_STYLES: &str = include_str!("templates/styles/ui/events_dialog.css");
 const TAB_BAR_STYLES: &str = include_str!("templates/styles/ui/tab_bar.css");
+const TABLE_SETTINGS_DIALOG_STYLES: &str =
+    include_str!("templates/styles/ui/table_settings_dialog.css");
 
 pub const CORE_LIFECYCLE: &str = include_str!("templates/scripts/core/lifecycle.js");
 pub const CORE_APP_STATE: &str = include_str!("templates/scripts/core/app_state.js");
@@ -37,6 +39,8 @@ pub const DATA_TABLE_UI: &str = include_str!("templates/scripts/ui/data_table.js
 pub const TABLE_TOOLBAR_UI: &str = include_str!("templates/scripts/ui/table_toolbar.js");
 pub const EVENTS_DIALOG_UI: &str = include_str!("templates/scripts/ui/events_dialog.js");
 pub const TAB_BAR_UI: &str = include_str!("templates/scripts/ui/tab_bar.js");
+pub const TABLE_SETTINGS_DIALOG_UI: &str =
+    include_str!("templates/scripts/ui/table_settings_dialog.js");
 
 pub const SERVICES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/services.js");
 pub const TRANSACTIONS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/transactions.js");
@@ -70,6 +74,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         TABLE_TOOLBAR_STYLES,
         EVENTS_DIALOG_STYLES,
         TAB_BAR_STYLES,
+        TABLE_SETTINGS_DIALOG_STYLES,
     ];
     if active_tab == "services" {
         combined_styles.push(SERVICES_PAGE_STYLES);

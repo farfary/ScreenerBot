@@ -126,6 +126,7 @@
 import * as AppState from "../core/app_state.js";
 import { $ } from "../core/dom.js";
 import { TableToolbarView } from "./table_toolbar.js";
+import { TableSettingsDialog } from "./table_settings_dialog.js";
 
 export class DataTable {
   constructor(options) {
@@ -214,6 +215,7 @@ export class DataTable {
     this._paginationScrollRAF = null;
     this._pendingRenderOptions = null;
     this._serverStateRestored = false; // Track if server state has been restored
+    this._settingsDialog = null; // NEW: Table settings dialog instance
 
     this._loadState();
     this._restoreServerState(); // NEW: Restore server-side state after loading
@@ -493,6 +495,7 @@ export class DataTable {
     const ordered = [];
     const columnMap = new Map(sourceColumns.map((col) => [col.id, col]));
 
+    // Add columns in the order specified by columnOrder
     for (const colId of this.state.columnOrder) {
       if (columnMap.has(colId)) {
         ordered.push(columnMap.get(colId));
@@ -500,6 +503,7 @@ export class DataTable {
       }
     }
 
+    // Add any remaining columns that weren't in columnOrder (new columns)
     ordered.push(...columnMap.values());
 
     return ordered;
@@ -1171,201 +1175,13 @@ export class DataTable {
       this._addEventListener(btn, "click", handler);
     });
 
-    // Column visibility toggle
+    // Column visibility toggle - NEW: Using settings dialog instead of dropdown
     const columnBtn = toolbarRoot?.querySelector(".dt-btn-columns");
-    const columnMenu = toolbarRoot?.querySelector(".dt-column-menu");
-    if (columnBtn && columnMenu) {
-      let draggingMenuItem = null;
-      let clearMenuDragHighlights = () => {};
-
-      const buildColumnMenu = () => {
-        const menuColumns = this._getOrderedColumns(true);
-        columnMenu.innerHTML = menuColumns
-          .map(
-            (col) => `
-            <label class="dt-column-menu-item" data-column-id="${col.id}">
-              <span class="dt-column-drag-handle" draggable="true" title="Drag to reorder columns">☰</span>
-              <input 
-                type="checkbox" 
-                data-column-id="${col.id}"
-                ${this._isColumnVisible(col.id) ? "checked" : ""}
-              />
-              <span class="dt-column-label">${col.label}</span>
-            </label>
-          `
-          )
-          .join("");
-
-        clearMenuDragHighlights = () => {
-          columnMenu
-            .querySelectorAll(".dt-column-menu-item.drag-over")
-            .forEach((dragItem) => dragItem.classList.remove("drag-over"));
-        };
-
-        const checkboxes = columnMenu.querySelectorAll('input[type="checkbox"]');
-        checkboxes.forEach((cb) => {
-          const handler = (e) => {
-            const columnId = e.target.dataset.columnId;
-            this.state.visibleColumns[columnId] = e.target.checked;
-            const shouldReopen = columnMenu.style.display === "block";
-            this._pendingColumnMenuOpen = shouldReopen;
-            this._saveState();
-            this._renderTable();
-          };
-          this._addEventListener(cb, "change", handler);
-        });
-
-        const menuItems = columnMenu.querySelectorAll(".dt-column-menu-item");
-        menuItems.forEach((item) => {
-          const handle = item.querySelector(".dt-column-drag-handle");
-          if (!handle) {
-            return;
-          }
-
-          const preventClickHandler = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          };
-          this._addEventListener(handle, "click", preventClickHandler);
-
-          const dragStartHandler = (e) => {
-            draggingMenuItem = item;
-            item.classList.add("dragging");
-            e.dataTransfer.effectAllowed = "move";
-            e.dataTransfer.setData("text/plain", item.dataset.columnId || "column");
-          };
-
-          const dragEndHandler = () => {
-            if (draggingMenuItem) {
-              draggingMenuItem.classList.remove("dragging");
-              draggingMenuItem = null;
-              this._updateColumnOrderFromMenu(columnMenu);
-            }
-            clearMenuDragHighlights();
-          };
-
-          const dragOverHandler = (e) => {
-            if (!draggingMenuItem || draggingMenuItem === item) {
-              return;
-            }
-
-            e.preventDefault();
-            const rect = item.getBoundingClientRect();
-            const shouldInsertBefore = e.clientY - rect.top < rect.height / 2;
-
-            const parent = item.parentElement;
-            if (!parent) {
-              return;
-            }
-
-            if (shouldInsertBefore) {
-              if (item.previousElementSibling !== draggingMenuItem) {
-                parent.insertBefore(draggingMenuItem, item);
-              }
-            } else if (item.nextElementSibling !== draggingMenuItem) {
-              parent.insertBefore(draggingMenuItem, item.nextElementSibling);
-            }
-
-            clearMenuDragHighlights();
-            item.classList.add("drag-over");
-          };
-
-          const dragLeaveHandler = () => {
-            item.classList.remove("drag-over");
-          };
-
-          const dropHandler = (e) => {
-            if (!draggingMenuItem || draggingMenuItem === item) {
-              return;
-            }
-
-            e.preventDefault();
-            const rect = item.getBoundingClientRect();
-            const shouldInsertBefore = e.clientY - rect.top < rect.height / 2;
-            const parent = item.parentElement;
-            if (!parent) {
-              return;
-            }
-
-            if (shouldInsertBefore) {
-              parent.insertBefore(draggingMenuItem, item);
-            } else {
-              parent.insertBefore(draggingMenuItem, item.nextElementSibling);
-            }
-
-            this._updateColumnOrderFromMenu(columnMenu);
-            if (draggingMenuItem) {
-              draggingMenuItem.classList.remove("dragging");
-            }
-            draggingMenuItem = null;
-            clearMenuDragHighlights();
-          };
-
-          this._addEventListener(handle, "dragstart", dragStartHandler);
-          this._addEventListener(handle, "dragend", dragEndHandler);
-          this._addEventListener(item, "dragover", dragOverHandler);
-          this._addEventListener(item, "dragleave", dragLeaveHandler);
-          this._addEventListener(item, "drop", dropHandler);
-        });
+    if (columnBtn) {
+      const settingsHandler = () => {
+        this._openSettingsDialog();
       };
-
-      const toggleColumnMenu = (shouldOpen) => {
-        const isOpen = columnMenu.style.display === "block";
-        const nextState = typeof shouldOpen === "boolean" ? shouldOpen : !isOpen;
-        if (nextState) {
-          buildColumnMenu();
-          columnMenu.style.display = "block";
-        } else {
-          columnMenu.style.display = "none";
-        }
-      };
-
-      const columnToggleHandler = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        toggleColumnMenu();
-      };
-      this._addEventListener(columnBtn, "click", columnToggleHandler);
-
-      this.documentClickHandler = (event) => {
-        if (
-          columnMenu.style.display === "block" &&
-          !columnMenu.contains(event.target) &&
-          !columnBtn.contains(event.target)
-        ) {
-          toggleColumnMenu(false);
-        }
-      };
-      document.addEventListener("click", this.documentClickHandler);
-
-      const menuDragOverHandler = (e) => {
-        if (!draggingMenuItem || e.target !== columnMenu) {
-          return;
-        }
-        e.preventDefault();
-      };
-
-      const menuDropHandler = (e) => {
-        if (!draggingMenuItem || e.target !== columnMenu) {
-          return;
-        }
-        e.preventDefault();
-        columnMenu.appendChild(draggingMenuItem);
-        this._updateColumnOrderFromMenu(columnMenu);
-        draggingMenuItem.classList.remove("dragging");
-        draggingMenuItem = null;
-        clearMenuDragHighlights();
-      };
-
-      this._addEventListener(columnMenu, "dragover", menuDragOverHandler);
-      this._addEventListener(columnMenu, "drop", menuDropHandler);
-
-      if (this._pendingColumnMenuOpen) {
-        toggleColumnMenu(true);
-        this._pendingColumnMenuOpen = false;
-      } else {
-        buildColumnMenu();
-      }
+      this._addEventListener(columnBtn, "click", settingsHandler);
     }
 
     // Sortable headers
@@ -3224,6 +3040,89 @@ export class DataTable {
   }
 
   /**
+   * Open the table settings dialog
+   */
+  _openSettingsDialog() {
+    if (!this._settingsDialog) {
+      this._settingsDialog = new TableSettingsDialog({
+        columns: this.options.columns,
+        currentOrder: this.state.columnOrder,
+        currentVisibility: this.state.visibleColumns,
+        onApply: (settings) => this.applySettings(settings),
+      });
+    }
+
+    // Update current state before opening
+    this._settingsDialog.options.currentOrder = this.state.columnOrder;
+    this._settingsDialog.options.currentVisibility = this.state.visibleColumns;
+
+    this._settingsDialog.open();
+  }
+
+  /**
+   * Apply column settings from the settings dialog
+   * @param {Object} settings - {columnOrder: string[], visibleColumns: {[id]: boolean}}
+   */
+  applySettings(settings) {
+    if (!settings) {
+      console.warn("[DataTable] applySettings called with no settings");
+      return;
+    }
+
+    console.log("[DataTable] applySettings called with:", settings);
+    console.log("[DataTable] Current state before:", {
+      columnOrder: [...this.state.columnOrder],
+      visibleColumns: { ...this.state.visibleColumns },
+    });
+
+    let hasChanges = false;
+
+    // Validate and apply column order
+    if (Array.isArray(settings.columnOrder) && settings.columnOrder.length > 0) {
+      // Validate that all column IDs exist in table configuration
+      const validColumnIds = new Set(this.options.columns.map((col) => col.id));
+      const validOrder = settings.columnOrder.filter((colId) => validColumnIds.has(colId));
+
+      if (validOrder.length > 0 && !this._arraysEqual(validOrder, this.state.columnOrder)) {
+        console.log("[DataTable] Updating column order from", this.state.columnOrder, "to", validOrder);
+        this.state.columnOrder = validOrder;
+        hasChanges = true;
+      } else {
+        console.log("[DataTable] Column order unchanged or invalid");
+      }
+    }
+
+    // Apply column visibility
+    if (settings.visibleColumns && typeof settings.visibleColumns === "object") {
+      const validColumnIds = new Set(this.options.columns.map((col) => col.id));
+
+      Object.keys(settings.visibleColumns).forEach((colId) => {
+        // Only apply visibility for valid column IDs
+        if (validColumnIds.has(colId)) {
+          const newVisibility = settings.visibleColumns[colId];
+          if (this.state.visibleColumns[colId] !== newVisibility) {
+            console.log(`[DataTable] Updating visibility for ${colId}: ${this.state.visibleColumns[colId]} -> ${newVisibility}`);
+            this.state.visibleColumns[colId] = newVisibility;
+            hasChanges = true;
+          }
+        }
+      });
+    }
+
+    if (hasChanges) {
+      console.log("[DataTable] Changes detected, saving state and re-rendering");
+      this._saveState();
+      this._renderTable();
+      this._log("info", "Table settings applied", {
+        columnOrder: this.state.columnOrder,
+        visibleColumns: this.state.visibleColumns,
+      });
+    } else {
+      console.log("[DataTable] No changes detected, skipping re-render");
+    }
+  }
+
+  /**
    * Clear all table data
    */
   clearData() {
@@ -3395,6 +3294,12 @@ export class DataTable {
     if (this._pendingRAF) {
       cancelAnimationFrame(this._pendingRAF);
       this._pendingRAF = null;
+    }
+
+    // Clean up settings dialog
+    if (this._settingsDialog) {
+      this._settingsDialog.destroy();
+      this._settingsDialog = null;
     }
 
     // Clean up resize listeners
