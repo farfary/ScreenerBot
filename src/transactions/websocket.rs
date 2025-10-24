@@ -179,7 +179,7 @@ impl SolanaWebSocketClient {
                         logger::info(LogTag::Websocket, &format!("Failed to send heartbeat ping: {}", e));
                         break; // Connection failed, exit to trigger reconnect
                     } else {
-                        logger::info(LogTag::Websocket, "💓 Sent heartbeat ping to keep connection alive");
+                        logger::verbose(LogTag::Websocket, "💓 Sent heartbeat ping to keep connection alive");
                     }
                 }
                 message = ws_receiver.next() => {
@@ -198,12 +198,12 @@ impl SolanaWebSocketClient {
                                 logger::info(LogTag::Websocket, &format!("Failed to respond to ping: {}", e));
                                 break; // Connection failed, exit to trigger reconnect
                             } else {
-                                logger::info(LogTag::Websocket, "🏓 Responded to server ping with pong");
+                                logger::verbose(LogTag::Websocket, "🏓 Responded to server ping with pong");
                             }
                         }
                         Some(Ok(Message::Pong(_))) => {
                             // Server responded to our ping - connection is alive
-                            logger::info(LogTag::Websocket, "🏓 Received pong response - connection alive");
+                            logger::verbose(LogTag::Websocket, "🏓 Received pong response - connection alive");
                         }
                         Some(Ok(Message::Close(_))) => {
                             logger::info(LogTag::Websocket, "WebSocket connection closed by server");

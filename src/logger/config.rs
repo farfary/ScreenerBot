@@ -21,6 +21,10 @@ pub struct LoggerConfig {
     /// Key: LogTag, Value: whether debug mode is enabled for that tag
     pub debug_modes: HashMap<String, bool>,
 
+    /// Per-module verbose mode flags (populated from command-line arguments)
+    /// Key: LogTag, Value: whether verbose mode is enabled for that tag
+    pub verbose_modes: HashMap<String, bool>,
+
     /// Specific tags to enable (empty = all enabled)
     pub enabled_tags: HashSet<String>,
 
@@ -39,6 +43,7 @@ impl Default for LoggerConfig {
         Self {
             min_level: LogLevel::Info,
             debug_modes: HashMap::new(),
+            verbose_modes: HashMap::new(),
             enabled_tags: HashSet::new(), // Empty = all enabled
             console_enabled: true,
             file_enabled: true,
@@ -124,6 +129,47 @@ pub fn init_from_args() {
             };
 
             config.debug_modes.insert(tag_name.to_string(), true);
+        } else if let Some(module) = arg.strip_prefix("--verbose-") {
+            // Map argument to tag name (same mapping as debug)
+            let tag_name = match module {
+                "api" => "api",
+                "tokens" => "tokens",
+                "pool-service" => "pool_service",
+                "pool-calculator" => "pool_calculator",
+                "pool-discovery" => "pool_discovery",
+                "pool-fetcher" => "pool_fetcher",
+                "pool-analyzer" => "pool_analyzer",
+                "pool-cache" => "pool_cache",
+                "pool-decoders" => "pool_decoder",
+                "pool-prices" => "pool",
+                "pool-cleanup" => "pool",
+                "pool-monitor" => "monitor",
+                "pool-tokens" => "pool",
+                "trader" => "trader",
+                "monitor" => "monitor",
+                "discovery" => "discovery",
+                "price-service" => "price_service",
+                "sol-price" => "sol_price",
+                "entry" => "entry",
+                "ohlcv" => "ohlcv",
+                "wallet" => "wallet",
+                "swaps" => "swap",
+                "decimals" => "decimals",
+                "transactions" => "transactions",
+                "websocket" => "websocket",
+                "rpc" => "rpc",
+                "positions" => "positions",
+                "ata" => "system",
+                "blacklist" => "blacklist",
+                "security" => "security",
+                "webserver" => "webserver",
+                "filtering" => "filtering",
+                "profit" => "profit",
+                "system" => "system",
+                _ => continue, // Unknown verbose flag, skip
+            };
+
+            config.verbose_modes.insert(tag_name.to_string(), true);
         }
     }
 
@@ -146,4 +192,11 @@ pub fn is_debug_enabled_for_tag(tag: &LogTag) -> bool {
     let config = get_logger_config();
     let tag_name = tag.to_debug_key();
     config.debug_modes.get(&tag_name).copied().unwrap_or(false)
+}
+
+/// Check if verbose mode is enabled for a specific tag
+pub fn is_verbose_enabled_for_tag(tag: &LogTag) -> bool {
+    let config = get_logger_config();
+    let tag_name = tag.to_debug_key();
+    config.verbose_modes.get(&tag_name).copied().unwrap_or(false)
 }

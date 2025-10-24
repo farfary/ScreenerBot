@@ -519,13 +519,13 @@ async fn compute_and_cache_metrics(
 }
 
 async fn warmup_dashboard_metrics() {
-    logger::info(
+    logger::debug(
         LogTag::Wallet,
         "Precomputing wallet dashboard metrics during startup",
     );
 
     if get_transaction_database().await.is_none() {
-        logger::info(
+        logger::debug(
             LogTag::Wallet,
             "Skipping dashboard warm-up → transactions database not ready",
         );
@@ -1363,7 +1363,7 @@ impl WalletDatabase {
         // Initialize database schema
         db.initialize_schema().await?;
 
-        logger::info(
+        logger::debug(
             LogTag::Wallet,
             "Wallet database initialized successfully",
         );

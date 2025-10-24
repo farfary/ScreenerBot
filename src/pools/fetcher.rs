@@ -313,7 +313,7 @@ impl AccountFetcher {
         // Convert to vector and batch
         let accounts_to_fetch: Vec<Pubkey> = pending_accounts.drain().collect();
 
-        logger::info(
+        logger::debug(
             LogTag::PoolFetcher,
             &format!("Processing {} pending accounts", accounts_to_fetch.len()),
         );
@@ -369,7 +369,7 @@ impl AccountFetcher {
                     )
                     .await;
 
-                    logger::info(
+                    logger::debug(
                         LogTag::PoolFetcher,
                         &format!("Successfully fetched {} accounts", account_data_list.len()),
                     );
@@ -574,7 +574,7 @@ impl AccountFetcher {
                                     } else {
                                         pool_descriptor.base_mint
                                     };
-                                logger::info(
+                                logger::debug(
                                     LogTag::PoolFetcher,
                                     &format!(
                                         "Requested calculation for complete bundle - token {} in pool {}",

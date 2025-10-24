@@ -172,7 +172,7 @@ pub async fn detect_dex_and_router(
     tx_data: &crate::rpc::TransactionDetails,
     balance_analysis: &BalanceAnalysis,
 ) -> Result<DexAnalysis, String> {
-    logger::info(
+    logger::debug(
         LogTag::Transactions,
             &format!("Detecting DEX/router for tx: {}", transaction.signature),
         );

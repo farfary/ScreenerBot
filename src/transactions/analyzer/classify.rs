@@ -152,7 +152,7 @@ pub async fn classify_transaction(
     balance_analysis: &BalanceAnalysis,
     dex_analysis: &DexAnalysis,
 ) -> Result<TransactionClass, String> {
-    logger::info(
+    logger::debug(
         LogTag::Transactions,
             &format!("Classifying transaction: {}", transaction.signature),
         );
@@ -171,7 +171,7 @@ pub async fn classify_transaction(
         calculate_classification_confidence(&classification, &flow_analysis, dex_analysis);
 
     // Decision summary
-    logger::info(
+    logger::debug(
         LogTag::Transactions,
             &format!(
                 "classification={:?} direction={:?} primary_token={:?} confidence={:?}",
@@ -180,7 +180,7 @@ pub async fn classify_transaction(
         );
 
         // Debug: summarize nodes, edges, and patterns
-        logger::info(
+        logger::debug(
         LogTag::Transactions,
             &format!(
                 "Flow graph: nodes={} edges={} patterns={} dex_conf={:.2}",

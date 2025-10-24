@@ -353,7 +353,7 @@ async fn load_failed_ata_cache() {
                 Ok(cache_data) => match FAILED_ATA_CACHE.lock() {
                     Ok(mut cache) => {
                         *cache = cache_data.failed_atas;
-                        logger::info(LogTag::Wallet, &format!("Loaded {} failed ATAs from cache", cache.len()));
+                        logger::debug(LogTag::Wallet, &format!("Loaded {} failed ATAs from cache", cache.len()));
                     }
                     Err(e) => {
                         logger::error(LogTag::Wallet, &format!("Failed to lock failed ATA cache during load: {}", e));

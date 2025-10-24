@@ -327,7 +327,7 @@ async fn services_overview(State(_state): State<Arc<AppState>>) -> Response {
 
     let start = Instant::now();
 
-    logger::info(
+    logger::debug(
         LogTag::Webserver,
         "Fetching complete services overview",
     );
@@ -335,7 +335,7 @@ async fn services_overview(State(_state): State<Arc<AppState>>) -> Response {
     let overview = gather_services_overview_snapshot().await;
     let gather_duration = start.elapsed();
 
-    logger::info(
+    logger::debug(
         LogTag::Webserver,
         &format!(
             "Overview payload ready: services={}, dependencies={}, gather_time={}ms",
@@ -348,7 +348,7 @@ async fn services_overview(State(_state): State<Arc<AppState>>) -> Response {
     let response = success_response(overview);
     let total_duration = start.elapsed();
 
-    logger::info(
+    logger::debug(
         LogTag::Webserver,
         &format!(
             "Overview response ready: total_time={}ms (gather={}ms, serialize={}ms)",

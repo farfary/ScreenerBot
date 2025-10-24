@@ -117,7 +117,7 @@ pub async fn calculate_pnl(
     classification: &TransactionClass,
     ata_analysis: &AtaAnalysis,
 ) -> Result<PnLAnalysis, String> {
-    logger::info(
+    logger::debug(
         LogTag::Transactions,
             &format!("Calculating P&L for tx: {}", transaction.signature),
         );

@@ -1342,7 +1342,7 @@ impl OhlcvMonitor {
             }
 
             if added > 0 || upgraded > 0 || removed > 0 || trimmed > 0 {
-                logger::info(
+                logger::debug(
                     LogTag::Ohlcv,
                     &format!(
                         "Pool Service sync: {} available, {} added, {} upgraded, {} removed, {} trimmed, {} already monitored",

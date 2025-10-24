@@ -1617,7 +1617,7 @@ impl RpcClient {
                                     );
                                     self.record_success(Some(&current_url));
 
-                                    logger::info(
+                                    logger::debug(
                                         LogTag::Rpc,
                                         &format!(
                                             "SOL balance retrieved: {} lamports ({:.6} SOL)",
@@ -2909,7 +2909,7 @@ impl RpcClient {
         // Use round-robin RPC rotation - get next URL from client
         let current_url = self.rotate_to_next_url();
 
-        logger::info(
+        logger::debug(
                 LogTag::Rpc,
                 &format!("Fetching token accounts from RPC: {}", current_url),
             );
@@ -2954,7 +2954,7 @@ impl RpcClient {
                                                 }
                                             }
 
-                                            logger::info(
+                                            logger::debug(
                                                     LogTag::Rpc,
                                                     &format!(
                                                         "Found {} {} accounts for wallet",
@@ -3440,7 +3440,7 @@ impl RpcClient {
                     self.record_response_time(&current_url, "getTransaction", duration_ms);
                     self.record_success(Some(&current_url));
 
-                    logger::info(
+                    logger::debug(
                             LogTag::Rpc,
                             &format!(
                                 "Successfully fetched transaction details for {} from RPC: {}",
@@ -4029,7 +4029,7 @@ impl RpcClient {
         // Use round-robin RPC rotation - get next URL from client
         let current_url = self.rotate_to_next_url();
 
-        logger::info(
+        logger::debug(
                 LogTag::Rpc,
                 &format!("Fetching {} signatures from RPC: {}", limit, current_url),
             );
@@ -4049,7 +4049,7 @@ impl RpcClient {
                 // Record successful call
                 self.record_success(Some(&current_url));
 
-                logger::info(
+                logger::debug(
                     LogTag::Rpc,
                     &format!(
                         "Retrieved {} signatures from {}",

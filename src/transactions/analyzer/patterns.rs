@@ -175,7 +175,7 @@ pub async fn detect_patterns(
     dex_analysis: &DexAnalysis,
     classification: &TransactionClass,
 ) -> Result<PatternAnalysis, String> {
-    logger::info(
+    logger::debug(
         LogTag::Transactions,
             &format!("Detecting patterns for tx: {}", transaction.signature),
         );

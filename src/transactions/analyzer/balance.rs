@@ -84,7 +84,7 @@ pub async fn analyze_balance_changes(
     transaction: &Transaction,
     tx_data: &crate::rpc::TransactionDetails,
 ) -> Result<BalanceAnalysis, String> {
-    logger::info(
+    logger::debug(
         LogTag::Transactions,
             &format!(
                 "Analyzing balance changes for tx: {}",
@@ -124,7 +124,7 @@ pub async fn extract_balance_changes(
     transaction: &Transaction,
     tx_data: &crate::rpc::TransactionDetails,
 ) -> Result<BalanceAnalysis, String> {
-    logger::info(
+    logger::debug(
         LogTag::Transactions,
         &format!(
             "Analyzing balance changes for tx: {}",
@@ -187,7 +187,7 @@ async fn extract_sol_balance_changes(
     let message = &tx_data.transaction.message;
     let account_keys = account_keys_from_message(message);
 
-    logger::info(
+    logger::debug(
         LogTag::Transactions,
             &format!("Extracted {} account keys from message", account_keys.len()),
         );
@@ -206,7 +206,7 @@ async fn extract_sol_balance_changes(
         .ok_or("Missing post_balances in transaction meta")?;
 
     if account_keys.len() != pre_balances.len() || account_keys.len() != post_balances.len() {
-        logger::info(
+        logger::debug(
         LogTag::Transactions,
             &format!(
                 "Length mismatch - account_keys: {}, pre_balances: {}, post_balances: {} (will align)",
@@ -353,7 +353,7 @@ async fn extract_token_balance_changes(
     }
 
     // Diagnostic: summarize aggregation distribution
-    logger::info(
+    logger::debug(
         LogTag::Transactions,
             &format!(
                 "Token changes aggregated across {} owners/accounts (pre={} post={})",

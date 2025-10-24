@@ -5,7 +5,7 @@
 /// - Delegates to the old logger.rs formatting/writing code
 /// - Implements the filtering rules
 
-use super::config::{get_logger_config, is_debug_enabled_for_tag};
+use super::config::{get_logger_config, is_debug_enabled_for_tag, is_verbose_enabled_for_tag};
 use super::levels::LogLevel;
 use super::tags::LogTag;
 
@@ -15,7 +15,7 @@ use super::tags::LogTag;
 /// 1. Errors are always shown (unless explicitly disabled)
 /// 2. Check against minimum log level threshold
 /// 3. Debug level requires --debug-<module> flag for that tag
-/// 4. Verbose level requires --verbose flag
+/// 4. Verbose level requires --verbose flag OR --verbose-<module> flag for that tag
 /// 5. If enabled_tags is non-empty, tag must be in the set
 pub fn should_log(tag: &LogTag, level: LogLevel) -> bool {
     let config = get_logger_config();
@@ -35,9 +35,9 @@ pub fn should_log(tag: &LogTag, level: LogLevel) -> bool {
         return is_debug_enabled_for_tag(tag);
     }
 
-    // Rule 4: Verbose requires explicit --verbose flag
+    // Rule 4: Verbose requires explicit --verbose flag OR --verbose-<module> flag
     if level == LogLevel::Verbose {
-        return config.min_level == LogLevel::Verbose;
+        return config.min_level == LogLevel::Verbose || is_verbose_enabled_for_tag(tag);
     }
 
     // Rule 5: Check if tag is enabled (empty set = all enabled)

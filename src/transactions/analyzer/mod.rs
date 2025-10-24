@@ -99,7 +99,7 @@ impl TransactionAnalyzer {
         tx_data: &crate::rpc::TransactionDetails,
     ) -> Result<CompleteAnalysis, String> {
         if self.debug_enabled {
-            logger::info(
+            logger::debug(
         LogTag::Transactions,
                 &format!(
                     "Starting complete analysis for tx: {}",
@@ -155,7 +155,7 @@ impl TransactionAnalyzer {
         let analyzed_at = chrono::Utc::now().timestamp();
 
         if self.debug_enabled {
-            logger::info(
+            logger::debug(
         LogTag::Transactions,
                 &format!(
                     "Analysis complete for {}: confidence={:?}, patterns={}, classification={:?}",
