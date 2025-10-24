@@ -1,6 +1,5 @@
-use super::super::utils::{
-    is_sol_mint, read_pubkey_struct_at_offset, read_token_account_amount, WRAPPED_SOL_MINT,
-};
+use super::super::utils::{is_sol_mint, read_pubkey_struct_at_offset, read_token_account_amount};
+use crate::constants::WRAPPED_SOL_MINT;
 /// Moonit AMM pool decoder
 ///
 /// This module handles decoding Moonit AMM pools which use a bonding curve model.

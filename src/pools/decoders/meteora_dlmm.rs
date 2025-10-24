@@ -1,4 +1,5 @@
-use super::super::utils::{is_sol_mint, WRAPPED_SOL_MINT};
+use super::super::utils::is_sol_mint;
+use crate::constants::WRAPPED_SOL_MINT;
 /// Meteora DLMM decoder
 ///
 /// This decoder handles Meteora Dynamic Liquidity Market Maker (DLMM) pools.

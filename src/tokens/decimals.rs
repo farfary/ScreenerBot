@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, RwLock};
 
 use crate::logger::{self, LogTag};
+pub use crate::constants::{SOL_DECIMALS, SOL_MINT, WSOL_MINT};
 use tokio::sync::Mutex as AsyncMutex;
 
 // In-memory decimals cache for fast synchronous lookups
@@ -20,10 +21,6 @@ static FETCH_LOCKS: std::sync::LazyLock<Mutex<HashMap<String, Arc<AsyncMutex<()>
 static FAILED_CACHE: std::sync::LazyLock<Arc<RwLock<HashSet<String>>>> =
     std::sync::LazyLock::new(|| Arc::new(RwLock::new(HashSet::new())));
 
-// Constants
-pub const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
-pub const WSOL_MINT: &str = "So11111111111111111111111111111111111111112";
-pub const SOL_DECIMALS: u8 = 9;
 
 // =============================================================================
 // PUBLIC API

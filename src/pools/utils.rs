@@ -6,17 +6,9 @@
 /// - Pairing vaults correctly based on mint types
 /// - Handling all possible base/quote token combinations
 use crate::logger::{self, LogTag};
+use crate::constants::{WRAPPED_SOL_MINT, NATIVE_SOL_MINT, USDC_MINT, USDT_MINT};
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
-
-/// SOL mint constants - all possible representations of SOL
-pub const WRAPPED_SOL_MINT: &str = "So11111111111111111111111111111111111111112";
-pub const NATIVE_SOL_MINT: &str = "11111111111111111111111111111111"; // System Program ID
-pub const SOL_DECIMALS: u8 = 9;
-
-/// Common stablecoin mints that we should skip (not SOL-based pricing)
-pub const USDC_MINT: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
-pub const USDT_MINT: &str = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
 
 /// Result of mint and vault analysis
 #[derive(Debug, Clone)]

@@ -1,4 +1,5 @@
-use super::super::utils::{is_sol_mint, WRAPPED_SOL_MINT};
+use super::super::utils::is_sol_mint;
+use crate::constants::WRAPPED_SOL_MINT;
 /// FluxBeam AMM decoder
 ///
 /// This decoder handles FluxBeam pools which are Token2022-based AMM pools.
