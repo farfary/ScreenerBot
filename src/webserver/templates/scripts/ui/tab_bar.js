@@ -368,6 +368,7 @@ export class TabBar {
 
     // Remount to ensure correct buttons are displayed (important for shared containers)
     this._remountButtons();
+    this._updateTabButtons();
 
     this.container.style.display = "flex";
     this.visible = true;
