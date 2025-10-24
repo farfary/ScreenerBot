@@ -8,7 +8,10 @@ use super::{
     },
     transitions::PositionTransition,
 };
-use super::{db::save_position, types::Position};
+use super::{
+    db::{save_position, update_position_price_fields},
+    types::Position,
+};
 use crate::{
     arguments::{is_debug_positions_enabled, is_dry_run_enabled},
     config::with_config,
@@ -1018,16 +1021,17 @@ pub async fn update_position_price(token_mint: &str, current_price: f64) -> Resu
         return Err(format!("Invalid price: {}", current_price));
     }
 
+    let _lock = acquire_position_lock(token_mint).await;
+
+    let now = Utc::now();
     let updated = super::state::update_position_state(token_mint, |pos| {
         pos.current_price = Some(current_price);
-        pos.current_price_updated = Some(Utc::now());
+        pos.current_price_updated = Some(now);
 
-        // Update highest price for trailing stop
         if current_price > pos.price_highest {
             pos.price_highest = current_price;
         }
 
-        // Update lowest price tracking
         if current_price < pos.price_lowest || pos.price_lowest == 0.0 {
             pos.price_lowest = current_price;
         }
@@ -1038,10 +1042,19 @@ pub async fn update_position_price(token_mint: &str, current_price: f64) -> Resu
         return Err(format!("Position not found for mint: {}", token_mint));
     }
 
-    // Save to database (async)
-    if let Some(position) = super::state::get_position_by_mint(token_mint).await {
-        save_position(&position).await?;
-    }
+    let position = super::state::get_position_by_mint(token_mint).await;
+
+    // Release per-mint lock before hitting the database to reduce contention
+    drop(_lock);
+
+    let position = position.ok_or_else(|| {
+        format!(
+            "Position disappeared after price update (mint: {})",
+            token_mint
+        )
+    })?;
+
+    update_position_price_fields(&position).await?;
 
     Ok(())
 }

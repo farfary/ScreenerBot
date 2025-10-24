@@ -44,9 +44,10 @@ pub use db::{
     get_position_by_id as get_db_position_by_id, get_position_by_mint as get_db_position_by_mint,
     get_positions_database, get_recent_closed_positions_for_mint, get_token_snapshot,
     get_token_snapshots, initialize_positions_database, load_all_positions, save_entry_record,
-    save_exit_record, save_position, save_token_snapshot, update_position, with_positions_database,
-    with_positions_database_async, PositionState, PositionStateHistory, PositionTracking,
-    PositionsDatabase, PositionsDatabaseStats, TokenSnapshot,
+    save_exit_record, save_position, save_token_snapshot, update_position,
+    update_position_price_fields, with_positions_database, with_positions_database_async,
+    PositionState, PositionStateHistory, PositionTracking, PositionsDatabase,
+    PositionsDatabaseStats, TokenSnapshot,
 };
 
 pub use lib::{

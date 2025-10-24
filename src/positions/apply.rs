@@ -1,8 +1,8 @@
-use super::db::{force_database_sync, update_position};
+use super::db::{force_database_sync, update_position, update_position_price_fields};
 use super::{
     loss_detection::process_position_loss_detection,
     state::{
-        get_position_by_id, release_global_position_permit, remove_position,
+        get_position_by_id, get_position_by_mint, release_global_position_permit, remove_position,
         remove_signature_from_index, update_position_state, POSITIONS,
     },
     transitions::PositionTransition,
@@ -537,9 +537,10 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             highest,
             lowest,
         } => {
-            update_position_state(&mint, |pos| {
+            let updated = update_position_state(&mint, |pos| {
+                let now = Utc::now();
                 pos.current_price = Some(current_price);
-                pos.current_price_updated = Some(Utc::now());
+                pos.current_price_updated = Some(now);
                 if let Some(high) = highest {
                     pos.price_highest = high;
                 }
@@ -548,6 +549,33 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 }
             })
             .await;
+
+            if updated {
+                if let Some(position) = get_position_by_mint(&mint).await {
+                    match update_position_price_fields(&position).await {
+                        Ok(_) => {
+                            effects.db_updated = true;
+                        }
+                        Err(err) => {
+                            logger::error(
+                                LogTag::Positions,
+                                &format!(
+                                    "Failed to persist price update for mint {} (id={:?}): {}",
+                                    mint, position.id, err
+                                ),
+                            );
+                        }
+                    }
+                } else if is_debug_positions_enabled() {
+                    logger::warning(
+                        LogTag::Positions,
+                        &format!(
+                            "Price update transition applied but position missing from state (mint={})",
+                            mint
+                        ),
+                    );
+                }
+            }
         }
     }
 

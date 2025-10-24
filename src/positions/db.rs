@@ -779,6 +779,56 @@ impl PositionsDatabase {
         Ok(())
     }
 
+    /// Update only the price-related fields for a position
+    pub async fn update_position_prices(
+        &self,
+        position_id: i64,
+        current_price: Option<f64>,
+        current_price_updated: Option<DateTime<Utc>>,
+        price_highest: f64,
+        price_lowest: f64,
+    ) -> Result<(), String> {
+        logger::debug(
+            LogTag::Positions,
+            &format!(
+                "Updating price fields for position ID {} (price={:?}, high={:.11}, low={:.11})",
+                position_id, current_price, price_highest, price_lowest
+            ),
+        );
+
+        let conn = self.get_connection()?;
+
+        let rows_affected = conn
+            .execute(
+                r#"
+            UPDATE positions SET
+                current_price = ?2,
+                current_price_updated = ?3,
+                price_highest = ?4,
+                price_lowest = ?5,
+                updated_at = datetime('now')
+            WHERE id = ?1
+            "#,
+                params![
+                    position_id,
+                    current_price,
+                    current_price_updated.map(|t| t.to_rfc3339()),
+                    price_highest,
+                    price_lowest
+                ],
+            )
+            .map_err(|e| format!("Failed to update position prices: {}", e))?;
+
+        if rows_affected == 0 {
+            return Err(format!(
+                "Position with ID {} not found when updating prices",
+                position_id
+            ));
+        }
+
+        Ok(())
+    }
+
     /// Force database synchronization to ensure all connections see recent writes
     /// This should be called after critical updates to prevent race conditions
     pub async fn force_sync(&self) -> Result<(), String> {
@@ -2023,6 +2073,28 @@ pub async fn update_position(position: &Position) -> Result<(), String> {
                 ),
             }
             result
+        }
+        None => Err("Positions database not initialized".to_string()),
+    }
+}
+
+/// Update only the price-related fields for a position using the latest in-memory state
+pub async fn update_position_price_fields(position: &Position) -> Result<(), String> {
+    let position_id = position
+        .id
+        .ok_or_else(|| "Cannot update price fields without position ID".to_string())?;
+
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => {
+            db.update_position_prices(
+                position_id,
+                position.current_price,
+                position.current_price_updated,
+                position.price_highest,
+                position.price_lowest,
+            )
+            .await
         }
         None => Err("Positions database not initialized".to_string()),
     }

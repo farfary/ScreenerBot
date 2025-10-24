@@ -172,20 +172,12 @@ pub async fn load_positions_with_filters(
     limit: usize,
     mint_filter: Option<&str>,
 ) -> Vec<PositionResponse> {
-    let positions_result = match status {
-        "open" => positions::db::get_open_positions().await,
-        "closed" => positions::db::get_closed_positions().await,
-        _ => positions::db::load_all_positions().await,
-    };
-
-    let positions = match positions_result {
-        Ok(pos) => pos,
-        Err(e) => {
-            logger::error(
-                LogTag::Positions,
-                &format!("Failed to load positions: {}", e),
-            );
-            return Vec::new();
+    let positions: Vec<positions::Position> = match status {
+        "open" => positions::get_open_positions().await,
+        "closed" => positions::get_closed_positions().await,
+        _ => {
+            let positions_guard = positions::POSITIONS.read().await;
+            positions_guard.clone()
         }
     };
 
@@ -344,14 +336,14 @@ async fn resolve_position_by_key(key: &str) -> Result<Option<positions::Position
         let id: i64 = id_part
             .parse()
             .map_err(|_| format!("Invalid position id: {}", id_part))?;
-        return positions::db::get_position_by_id(id).await;
+        return Ok(positions::get_position_by_id(id).await);
     }
 
     if let Some(mint_part) = key.strip_prefix("mint:") {
-        return positions::db::get_position_by_mint(mint_part).await;
+        return Ok(positions::get_position_by_mint(mint_part).await);
     }
 
-    positions::db::get_position_by_mint(key).await
+    Ok(positions::get_position_by_mint(key).await)
 }
 
 async fn map_position_to_detail(position: &positions::Position) -> PositionDetail {
@@ -656,12 +648,8 @@ fn lamports_option_to_sol(value: Option<u64>) -> Option<f64> {
 }
 
 async fn get_positions_stats() -> Json<PositionsStatsResponse> {
-    let open_positions = positions::db::get_open_positions()
-        .await
-        .unwrap_or_default();
-    let closed_positions = positions::db::get_closed_positions()
-        .await
-        .unwrap_or_default();
+    let open_positions = positions::get_open_positions().await;
+    let closed_positions = positions::get_closed_positions().await;
 
     let total = open_positions.len() + closed_positions.len();
     let open = open_positions.len();
@@ -715,7 +703,7 @@ pub struct PositionData {
     pub win_rate: f64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct PositionSummary {
     pub id: Option<i64>,
     pub entry_price: f64,
@@ -866,65 +854,72 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
     let decimals = crate::tokens::get_decimals(&mint).await;
 
     // 1. Get position data
-    let open_position = positions::db::get_open_positions()
+    let open_position_record = positions::get_open_positions()
         .await
-        .ok()
-        .and_then(|positions| {
-            positions.into_iter().find(|p| p.mint == mint).map(|p| {
-                let unrealized_pnl = p.current_price.map(|current| {
-                    let current_value = current * p.entry_size_sol;
-                    current_value - p.entry_size_sol
-                });
+        .into_iter()
+        .find(|p| p.mint == mint);
 
-                let unrealized_pnl_percent =
-                    unrealized_pnl.map(|pnl| (pnl / p.entry_size_sol) * 100.0);
-
-                PositionSummary {
-                    id: p.id,
-                    entry_price: p.entry_price,
-                    entry_time: p.entry_time.timestamp(),
-                    entry_size_sol: p.entry_size_sol,
-                    current_price: p.current_price,
-                    unrealized_pnl,
-                    unrealized_pnl_percent,
-                    phantom_confirmations: p.phantom_confirmations,
-                }
-            })
+    let open_position_summary = open_position_record.as_ref().map(|p| {
+        let unrealized_pnl = p.current_price.map(|current| {
+            let current_value = current * p.entry_size_sol;
+            current_value - p.entry_size_sol
         });
 
-    let closed_positions = positions::db::get_closed_positions()
-        .await
-        .ok()
-        .map(|positions| {
-            let matching_positions: Vec<_> =
-                positions.into_iter().filter(|p| p.mint == mint).collect();
-            let count = matching_positions.len();
-            let total_pnl: f64 = matching_positions
-                .iter()
-                .filter_map(|p| p.sol_received.map(|received| received - p.entry_size_sol))
-                .sum();
-            let wins = matching_positions
-                .iter()
-                .filter(|p| {
-                    p.sol_received
-                        .map(|r| r > p.entry_size_sol)
-                        .unwrap_or(false)
-                })
-                .count();
-            let win_rate = if count > 0 {
-                ((wins as f64) / (count as f64)) * 100.0
+        let unrealized_pnl_percent = unrealized_pnl.map(|pnl| {
+            if p.entry_size_sol > 0.0 {
+                (pnl / p.entry_size_sol) * 100.0
             } else {
                 0.0
-            };
-            (count, total_pnl, win_rate)
-        })
-        .unwrap_or((0, 0.0, 0.0));
+            }
+        });
+
+        PositionSummary {
+            id: p.id,
+            entry_price: p.entry_price,
+            entry_time: p.entry_time.timestamp(),
+            entry_size_sol: p.entry_size_sol,
+            current_price: p.current_price,
+            unrealized_pnl,
+            unrealized_pnl_percent,
+            phantom_confirmations: p.phantom_confirmations,
+        }
+    });
+
+    let matching_closed: Vec<_> = positions::get_closed_positions()
+        .await
+        .into_iter()
+        .filter(|p| p.mint == mint)
+        .collect();
+
+    let (closed_count, total_pnl, win_rate) = if matching_closed.is_empty() {
+        (0, 0.0, 0.0)
+    } else {
+        let count = matching_closed.len();
+        let total_pnl: f64 = matching_closed
+            .iter()
+            .filter_map(|p| p.sol_received.map(|received| received - p.entry_size_sol))
+            .sum();
+        let wins = matching_closed
+            .iter()
+            .filter(|p| {
+                p.sol_received
+                    .map(|r| r > p.entry_size_sol)
+                    .unwrap_or(false)
+            })
+            .count();
+        let win_rate = if count > 0 {
+            (wins as f64 / count as f64) * 100.0
+        } else {
+            0.0
+        };
+        (count, total_pnl, win_rate)
+    };
 
     let position_data = Some(PositionData {
-        open_position,
-        closed_positions_count: closed_positions.0,
-        total_pnl: closed_positions.1,
-        win_rate: closed_positions.2,
+        open_position: open_position_summary.clone(),
+        closed_positions_count: closed_count,
+        total_pnl,
+        win_rate,
     });
 
     // 2. Get token info from database (with market data)
@@ -1020,103 +1015,89 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
     });
 
     // 8. Get position debug data
-    let position_debug = if position_data
-        .as_ref()
-        .and_then(|pd| pd.open_position.as_ref())
-        .is_some()
-    {
-        // Get full position details
-        let full_position = positions::db::get_open_positions()
-            .await
-            .ok()
-            .and_then(|positions| positions.into_iter().find(|p| p.mint == mint));
+    let position_debug = if let Some(pos) = open_position_record.clone() {
+        // Transaction details
+        let transaction_details = TransactionDetails {
+            entry_signature: pos.entry_transaction_signature.clone(),
+            entry_verified: pos.transaction_entry_verified,
+            exit_signature: pos.exit_transaction_signature.clone(),
+            exit_verified: pos.transaction_exit_verified,
+            synthetic_exit: pos.synthetic_exit,
+            closed_reason: pos.closed_reason.clone(),
+        };
 
-        if let Some(pos) = full_position {
-            // Transaction details
-            let transaction_details = TransactionDetails {
-                entry_signature: pos.entry_transaction_signature.clone(),
-                entry_verified: pos.transaction_entry_verified,
-                exit_signature: pos.exit_transaction_signature.clone(),
-                exit_verified: pos.transaction_exit_verified,
-                synthetic_exit: pos.synthetic_exit,
-                closed_reason: pos.closed_reason.clone(),
-            };
+        // Fee details
+        let entry_fee_sol = pos.entry_fee_lamports.map(|l| (l as f64) / 1_000_000_000.0);
+        let exit_fee_sol = pos.exit_fee_lamports.map(|l| (l as f64) / 1_000_000_000.0);
+        let total_fees_sol = entry_fee_sol.unwrap_or(0.0) + exit_fee_sol.unwrap_or(0.0);
 
-            // Fee details
-            let entry_fee_sol = pos.entry_fee_lamports.map(|l| (l as f64) / 1_000_000_000.0);
-            let exit_fee_sol = pos.exit_fee_lamports.map(|l| (l as f64) / 1_000_000_000.0);
-            let total_fees_sol = entry_fee_sol.unwrap_or(0.0) + exit_fee_sol.unwrap_or(0.0);
+        let fee_details = FeeDetails {
+            entry_fee_lamports: pos.entry_fee_lamports,
+            entry_fee_sol,
+            exit_fee_lamports: pos.exit_fee_lamports,
+            exit_fee_sol,
+            total_fees_sol,
+        };
 
-            let fee_details = FeeDetails {
-                entry_fee_lamports: pos.entry_fee_lamports,
-                entry_fee_sol,
-                exit_fee_lamports: pos.exit_fee_lamports,
-                exit_fee_sol,
-                total_fees_sol,
-            };
+        // Profit targets
+        let profit_targets = ProfitTargets {
+            min_target_percent: pos.profit_target_min,
+            max_target_percent: pos.profit_target_max,
+            liquidity_tier: pos.liquidity_tier.clone(),
+        };
 
-            // Profit targets
-            let profit_targets = ProfitTargets {
-                min_target_percent: pos.profit_target_min,
-                max_target_percent: pos.profit_target_max,
-                liquidity_tier: pos.liquidity_tier.clone(),
-            };
+        // Price tracking
+        let current = pos.current_price.unwrap_or(pos.entry_price);
+        let drawdown_from_high = if pos.price_highest > 0.0 {
+            Some(((current - pos.price_highest) / pos.price_highest) * 100.0)
+        } else {
+            None
+        };
+        let gain_from_low = if pos.price_lowest > 0.0 {
+            Some(((current - pos.price_lowest) / pos.price_lowest) * 100.0)
+        } else {
+            None
+        };
 
-            // Price tracking
-            let current = pos.current_price.unwrap_or(pos.entry_price);
-            let drawdown_from_high = if pos.price_highest > 0.0 {
-                Some(((current - pos.price_highest) / pos.price_highest) * 100.0)
-            } else {
-                None
-            };
-            let gain_from_low = if pos.price_lowest > 0.0 {
-                Some(((current - pos.price_lowest) / pos.price_lowest) * 100.0)
-            } else {
-                None
-            };
+        let price_tracking = PriceTracking {
+            price_highest: pos.price_highest,
+            price_lowest: pos.price_lowest,
+            current_price: pos.current_price,
+            current_price_updated: pos.current_price_updated.map(|dt| dt.to_rfc3339()),
+            drawdown_from_high,
+            gain_from_low,
+        };
 
-            let price_tracking = PriceTracking {
-                price_highest: pos.price_highest,
-                price_lowest: pos.price_lowest,
-                current_price: pos.current_price,
-                current_price_updated: pos.current_price_updated.map(|dt| dt.to_rfc3339()),
-                drawdown_from_high,
-                gain_from_low,
-            };
-
-            // Phantom details
-            let phantom_details = if pos.phantom_remove || pos.phantom_confirmations > 0 {
-                Some(PhantomDetails {
-                    phantom_remove: pos.phantom_remove,
-                    phantom_confirmations: pos.phantom_confirmations,
-                    phantom_first_seen: pos.phantom_first_seen.map(|dt| dt.to_rfc3339()),
-                })
-            } else {
-                None
-            };
-
-            // Proceeds metrics
-            let proceeds_metrics = crate::positions::metrics::get_proceeds_metrics_snapshot().await;
-            let proceeds = ProceedsMetrics {
-                accepted_quotes: proceeds_metrics.accepted_quotes,
-                rejected_quotes: proceeds_metrics.rejected_quotes,
-                accepted_profit_quotes: proceeds_metrics.accepted_profit_quotes,
-                accepted_loss_quotes: proceeds_metrics.accepted_loss_quotes,
-                average_shortfall_bps: proceeds_metrics.average_shortfall_bps,
-                worst_shortfall_bps: proceeds_metrics.worst_shortfall_bps,
-            };
-
-            Some(PositionDebugDetails {
-                transaction_details,
-                fee_details,
-                profit_targets,
-                price_tracking,
-                phantom_details,
-                proceeds_metrics: proceeds,
+        // Phantom details
+        let phantom_details = if pos.phantom_remove || pos.phantom_confirmations > 0 {
+            Some(PhantomDetails {
+                phantom_remove: pos.phantom_remove,
+                phantom_confirmations: pos.phantom_confirmations,
+                phantom_first_seen: pos.phantom_first_seen.map(|dt| dt.to_rfc3339()),
             })
         } else {
             None
-        }
+        };
+
+        // Proceeds metrics
+        let proceeds_metrics = crate::positions::metrics::get_proceeds_metrics_snapshot().await;
+        let proceeds = ProceedsMetrics {
+            accepted_quotes: proceeds_metrics.accepted_quotes,
+            rejected_quotes: proceeds_metrics.rejected_quotes,
+            accepted_profit_quotes: proceeds_metrics.accepted_profit_quotes,
+            accepted_loss_quotes: proceeds_metrics.accepted_loss_quotes,
+            average_shortfall_bps: proceeds_metrics.average_shortfall_bps,
+            worst_shortfall_bps: proceeds_metrics.worst_shortfall_bps,
+        };
+
+        Some(PositionDebugDetails {
+            transaction_details,
+            fee_details,
+            profit_targets,
+            price_tracking,
+            phantom_details,
+            proceeds_metrics: proceeds,
+        })
     } else {
         None
     };
