@@ -148,7 +148,7 @@ pub fn analyze_token_pair(pool_info: PoolMintVaultInfo) -> TokenPairInfo {
         ));
     };
 
-    logger::info(
+    logger::debug(
         LogTag::PoolService,
         &format!(
             "Valid SOL pair: token={}, sol_is_first={}, token_vault={}, sol_vault={}",
