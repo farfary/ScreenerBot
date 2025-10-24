@@ -12,7 +12,6 @@ use super::{
     verifier::{verify_transaction, VerificationOutcome},
 };
 use crate::{
-    arguments::is_debug_positions_enabled,
     logger::{self, LogTag},
     rpc::get_rpc_client,
 };

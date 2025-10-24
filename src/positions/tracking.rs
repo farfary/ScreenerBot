@@ -2,7 +2,6 @@ use super::{
     apply::apply_transition, state::update_position_state, transitions::PositionTransition,
 };
 use crate::{
-    arguments::is_debug_positions_enabled,
     logger::{self, LogTag},
     pools::PriceResult,
 };

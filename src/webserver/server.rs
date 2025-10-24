@@ -9,7 +9,6 @@ use tokio::sync::Notify;
 use tower_http::compression::CompressionLayer;
 
 use crate::{
-    arguments::is_debug_webserver_enabled,
     logger::{self, LogTag},
     webserver::{routes, state::AppState},
 };

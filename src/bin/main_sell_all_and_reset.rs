@@ -31,7 +31,7 @@
 //! This tool will attempt to sell ALL tokens in your wallet AND delete specific bot data files. Use with caution!
 
 use futures::stream::{self, StreamExt};
-use screenerbot::arguments::{is_debug_ata_enabled, is_debug_swaps_enabled, set_cmd_args};
+use screenerbot::arguments::set_cmd_args;
 use screenerbot::config::with_config;
 use screenerbot::constants::SOL_MINT;
 use screenerbot::errors::ScreenerBotError;
@@ -1787,8 +1787,8 @@ async fn check_comprehensive_balance(wallet_address: &str, stage: &str) -> Resul
                 ),
             );
 
-            if is_debug_ata_enabled() && !token_accounts.is_empty() {
-                logger::info(LogTag::System, &format!("Token accounts at {}:", stage));
+            if !token_accounts.is_empty() {
+                logger::debug(LogTag::System, &format!("Token accounts at {}:", stage));
                 for account in token_accounts.iter().take(10) {
                     // Show max 10 to avoid spam
                     let token_program = if account.is_token_2022 {
@@ -1796,7 +1796,7 @@ async fn check_comprehensive_balance(wallet_address: &str, stage: &str) -> Resul
                     } else {
                         "SPL Token"
                     };
-                    logger::info(
+                    logger::debug(
                         LogTag::System,
                         &format!(
                             "  {} ({}): {} raw units",
@@ -1805,7 +1805,7 @@ async fn check_comprehensive_balance(wallet_address: &str, stage: &str) -> Resul
                     );
                 }
                 if token_accounts.len() > 10 {
-                    logger::info(
+                    logger::debug(
                         LogTag::System,
                         &format!("  ... and {} more accounts", token_accounts.len() - 10),
                     );

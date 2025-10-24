@@ -1,5 +1,4 @@
 use crate::{
-    arguments::is_debug_positions_enabled,
     config::with_config,
     logger::{self, LogTag},
     positions::{

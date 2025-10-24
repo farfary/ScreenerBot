@@ -10,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::{
-    arguments::is_debug_webserver_enabled,
     logger::{self, LogTag},
     services::{ServiceHealth, ServiceMetrics},
     webserver::{state::AppState, utils::success_response},

@@ -8,8 +8,8 @@ use std::sync::atomic::AtomicBool;
 // Re-export essential argument handling from the arguments module for backwards compatibility
 // Note: is_debug_* functions are removed - use logger module which automatically checks arguments
 pub use crate::arguments::{
-    get_arg_value, get_cmd_args, get_enabled_debug_modes, has_arg, is_any_debug_enabled,
-    is_dry_run_enabled, print_debug_info, set_cmd_args, CMD_ARGS,
+    get_arg_value, get_cmd_args, get_enabled_debug_modes, has_arg, is_dry_run_enabled,
+    print_debug_info, set_cmd_args, CMD_ARGS,
 };
 
 // Startup timestamp to track when the bot started for trading logic

@@ -19,14 +19,12 @@ async fn main() -> Result<(), String> {
             open, max
         ),
     );
-    if arguments::is_debug_positions_enabled() {
-        logger::info(
-            LogTag::Positions,
-            &format!(
-                "Enabled debug modes: {:?}",
-                arguments::get_enabled_debug_modes()
-            ),
-        );
-    }
+    logger::debug(
+        LogTag::Positions,
+        &format!(
+            "Enabled debug modes: {:?}",
+            arguments::get_enabled_debug_modes()
+        ),
+    );
     Ok(())
 }

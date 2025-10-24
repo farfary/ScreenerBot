@@ -4,7 +4,6 @@ use super::{
     transitions::PositionTransition,
 };
 use crate::{
-    arguments::is_debug_positions_enabled,
     logger::{self, LogTag},
     tokens::get_decimals,
     transactions::{

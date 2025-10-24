@@ -13,7 +13,7 @@ use super::{
     types::Position,
 };
 use crate::{
-    arguments::{is_debug_positions_enabled, is_dry_run_enabled},
+    arguments::is_dry_run_enabled,
     config::with_config,
     constants::SOL_MINT,
     logger::{self, LogTag},

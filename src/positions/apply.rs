@@ -7,10 +7,7 @@ use super::{
     },
     transitions::PositionTransition,
 };
-use crate::{
-    arguments::is_debug_positions_enabled,
-    logger::{self, LogTag},
-};
+use crate::logger::{self, LogTag};
 use chrono::Utc;
 
 #[derive(Debug)]
@@ -566,8 +563,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             );
                         }
                     }
-                } else if is_debug_positions_enabled() {
-                    logger::warning(
+                } else {
+                    logger::debug(
                         LogTag::Positions,
                         &format!(
                             "Price update transition applied but position missing from state (mint={})",

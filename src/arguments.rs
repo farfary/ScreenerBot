@@ -55,142 +55,8 @@ pub fn get_arg_value(flag: &str) -> Option<String> {
 }
 
 // =============================================================================
-// DEBUG FLAG CHECKING FUNCTIONS
-// These functions check for specific debug flags in the command-line arguments
-// =============================================================================
-
-/// Filtering module debug mode
-pub fn is_debug_filtering_enabled() -> bool {
-    has_arg("--debug-filtering")
-}
-
-/// Profit calculation debug mode
-pub fn is_debug_profit_enabled() -> bool {
-    has_arg("--debug-profit")
-}
-
-/// Pool prices debug mode
-pub fn is_debug_pool_prices_enabled() -> bool {
-    has_arg("--debug-pool-prices")
-}
-
-/// Pool calculator debug mode
-pub fn is_debug_pool_calculator_enabled() -> bool {
-    has_arg("--debug-pool-calculator")
-}
-
-pub fn is_debug_pool_discovery_enabled() -> bool {
-    has_arg("--debug-pool-discovery")
-}
-
-/// Pool cleanup debug mode
-pub fn is_debug_pool_cleanup_enabled() -> bool {
-    has_arg("--debug-pool-cleanup")
-}
-
-/// Pool monitor debug mode
-pub fn is_debug_pool_monitor_enabled() -> bool {
-    has_arg("--debug-pool-monitor")
-}
-
-/// Pool service debug mode
-pub fn is_debug_pool_service_enabled() -> bool {
-    has_arg("--debug-pool-service")
-}
-
-/// Pool tokens debug mode
-pub fn is_debug_pool_tokens_enabled() -> bool {
-    has_arg("--debug-pool-tokens")
-}
-
-/// Pool analyzer debug mode
-pub fn is_debug_pool_analyzer_enabled() -> bool {
-    has_arg("--debug-pool-analyzer")
-}
-
-/// Pool cache debug mode
-pub fn is_debug_pool_cache_enabled() -> bool {
-    has_arg("--debug-pool-cache")
-}
-
-/// Pool fetcher debug mode
-pub fn is_debug_pool_fetcher_enabled() -> bool {
-    has_arg("--debug-pool-fetcher")
-}
-
-/// Pool decoders debug mode
-pub fn is_debug_pool_decoders_enabled() -> bool {
-    has_arg("--debug-pool-decoders")
-}
-
-/// Trader module debug mode
-pub fn is_debug_trader_enabled() -> bool {
-    has_arg("--debug-trader")
-}
-
-/// API calls debug mode
-pub fn is_debug_api_enabled() -> bool {
-    has_arg("--debug-api")
-}
-
-/// Monitor module debug mode
-pub fn is_debug_monitor_enabled() -> bool {
-    has_arg("--debug-monitor")
-}
-
-/// Discovery module debug mode
-pub fn is_debug_discovery_enabled() -> bool {
-    has_arg("--debug-discovery")
-}
-
-/// Price service debug mode
-pub fn is_debug_price_service_enabled() -> bool {
-    has_arg("--debug-price-service")
-}
-
-/// SOL price service debug mode
-pub fn is_debug_sol_price_enabled() -> bool {
-    has_arg("--debug-sol-price")
-}
-
-/// Entry module debug mode
-pub fn is_debug_entry_enabled() -> bool {
-    has_arg("--debug-entry")
-}
-
-/// OHLCV analysis debug mode
-pub fn is_debug_ohlcv_enabled() -> bool {
-    has_arg("--debug-ohlcv")
-}
-
-/// Wallet operations debug mode
-pub fn is_debug_wallet_enabled() -> bool {
-    has_arg("--debug-wallet")
-}
-
-/// Swap operations debug mode
-pub fn is_debug_swaps_enabled() -> bool {
-    has_arg("--debug-swaps")
-}
-
-/// Decimals module debug mode
-pub fn is_debug_decimals_enabled() -> bool {
-    has_arg("--debug-decimals")
-}
-
-/// Transactions module debug mode
-pub fn is_debug_transactions_enabled() -> bool {
-    has_arg("--debug-transactions")
-}
-
-/// WebSocket module debug mode
-pub fn is_debug_websocket_enabled() -> bool {
-    has_arg("--debug-websocket")
-}
-
-// ============================================================================
 // CPU PROFILING FLAGS
-// ============================================================================
+// =============================================================================
 
 /// Enable tokio-console for async task profiling
 /// Requires console-subscriber feature: cargo run --features console --bin screenerbot -- --run --profile-tokio-console
@@ -230,40 +96,9 @@ pub fn is_force_refresh_enabled() -> bool {
     has_arg("--force-refresh")
 }
 
-/// RPC operations debug mode
-pub fn is_debug_rpc_enabled() -> bool {
-    has_arg("--debug-rpc")
-}
-
-/// Positions module debug mode
-pub fn is_debug_positions_enabled() -> bool {
-    has_arg("--debug-positions")
-}
-
-/// ATA operations debug mode
-pub fn is_debug_ata_enabled() -> bool {
-    has_arg("--debug-ata")
-}
-
-/// Blacklist operations debug mode
-pub fn is_debug_blacklist_enabled() -> bool {
-    has_arg("--debug-blacklist")
-}
-
-/// System operations debug mode
-pub fn is_debug_system_enabled() -> bool {
-    has_arg("--debug-system")
-}
-
-/// Security operations debug mode
-pub fn is_debug_security_enabled() -> bool {
-    has_arg("--debug-security")
-}
-
-/// Webserver operations debug mode
-pub fn is_debug_webserver_enabled() -> bool {
-    has_arg("--debug-webserver")
-}
+// =============================================================================
+// CORE FLAGS
+// =============================================================================
 
 /// Dry-run mode - simulates trading without executing actual transactions
 pub fn is_dry_run_enabled() -> bool {
@@ -371,136 +206,28 @@ pub fn print_help() {
 // UTILITY FUNCTIONS
 // =============================================================================
 
-/// Checks if any debug mode is enabled
-pub fn is_any_debug_enabled() -> bool {
-    is_debug_filtering_enabled()
-        || is_debug_profit_enabled()
-        || is_debug_pool_prices_enabled()
-        || is_debug_pool_calculator_enabled()
-        || is_debug_pool_discovery_enabled()
-        || is_debug_pool_analyzer_enabled()
-        || is_debug_pool_cache_enabled()
-        || is_debug_pool_fetcher_enabled()
-        || is_debug_pool_decoders_enabled()
-        || is_debug_pool_cleanup_enabled()
-        || is_debug_pool_monitor_enabled()
-        || is_debug_pool_service_enabled()
-        || is_debug_pool_tokens_enabled()
-        || is_debug_trader_enabled()
-        || is_debug_api_enabled()
-        || is_debug_monitor_enabled()
-        || is_debug_discovery_enabled()
-        || is_debug_price_service_enabled()
-        || is_debug_sol_price_enabled()
-        || is_debug_entry_enabled()
-        || is_debug_ohlcv_enabled()
-        || is_debug_wallet_enabled()
-        || is_debug_swaps_enabled()
-        || is_debug_decimals_enabled()
-        || is_debug_transactions_enabled()
-        || is_debug_websocket_enabled()
-        || is_debug_rpc_enabled()
-        || is_debug_positions_enabled()
-        || is_debug_ata_enabled()
-        || is_debug_blacklist_enabled()
-        || is_debug_security_enabled()
-        || is_debug_webserver_enabled()
-}
-
-/// Gets a list of all enabled debug modes
-pub fn get_enabled_debug_modes() -> Vec<&'static str> {
+/// Gets a list of all enabled debug modes by checking command-line arguments
+/// Note: The logger system handles actual debug filtering, this is for informational purposes only
+pub fn get_enabled_debug_modes() -> Vec<String> {
     let mut modes = Vec::new();
+    let args = get_cmd_args();
 
-    if is_debug_filtering_enabled() {
-        modes.push("filtering");
+    // Check for debug flags
+    for arg in &args {
+        if let Some(module) = arg.strip_prefix("--debug-") {
+            modes.push(module.to_string());
+        }
     }
-    if is_debug_profit_enabled() {
-        modes.push("profit");
-    }
-    if is_debug_pool_prices_enabled() {
-        modes.push("pool-prices");
-    }
-    if is_debug_pool_calculator_enabled() {
-        modes.push("pool-calculator");
-    }
-    if is_debug_pool_discovery_enabled() {
-        modes.push("pool-discovery");
-    }
-    if is_debug_pool_cleanup_enabled() {
-        modes.push("pool-cleanup");
-    }
-    if is_debug_pool_monitor_enabled() {
-        modes.push("pool-monitor");
-    }
-    if is_debug_pool_service_enabled() {
-        modes.push("pool-service");
-    }
-    if is_debug_pool_tokens_enabled() {
-        modes.push("pool-tokens");
-    }
-    if is_debug_trader_enabled() {
-        modes.push("trader");
-    }
-    if is_debug_api_enabled() {
-        modes.push("api");
-    }
-    if is_debug_monitor_enabled() {
-        modes.push("monitor");
-    }
-    if is_debug_discovery_enabled() {
-        modes.push("discovery");
-    }
-    if is_debug_price_service_enabled() {
-        modes.push("price-service");
-    }
-    if is_debug_sol_price_enabled() {
-        modes.push("sol-price");
-    }
-    if is_debug_entry_enabled() {
-        modes.push("entry");
-    }
-    if is_debug_ohlcv_enabled() {
-        modes.push("ohlcv");
-    }
-    if is_debug_wallet_enabled() {
-        modes.push("wallet");
-    }
-    if is_debug_swaps_enabled() {
-        modes.push("swaps");
-    }
-    if is_debug_decimals_enabled() {
-        modes.push("decimals");
-    }
-    if is_debug_transactions_enabled() {
-        modes.push("transactions");
-    }
-    if is_debug_websocket_enabled() {
-        modes.push("websocket");
-    }
-    if is_debug_rpc_enabled() {
-        modes.push("rpc");
-    }
-    if is_debug_positions_enabled() {
-        modes.push("positions");
-    }
-    if is_debug_ata_enabled() {
-        modes.push("ata");
-    }
-    if is_debug_blacklist_enabled() {
-        modes.push("blacklist");
-    }
-    if is_debug_security_enabled() {
-        modes.push("security");
-    }
-    // Note: webserver debug is always available via logger system
+
+    // Include other modes
     if is_dry_run_enabled() {
-        modes.push("dry-run");
+        modes.push("dry-run".to_string());
     }
     if is_clear_all_enabled() {
-        modes.push("clear-all");
+        modes.push("clear-all".to_string());
     }
     if is_positions_sell_all_enabled() {
-        modes.push("positions-sell-all");
+        modes.push("positions-sell-all".to_string());
     }
 
     modes

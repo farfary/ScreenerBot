@@ -1,8 +1,5 @@
 use super::types::Position;
-use crate::{
-    arguments::is_debug_positions_enabled,
-    logger::{self, LogTag},
-};
+use crate::logger::{self, LogTag};
 use chrono::{DateTime, Utc};
 use std::{
     collections::HashMap,
@@ -201,7 +198,7 @@ pub async fn add_position(position: Position) -> usize {
     // Clear any pending-open flag for this mint now that the position exists
     {
         let mut pending = PENDING_OPEN_SWAPS.write().await;
-        if pending.remove(&position.mint).is_some() && is_debug_positions_enabled() {
+        if pending.remove(&position.mint).is_some() {
             logger::debug(
                 LogTag::Positions,
                 &format!(
@@ -254,7 +251,7 @@ pub async fn remove_position(mint: &str) -> Option<Position> {
         // Also clear any pending-open state for this mint (safety)
         {
             let mut pending = PENDING_OPEN_SWAPS.write().await;
-            if pending.remove(&removed.mint).is_some() && is_debug_positions_enabled() {
+            if pending.remove(&removed.mint).is_some() {
                 logger::debug(
                     LogTag::Positions,
                     &format!(
@@ -425,7 +422,7 @@ pub async fn set_pending_open(mint: &str, ttl_secs: i64) {
 /// Clear a mint's pending open swap state, if present
 pub async fn clear_pending_open(mint: &str) {
     let mut pending = PENDING_OPEN_SWAPS.write().await;
-    if pending.remove(mint).is_some() && is_debug_positions_enabled() {
+    if pending.remove(mint).is_some() {
         logger::debug(
             LogTag::Positions,
             &format!("🧹 Cleared pending-open for mint: {}", mint),
