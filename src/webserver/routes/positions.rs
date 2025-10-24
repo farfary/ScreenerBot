@@ -9,7 +9,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::tokens;
 // Security database deprecated; security info is on Token when available
@@ -181,7 +181,7 @@ pub async fn load_positions_with_filters(
     let positions = match positions_result {
         Ok(pos) => pos,
         Err(e) => {
-            eprintln!("Failed to load positions: {}", e);
+            logger::error(LogTag::Positions, &format!("Failed to load positions: {}", e));
             return Vec::new();
         }
     };
@@ -321,9 +321,8 @@ async fn get_position_details(Path(key): Path<String>) -> Response {
             Some(&format!("No position found for key {}", key)),
         ),
         Err(err) => {
-            log(
-                LogTag::Webserver,
-                "POSITIONS_DETAIL_ERROR",
+            logger::info(
+        LogTag::Webserver,
                 &format!("Failed to resolve position for key {}: {}", key, err),
             );
 
@@ -441,9 +440,8 @@ async fn fetch_transaction_summary(
                 Some("Transaction not available in cache".to_string()),
             ),
             Err(err) => {
-                log(
-                    LogTag::Webserver,
-                    "POSITIONS_DETAIL_TX_ERROR",
+                logger::info(
+        LogTag::Webserver,
                     &format!("Failed to load {} transaction {}: {}", kind, sig, err),
                 );
                 PositionTransactionSummary::missing(kind, Some(sig), Some(err))
@@ -470,9 +468,8 @@ async fn load_state_history_entries(
     let db_arc = match positions::get_positions_database().await {
         Ok(db) => db,
         Err(err) => {
-            log(
-                LogTag::Webserver,
-                "POSITIONS_DETAIL_STATE_HISTORY_ERROR",
+            logger::info(
+        LogTag::Webserver,
                 &format!(
                     "Failed to access positions database for position {}: {}",
                     id, err
@@ -488,9 +485,8 @@ async fn load_state_history_entries(
     };
 
     let Some(db) = db_clone else {
-        log(
-            LogTag::Webserver,
-            "POSITIONS_DETAIL_STATE_HISTORY_ERROR",
+        logger::info(
+        LogTag::Webserver,
             &format!(
                 "Positions database not initialized when loading history for position {}",
                 id
@@ -509,9 +505,8 @@ async fn load_state_history_entries(
             })
             .collect(),
         Err(err) => {
-            log(
-                LogTag::Webserver,
-                "POSITIONS_DETAIL_STATE_HISTORY_ERROR",
+            logger::info(
+        LogTag::Webserver,
                 &format!("Failed to load state history for position {}: {}", id, err),
             );
             Vec::new()

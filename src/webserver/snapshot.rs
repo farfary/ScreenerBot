@@ -11,7 +11,7 @@ use crate::{
         are_core_services_ready, get_pending_services, POOL_SERVICE_READY, POSITIONS_SYSTEM_READY,
         TOKENS_SYSTEM_READY, TRANSACTIONS_SYSTEM_READY,
     },
-    logger::{log, LogTag},
+    logger::{self, LogTag},
     rpc::get_global_rpc_stats,
     trader::is_trader_running,
     wallet::{get_current_wallet_status, get_snapshot_token_balances},
@@ -636,9 +636,8 @@ async fn collect_wallet_snapshot() -> Option<WalletStatusSnapshot> {
                             .collect();
                     }
                     Err(err) => {
-                        log(
+                        logger::warning(
                             LogTag::Webserver,
-                            "WARN",
                             &format!("Failed to load wallet token balances: {}", err),
                         );
                     }
@@ -656,9 +655,8 @@ async fn collect_wallet_snapshot() -> Option<WalletStatusSnapshot> {
         }
         Ok(None) => None,
         Err(err) => {
-            log(
+            logger::warning(
                 LogTag::Webserver,
-                "WARN",
                 &format!("Failed to load current wallet snapshot: {}", err),
             );
             None
@@ -933,9 +931,8 @@ async fn collect_events_snapshot() -> Option<EventsStatusSnapshot> {
     let db_stats = match db.get_stats().await {
         Ok(stats) => stats,
         Err(e) => {
-            log(
+            logger::warning(
                 LogTag::Webserver,
-                "WARN",
                 &format!("Failed to load events database stats: {}", e),
             );
             HashMap::new()
@@ -950,9 +947,8 @@ async fn collect_events_snapshot() -> Option<EventsStatusSnapshot> {
     let category_counts = match crate::events::count_by_category(24).await {
         Ok(counts) => counts,
         Err(e) => {
-            log(
+            logger::warning(
                 LogTag::Webserver,
-                "WARN",
                 &format!("Failed to load events category counts: {}", e),
             );
             HashMap::new()
@@ -963,9 +959,8 @@ async fn collect_events_snapshot() -> Option<EventsStatusSnapshot> {
     let recent_events_raw = match crate::events::recent_all(10).await {
         Ok(events) => events,
         Err(e) => {
-            log(
+            logger::warning(
                 LogTag::Webserver,
-                "WARN",
                 &format!("Failed to load recent events: {}", e),
             );
             Vec::new()
@@ -1079,9 +1074,8 @@ async fn collect_transactions_snapshot() -> Option<TransactionsStatusSnapshot> {
                 });
             }
             Err(err) => {
-                log(
+                logger::warning(
                     LogTag::Webserver,
-                    "WARN",
                     &format!("Failed to load transactions database stats: {}", err),
                 );
             }
@@ -1089,18 +1083,16 @@ async fn collect_transactions_snapshot() -> Option<TransactionsStatusSnapshot> {
 
         match db.get_successful_transactions_count().await {
             Ok(count) => stats.successful_transactions_count = count,
-            Err(err) => log(
+            Err(err) => logger::warning(
                 LogTag::Webserver,
-                "WARN",
                 &format!("Failed to load successful transaction count: {}", err),
             ),
         }
 
         match db.get_failed_transactions_count().await {
             Ok(count) => stats.failed_transactions_count = count,
-            Err(err) => log(
+            Err(err) => logger::warning(
                 LogTag::Webserver,
-                "WARN",
                 &format!("Failed to load failed transaction count: {}", err),
             ),
         }
@@ -1112,27 +1104,24 @@ async fn collect_transactions_snapshot() -> Option<TransactionsStatusSnapshot> {
                     backfill_cursor: state.backfill_before_cursor,
                 });
             }
-            Err(err) => log(
+            Err(err) => logger::warning(
                 LogTag::Webserver,
-                "WARN",
                 &format!("Failed to load transactions bootstrap state: {}", err),
             ),
         }
 
         match db.get_newest_known_signature().await {
             Ok(sig) => newest_signature = sig,
-            Err(err) => log(
+            Err(err) => logger::warning(
                 LogTag::Webserver,
-                "WARN",
                 &format!("Failed to load newest known signature: {}", err),
             ),
         }
 
         match db.get_oldest_known_signature().await {
             Ok(sig) => oldest_signature = sig,
-            Err(err) => log(
+            Err(err) => logger::warning(
                 LogTag::Webserver,
-                "WARN",
                 &format!("Failed to load oldest known signature: {}", err),
             ),
         }

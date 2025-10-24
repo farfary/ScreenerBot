@@ -35,7 +35,7 @@ use screenerbot::arguments::{is_debug_ata_enabled, is_debug_swaps_enabled, set_c
 use screenerbot::config::with_config;
 use screenerbot::constants::SOL_MINT;
 use screenerbot::errors::ScreenerBotError;
-use screenerbot::logger::{log, LogTag};
+use screenerbot::logger::{self as logger, LogTag};
 use screenerbot::rpc::{get_rpc_client, init_rpc_client, TokenAccountInfo};
 use screenerbot::swaps::{execute_best_swap, get_best_quote};
 use screenerbot::tokens::Token;
@@ -62,298 +62,266 @@ use tokio::time::{sleep, Duration};
 
 /// Print comprehensive help menu for the Sell All and Reset Tool
 fn print_help() {
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "🔄 Sell All Tokens, Close ATAs, and Reset Bot Data Tool",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "======================================================",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "Comprehensive wallet cleanup and bot reset utility that sells all tokens for SOL,",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "closes all Associated Token Accounts (ATAs), and resets bot data files.",
     );
-    log(LogTag::System, "INFO", "");
-    log(LogTag::System, "WARNING", "⚠️  WARNING: This tool will:");
-    log(
+    logger::info(
+        LogTag::System, "");
+    logger::info(
+        LogTag::System, "⚠️  WARNING: This tool will:");
+    logger::info(
         LogTag::System,
-        "WARNING",
         "    • Sell ALL tokens in your wallet for SOL",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "WARNING",
         "    • Close empty Associated Token Accounts (ATAs)",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "WARNING",
         "    • DELETE specific bot data files (irreversible)",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "WARNING",
         "    Use with extreme caution and understand the risks involved.",
     );
-    log(LogTag::System, "INFO", "");
-    log(LogTag::System, "INFO", "USAGE:");
-    log(
+    logger::info(
+        LogTag::System, "");
+    logger::info(
+        LogTag::System, "USAGE:");
+    logger::info(
         LogTag::System,
-        "INFO",
         "    cargo run --bin tool_sell_all_and_reset [OPTIONS]",
     );
-    log(LogTag::System, "INFO", "");
-    log(LogTag::System, "INFO", "OPTIONS:");
-    log(
+    logger::info(
+        LogTag::System, "");
+    logger::info(
+        LogTag::System, "OPTIONS:");
+    logger::info(
         LogTag::System,
-        "INFO",
         "    --help, -h          Show this help message",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    --dry-run, -d      Simulate operations without executing transactions",
     );
-    log(LogTag::System, "INFO", "");
-    log(LogTag::System, "INFO", "EXAMPLES:");
-    log(
+    logger::info(
+        LogTag::System, "");
+    logger::info(
+        LogTag::System, "EXAMPLES:");
+    logger::info(
         LogTag::System,
-        "INFO",
         "    # Simulate cleanup to see what would happen",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    cargo run --bin tool_sell_all_and_reset -- --dry-run",
     );
-    log(LogTag::System, "INFO", "");
-    log(
+    logger::info(
+        LogTag::System, "");
+    logger::info(
         LogTag::System,
-        "INFO",
         "    # Execute full wallet cleanup and bot reset (DANGEROUS)",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    cargo run --bin tool_sell_all_and_reset",
     );
-    log(LogTag::System, "INFO", "");
-    log(LogTag::System, "INFO", "OPERATIONS PERFORMED:");
-    log(
+    logger::info(
+        LogTag::System, "");
+    logger::info(
+        LogTag::System, "OPERATIONS PERFORMED:");
+    logger::info(
         LogTag::System,
-        "INFO",
         "    1. Scan wallet for all SPL Token and Token-2022 accounts",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    2. Identify tokens with non-zero balances",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    3. Sell larger token amounts for SOL using swap service",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    4. Burn small dust amounts (<1000 raw units) to empty ATAs",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    5. Close only EMPTY Associated Token Accounts (zero balance)",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    6. Reclaim rent SOL from closed ATAs (~0.00203928 SOL each)",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    7. Delete specific bot data files to reset the system",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    8. Clean up all bot log files from logs/ directory",
     );
-    log(LogTag::System, "INFO", "");
-    log(LogTag::System, "INFO", "DATA FILES THAT WILL BE DELETED:");
-    log(
+    logger::info(
+        LogTag::System, "");
+    logger::info(
+        LogTag::System, "DATA FILES THAT WILL BE DELETED:");
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • data/rpc_stats.json (RPC statistics)",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • data/ata_failed_cache.json (failed ATA cache)",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • data/positions.db (trading positions database)",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • data/events.db (events system database)",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • data/events.db-shm (events DB shared memory)",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • data/events.db-wal (events DB write-ahead log)",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • logs/screenerbot_*.log (all bot log files)",
     );
-    log(LogTag::System, "INFO", "");
-    log(LogTag::System, "INFO", "FILES THAT WILL BE PRESERVED:");
-    log(
+    logger::info(
+        LogTag::System, "");
+    logger::info(
+        LogTag::System, "FILES THAT WILL BE PRESERVED:");
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • data/config.toml (wallet keys and RPC endpoints)",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • data/tokens.db (token database)",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • data/decimal_cache.json (token decimals cache)",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • data/token_blacklist.json (blacklisted tokens)",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • data/wallet_transactions_stats.json (wallet sync data)",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • data/cache_ohlcvs/ (OHLCV data cache)",
     );
-    log(LogTag::System, "INFO", "");
-    log(LogTag::System, "INFO", "SAFETY FEATURES:");
-    log(
+    logger::info(
+        LogTag::System, "");
+    logger::info(
+        LogTag::System, "SAFETY FEATURES:");
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • Skips SOL (native token) - cannot sell SOL for SOL",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • Validates token balances before attempting sales",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • Only closes ATAs with zero balance (cannot close non-empty ATAs)",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • Detailed progress reporting for each operation",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • Graceful error handling for failed transactions",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • Supports both SPL Token and Token-2022 programs",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • Concurrent processing with rate limiting",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • Only removes specific data files, preserves configuration",
     );
-    log(LogTag::System, "INFO", "");
-    log(LogTag::System, "INFO", "ESTIMATED OUTCOMES:");
-    log(
+    logger::info(
+        LogTag::System, "");
+    logger::info(
+        LogTag::System, "ESTIMATED OUTCOMES:");
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • SOL received from token sales (varies by token values)",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • Rent SOL reclaimed from closed ATAs",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • Clean wallet with only SOL remaining",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "    • Fresh bot state with preserved configuration",
     );
-    log(LogTag::System, "INFO", "");
-    log(LogTag::System, "WARNING", "RISK WARNINGS:");
-    log(
+    logger::info(
+        LogTag::System, "");
+    logger::info(
+        LogTag::System, "RISK WARNINGS:");
+    logger::info(
         LogTag::System,
-        "WARNING",
         "    • Irreversible operation - tokens will be permanently sold",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "WARNING",
         "    • Bot data files will be permanently deleted",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "WARNING",
         "    • Market slippage may result in lower SOL amounts",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "WARNING",
         "    • Some tokens may fail to sell due to liquidity issues",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "WARNING",
         "    • Failed transactions still consume transaction fees",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "WARNING",
         "    • Use --dry-run first to understand the impact",
     );
-    log(LogTag::System, "INFO", "");
+    logger::info(
+        LogTag::System, "");
 }
 
 /// Data files to be removed during reset
@@ -411,9 +379,8 @@ async fn burn_dust_tokens_with_retry(
     token_accounts: &[TokenAccountInfo],
     dry_run: bool,
 ) -> (usize, usize, HashSet<String>) {
-    log(
+    logger::info(
         LogTag::System,
-        "BURN_START",
         &format!(
             "Starting dust token burning for {} accounts{}",
             token_accounts.len(),
@@ -435,9 +402,8 @@ async fn burn_dust_tokens_with_retry(
 
             // Only burn very small amounts that are uneconomical to sell
             if account.balance > 0 && account.balance < BURN_THRESHOLD_RAW_UNITS {
-                log(
-                    LogTag::System,
-                    "BURN_CANDIDATE",
+                logger::info(
+        LogTag::System,
                     &format!(
                         "Found dust token for burning: {} ({} raw units)",
                         &account.mint, account.balance
@@ -450,9 +416,8 @@ async fn burn_dust_tokens_with_retry(
         })
         .collect();
 
-    log(
+    logger::info(
         LogTag::System,
-        "BURN_FILTER",
         &format!(
             "Filtered {} burnable accounts from {} total (burn threshold: {} units)",
             burnable_accounts.len(),
@@ -466,9 +431,8 @@ async fn burn_dust_tokens_with_retry(
     }
 
     if dry_run {
-        log(
-            LogTag::System,
-            "DRY_BURN",
+        logger::info(
+        LogTag::System,
             &format!("Would burn {} dust tokens", burnable_accounts.len()),
         );
         let dry_run_burned_mints: HashSet<String> = burnable_accounts
@@ -485,9 +449,8 @@ async fn burn_dust_tokens_with_retry(
     let mut successfully_burned_mints = HashSet::new();
 
     for account in &burnable_accounts {
-        log(
-            LogTag::System,
-            "BURN_ATTEMPT",
+        logger::info(
+        LogTag::System,
             &format!(
                 "Attempting to burn {} raw units of {}",
                 account.balance, &account.mint
@@ -498,9 +461,8 @@ async fn burn_dust_tokens_with_retry(
         // This is not a real burn but achieves the same goal of emptying the ATA
         match burn_single_token_amount(account).await {
             Ok(signature) => {
-                log(
-                    LogTag::System,
-                    "BURN_SUCCESS",
+                logger::info(
+        LogTag::System,
                     &format!(
                         "Successfully burned dust amount for {}. TX: {}",
                         &account.mint, signature
@@ -510,9 +472,8 @@ async fn burn_dust_tokens_with_retry(
                 successfully_burned_mints.insert(account.mint.clone());
             }
             Err(error_msg) => {
-                log(
-                    LogTag::System,
-                    "BURN_FAILED",
+                logger::info(
+        LogTag::System,
                     &format!(
                         "Failed to burn dust amount for {}: {}",
                         &account.mint, error_msg
@@ -523,9 +484,8 @@ async fn burn_dust_tokens_with_retry(
         }
     }
 
-    log(
+    logger::info(
         LogTag::System,
-        "BURN_SUMMARY",
         &format!(
             "Burn completed: {} success, {} failed",
             successful_burns, failed_burns
@@ -540,9 +500,8 @@ async fn burn_single_token_amount(account: &TokenAccountInfo) -> Result<String, 
     let wallet_address = get_wallet_address().map_err(|e| e.to_string())?;
     let rpc_client = get_rpc_client();
 
-    log(
+    logger::info(
         LogTag::System,
-        "BURN_START",
         &format!(
             "Starting burn of {} raw units for token {}",
             account.balance, &account.mint
@@ -583,9 +542,8 @@ async fn burn_single_token_amount(account: &TokenAccountInfo) -> Result<String, 
     )
     .map_err(|e| format!("Failed to create burn instruction: {}", e))?;
 
-    log(
+    logger::info(
         LogTag::System,
-        "BURN_INSTRUCTION",
         &format!("Created burn instruction for {} tokens", account.balance),
     );
 
@@ -603,9 +561,8 @@ async fn burn_single_token_amount(account: &TokenAccountInfo) -> Result<String, 
         recent_blockhash,
     );
 
-    log(
+    logger::info(
         LogTag::System,
-        "BURN_TRANSACTION",
         "Sending burn transaction to network",
     );
 
@@ -615,9 +572,8 @@ async fn burn_single_token_amount(account: &TokenAccountInfo) -> Result<String, 
         .await
         .map_err(|e| format!("Failed to send burn transaction: {}", e))?;
 
-    log(
+    logger::info(
         LogTag::System,
-        "BURN_SUCCESS",
         &format!("Burn transaction confirmed: {}", signature),
     );
 
@@ -666,79 +622,68 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let dry_run = args.contains(&"--dry-run".to_string()) || args.contains(&"-d".to_string());
 
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "WALLET CLEANUP AND BOT RESET UTILITY",
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "====================================",
     );
 
     if dry_run {
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System,
             "DRY RUN MODE - No actual transactions or file deletions will be made",
         );
     }
 
-    log(LogTag::System, "INFO", "This tool will:");
-    log(
+    logger::info(
+        LogTag::System, "This tool will:");
+    logger::info(
         LogTag::System,
-        "INFO",
         "  - Scan for all token accounts (SPL & Token-2022)",
     );
     if !dry_run {
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System,
             "  - Sell larger token amounts for SOL with retry logic",
         );
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System,
             "  - Burn small dust amounts to empty ATAs",
         );
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System,
             "  - Close empty Associated Token Accounts (ATAs) with retry logic",
         );
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System,
             "  - Reclaim rent SOL from closed ATAs",
         );
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System,
             "  - Delete specific bot data files to reset the system",
         );
     } else {
-        log(LogTag::System, "INFO", "  - Show what tokens would be sold");
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System, "  - Show what tokens would be sold");
+        logger::info(
+        LogTag::System,
             "  - Show what empty ATAs would be closed",
         );
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System,
             "  - Estimate rent SOL that would be reclaimed",
         );
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System,
             "  - Show what data files would be deleted",
         );
     }
 
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         &format!(
             "Starting comprehensive wallet cleanup and bot reset{}",
             if dry_run { " (DRY RUN)" } else { "" }
@@ -746,15 +691,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Initialize configuration
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "Loading configuration...",
     );
     if let Err(e) = screenerbot::config::load_config() {
-        log(
-            LogTag::System,
-            "ERROR",
+        logger::info(
+        LogTag::System,
             &format!("Failed to load configuration: {}", e),
         );
         std::process::exit(1);
@@ -763,25 +706,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let wallet_address = match get_wallet_address() {
         Ok(addr) => addr,
         Err(e) => {
-            log(
-                LogTag::System,
-                "ERROR",
+            logger::info(
+        LogTag::System,
                 &format!("Failed to get wallet address: {}", e),
             );
             return Err(Box::new(e) as Box<dyn std::error::Error>);
         }
     };
 
-    log(
+    logger::info(
         LogTag::System,
-        "WALLET",
         &format!("Processing wallet: {}", wallet_address),
     );
 
     // Step 1: Initialize RPC and get initial SOL balance
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "Initializing RPC client and checking initial balances...",
     );
     init_rpc_client()?;
@@ -789,17 +729,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Check initial SOL balance
     let initial_sol_balance = match get_sol_balance(&wallet_address).await {
         Ok(balance) => {
-            log(
-                LogTag::System,
-                "BALANCE",
+            logger::info(
+        LogTag::System,
                 &format!("Initial SOL balance: {:.6} SOL", balance),
             );
             balance
         }
         Err(e) => {
-            log(
-                LogTag::System,
-                "ERROR",
+            logger::info(
+        LogTag::System,
                 &format!("Failed to get initial SOL balance: {}", e),
             );
             return Err(Box::new(e) as Box<dyn std::error::Error>);
@@ -807,18 +745,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Step 2: Get all token accounts using centralized RPC client
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "Scanning for all token accounts (SPL Token and Token-2022)...",
     );
 
     let token_accounts = match get_all_token_accounts(&wallet_address).await {
         Ok(accounts) => accounts,
         Err(e) => {
-            log(
-                LogTag::System,
-                "ERROR",
+            logger::info(
+        LogTag::System,
                 &format!("Failed to get token accounts: {}", e),
             );
             return Err(Box::new(e) as Box<dyn std::error::Error>);
@@ -826,15 +762,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     if token_accounts.is_empty() {
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System,
             "No token accounts found - wallet is already clean!",
         );
     } else {
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System,
             &format!("Found {} token accounts:", token_accounts.len()),
         );
         for account in &token_accounts {
@@ -843,9 +777,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 "SPL Token"
             };
-            log(
-                LogTag::System,
-                "INFO",
+            logger::info(
+        LogTag::System,
                 &format!(
                     "  {} ({}): {} raw units - Mint: {}",
                     &account.mint, token_program, account.balance, account.mint
@@ -856,9 +789,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Check initial comprehensive balance
     if let Err(e) = check_comprehensive_balance(&wallet_address, "INITIAL").await {
-        log(
-            LogTag::System,
-            "WARNING",
+        logger::info(
+        LogTag::System,
             &format!("Initial balance check failed: {}", e),
         );
     }
@@ -873,9 +805,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Check balance after selling
     if successful_sells > 0 || failed_sells > 0 {
         if let Err(e) = check_comprehensive_balance(&wallet_address, "AFTER_SELLING").await {
-            log(
-                LogTag::System,
-                "WARNING",
+            logger::info(
+        LogTag::System,
                 &format!("Post-selling balance check failed: {}", e),
             );
         }
@@ -884,34 +815,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Step 2.5: Wait for swap transactions to be processed before ATA closing
     if successful_sells > 0 && !dry_run {
         const SWAP_CONFIRMATION_DELAY_SECONDS: u64 = 10;
-        log(
-            LogTag::System,
-            "WAIT_CONFIRMATION",
+        logger::info(
+        LogTag::System,
             &format!(
                 "Waiting {}s for {} swap transactions to be confirmed before ATA closing...",
                 SWAP_CONFIRMATION_DELAY_SECONDS, successful_sells
             ),
         );
 
-        if is_debug_ata_enabled() {
-            log(
-                LogTag::System,
-                "DEBUG",
+        logger::info(
+        LogTag::System,
                 &format!(
                     "⏳ RESET_WAIT_CONFIRMATION: delaying {}s for blockchain confirmation",
                     SWAP_CONFIRMATION_DELAY_SECONDS
                 ),
             );
-        }
 
         tokio::time::sleep(tokio::time::Duration::from_secs(
             SWAP_CONFIRMATION_DELAY_SECONDS,
         ))
         .await;
 
-        log(
-            LogTag::System,
-            "WAIT_CONFIRMATION_DONE",
+        logger::info(
+        LogTag::System,
             "Swap confirmation wait completed, proceeding with dust burning and ATA closing",
         );
     }
@@ -941,18 +867,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Check balance after ATA closing
     if successful_closes > 0 || failed_closes > 0 {
         if let Err(e) = check_comprehensive_balance(&wallet_address, "AFTER_ATA_CLOSING").await {
-            log(
-                LogTag::System,
-                "WARNING",
+            logger::info(
+        LogTag::System,
                 &format!("Post-ATA-closing balance check failed: {}", e),
             );
         }
     }
 
     // Step 4: Remove specified data files
-    log(
+    logger::info(
         LogTag::System,
-        "FILE_CLEANUP_START",
         &format!(
             "Starting data file cleanup{}",
             if dry_run { " (DRY RUN)" } else { "" }
@@ -966,16 +890,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for file_path in DATA_FILES_TO_REMOVE {
         if dry_run {
             if Path::new(file_path).exists() {
-                log(
-                    LogTag::System,
-                    "DRY_FILE_REMOVE",
+                logger::info(
+        LogTag::System,
                     &format!("Would remove file: {}", file_path),
                 );
                 files_removed += 1;
             } else {
-                log(
-                    LogTag::System,
-                    "DRY_FILE_NOT_FOUND",
+                logger::info(
+        LogTag::System,
                     &format!("File not found (would skip): {}", file_path),
                 );
                 files_not_found += 1;
@@ -984,26 +906,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if Path::new(file_path).exists() {
                 match fs::remove_file(file_path) {
                     Ok(()) => {
-                        log(
-                            LogTag::System,
-                            "FILE_REMOVED",
+                        logger::info(
+        LogTag::System,
                             &format!("Successfully removed file: {}", file_path),
                         );
                         files_removed += 1;
                     }
                     Err(e) => {
-                        log(
-                            LogTag::System,
-                            "FILE_REMOVE_FAILED",
+                        logger::info(
+        LogTag::System,
                             &format!("Failed to remove file {}: {}", file_path, e),
                         );
                         files_failed += 1;
                     }
                 }
             } else {
-                log(
-                    LogTag::System,
-                    "FILE_NOT_FOUND",
+                logger::info(
+        LogTag::System,
                     &format!("File not found (skipping): {}", file_path),
                 );
                 files_not_found += 1;
@@ -1011,9 +930,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    log(
+    logger::info(
         LogTag::System,
-        "FILE_CLEANUP_SUMMARY",
         &format!(
             "File cleanup completed: {} removed, {} not found, {} failed",
             files_removed, files_not_found, files_failed
@@ -1021,9 +939,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Log file cleanup
-    log(
+    logger::info(
         LogTag::System,
-        "LOG_CLEANUP_START",
         &format!(
             "Starting log file cleanup{}",
             if dry_run { " (DRY RUN)" } else { "" }
@@ -1041,18 +958,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if let Some(name_str) = filename.to_str() {
                         if name_str.starts_with("screenerbot_") && name_str.ends_with(".log") {
                             if dry_run {
-                                log(
-                                    LogTag::System,
-                                    "DRY_LOG_REMOVE",
+                                logger::info(
+        LogTag::System,
                                     &format!("Would remove log file: {}", path.display()),
                                 );
                                 log_files_removed += 1;
                             } else {
                                 match fs::remove_file(&path) {
                                     Ok(()) => {
-                                        log(
-                                            LogTag::System,
-                                            "LOG_REMOVED",
+                                        logger::info(
+        LogTag::System,
                                             &format!(
                                                 "Successfully removed log file: {}",
                                                 path.display()
@@ -1061,9 +976,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         log_files_removed += 1;
                                     }
                                     Err(e) => {
-                                        log(
-                                            LogTag::System,
-                                            "LOG_REMOVE_FAILED",
+                                        logger::info(
+        LogTag::System,
                                             &format!(
                                                 "Failed to remove log file {}: {}",
                                                 path.display(),
@@ -1080,16 +994,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     } else {
-        log(
-            LogTag::System,
-            "LOG_DIR_NOT_FOUND",
+        logger::info(
+        LogTag::System,
             "Logs directory not found or not accessible",
         );
     }
 
-    log(
+    logger::info(
         LogTag::System,
-        "LOG_CLEANUP_SUMMARY",
         &format!(
             "Log cleanup completed: {} removed, {} failed",
             log_files_removed, log_files_failed
@@ -1097,50 +1009,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Step 5: Final summary and cleanup report
-    log(
+    logger::info(
         LogTag::System,
-        "FINAL_REPORT",
         &format!("Final cleanup and reset report:"),
     );
 
     if !token_accounts.is_empty() {
-        log(
-            LogTag::System,
-            "FINAL_REPORT",
+        logger::info(
+        LogTag::System,
             &format!("Token accounts found: {}", token_accounts.len()),
         );
     }
 
     if dry_run {
         if !token_accounts.is_empty() {
-            log(
-                LogTag::System,
-                "FINAL_REPORT",
+            logger::info(
+        LogTag::System,
                 &format!(
                     "Would Sell - Success: {} | Failed: {}",
                     successful_sells, failed_sells
                 ),
             );
-            log(
-                LogTag::System,
-                "FINAL_REPORT",
+            logger::info(
+        LogTag::System,
                 &format!(
                     "Would Burn - Success: {} | Failed: {}",
                     successful_burns, failed_burns
                 ),
             );
-            log(
-                LogTag::System,
-                "FINAL_REPORT",
+            logger::info(
+        LogTag::System,
                 &format!(
                     "Would Close ATAs - Success: {} | Failed: {}",
                     successful_closes, failed_closes
                 ),
             );
         }
-        log(
-            LogTag::System,
-            "FINAL_REPORT",
+        logger::info(
+        LogTag::System,
             &format!(
                 "Would Remove Files - Success: {} | Not Found: {} | Failed: {}",
                 files_removed, files_not_found, files_failed
@@ -1148,34 +1054,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     } else {
         if !token_accounts.is_empty() {
-            log(
-                LogTag::System,
-                "FINAL_REPORT",
+            logger::info(
+        LogTag::System,
                 &format!(
                     "Sales - Success: {} | Failed: {}",
                     successful_sells, failed_sells
                 ),
             );
-            log(
-                LogTag::System,
-                "FINAL_REPORT",
+            logger::info(
+        LogTag::System,
                 &format!(
                     "Burns - Success: {} | Failed: {}",
                     successful_burns, failed_burns
                 ),
             );
-            log(
-                LogTag::System,
-                "FINAL_REPORT",
+            logger::info(
+        LogTag::System,
                 &format!(
                     "ATA Closes - Success: {} | Failed: {}",
                     successful_closes, failed_closes
                 ),
             );
         }
-        log(
-            LogTag::System,
-            "FINAL_REPORT",
+        logger::info(
+        LogTag::System,
             &format!(
                 "File Removals - Success: {} | Not Found: {} | Failed: {}",
                 files_removed, files_not_found, files_failed
@@ -1184,33 +1086,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if failed_sells > 0 {
-        log(
-            LogTag::System,
-            "FAILED_SELLS",
+        logger::info(
+        LogTag::System,
             &format!("Found {} failed sells", failed_sells),
         );
     }
 
     if failed_burns > 0 {
-        log(
-            LogTag::System,
-            "FAILED_BURNS",
+        logger::info(
+        LogTag::System,
             &format!("Found {} failed burns", failed_burns),
         );
     }
 
     if failed_closes > 0 {
-        log(
-            LogTag::System,
-            "FAILED_CLOSES",
+        logger::info(
+        LogTag::System,
             &format!("Found {} failed ATA closes", failed_closes),
         );
     }
 
     if files_failed > 0 {
-        log(
-            LogTag::System,
-            "FAILED_FILE_REMOVES",
+        logger::info(
+        LogTag::System,
             &format!("Found {} failed file removals", files_failed),
         );
     }
@@ -1218,15 +1116,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let estimated_rent_reclaimed = (successful_closes as f64) * 0.00203928; // ~0.002 SOL per ATA
     if estimated_rent_reclaimed > 0.0 {
         if dry_run {
-            log(
-                LogTag::System,
-                "ESTIMATED_RENT",
+            logger::info(
+        LogTag::System,
                 &format!("Would reclaim {:.6} SOL in rent", estimated_rent_reclaimed),
             );
         } else {
-            log(
-                LogTag::System,
-                "RECLAIMED_RENT",
+            logger::info(
+        LogTag::System,
                 &format!("Reclaimed {:.6} SOL in rent", estimated_rent_reclaimed),
             );
         }
@@ -1248,23 +1144,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if all_wallet_ops_successful && all_file_ops_successful {
         // All operations successful
         if dry_run {
-            log(
-                LogTag::System,
-                "DRY_RUN_COMPLETE",
+            logger::info(
+        LogTag::System,
                 "All operations would succeed - dry run complete",
             );
         } else {
-            log(
-                LogTag::System,
-                "RESET_COMPLETE",
+            logger::info(
+        LogTag::System,
                 "All tokens sold/burned, ATAs closed, and data files removed successfully",
             );
         }
     } else {
         if dry_run {
-            log(
-                LogTag::System,
-                "DRY_RUN_ISSUES",
+            logger::info(
+        LogTag::System,
                 &format!(
                     "Dry run completed with issues: {} sell failures, {} burn failures, {} close failures, {} file removal failures",
                     failed_sells,
@@ -1274,9 +1167,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )
             );
         } else {
-            log(
-                LogTag::System,
-                "RESET_ISSUES",
+            logger::info(
+        LogTag::System,
                 &format!(
                     "Reset completed with issues: {} sell failures, {} burn failures, {} close failures, {} file removal failures",
                     failed_sells,
@@ -1290,9 +1182,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Final comprehensive balance check
     if let Err(e) = check_comprehensive_balance(&wallet_address, "FINAL").await {
-        log(
-            LogTag::System,
-            "WARNING",
+        logger::info(
+        LogTag::System,
             &format!("Final balance check failed: {}", e),
         );
     }
@@ -1302,36 +1193,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(balance) => {
             let sol_change = balance - initial_sol_balance;
             if sol_change > 0.0 {
-                log(
-                    LogTag::System,
-                    "BALANCE_CHANGE",
+                logger::info(
+        LogTag::System,
                     &format!(
                         "SOL balance increased by {:.6} SOL (from {:.6} to {:.6})",
                         sol_change, initial_sol_balance, balance
                     ),
                 );
             } else if sol_change < 0.0 {
-                log(
-                    LogTag::System,
-                    "BALANCE_CHANGE",
+                logger::info(
+        LogTag::System,
                     &format!(
                         "SOL balance decreased by {:.6} SOL (from {:.6} to {:.6})",
                         -sol_change, initial_sol_balance, balance
                     ),
                 );
             } else {
-                log(
-                    LogTag::System,
-                    "BALANCE_CHANGE",
+                logger::info(
+        LogTag::System,
                     &format!("SOL balance unchanged: {:.6} SOL", balance),
                 );
             }
             balance
         }
         Err(e) => {
-            log(
-                LogTag::System,
-                "ERROR",
+            logger::info(
+        LogTag::System,
                 &format!("Failed to get final SOL balance: {}", e),
             );
             initial_sol_balance
@@ -1339,22 +1226,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     if dry_run {
-        log(
-            LogTag::System,
-            "DRY_RUN_HINT",
+        logger::info(
+        LogTag::System,
             "To execute for real, run without --dry-run flag",
         );
     } else {
-        log(
-            LogTag::System,
-            "RESET_HINT",
+        logger::info(
+        LogTag::System,
             "Bot has been reset to fresh state with clean wallet",
         );
     }
 
-    log(
+    logger::info(
         LogTag::System,
-        "TOOL_COMPLETE",
         &format!(
             "Tool execution finished: {} token accounts processed, {} data files processed",
             token_accounts.len(),
@@ -1370,9 +1254,8 @@ async fn sell_all_tokens_with_retry(
     token_accounts: &[TokenAccountInfo],
     dry_run: bool,
 ) -> (usize, usize, HashSet<String>) {
-    log(
+    logger::info(
         LogTag::System,
-        "SELL_START",
         &format!(
             "Starting token sales for {} accounts{}",
             token_accounts.len(),
@@ -1385,18 +1268,16 @@ async fn sell_all_tokens_with_retry(
         .iter()
         .filter(|account| {
             if account.balance == 0 {
-                log(
-                    LogTag::System,
-                    "SKIP_ZERO",
+                logger::info(
+        LogTag::System,
                     &format!("Skipping zero balance token: {}", &account.mint),
                 );
                 return false;
             }
 
             if account.balance < DUST_THRESHOLD_RAW_UNITS {
-                log(
-                    LogTag::System,
-                    "SKIP_DUST",
+                logger::info(
+        LogTag::System,
                     &format!(
                         "Skipping dust balance (<{} raw units) token: {} ({} units)",
                         DUST_THRESHOLD_RAW_UNITS, &account.mint, account.balance
@@ -1406,7 +1287,7 @@ async fn sell_all_tokens_with_retry(
             }
 
             if account.mint == SOL_MINT {
-                log(LogTag::System, "SKIP_SOL", "Skipping SOL (native token)");
+                logger::info(LogTag::System, "Skipping SOL (native token)");
                 return false;
             }
 
@@ -1414,9 +1295,8 @@ async fn sell_all_tokens_with_retry(
         })
         .collect();
 
-    log(
+    logger::info(
         LogTag::System,
-        "SELL_FILTER",
         &format!(
             "Filtered {} sellable accounts from {} total (dust threshold: {} units)",
             sellable_accounts.len(),
@@ -1460,9 +1340,8 @@ async fn sell_all_tokens_with_retry(
         .map(|(mint, _, _)| mint.clone())
         .collect();
 
-    log(
+    logger::info(
         LogTag::System,
-        "SELL_SUMMARY",
         &format!(
             "Sales completed: {} success, {} failed",
             successful_sells, failed_sells
@@ -1478,9 +1357,8 @@ async fn sell_single_token_with_retry(
     dry_run: bool,
 ) -> (String, bool, Option<String>) {
     if dry_run {
-        log(
-            LogTag::System,
-            "DRY_SELL",
+        logger::info(
+        LogTag::System,
             &format!(
                 "Would sell {} raw units of {}",
                 account.balance, &account.mint
@@ -1489,9 +1367,8 @@ async fn sell_single_token_with_retry(
         return (account.mint.clone(), true, None);
     }
 
-    log(
+    logger::info(
         LogTag::System,
-        "SELL_START",
         &format!(
             "Starting sell for token: {} ({} raw units)",
             &account.mint, account.balance
@@ -1500,9 +1377,8 @@ async fn sell_single_token_with_retry(
 
     // Try to sell with retries
     for attempt in 1..=MAX_SELL_RETRIES {
-        log(
-            LogTag::System,
-            "SELL_ATTEMPT",
+        logger::info(
+        LogTag::System,
             &format!(
                 "Sell attempt {} of {} for token {}",
                 attempt, MAX_SELL_RETRIES, &account.mint
@@ -1511,13 +1387,12 @@ async fn sell_single_token_with_retry(
 
         match attempt_single_sell(account).await {
             Ok(success_msg) => {
-                log(LogTag::System, "SELL_SUCCESS", &success_msg);
+                logger::info(LogTag::System, &success_msg);
                 return (account.mint.clone(), true, None);
             }
             Err(error_msg) => {
-                log(
-                    LogTag::System,
-                    "SELL_ATTEMPT_FAILED",
+                logger::info(
+        LogTag::System,
                     &format!(
                         "Sell attempt {} failed for {}: {}",
                         attempt, &account.mint, error_msg
@@ -1530,9 +1405,8 @@ async fn sell_single_token_with_retry(
                     || lower_err.contains("no routers available for quote")
                     || lower_err.contains("could not find any route");
                 if is_terminal_no_route {
-                    log(
-                        LogTag::System,
-                        "SELL_TERMINAL_NO_ROUTE",
+                    logger::info(
+        LogTag::System,
                         &format!(
                             "Detected terminal no-route condition for {} – aborting further retries",
                             &account.mint
@@ -1543,16 +1417,14 @@ async fn sell_single_token_with_retry(
 
                 if attempt < MAX_SELL_RETRIES {
                     let delay = Duration::from_millis(RETRY_DELAY_MS * (attempt as u64));
-                    log(
-                        LogTag::System,
-                        "SELL_RETRY_DELAY",
+                    logger::info(
+        LogTag::System,
                         &format!("Waiting {}ms before retry...", delay.as_millis()),
                     );
                     sleep(delay).await;
                 } else {
-                    log(
-                        LogTag::System,
-                        "SELL_FAILED",
+                    logger::info(
+        LogTag::System,
                         &format!(
                             "All sell attempts failed for {}: {}",
                             &account.mint, error_msg
@@ -1585,9 +1457,8 @@ async fn attempt_single_sell(account: &TokenAccountInfo) -> Result<String, Strin
     }
 
     if actual_balance != account.balance {
-        log(
-            LogTag::System,
-            "BALANCE_MISMATCH",
+        logger::info(
+        LogTag::System,
             &format!(
                 "Balance mismatch for {}: expected {}, actual {}",
                 &account.mint, account.balance, actual_balance
@@ -1720,9 +1591,8 @@ async fn close_all_atas_with_retry(
     wallet_address: &str,
     dry_run: bool,
 ) -> (usize, usize) {
-    log(
+    logger::info(
         LogTag::System,
-        "ATA_START",
         &format!(
             "Starting ATA cleanup for {} accounts{}",
             token_accounts.len(),
@@ -1735,7 +1605,7 @@ async fn close_all_atas_with_retry(
         .iter()
         .filter(|account| {
             if account.mint == SOL_MINT {
-                log(LogTag::System, "SKIP_SOL_ATA", "Skipping SOL account for ATA closing");
+                logger::info(LogTag::System, "Skipping SOL account for ATA closing");
                 return false;
             }
 
@@ -1744,9 +1614,8 @@ async fn close_all_atas_with_retry(
             let was_sold = successfully_sold_mints.contains(&account.mint);
 
             if account.balance > 0 && !was_burned && !was_sold {
-                log(
-                    LogTag::System,
-                    "SKIP_NONZERO_ATA",
+                logger::info(
+        LogTag::System,
                     &format!(
                         "Skipping ATA close for {} - still has {} tokens (cannot close non-empty ATA)",
                         &account.mint,
@@ -1757,9 +1626,8 @@ async fn close_all_atas_with_retry(
             }
 
             if was_burned {
-                log(
-                    LogTag::System,
-                    "BURNED_ATA_CANDIDATE",
+                logger::info(
+        LogTag::System,
                     &format!(
                         "Including ATA for {} - tokens were burned (should now be empty)",
                         &account.mint
@@ -1771,9 +1639,8 @@ async fn close_all_atas_with_retry(
         })
         .collect();
 
-    log(
+    logger::info(
         LogTag::System,
-        "ATA_FILTER",
         &format!(
             "Filtered {} closable accounts from {} total (only empty ATAs can be closed)",
             closable_accounts.len(),
@@ -1819,9 +1686,8 @@ async fn close_all_atas_with_retry(
         .filter(|(_, success, _)| !*success)
         .count();
 
-    log(
+    logger::info(
         LogTag::System,
-        "ATA_SUMMARY",
         &format!(
             "ATA cleanup completed: {} success, {} failed",
             successful_closes, failed_closes
@@ -1840,17 +1706,15 @@ async fn close_single_ata_with_retry(
     dry_run: bool,
 ) -> (String, bool, Option<String>) {
     if dry_run {
-        log(
-            LogTag::System,
-            "DRY_ATA",
+        logger::info(
+        LogTag::System,
             &format!("Would close ATA for token: {}", &account.mint),
         );
         return (account.mint.clone(), true, Some("DRY_RUN_TX".to_string()));
     }
 
-    log(
+    logger::info(
         LogTag::System,
-        "ATA_START",
         &format!("Starting ATA close for token: {}", &account.mint),
     );
 
@@ -1861,9 +1725,8 @@ async fn close_single_ata_with_retry(
 
     // Try to close with retries
     for attempt in 1..=MAX_ATA_CLOSE_RETRIES {
-        log(
-            LogTag::System,
-            "ATA_ATTEMPT",
+        logger::info(
+        LogTag::System,
             &format!(
                 "ATA close attempt {} of {} for token {}",
                 attempt, MAX_ATA_CLOSE_RETRIES, &account.mint
@@ -1872,9 +1735,8 @@ async fn close_single_ata_with_retry(
 
         match attempt_single_ata_close(&account.mint, wallet_address, recently_processed).await {
             Ok(signature) => {
-                log(
-                    LogTag::System,
-                    "ATA_SUCCESS",
+                logger::info(
+        LogTag::System,
                     &format!(
                         "Successfully closed ATA for {}. TX: {}",
                         &account.mint, signature
@@ -1883,9 +1745,8 @@ async fn close_single_ata_with_retry(
                 return (account.mint.clone(), true, Some(signature));
             }
             Err(error_msg) => {
-                log(
-                    LogTag::System,
-                    "ATA_ATTEMPT_FAILED",
+                logger::info(
+        LogTag::System,
                     &format!(
                         "ATA close attempt {} failed for {}: {}",
                         attempt, &account.mint, error_msg
@@ -1894,16 +1755,14 @@ async fn close_single_ata_with_retry(
 
                 if attempt < MAX_ATA_CLOSE_RETRIES {
                     let delay = Duration::from_millis(RETRY_DELAY_MS * (attempt as u64));
-                    log(
-                        LogTag::System,
-                        "ATA_RETRY_DELAY",
+                    logger::info(
+        LogTag::System,
                         &format!("Waiting {}ms before retry...", delay.as_millis()),
                     );
                     sleep(delay).await;
                 } else {
-                    log(
-                        LogTag::System,
-                        "ATA_FAILED",
+                    logger::info(
+        LogTag::System,
                         &format!(
                             "All ATA close attempts failed for {}: {}",
                             &account.mint, error_msg
@@ -1936,16 +1795,13 @@ async fn attempt_single_ata_close(
             match rpc_client.is_token_account_token_2022(&ata_address).await {
                 Ok(_) => {
                     // Account exists, proceed with closing
-                    if is_debug_ata_enabled() {
-                        log(
-                            LogTag::System,
-                            "DEBUG",
+                    logger::info(
+        LogTag::System,
                             &format!(
                                 "✅ ATA_VERIFIED: account {} exists, proceeding with close",
                                 &ata_address
                             ),
                         );
-                    }
                 }
                 Err(_) => {
                     // Account doesn't exist or is already closed
@@ -1968,25 +1824,22 @@ async fn attempt_single_ata_close(
 
 /// Check comprehensive balance before and after operations
 async fn check_comprehensive_balance(wallet_address: &str, stage: &str) -> Result<(), String> {
-    log(
+    logger::info(
         LogTag::System,
-        "BALANCE_CHECK",
         &format!("Checking comprehensive balance at stage: {}", stage),
     );
 
     // Check SOL balance
     match get_sol_balance(wallet_address).await {
         Ok(sol_balance) => {
-            log(
-                LogTag::System,
-                "BALANCE_SOL",
+            logger::info(
+        LogTag::System,
                 &format!("{}: SOL balance: {:.6} SOL", stage, sol_balance),
             );
         }
         Err(e) => {
-            log(
-                LogTag::System,
-                "ERROR",
+            logger::info(
+        LogTag::System,
                 &format!("Failed to get SOL balance at {}: {}", stage, e),
             );
         }
@@ -1996,9 +1849,8 @@ async fn check_comprehensive_balance(wallet_address: &str, stage: &str) -> Resul
     match get_all_token_accounts(wallet_address).await {
         Ok(token_accounts) => {
             let non_zero_accounts = token_accounts.iter().filter(|a| a.balance > 0).count();
-            log(
-                LogTag::System,
-                "BALANCE_TOKENS",
+            logger::info(
+        LogTag::System,
                 &format!(
                     "{}: Found {} token accounts, {} with non-zero balance",
                     stage,
@@ -2008,9 +1860,8 @@ async fn check_comprehensive_balance(wallet_address: &str, stage: &str) -> Resul
             );
 
             if is_debug_ata_enabled() && !token_accounts.is_empty() {
-                log(
-                    LogTag::System,
-                    "DEBUG",
+                logger::info(
+        LogTag::System,
                     &format!("Token accounts at {}:", stage),
                 );
                 for account in token_accounts.iter().take(10) {
@@ -2020,9 +1871,8 @@ async fn check_comprehensive_balance(wallet_address: &str, stage: &str) -> Resul
                     } else {
                         "SPL Token"
                     };
-                    log(
-                        LogTag::System,
-                        "DEBUG",
+                    logger::info(
+        LogTag::System,
                         &format!(
                             "  {} ({}): {} raw units",
                             &account.mint, token_program, account.balance
@@ -2030,18 +1880,16 @@ async fn check_comprehensive_balance(wallet_address: &str, stage: &str) -> Resul
                     );
                 }
                 if token_accounts.len() > 10 {
-                    log(
-                        LogTag::System,
-                        "DEBUG",
+                    logger::info(
+        LogTag::System,
                         &format!("  ... and {} more accounts", token_accounts.len() - 10),
                     );
                 }
             }
         }
         Err(e) => {
-            log(
-                LogTag::System,
-                "ERROR",
+            logger::info(
+        LogTag::System,
                 &format!("Failed to get token accounts at {}: {}", stage, e),
             );
         }

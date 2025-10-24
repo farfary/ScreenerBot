@@ -112,9 +112,8 @@ async fn get_pool_program_info(pool_address: &str) -> (String, String) {
 async fn discover_and_identify_biggest_pool(
     token_address: &str,
 ) -> Result<Option<(String, f64, String)>, String> {
-    log(
+    logger::info(
         LogTag::PoolService,
-        "DISCOVER_START",
         &format!("Discovering pools for token: {}", token_address),
     );
 
@@ -123,17 +122,15 @@ async fn discover_and_identify_biggest_pool(
     let pool_descriptors = discovery.discover_pools_for_token(token_address).await;
 
     if pool_descriptors.is_empty() {
-        log(
-            LogTag::PoolService,
-            "DISCOVER_ERROR",
+        logger::info(
+        LogTag::PoolService,
             "No SOL-based pools found for token",
         );
         return Ok(None);
     }
 
-    log(
+    logger::info(
         LogTag::PoolService,
-        "DISCOVER_SUCCESS",
         &format!(
             "Found {} SOL-based pools for token {}",
             pool_descriptors.len(),
@@ -159,9 +156,8 @@ async fn discover_and_identify_biggest_pool(
         let (program_id, program_name) = get_pool_program_info(&pool.pool_id.to_string()).await;
         let program_display = format!("{} ({})", program_name, &program_id[..8]);
 
-        log(
-            LogTag::PoolService,
-            "BIGGEST_POOL",
+        logger::info(
+        LogTag::PoolService,
             &format!(
                 "Selected biggest SOL pool: {} | {} | Liquidity: ${:.2}",
                 &pool.pool_id.to_string()[..8],
@@ -171,9 +167,8 @@ async fn discover_and_identify_biggest_pool(
         );
 
         // Log summary of all pools for reference
-        log(
-            LogTag::PoolService,
-            "POOLS_SUMMARY",
+        logger::info(
+        LogTag::PoolService,
             &format!(
                 "All SOL pools: {} total, focusing on highest liquidity pool",
                 pool_descriptors.len()
@@ -186,9 +181,8 @@ async fn discover_and_identify_biggest_pool(
             program_display,
         )))
     } else {
-        log(
-            LogTag::PoolService,
-            "DISCOVER_ERROR",
+        logger::info(
+        LogTag::PoolService,
             "No valid SOL pools found",
         );
         Ok(None)
@@ -247,48 +241,43 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .collect();
 
     if !enabled_modes.is_empty() {
-        log(
-            LogTag::PoolService,
-            "DEBUG",
+        logger::info(
+        LogTag::PoolService,
             &format!("Debug modes enabled: {}", enabled_modes.join(", ")),
         );
     } else {
-        log(LogTag::PoolService, "INFO", "No debug modes enabled");
+        logger::info(
+        LogTag::PoolService, "No debug modes enabled");
     }
 
-    log(
+    logger::info(
         LogTag::PoolService,
-        "START",
         &format!("Starting pool service for single token: {}", args.token),
     );
 
     // Initialize DexScreener API
-    log(
+    logger::info(
         LogTag::PoolService,
-        "INIT",
         "Initializing DexScreener API...",
     );
     if let Err(e) = init_dexscreener_api().await {
-        log(
-            LogTag::PoolService,
-            "ERROR",
+        logger::info(
+        LogTag::PoolService,
             &format!("Failed to initialize DexScreener API: {}", e),
         );
         return Err(e.into());
     }
 
     // Pre-fetch token decimals to ensure they're cached
-    log(
+    logger::info(
         LogTag::PoolService,
-        "INIT",
         "Pre-fetching token decimals...",
     );
 
     // Early stablecoin validation - reject stablecoin tokens immediately
     if is_stablecoin_mint(&args.token) {
-        log(
-            LogTag::PoolService,
-            "ERROR",
+        logger::info(
+        LogTag::PoolService,
             &format!(
                 "Token {} is a stablecoin (USDC/USDT) - not supported for price monitoring",
                 &args.token[..8]
@@ -299,16 +288,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match screenerbot::tokens::decimals::get_token_decimals_from_chain(&args.token).await {
         Ok(decimals) => {
-            log(
-                LogTag::PoolService,
-                "SUCCESS",
+            logger::info(
+        LogTag::PoolService,
                 &format!("Token decimals fetched: {} decimals", decimals),
             );
         }
         Err(e) => {
-            log(
-                LogTag::PoolService,
-                "WARN",
+            logger::info(
+        LogTag::PoolService,
                 &format!("Failed to fetch token decimals: {}", e),
             );
         }
@@ -319,31 +306,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // NOTE: start_pool_service() is now part of ServiceManager, not a standalone function
     // This debug tool needs to be updated to use the service architecture
-    log(
+    logger::info(
         LogTag::PoolService,
-        "INFO",
         "⚠️ Pool service API has changed - this tool needs updating",
     );
-    log(
+    logger::info(
         LogTag::PoolService,
-        "INFO",
         "Use ServiceManager to start pool service in the new architecture",
     );
 
     // For now, just do a manual discovery and price fetch
-    log(
+    logger::info(
         LogTag::PoolService,
-        "INFO",
         "Performing manual pool discovery...",
     );
-    log(
+    logger::info(
         LogTag::PoolService,
-        "INFO",
         &format!("Monitoring token: {}", args.token),
     );
-    log(
+    logger::info(
         LogTag::PoolService,
-        "INFO",
         &format!(
             "Will run for {} seconds, checking every {} seconds",
             args.duration, args.interval
@@ -353,34 +335,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Discover pools and identify the biggest one
     let biggest_pool_info = match discover_and_identify_biggest_pool(&args.token).await {
         Ok(Some(info)) => {
-            log(
-                LogTag::PoolService,
-                "SUCCESS",
+            logger::info(
+        LogTag::PoolService,
                 "Biggest pool identified successfully",
             );
             Some(info)
         }
         Ok(None) => {
-            log(
-                LogTag::PoolService,
-                "WARN",
+            logger::info(
+        LogTag::PoolService,
                 "No pools found, will monitor anyway",
             );
             None
         }
         Err(e) => {
-            log(
-                LogTag::PoolService,
-                "DISCOVER_FAILED",
+            logger::info(
+        LogTag::PoolService,
                 &format!("Pool discovery failed: {}", e),
             );
             None
         }
     };
 
-    log(
+    logger::info(
         LogTag::PoolService,
-        "INFO",
         "Starting price change monitoring (biggest pool only)...",
     );
 
@@ -393,9 +371,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tokio::signal::ctrl_c()
             .await
             .expect("Failed to listen for Ctrl+C");
-        log(
-            LogTag::PoolService,
-            "SHUTDOWN",
+        logger::info(
+        LogTag::PoolService,
             "Received Ctrl+C, shutting down...",
         );
         shutdown_clone.notify_one();
@@ -406,9 +383,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let run_duration = args.duration;
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_secs(run_duration)).await;
-        log(
-            LogTag::PoolService,
-            "SHUTDOWN",
+        logger::info(
+        LogTag::PoolService,
             "Time limit reached, shutting down...",
         );
         shutdown_timer.notify_one();
@@ -486,9 +462,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                             };
 
-                            log(
-                                LogTag::PoolService,
-                                "PRICE_CHANGE",
+                            logger::info(
+        LogTag::PoolService,
                                 &format!("[{}] {:.12} SOL{} {}{} | Confidence: {:.2}",
                                     check_count,
                                     price.price_sol,
@@ -503,14 +478,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     },
                                     price.confidence)
                             );
-                            log(
-                                LogTag::PoolService,
-                                "POOL_INFO",
+                            logger::info(
+        LogTag::PoolService,
                                 &format!("    Biggest Pool: {} | Program: {}", price.pool_address, program_display)
                             );
-                            log(
-                                LogTag::PoolService,
-                                "RESERVES",
+                            logger::info(
+        LogTag::PoolService,
                                 &format!("    Reserves: {:.6} SOL / {:.6} tokens", price.sol_reserves, price.token_reserves)
                             );
 
@@ -520,9 +493,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         } else {
                             // No change, just log a brief status every 10 checks
                             if check_count % 10 == 0 {
-                                log(
-                                    LogTag::PoolService,
-                                    "PRICE_STABLE",
+                                logger::info(
+        LogTag::PoolService,
                                     &format!("[{}] Price stable: {:.12} SOL (no changes)", check_count, price.price_sol)
                                 );
                             }
@@ -530,9 +502,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     } else {
                         // Price is not from the biggest pool, ignore it
                         if check_count % 10 == 0 {
-                            log(
-                                LogTag::PoolService,
-                                "WRONG_POOL",
+                            logger::info(
+        LogTag::PoolService,
                                 &format!("[{}] Price from different pool ({}), waiting for biggest pool", check_count, &price.pool_address[..8])
                             );
                         }
@@ -556,25 +527,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     " (Initial API price)".to_string()
                                 };
 
-                                log(
-                                    LogTag::PoolService,
-                                    "API_PRICE_CHANGE",
+                                logger::info(
+        LogTag::PoolService,
                                     &format!("[{}] Pool unavailable | API: {:.12} SOL{}", check_count, api_val, change_info)
                                 );
                                 last_api_price = Some(api_val);
                             } else if check_count % 10 == 0 {
-                                log(
-                                    LogTag::PoolService,
-                                    "NO_POOL_PRICE",
+                                logger::info(
+        LogTag::PoolService,
                                     &format!("[{}] Pool price unavailable | API stable: {:.12} SOL", check_count, api_val)
                                 );
                             }
                         }
                         None => {
                             if check_count % 10 == 0 {
-                                log(
-                                    LogTag::PoolService,
-                                    "NO_PRICE",
+                                logger::info(
+        LogTag::PoolService,
                                     &format!("[{}] No price available from pool or API", check_count)
                                 );
                             }
@@ -588,15 +556,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    log(LogTag::PoolService, "STOP", "Stopping...");
+    logger::info(
+        LogTag::PoolService, "Stopping...");
 
     // Clear debug override
     set_debug_token_override(None);
 
-    log(LogTag::PoolService, "SUCCESS", "Debug session complete");
-    log(
+    logger::info(
+        LogTag::PoolService, "Debug session complete");
+    logger::info(
         LogTag::PoolService,
-        "STATS",
         &format!("Total price checks performed: {}", check_count),
     );
 

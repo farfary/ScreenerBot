@@ -1,6 +1,6 @@
 //! Manual order processing
 
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::trader::execution::execute_trade;
 use crate::trader::types::{
     TradeAction, TradeDecision, TradePriority, TradeReason, TradeResult,
@@ -9,9 +9,8 @@ use chrono::Utc;
 
 /// Execute a manual buy order
 pub async fn manual_buy(mint: &str, size_sol: f64) -> Result<TradeResult, String> {
-    log(
+    logger::info(
         LogTag::Trader,
-        "INFO",
         &format!("Processing manual buy: mint={}, size={} SOL", mint, size_sol),
     );
 
@@ -37,9 +36,8 @@ pub async fn manual_buy(mint: &str, size_sol: f64) -> Result<TradeResult, String
 
 /// Execute a manual sell order
 pub async fn manual_sell(position_id: &str) -> Result<TradeResult, String> {
-    log(
+    logger::info(
         LogTag::Trader,
-        "INFO",
         &format!("Processing manual sell: position_id={}", position_id),
     );
 
@@ -67,9 +65,8 @@ pub async fn manual_sell(position_id: &str) -> Result<TradeResult, String> {
 
 /// Execute a force buy (bypass safety checks)
 pub async fn force_buy(mint: &str, size_sol: f64) -> Result<TradeResult, String> {
-    log(
+    logger::warning(
         LogTag::Trader,
-        "WARN",
         &format!(
             "Processing FORCE buy (safety checks bypassed): mint={}, size={} SOL",
             mint, size_sol
@@ -98,9 +95,8 @@ pub async fn force_buy(mint: &str, size_sol: f64) -> Result<TradeResult, String>
 
 /// Execute a force sell (bypass safety checks)
 pub async fn force_sell(position_id: &str) -> Result<TradeResult, String> {
-    log(
+    logger::warning(
         LogTag::Trader,
-        "WARN",
         &format!(
             "Processing FORCE sell (safety checks bypassed): position_id={}",
             position_id

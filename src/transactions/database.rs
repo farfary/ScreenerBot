@@ -15,8 +15,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use crate::global::is_debug_transactions_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::transactions::{types::*, utils::*};
 
 // =============================================================================
@@ -307,9 +306,8 @@ impl TransactionDatabase {
         let database_path_str = database_path.to_string_lossy().to_string();
 
         if log_details {
-            log(
-                LogTag::Transactions,
-                "INIT",
+            logger::info(
+        LogTag::Transactions,
                 &format!("Initializing TransactionDatabase at: {}", database_path_str),
             );
         }
@@ -338,9 +336,8 @@ impl TransactionDatabase {
         db.initialize_schema().await?;
 
         if log_details {
-            log(
-                LogTag::Transactions,
-                "INIT",
+            logger::info(
+        LogTag::Transactions,
                 "TransactionDatabase initialization complete",
             );
         }
@@ -506,9 +503,8 @@ impl TransactionDatabase {
         }
 
         if total_updated > 0 {
-            log(
-                LogTag::Transactions,
-                "MIGRATION",
+            logger::info(
+        LogTag::Transactions,
                 &format!(
                     "Backfilled sol_delta for {} processed transactions",
                     total_updated
@@ -531,13 +527,10 @@ impl TransactionDatabase {
         match serde_json::from_str::<Vec<SolBalanceChange>>(raw) {
             Ok(changes) => changes.iter().map(|change| change.change).sum(),
             Err(err) => {
-                if is_debug_transactions_enabled() {
-                    log(
-                        LogTag::Transactions,
-                        "MIGRATION_WARN",
+                logger::info(
+        LogTag::Transactions,
                         &format!("Failed to parse sol_balance_change payload: {}", err),
                     );
-                }
                 0.0
             }
         }
@@ -800,9 +793,7 @@ impl TransactionDatabase {
     }
 
     /// Store raw transaction data
-    pub async fn store_raw_transaction(&self, transaction: &Transaction) -> Result<(), String> {
-        let debug = is_debug_transactions_enabled();
-        let conn = self.get_connection()?;
+    pub async fn store_raw_transaction(&self, transaction: &Transaction) -> Result<(), String> {        let conn = self.get_connection()?;
 
         let status_str = match &transaction.status {
             TransactionStatus::Pending => "Pending",
@@ -839,16 +830,6 @@ impl TransactionDatabase {
             )
             .map_err(|e| format!("Failed to store raw transaction: {}", e))?;
 
-        if debug {
-            log(
-                LogTag::Transactions,
-                "DB_RAW",
-                &format!(
-                    "Stored raw {} (status={}, success={})",
-                    &transaction.signature, status_str, transaction.success
-                ),
-            );
-        }
 
         Ok(())
     }
@@ -857,9 +838,7 @@ impl TransactionDatabase {
     pub async fn store_processed_transaction(
         &self,
         transaction: &Transaction,
-    ) -> Result<(), String> {
-        let debug = is_debug_transactions_enabled();
-        let conn = self.get_connection()?;
+    ) -> Result<(), String> {        let conn = self.get_connection()?;
 
         // Serialize complex fields as JSON strings
         let sol_balance_change_json = serde_json::to_string(&transaction.sol_balance_changes)
@@ -920,19 +899,6 @@ impl TransactionDatabase {
             )
             .map_err(|e| format!("Failed to store processed transaction: {}", e))?;
 
-        if debug {
-            log(
-                LogTag::Transactions,
-                "DB_PROCESSED",
-                &format!(
-                    "Stored processed {} (type={:?}, direction={:?}, fee_sol={:.8})",
-                    &transaction.signature,
-                    transaction.transaction_type,
-                    transaction.direction,
-                    transaction.fee_sol
-                ),
-            );
-        }
 
         Ok(())
     }
@@ -965,9 +931,7 @@ impl TransactionDatabase {
     }
 
     /// Get transaction by signature
-    pub async fn get_transaction(&self, signature: &str) -> Result<Option<Transaction>, String> {
-        let debug = is_debug_transactions_enabled();
-        let conn = self.get_connection()?;
+    pub async fn get_transaction(&self, signature: &str) -> Result<Option<Transaction>, String> {        let conn = self.get_connection()?;
 
         let result = conn.query_row(
             r#"SELECT signature, slot, block_time, timestamp, status, success, error_message,
@@ -1015,16 +979,6 @@ impl TransactionDatabase {
 
         match result {
             Ok(transaction) => {
-                if debug {
-                    log(
-                        LogTag::Transactions,
-                        "DB_HIT",
-                        &format!(
-                            "Cache hit for {} (status={:?})",
-                            signature, transaction.status
-                        ),
-                    );
-                }
                 Ok(Some(transaction))
             }
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
@@ -1123,9 +1077,8 @@ impl TransactionDatabase {
     pub async fn perform_maintenance(&self) -> Result<(), String> {
         let conn = self.get_connection()?;
 
-        log(
-            LogTag::Transactions,
-            "INFO",
+        logger::info(
+        LogTag::Transactions,
             "Starting database maintenance",
         );
 
@@ -1153,9 +1106,8 @@ impl TransactionDatabase {
             )
             .map_err(|e| format!("Failed to cleanup old deferred retries: {}", e))?;
 
-        log(
-            LogTag::Transactions,
-            "INFO",
+        logger::info(
+        LogTag::Transactions,
             &format!(
                 "Database maintenance complete: cleaned {} pending, {} retries",
                 cleaned_pending, cleaned_retries
@@ -1655,17 +1607,14 @@ impl TransactionDatabase {
         let wallet_address = crate::utils::get_wallet_address()
             .map_err(|e| format!("Failed to get wallet address: {}", e))?;
 
-        if is_debug_transactions_enabled() {
-            log(
-                LogTag::Transactions,
-                "FLOW_AGG_START",
+        logger::info(
+        LogTag::Transactions,
                 &format!(
                     "Aggregating SOL flows for wallet {} from {}",
                     wallet_address,
                     from.to_rfc3339()
                 ),
             );
-        }
 
         // Change query to get all rows so we can parse JSON
         let row_query = query.replace(
@@ -1716,10 +1665,9 @@ impl TransactionDatabase {
                                         change_obj.get("change").and_then(|v| v.as_f64())
                                     {
                                         parsed_count += 1;
-                                        if is_debug_transactions_enabled() && count <= 5 {
-                                            log(
+                                        if count <= 5 {
+                                            logger::debug(
                                                 LogTag::Transactions,
-                                                "FLOW_PARSE",
                                                 &format!(
                                                     "TX {}: wallet change={:.6} SOL",
                                                     &signature[..8],
@@ -1739,10 +1687,9 @@ impl TransactionDatabase {
                         }
                         if !found_wallet {
                             no_wallet_account_count += 1;
-                            if is_debug_transactions_enabled() && no_wallet_account_count <= 3 {
-                                log(
+                            if no_wallet_account_count <= 3 {
+                                logger::debug(
                                     LogTag::Transactions,
-                                    "FLOW_NO_WALLET",
                                     &format!(
                                         "TX {}: no wallet account in {} balance changes",
                                         &signature[..8],
@@ -1754,10 +1701,9 @@ impl TransactionDatabase {
                     }
                     Err(e) => {
                         parse_error_count += 1;
-                        if is_debug_transactions_enabled() && parse_error_count <= 3 {
-                            log(
+                        if parse_error_count <= 3 {
+                            logger::debug(
                                 LogTag::Transactions,
-                                "FLOW_PARSE_ERR",
                                 &format!("TX {}: JSON parse error: {}", &signature[..8], e),
                             );
                         }
@@ -1768,10 +1714,8 @@ impl TransactionDatabase {
             }
         }
 
-        if is_debug_transactions_enabled() {
-            log(
-                LogTag::Transactions,
-                "FLOW_AGG_RESULT",
+        logger::info(
+        LogTag::Transactions,
                 &format!(
                     "Aggregated {} txs: parsed={} with wallet, no_json={}, parse_errors={}, no_wallet_account={} | inflow={:.6} SOL, outflow={:.6} SOL, net={:.6} SOL",
                     count,
@@ -1784,7 +1728,6 @@ impl TransactionDatabase {
                     inflow - outflow
                 ),
             );
-        }
 
         Ok((inflow, outflow, count))
     }
@@ -2237,9 +2180,8 @@ pub async fn init_transaction_database() -> Result<Arc<TransactionDatabase>, Str
     let mut global = GLOBAL_TRANSACTION_DATABASE.lock().await;
     *global = Some(Arc::clone(&db_arc));
 
-    log(
+    logger::info(
         LogTag::Transactions,
-        "INFO",
         "Global transaction database initialized",
     );
     Ok(db_arc)

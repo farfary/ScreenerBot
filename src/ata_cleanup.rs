@@ -1,10 +1,10 @@
-use crate::global::{is_debug_wallet_enabled, ATA_FAILED_CACHE};
+use crate::global::ATA_FAILED_CACHE;
 /// Background ATA Cleanup Service
 ///
 /// This service runs independently from the trading logic and periodically
 /// scans for empty Associated Token Accounts (ATAs) to close and reclaim rent.
 /// This prevents blocking the main trading flow while ensuring optimal rent utilization.
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::utils::get_wallet_address;
 
 use chrono;
@@ -52,13 +52,7 @@ struct FailedAtaCache {
 /// Background ATA cleanup service that runs independently
 /// This service periodically scans for empty ATAs and closes them to reclaim rent
 pub async fn start_ata_cleanup_service(shutdown_notify: Arc<Notify>) {
-    if is_debug_wallet_enabled() {
-        log(
-            LogTag::Wallet,
-            "ATA_SERVICE",
-            "Starting background ATA cleanup service...",
-        );
-    }
+    logger::debug(LogTag::Wallet, "Starting background ATA cleanup service...");
 
     // Load failed ATA cache from disk
     load_failed_ata_cache().await;
@@ -70,22 +64,19 @@ pub async fn start_ata_cleanup_service(shutdown_notify: Arc<Notify>) {
     let mut cleanup_timer = interval(Duration::from_secs(ATA_CLEANUP_INTERVAL_MINUTES * 60));
     cleanup_timer.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
-    if is_debug_wallet_enabled() {
-        log(
+    logger::debug(
             LogTag::Wallet,
-            "ATA_SERVICE",
             &format!(
                 "ATA cleanup service started - will check every {} minutes",
                 ATA_CLEANUP_INTERVAL_MINUTES
             ),
         );
-    }
 
     loop {
         tokio::select! {
             // Check for shutdown signal
-            _ = shutdown_notify.notified() => {
-                log(LogTag::Wallet, "ATA_SERVICE", "ATA cleanup service shutting down...");
+                _ = shutdown_notify.notified() => {
+                logger::info(LogTag::Wallet, "ATA cleanup service shutting down...");
                 // Save failed ATA cache before shutdown
                 save_failed_ata_cache().await;
                 break;
@@ -96,20 +87,15 @@ pub async fn start_ata_cleanup_service(shutdown_notify: Arc<Notify>) {
                 match perform_ata_cleanup().await {
                     Ok((closed_count, signatures)) => {
                         if closed_count > 0 {
-                            log(
+                            logger::info(
                                 LogTag::Wallet,
-                                "ATA_SERVICE",
                                 &format!("Cleanup cycle completed: {} ATAs closed, {} signatures",
-                                        closed_count, signatures.len())
+                                        closed_count, signatures.len()),
                             );
                         }
                     }
                     Err(e) => {
-                        log(
-                            LogTag::Wallet,
-                            "ERROR",
-                            &format!("ATA cleanup service error: {}", e)
-                        );
+                        logger::error(LogTag::Wallet, &format!("ATA cleanup service error: {}", e));
 
                         // Sleep a bit before continuing on error to avoid rapid failures
                         sleep(Duration::from_secs(30)).await;
@@ -119,27 +105,20 @@ pub async fn start_ata_cleanup_service(shutdown_notify: Arc<Notify>) {
         }
     }
 
-    log(LogTag::Wallet, "ATA_SERVICE", "ATA cleanup service stopped");
+    logger::info(LogTag::Wallet, "ATA cleanup service stopped");
 }
 
 /// Performs the actual ATA cleanup operation with failed ATA caching
 async fn perform_ata_cleanup(
 ) -> Result<(u32, Vec<String>), Box<dyn std::error::Error + Send + Sync>> {
-    if is_debug_wallet_enabled() {
-        log(
-            LogTag::Wallet,
-            "ATA_SERVICE",
-            "Starting periodic ATA cleanup check...",
-        );
-    }
+    logger::debug(LogTag::Wallet, "Starting periodic ATA cleanup check...");
 
     // Get wallet address from config
     let wallet_address = match get_wallet_address() {
         Ok(addr) => addr,
         Err(e) => {
-            log(
+            logger::error(
                 LogTag::Wallet,
-                "ERROR",
                 &format!("Failed to get wallet address for ATA cleanup: {}", e),
             );
             return Err(Box::new(e));
@@ -150,9 +129,8 @@ async fn perform_ata_cleanup(
     let all_accounts = match crate::utils::get_all_token_accounts(&wallet_address).await {
         Ok(accounts) => accounts,
         Err(e) => {
-            log(
+            logger::error(
                 LogTag::Wallet,
-                "ERROR",
                 &format!("Failed to get token accounts: {}", e),
             );
             return Err(Box::new(e));
@@ -163,9 +141,8 @@ async fn perform_ata_cleanup(
     let failed_cache = match FAILED_ATA_CACHE.lock() {
         Ok(cache) => cache.clone(),
         Err(e) => {
-            log(
+            logger::error(
                 LogTag::Wallet,
-                "ERROR",
                 &format!("Failed to lock failed ATA cache: {}", e),
             );
             return Err(Box::new(std::io::Error::new(
@@ -180,19 +157,12 @@ async fn perform_ata_cleanup(
         .collect();
 
     if empty_accounts.is_empty() {
-        if is_debug_wallet_enabled() {
-            log(
-                LogTag::Wallet,
-                "ATA_SERVICE",
-                "No empty ATAs found - wallet is already optimized",
-            );
-        }
+        logger::debug(LogTag::Wallet, "No empty ATAs found - wallet is already optimized");
         return Ok((0, Vec::new()));
     }
 
-    log(
+    logger::info(
         LogTag::Wallet,
-        "ATA_SERVICE",
         &format!(
             "Found {} empty ATAs to close (excluding {} cached failures)",
             empty_accounts.len(),
@@ -209,7 +179,7 @@ async fn perform_ata_cleanup(
 
     for account in empty_accounts {
         match crate::utils::close_single_ata(&wallet_address, &account.mint).await {
-            Ok(signature) => {
+                Ok(signature) => {
                 closed_count += 1;
                 // Query actual ATA rent from chain
                 let actual_rent = match crate::rpc::get_ata_rent_lamports().await {
@@ -217,9 +187,8 @@ async fn perform_ata_cleanup(
                     Err(_) => 0.00203928, // Fallback to standard ATA rent
                 };
                 total_rent_reclaimed += actual_rent;
-                log(
+                logger::info(
                     LogTag::Wallet,
-                    "ATA_SERVICE",
                     &format!(
                         "Closed ATA for {} - Tx: {} - Rent reclaimed: {:.8} SOL",
                         &account.mint[..8],
@@ -231,9 +200,8 @@ async fn perform_ata_cleanup(
             }
             Err(e) => {
                 failed_count += 1;
-                log(
+                logger::error(
                     LogTag::Wallet,
-                    "ERROR",
                     &format!(
                         "Failed to close ATA {}: {} - Adding to cache",
                         &account.mint[..8],
@@ -259,9 +227,8 @@ async fn perform_ata_cleanup(
                 }
             }
             Err(e) => {
-                log(
+                logger::error(
                     LogTag::Wallet,
-                    "ERROR",
                     &format!("Failed to update failed ATA cache: {}", e),
                 );
             }
@@ -281,9 +248,8 @@ async fn perform_ata_cleanup(
             );
         }
         Err(e) => {
-            log(
+            logger::error(
                 LogTag::Wallet,
-                "ERROR",
                 &format!("Failed to update ATA cleanup stats: {}", e),
             );
         }
@@ -296,46 +262,32 @@ async fn perform_ata_cleanup(
 
     // Log summary
     if closed_count > 0 {
-        log(
+        logger::info(
             LogTag::Wallet,
-            "ATA_SERVICE",
             &format!(
                 "Cleaned up {} ATAs, reclaimed {:.6} SOL in rent. {} failures cached.",
                 closed_count, total_rent_reclaimed, failed_count
             ),
         );
     } else {
-        log(
-            LogTag::Wallet,
-            "ATA_SERVICE",
-            "No ATAs were successfully closed",
-        );
+        logger::info(LogTag::Wallet, "No ATAs were successfully closed");
     }
 
-    log(
-        LogTag::Wallet,
-        "ATA_SERVICE",
-        "Periodic ATA cleanup check completed",
-    );
+    logger::info(LogTag::Wallet, "Periodic ATA cleanup check completed");
     Ok((closed_count, signatures))
 }
 
 /// Manually trigger an immediate ATA cleanup (can be called from other parts of the system)
 pub async fn trigger_immediate_ata_cleanup(
 ) -> Result<(u32, Vec<String>), Box<dyn std::error::Error + Send + Sync>> {
-    log(
-        LogTag::Wallet,
-        "ATA_SERVICE",
-        "Manual ATA cleanup triggered...",
-    );
+    logger::info(LogTag::Wallet, "Manual ATA cleanup triggered...");
 
     // Perform manual cleanup and collect signatures
     let (cleanup_count, actual_signatures) = perform_ata_cleanup().await?;
 
     // Log completion with actual results (no need to re-access stats)
-    log(
+    logger::info(
         LogTag::Wallet,
-        "ATA_SERVICE",
         &format!(
             "Manual ATA cleanup completed: {} closed, {} signatures",
             cleanup_count,
@@ -350,11 +302,7 @@ pub fn get_ata_cleanup_statistics() -> AtaCleanupStats {
     match ATA_STATS.lock() {
         Ok(stats) => stats.clone(),
         Err(_) => {
-            log(
-                LogTag::Wallet,
-                "ERROR",
-                "Failed to lock ATA stats - returning default stats",
-            );
+            logger::error(LogTag::Wallet, "Failed to lock ATA stats - returning default stats");
             AtaCleanupStats {
                 total_closed: 0,
                 total_rent_reclaimed: 0.0,
@@ -370,11 +318,7 @@ pub fn get_failed_ata_count() -> usize {
     match FAILED_ATA_CACHE.lock() {
         Ok(cache) => cache.len(),
         Err(_) => {
-            log(
-                LogTag::Wallet,
-                "ERROR",
-                "Failed to lock failed ATA cache - returning 0",
-            );
+            logger::error(LogTag::Wallet, "Failed to lock failed ATA cache - returning 0");
             0
         }
     }
@@ -388,7 +332,7 @@ pub async fn clear_failed_ata_cache() -> Result<(), Box<dyn std::error::Error + 
         }
         Err(e) => {
             let error_msg = format!("Failed to lock failed ATA cache for clearing: {}", e);
-            log(LogTag::Wallet, "ERROR", &error_msg);
+            logger::error(LogTag::Wallet, &error_msg);
             return Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 error_msg,
@@ -397,11 +341,7 @@ pub async fn clear_failed_ata_cache() -> Result<(), Box<dyn std::error::Error + 
     }
 
     save_failed_ata_cache().await;
-    log(
-        LogTag::Wallet,
-        "ATA_SERVICE",
-        "Failed ATA cache cleared - will retry all ATAs",
-    );
+    logger::info(LogTag::Wallet, "Failed ATA cache cleared - will retry all ATAs");
     Ok(())
 }
 
@@ -413,42 +353,22 @@ async fn load_failed_ata_cache() {
                 Ok(cache_data) => match FAILED_ATA_CACHE.lock() {
                     Ok(mut cache) => {
                         *cache = cache_data.failed_atas;
-                        log(
-                            LogTag::Wallet,
-                            "ATA_SERVICE",
-                            &format!("Loaded {} failed ATAs from cache", cache.len()),
-                        );
+                        logger::info(LogTag::Wallet, &format!("Loaded {} failed ATAs from cache", cache.len()));
                     }
                     Err(e) => {
-                        log(
-                            LogTag::Wallet,
-                            "ERROR",
-                            &format!("Failed to lock failed ATA cache during load: {}", e),
-                        );
+                        logger::error(LogTag::Wallet, &format!("Failed to lock failed ATA cache during load: {}", e));
                     }
                 },
                 Err(e) => {
-                    log(
-                        LogTag::Wallet,
-                        "ERROR",
-                        &format!("Failed to parse ATA cache file: {}", e),
-                    );
+                    logger::error(LogTag::Wallet, &format!("Failed to parse ATA cache file: {}", e));
                 }
             },
             Err(e) => {
-                log(
-                    LogTag::Wallet,
-                    "ERROR",
-                    &format!("Failed to read ATA cache file: {}", e),
-                );
+                logger::error(LogTag::Wallet, &format!("Failed to read ATA cache file: {}", e));
             }
         }
     } else {
-        log(
-            LogTag::Wallet,
-            "ATA_SERVICE",
-            "No existing failed ATA cache found",
-        );
+        logger::info(LogTag::Wallet, "No existing failed ATA cache found");
     }
 }
 
@@ -459,40 +379,21 @@ async fn save_failed_ata_cache() {
             failed_atas: cache.clone(),
         },
         Err(e) => {
-            log(
-                LogTag::Wallet,
-                "ERROR",
-                &format!("Failed to lock failed ATA cache during save: {}", e),
-            );
+            logger::error(LogTag::Wallet, &format!("Failed to lock failed ATA cache during save: {}", e));
             return;
         }
     };
 
     match serde_json::to_string_pretty(&cache_data) {
         Ok(json) => {
-            if let Err(e) = tokio::fs::write(ATA_FAILED_CACHE_FILE, json).await {
-                log(
-                    LogTag::Wallet,
-                    "ERROR",
-                    &format!("Failed to save ATA cache file: {}", e),
-                );
+                if let Err(e) = tokio::fs::write(ATA_FAILED_CACHE_FILE, json).await {
+                logger::error(LogTag::Wallet, &format!("Failed to save ATA cache file: {}", e));
             } else {
-                log(
-                    LogTag::Wallet,
-                    "ATA_SERVICE",
-                    &format!(
-                        "Saved {} failed ATAs to cache",
-                        cache_data.failed_atas.len()
-                    ),
-                );
+                logger::info(LogTag::Wallet, &format!("Saved {} failed ATAs to cache", cache_data.failed_atas.len()));
             }
         }
         Err(e) => {
-            log(
-                LogTag::Wallet,
-                "ERROR",
-                &format!("Failed to serialize ATA cache: {}", e),
-            );
+            logger::error(LogTag::Wallet, &format!("Failed to serialize ATA cache: {}", e));
         }
     }
 }
@@ -525,12 +426,12 @@ pub async fn get_ata_cleanup_stats() -> Result<String, Box<dyn std::error::Error
                 potential_rent
             );
 
-            log(LogTag::Wallet, "ATA_SERVICE", &status);
+            logger::info(LogTag::Wallet, &status);
             Ok(status)
         }
         Err(e) => {
             let error_msg = format!("Failed to get ATA stats: {}", e);
-            log(LogTag::Wallet, "ERROR", &error_msg);
+            logger::error(LogTag::Wallet, &error_msg);
             Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
         }
     }

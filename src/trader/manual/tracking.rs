@@ -1,6 +1,6 @@
 //! Manual trade tracking and history
 
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::trader::types::TradeResult;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -49,9 +49,8 @@ pub async fn record_manual_trade(result: &TradeResult) -> Result<(), String> {
         history.drain(0..excess);
     }
 
-    log(
+    logger::info(
         LogTag::Trader,
-        "INFO",
         &format!(
             "Recorded manual trade: action={}, mint={}, success={}",
             record.action, record.mint, record.success
@@ -81,5 +80,5 @@ pub async fn get_manual_trade_history(limit: usize) -> Vec<ManualTradeRecord> {
 pub async fn clear_history() {
     let mut history = get_history_storage().write().await;
     history.clear();
-    log(LogTag::Trader, "INFO", "Cleared manual trade history");
+    logger::info(LogTag::Trader, "Cleared manual trade history");
 }

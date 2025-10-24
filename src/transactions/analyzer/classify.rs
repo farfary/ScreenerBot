@@ -14,8 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use super::{balance::BalanceAnalysis, dex::DexAnalysis, AnalysisConfidence};
-use crate::global::is_debug_transactions_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::transactions::types::*;
 use crate::transactions::utils::WSOL_MINT;
 
@@ -153,13 +152,10 @@ pub async fn classify_transaction(
     balance_analysis: &BalanceAnalysis,
     dex_analysis: &DexAnalysis,
 ) -> Result<TransactionClass, String> {
-    if is_debug_transactions_enabled() {
-        log(
-            LogTag::Transactions,
-            "CLASSIFY",
+    logger::info(
+        LogTag::Transactions,
             &format!("Classifying transaction: {}", transaction.signature),
         );
-    }
 
     // Step 1: Build flow graph from balance changes
     let flow_analysis = build_flow_graph(balance_analysis, dex_analysis).await?;
@@ -175,10 +171,8 @@ pub async fn classify_transaction(
         calculate_classification_confidence(&classification, &flow_analysis, dex_analysis);
 
     // Decision summary
-    if is_debug_transactions_enabled() {
-        log(
-            LogTag::Transactions,
-            "CLASSIFY_DECISION",
+    logger::info(
+        LogTag::Transactions,
             &format!(
                 "classification={:?} direction={:?} primary_token={:?} confidence={:?}",
                 classification.0, classification.1, classification.2, confidence
@@ -186,9 +180,8 @@ pub async fn classify_transaction(
         );
 
         // Debug: summarize nodes, edges, and patterns
-        log(
-            LogTag::Transactions,
-            "CLASSIFY_DEBUG",
+        logger::info(
+        LogTag::Transactions,
             &format!(
                 "Flow graph: nodes={} edges={} patterns={} dex_conf={:.2}",
                 flow_analysis.nodes.len(),
@@ -197,7 +190,6 @@ pub async fn classify_transaction(
                 dex_analysis.confidence
             ),
         );
-    }
 
     Ok(TransactionClass {
         transaction_type: classification.0,

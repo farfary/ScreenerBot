@@ -5,7 +5,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, RwLock};
 
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use tokio::sync::Mutex as AsyncMutex;
 
 // In-memory decimals cache for fast synchronous lookups
@@ -93,9 +93,8 @@ pub async fn get(mint: &str) -> Option<u8> {
     if let Ok(d) = chain_result {
         cache(mint, d);
         if let Err(e) = persist_to_db(mint, d).await {
-            log(
+            logger::warning(
                 LogTag::Tokens,
-                "WARN",
                 &format!("Failed to persist decimals to DB: mint={} err={}", mint, e),
             );
         }
@@ -105,9 +104,8 @@ pub async fn get(mint: &str) -> Option<u8> {
     }
 
     if let Err(err) = &chain_result {
-        log(
+        logger::warning(
             LogTag::Tokens,
-            "WARN",
             &format!(
                 "Failed to fetch decimals from chain: mint={} err={}",
                 mint, err
@@ -116,9 +114,8 @@ pub async fn get(mint: &str) -> Option<u8> {
     }
 
     if let Some(d) = get_from_rugcheck(mint).await {
-        log(
+        logger::info(
             LogTag::Tokens,
-            "DECIMALS_RUGCHECK_FALLBACK",
             &format!(
                 "Resolved decimals via RugCheck: mint={} decimals={}",
                 mint, d
@@ -126,9 +123,8 @@ pub async fn get(mint: &str) -> Option<u8> {
         );
         cache(mint, d);
         if let Err(e) = persist_to_db(mint, d).await {
-            log(
+            logger::warning(
                 LogTag::Tokens,
-                "WARN",
                 &format!(
                     "Failed to persist RugCheck decimals to DB: mint={} err={}",
                     mint, e
@@ -140,13 +136,9 @@ pub async fn get(mint: &str) -> Option<u8> {
         return Some(d);
     }
 
-    log(
+    logger::warning(
         LogTag::Tokens,
-        "DECIMALS_UNRESOLVED",
-        &format!(
-            "Unable to resolve decimals after all fallbacks: mint={}",
-            mint
-        ),
+        &format!("Unable to resolve decimals after all fallbacks: mint={}", mint),
     );
     mark_failure(mint);
     drop(guard);

@@ -125,9 +125,8 @@ async fn validate_price_availability(
         Some(decimals) => decimals,
         None => {
             calculation_error = Some("Missing token decimals".to_string());
-            log(
-                LogTag::System,
-                "DECIMALS_MISS",
+            logger::info(
+        LogTag::System,
                 &format!("No decimals for {}", &token_mint[..8]),
             );
             return (
@@ -146,9 +145,8 @@ async fn validate_price_availability(
         {
             Ok(price) => {
                 calculated_price = Some(price);
-                log(
-                    LogTag::System,
-                    "POOL_PRICE_CALC",
+                logger::info(
+        LogTag::System,
                     &format!(
                         "Calculated pool price for {}: {:.8} SOL",
                         &token_mint[..8],
@@ -158,9 +156,8 @@ async fn validate_price_availability(
             }
             Err(e) => {
                 calculation_error = Some(e.clone());
-                log(
-                    LogTag::System,
-                    "POOL_PRICE_ERROR",
+                logger::info(
+        LogTag::System,
                     &format!(
                         "Pool price calculation failed for {}: {}",
                         &token_mint[..8],
@@ -188,16 +185,14 @@ async fn validate_price_availability(
         match price_opt {
             Some(price) => {
                 api_price = Some(price);
-                log(
-                    LogTag::System,
-                    "API_PRICE",
+                logger::info(
+        LogTag::System,
                     &format!("API price for {}: {:.8} SOL", &token_mint[..8], price),
                 );
             }
             None => {
-                log(
-                    LogTag::System,
-                    "API_PRICE_MISS",
+                logger::info(
+        LogTag::System,
                     &format!("No API price available for {}", &token_mint[..8]),
                 );
             }
@@ -211,9 +206,8 @@ async fn validate_price_availability(
             price_diff_percent = Some(diff_percent);
 
             if diff_percent > price_diff_threshold {
-                log(
-                    LogTag::System,
-                    "PRICE_DIFF_HIGH",
+                logger::info(
+        LogTag::System,
                     &format!(
                         "HIGH PRICE DIFF for {}: calc={:.8} vs api={:.8} ({:.1}%)",
                         &token_mint[..8],
@@ -223,9 +217,8 @@ async fn validate_price_availability(
                     ),
                 );
             } else {
-                log(
-                    LogTag::System,
-                    "PRICE_MATCH",
+                logger::info(
+        LogTag::System,
                     &format!(
                         "Price match for {}: calc={:.8} vs api={:.8} ({:.1}%)",
                         &token_mint[..8],
@@ -299,9 +292,8 @@ async fn fetch_pool_accounts(
 
     // For now, we'll start with just the main pool account
     // This can be extended to fetch additional accounts based on program type
-    log(
+    logger::info(
         LogTag::System,
-        "ACCOUNT_FETCH",
         &format!(
             "Fetched {} accounts for {} pool",
             accounts.len(),
@@ -362,9 +354,8 @@ async fn calculate_orca_whirlpool_price(
 
     // This is a placeholder for actual Orca Whirlpool decoding
     // The real implementation would decode the account data according to Orca's structure
-    log(
+    logger::info(
         LogTag::System,
-        "ORCA_DECODE",
         "Attempting Orca Whirlpool price calculation (placeholder)",
     );
 
@@ -383,9 +374,8 @@ async fn calculate_raydium_clmm_price(
         return Err("No pool account data".to_string());
     }
 
-    log(
+    logger::info(
         LogTag::System,
-        "RAYDIUM_CLMM_DECODE",
         "Attempting Raydium CLMM price calculation (placeholder)",
     );
 
@@ -403,9 +393,8 @@ async fn calculate_raydium_cpmm_price(
         return Err("No pool account data".to_string());
     }
 
-    log(
+    logger::info(
         LogTag::System,
-        "RAYDIUM_CPMM_DECODE",
         "Attempting Raydium CPMM price calculation (placeholder)",
     );
 
@@ -423,9 +412,8 @@ async fn calculate_meteora_price(
         return Err("No pool account data".to_string());
     }
 
-    log(
+    logger::info(
         LogTag::System,
-        "METEORA_DECODE",
         "Attempting Meteora price calculation (placeholder)",
     );
 
@@ -443,9 +431,8 @@ async fn calculate_pumpfun_price(
         return Err("No pool account data".to_string());
     }
 
-    log(
+    logger::info(
         LogTag::System,
-        "PUMPFUN_DECODE",
         "Attempting PumpFun price calculation (placeholder)",
     );
 
@@ -456,9 +443,8 @@ async fn calculate_pumpfun_price(
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    log(
+    logger::info(
         LogTag::System,
-        "INIT",
         &format!(
             "Starting unsupported pools scan (limit={}, min_liq={})",
             args.limit, args.min_liquidity
@@ -466,20 +452,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Open token database
-    log(LogTag::System, "DATABASE", "Opening token database...");
+    logger::info(LogTag::System, "Opening token database...");
     let db = TokenDatabase::new()?;
-    log(
+    logger::info(
         LogTag::System,
-        "DATABASE",
         "Fetching all tokens from database...",
     );
     let mut tokens = db
         .get_all_tokens()
         .await
         .map_err(|e| format!("DB error: {e}"))?;
-    log(
+    logger::info(
         LogTag::System,
-        "DATABASE",
         &format!("Retrieved {} tokens from database", tokens.len()),
     );
 
@@ -487,9 +471,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let initial_count = tokens.len();
     tokens
         .retain(|t| t.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0) >= args.min_liquidity);
-    log(
+    logger::info(
         LogTag::System,
-        "FILTER",
         &format!(
             "Filtered tokens by min_liquidity ${}: {} -> {}",
             args.min_liquidity,
@@ -509,24 +492,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let tokens = tokens.into_iter().take(args.limit).collect::<Vec<_>>();
 
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         &format!("Scanning {} tokens", tokens.len()),
     );
 
     if tokens.is_empty() {
-        log(
-            LogTag::System,
-            "ERROR",
+        logger::info(
+        LogTag::System,
             "No tokens match the criteria! Check min_liquidity setting or database content.",
         );
         return Ok(());
     }
 
-    log(
+    logger::info(
         LogTag::System,
-        "INIT",
         "Initializing pool discovery and RPC client...",
     );
     let discovery = PoolDiscovery::new();
@@ -534,32 +514,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize DexScreener API if price testing is enabled
     if args.test_prices {
-        log(
-            LogTag::System,
-            "INIT",
+        logger::info(
+        LogTag::System,
             "Initializing DexScreener API for price testing...",
         );
         if let Err(e) = init_dexscreener_api().await {
-            log(
-                LogTag::System,
-                "WARNING",
+            logger::info(
+        LogTag::System,
                 &format!(
                     "Failed to initialize DexScreener API: {}. Price testing may fail.",
                     e
                 ),
             );
         } else {
-            log(
-                LogTag::System,
-                "SUCCESS",
+            logger::info(
+        LogTag::System,
                 "DexScreener API initialized successfully",
             );
         }
     }
 
-    log(
+    logger::info(
         LogTag::System,
-        "INIT",
         "Pool discovery and RPC client ready",
     );
 
@@ -575,9 +551,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mint = &token.mint;
         let liquidity_usd = token.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
 
-        log(
-            LogTag::System,
-            "PROGRESS",
+        logger::info(
+        LogTag::System,
             &format!(
                 "Scanning token {}/{}: {} (liq: ${:.2})",
                 idx + 1,
@@ -588,9 +563,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
 
         if is_stablecoin_mint(mint) {
-            log(
-                LogTag::System,
-                "SKIP",
+            logger::info(
+        LogTag::System,
                 &format!(
                     "Skipping stablecoin: {}",
                     &mint[..std::cmp::min(8, mint.len())]
@@ -600,9 +574,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // Discover pools (discovery already filters stablecoins inside too)
-        log(
-            LogTag::System,
-            "DISCOVERY",
+        logger::info(
+        LogTag::System,
             &format!(
                 "Discovering pools for token: {}",
                 &mint[..std::cmp::min(8, mint.len())]
@@ -611,9 +584,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let pool_descriptors = discovery.discover_pools_for_token(mint).await;
 
         if pool_descriptors.is_empty() {
-            log(
-                LogTag::System,
-                "NO_POOLS",
+            logger::info(
+        LogTag::System,
                 &format!(
                     "No pools found for token: {}",
                     &mint[..std::cmp::min(8, mint.len())]
@@ -622,9 +594,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
 
-        log(
-            LogTag::System,
-            "POOLS_FOUND",
+        logger::info(
+        LogTag::System,
             &format!(
                 "Found {} pools for token: {}",
                 pool_descriptors.len(),
@@ -635,9 +606,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Limit pools per token for speed
         let mut considered = 0usize;
         let total_pools = pool_descriptors.len();
-        log(
-            LogTag::System,
-            "ANALYZING",
+        logger::info(
+        LogTag::System,
             &format!(
                 "Analyzing {} pools for token: {}",
                 total_pools,
@@ -647,9 +617,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         for descriptor in pool_descriptors {
             if considered >= args.max_pools {
-                log(
-                    LogTag::System,
-                    "LIMIT_REACHED",
+                logger::info(
+        LogTag::System,
                     &format!(
                         "Reached max pools limit ({}) for token: {}",
                         args.max_pools,
@@ -663,9 +632,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let pool_pubkey = descriptor.pool_id;
             let pool_address = pool_pubkey.to_string();
 
-            log(
-                LogTag::System,
-                "POOL_CHECK",
+            logger::info(
+        LogTag::System,
                 &format!(
                     "Checking pool {}/{}: {} (liq: ${:.2})",
                     considered,
@@ -678,9 +646,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Fetch account to get owner program id
             let program_id = match rpc.get_account(&pool_pubkey).await {
                 Ok(acc) => {
-                    log(
-                        LogTag::System,
-                        "ACCOUNT_FETCHED",
+                    logger::info(
+        LogTag::System,
                         &format!(
                             "Pool {} owner: {}",
                             &pool_address[..std::cmp::min(8, pool_address.len())],
@@ -690,9 +657,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     acc.owner.to_string()
                 }
                 Err(e) => {
-                    log(
-                        LogTag::System,
-                        "ACCOUNT_ERROR",
+                    logger::info(
+        LogTag::System,
                         &format!(
                             "Failed to fetch account for pool {}: {}",
                             &pool_address[..std::cmp::min(8, pool_address.len())],
@@ -725,9 +691,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let quote_is_sol = is_sol_mint(&descriptor.quote_mint.to_string());
             let sol_pair = base_is_sol || quote_is_sol;
 
-            log(
-                LogTag::System,
-                "POOL_ANALYSIS",
+            logger::info(
+        LogTag::System,
                 &format!(
                     "Pool {}: program={} supported={} sol_pair={} (base={} quote={})",
                     &pool_address[..std::cmp::min(8, pool_address.len())],
@@ -751,9 +716,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Skip non-SOL pairs entirely (we only care SOL pricing domain)
             if !sol_pair {
-                log(
-                    LogTag::System,
-                    "SKIP_NON_SOL",
+                logger::info(
+        LogTag::System,
                     &format!(
                         "Skipping non-SOL pair: {}",
                         &pool_address[..std::cmp::min(8, pool_address.len())]
@@ -832,32 +796,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    log(LogTag::System, "RESULT", &format!("=== SCAN COMPLETE ==="));
-    log(
+    logger::info(LogTag::System, &format!("=== SCAN COMPLETE ==="));
+    logger::info(
         LogTag::System,
-        "RESULT",
         &format!("Total tokens scanned: {}", tokens.len()),
     );
-    log(
+    logger::info(
         LogTag::System,
-        "RESULT",
         &format!("Unsupported SOL pools found: {}", unsupported.len()),
     );
     if args.show_supported {
-        log(
-            LogTag::System,
-            "RESULT",
+        logger::info(
+        LogTag::System,
             &format!("Supported SOL pools found: {}", supported.len()),
         );
     }
-    log(
+    logger::info(
         LogTag::System,
-        "RESULT",
         &format!("=== UNSUPPORTED POOLS ==="),
     );
 
     if unsupported.is_empty() {
-        log(LogTag::System, "RESULT", "No unsupported pools found!");
+        logger::info(LogTag::System, "No unsupported pools found!");
     } else {
         for item in &unsupported {
             let price_info = if args.test_prices {
@@ -884,9 +844,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 String::new()
             };
 
-            log(
-                LogTag::System,
-                "UNSUPPORTED_POOL",
+            logger::info(
+        LogTag::System,
                 &format!(
                     "mint={} pool={} program={} ({}) liq_usd={:.2} notes={}{}",
                     &item.token_mint[..std::cmp::min(8, item.token_mint.len())],
@@ -907,9 +866,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .partial_cmp(&a.liquidity_usd)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
-        log(
-            LogTag::System,
-            "RESULT",
+        logger::info(
+        LogTag::System,
             &format!("Supported (sampled) SOL pools: {}", supported.len()),
         );
         for item in &supported {
@@ -937,9 +895,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 String::new()
             };
 
-            log(
-                LogTag::System,
-                "SUPPORTED_POOL",
+            logger::info(
+        LogTag::System,
                 &format!(
                     "mint={} pool={} program={} liq_usd={:.2}{}",
                     &item.token_mint[..std::cmp::min(8, item.token_mint.len())],
@@ -1008,31 +965,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         *counts.entry(u.program_kind).or_insert(0) += 1;
     }
 
-    log(
+    logger::info(
         LogTag::System,
-        "SUMMARY",
         "Unsupported pool counts per program kind (Unknown grouped)",
     );
     for (kind, count) in counts {
-        log(
-            LogTag::System,
-            "SUMMARY",
+        logger::info(
+        LogTag::System,
             &format!("{} => {} pools", kind.display_name(), count),
         );
     }
 
     // Print detailed error analysis per program if price testing was enabled
     if args.test_prices {
-        log(
-            LogTag::System,
-            "PRICE_ANALYSIS",
+        logger::info(
+        LogTag::System,
             "=== DATA AVAILABILITY ANALYSIS ===",
         );
         for (program_kind, stats) in program_error_stats {
             if stats.total_pools > 0 {
-                log(
-                    LogTag::System,
-                    "PROGRAM_STATS",
+                logger::info(
+        LogTag::System,
                     &format!(
                         "{}: {} pools, {} data errors, {} API price gaps",
                         program_kind.display_name(),
@@ -1044,9 +997,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // Print specific error messages for this program
                 for error_msg in &stats.error_messages {
-                    log(
-                        LogTag::System,
-                        "PROGRAM_ERROR",
+                    logger::info(
+        LogTag::System,
                         &format!("  {} issue: {}", program_kind.display_name(), error_msg),
                     );
                 }

@@ -1,5 +1,4 @@
-use crate::arguments::is_debug_system_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::strategies::conditions::ConditionRegistry;
 use crate::strategies::types::{
     EvaluationContext, EvaluationResult, LogicalOperator, RuleTree, Strategy,
@@ -88,27 +87,13 @@ impl StrategyEngine {
         let result = match timeout(timeout_duration, evaluation_future).await {
             Ok(Ok(res)) => res,
             Ok(Err(e)) => {
-                if is_debug_system_enabled() {
-                    log(
-                        LogTag::System,
-                        "ERROR",
-                        &format!(
-                            "Strategy evaluation failed: strategy_id={}, error={}",
-                            strategy.id, e
-                        ),
-                    );
-                }
+                logger::error(LogTag::System, &format!("Strategy evaluation failed: strategy_id={}, error={}",
+                        strategy.id, e));
                 return Err(e);
             }
             Err(_) => {
-                log(
-                    LogTag::System,
-                    "WARN",
-                    &format!(
-                        "Strategy evaluation timeout: strategy_id={}, timeout_ms={}",
-                        strategy.id, self.config.evaluation_timeout_ms
-                    ),
-                );
+                logger::warning(LogTag::System, &format!("Strategy evaluation timeout: strategy_id={}, timeout_ms={}",
+                        strategy.id, self.config.evaluation_timeout_ms));
                 return Err("Evaluation timeout".to_string());
             }
         };
@@ -120,16 +105,8 @@ impl StrategyEngine {
             self.cache_evaluation(key, result).await;
         }
 
-        if is_debug_system_enabled() {
-            log(
-                LogTag::System,
-                "INFO",
-                &format!(
-                    "Strategy evaluated: strategy_id={}, result={}, time_ms={}",
-                    strategy.id, result, execution_time
-                ),
-            );
-        }
+        logger::info(LogTag::System, &format!("Strategy evaluated: strategy_id={}, result={}, time_ms={}",
+                strategy.id, result, execution_time));
 
         Ok(EvaluationResult {
             strategy_id: strategy.id.clone(),
@@ -247,7 +224,7 @@ impl StrategyEngine {
     pub async fn clear_cache(&self) {
         let mut cache = self.evaluation_cache.write().await;
         cache.clear();
-        log(LogTag::System, "INFO", "Strategy evaluation cache cleared");
+    logger::info(LogTag::System, "Strategy evaluation cache cleared");
     }
 
     /// Get condition registry for UI/debugging

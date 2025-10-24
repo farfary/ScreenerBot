@@ -25,8 +25,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, Notify, RwLock};
 
 use crate::config::with_config;
-use crate::global::is_debug_wallet_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::rpc::{get_rpc_client, TokenAccountInfo};
 // Use tokens::store accessors directly when needed
 use crate::transactions::get_transaction_database;
@@ -374,23 +373,19 @@ async fn circuit_reset(window_key: &str) {
 
 async fn compute_and_cache_metrics_internal(window_key: &'static str, window_hours: i64) {
     if get_transaction_database().await.is_none() {
-        if is_debug_wallet_enabled() {
-            log(
-                LogTag::Wallet,
-                "METRICS_SKIP",
-                &format!(
-                    "Skipping {} recompute → transactions database not ready",
-                    window_key
-                ),
-            );
-        }
+        logger::debug(
+            LogTag::Wallet,
+            &format!(
+                "Skipping {} recompute → transactions database not ready",
+                window_key
+            ),
+        );
         return;
     }
 
     if circuit_should_skip(window_key).await {
-        log(
+        logger::info(
             LogTag::Wallet,
-            "METRICS_SKIP",
             &format!(
                 "Circuit breaker active for {} → skipping cache recomputation",
                 window_key
@@ -405,9 +400,8 @@ async fn compute_and_cache_metrics_internal(window_key: &'static str, window_hou
         }
         Err(err) => {
             circuit_record_failure(window_key).await;
-            log(
+            logger::error(
                 LogTag::Wallet,
-                "METRICS_ERROR",
                 &format!(
                     "Failed to compute dashboard metrics for {}: {}",
                     window_key, err
@@ -423,16 +417,13 @@ async fn compute_and_cache_metrics(
 ) -> Result<(), String> {
     let start_time = Instant::now();
 
-    if is_debug_wallet_enabled() {
-        log(
-            LogTag::Wallet,
-            "METRICS_COMPUTE_START",
-            &format!(
-                "Computing dashboard metrics for {} ({}h)",
-                window_key, window_hours
-            ),
-        );
-    }
+    logger::debug(
+        LogTag::Wallet,
+        &format!(
+            "Computing dashboard metrics for {} ({}h)",
+            window_key, window_hours
+        ),
+    );
 
     let snapshot_limit = DEFAULT_PRECOMPUTED_SNAPSHOT_LIMIT;
     let token_limit = DEFAULT_PRECOMPUTED_TOKEN_LIMIT;
@@ -512,35 +503,30 @@ async fn compute_and_cache_metrics(
         }
     }
 
-    if is_debug_wallet_enabled() {
-        log(
-            LogTag::Wallet,
-            "METRICS_CACHED",
-            &format!(
-                "Cached {} metrics: net={:.6} SOL, txs={}, computed_in={}ms, ttl={}s",
-                window_key,
-                payload.flows.net_sol,
-                payload.flows.transactions_analyzed,
-                duration_ms,
-                ttl_secs
-            ),
-        );
-    }
+    logger::debug(
+        LogTag::Wallet,
+        &format!(
+            "Cached {} metrics: net={:.6} SOL, txs={}, computed_in={}ms, ttl={}s",
+            window_key,
+            payload.flows.net_sol,
+            payload.flows.transactions_analyzed,
+            duration_ms,
+            ttl_secs
+        ),
+    );
 
     Ok(())
 }
 
 async fn warmup_dashboard_metrics() {
-    log(
+    logger::info(
         LogTag::Wallet,
-        "METRICS_WARMUP_START",
         "Precomputing wallet dashboard metrics during startup",
     );
 
     if get_transaction_database().await.is_none() {
-        log(
+        logger::info(
             LogTag::Wallet,
-            "METRICS_WARMUP_SKIP",
             "Skipping dashboard warm-up → transactions database not ready",
         );
         return;
@@ -551,9 +537,8 @@ async fn warmup_dashboard_metrics() {
         compute_and_cache_metrics_internal(key, hours).await;
     }
 
-    log(
+    logger::info(
         LogTag::Wallet,
-        "METRICS_WARMUP_DONE",
         "Wallet dashboard metrics warm-up complete",
     );
 }
@@ -650,13 +635,10 @@ fn short_mint_label(mint: &str) -> String {
 }
 
 async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, String> {
-    if is_debug_wallet_enabled() {
-        log(
-            LogTag::Wallet,
-            "FLOW_START",
-            &format!("Computing flow metrics for window: {} hours", window_hours),
-        );
-    }
+    logger::debug(
+        LogTag::Wallet,
+        &format!("Computing flow metrics for window: {} hours", window_hours),
+    );
 
     // All-time mode when window_hours <= 0
     if window_hours <= 0 {
@@ -666,16 +648,13 @@ async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, St
                     db.aggregate_cached_flows_sync(min_ts, None)
                 {
                     if tx_count > 0 {
-                        if is_debug_wallet_enabled() {
-                            log(
-                                LogTag::Wallet,
-                                "FLOW_CACHE_ALL",
-                                &format!(
-                                    "All-time cached: inflow={:.6}, outflow={:.6}, txs={}",
-                                    inflow, outflow, tx_count
-                                ),
-                            );
-                        }
+                        logger::debug(
+                            LogTag::Wallet,
+                            &format!(
+                                "All-time cached: inflow={:.6}, outflow={:.6}, txs={}",
+                                inflow, outflow, tx_count
+                            ),
+                        );
                         return Ok(WalletFlowMetrics {
                             window_hours: 0,
                             inflow_sol: inflow,
@@ -696,16 +675,13 @@ async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, St
             .aggregate_sol_flows_since(epoch, None)
             .await
             .map_err(|e| format!("Failed to aggregate all-time SOL flows: {}", e))?;
-        if is_debug_wallet_enabled() {
-            log(
-                LogTag::Wallet,
-                "FLOW_DB_ALL",
-                &format!(
-                    "All-time DB: inflow={:.6}, outflow={:.6}, txs={}",
-                    inflow, outflow, tx_count
-                ),
-            );
-        }
+        logger::debug(
+            LogTag::Wallet,
+            &format!(
+                "All-time DB: inflow={:.6}, outflow={:.6}, txs={}",
+                inflow, outflow, tx_count
+            ),
+        );
         return Ok(WalletFlowMetrics {
             window_hours: 0,
             inflow_sol: inflow,
@@ -718,28 +694,22 @@ async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, St
     let window_hours = clamp_window_hours(window_hours);
     let window_start = Utc::now() - ChronoDuration::hours(window_hours);
 
-    if is_debug_wallet_enabled() {
-        log(
-            LogTag::Wallet,
-            "FLOW_WINDOW",
-            &format!("Window start: {}", window_start.to_rfc3339()),
-        );
-    }
+    logger::debug(
+        LogTag::Wallet,
+        &format!("Window start: {}", window_start.to_rfc3339()),
+    );
 
     // Try cached aggregation first
     if let Some(db) = GLOBAL_WALLET_DB.lock().await.as_ref() {
         match db.aggregate_cached_flows_sync(window_start, None) {
             Ok((inflow, outflow, tx_count)) => {
-                if is_debug_wallet_enabled() {
-                    log(
-                        LogTag::Wallet,
-                        "FLOW_CACHE",
-                        &format!(
-                            "Cached: inflow={:.6}, outflow={:.6}, txs={}",
-                            inflow, outflow, tx_count
-                        ),
-                    );
-                }
+                logger::debug(
+                    LogTag::Wallet,
+                    &format!(
+                        "Cached: inflow={:.6}, outflow={:.6}, txs={}",
+                        inflow, outflow, tx_count
+                    ),
+                );
                 if tx_count > 0 {
                     return Ok(WalletFlowMetrics {
                         window_hours,
@@ -751,25 +721,19 @@ async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, St
                 }
             }
             Err(e) => {
-                if is_debug_wallet_enabled() {
-                    log(
-                        LogTag::Wallet,
-                        "FLOW_CACHE_ERR",
-                        &format!("Cache aggregation failed: {}", e),
-                    );
-                }
+                logger::debug(
+                    LogTag::Wallet,
+                    &format!("Cache aggregation failed: {}", e),
+                );
             }
         }
     }
 
     // Fallback to live aggregation from transactions DB
-    if is_debug_wallet_enabled() {
-        log(
-            LogTag::Wallet,
-            "FLOW_FALLBACK",
-            "Using live aggregation from transactions DB",
-        );
-    }
+    logger::debug(
+        LogTag::Wallet,
+        "Using live aggregation from transactions DB",
+    );
 
     let tx_db = get_transaction_database()
         .await
@@ -779,16 +743,13 @@ async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, St
         .await
         .map_err(|e| format!("Failed to aggregate SOL flows: {}", e))?;
 
-    if is_debug_wallet_enabled() {
-        log(
-            LogTag::Wallet,
-            "FLOW_DB",
-            &format!(
-                "DB aggregation: inflow={:.6}, outflow={:.6}, txs={}",
-                inflow, outflow, tx_count
-            ),
-        );
-    }
+    logger::debug(
+        LogTag::Wallet,
+        &format!(
+            "DB aggregation: inflow={:.6}, outflow={:.6}, txs={}",
+            inflow, outflow, tx_count
+        ),
+    );
 
     Ok(WalletFlowMetrics {
         window_hours,
@@ -878,13 +839,10 @@ async fn compute_daily_flows(window_hours: i64) -> Result<Vec<DailyFlowPoint>, S
         result = merged;
     }
 
-    if is_debug_wallet_enabled() {
-        log(
-            LogTag::Wallet,
-            "DAILY_FLOW",
-            &format!("Computed {} daily flow points", result.len()),
-        );
-    }
+    logger::debug(
+        LogTag::Wallet,
+        &format!("Computed {} daily flow points", result.len()),
+    );
 
     Ok(result)
 }
@@ -1109,9 +1067,8 @@ async fn compute_dashboard_payload_realtime(
 
     // Compute daily flows for chart
     let daily_flows = compute_daily_flows(window_hours).await.unwrap_or_else(|e| {
-        log(
+        logger::warning(
             LogTag::Wallet,
-            "DAILY_FLOW_ERR",
             &format!("Failed to compute daily flows: {}", e),
         );
         Vec::new()
@@ -1267,10 +1224,9 @@ pub async fn get_wallet_dashboard_data(
                             )
                             .await;
                             return Ok(payload);
-                        } else if is_debug_wallet_enabled() {
-                            log(
+                        } else {
+                            logger::debug(
                                 LogTag::Wallet,
-                                "DASHBOARD_CACHE_STALE",
                                 &format!(
                                     "Discarding stale dashboard cache for {} (age={}s, ttl={}s)",
                                     window_key, age_secs, ttl_secs
@@ -1279,9 +1235,8 @@ pub async fn get_wallet_dashboard_data(
                         }
                     }
                     Err(err) => {
-                        log(
+                        logger::warning(
                             LogTag::Wallet,
-                            "DASHBOARD_CACHE_ERR",
                             &format!(
                                 "Failed to deserialize dashboard cache for {}: {}",
                                 window_key, err
@@ -1289,10 +1244,9 @@ pub async fn get_wallet_dashboard_data(
                         );
                     }
                 }
-            } else if is_debug_wallet_enabled() {
-                log(
+            } else {
+                logger::debug(
                     LogTag::Wallet,
-                    "DASHBOARD_CACHE_SKIP",
                     &format!(
                         "Cache entry {} does not cover requested limits (snapshots={} tokens={})",
                         window_key, metrics.snapshot_limit, metrics.token_limit
@@ -1385,13 +1339,10 @@ impl WalletDatabase {
         let database_path = data_dir.join("wallet.db");
         let database_path_str = database_path.to_string_lossy().to_string();
 
-        if is_debug_wallet_enabled() {
-            log(
-                LogTag::Wallet,
-                "INIT",
-                &format!("Initializing wallet database at: {}", database_path_str),
-            );
-        }
+        logger::debug(
+            LogTag::Wallet,
+            &format!("Initializing wallet database at: {}", database_path_str),
+        );
 
         // Configure connection manager
         let manager = SqliteConnectionManager::file(&database_path);
@@ -1412,9 +1363,8 @@ impl WalletDatabase {
         // Initialize database schema
         db.initialize_schema().await?;
 
-        log(
+        logger::info(
             LogTag::Wallet,
-            "READY",
             "Wallet database initialized successfully",
         );
         Ok(db)
@@ -1471,13 +1421,10 @@ impl WalletDatabase {
         )
         .map_err(|e| format!("Failed to set wallet schema version: {}", e))?;
 
-        if is_debug_wallet_enabled() {
-            log(
-                LogTag::Wallet,
-                "SCHEMA",
-                "Wallet database schema initialized with all tables and indexes",
-            );
-        }
+        logger::debug(
+            LogTag::Wallet,
+            "Wallet database schema initialized with all tables and indexes",
+        );
 
         Ok(())
     }
@@ -1777,18 +1724,15 @@ impl WalletDatabase {
             .map_err(|e| format!("Failed to insert token balance: {}", e))?;
         }
 
-        if is_debug_wallet_enabled() {
-            log(
-                LogTag::Wallet,
-                "SAVE",
-                &format!(
-                    "Saved wallet snapshot ID {} with {} tokens for {}",
-                    snapshot_id,
-                    snapshot.token_balances.len(),
-                    &snapshot.wallet_address[..8]
-                ),
-            );
-        }
+        logger::debug(
+            LogTag::Wallet,
+            &format!(
+                "Saved wallet snapshot ID {} with {} tokens for {}",
+                snapshot_id,
+                snapshot.token_balances.len(),
+                &snapshot.wallet_address[..8]
+            ),
+        );
 
         Ok(snapshot_id)
     }
@@ -1836,18 +1780,15 @@ impl WalletDatabase {
             .map_err(|e| format!("Failed to insert token balance: {}", e))?;
         }
 
-        if is_debug_wallet_enabled() {
-            log(
-                LogTag::Wallet,
-                "SAVE",
-                &format!(
-                    "Saved wallet snapshot ID {} with {} tokens for {}",
-                    snapshot_id,
-                    snapshot.token_balances.len(),
-                    &snapshot.wallet_address[..8]
-                ),
-            );
-        }
+        logger::debug(
+            LogTag::Wallet,
+            &format!(
+                "Saved wallet snapshot ID {} with {} tokens for {}",
+                snapshot_id,
+                snapshot.token_balances.len(),
+                &snapshot.wallet_address[..8]
+            ),
+        );
 
         Ok(snapshot_id)
     }
@@ -2149,9 +2090,8 @@ impl WalletDatabase {
             .map_err(|e| format!("Failed to cleanup old snapshots: {}", e))?;
 
         if deleted_count > 0 {
-            log(
+            logger::info(
                 LogTag::Wallet,
-                "CLEANUP",
                 &format!("Cleaned up {} old wallet snapshots", deleted_count),
             );
         }
@@ -2178,9 +2118,8 @@ impl WalletDatabase {
             .map_err(|e| format!("Failed to cleanup old snapshots: {}", e))?;
 
         if deleted_count > 0 {
-            log(
+            logger::info(
                 LogTag::Wallet,
-                "CLEANUP",
                 &format!("Cleaned up {} old wallet snapshots", deleted_count),
             );
         }
@@ -2207,9 +2146,8 @@ pub async fn initialize_wallet_database() -> Result<(), String> {
     let db = WalletDatabase::new().await?;
     *db_lock = Some(db);
 
-    log(
+    logger::info(
         LogTag::Wallet,
-        "INIT",
         "Global wallet database initialized successfully",
     );
     Ok(())
@@ -2230,13 +2168,10 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
     let rpc_client = get_rpc_client();
     let snapshot_time = Utc::now();
 
-    if is_debug_wallet_enabled() {
-        log(
-            LogTag::Wallet,
-            "COLLECT",
-            &format!("Collecting wallet snapshot for {}", &wallet_address[..8]),
-        );
-    }
+    logger::debug(
+        LogTag::Wallet,
+        &format!("Collecting wallet snapshot for {}", &wallet_address[..8]),
+    );
 
     // Add small delay to avoid overwhelming RPC client
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -2286,16 +2221,13 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
 
     let total_tokens_count = token_balances.len() as u32;
 
-    if is_debug_wallet_enabled() {
-        log(
-            LogTag::Wallet,
-            "SNAPSHOT",
-            &format!(
-                "Collected snapshot: SOL {:.6}, {} tokens",
-                sol_balance, total_tokens_count
-            ),
-        );
-    }
+    logger::debug(
+        LogTag::Wallet,
+        &format!(
+            "Collected snapshot: SOL {:.6}, {} tokens",
+            sol_balance, total_tokens_count
+        ),
+    );
 
     Ok(WalletSnapshot {
         id: None,
@@ -2315,13 +2247,12 @@ pub async fn start_wallet_monitoring_service(
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(
         monitor.instrument(async move {
-            log(LogTag::Wallet, "START", "Wallet monitoring service started (instrumented)");
+            logger::info(LogTag::Wallet, "Wallet monitoring service started (instrumented)");
 
             // Initialize database
             if let Err(e) = initialize_wallet_database().await {
-                log(
+                logger::error(
                     LogTag::Wallet,
-                    "ERROR",
                     &format!("Failed to initialize wallet database: {}", e)
                 );
                 return;
@@ -2355,7 +2286,7 @@ pub async fn start_wallet_monitoring_service(
             loop {
                 tokio::select! {
                 _ = shutdown.notified() => {
-                    log(LogTag::Wallet, "SHUTDOWN", "Wallet monitoring service shutting down");
+                    logger::info(LogTag::Wallet, "Wallet monitoring service shutting down");
                     break;
                 }
                 _ = interval.tick() => {
@@ -2368,31 +2299,28 @@ pub async fn start_wallet_monitoring_service(
                                 Some(db) => {
                                     match db.save_wallet_snapshot_sync(&snapshot) {
                                         Ok(snapshot_id) => {
-                                            if is_debug_wallet_enabled() {
-                                                log(
-                                                    LogTag::Wallet,
-                                                    "SAVED",
-                                                    &format!(
-                                                        "Saved snapshot ID {} - SOL: {:.6}, Tokens: {}",
-                                                        snapshot_id,
-                                                        snapshot.sol_balance,
-                                                        snapshot.total_tokens_count
-                                                    )
-                                                );
-                                            }
+                                            logger::debug(
+                                                LogTag::Wallet,
+                                                &format!(
+                                                    "Saved snapshot ID {} - SOL: {:.6}, Tokens: {}",
+                                                    snapshot_id,
+                                                    snapshot.sol_balance,
+                                                    snapshot.total_tokens_count
+                                                )
+                                            );
                                         }
                                         Err(e) => {
-                                            log(LogTag::Wallet, "ERROR", &format!("Failed to save wallet snapshot: {}", e));
+                                            logger::error(LogTag::Wallet, &format!("Failed to save wallet snapshot: {}", e));
                                         }
                                     }
                                 }
                                 None => {
-                                    log(LogTag::Wallet, "ERROR", "Wallet database not initialized");
+                                    logger::error(LogTag::Wallet, "Wallet database not initialized");
                                 }
                             }
                         }
                         Err(e) => {
-                            log(LogTag::Wallet, "ERROR", &format!("Failed to collect wallet snapshot: {}", e));
+                            logger::error(LogTag::Wallet, &format!("Failed to collect wallet snapshot: {}", e));
                         }
                     }
 
@@ -2405,17 +2333,17 @@ pub async fn start_wallet_monitoring_service(
                         match db_guard.as_ref() {
                             Some(db) => {
                                 if let Err(e) = db.cleanup_old_snapshots_sync() {
-                                    log(LogTag::Wallet, "WARN", &format!("Failed to cleanup old snapshots: {}", e));
+                                    logger::warning(LogTag::Wallet, &format!("Failed to cleanup old snapshots: {}", e));
                                 }
                                 if let Err(e) = db.cleanup_expired_metrics() {
-                                    log(LogTag::Wallet, "WARN", &format!(
+                                    logger::warning(LogTag::Wallet, &format!(
                                         "Failed to cleanup expired dashboard metrics: {}",
                                         e
                                     ));
                                 }
                             }
                             None => {
-                                log(LogTag::Wallet, "WARN", "Wallet database not initialized for cleanup");
+                                logger::warning(LogTag::Wallet, "Wallet database not initialized for cleanup");
                             }
                         }
                     }
@@ -2443,7 +2371,7 @@ pub async fn start_wallet_monitoring_service(
                         match tx_db.export_processed_for_wallet_flow(start_ts, batch_size).await {
                             Ok(rows) => rows,
                             Err(e) => {
-                                log(LogTag::Wallet, "FLOW_SYNC_ERR", &format!("Failed to export processed rows: {}", e));
+                                logger::error(LogTag::Wallet, &format!("Failed to export processed rows: {}", e));
                                 Vec::new()
                             }
                         }
@@ -2459,9 +2387,9 @@ pub async fn start_wallet_monitoring_service(
                     let db_guard = GLOBAL_WALLET_DB.lock().await;
                     if let Some(wallet_db) = db_guard.as_ref() {
                         if let Err(e) = wallet_db.upsert_flow_rows_sync(&mapped) {
-                            log(LogTag::Wallet, "FLOW_SYNC_ERR", &format!("Failed to upsert flow cache rows: {}", e));
-                        } else if is_debug_wallet_enabled() {
-                            log(LogTag::Wallet, "FLOW_SYNC", &format!("Upserted {} flow cache rows", mapped.len()));
+                            logger::error(LogTag::Wallet, &format!("Failed to upsert flow cache rows: {}", e));
+                        } else {
+                            logger::debug(LogTag::Wallet, &format!("Upserted {} flow cache rows", mapped.len()));
                         }
                     }
                 }
@@ -2480,7 +2408,7 @@ pub async fn start_wallet_monitoring_service(
             }
             }
 
-            log(LogTag::Wallet, "STOPPED", "Wallet monitoring service stopped");
+            logger::info(LogTag::Wallet, "Wallet monitoring service stopped");
         })
     )
 }

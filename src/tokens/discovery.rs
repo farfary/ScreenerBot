@@ -1,5 +1,6 @@
 use crate::apis::get_api_manager;
 use crate::config;
+use crate::logger::{self, LogTag};
 use crate::pools::utils::{is_sol_mint, is_stablecoin_mint};
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::events::{self, TokenEvent};
@@ -64,7 +65,10 @@ pub fn start_discovery_loop(
                         Ok(stats) => {
                             if let Some(reason) = stats.skip_reason.clone() {
                                 if last_skip_reason.as_ref() != Some(&reason) {
-                                    println!("[DISCOVERY] Skipping discovery loop: {}", reason);
+                                    logger::info(
+                                        LogTag::Tokens,
+                                        &format!("[DISCOVERY] Skipping discovery loop: {}", reason),
+                                    );
                                     last_skip_reason = Some(reason);
                                 }
                                 continue;
@@ -84,21 +88,27 @@ pub fn start_discovery_loop(
                                 parts.join(", ")
                             };
 
-                            println!(
-                                "[DISCOVERY] Completed: {} candidates, {} unique, {} new, {} known, {} blacklisted, {} invalid, {} errors ({} ms) | sources: {}",
-                                stats.total_candidates,
-                                stats.unique_mints,
-                                stats.newly_added,
-                                stats.already_known,
-                                stats.blacklisted,
-                                stats.invalid,
-                                stats.errors,
-                                stats.duration_ms,
-                                source_summary
+                            logger::info(
+                                LogTag::Tokens,
+                                &format!(
+                                    "[DISCOVERY] Completed: {} candidates, {} unique, {} new, {} known, {} blacklisted, {} invalid, {} errors ({} ms) | sources: {}",
+                                    stats.total_candidates,
+                                    stats.unique_mints,
+                                    stats.newly_added,
+                                    stats.already_known,
+                                    stats.blacklisted,
+                                    stats.invalid,
+                                    stats.errors,
+                                    stats.duration_ms,
+                                    source_summary
+                                ),
                             );
                         }
                         Err(err) => {
-                            eprintln!("[DISCOVERY] Run failed: {}", err);
+                            logger::error(
+                                LogTag::Tokens,
+                                &format!("[DISCOVERY] Run failed: {}", err),
+                            );
                         }
                     }
                 }
@@ -351,7 +361,10 @@ pub async fn run_discovery_once(
             }
             Err(err) => {
                 stats.errors += 1;
-                eprintln!("[DISCOVERY] Source {} failed: {}", source, err);
+                logger::error(
+                    LogTag::Tokens,
+                    &format!("[DISCOVERY] Source {} failed: {}", source, err),
+                );
             }
         }
     }
@@ -378,7 +391,10 @@ pub async fn run_discovery_once(
         .map_err(|e| e.to_string())?;
 
         if let Err(err) = db.update_priority(&mint, Priority::High.to_value()) {
-            eprintln!("[DISCOVERY] Failed to set priority for {}: {}", mint, err);
+            logger::error(
+                LogTag::Tokens,
+                &format!("[DISCOVERY] Failed to set priority for {}: {}", mint, err),
+            );
         }
 
         let mut sources: Vec<String> = aggregate.sources.into_iter().collect();

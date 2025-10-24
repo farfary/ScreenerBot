@@ -4,8 +4,7 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, Notify};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
-use crate::arguments::is_debug_websocket_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 
 /// WebSocket client for real-time Solana transaction monitoring
 ///
@@ -104,16 +103,13 @@ impl SolanaWebSocketClient {
         ws_url: &str,
         shutdown: Arc<Notify>,
     ) -> Result<(), String> {
-        if is_debug_websocket_enabled() {
-            log(
-                LogTag::Websocket,
-                "START",
-                &format!(
-                    "🔌 Starting WebSocket monitoring for wallet: {}",
-                    &self.wallet_address
-                ),
-            );
-        }
+        logger::info(
+            LogTag::Websocket,
+            &format!(
+                "🔌 Starting WebSocket monitoring for wallet: {}",
+                &self.wallet_address
+            ),
+        );
 
         // Connect to WebSocket endpoint
         let (ws_stream, _) = connect_async(ws_url)
@@ -141,16 +137,13 @@ impl SolanaWebSocketClient {
         let subscribe_text = serde_json::to_string(&subscribe_message)
             .map_err(|e| format!("Failed to serialize subscription: {}", e))?;
 
-        if is_debug_websocket_enabled() {
-            log(
-                LogTag::Websocket,
-                "SUBSCRIBE",
-                &format!(
-                    "📡 Subscribing to logs for wallet: {}",
-                    &self.wallet_address
-                ),
-            );
-        }
+        logger::info(
+            LogTag::Websocket,
+            &format!(
+                "📡 Subscribing to logs for wallet: {}",
+                &self.wallet_address
+            ),
+        );
 
         // Send subscription
         ws_sender
@@ -162,27 +155,20 @@ impl SolanaWebSocketClient {
         let mut heartbeat_interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
         heartbeat_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        if is_debug_websocket_enabled() {
-            log(
-                LogTag::Websocket,
-                "HEARTBEAT",
-                "📡 Heartbeat timer initialized (30s interval)",
-            );
-        }
+        logger::info(
+            LogTag::Websocket,
+            "📡 Heartbeat timer initialized (30s interval)",
+        );
 
         // Listen for messages with shutdown and heartbeat handling
         loop {
             tokio::select! {
                 _ = shutdown.notified() => {
-                    if is_debug_websocket_enabled() {
-                        log(LogTag::Websocket, "SHUTDOWN", "WebSocket monitoring received shutdown signal");
-                    }
+                    logger::info(LogTag::Websocket, "WebSocket monitoring received shutdown signal");
 
                     // Send close message to server
                     if let Err(e) = ws_sender.send(Message::Close(None)).await {
-                        if is_debug_websocket_enabled() {
-                            log(LogTag::Websocket, "CLOSE_ERROR", &format!("Failed to send close message: {}", e));
-                        }
+                        logger::info(LogTag::Websocket, &format!("Failed to send close message: {}", e));
                     }
 
                     break;
@@ -190,72 +176,53 @@ impl SolanaWebSocketClient {
                 _ = heartbeat_interval.tick() => {
                     // Send periodic ping to keep connection alive
                     if let Err(e) = ws_sender.send(Message::Ping(vec![])).await {
-                        if is_debug_websocket_enabled() {
-                            log(LogTag::Websocket, "HEARTBEAT_ERROR", &format!("Failed to send heartbeat ping: {}", e));
-                        }
+                        logger::info(LogTag::Websocket, &format!("Failed to send heartbeat ping: {}", e));
                         break; // Connection failed, exit to trigger reconnect
-                    } else if is_debug_websocket_enabled() {
-                        log(LogTag::Websocket, "HEARTBEAT", "💓 Sent heartbeat ping to keep connection alive");
+                    } else {
+                        logger::info(LogTag::Websocket, "💓 Sent heartbeat ping to keep connection alive");
                     }
                 }
                 message = ws_receiver.next() => {
                     match message {
                         Some(Ok(Message::Text(text))) => {
                             if let Err(e) = self.handle_websocket_message(&text).await {
-                                if is_debug_websocket_enabled() {
-                                    log(
-                                        LogTag::Websocket,
-                                        "ERROR",
-                                        &format!("Failed to handle WebSocket message: {}", e)
-                                    );
-                                }
+                                logger::info(
+                                    LogTag::Websocket,
+                                    &format!("Failed to handle WebSocket message: {}", e)
+                                );
                             }
                         }
                         Some(Ok(Message::Ping(payload))) => {
                             // Respond to server ping with pong to keep connection alive
                             if let Err(e) = ws_sender.send(Message::Pong(payload)).await {
-                                if is_debug_websocket_enabled() {
-                                    log(LogTag::Websocket, "PONG_ERROR", &format!("Failed to respond to ping: {}", e));
-                                }
+                                logger::info(LogTag::Websocket, &format!("Failed to respond to ping: {}", e));
                                 break; // Connection failed, exit to trigger reconnect
-                            } else if is_debug_websocket_enabled() {
-                                log(LogTag::Websocket, "PONG", "🏓 Responded to server ping with pong");
+                            } else {
+                                logger::info(LogTag::Websocket, "🏓 Responded to server ping with pong");
                             }
                         }
                         Some(Ok(Message::Pong(_))) => {
                             // Server responded to our ping - connection is alive
-                            if is_debug_websocket_enabled() {
-                                log(LogTag::Websocket, "PONG_RECEIVED", "🏓 Received pong response - connection alive");
-                            }
+                            logger::info(LogTag::Websocket, "🏓 Received pong response - connection alive");
                         }
                         Some(Ok(Message::Close(_))) => {
-                            if is_debug_websocket_enabled() {
-                                log(LogTag::Websocket, "CLOSE", "WebSocket connection closed by server");
-                            }
+                            logger::info(LogTag::Websocket, "WebSocket connection closed by server");
                             break;
                         }
                         Some(Ok(Message::Binary(_))) => {
                             // Ignore binary messages
-                            if is_debug_websocket_enabled() {
-                                log(LogTag::Websocket, "BINARY", "Received binary message (ignored)");
-                            }
+                            logger::info(LogTag::Websocket, "Received binary message (ignored)");
                         }
                         Some(Ok(Message::Frame(_))) => {
                             // Ignore raw frame messages (handled by tungstenite internally)
-                            if is_debug_websocket_enabled() {
-                                log(LogTag::Websocket, "FRAME", "Received raw frame message (ignored)");
-                            }
+                            logger::info(LogTag::Websocket, "Received raw frame message (ignored)");
                         }
                         Some(Err(e)) => {
-                            if is_debug_websocket_enabled() {
-                                log(LogTag::Websocket, "ERROR", &format!("WebSocket error: {}", e));
-                            }
+                            logger::info(LogTag::Websocket, &format!("WebSocket error: {}", e));
                             break;
                         }
                         None => {
-                            if is_debug_websocket_enabled() {
-                                log(LogTag::Websocket, "CLOSE", "WebSocket stream ended");
-                            }
+                            logger::info(LogTag::Websocket, "WebSocket stream ended");
                             break;
                         }
                     }
@@ -263,9 +230,7 @@ impl SolanaWebSocketClient {
             }
         }
 
-        if is_debug_websocket_enabled() {
-            log(LogTag::Websocket, "STOP", "WebSocket monitoring stopped");
-        }
+        logger::info(LogTag::Websocket, "WebSocket monitoring stopped");
 
         Ok(())
     }
@@ -284,23 +249,17 @@ impl SolanaWebSocketClient {
                                 if let Some(signature) =
                                     value.get("signature").and_then(|v| v.as_str())
                                 {
-                                    if is_debug_websocket_enabled() {
-                                        log(
-                                            LogTag::Websocket,
-                                            "NEW_TX",
-                                            &format!("🆕 New transaction detected: {}", signature),
-                                        );
-                                    }
+                                    logger::info(
+                                        LogTag::Websocket,
+                                        &format!("🆕 New transaction detected: {}", signature),
+                                    );
 
                                     // Send signature to transaction processor
                                     if let Err(_) = self.tx_sender.send(signature.to_string()) {
-                                        if is_debug_websocket_enabled() {
-                                            log(
-                                                LogTag::Websocket,
-                                                "CHANNEL_ERROR",
-                                                "Failed to send signature to processor - channel closed"
-                                            );
-                                        }
+                                        logger::info(
+                                            LogTag::Websocket,
+                                            "Failed to send signature to processor - channel closed"
+                                        );
                                         return Err("Transaction channel closed".to_string());
                                     }
 
@@ -315,13 +274,10 @@ impl SolanaWebSocketClient {
             // Check if this is a subscription confirmation
             if let Some(result) = notification.get("result") {
                 if result.is_number() {
-                    if is_debug_websocket_enabled() {
-                        log(
-                            LogTag::Websocket,
-                            "SUBSCRIBED",
-                            &format!("✅ WebSocket subscription confirmed: {}", result),
-                        );
-                    }
+                    logger::info(
+                        LogTag::Websocket,
+                        &format!("✅ WebSocket subscription confirmed: {}", result),
+                    );
                     return Ok(());
                 }
             }
@@ -366,9 +322,7 @@ pub async fn start_websocket_monitoring(
             // Check for shutdown before attempting connection
             tokio::select! {
                 _ = shutdown_clone.notified() => {
-                    if is_debug_websocket_enabled() {
-                        log(LogTag::Websocket, "SHUTDOWN", "WebSocket background task received shutdown signal");
-                    }
+                    logger::info(LogTag::Websocket, "WebSocket background task received shutdown signal");
                     break;
                 }
                 _ = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => {
@@ -376,17 +330,14 @@ pub async fn start_websocket_monitoring(
                 }
             }
 
-            if is_debug_websocket_enabled() {
-                log(
-                    LogTag::Websocket,
-                    "CONNECT",
-                    &format!(
-                        "🔄 Connecting to WebSocket: {} (attempt {})",
-                        ws_url_clone,
-                        reconnect_attempts + 1
-                    ),
-                );
-            }
+            logger::info(
+                LogTag::Websocket,
+                &format!(
+                    "🔄 Connecting to WebSocket: {} (attempt {})",
+                    ws_url_clone,
+                    reconnect_attempts + 1
+                ),
+            );
 
             // Create a shutdown signal for this connection attempt
             let connection_shutdown = Arc::new(Notify::new());
@@ -406,13 +357,10 @@ pub async fn start_websocket_monitoring(
                 Ok(_) => {
                     // Normal exit (shutdown received) or successful long-running connection
                     reconnect_attempts = 0; // Reset attempt counter on successful connection
-                    if is_debug_websocket_enabled() {
-                        log(
-                            LogTag::Websocket,
-                            "NORMAL_EXIT",
-                            "WebSocket monitoring exited normally",
-                        );
-                    }
+                    logger::info(
+                        LogTag::Websocket,
+                        "WebSocket monitoring exited normally",
+                    );
                     break;
                 }
                 Err(e) => {
@@ -424,23 +372,18 @@ pub async fn start_websocket_monitoring(
                         max_reconnect_delay,
                     );
 
-                    if is_debug_websocket_enabled() {
-                        log(
-                            LogTag::Websocket,
-                            "RECONNECT",
-                            &format!(
-                                "WebSocket disconnected: {} - Reconnecting in {}s (attempt {})",
-                                e, delay_seconds, reconnect_attempts
-                            ),
-                        );
-                    }
+                    logger::info(
+                        LogTag::Websocket,
+                        &format!(
+                            "WebSocket disconnected: {} - Reconnecting in {}s (attempt {})",
+                            e, delay_seconds, reconnect_attempts
+                        ),
+                    );
 
                     // Wait for calculated delay or shutdown signal
                     tokio::select! {
                         _ = shutdown_clone.notified() => {
-                            if is_debug_websocket_enabled() {
-                                log(LogTag::Websocket, "SHUTDOWN_DURING_WAIT", "Shutdown received during reconnection wait");
-                            }
+                            logger::info(LogTag::Websocket, "Shutdown received during reconnection wait");
                             break;
                         }
                         _ = tokio::time::sleep(tokio::time::Duration::from_secs(delay_seconds)) => {
@@ -451,13 +394,10 @@ pub async fn start_websocket_monitoring(
             }
         }
 
-        if is_debug_websocket_enabled() {
-            log(
-                LogTag::Websocket,
-                "TASK_EXIT",
-                "WebSocket background task exiting",
-            );
-        }
+        logger::info(
+            LogTag::Websocket,
+            "WebSocket background task exiting",
+        );
     });
 
     Ok(tx_receiver)

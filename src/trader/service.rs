@@ -1,6 +1,6 @@
 //! Trader service implementation
 
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::trader::auto;
 use crate::trader::config;
 use std::sync::Arc;
@@ -29,7 +29,7 @@ impl Default for TraderService {
 
 impl TraderService {
     pub async fn start(&self) -> Result<(), String> {
-        log(LogTag::Trader, "INFO", "Starting Trader Service...");
+        logger::info(LogTag::Trader, "Starting Trader Service...");
 
         // Record service start event
         crate::events::record_safe(crate::events::Event::new(
@@ -51,9 +51,8 @@ impl TraderService {
         // Check if trader is enabled
         let trader_enabled = config::is_trader_enabled();
         if !trader_enabled {
-            log(
+            logger::info(
                 LogTag::Trader,
-                "INFO",
                 "Trader service started but trading is disabled in config",
             );
             
@@ -93,9 +92,8 @@ impl TraderService {
         // Start auto trading monitors
         let _auto_task = tokio::spawn(async move {
             if let Err(e) = auto::start_auto_trading(shutdown_rx).await {
-                log(
+                logger::error(
                     LogTag::Trader,
-                    "ERROR",
                     &format!("Auto trading error: {}", e),
                 );
                 
@@ -115,7 +113,7 @@ impl TraderService {
             }
         });
 
-        log(LogTag::Trader, "INFO", "Trader Service started successfully");
+        logger::info(LogTag::Trader, "Trader Service started successfully");
         
         // Record successful start event
         crate::events::record_safe(crate::events::Event::new(
@@ -135,7 +133,7 @@ impl TraderService {
     }
 
     pub async fn stop(&self) -> Result<(), String> {
-        log(LogTag::Trader, "INFO", "Stopping Trader Service...");
+        logger::info(LogTag::Trader, "Stopping Trader Service...");
 
         // Record shutdown event
         crate::events::record_safe(crate::events::Event::new(
@@ -159,7 +157,7 @@ impl TraderService {
         // Wait a moment for graceful shutdown
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
-        log(LogTag::Trader, "INFO", "Trader Service stopped");
+        logger::info(LogTag::Trader, "Trader Service stopped");
         
         // Record stopped event
         crate::events::record_safe(crate::events::Event::new(

@@ -1,15 +1,14 @@
 //! Sell operation execution
 
 use crate::config::with_config;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::trader::types::{TradeDecision, TradeReason, TradeResult};
 
 /// Execute a sell trade
 pub async fn execute_sell(decision: &TradeDecision) -> Result<TradeResult, String> {
-    log(
+    logger::info(
         LogTag::Trader,
-        "INFO",
         &format!(
             "Executing sell for position {} token {} (reason: {:?})",
             decision
@@ -39,9 +38,8 @@ pub async fn execute_sell(decision: &TradeDecision) -> Result<TradeResult, Strin
             .await
         {
             Ok(transaction_signature) => {
-                log(
+                logger::info(
                     LogTag::Trader,
-                    "SUCCESS",
                     &format!(
                         "✅ Partial sell executed: {} | {}% | TX: {} | Reason: {}",
                         decision.mint, exit_percentage, transaction_signature, exit_reason
@@ -58,7 +56,7 @@ pub async fn execute_sell(decision: &TradeDecision) -> Result<TradeResult, Strin
             }
             Err(e) => {
                 let error = format!("Partial sell execution failed: {}", e);
-                log(LogTag::Trader, "ERROR", &error);
+                logger::error(LogTag::Trader, &error);
                 Ok(TradeResult::failure(decision.clone(), error, 0))
             }
         }
@@ -66,9 +64,8 @@ pub async fn execute_sell(decision: &TradeDecision) -> Result<TradeResult, Strin
         // Full exit (either disabled or emergency exit)
         match positions::close_position_direct(&decision.mint, exit_reason.clone()).await {
             Ok(transaction_signature) => {
-                log(
+                logger::info(
                     LogTag::Trader,
-                    "SUCCESS",
                     &format!(
                         "✅ Full sell executed: {} | TX: {} | Reason: {}",
                         decision.mint, transaction_signature, exit_reason
@@ -85,7 +82,7 @@ pub async fn execute_sell(decision: &TradeDecision) -> Result<TradeResult, Strin
             }
             Err(e) => {
                 let error = format!("Full sell execution failed: {}", e);
-                log(LogTag::Trader, "ERROR", &error);
+                logger::error(LogTag::Trader, &error);
                 Ok(TradeResult::failure(decision.clone(), error, 0))
             }
         }

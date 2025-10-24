@@ -5,7 +5,7 @@ use super::{
 };
 use crate::{
     arguments::is_debug_positions_enabled,
-    logger::{log, LogTag},
+    logger::{self, LogTag},
     tokens::get_decimals,
     transactions::{
         get_global_transaction_manager, get_transaction, Transaction, TransactionStatus,
@@ -80,18 +80,15 @@ async fn residual_balance_requires_retry(position_id: Option<i64>, balance: u64)
             if let Some(token_amount) = position.token_amount {
                 let dust_threshold = std::cmp::max(token_amount / 1_000, 10);
                 if balance <= dust_threshold {
-                    if is_debug_positions_enabled() {
-                        log(
-                            LogTag::Positions,
-                            "DEBUG",
-                            &format!(
-                                "Ignoring residual dust balance {} (threshold {} tokens) for position {}",
-                                balance,
-                                dust_threshold,
-                                pid
-                            )
-                        );
-                    }
+                    logger::debug(
+                        LogTag::Positions,
+                        &format!(
+                            "Ignoring residual dust balance {} (threshold {} tokens) for position {}",
+                            balance,
+                            dust_threshold,
+                            pid
+                        ),
+                    );
                     return false;
                 }
             }
@@ -103,13 +100,10 @@ async fn residual_balance_requires_retry(position_id: Option<i64>, balance: u64)
 
 /// Verify a transaction and produce the appropriate transition
 pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome {
-    if is_debug_positions_enabled() {
-        log(
-            LogTag::Positions,
-            "DEBUG",
-            &format!("🔍 Verifying transaction: {}", item.signature),
+        logger::debug(
+        LogTag::Positions,
+        &format!("🔍 Verifying transaction: {}", item.signature),
         );
-    }
 
     // Get transaction
     let transaction = match get_transaction(&item.signature).await {
@@ -311,17 +305,14 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                     if residual_balance_requires_retry(Some(position_id), balance)
                                         .await
                                     {
-                                        if is_debug_positions_enabled() {
-                                            log(
-                                                LogTag::Positions,
-                                                "DEBUG",
-                                                &format!(
-                                                    "🔄 Exit timeout but significant balance remains ({} tokens), clearing for retry: {}",
-                                                    balance,
-                                                    item.signature
-                                                )
-                                            );
-                                        }
+                                        logger::debug(
+                                            LogTag::Positions,
+                                            &format!(
+                                                "🔄 Exit timeout but significant balance remains ({} tokens), clearing for retry: {}",
+                                                balance,
+                                                item.signature
+                                            ),
+                                        );
                                         return VerificationOutcome::Transition(
                                             PositionTransition::ExitFailedClearForRetry {
                                                 position_id,
@@ -460,16 +451,13 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                 || error_msg.to_lowercase().contains("not yet indexed")
                 || error_msg.to_lowercase().contains("rpc error")
             {
-                if is_debug_positions_enabled() {
-                    log(
-                        LogTag::Positions,
-                        "DEBUG",
-                        &format!(
-                            "🔄 RPC indexing delay for {}: {}",
-                            item.signature, error_msg
-                        ),
-                    );
-                }
+                logger::debug(
+                    LogTag::Positions,
+                    &format!(
+                        "🔄 RPC indexing delay for {}: {}",
+                        item.signature, error_msg
+                    ),
+                );
                 return VerificationOutcome::RetryTransient(format!(
                     "RPC indexing delay: {}",
                     error_msg
@@ -529,16 +517,13 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
             if let Ok(wallet_address) = get_wallet_address() {
                 // Throttle token accounts query to reduce RPC load
                 if should_throttle_token_accounts(&item.mint).await {
-                    if is_debug_positions_enabled() {
-                        log(
-                            LogTag::Positions,
-                            "DEBUG",
-                            &format!(
-                                "⏳ Throttling token accounts check (entry verify) for mint {}",
-                                item.mint
-                            ),
-                        );
-                    }
+                    logger::debug(
+                        LogTag::Positions,
+                        &format!(
+                            "⏳ Throttling token accounts check (entry verify) for mint {}",
+                            item.mint
+                        ),
+                    );
                     return VerificationOutcome::RetryTransient(
                         "Token accounts check throttled".to_string(),
                     );
@@ -546,18 +531,15 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                 if let Ok(actual_units) = get_total_token_balance(&wallet_address, &item.mint).await
                 {
                     if actual_units > 0 && actual_units < token_amount_units {
-                        if is_debug_positions_enabled() {
-                            log(
-                                LogTag::Positions,
-                                "ENTRY_UNITS_CORRECTED",
-                                &format!(
-                                    "Reduced token units to on-chain balance for mint {}: tx-derived={} actual={}",
-                                    &item.mint,
-                                    token_amount_units,
-                                    actual_units
-                                )
-                            );
-                        }
+                        logger::debug(
+                            LogTag::Positions,
+                            &format!(
+                                "Reduced token units to on-chain balance for mint {}: tx-derived={} actual={}",
+                                &item.mint,
+                                token_amount_units,
+                                actual_units
+                            ),
+                        );
                         token_amount_units = actual_units;
                     }
                 }
@@ -610,16 +592,13 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
             if let Ok(wallet_address) = get_wallet_address() {
                 // Throttle token accounts query to reduce RPC load
                 if should_throttle_token_accounts(&item.mint).await {
-                    if is_debug_positions_enabled() {
-                        log(
-                            LogTag::Positions,
-                            "DEBUG",
-                            &format!(
-                                "⏳ Throttling token accounts check (exit residual) for mint {}",
-                                item.mint
-                            ),
-                        );
-                    }
+                    logger::debug(
+                        LogTag::Positions,
+                        &format!(
+                            "⏳ Throttling token accounts check (exit residual) for mint {}",
+                            item.mint
+                        ),
+                    );
                     return VerificationOutcome::RetryTransient(
                         "Token accounts check throttled".to_string(),
                     );
@@ -633,9 +612,8 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                 if exit_amount < expected.saturating_sub(tolerance)
                                     || exit_amount > expected + tolerance
                                 {
-                                    log(
+                                    logger::warning(
                                         LogTag::Positions,
-                                        "PARTIAL_EXIT_AMOUNT_MISMATCH",
                                         &format!(
                                             "⚠️ Partial exit amount mismatch for mint {}: expected={} actual={} tolerance={}",
                                             item.mint, expected, exit_amount, tolerance
@@ -647,9 +625,8 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                 }
                             }
 
-                            log(
+                            logger::info(
                                 LogTag::Positions,
-                                "PARTIAL_EXIT_VERIFIED",
                                 &format!(
                                     "✅ Partial exit verified for mint {}: sold={} remaining={}",
                                     item.mint, exit_amount, remaining_balance
@@ -672,14 +649,13 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                         if residual_balance_requires_retry(item.position_id, remaining_balance)
                             .await
                         {
-                            log(
+                            logger::warning(
                                 LogTag::Positions,
-                                "RESIDUAL_DETECTED",
                                 &format!(
                                     "⚠️ Exit residual {} units for mint {} → will retry another close",
                                     remaining_balance,
                                     item.mint
-                                )
+                                ),
                             );
 
                             crate::events::record_safe(crate::events::Event::new(
@@ -699,9 +675,8 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                 PositionTransition::ExitFailedClearForRetry { position_id },
                             );
                         } else {
-                            log(
+                            logger::info(
                                 LogTag::Positions,
-                                "COMPLETE_EXIT",
                                 &format!(
                                     "✅ Exit verified with zero residual for mint {}",
                                     item.mint
@@ -710,9 +685,8 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                         }
                     }
                     Err(e) => {
-                        log(
+                        logger::warning(
                             LogTag::Positions,
-                            "RESIDUAL_CHECK_FAILED",
                             &format!("⚠️ Could not verify residual balance after exit: {}", e),
                         );
                         // Be conservative, retry later

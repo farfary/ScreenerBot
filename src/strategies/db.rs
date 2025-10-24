@@ -1,5 +1,4 @@
-use crate::arguments::is_debug_system_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::strategies::types::{
     EvaluationResult, RiskLevel, Strategy, StrategyPerformance, StrategyTemplate, StrategyType,
 };
@@ -198,14 +197,8 @@ pub fn init_strategies_db() -> Result<(), String> {
         )
         .map_err(|e| format!("Failed to update schema version: {}", e))?;
 
-        log(
-            LogTag::System,
-            "SUCCESS",
-            &format!(
-                "Strategies database initialized with schema version {}",
-                STRATEGIES_SCHEMA_VERSION
-            ),
-        );
+        logger::info(LogTag::System, &format!("Strategies database initialized with schema version {}",
+                STRATEGIES_SCHEMA_VERSION));
     }
 
     STRATEGIES_DB_INITIALIZED.store(true, Ordering::Relaxed);
@@ -246,16 +239,8 @@ pub fn insert_strategy(strategy: &Strategy) -> Result<(), String> {
     )
     .map_err(|e| format!("Failed to insert strategy: {}", e))?;
 
-    if is_debug_system_enabled() {
-        log(
-            LogTag::System,
-            "INFO",
-            &format!(
-                "Inserted strategy: id={}, name={}, type={}",
-                strategy.id, strategy.name, strategy.strategy_type
-            ),
-        );
-    }
+        logger::info(LogTag::System, &format!("Inserted strategy: id={}, name={}, type={}",
+            strategy.id, strategy.name, strategy.strategy_type));
 
     Ok(())
 }
@@ -296,16 +281,8 @@ pub fn update_strategy(strategy: &Strategy) -> Result<(), String> {
         return Err(format!("Strategy not found: {}", strategy.id));
     }
 
-    if is_debug_system_enabled() {
-        log(
-            LogTag::System,
-            "INFO",
-            &format!(
-                "Updated strategy: id={}, name={}",
-                strategy.id, strategy.name
-            ),
-        );
-    }
+        logger::info(LogTag::System, &format!("Updated strategy: id={}, name={}",
+            strategy.id, strategy.name));
 
     Ok(())
 }
@@ -322,13 +299,7 @@ pub fn delete_strategy(strategy_id: &str) -> Result<(), String> {
         return Err(format!("Strategy not found: {}", strategy_id));
     }
 
-    if is_debug_system_enabled() {
-        log(
-            LogTag::System,
-            "INFO",
-            &format!("Deleted strategy: id={}", strategy_id),
-        );
-    }
+        logger::info(LogTag::System, &format!("Deleted strategy: id={}", strategy_id));
 
     Ok(())
 }

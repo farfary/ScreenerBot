@@ -1,5 +1,4 @@
-use crate::arguments::is_debug_pool_fetcher_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -28,13 +27,7 @@ impl Service for PoolFetcherService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
-        if is_debug_pool_fetcher_enabled() {
-            log(
-                LogTag::PoolService,
-                "INFO",
-                "Initializing pool fetcher service...",
-            );
-        }
+        logger::info(LogTag::PoolService, &"Initializing pool fetcher service...".to_string());
         Ok(())
     }
 
@@ -43,13 +36,7 @@ impl Service for PoolFetcherService {
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
-        if is_debug_pool_fetcher_enabled() {
-            log(
-                LogTag::PoolService,
-                "INFO",
-                "Starting pool fetcher service...",
-            );
-        }
+    logger::info(LogTag::PoolService, &"Starting pool fetcher service...".to_string());
 
         // Get the AccountFetcher component from global state
         let fetcher = crate::pools::get_account_fetcher()
@@ -60,25 +47,16 @@ impl Service for PoolFetcherService {
             fetcher.start_fetcher_task(shutdown).await;
         }));
 
-        if is_debug_pool_fetcher_enabled() {
-            log(
-                LogTag::PoolService,
-                "SUCCESS",
-                "✅ Pool fetcher service started (instrumented)",
-            );
-        }
+    logger::info(LogTag::PoolService, &"✅ Pool fetcher service started (instrumented)".to_string());
 
         Ok(vec![handle])
     }
 
     async fn stop(&mut self) -> Result<(), String> {
-        if is_debug_pool_fetcher_enabled() {
-            log(
-                LogTag::PoolService,
-                "INFO",
-                "Pool fetcher service stopping (via shutdown signal)",
-            );
-        }
+        logger::info(
+            LogTag::PoolService,
+            &"Pool fetcher service stopping (via shutdown signal)".to_string(),
+        );
         Ok(())
     }
 

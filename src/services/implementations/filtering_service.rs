@@ -5,7 +5,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 
 use crate::filtering;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 
 // Timing constants
@@ -74,25 +74,22 @@ impl Service for FilteringService {
 
         let handle = tokio::spawn(monitor.instrument(async move {
             // Do first refresh immediately on start (async, doesn't block other services)
-            log(
+            logger::info(
                 LogTag::Filtering,
-                "REFRESH_START",
                 "Starting initial filtering refresh...",
             );
             match filtering::refresh().await {
                 Ok(_) => {
                     operations.fetch_add(1, Ordering::Relaxed);
-                    log(
+                    logger::info(
                         LogTag::Filtering,
-                        "REFRESH_COMPLETE",
                         "Initial filtering refresh complete",
                     );
                 }
                 Err(err) => {
                     errors.fetch_add(1, Ordering::Relaxed);
-                    log(
+                    logger::warning(
                         LogTag::Filtering,
-                        "REFRESH_ERROR",
                         &format!("Initial refresh failed: {}", err),
                     );
                 }
@@ -114,7 +111,7 @@ impl Service for FilteringService {
                     }
                     Err(err) => {
                         errors.fetch_add(1, Ordering::Relaxed);
-                        log(LogTag::Filtering, "REFRESH_ERROR", &err);
+                        logger::warning(LogTag::Filtering, &err);
                         tokio::time::sleep(Duration::from_secs(3)).await;
                     }
                 }

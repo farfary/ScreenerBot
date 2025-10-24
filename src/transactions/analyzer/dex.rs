@@ -15,8 +15,7 @@ use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 
 use super::balance::BalanceAnalysis;
-use crate::global::is_debug_transactions_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::transactions::{program_ids::*, types::*, utils::*};
 
 // =============================================================================
@@ -173,13 +172,10 @@ pub async fn detect_dex_and_router(
     tx_data: &crate::rpc::TransactionDetails,
     balance_analysis: &BalanceAnalysis,
 ) -> Result<DexAnalysis, String> {
-    if is_debug_transactions_enabled() {
-        log(
-            LogTag::Transactions,
-            "DEX_DETECT",
+    logger::info(
+        LogTag::Transactions,
             &format!("Detecting DEX/router for tx: {}", transaction.signature),
         );
-    }
 
     // Step 1: Extract all program IDs from instructions
     let program_ids = extract_program_ids(tx_data)?;

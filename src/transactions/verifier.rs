@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::transactions::{processor::TransactionProcessor, types::*, utils::*};
 
 // =============================================================================
@@ -76,9 +76,8 @@ pub async fn verify_transaction_for_position(
 ) -> Result<TransactionVerificationResult, String> {
     let processor = TransactionProcessor::new(wallet_pubkey);
 
-    log(
+    logger::info(
         LogTag::Transactions,
-        "VERIFY",
         &format!(
             "Verifying transaction {} for position (expected: {:?})",
             signature, expected_type
@@ -112,9 +111,8 @@ pub async fn verify_transaction_for_position(
     let verification_result =
         perform_comprehensive_verification(&transaction, expected_type, wallet_pubkey).await?;
 
-    log(
+    logger::info(
         LogTag::Transactions,
-        "VERIFY_RESULT",
         &format!(
             "Verification complete for {}: verified={}, confidence={:.2}, issues={}",
             signature,
@@ -409,9 +407,8 @@ pub async fn verify_transactions_batch(
 ) -> HashMap<String, TransactionVerificationResult> {
     let mut results = HashMap::new();
 
-    log(
+    logger::info(
         LogTag::Transactions,
-        "BATCH_VERIFY",
         &format!(
             "Starting batch verification of {} transactions",
             verifications.len()
@@ -462,9 +459,8 @@ pub async fn verify_transactions_batch(
         }
     }
 
-    log(
+    logger::info(
         LogTag::Transactions,
-        "BATCH_VERIFY_COMPLETE",
         &format!(
             "Batch verification complete: {}/{} verified successfully",
             success_count,
@@ -549,9 +545,8 @@ pub async fn verify_transaction_legacy(
     signature: &str,
     wallet_pubkey: Pubkey,
 ) -> Result<bool, String> {
-    log(
+    logger::info(
         LogTag::Transactions,
-        "WARN",
         "Using legacy verification function - please migrate to new verification API",
     );
 

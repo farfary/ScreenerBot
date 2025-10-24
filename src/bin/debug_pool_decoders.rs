@@ -19,7 +19,7 @@
 
 use base64::Engine as _;
 use clap::Parser;
-use screenerbot::logger::{log, LogTag};
+use screenerbot::logger::{self as logger, LogTag};
 use screenerbot::pools::decoders::fluxbeam_amm::{FluxbeamAmmDecoder, FluxbeamPoolInfo};
 use screenerbot::pools::decoders::raydium_cpmm::{RaydiumCpmmDecoder, RaydiumCpmmPoolInfo};
 use screenerbot::pools::types::{PriceResult, ProgramKind, SOL_MINT};
@@ -138,9 +138,8 @@ async fn fetch_pool_account_data(pool_address: &str) -> Result<PoolAccountData, 
     let pool_pubkey =
         parse_pubkey(pool_address).map_err(|e| format!("Invalid pool address: {}", e))?;
 
-    log(
+    logger::info(
         LogTag::PoolService,
-        "RPC_FETCH",
         &format!("Fetching account data for pool: {}", &pool_address[..8]),
     );
 
@@ -149,9 +148,8 @@ async fn fetch_pool_account_data(pool_address: &str) -> Result<PoolAccountData, 
 
     match client.get_account(&pool_pubkey) {
         Ok(account) => {
-            log(
-                LogTag::PoolService,
-                "RPC_SUCCESS",
+            logger::info(
+        LogTag::PoolService,
                 &format!(
                     "Fetched account: {} bytes, owner: {}",
                     account.data.len(),
@@ -165,7 +163,7 @@ async fn fetch_pool_account_data(pool_address: &str) -> Result<PoolAccountData, 
         }
         Err(e) => {
             let error_msg = format!("Failed to fetch account data: {}", e);
-            log(LogTag::PoolService, "RPC_ERROR", &error_msg);
+            logger::info(LogTag::PoolService, &error_msg);
             Err(error_msg)
         }
     }
@@ -185,9 +183,8 @@ async fn test_decoder(
 ) -> DecoderTestResult {
     let start_time = std::time::Instant::now();
 
-    log(
+    logger::info(
         LogTag::PoolService,
-        "DECODER_TEST",
         &format!("Testing {} decoder", decoder_name),
     );
 
@@ -229,9 +226,8 @@ async fn test_raydium_cpmm_decoder(
     Option<ReservesInfo>,
 ) {
     if verbose {
-        log(
-            LogTag::PoolService,
-            "DECODER_DETAIL",
+        logger::info(
+        LogTag::PoolService,
             "Testing Raydium CPMM decoder",
         );
     }
@@ -239,9 +235,8 @@ async fn test_raydium_cpmm_decoder(
     match RaydiumCpmmDecoder::decode_raydium_cpmm_pool(&pool_data.data, &pool_data.address) {
         Some(pool_info) => {
             if verbose {
-                log(
-                    LogTag::PoolService,
-                    "DECODE_SUCCESS",
+                logger::info(
+        LogTag::PoolService,
                     &format!(
                         "Raydium CPMM decoded successfully: token0={}, token1={}",
                         &pool_info.token_0_mint[..8],
@@ -257,9 +252,8 @@ async fn test_raydium_cpmm_decoder(
             // For now, just show the pool structure
             if let Some(ref reserves) = reserves_info {
                 if verbose {
-                    log(
-                        LogTag::PoolService,
-                        "RESERVES_INFO",
+                    logger::info(
+        LogTag::PoolService,
                         &format!(
                             "Reserves extracted: SOL={}, Token={}, Token mint={}",
                             reserves.sol_reserve,
@@ -280,7 +274,7 @@ async fn test_raydium_cpmm_decoder(
         None => {
             let error_msg = "Raydium CPMM decode failed: could not parse pool data".to_string();
             if verbose {
-                log(LogTag::PoolService, "DECODE_ERROR", &error_msg);
+                logger::info(LogTag::PoolService, &error_msg);
             }
             (false, None, Some(error_msg), None)
         }
@@ -298,9 +292,8 @@ async fn test_raydium_clmm_decoder(
     Option<ReservesInfo>,
 ) {
     if verbose {
-        log(
-            LogTag::PoolService,
-            "DECODER_DETAIL",
+        logger::info(
+        LogTag::PoolService,
             "Testing Raydium CLMM decoder",
         );
     }
@@ -308,7 +301,7 @@ async fn test_raydium_clmm_decoder(
     // Note: This is a placeholder - actual CLMM decoder implementation would go here
     let error_msg = "Raydium CLMM decoder not yet implemented in debug tool".to_string();
     if verbose {
-        log(LogTag::PoolService, "DECODE_ERROR", &error_msg);
+        logger::info(LogTag::PoolService, &error_msg);
     }
     (false, None, Some(error_msg), None)
 }
@@ -324,9 +317,8 @@ async fn test_raydium_legacy_decoder(
     Option<ReservesInfo>,
 ) {
     if verbose {
-        log(
-            LogTag::PoolService,
-            "DECODER_DETAIL",
+        logger::info(
+        LogTag::PoolService,
             "Testing Raydium Legacy AMM decoder",
         );
     }
@@ -334,7 +326,7 @@ async fn test_raydium_legacy_decoder(
     // Note: This is a placeholder - actual Legacy AMM decoder implementation would go here
     let error_msg = "Raydium Legacy AMM decoder not yet implemented in debug tool".to_string();
     if verbose {
-        log(LogTag::PoolService, "DECODE_ERROR", &error_msg);
+        logger::info(LogTag::PoolService, &error_msg);
     }
     (false, None, Some(error_msg), None)
 }
@@ -350,9 +342,8 @@ async fn test_orca_whirlpool_decoder(
     Option<ReservesInfo>,
 ) {
     if verbose {
-        log(
-            LogTag::PoolService,
-            "DECODER_DETAIL",
+        logger::info(
+        LogTag::PoolService,
             "Testing Orca Whirlpool decoder",
         );
     }
@@ -360,7 +351,7 @@ async fn test_orca_whirlpool_decoder(
     // Note: This is a placeholder - actual Whirlpool decoder implementation would go here
     let error_msg = "Orca Whirlpool decoder not yet implemented in debug tool".to_string();
     if verbose {
-        log(LogTag::PoolService, "DECODE_ERROR", &error_msg);
+        logger::info(LogTag::PoolService, &error_msg);
     }
     (false, None, Some(error_msg), None)
 }
@@ -376,9 +367,8 @@ async fn test_meteora_damm_decoder(
     Option<ReservesInfo>,
 ) {
     if verbose {
-        log(
-            LogTag::PoolService,
-            "DECODER_DETAIL",
+        logger::info(
+        LogTag::PoolService,
             "Testing Meteora DAMM decoder",
         );
     }
@@ -386,7 +376,7 @@ async fn test_meteora_damm_decoder(
     // Note: This is a placeholder - actual DAMM decoder implementation would go here
     let error_msg = "Meteora DAMM decoder not yet implemented in debug tool".to_string();
     if verbose {
-        log(LogTag::PoolService, "DECODE_ERROR", &error_msg);
+        logger::info(LogTag::PoolService, &error_msg);
     }
     (false, None, Some(error_msg), None)
 }
@@ -402,9 +392,8 @@ async fn test_meteora_dlmm_decoder(
     Option<ReservesInfo>,
 ) {
     if verbose {
-        log(
-            LogTag::PoolService,
-            "DECODER_DETAIL",
+        logger::info(
+        LogTag::PoolService,
             "Testing Meteora DLMM decoder",
         );
     }
@@ -412,7 +401,7 @@ async fn test_meteora_dlmm_decoder(
     // Note: This is a placeholder - actual DLMM decoder implementation would go here
     let error_msg = "Meteora DLMM decoder not yet implemented in debug tool".to_string();
     if verbose {
-        log(LogTag::PoolService, "DECODE_ERROR", &error_msg);
+        logger::info(LogTag::PoolService, &error_msg);
     }
     (false, None, Some(error_msg), None)
 }
@@ -428,9 +417,8 @@ async fn test_pumpfun_amm_decoder(
     Option<ReservesInfo>,
 ) {
     if verbose {
-        log(
-            LogTag::PoolService,
-            "DECODER_DETAIL",
+        logger::info(
+        LogTag::PoolService,
             "Testing PumpFun AMM decoder",
         );
     }
@@ -438,7 +426,7 @@ async fn test_pumpfun_amm_decoder(
     // Note: This is a placeholder - actual PumpFun AMM decoder implementation would go here
     let error_msg = "PumpFun AMM decoder not yet implemented in debug tool".to_string();
     if verbose {
-        log(LogTag::PoolService, "DECODE_ERROR", &error_msg);
+        logger::info(LogTag::PoolService, &error_msg);
     }
     (false, None, Some(error_msg), None)
 }
@@ -454,9 +442,8 @@ async fn test_pumpfun_legacy_decoder(
     Option<ReservesInfo>,
 ) {
     if verbose {
-        log(
-            LogTag::PoolService,
-            "DECODER_DETAIL",
+        logger::info(
+        LogTag::PoolService,
             "Testing PumpFun Legacy decoder",
         );
     }
@@ -464,7 +451,7 @@ async fn test_pumpfun_legacy_decoder(
     // Note: This is a placeholder - actual PumpFun Legacy decoder implementation would go here
     let error_msg = "PumpFun Legacy decoder not yet implemented in debug tool".to_string();
     if verbose {
-        log(LogTag::PoolService, "DECODE_ERROR", &error_msg);
+        logger::info(LogTag::PoolService, &error_msg);
     }
     (false, None, Some(error_msg), None)
 }
@@ -480,9 +467,8 @@ async fn test_moonit_amm_decoder(
     Option<ReservesInfo>,
 ) {
     if verbose {
-        log(
-            LogTag::PoolService,
-            "DECODER_DETAIL",
+        logger::info(
+        LogTag::PoolService,
             "Testing Moonit AMM decoder",
         );
     }
@@ -490,7 +476,7 @@ async fn test_moonit_amm_decoder(
     // Note: This is a placeholder - actual Moonit AMM decoder implementation would go here
     let error_msg = "Moonit AMM decoder not yet implemented in debug tool".to_string();
     if verbose {
-        log(LogTag::PoolService, "DECODE_ERROR", &error_msg);
+        logger::info(LogTag::PoolService, &error_msg);
     }
     (false, None, Some(error_msg), None)
 }
@@ -506,9 +492,8 @@ async fn test_fluxbeam_amm_decoder(
     Option<ReservesInfo>,
 ) {
     if verbose {
-        log(
-            LogTag::PoolService,
-            "DECODER_DETAIL",
+        logger::info(
+        LogTag::PoolService,
             "Testing FluxBeam AMM decoder",
         );
     }
@@ -516,9 +501,8 @@ async fn test_fluxbeam_amm_decoder(
     match FluxbeamAmmDecoder::parse_fluxbeam_pool(&pool_data.data) {
         Some(pool_info) => {
             if verbose {
-                log(
-                    LogTag::PoolService,
-                    "DECODE_SUCCESS",
+                logger::info(
+        LogTag::PoolService,
                     &format!(
                         "FluxBeam AMM decoded successfully: tokenA={}, tokenB={}",
                         &pool_info.token_a_mint[..8],
@@ -533,9 +517,8 @@ async fn test_fluxbeam_amm_decoder(
             // For actual price calculation, we would need vault account data
             if let Some(ref reserves) = reserves_info {
                 if verbose {
-                    log(
-                        LogTag::PoolService,
-                        "RESERVES_INFO",
+                    logger::info(
+        LogTag::PoolService,
                         &format!(
                             "Reserves extracted: SOL vault={}, Token vault={}, Token mint={}",
                             &reserves.sol_reserve,
@@ -559,7 +542,7 @@ async fn test_fluxbeam_amm_decoder(
         None => {
             let error_msg = "FluxBeam AMM decode failed: could not parse pool data".to_string();
             if verbose {
-                log(LogTag::PoolService, "DECODE_ERROR", &error_msg);
+                logger::info(LogTag::PoolService, &error_msg);
             }
             (false, None, Some(error_msg), None)
         }
@@ -572,9 +555,8 @@ async fn extract_fluxbeam_reserves_from_info(
     verbose: bool,
 ) -> Option<ReservesInfo> {
     if verbose {
-        log(
-            LogTag::PoolService,
-            "EXTRACT_RESERVES",
+        logger::info(
+        LogTag::PoolService,
             &format!(
                 "Extracting reserves from FluxBeam pool: tokenA={}, tokenB={}",
                 &pool_info.token_a_mint[..8],
@@ -618,9 +600,8 @@ async fn extract_fluxbeam_reserves_from_info(
         })
     } else {
         if verbose {
-            log(
-                LogTag::PoolService,
-                "NO_SOL_PAIR",
+            logger::info(
+        LogTag::PoolService,
                 "Pool does not contain SOL - cannot extract SOL reserves",
             );
         }
@@ -634,9 +615,8 @@ async fn extract_raydium_cpmm_reserves_from_info(
     verbose: bool,
 ) -> Option<ReservesInfo> {
     if verbose {
-        log(
-            LogTag::PoolService,
-            "EXTRACT_RESERVES",
+        logger::info(
+        LogTag::PoolService,
             &format!(
                 "Extracting reserves from CPMM pool: token0={}, token1={}",
                 &pool_info.token_0_mint[..8],
@@ -680,9 +660,8 @@ async fn extract_raydium_cpmm_reserves_from_info(
         })
     } else {
         if verbose {
-            log(
-                LogTag::PoolService,
-                "NO_SOL_PAIR",
+            logger::info(
+        LogTag::PoolService,
                 "Pool does not contain SOL - cannot extract SOL reserves",
             );
         }
@@ -790,9 +769,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // Fetch pool account data from RPC
-    log(
+    logger::info(
         LogTag::PoolService,
-        "START",
         "Fetching pool account data from RPC",
     );
     let pool_data = match fetch_pool_account_data(&args.pool).await {
@@ -837,7 +815,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Test decoders
-    log(LogTag::PoolService, "TEST", "Starting decoder tests");
+    logger::info(LogTag::PoolService, "Starting decoder tests");
     let mut results = Vec::new();
 
     for decoder_name in decoders_to_test {
@@ -879,6 +857,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    log(LogTag::PoolService, "COMPLETE", "Decoder testing completed");
+    logger::info(LogTag::PoolService, "Decoder testing completed");
     Ok(())
 }

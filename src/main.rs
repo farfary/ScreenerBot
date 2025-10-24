@@ -1,6 +1,6 @@
 use screenerbot::{
     arguments::{is_dry_run_enabled, is_run_enabled, patterns, print_debug_info, print_help},
-    logger::{init_file_logging, log, LogTag},
+    logger::{self as logger, LogTag},
 };
 
 /// Main entry point for ScreenerBot
@@ -10,8 +10,8 @@ use screenerbot::{
 /// - --help: Display help information
 #[tokio::main]
 async fn main() {
-    // Initialize file logging system first (required for all operations)
-    init_file_logging();
+    // Initialize logger system first (required for all operations)
+    logger::init();
 
     // Check for help request first (before any other processing)
     if patterns::is_help_requested() {
@@ -20,40 +20,27 @@ async fn main() {
     }
 
     // Log startup information
-    log(LogTag::System, "INFO", "🚀 ScreenerBot starting up...");
+    logger::info(LogTag::System, "🚀 ScreenerBot starting up...");
 
     // Print debug information if any debug modes are enabled
     print_debug_info();
 
     // Validate argument combinations
     if let Err(e) = validate_arguments() {
-        log(
-            LogTag::System,
-            "ERROR",
-            &format!("Argument validation failed: {}", e),
-        );
-        log(LogTag::System, "ERROR", &format!("Error: {}", e));
-        log(
-            LogTag::System,
-            "INFO",
-            "Use --help to see all available options",
-        );
+        logger::error(LogTag::System, &format!("Argument validation failed: {}", e));
+        logger::error(LogTag::System, &format!("Error: {}", e));
+        logger::info(LogTag::System, "Use --help to see all available options");
         std::process::exit(1);
     }
 
     // Route to appropriate bot state based on arguments
     let result = if is_run_enabled() {
-        log(
-            LogTag::System,
-            "INFO",
-            "🚀 Starting ScreenerBot in RUN mode",
-        );
+        logger::info(LogTag::System, "🚀 Starting ScreenerBot in RUN mode");
 
         // Log dry-run status prominently if enabled
         if is_dry_run_enabled() {
-            log(
+            logger::info(
                 LogTag::System,
-                "CRITICAL",
                 "🚫 DRY-RUN MODE ENABLED - NO ACTUAL TRADING WILL OCCUR",
             );
         }
@@ -62,13 +49,9 @@ async fn main() {
         screenerbot::run::run_bot().await
     } else {
         let error_msg = "No valid mode specified";
-        log(LogTag::System, "ERROR", error_msg);
-        log(LogTag::System, "ERROR", &format!("Error: {}", error_msg));
-        log(
-            LogTag::System,
-            "INFO",
-            "Use --help to see all available options",
-        );
+        logger::error(LogTag::System, error_msg);
+        logger::error(LogTag::System, &format!("Error: {}", error_msg));
+        logger::info(LogTag::System, "Use --help to see all available options");
         print_help();
         std::process::exit(1);
     };
@@ -76,19 +59,11 @@ async fn main() {
     // Handle the result
     match result {
         Ok(_) => {
-            log(
-                LogTag::System,
-                "INFO",
-                "✅ ScreenerBot completed successfully",
-            );
+            logger::info(LogTag::System, "✅ ScreenerBot completed successfully");
         }
         Err(e) => {
-            log(
-                LogTag::System,
-                "ERROR",
-                &format!("ScreenerBot failed: {}", e),
-            );
-            log(LogTag::System, "ERROR", &format!("Error: {}", e));
+            logger::error(LogTag::System, &format!("ScreenerBot failed: {}", e));
+            logger::error(LogTag::System, &format!("Error: {}", e));
             std::process::exit(1);
         }
     }

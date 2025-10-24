@@ -1,6 +1,6 @@
 //! Entry opportunity monitoring based on strategies
 
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::pools;
 use crate::trader::auto::strategy_manager::StrategyManager;
 use crate::trader::config;
@@ -50,7 +50,7 @@ const ENTRY_CHECK_ACQUIRE_TIMEOUT_SECS: u64 = 30;
 pub async fn monitor_entries(
     mut shutdown: tokio::sync::watch::Receiver<bool>,
 ) -> Result<(), String> {
-    log(LogTag::Trader, "INFO", "Starting entry opportunity monitor");
+    logger::info(LogTag::Trader, "Starting entry opportunity monitor");
 
     // Record monitor start event
     crate::events::record_safe(crate::events::Event::new(
@@ -73,14 +73,14 @@ pub async fn monitor_entries(
     loop {
         // Check if we should shutdown
         if *shutdown.borrow() {
-            log(LogTag::Trader, "INFO", "Entry monitor shutting down");
+            logger::info(LogTag::Trader, "Entry monitor shutting down");
             break;
         }
 
         // Check if trader is enabled
         let trader_enabled = config::is_trader_enabled();
         if !trader_enabled {
-            log(LogTag::Trader, "INFO", "Entry monitor paused - trader disabled");
+            logger::info(LogTag::Trader, "Entry monitor paused - trader disabled");
             sleep(Duration::from_secs(5)).await;
             continue;
         }
@@ -90,9 +90,8 @@ pub async fn monitor_entries(
 
         // Check if we can open more positions
         if !check_position_limits().await? {
-            log(
+            logger::info(
                 LogTag::Trader,
-                "INFO",
                 "Position limit reached, skipping entry check",
             );
             sleep(Duration::from_secs(ENTRY_MONITOR_INTERVAL_SECS)).await;
@@ -118,9 +117,8 @@ pub async fn monitor_entries(
             
             // Try to reserve token for this cycle - prevents duplicate concurrent entries
             if !try_reserve_token_for_cycle(&token).await {
-                log(
+                logger::debug(
                     LogTag::Trader,
-                    "DEBUG",
                     &format!("Token {} already reserved by another thread, skipping", token),
                 );
                 continue;
@@ -147,17 +145,15 @@ pub async fn monitor_entries(
                     {
                         Ok(Ok(permit)) => permit,
                         Ok(Err(e)) => {
-                            log(
+                            logger::error(
                                 LogTag::Trader,
-                                "ERROR",
                                 &format!("Failed to acquire semaphore for entry check: {}", e),
                             );
                             return None;
                         }
                         Err(_) => {
-                            log(
+                            logger::warning(
                                 LogTag::Trader,
-                                "WARN",
                                 &format!(
                                     "Timeout waiting for entry check semaphore for {}",
                                     token_clone
@@ -172,9 +168,8 @@ pub async fn monitor_entries(
                         Ok(Some(decision)) => Some(decision),
                         Ok(None) => None,
                         Err(e) => {
-                            log(
+                            logger::error(
                                 LogTag::Trader,
-                                "ERROR",
                                 &format!(
                                     "Entry strategy check failed for {}: {}",
                                     token_clone, e
@@ -218,9 +213,8 @@ pub async fn monitor_entries(
                         
                         if result.success {
                             let tx_sig = result.tx_signature.clone();
-                            log(
+                            logger::info(
                                 LogTag::Trader,
-                                "SUCCESS",
                                 &format!(
                                     "Entry executed for {}: tx={}",
                                     decision.mint,
@@ -244,9 +238,8 @@ pub async fn monitor_entries(
                             .await;
                         } else {
                             let error_msg = result.error.clone().unwrap_or_default();
-                            log(
+                            logger::error(
                                 LogTag::Trader,
-                                "ERROR",
                                 &format!(
                                     "Entry failed for {}: {}",
                                     decision.mint,
@@ -274,9 +267,8 @@ pub async fn monitor_entries(
                         // Clear reservation on error
                         clear_token_reservation(&mint_for_cleanup).await;
                         
-                        log(
+                        logger::error(
                             LogTag::Trader,
-                            "ERROR",
                             &format!("Failed to execute entry for {}: {}", decision.mint, e),
                         );
                         
@@ -311,7 +303,7 @@ pub async fn monitor_entries(
             _ = sleep(wait_time) => {},
             _ = shutdown.changed() => {
                 if *shutdown.borrow() {
-                    log(LogTag::Trader, "INFO", "Entry monitor shutting down");
+                    logger::info(LogTag::Trader, "Entry monitor shutting down");
                     break;
                 }
             }

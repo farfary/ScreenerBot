@@ -8,6 +8,7 @@
 /// - Returns ONE best pool per token (DexScreener picks most liquid)
 /// - No pool filtering logic (trust DexScreener API)
 use crate::apis::dexscreener::DexScreenerPool;
+use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::store::{self, CacheMetrics};
 use crate::tokens::types::{DexScreenerData, TokenError, TokenResult};
@@ -136,9 +137,12 @@ pub async fn fetch_dexscreener_data_batch(
             if age < 30 {
                 store::store_dexscreener(mint, &db_data);
                 if let Err(err) = store::refresh_token_snapshot(mint).await {
-                    eprintln!(
-                        "[TOKENS][STORE] Failed to refresh token snapshot after DB hit mint={} err={:?}",
-                        mint, err
+                    logger::error(
+                        LogTag::Tokens,
+                        &format!(
+                            "[TOKENS][STORE] Failed to refresh token snapshot after DB hit mint={} err={:?}",
+                            mint, err
+                        ),
                     );
                 }
                 results.insert(mint.clone(), Some(db_data));
@@ -182,18 +186,24 @@ pub async fn fetch_dexscreener_data_batch(
 
         // Store in database
         if let Err(e) = db.upsert_dexscreener_data(mint, &data) {
-            eprintln!(
-                "[TOKENS][DEXSCREENER] Failed to store data for {}: {}",
-                mint, e
+            logger::error(
+                LogTag::Tokens,
+                &format!(
+                    "[TOKENS][DEXSCREENER] Failed to store data for {}: {}",
+                    mint, e
+                ),
             );
         }
 
         // Cache it
         store::store_dexscreener(mint, &data);
         if let Err(err) = store::refresh_token_snapshot(mint).await {
-            eprintln!(
-                "[TOKENS][STORE] Failed to refresh token snapshot after API mint={} err={:?}",
-                mint, err
+            logger::error(
+                LogTag::Tokens,
+                &format!(
+                    "[TOKENS][STORE] Failed to refresh token snapshot after API mint={} err={:?}",
+                    mint, err
+                ),
             );
         }
 

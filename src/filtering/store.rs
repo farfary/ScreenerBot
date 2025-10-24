@@ -7,7 +7,7 @@ use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use once_cell::sync::Lazy;
 use tokio::sync::RwLock;
 
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::tokens::types::Token;
 
 use super::engine::compute_snapshot;
@@ -50,9 +50,8 @@ impl FilteringStore {
             Err(err) => {
                 if let Some(existing) = stale_snapshot {
                     let age_secs = snapshot_age_secs(existing.as_ref());
-                    log(
-                        LogTag::Filtering,
-                        "SNAPSHOT_FALLBACK",
+                    logger::info(
+        LogTag::Filtering,
                         &format!(
                             "refresh_failed={} using_stale_snapshot age_secs={}",
                             err, age_secs

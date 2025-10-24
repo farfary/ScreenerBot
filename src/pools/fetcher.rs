@@ -1,13 +1,11 @@
 use super::types::PoolDescriptor;
 use super::utils::is_sol_mint;
-use crate::arguments::is_debug_pool_fetcher_enabled;
 use crate::events::{record_safe, Event, EventCategory, Severity};
 /// Account fetcher module
 ///
 /// This module handles efficient batched fetching of pool account data from RPC.
 /// It optimizes RPC usage by batching requests and managing rate limits.
-use crate::global::is_debug_pool_service_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::pools::service; // access global calculator
 use crate::rpc::{get_rpc_client, RpcClient};
 use solana_sdk::{account::Account, pubkey::Pubkey};
@@ -169,9 +167,7 @@ impl AccountFetcher {
 
     /// Start fetcher background task
     pub async fn start_fetcher_task(&self, shutdown: Arc<Notify>) {
-        if is_debug_pool_fetcher_enabled() {
-            log(LogTag::PoolFetcher, "INFO", "Starting account fetcher task");
-        }
+        logger::info(LogTag::PoolFetcher, "Starting account fetcher task");
 
         let rpc_client = self.rpc_client.clone();
         let pool_directory = self.pool_directory.clone();
@@ -189,54 +185,40 @@ impl AccountFetcher {
                 tokio::time::interval(tokio::time::Duration::from_millis(FETCH_INTERVAL_MS));
             let mut pending_accounts: HashSet<Pubkey> = HashSet::new();
 
-            if is_debug_pool_fetcher_enabled() {
-                log(LogTag::PoolFetcher, "INFO", "Account fetcher task started");
-            }
+            logger::info(LogTag::PoolFetcher, "Account fetcher task started");
 
             loop {
                 tokio::select! {
                     _ = shutdown.notified() => {
-                        if is_debug_pool_fetcher_enabled() {
-                            log(LogTag::PoolFetcher, "INFO", "Account fetcher task shutting down");
-                        }
+                        logger::info(LogTag::PoolFetcher, "Account fetcher task shutting down");
                         break;
                     }
 
                     message = fetcher_rx.recv() => {
                         match message {
                             Some(FetcherMessage::FetchPool { pool_id, accounts }) => {
-                                if is_debug_pool_fetcher_enabled() {
-                                    log(
-                                        LogTag::PoolFetcher,
-                                        "DEBUG",
-                                        &format!("Received fetch request for pool {} with {} accounts", pool_id, accounts.len())
-                                    );
-                                }
+                                logger::debug(
+                                    LogTag::PoolFetcher,
+                                    &format!("Received fetch request for pool {} with {} accounts", pool_id, accounts.len())
+                                );
                                 pending_accounts.extend(accounts);
                             }
 
                             Some(FetcherMessage::FetchAccounts { accounts }) => {
-                                if is_debug_pool_fetcher_enabled() {
-                                    log(
-                                        LogTag::PoolFetcher,
-                                        "DEBUG",
-                                        &format!("Received fetch request for {} accounts", accounts.len())
-                                    );
-                                }
+                                logger::debug(
+                                    LogTag::PoolFetcher,
+                                    &format!("Received fetch request for {} accounts", accounts.len())
+                                );
                                 pending_accounts.extend(accounts);
                             }
 
                             Some(FetcherMessage::Shutdown) => {
-                                if is_debug_pool_fetcher_enabled() {
-                                    log(LogTag::PoolFetcher, "INFO", "Fetcher received shutdown signal");
-                                }
+                                logger::info(LogTag::PoolFetcher, "Fetcher received shutdown signal");
                                 break;
                             }
 
                             None => {
-                                if is_debug_pool_fetcher_enabled() {
-                                    log(LogTag::PoolFetcher, "INFO", "Fetcher channel closed");
-                                }
+                                logger::info(LogTag::PoolFetcher, "Fetcher channel closed");
                                 break;
                             }
                         }
@@ -264,13 +246,7 @@ impl AccountFetcher {
                 }
             }
 
-            if is_debug_pool_fetcher_enabled() {
-                log(
-                    LogTag::PoolFetcher,
-                    "INFO",
-                    "Account fetcher task completed",
-                );
-            }
+            logger::info(LogTag::PoolFetcher, "Account fetcher task completed");
         });
     }
 
@@ -337,13 +313,10 @@ impl AccountFetcher {
         // Convert to vector and batch
         let accounts_to_fetch: Vec<Pubkey> = pending_accounts.drain().collect();
 
-        if is_debug_pool_fetcher_enabled() {
-            log(
-                LogTag::PoolFetcher,
-                "INFO",
-                &format!("Processing {} pending accounts", accounts_to_fetch.len()),
-            );
-        }
+        logger::info(
+            LogTag::PoolFetcher,
+            &format!("Processing {} pending accounts", accounts_to_fetch.len()),
+        );
 
         // Process in batches
         for batch in accounts_to_fetch.chunks(ACCOUNT_BATCH_SIZE) {
@@ -396,20 +369,16 @@ impl AccountFetcher {
                     )
                     .await;
 
-                    if is_debug_pool_fetcher_enabled() {
-                        log(
-                            LogTag::PoolFetcher,
-                            "SUCCESS",
-                            &format!("Successfully fetched {} accounts", account_data_list.len()),
-                        );
-                    }
+                    logger::info(
+                        LogTag::PoolFetcher,
+                        &format!("Successfully fetched {} accounts", account_data_list.len()),
+                    );
                 }
                 Err(e) => {
                     let batch_duration = batch_start.elapsed();
 
-                    log(
+                    logger::error(
                         LogTag::PoolFetcher,
-                        "ERROR",
                         &format!("Failed to fetch account batch: {}", e),
                     );
 
@@ -443,13 +412,10 @@ impl AccountFetcher {
             return Ok(Vec::new());
         }
 
-        if is_debug_pool_fetcher_enabled() {
-            log(
-                LogTag::PoolFetcher,
-                "DEBUG",
-                &format!("Fetching batch of {} accounts", accounts.len()),
-            );
-        }
+        logger::debug(
+            LogTag::PoolFetcher,
+            &format!("Fetching batch of {} accounts", accounts.len()),
+        );
 
         // Fetch accounts using RPC client
         let rpc_start = Instant::now();
@@ -502,13 +468,7 @@ impl AccountFetcher {
                 account_data_list.push(account_data);
             } else {
                 missing_accounts.push(accounts[i].to_string());
-                if is_debug_pool_fetcher_enabled() {
-                    log(
-                        LogTag::PoolFetcher,
-                        "WARN",
-                        &format!("Account not found: {}", accounts[i]),
-                    );
-                }
+                logger::warning(LogTag::PoolFetcher, &format!("Account not found: {}", accounts[i]));
             }
         }
 
@@ -569,15 +529,14 @@ impl AccountFetcher {
                     };
                     bundle.add_account(isolated_account_data);
 
-                    if is_debug_pool_fetcher_enabled() {
+                    {
                         let target_token = if is_sol_mint(&pool_descriptor.base_mint.to_string()) {
                             pool_descriptor.quote_mint
                         } else {
                             pool_descriptor.base_mint
                         };
-                        log(
+                        logger::debug(
                             LogTag::PoolFetcher,
-                            "DEBUG",
                             &format!(
                                 "Added account {} to bundle for token {} in pool {}",
                                 account_data.pubkey, target_token, pool_id
@@ -595,9 +554,8 @@ impl AccountFetcher {
                                 pool_descriptor.clone(),
                                 bundle.clone(),
                             ) {
-                                log(
+                                logger::warning(
                                     LogTag::PoolFetcher,
-                                    "WARN",
                                     &format!(
                                         "Failed to request calculation for token {} in pool {}: {}",
                                         if is_sol_mint(&pool_descriptor.base_mint.to_string()) {
@@ -609,21 +567,20 @@ impl AccountFetcher {
                                         e
                                     ),
                                 );
-                            } else if is_debug_pool_fetcher_enabled() {
+                            } else {
                                 let target_token =
                                     if is_sol_mint(&pool_descriptor.base_mint.to_string()) {
                                         pool_descriptor.quote_mint
                                     } else {
                                         pool_descriptor.base_mint
                                     };
-                                log(
+                                logger::info(
                                     LogTag::PoolFetcher,
-                                    "INFO",
                                     &format!(
                                         "Requested calculation for complete bundle - token {} in pool {}",
                                         target_token,
                                         pool_id
-                                    )
+                                    ),
                                 );
                             }
                         }
@@ -679,12 +636,8 @@ impl AccountFetcher {
         let mut bundles = self.account_bundles.write().unwrap();
         bundles.retain(|pool_id, bundle| {
             let should_keep = !bundle.is_stale(max_age_seconds);
-            if !should_keep && is_debug_pool_fetcher_enabled() {
-                log(
-                    LogTag::PoolFetcher,
-                    "DEBUG",
-                    &format!("Removing stale bundle for pool: {}", pool_id),
-                );
+            if !should_keep {
+                logger::debug(LogTag::PoolFetcher, &format!("Removing stale bundle for pool: {}", pool_id));
             }
             should_keep
         });

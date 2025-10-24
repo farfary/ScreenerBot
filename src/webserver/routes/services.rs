@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use crate::{
     arguments::is_debug_webserver_enabled,
-    logger::{log, LogTag},
+    logger::{self, LogTag},
     services::{ServiceHealth, ServiceMetrics},
     webserver::{state::AppState, utils::success_response},
 };
@@ -81,13 +81,10 @@ pub struct ServicesSummary {
 pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
     use crate::services::get_service_manager;
 
-    if is_debug_webserver_enabled() {
-        log(
+    logger::debug(
             LogTag::Webserver,
-            "DEBUG",
             "Collecting services overview snapshot from ServiceManager",
         );
-    }
 
     let mut services = Vec::new();
     let mut dependency_graph = Vec::new();
@@ -102,13 +99,10 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
     };
 
     if let Some(manager_ref) = get_service_manager().await {
-        if is_debug_webserver_enabled() {
-            log(
+        logger::debug(
                 LogTag::Webserver,
-                "DEBUG",
                 "ServiceManager reference obtained, attempting non-blocking read lock",
             );
-        }
 
         // Use try_read() to avoid deadlock - returns immediately if lock is held
         match manager_ref.try_read() {
@@ -119,10 +113,8 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
                     let health_map = manager.get_health_cached().await;
                     let metrics_map = manager.get_metrics_cached().await;
 
-                    if is_debug_webserver_enabled() {
-                        log(
+                    logger::debug(
                     LogTag::Webserver,
-                    "DEBUG",
                     &format!(
                         "Discovered {} registered services while compiling snapshot (health_map_size={}, metrics_map_size={})",
                         service_names.len(),
@@ -130,7 +122,6 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
                         metrics_map.len()
                     )
                 );
-                    }
 
                     for name in service_names {
                         if let Some(service) = manager.get_service(name) {
@@ -155,10 +146,8 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
                                 .sanitized();
                             let uptime_seconds = metrics.uptime_seconds;
 
-                            if is_debug_webserver_enabled() {
-                                log(
+                            logger::debug(
                             LogTag::Webserver,
-                            "DEBUG",
                             &format!(
                                 "Service '{}': priority={}, enabled={}, health={:?}, metrics.task_count={}",
                                 name,
@@ -168,7 +157,6 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
                                 metrics.task_count
                             )
                         );
-                            }
 
                             if enabled {
                                 summary.enabled_services += 1;
@@ -211,31 +199,24 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
                         }
                     }
                 } else {
-                    if is_debug_webserver_enabled() {
-                        log(
+                    logger::debug(
                             LogTag::Webserver,
-                            "DEBUG",
                             "ServiceManager read lock acquired but manager is None",
                         );
-                    }
                 }
             }
             Err(_) => {
-                log(
+                logger::warning(
                     LogTag::Webserver,
-                    "WARN",
                     "ServiceManager read lock is held (try_read failed) - returning empty snapshot to avoid blocking",
                 );
             }
         }
     } else {
-        if is_debug_webserver_enabled() {
-            log(
+        logger::debug(
                 LogTag::Webserver,
-                "DEBUG",
                 "ServiceManager reference not available (get_service_manager returned None)",
             );
-        }
     }
 
     services.sort_by_key(|service| service.priority);
@@ -246,22 +227,19 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
         && summary.degraded_services == 0
         && summary.starting_services == 0;
 
-    if is_debug_webserver_enabled() {
-        let unhealthy = summary.unhealthy_services + summary.degraded_services;
-        log(
-            LogTag::Webserver,
-            "DEBUG",
-            &format!(
-                "Services snapshot prepared: total={} enabled={} healthy={} unhealthy={} starting={} degraded={}",
-                summary.total_services,
-                summary.enabled_services,
-                summary.healthy_services,
-                summary.unhealthy_services,
-                summary.starting_services,
-                summary.degraded_services
-            )
-        );
-    }
+    let unhealthy = summary.unhealthy_services + summary.degraded_services;
+    logger::debug(
+        LogTag::Webserver,
+        &format!(
+            "Services snapshot prepared: total={} enabled={} healthy={} unhealthy={} starting={} degraded={}",
+            summary.total_services,
+            summary.enabled_services,
+            summary.healthy_services,
+            summary.unhealthy_services,
+            summary.starting_services,
+            summary.degraded_services
+        )
+    );
 
     ServicesOverviewResponse {
         services,
@@ -286,9 +264,7 @@ pub fn routes() -> Router<Arc<AppState>> {
 /// GET /api/services
 /// List all services with their current status
 async fn list_services(State(_state): State<Arc<AppState>>) -> Response {
-    if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "DEBUG", "Fetching all services list");
-    }
+    logger::debug(LogTag::Webserver, "Fetching all services list");
 
     let overview = gather_services_overview_snapshot().await;
     let unhealthy_count = overview.summary.unhealthy_services + overview.summary.degraded_services;
@@ -301,19 +277,16 @@ async fn list_services(State(_state): State<Arc<AppState>>) -> Response {
         timestamp: overview.timestamp,
     };
 
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "DEBUG",
-            &format!(
-                "Returning services list: total={} healthy={} unhealthy={} starting={}",
-                response.total_count,
-                response.healthy_count,
-                response.unhealthy_count,
-                response.starting_count
-            ),
-        );
-    }
+    logger::info(
+        LogTag::Webserver,
+        &format!(
+            "Returning services list: total={} healthy={} unhealthy={} starting={}",
+            response.total_count,
+            response.healthy_count,
+            response.unhealthy_count,
+            response.starting_count
+        ),
+    );
 
     success_response(response)
 }
@@ -321,28 +294,22 @@ async fn list_services(State(_state): State<Arc<AppState>>) -> Response {
 /// GET /api/services/:name
 /// Get detailed information about a specific service
 async fn get_service(Path(name): Path<String>, State(_state): State<Arc<AppState>>) -> Response {
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "DEBUG",
-            &format!("Fetching service details for: {}", name),
-        );
-    }
+    logger::info(
+        LogTag::Webserver,
+        &format!("Fetching service details for: {}", name),
+    );
 
     let overview = gather_services_overview_snapshot().await;
 
     match overview.services.into_iter().find(|svc| svc.name == name) {
         Some(service) => {
-            if is_debug_webserver_enabled() {
-                log(
-                    LogTag::Webserver,
-                    "DEBUG",
-                    &format!(
-                        "Service '{}' found with priority {}",
-                        service.name, service.priority
-                    ),
-                );
-            }
+            logger::info(
+                LogTag::Webserver,
+                &format!(
+                    "Service '{}' found with priority {}",
+                    service.name, service.priority
+                ),
+            );
             success_response(service)
         }
         None => (
@@ -360,45 +327,36 @@ async fn services_overview(State(_state): State<Arc<AppState>>) -> Response {
 
     let start = Instant::now();
 
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "DEBUG",
-            "Fetching complete services overview",
-        );
-    }
+    logger::info(
+        LogTag::Webserver,
+        "Fetching complete services overview",
+    );
 
     let overview = gather_services_overview_snapshot().await;
     let gather_duration = start.elapsed();
 
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "DEBUG",
-            &format!(
-                "Overview payload ready: services={}, dependencies={}, gather_time={}ms",
-                overview.services.len(),
-                overview.dependency_graph.len(),
-                gather_duration.as_millis()
-            ),
-        );
-    }
+    logger::info(
+        LogTag::Webserver,
+        &format!(
+            "Overview payload ready: services={}, dependencies={}, gather_time={}ms",
+            overview.services.len(),
+            overview.dependency_graph.len(),
+            gather_duration.as_millis()
+        ),
+    );
 
     let response = success_response(overview);
     let total_duration = start.elapsed();
 
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "DEBUG",
-            &format!(
-                "Overview response ready: total_time={}ms (gather={}ms, serialize={}ms)",
-                total_duration.as_millis(),
-                gather_duration.as_millis(),
-                (total_duration - gather_duration).as_millis()
-            ),
-        );
-    }
+    logger::info(
+        LogTag::Webserver,
+        &format!(
+            "Overview response ready: total_time={}ms (gather={}ms, serialize={}ms)",
+            total_duration.as_millis(),
+            gather_duration.as_millis(),
+            (total_duration - gather_duration).as_millis()
+        ),
+    );
 
     response
 }

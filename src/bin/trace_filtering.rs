@@ -5,7 +5,7 @@ use screenerbot::filtering::get_filtered_token_mints;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔍 Testing new filtering system");
 
-    screenerbot::logger::init_file_logging();
+    screenerbot::logger::init();
 
     let filtered_tokens = get_filtered_token_mints().await?;
 

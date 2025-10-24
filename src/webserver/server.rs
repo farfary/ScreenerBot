@@ -10,7 +10,7 @@ use tower_http::compression::CompressionLayer;
 
 use crate::{
     arguments::is_debug_webserver_enabled,
-    logger::{log, LogTag},
+    logger::{self, LogTag},
     webserver::{routes, state::AppState},
 };
 
@@ -25,22 +25,17 @@ static SHUTDOWN_NOTIFY: once_cell::sync::Lazy<Arc<Notify>> =
 ///
 /// This function blocks until the server is shut down
 pub async fn start_server() -> Result<(), String> {
-    if is_debug_webserver_enabled() {
-        log(
+    logger::debug(
             LogTag::Webserver,
-            "INFO",
             &format!("🌐 Starting webserver on {}:{}", DEFAULT_HOST, DEFAULT_PORT),
         );
-    }
 
     // Create application state
     let state = Arc::new(AppState::new());
 
     // Set global app state
     crate::webserver::state::set_global_app_state(Arc::clone(&state));
-    if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "INFO", "✅ Global app state configured");
-    }
+    logger::debug(LogTag::Webserver, "✅ Global app state configured");
 
     // Build the router
     let app = build_app(state.clone());
@@ -81,29 +76,22 @@ pub async fn start_server() -> Result<(), String> {
         }
     })?;
 
-    if is_debug_webserver_enabled() {
-        log(
+    logger::debug(
             LogTag::Webserver,
-            "INFO",
             &format!("✅ Webserver listening on http://{}", addr),
         );
-        log(
+        logger::debug(
             LogTag::Webserver,
-            "INFO",
             &format!("📊 API endpoints available at http://{}/api", addr),
         );
-    }
 
     // Run the server with graceful shutdown
     let shutdown_signal = async {
         SHUTDOWN_NOTIFY.notified().await;
-        if is_debug_webserver_enabled() {
-            log(
+        logger::debug(
                 LogTag::Webserver,
-                "INFO",
                 "Received shutdown signal, stopping webserver...",
             );
-        }
     };
 
     axum::serve(listener, app)
@@ -111,22 +99,17 @@ pub async fn start_server() -> Result<(), String> {
         .await
         .map_err(|e| format!("Server error: {}", e))?;
 
-    if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "INFO", "✅ Webserver stopped gracefully");
-    }
+    logger::debug(LogTag::Webserver, "✅ Webserver stopped gracefully");
 
     Ok(())
 }
 
 /// Trigger webserver shutdown
 pub fn shutdown() {
-    if is_debug_webserver_enabled() {
-        log(
+    logger::debug(
             LogTag::Webserver,
-            "INFO",
             "Triggering webserver shutdown...",
         );
-    }
     SHUTDOWN_NOTIFY.notify_one();
 }
 

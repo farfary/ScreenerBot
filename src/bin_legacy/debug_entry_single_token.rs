@@ -77,27 +77,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     set_cmd_args(cmd_args.clone());
 
-    log(
+    logger::info(
         LogTag::Entry,
-        "START",
         &format!("Starting entry test for token {}", args.token),
     );
 
     // Initialize external APIs used by discovery/fetchers
     if let Err(e) = init_dexscreener_api().await {
-        log(
-            LogTag::Entry,
-            "ERROR",
+        logger::info(
+        LogTag::Entry,
             &format!("DexScreener init failed: {}", e),
         );
     }
 
     // Ensure decimals are cached to allow any token math elsewhere if needed
     match get_token_decimals_from_chain(&args.token).await {
-        Ok(dec) => log(LogTag::Entry, "INIT", &format!("Token decimals: {}", dec)),
-        Err(e) => log(
-            LogTag::Entry,
-            "WARN",
+        Ok(dec) => logger::info(
+        LogTag::Entry, &format!("Token decimals: {}", dec)),
+        Err(e) => logger::info(
+        LogTag::Entry,
             &format!("Failed to fetch decimals: {}", e),
         ),
     }
@@ -107,14 +105,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // NOTE: Pool service must be started via ServiceManager now
     // This debug tool needs to be updated to use the new service architecture
-    log(
+    logger::info(
         LogTag::Entry,
-        "ERROR",
         "This debug tool is outdated - pool service is now managed by ServiceManager.",
     );
-    log(
+    logger::info(
         LogTag::Entry,
-        "ERROR",
         "Please run the main bot with --debug-entry enabled instead.",
     );
     return Err("Debug tool needs updating for new service architecture".into());
@@ -130,18 +126,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let (approved, confidence, reason) = screenerbot::entry::should_buy(&price).await;
 
             // Log a concise decision line (full details gated behind --debug-entry within entry.rs)
-            log(
-                LogTag::Entry,
-                "ENTRY_TEST",
+            logger::info(
+        LogTag::Entry,
                 &format!(
                     "mint={} price={:.12} SOL should_buy={} conf={:.1}% reason={}",
                     price.mint, price.price_sol, approved, confidence, reason
                 ),
             );
         } else {
-            log(
-                LogTag::Entry,
-                "WAIT",
+            logger::info(
+        LogTag::Entry,
                 "Price not yet available from pool service",
             );
         }
@@ -149,6 +143,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Gracefully stop the pool service with a small timeout window
     stop_pool_service(5).await?;
-    log(LogTag::Entry, "DONE", "Stopped pool service and exiting");
+    logger::info(
+        LogTag::Entry, "Stopped pool service and exiting");
     Ok(())
 }

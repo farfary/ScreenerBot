@@ -45,7 +45,7 @@ pub mod db;
 pub mod maintenance;
 pub mod types;
 
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use db::EventsDatabase;
 pub use maintenance::{
     get_events_summary, record_entry_event, record_ohlcv_event, record_pool_event,
@@ -126,9 +126,8 @@ pub async fn init() -> Result<(), String> {
         _handle: handle,
     });
 
-    log(
+    logger::info(
         LogTag::System,
-        "READY",
         "Events system initialized successfully",
     );
     Ok(())
@@ -155,9 +154,8 @@ pub async fn record(event: Event) -> Result<(), String> {
 /// Logs errors instead of propagating them to avoid disrupting main operations
 pub async fn record_safe(event: Event) {
     if let Err(e) = record(event).await {
-        log(
+        logger::warning(
             LogTag::System,
-            "WARN",
             &format!("Failed to record event: {}", e),
         );
     }
@@ -308,7 +306,7 @@ async fn event_writer_task(mut receiver: mpsc::Receiver<Event>, db: Arc<EventsDa
         }
     }
 
-    log(LogTag::System, "INFO", "Events writer task stopped");
+    logger::info(LogTag::System, "Events writer task stopped");
 }
 
 /// Write a batch of events to database
@@ -318,9 +316,8 @@ async fn write_batch(db: &EventsDatabase, batch: &mut Vec<Event>) {
     }
 
     if let Err(e) = db.insert_events(batch.as_mut_slice()).await {
-        log(
+        logger::error(
             LogTag::System,
-            "ERROR",
             &format!("Failed to write event batch: {}", e),
         );
     }

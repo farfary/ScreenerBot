@@ -1,12 +1,10 @@
 use super::types::{PriceResult, PRICE_HISTORY_MAX_ENTRIES};
-use crate::arguments::{is_debug_pool_cache_enabled, is_debug_pool_cleanup_enabled};
 /// Database module for persistent price history storage
 ///
 /// This module provides SQLite-based storage for price history data,
 /// enabling price history to survive service restarts and providing
 /// full historical data access beyond the in-memory cache limits.
-use crate::global::is_debug_pool_service_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, Row};
 use std::fs;
@@ -223,13 +221,10 @@ impl PoolsDatabase {
             run_database_writer(rx, db_connection).await;
         });
 
-        if is_debug_pool_service_enabled() {
-            log(
-                LogTag::PoolService,
-                "DB_INIT",
-                &format!("✅ Pools database initialized: {}", self.db_path),
-            );
-        }
+        logger::info(
+            LogTag::PoolService,
+            &format!("✅ Pools database initialized: {}", self.db_path),
+        );
 
         Ok(())
     }
@@ -279,17 +274,14 @@ impl PoolsDatabase {
         // Reverse to get chronological order (oldest to newest)
         results.reverse();
 
-        if is_debug_pool_cache_enabled() {
-            log(
-                LogTag::PoolCache,
-                "DB_LOAD",
-                &format!(
-                    "Loaded {} price history entries for token: {}",
-                    results.len(),
-                    mint
-                ),
-            );
-        }
+        logger::debug(
+            LogTag::PoolCache,
+            &format!(
+                "Loaded {} price history entries for token: {}",
+                results.len(),
+                mint
+            ),
+        );
 
         Ok(results)
     }
@@ -375,10 +367,9 @@ impl PoolsDatabase {
             )
             .map_err(|e| format!("Failed to cleanup old entries: {}", e))?;
 
-        if deleted > 0 && is_debug_pool_service_enabled() {
-            log(
+        if deleted > 0 {
+            logger::debug(
                 LogTag::PoolService,
-                "DB_CLEANUP",
                 &format!("Cleaned up {} old price history entries", deleted),
             );
         }
@@ -404,10 +395,9 @@ impl PoolsDatabase {
                 )
                 .map_err(|e| format!("Failed to cleanup gapped data for token {}: {}", mint, e))?;
 
-            if deleted > 0 && is_debug_pool_cache_enabled() {
-                log(
+            if deleted > 0 {
+                logger::debug(
                     LogTag::PoolCache,
-                    "GAP_CLEANUP",
                     &format!(
                         "Removed {} gapped price entries for token: {}",
                         deleted, mint
@@ -501,19 +491,17 @@ impl PoolsDatabase {
                     total_deleted += deleted;
                 }
                 Err(e) => {
-                    log(
+                    logger::error(
                         LogTag::PoolCache,
-                        "ERROR",
                         &format!("Failed to cleanup gapped data for token {}: {}", token, e),
                     );
                 }
             }
         }
 
-        if total_deleted > 0 && is_debug_pool_cleanup_enabled() {
-            log(
+        if total_deleted > 0 {
+            logger::debug(
                 LogTag::PoolService,
-                "GAP_CLEANUP",
                 &format!(
                     "Removed {} total gapped price entries across all tokens",
                     total_deleted
@@ -617,13 +605,10 @@ async fn flush_write_buffer(
 
             // Commit transaction
             if tx.commit().is_ok() && insert_count > 0 {
-                if is_debug_pool_cache_enabled() {
-                    log(
-                        LogTag::PoolCache,
-                        "DB_WRITE",
-                        &format!("Stored {} price history entries to database", insert_count),
-                    );
-                }
+                logger::debug(
+                    LogTag::PoolCache,
+                    &format!("Stored {} price history entries to database", insert_count),
+                );
             }
         }
     }

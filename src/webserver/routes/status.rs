@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use crate::{
     arguments::is_debug_webserver_enabled,
-    logger::{log, LogTag},
+    logger::{self, LogTag},
     webserver::{
         snapshot::{
             gather_status_snapshot, ServiceStatusSnapshot, StatusSnapshot, SystemMetricsSnapshot,
@@ -34,9 +34,7 @@ pub fn routes() -> Router<Arc<AppState>> {
 
 /// GET /api/health
 async fn health_check() -> Response {
-    if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "DEBUG", "Health check endpoint called");
-    }
+    logger::debug(LogTag::Webserver, "Health check endpoint called");
 
     let response = HealthResponse {
         status: "ok".to_string(),
@@ -49,39 +47,30 @@ async fn health_check() -> Response {
 
 /// GET /api/status
 async fn system_status() -> Response {
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "DEBUG",
+    logger::info(
+        LogTag::Webserver,
             "Fetching system status snapshot",
         );
-    }
 
     let snapshot: StatusSnapshot = gather_status_snapshot().await;
 
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "DEBUG",
+    logger::info(
+        LogTag::Webserver,
             &format!(
                 "Status snapshot ready (uptime={}s, trading_enabled={}, open_positions={})",
                 snapshot.uptime_seconds, snapshot.trading_enabled, snapshot.open_positions
             ),
         );
-    }
 
     success_response(snapshot)
 }
 
 /// GET /api/status/services
 async fn service_status() -> Response {
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "DEBUG",
+    logger::info(
+        LogTag::Webserver,
             "Fetching service status snapshot",
         );
-    }
 
     let services: ServiceStatusSnapshot = gather_status_snapshot().await.services;
     success_response(services)
@@ -89,13 +78,10 @@ async fn service_status() -> Response {
 
 /// GET /api/status/metrics
 async fn system_metrics() -> Response {
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "DEBUG",
+    logger::info(
+        LogTag::Webserver,
             "Fetching system metrics snapshot",
         );
-    }
 
     let metrics: SystemMetricsSnapshot = gather_status_snapshot().await.metrics;
     success_response(metrics)

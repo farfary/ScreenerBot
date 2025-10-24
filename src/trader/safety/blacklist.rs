@@ -1,6 +1,6 @@
 //! Blacklist integration for safety checks
 
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::positions::Position;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
 use chrono::Utc;
@@ -16,7 +16,7 @@ fn get_blacklist_cache() -> &'static RwLock<HashSet<String>> {
 
 /// Initialize blacklist cache
 pub async fn init_blacklist() -> Result<(), String> {
-    log(LogTag::Trader, "INFO", "Initializing blacklist cache...");
+    logger::info(LogTag::Trader, "Initializing blacklist cache...");
     update_blacklist_cache().await?;
     Ok(())
 }
@@ -32,9 +32,8 @@ async fn update_blacklist_cache() -> Result<(), String> {
     cache.extend(blacklist.iter().cloned());
     
     if cache.len() != previous_count {
-        log(
+        logger::info(
             LogTag::Trader,
-            "INFO",
             &format!(
                 "🚫 Blacklist cache updated: {} tokens (was {})",
                 cache.len(),
@@ -78,9 +77,8 @@ pub async fn check_blacklist_exit(
     };
     
     if is_blacklisted {
-        log(
-            LogTag::Trader,
-            "WARN",
+        logger::info(
+        LogTag::Trader,
             &format!(
                 "⛔ BLACKLISTED: {} (mint={}) - Triggering emergency exit at {:.9} SOL",
                 position.symbol,

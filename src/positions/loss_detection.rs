@@ -1,5 +1,5 @@
 use super::{lib::calculate_position_pnl, types::Position};
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::tokens::cleanup;
 use crate::tokens::database::get_global_database;
 
@@ -45,9 +45,8 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<(), 
     // Process loss detection
     if net_pnl_sol < 0.0 {
         let loss_sol = net_pnl_sol.abs();
-        log(
+        logger::warning(
             LogTag::Positions,
-            "LOSS_DETECTED",
             &format!(
                 "💸 Loss detected for {} ({}): -{:.3} SOL ({:.1}%)",
                 position.symbol, &position.mint, loss_sol, net_pnl_percent
@@ -59,10 +58,9 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<(), 
             // Add to database-backed blacklist
             if let Some(db) = get_global_database() {
                 match cleanup::blacklist_token(&position.mint, "PoorPerformance", &db) {
-                    Ok(_) => {
-                        log(
+                        Ok(_) => {
+                        logger::info(
                             LogTag::Positions,
-                            "AUTO_BLACKLIST",
                             &format!(
                                 "🚫 Auto-blacklisted {} due to significant loss: -{:.3} SOL ({:.1}%)",
                                 position.symbol, loss_sol, net_pnl_percent
@@ -70,9 +68,8 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<(), 
                         );
                     }
                     Err(e) => {
-                        log(
+                        logger::warning(
                             LogTag::Positions,
-                            "BLACKLIST_FAILED",
                             &format!(
                                 "⚠️ Failed to blacklist {} after significant loss: {}",
                                 position.symbol, e
@@ -81,9 +78,8 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<(), 
                     }
                 }
             } else {
-                log(
+                logger::warning(
                     LogTag::Positions,
-                    "BLACKLIST_FAILED",
                     &format!(
                         "⚠️ Failed to blacklist {} - database not initialized",
                         position.symbol
@@ -95,9 +91,8 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<(), 
                 ));
             }
         } else {
-            log(
+            logger::info(
                 LogTag::Positions,
-                "MINOR_LOSS",
                 &format!(
                     "📊 Minor loss for {} not blacklisted: -{:.3} SOL ({:.1}%)",
                     position.symbol, loss_sol, net_pnl_percent
@@ -105,9 +100,8 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<(), 
             );
         }
     } else if net_pnl_sol > 0.0 {
-        log(
+        logger::info(
             LogTag::Positions,
-            "PROFIT_RECORDED",
             &format!(
                 "💰 Profit recorded for {} ({}): +{:.3} SOL ({:.1}%)",
                 position.symbol, &position.mint, net_pnl_sol, net_pnl_percent

@@ -6,16 +6,16 @@ mod risk;
 pub use limits::{check_position_limits, has_open_position, is_in_reentry_cooldown};
 pub use risk::check_risk_limits;
 
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::positions::Position;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
 use chrono::Utc;
 
 /// Initialize the safety system
 pub async fn init_safety_system() -> Result<(), String> {
-    log(LogTag::Trader, "INFO", "Initializing safety system...");
+    logger::info(LogTag::Trader, "Initializing safety system...");
     // Blacklist is now managed by tokens/filtering modules - no init needed
-    log(LogTag::Trader, "INFO", "Safety system initialized");
+    logger::info(LogTag::Trader, "Safety system initialized");
     Ok(())
 }
 
@@ -39,9 +39,8 @@ pub fn check_blacklist_exit(
     let blacklisted_tokens = crate::tokens::get_blacklisted_tokens();
     
     if blacklisted_tokens.contains(&position.mint) {
-        log(
+        logger::warning(
             LogTag::Trader,
-            "WARN",
             &format!(
                 "⛔ BLACKLISTED: {} (mint={}) - Triggering emergency exit at {:.9} SOL",
                 position.symbol,

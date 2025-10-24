@@ -5,8 +5,7 @@ use chrono::Utc;
 use futures::stream::{self, StreamExt};
 
 use crate::config::FilteringConfig;
-use crate::global::is_debug_filtering_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::tokens::types::{DataSource, Token};
 use crate::tokens::{get_full_token_async, get_full_token_for_source_async, list_tokens_async};
@@ -18,9 +17,7 @@ use super::types::{
 
 const TOKEN_FETCH_CONCURRENCY: usize = 24;
 
-pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapshot, String> {
-    let debug_enabled = is_debug_filtering_enabled();
-    let start = StdInstant::now();
+pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapshot, String> {    let start = StdInstant::now();
 
     let max_candidates = config.max_tokens_to_process.max(100);
     let fetch_limit = if config.target_filtered_tokens > 0 {
@@ -34,13 +31,7 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
         .map_err(|e| format!("Failed to list tokens: {}", e))?;
 
     if metadata.is_empty() {
-        if debug_enabled {
-            log(
-                LogTag::Filtering,
-                "SNAPSHOT_EMPTY",
-                "Token store empty - snapshot remains empty",
-            );
-        }
+        logger::debug(LogTag::Filtering, "Token store empty - snapshot remains empty");
         return Ok(FilteringSnapshot::empty());
     }
 
@@ -54,11 +45,7 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
                     Ok(Some(token)) => Some((index, token)),
                     Ok(None) => None,
                     Err(err) => {
-                        log(
-                            LogTag::Filtering,
-                            "TOKEN_LOAD_ERROR",
-                            &format!("mint={} error={}", mint, err),
-                        );
+                        logger::info(LogTag::Filtering, &format!("mint={} error={}", mint, err));
                         None
                     }
                 }
@@ -70,16 +57,8 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
         .await;
 
     if tokens_with_index.is_empty() {
-        if debug_enabled {
-            log(
-                LogTag::Filtering,
-                "SNAPSHOT_NO_TOKENS",
-                &format!(
-                    "Unable to load full tokens for any candidates (total_candidates={})",
-                    total_candidates
-                ),
-            );
-        }
+        logger::info(LogTag::Filtering, &format!("Unable to load full tokens for any candidates (total_candidates={})",
+                total_candidates));
         return Ok(FilteringSnapshot::empty());
     }
 
@@ -97,11 +76,7 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
         match crate::ohlcvs::get_mints_with_data(&candidate_mints).await {
             Ok(set) => set,
             Err(err) => {
-                log(
-                    LogTag::Filtering,
-                    "OHLCV_LOOKUP_FAILED",
-                    &format!("error={}", err),
-                );
+                logger::warning(LogTag::Filtering, &format!("error={}", err));
                 HashSet::new()
             }
         };
@@ -178,22 +153,14 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
 
     let elapsed_ms = start.elapsed().as_millis();
 
-    if debug_enabled {
-        let rejection_summary = stats.rejection_summary();
-        log(
-            LogTag::Filtering,
-            "REFRESH_COMPLETE",
-            &format!(
-                "processed={} passed={} rejected={} target_reached={} duration_ms={} rejection_summary={}",
-                stats.total_processed,
-                stats.passed,
-                stats.rejected,
-                stats.target_reached,
-                elapsed_ms,
-                rejection_summary
-            ),
-        );
-    }
+    let rejection_summary = stats.rejection_summary();
+    logger::info(LogTag::Filtering, &format!("processed={} passed={} rejected={} target_reached={} duration_ms={} rejection_summary={}",
+            stats.total_processed,
+            stats.passed,
+            stats.rejected,
+            stats.target_reached,
+            elapsed_ms,
+            rejection_summary));
 
     let snapshot = FilteringSnapshot {
         updated_at: Utc::now(),
@@ -252,11 +219,7 @@ async fn apply_all_filters(
                 }
                 Ok(None) => None,
                 Err(err) => {
-                    log(
-                        LogTag::Filtering,
-                        "DEX_DATA_LOAD_FAILED",
-                        &format!("mint={} err={}", token.mint, err),
-                    );
+                    logger::info(LogTag::Filtering, &format!("mint={} err={}", token.mint, err));
                     None
                 }
             }
@@ -285,11 +248,7 @@ async fn apply_all_filters(
                 }
                 Ok(None) => None,
                 Err(err) => {
-                    log(
-                        LogTag::Filtering,
-                        "GECKO_DATA_LOAD_FAILED",
-                        &format!("mint={} err={}", token.mint, err),
-                    );
+                    logger::info(LogTag::Filtering, &format!("mint={} err={}", token.mint, err));
                     None
                 }
             }

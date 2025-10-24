@@ -3,7 +3,7 @@
 /// This module handles the actual execution of swap transactions,
 /// including transaction signing and broadcasting.
 use super::types::{SwapError, SwapParams, SwapResult};
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::rpc::get_rpc_client;
 
 use base64::Engine;
@@ -20,11 +20,7 @@ impl SwapExecutor {
         dry_run: bool,
     ) -> Result<SwapResult, SwapError> {
         if dry_run {
-            log(
-                LogTag::System,
-                "INFO",
-                "🧪 Dry run mode - transaction not sent",
-            );
+            logger::info(LogTag::System, "🧪 Dry run mode - transaction not sent");
             return Ok(SwapResult {
                 signature: None,
                 params: swap_params,
@@ -43,11 +39,7 @@ impl SwapExecutor {
         // Send transaction using centralized signing service
         let rpc_client = get_rpc_client();
 
-        log(
-            LogTag::System,
-            "INFO",
-            "📤 Sending transaction to blockchain...",
-        );
+        logger::info(LogTag::System, "📤 Sending transaction to blockchain...");
 
         // Use the centralized sign_and_send_transaction method
         let signature_str = rpc_client
@@ -60,11 +52,7 @@ impl SwapExecutor {
             .parse()
             .map_err(|e| SwapError::ExecutionError(format!("Invalid signature format: {}", e)))?;
 
-        log(
-            LogTag::System,
-            "SUCCESS",
-            &format!("✅ Transaction sent: {}", signature),
-        );
+        logger::info(LogTag::System, &format!("✅ Transaction sent: {}", signature));
 
         Ok(SwapResult {
             signature: Some(signature),

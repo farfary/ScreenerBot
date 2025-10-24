@@ -7,7 +7,7 @@ use crate::{
         is_profile_tracing_enabled,
     },
     global,
-    logger::{init_file_logging, log, LogTag},
+    logger::{self, LogTag},
     services::ServiceManager,
 };
 
@@ -19,31 +19,24 @@ pub async fn run_bot() -> Result<(), String> {
     // 1. Acquire process lock to prevent multiple instances
     let _process_lock = crate::process_lock::ProcessLock::acquire()?;
 
-    // 2. Initialize file logging system first
-    init_file_logging();
-
-    log(LogTag::System, "INFO", "🚀 ScreenerBot starting up...");
+    logger::info(LogTag::System, "🚀 ScreenerBot starting up...");
 
     // 3. Load configuration
     crate::config::load_config().map_err(|e| format!("Failed to load config: {}", e))?;
 
-    log(LogTag::System, "INFO", "Configuration loaded successfully");
+    logger::info(LogTag::System, "Configuration loaded successfully");
 
     // 4. Initialize strategy system
     crate::strategies::init_strategy_system(crate::strategies::engine::EngineConfig::default())
         .await
         .map_err(|e| format!("Failed to initialize strategy system: {}", e))?;
 
-    log(
-        LogTag::System,
-        "INFO",
-        "Strategy system initialized successfully",
-    );
+    logger::info(LogTag::System, "Strategy system initialized successfully");
 
     // 5. Create service manager
     let mut service_manager = ServiceManager::new().await?;
 
-    log(LogTag::System, "INFO", "Service manager initialized");
+    logger::info(LogTag::System, "Service manager initialized");
 
     // 6. Register all services
     register_all_services(&mut service_manager);
@@ -70,17 +63,13 @@ pub async fn run_bot() -> Result<(), String> {
         *guard = Some(service_manager);
     }
 
-    log(
-        LogTag::System,
-        "SUCCESS",
-        "✅ All services started - ScreenerBot is running",
-    );
+    logger::info(LogTag::System, "✅ All services started - ScreenerBot is running");
 
     // 11. Wait for shutdown signal
     wait_for_shutdown_signal().await?;
 
     // 12. Stop all services gracefully
-    log(LogTag::System, "INFO", "🛑 Initiating graceful shutdown...");
+    logger::info(LogTag::System, "🛑 Initiating graceful shutdown...");
 
     let manager_ref = crate::services::get_service_manager()
         .await
@@ -95,11 +84,7 @@ pub async fn run_bot() -> Result<(), String> {
 
     service_manager.stop_all().await?;
 
-    log(
-        LogTag::System,
-        "SUCCESS",
-        "✅ ScreenerBot shut down successfully",
-    );
+    logger::info(LogTag::System, "✅ ScreenerBot shut down successfully");
 
     Ok(())
 }
@@ -108,7 +93,7 @@ pub async fn run_bot() -> Result<(), String> {
 fn register_all_services(manager: &mut ServiceManager) {
     use crate::services::implementations::*;
 
-    log(LogTag::System, "INFO", "Registering services...");
+    logger::info(LogTag::System, "Registering services...");
 
     // Register all services (order doesn't matter - manager handles dependencies and priority)
 
@@ -137,29 +122,23 @@ fn register_all_services(manager: &mut ServiceManager) {
     manager.register(Box::new(TraderService));
     manager.register(Box::new(WebserverService));
 
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "All services registered (20 total - centralized TokensService)",
     );
 }
 
 /// Wait for shutdown signal (Ctrl+C)
 async fn wait_for_shutdown_signal() -> Result<(), String> {
-    log(
-        LogTag::System,
-        "INFO",
-        "Waiting for Ctrl+C (press twice to force kill)",
-    );
+    logger::info(LogTag::System, "Waiting for Ctrl+C (press twice to force kill)");
 
     // First Ctrl+C triggers graceful shutdown
     tokio::signal::ctrl_c()
         .await
         .map_err(|e| format!("Failed to listen for shutdown signal: {}", e))?;
 
-    log(
+    logger::warning(
         LogTag::System,
-        "WARN",
         "Shutdown signal received. Press Ctrl+C again to force kill.",
     );
 
@@ -167,9 +146,8 @@ async fn wait_for_shutdown_signal() -> Result<(), String> {
     tokio::spawn(async move {
         // If another Ctrl+C is received during graceful shutdown, exit immediately
         if tokio::signal::ctrl_c().await.is_ok() {
-            log(
+            logger::error(
                 LogTag::System,
-                "ERROR",
                 "Second Ctrl+C detected — forcing immediate exit.",
             );
             // 130 is the conventional exit code for SIGINT
@@ -186,9 +164,18 @@ fn init_profiling() {
     #[cfg(feature = "console")]
     if is_profile_tokio_console_enabled() {
         console_subscriber::init();
-        eprintln!("🔍 Tokio console enabled - connect with: tokio-console");
-        eprintln!("   Install: cargo install tokio-console");
-        eprintln!("   Connect: tokio-console");
+        crate::logger::info(
+            crate::logger::LogTag::System,
+            &"🔍 Tokio console enabled - connect with: tokio-console".to_string(),
+        );
+        crate::logger::info(
+            crate::logger::LogTag::System,
+            &"   Install: cargo install tokio-console".to_string(),
+        );
+        crate::logger::info(
+            crate::logger::LogTag::System,
+            &"   Connect: tokio-console".to_string(),
+        );
         return;
     }
 
@@ -206,8 +193,14 @@ fn init_profiling() {
             .with_line_number(true)
             .init();
 
-        eprintln!("🔍 Tracing profiling enabled");
-        eprintln!("   View detailed traces with thread IDs and timing");
+        crate::logger::info(
+            crate::logger::LogTag::System,
+            &"🔍 Tracing profiling enabled".to_string(),
+        );
+        crate::logger::info(
+            crate::logger::LogTag::System,
+            &"   View detailed traces with thread IDs and timing".to_string(),
+        );
         return;
     }
 
@@ -215,10 +208,22 @@ fn init_profiling() {
     #[cfg(feature = "flamegraph")]
     if is_profile_cpu_enabled() {
         let duration = get_profile_duration();
-        eprintln!("🔥 CPU profiling enabled with pprof");
-        eprintln!("   Duration: {} seconds", duration);
-        eprintln!("   Flamegraph will be generated on exit");
-        eprintln!("   Press Ctrl+C to stop and generate flamegraph");
+        crate::logger::info(
+            crate::logger::LogTag::System,
+            &"🔥 CPU profiling enabled with pprof".to_string(),
+        );
+        crate::logger::info(
+            crate::logger::LogTag::System,
+            &format!("   Duration: {} seconds", duration),
+        );
+        crate::logger::info(
+            crate::logger::LogTag::System,
+            &"   Flamegraph will be generated on exit".to_string(),
+        );
+        crate::logger::info(
+            crate::logger::LogTag::System,
+            &"   Press Ctrl+C to stop and generate flamegraph".to_string(),
+        );
 
         // Note: pprof profiling is initialized later in the async context
         // This is just a notification
@@ -240,13 +245,12 @@ pub fn start_cpu_profiling() -> Option<pprof::ProfilerGuard<'static>> {
         .build()
     {
         Ok(guard) => {
-            log(LogTag::System, "INFO", "🔥 CPU profiling started (pprof)");
+            logger::info(LogTag::System, "🔥 CPU profiling started (pprof)");
             Some(guard)
         }
         Err(e) => {
-            log(
+            logger::error(
                 LogTag::System,
-                "ERROR",
                 &format!("Failed to start CPU profiling: {}", e),
             );
             None

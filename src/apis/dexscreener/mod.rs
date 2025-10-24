@@ -21,7 +21,7 @@ pub use self::types::{
 
 use crate::apis::client::RateLimiter;
 use crate::apis::stats::ApiStatsTracker;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use reqwest::{Client, StatusCode};
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
@@ -176,9 +176,8 @@ impl DexScreenerClient {
         let endpoint = format!("token-pairs/v1/{}/{}", chain, token_address);
         let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
 
-        log(
-            LogTag::Tokens,
-            "DEBUG",
+        logger::debug(
+            LogTag::Api,
             &format!(
                 "[DEXSCREENER] Fetching token pools: token={}, chain={}",
                 token_address, chain
@@ -225,9 +224,8 @@ impl DexScreenerClient {
         let endpoint = format!("tokens/v1/{}/{}", chain, address_list);
         let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
 
-        log(
-            LogTag::Tokens,
-            "DEBUG",
+        logger::debug(
+            LogTag::Api,
             &format!(
                 "[DEXSCREENER] Fetching batch tokens: {} addresses, chain={}",
                 addresses.len(),
@@ -253,9 +251,8 @@ impl DexScreenerClient {
         let endpoint = format!("latest/dex/pairs/{}/{}", chain_id, pair_address);
         let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
 
-        log(
-            LogTag::Tokens,
-            "DEBUG",
+        logger::debug(
+            LogTag::Api,
             &format!(
                 "[DEXSCREENER] Fetching pair: pair={}, chain={}",
                 pair_address, chain_id
@@ -281,9 +278,8 @@ impl DexScreenerClient {
         let endpoint = "latest/dex/search";
         let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
 
-        log(
-            LogTag::Tokens,
-            "DEBUG",
+        logger::debug(
+            LogTag::Api,
             &format!("[DEXSCREENER] Searching pairs: query={}", query),
         );
         let builder = self.client.get(&url).query(&[("q", query)]);
@@ -298,9 +294,8 @@ impl DexScreenerClient {
         let endpoint = "token-profiles/latest/v1";
         let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
 
-        log(
-            LogTag::Tokens,
-            "DEBUG",
+        logger::debug(
+            LogTag::Api,
             "[DEXSCREENER] Fetching latest token profiles",
         );
 
@@ -364,9 +359,8 @@ impl DexScreenerClient {
             self.client.get(&url)
         };
 
-        log(
-            LogTag::Tokens,
-            "DEBUG",
+        logger::debug(
+            LogTag::Api,
             "[DEXSCREENER] Fetching top boosted tokens",
         );
 
@@ -382,9 +376,8 @@ impl DexScreenerClient {
         let endpoint = "token-boosts/latest/v1";
         let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
 
-        log(
-            LogTag::Tokens,
-            "DEBUG",
+        logger::debug(
+            LogTag::Api,
             "[DEXSCREENER] Fetching latest boosted tokens",
         );
 
@@ -422,9 +415,8 @@ impl DexScreenerClient {
             self.client.get(&url).query(&query_params)
         };
 
-        log(
-            LogTag::Tokens,
-            "DEBUG",
+        logger::debug(
+            LogTag::Api,
             &format!(
                 "[DEXSCREENER] Fetching top tokens: chain={:?}, sort={:?}",
                 chain_id, sort_by
@@ -468,9 +460,8 @@ impl DexScreenerClient {
         let endpoint = format!("token-profiles/{}", address);
         let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
 
-        log(
-            LogTag::Tokens,
-            "DEBUG",
+        logger::debug(
+            LogTag::Api,
             &format!("[DEXSCREENER] Fetching token info: {}", address),
         );
         let (mut response, elapsed) = self
@@ -522,9 +513,8 @@ impl DexScreenerClient {
         let endpoint = format!("orders/v1/{}/{}", chain, token_address);
         let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
 
-        log(
-            LogTag::Tokens,
-            "DEBUG",
+        logger::debug(
+            LogTag::Api,
             &format!(
                 "[DEXSCREENER] Fetching token orders: token={}, chain={}",
                 token_address, chain
@@ -539,9 +529,8 @@ impl DexScreenerClient {
         let endpoint = "chains/v1";
         let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
 
-        log(
-            LogTag::Tokens,
-            "DEBUG",
+        logger::debug(
+            LogTag::Api,
             "[DEXSCREENER] Fetching supported chains",
         );
 

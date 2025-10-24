@@ -10,7 +10,7 @@ pub mod types;
 use crate::config::with_config;
 use crate::constants::SOL_MINT;
 use crate::errors::{BlockchainError, ScreenerBotError};
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::tokens::Token;
 use futures::future;
 use std::future::Future;
@@ -74,9 +74,8 @@ pub async fn get_best_quote(
     slippage: f64,
     swap_mode: &str,
 ) -> Result<UnifiedQuote, ScreenerBotError> {
-    log(
+    logger::info(
         LogTag::Swap,
-        "BEST_QUOTE",
         &format!(
             "🔍 Finding best route: {} -> {} (amount: {}) - CONCURRENT QUOTES",
             if input_mint == SOL_MINT {
@@ -102,9 +101,8 @@ pub async fn get_best_quote(
 
     // Prepare GMGN quote future with timeout
     if gmgn_enabled {
-        log(
+        logger::debug(
             LogTag::Swap,
-            "QUOTE_GMGN_START",
             "🔵 Starting GMGN quote request...",
         );
         let gmgn_future = async {
@@ -133,7 +131,7 @@ pub async fn get_best_quote(
                     
                     // Validate output amount is non-zero
                     if output_amount == 0 {
-                        log(LogTag::Swap, "QUOTE_GMGN_INVALID", 
+                        logger::warning(LogTag::Swap, 
                             "⚠️ GMGN quote returned zero output amount - rejecting");
                         return Err(ScreenerBotError::invalid_amount(
                             "0",
@@ -163,26 +161,16 @@ pub async fn get_best_quote(
                         swap_mode: swap_mode.to_string(),
                     };
 
-                    log(
-                        LogTag::Swap,
-                        "QUOTE_GMGN_SUCCESS",
-                        &format!(
-                            "✅ GMGN quote: {} tokens, impact: {:.2}%, fee: {} lamports",
+                    logger::info(LogTag::Swap, &format!("✅ GMGN quote: {} tokens, impact: {:.2}%, fee: {} lamports",
                             unified_quote.output_amount,
                             unified_quote.price_impact_pct,
-                            unified_quote.fee_lamports
-                        ),
-                    );
+                            unified_quote.fee_lamports));
 
                     Ok(unified_quote)
                 }
                 Ok(Err(e)) => {
                     // Quote failed (API error, not timeout)
-                    log(
-                        LogTag::Swap,
-                        "QUOTE_GMGN_ERROR",
-                        &format!("❌ GMGN quote failed: {}", e),
-                    );
+                    logger::error(LogTag::Swap, &format!("❌ GMGN quote failed: {}", e));
                     Err(e)
                 }
                 Err(_timeout) => {
@@ -190,31 +178,19 @@ pub async fn get_best_quote(
                     let error = ScreenerBotError::network_error(
                         "GMGN quote request exceeded 15 second timeout",
                     );
-                    log(
-                        LogTag::Swap,
-                        "QUOTE_GMGN_TIMEOUT",
-                        "⏰ GMGN quote timed out after 15s",
-                    );
+                    logger::warning(LogTag::Swap, "⏰ GMGN quote timed out after 15s");
                     Err(error)
                 }
             }
         };
         futures.push(Box::pin(gmgn_future));
     } else {
-        log(
-            LogTag::Swap,
-            "QUOTE_GMGN_DISABLED",
-            "⏸️ GMGN router disabled in config",
-        );
+        logger::debug(LogTag::Swap, "⏸️ GMGN router disabled in config");
     }
 
     // Prepare Jupiter quote future with timeout
     if jupiter_enabled {
-        log(
-            LogTag::Swap,
-            "QUOTE_JUPITER_START",
-            "🟡 Starting Jupiter quote request...",
-        );
+        logger::debug(LogTag::Swap, "🟡 Starting Jupiter quote request...");
         let jupiter_future = async {
             // Apply 15-second timeout to Jupiter quote
             let quote_result = tokio::time::timeout(
@@ -240,7 +216,7 @@ pub async fn get_best_quote(
                     
                     // Validate output amount is non-zero
                     if output_amount == 0 {
-                        log(LogTag::Swap, "QUOTE_JUPITER_INVALID", 
+                        logger::warning(LogTag::Swap, 
                             "⚠️ Jupiter quote returned zero output amount - rejecting");
                         return Err(ScreenerBotError::invalid_amount(
                             "0",
@@ -271,26 +247,16 @@ pub async fn get_best_quote(
                         swap_mode: swap_mode.to_string(),
                     };
 
-                    log(
-                        LogTag::Swap,
-                        "QUOTE_JUPITER_SUCCESS",
-                        &format!(
-                            "✅ Jupiter quote: {} tokens, impact: {:.2}%, fee: {} lamports",
+                    logger::info(LogTag::Swap, &format!("✅ Jupiter quote: {} tokens, impact: {:.2}%, fee: {} lamports",
                             unified_quote.output_amount,
                             unified_quote.price_impact_pct,
-                            unified_quote.fee_lamports
-                        ),
-                    );
+                            unified_quote.fee_lamports));
 
                     Ok(unified_quote)
                 }
                 Ok(Err(e)) => {
                     // Quote failed (API error, not timeout)
-                    log(
-                        LogTag::Swap,
-                        "QUOTE_JUPITER_ERROR",
-                        &format!("❌ Jupiter quote failed: {}", e),
-                    );
+                    logger::info(LogTag::Swap, &format!("❌ Jupiter quote failed: {}", e));
                     Err(e)
                 }
                 Err(_timeout) => {
@@ -298,32 +264,19 @@ pub async fn get_best_quote(
                     let error = ScreenerBotError::network_error(
                         "Jupiter quote request exceeded 15 second timeout",
                     );
-                    log(
-                        LogTag::Swap,
-                        "QUOTE_JUPITER_TIMEOUT",
-                        "⏰ Jupiter quote timed out after 15s",
-                    );
+                    logger::info(LogTag::Swap, "⏰ Jupiter quote timed out after 15s");
                     Err(error)
                 }
             }
         };
         futures.push(Box::pin(jupiter_future));
     } else {
-        log(
-            LogTag::Swap,
-            "QUOTE_JUPITER_DISABLED",
-            "⏸️ Jupiter router disabled in config",
-        );
+        logger::info(LogTag::Swap, "⏸️ Jupiter router disabled in config");
     }
 
     // Execute all quote requests concurrently
-    log(
-        LogTag::Swap,
-        "CONCURRENT_EXECUTION",
-        &format!(
-            "⚡ Executing {} quote requests concurrently...",
-            futures.len()
-        ),
+    logger::info(LogTag::Swap, &format!("⚡ Executing {} quote requests concurrently...",
+            futures.len()),
     );
 
     let results = future::join_all(futures).await;
@@ -339,14 +292,10 @@ pub async fn get_best_quote(
     // Check if we have any quotes
     if quotes.is_empty() {
         let error_msg = "No routers available for quote - GMGN and Jupiter all failed";
-        log(LogTag::Swap, "QUOTE_ERROR", &format!("❌ {}", error_msg));
+        logger::error(LogTag::Swap, &format!("❌ {}", error_msg));
 
         // Log detailed failure summary for debugging
-        log(
-            LogTag::Swap,
-            "FAILURE_SUMMARY",
-            &format!(
-                "🔍 Quote failure summary - GMGN: {}, Jupiter: {} (check token liquidity and API status)",
+        logger::info(LogTag::Swap, &format!("🔍 Quote failure summary - GMGN: {}, Jupiter: {} (check token liquidity and API status)",
                 if gmgn_enabled {
                     "enabled but failed"
                 } else {
@@ -356,9 +305,7 @@ pub async fn get_best_quote(
                     "enabled but failed"
                 } else {
                     "disabled"
-                }
-            )
-        );
+                }));
 
         return Err(ScreenerBotError::api_error(error_msg.to_string()));
     }
@@ -372,39 +319,21 @@ pub async fn get_best_quote(
 
     // Log comparison results if we have multiple quotes
     if quotes.len() > 1 {
-        log(
-            LogTag::Swap,
-            "QUOTE_COMPARISON",
-            &format!(
-                "⚖️ Quote comparison: GMGN vs Jupiter - Winner: {:?}",
-                best_quote.router
-            ),
-        );
+        logger::info(LogTag::Swap, &format!("⚖️ Quote comparison: GMGN vs Jupiter - Winner: {:?}",
+                best_quote.router));
 
         // Show detailed comparison
         for quote in &quotes {
-            log(
-                LogTag::Swap,
-                "QUOTE_DETAILS",
-                &format!(
-                    "  • {:?}: {} tokens (impact: {:.2}%, fee: {} lamports)",
-                    quote.router, quote.output_amount, quote.price_impact_pct, quote.fee_lamports
-                ),
-            );
+            logger::info(LogTag::Swap, &format!("  • {:?}: {} tokens (impact: {:.2}%, fee: {} lamports)",
+                    quote.router, quote.output_amount, quote.price_impact_pct, quote.fee_lamports));
         }
     }
 
-    log(
-        LogTag::Swap,
-        "BEST_ROUTE",
-        &format!(
-            "🏆 Best route selected: {:?} with {} tokens (impact: {:.2}%, fee: {} lamports)",
+    logger::info(LogTag::Swap, &format!("🏆 Best route selected: {:?} with {} tokens (impact: {:.2}%, fee: {} lamports)",
             best_quote.router,
             best_quote.output_amount,
             best_quote.price_impact_pct,
-            best_quote.fee_lamports
-        ),
-    );
+            best_quote.fee_lamports));
 
     Ok(best_quote)
 }
@@ -417,11 +346,7 @@ pub async fn execute_best_swap(
     input_amount: u64,
     quote: UnifiedQuote,
 ) -> Result<SwapResult, ScreenerBotError> {
-    log(
-        LogTag::Swap,
-        "EXECUTE",
-        &format!(
-            "🚀 Executing swap via {:?}: {} -> {} (amount: {})",
+    logger::info(LogTag::Swap, &format!("🚀 Executing swap via {:?}: {} -> {} (amount: {})",
             quote.router,
             if input_mint == SOL_MINT {
                 "SOL"
@@ -433,9 +358,7 @@ pub async fn execute_best_swap(
             } else {
                 &output_mint[..8]
             },
-            input_amount
-        ),
-    );
+            input_amount));
 
     // Try primary router first
     let primary_result = match quote.execution_data {
@@ -494,14 +417,8 @@ pub async fn execute_best_swap(
 
     // Check if primary router failed and fallback is available
     if let Err(ref primary_error) = primary_result {
-        log(
-            LogTag::Swap,
-            "FALLBACK_TRIGGERED",
-            &format!(
-                "⚠️ Primary router {:?} failed: {}",
-                quote.router, primary_error
-            ),
-        );
+        logger::info(LogTag::Swap, &format!("⚠️ Primary router {:?} failed: {}",
+                quote.router, primary_error));
 
         // Only try fallback for certain error types (propagation failures, transaction errors)
         let should_fallback = match primary_error {
@@ -516,11 +433,7 @@ pub async fn execute_best_swap(
         };
 
         if should_fallback {
-            log(
-                LogTag::Swap,
-                "FALLBACK_ATTEMPT",
-                "🔄 Attempting fallback to alternative router...",
-            );
+            logger::info(LogTag::Swap, "🔄 Attempting fallback to alternative router...");
 
             // Get fallback quote from the other router
             let wallet_address = match crate::config::get_wallet_pubkey_string() {
@@ -537,11 +450,7 @@ pub async fn execute_best_swap(
                 RouterType::Jupiter => {
                     // Jupiter failed, try GMGN
                     if gmgn_enabled_fallback {
-                        log(
-                            LogTag::Swap,
-                            "FALLBACK_GMGN",
-                            "🔵 Falling back to GMGN router...",
-                        );
+                        logger::info(LogTag::Swap, "🔵 Falling back to GMGN router...");
 
                         match gmgn::get_gmgn_quote(
                             input_mint,
@@ -554,47 +463,30 @@ pub async fn execute_best_swap(
                         .await
                         {
                             Ok(gmgn_data) => {
-                                log(
-                                    LogTag::Swap,
-                                    "FALLBACK_QUOTE_SUCCESS",
-                                    &format!(
-                                        "✅ GMGN fallback quote: {} tokens, impact: {:.2}%",
+                                logger::info(LogTag::Swap, &format!("✅ GMGN fallback quote: {} tokens, impact: {:.2}%",
                                         gmgn_data.quote.out_amount,
                                         gmgn_data
                                             .quote
                                             .price_impact_pct
                                             .parse::<f64>()
-                                            .unwrap_or(0.0)
-                                    ),
+                                            .unwrap_or(0.0)),
                                 );
                                 Some(gmgn_data)
                             }
                             Err(e) => {
-                                log(
-                                    LogTag::Swap,
-                                    "FALLBACK_QUOTE_FAILED",
-                                    &format!("❌ GMGN fallback quote failed: {}", e),
-                                );
+                                logger::info(LogTag::Swap, &format!("❌ GMGN fallback quote failed: {}", e));
                                 None
                             }
                         }
                     } else {
-                        log(
-                            LogTag::Swap,
-                            "FALLBACK_UNAVAILABLE",
-                            "❌ GMGN fallback not available (disabled)",
-                        );
+                        logger::info(LogTag::Swap, "❌ GMGN fallback not available (disabled)");
                         None
                     }
                 }
                 RouterType::GMGN => {
                     // GMGN failed, try Jupiter
                     if jupiter_enabled_fallback {
-                        log(
-                            LogTag::Swap,
-                            "FALLBACK_JUPITER",
-                            "🟡 Falling back to Jupiter router...",
-                        );
+                        logger::info(LogTag::Swap, "🟡 Falling back to Jupiter router...");
 
                         match jupiter::get_jupiter_quote(
                             input_mint,
@@ -606,36 +498,23 @@ pub async fn execute_best_swap(
                         .await
                         {
                             Ok(jupiter_data) => {
-                                log(
-                                    LogTag::Swap,
-                                    "FALLBACK_QUOTE_SUCCESS",
-                                    &format!(
-                                        "✅ Jupiter fallback quote: {} tokens, impact: {:.2}%",
+                                logger::info(LogTag::Swap, &format!("✅ Jupiter fallback quote: {} tokens, impact: {:.2}%",
                                         jupiter_data.quote.out_amount,
                                         jupiter_data
                                             .quote
                                             .price_impact_pct
                                             .parse::<f64>()
-                                            .unwrap_or(0.0)
-                                    ),
+                                            .unwrap_or(0.0)),
                                 );
                                 Some(jupiter_data)
                             }
                             Err(e) => {
-                                log(
-                                    LogTag::Swap,
-                                    "FALLBACK_QUOTE_FAILED",
-                                    &format!("❌ Jupiter fallback quote failed: {}", e),
-                                );
+                                logger::info(LogTag::Swap, &format!("❌ Jupiter fallback quote failed: {}", e));
                                 None
                             }
                         }
                     } else {
-                        log(
-                            LogTag::Swap,
-                            "FALLBACK_UNAVAILABLE",
-                            "❌ Jupiter fallback not available (disabled)",
-                        );
+                        logger::info(LogTag::Swap, "❌ Jupiter fallback not available (disabled)");
                         None
                     }
                 }
@@ -646,11 +525,7 @@ pub async fn execute_best_swap(
                 let fallback_result = match quote.router {
                     RouterType::Jupiter => {
                         // Fallback to GMGN
-                        log(
-                            LogTag::Swap,
-                            "FALLBACK_EXECUTE",
-                            "🔵 Executing GMGN fallback swap...",
-                        );
+                        logger::info(LogTag::Swap, "🔵 Executing GMGN fallback swap...");
                         match gmgn::execute_gmgn_swap(
                             token,
                             input_mint,
@@ -678,11 +553,7 @@ pub async fn execute_best_swap(
                     }
                     RouterType::GMGN => {
                         // Fallback to Jupiter
-                        log(
-                            LogTag::Swap,
-                            "FALLBACK_EXECUTE",
-                            "🟡 Executing Jupiter fallback swap...",
-                        );
+                        logger::info(LogTag::Swap, "🟡 Executing Jupiter fallback swap...");
                         match jupiter::execute_jupiter_swap(
                             token,
                             input_mint,
@@ -711,26 +582,17 @@ pub async fn execute_best_swap(
 
                 match fallback_result {
                     Ok(result) => {
-                        log(
-                            LogTag::Swap,
-                            "FALLBACK_SUCCESS",
-                            &format!(
-                                "✅ Fallback swap succeeded via {:?}! TX: {}",
+                        logger::info(LogTag::Swap, &format!("✅ Fallback swap succeeded via {:?}! TX: {}",
                                 result.router_used.as_ref().unwrap(),
                                 result
                                     .transaction_signature
                                     .as_ref()
-                                    .unwrap_or(&"None".to_string())
-                            ),
+                                    .unwrap_or(&"None".to_string())),
                         );
                         return Ok(result);
                     }
                     Err(fallback_error) => {
-                        log(
-                            LogTag::Swap,
-                            "FALLBACK_FAILED",
-                            &format!("❌ Fallback swap also failed: {}", fallback_error),
-                        );
+                        logger::info(LogTag::Swap, &format!("❌ Fallback swap also failed: {}", fallback_error));
                         // Return the original error, not the fallback error
                         return primary_result;
                     }
@@ -781,16 +643,10 @@ pub async fn get_best_quote_for_opening(
                     let _ = crate::tokens::cleanup::blacklist_token(output_mint, "NoRoute", &db);
                 }
 
-                log(
-                    LogTag::Swap,
-                    "NO_ROUTE_TRACKED",
-                    &format!(
-                        "🚫 No route error tracked for {} ({}): {}",
+                logger::info(LogTag::Swap, &format!("🚫 No route error tracked for {} ({}): {}",
                         token_symbol,
                         &output_mint[..8],
-                        error_msg
-                    ),
-                );
+                        error_msg));
             }
 
             Err(e)

@@ -3,7 +3,7 @@
 /// This module implements direct swaps for Raydium Constant Product Market Maker pools.
 /// It integrates with the centralized Raydium CPMM decoder and provides both buy and sell operations.
 use super::ProgramSwap;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::pools::decoders::raydium_cpmm::{RaydiumCpmmDecoder, RaydiumCpmmPoolInfo};
 use crate::pools::swap::executor::SwapExecutor;
 use crate::pools::swap::types::{
@@ -34,11 +34,7 @@ impl ProgramSwap for RaydiumCpmmSwap {
         request: SwapRequest,
         pool_data: AccountData,
     ) -> Result<SwapResult, SwapError> {
-        log(
-            LogTag::System,
-            "INFO",
-            &format!("🔄 Executing Raydium CPMM {:?} swap", request.direction),
-        );
+        logger::info(LogTag::System, &format!("🔄 Executing Raydium CPMM {:?} swap", request.direction));
 
         // Decode pool state using centralized decoder
         let pool_info = Self::decode_pool_state(&pool_data)?;
@@ -49,9 +45,8 @@ impl ProgramSwap for RaydiumCpmmSwap {
         // Calculate swap parameters
         let swap_params = Self::calculate_swap_params(&request, &pool_info).await?;
 
-        log(
+        logger::info(
             LogTag::System,
-            "INFO",
             &format!(
                 "💰 Swap calculation: {:.6} → {:.6} (min: {:.6})",
                 swap_params.input_amount, swap_params.expected_output, swap_params.minimum_output
@@ -99,9 +94,8 @@ impl RaydiumCpmmSwap {
         let vault_0_balance = Self::get_token_account_balance(&pool_info.token_0_vault).await?;
         let vault_1_balance = Self::get_token_account_balance(&pool_info.token_1_vault).await?;
 
-        log(
+        logger::debug(
             LogTag::System,
-            "DEBUG",
             &format!(
                 "📊 Vault balances: {} = {}, {} = {}",
                 pool_info.token_0_vault, vault_0_balance, pool_info.token_1_vault, vault_1_balance

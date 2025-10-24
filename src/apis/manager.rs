@@ -3,7 +3,7 @@
 use std::sync::{Arc, LazyLock};
 
 use crate::config::get_config_clone;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 
 use super::coingecko::CoinGeckoClient;
 use super::defillama::DefiLlamaClient;
@@ -76,14 +76,13 @@ impl ApiManager {
             && discovery_cfg.defillama.enabled
             && discovery_cfg.defillama.protocols_enabled;
 
-        log(LogTag::Api, "INIT", "Initializing global API manager");
+        logger::info(LogTag::Api, "Initializing global API manager");
 
         Self {
             dexscreener: DexScreenerClient::new(dexscreener_enabled, dex_rate_limit, dex_timeout)
                 .unwrap_or_else(|e| {
-                    log(
+                    logger::warning(
                         LogTag::Api,
-                        "WARN",
                         &format!(
                             "Failed to initialize DexScreener client: {} - using disabled client",
                             e
@@ -98,9 +97,8 @@ impl ApiManager {
                 gecko_timeout,
             )
             .unwrap_or_else(|e| {
-                log(
+                logger::warning(
                     LogTag::Api,
-                    "WARN",
                     &format!(
                         "Failed to initialize GeckoTerminal client: {} - using disabled client",
                         e
@@ -111,9 +109,8 @@ impl ApiManager {
             }),
             rugcheck: RugcheckClient::new(rug_enabled, RUG_RATE_LIMIT, RUG_TIMEOUT).unwrap_or_else(
                 |e| {
-                    log(
+                    logger::warning(
                         LogTag::Api,
-                        "WARN",
                         &format!(
                             "Failed to initialize Rugcheck client: {} - using disabled client",
                             e
@@ -124,9 +121,8 @@ impl ApiManager {
                 },
             ),
             jupiter: JupiterClient::new(jup_enabled).unwrap_or_else(|e| {
-                log(
+                logger::warning(
                     LogTag::Api,
-                    "WARN",
                     &format!(
                         "Failed to initialize Jupiter client: {} - using disabled client",
                         e
@@ -135,9 +131,8 @@ impl ApiManager {
                 JupiterClient::new(false).expect("Failed to create disabled Jupiter client")
             }),
             coingecko: CoinGeckoClient::new(coingecko_enabled).unwrap_or_else(|e| {
-                log(
+                logger::warning(
                     LogTag::Api,
-                    "WARN",
                     &format!(
                         "Failed to initialize CoinGecko client: {} - using disabled client",
                         e
@@ -146,9 +141,8 @@ impl ApiManager {
                 CoinGeckoClient::new(false).expect("Failed to create disabled CoinGecko client")
             }),
             defillama: DefiLlamaClient::new(defillama_enabled).unwrap_or_else(|e| {
-                log(
+                logger::warning(
                     LogTag::Api,
-                    "WARN",
                     &format!(
                         "Failed to initialize DefiLlama client: {} - using disabled client",
                         e

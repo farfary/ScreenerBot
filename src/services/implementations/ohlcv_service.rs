@@ -1,5 +1,4 @@
-use crate::arguments::is_debug_ohlcv_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::ohlcvs::{ActivityType, Priority};
 use crate::services::{Service, ServiceHealth};
 use async_trait::async_trait;
@@ -52,66 +51,29 @@ impl Service for OhlcvService {
 
                 tokio::select! {
                     _ = autop_shutdown.notified() => {
-                        if is_debug_ohlcv_enabled() {
-                            log(LogTag::Ohlcv, "AUTO_POPULATE_EXIT", "Shutdown received before OHLCV auto-populate");
-                        }
+                        logger::info(LogTag::Ohlcv, &"AUTO_POPULATE_EXIT: Shutdown received before OHLCV auto-populate".to_string());
                         return;
                     }
                     _ = sleep(Duration::from_secs(5)) => {}
                 }
-
-                if is_debug_ohlcv_enabled() {
-                    log(
-                        LogTag::Ohlcv,
-                        "AUTO_POPULATE",
-                        "Adding open positions to OHLCV monitoring..."
-                    );
-                }
+                logger::info(LogTag::Ohlcv, &"AUTO_POPULATE: Adding open positions to OHLCV monitoring...".to_string());
 
                 let open_positions = crate::positions::get_open_positions().await;
                 for position in &open_positions {
-                    if
-                        let Err(e) = crate::ohlcvs::add_token_monitoring(
-                            &position.mint,
-                            Priority::Critical
-                        ).await
-                    {
-                        if is_debug_ohlcv_enabled() {
-                            log(
-                                LogTag::Ohlcv,
-                                "ERROR",
-                                &format!("Failed to add {} to monitoring: {}", position.mint, e)
-                            );
-                        }
+                    if let Err(e) = crate::ohlcvs::add_token_monitoring(&position.mint, Priority::Critical).await {
+                        logger::error(LogTag::Ohlcv, &format!("Failed to add {} to monitoring: {}", position.mint, e));
                         continue;
                     }
 
-                    if
-                        let Err(e) = crate::ohlcvs::record_activity(
-                            &position.mint,
-                            ActivityType::PositionOpened
-                        ).await
-                    {
-                        if is_debug_ohlcv_enabled() {
-                            log(
-                                LogTag::Ohlcv,
-                                "ERROR",
-                                &format!("Failed to record activity for {}: {}", position.mint, e)
-                            );
-                        }
+                    if let Err(e) = crate::ohlcvs::record_activity(&position.mint, ActivityType::PositionOpened).await {
+                        logger::error(LogTag::Ohlcv, &format!("Failed to record activity for {}: {}", position.mint, e));
                     }
                 }
 
-                if is_debug_ohlcv_enabled() {
-                    log(
-                        LogTag::Ohlcv,
-                        "AUTO_POPULATE_DONE",
-                        &format!(
-                            "✅ Added {} open positions to OHLCV monitoring",
-                            open_positions.len()
-                        )
-                    );
-                }
+                logger::info(
+                    LogTag::Ohlcv,
+                    &format!("AUTO_POPULATE_DONE: ✅ Added {} open positions to OHLCV monitoring", open_positions.len()),
+                );
             })
         );
 

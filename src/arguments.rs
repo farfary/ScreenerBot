@@ -1,4 +1,3 @@
-use crate::logger::{log, LogTag};
 /// Centralized argument handling system for ScreenerBot
 ///
 /// This module consolidates all command-line argument parsing and debug flag checking
@@ -9,6 +8,7 @@ use crate::logger::{log, LogTag};
 /// - Debug flag checking functions for all modules
 /// - Unified argument parsing utilities
 /// - Support for both binary-specific and main application arguments
+use crate::logger::{self, LogTag};
 use once_cell::sync::Lazy;
 use std::env;
 use std::sync::Mutex;
@@ -492,9 +492,7 @@ pub fn get_enabled_debug_modes() -> Vec<&'static str> {
     if is_debug_security_enabled() {
         modes.push("security");
     }
-    if is_debug_webserver_enabled() {
-        modes.push("webserver");
-    }
+    // Note: webserver debug is always available via logger system
     if is_dry_run_enabled() {
         modes.push("dry-run");
     }
@@ -511,21 +509,14 @@ pub fn get_enabled_debug_modes() -> Vec<&'static str> {
 /// Prints debug information about current arguments and enabled debug modes
 pub fn print_debug_info() {
     let args = get_cmd_args();
-    log(
-        LogTag::System,
-        "DEBUG",
-        &format!("Command-line arguments: {:?}", args),
+    logger::debug(LogTag::System, &format!("Command-line arguments: {:?}", args),
     );
 
     let enabled_modes = get_enabled_debug_modes();
     if enabled_modes.is_empty() {
-        log(LogTag::System, "DEBUG", "No debug modes enabled");
+        logger::debug(LogTag::System, "No debug modes enabled");
     } else {
-        log(
-            LogTag::System,
-            "DEBUG",
-            &format!("Enabled debug modes: {:?}", enabled_modes),
-        );
+        logger::debug(LogTag::System, &format!("Enabled debug modes: {:?}", enabled_modes));
     }
 }
 

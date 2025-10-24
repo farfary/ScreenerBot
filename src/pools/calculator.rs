@@ -11,8 +11,7 @@ use crate::events::{record_safe, Event, EventCategory, Severity};
 /// - Calculates token prices from pool reserves (SOL-based pricing only)
 /// - Handles price triangulation for indirect pairs
 /// - Updates price cache and history
-use crate::global::is_debug_pool_calculator_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::pools::discovery::PoolDiscovery;
 use crate::tokens::get_cached_decimals;
 use solana_sdk::pubkey::Pubkey;
@@ -75,13 +74,7 @@ impl PriceCalculator {
 
     /// Start calculator background task
     pub async fn start_calculator_task(&self, shutdown: Arc<Notify>) {
-        if is_debug_pool_calculator_enabled() {
-            log(
-                LogTag::PoolCalculator,
-                "INFO",
-                "Starting price calculator task",
-            );
-        }
+        logger::info(LogTag::PoolCalculator, "Starting price calculator task");
 
         let pool_directory = self.pool_directory.clone();
         let sol_reference_price = self.sol_reference_price.clone();
@@ -93,20 +86,12 @@ impl PriceCalculator {
         };
 
         tokio::spawn(async move {
-            if is_debug_pool_calculator_enabled() {
-                log(
-                    LogTag::PoolCalculator,
-                    "INFO",
-                    "Price calculator task started",
-                );
-            }
+            logger::info(LogTag::PoolCalculator, "Price calculator task started");
 
             loop {
                 tokio::select! {
                     _ = shutdown.notified() => {
-                        if is_debug_pool_calculator_enabled() {
-                            log(LogTag::PoolCalculator, "INFO", "Price calculator task shutting down");
-                        }
+                        logger::info(LogTag::PoolCalculator, "Price calculator task shutting down");
                         break;
                     }
 
@@ -166,18 +151,15 @@ impl PriceCalculator {
                                         })
                                     )).await;
 
-                                    if is_debug_pool_calculator_enabled() {
-                                        log(
-                                            LogTag::PoolCalculator,
-                                            "SUCCESS",
-                                            &format!(
-                                                "Calculated price for token {} in pool {}: {} SOL",
-                                                price_result.mint,
-                                                pool_id,
-                                                price_result.price_sol
-                                            )
-                                        );
-                                    }
+                                    logger::info(
+                                        LogTag::PoolCalculator,
+                                        &format!(
+                                            "Calculated price for token {} in pool {}: {} SOL",
+                                            price_result.mint,
+                                            pool_id,
+                                            price_result.price_sol
+                                        ),
+                                    );
                                 } else if let Some(error) = result.error {
                                     record_safe(Event::error(
                                         EventCategory::Pool,
@@ -194,28 +176,25 @@ impl PriceCalculator {
                                         })
                                     )).await;
 
-                                    log(
+                                    logger::warning(
                                         LogTag::PoolCalculator,
-                                        "WARN",
-                                        &format!("Failed to calculate price for token {} in pool {}: {}",
+                                        &format!(
+                                            "Failed to calculate price for token {} in pool {}: {}",
                                             token_mint,
                                             pool_id,
-                                            error)
+                                            error
+                                        ),
                                     );
                                 }
                             }
 
                             Some(CalculatorMessage::Shutdown) => {
-                                if is_debug_pool_calculator_enabled() {
-                                    log(LogTag::PoolCalculator, "INFO", "Calculator received shutdown signal");
-                                }
+                                logger::info(LogTag::PoolCalculator, "Calculator received shutdown signal");
                                 break;
                             }
 
                             None => {
-                                if is_debug_pool_calculator_enabled() {
-                                    log(LogTag::PoolCalculator, "INFO", "Calculator channel closed");
-                                }
+                                logger::info(LogTag::PoolCalculator, "Calculator channel closed");
                                 break;
                             }
                         }
@@ -223,13 +202,7 @@ impl PriceCalculator {
                 }
             }
 
-            if is_debug_pool_calculator_enabled() {
-                log(
-                    LogTag::PoolCalculator,
-                    "INFO",
-                    "Price calculator task completed",
-                );
-            }
+            logger::info(LogTag::PoolCalculator, "Price calculator task completed");
         });
     }
 
@@ -240,15 +213,14 @@ impl PriceCalculator {
         account_bundle: &PoolAccountBundle,
         sol_reference_price: &Arc<RwLock<f64>>,
     ) -> PoolCalculationResult {
-        if is_debug_pool_calculator_enabled() {
+        {
             let target_token = if pool_descriptor.base_mint.to_string() != SOL_MINT {
                 pool_descriptor.base_mint
             } else {
                 pool_descriptor.quote_mint
             };
-            log(
+            logger::debug(
                 LogTag::PoolCalculator,
-                "DEBUG",
                 &format!(
                     "Calculating price for pool {} ({}) - {}/{} (token: {})",
                     pool_id,
@@ -421,18 +393,15 @@ impl PriceCalculator {
         quote_mint: &str,
         pool_id: &str,
     ) -> Option<PriceResult> {
-        if is_debug_pool_calculator_enabled() {
-            log(
-                LogTag::PoolCalculator,
-                "DEBUG",
-                &format!(
-                    "Calculating price for token {} in pool {} using {} decoder",
-                    base_mint,
-                    pool_id,
-                    program_kind.display_name()
-                ),
-            );
-        }
+        logger::debug(
+            LogTag::PoolCalculator,
+            &format!(
+                "Calculating price for token {} in pool {} using {} decoder",
+                base_mint,
+                pool_id,
+                program_kind.display_name()
+            ),
+        );
 
         // Use decoder to parse and calculate
         let mut price_result =
@@ -477,13 +446,10 @@ impl PriceCalculator {
         let mut reference = self.sol_reference_price.write().unwrap();
         *reference = sol_price_usd;
 
-        if is_debug_pool_calculator_enabled() {
-            log(
-                LogTag::PoolCalculator,
-                "DEBUG",
-                &format!("Updated SOL reference price to ${:.2}", sol_price_usd),
-            );
-        }
+        logger::debug(
+            LogTag::PoolCalculator,
+            &format!("Updated SOL reference price to ${:.2}", sol_price_usd),
+        );
     }
 
     /// Get the canonical pool used for pricing a given token mint (highest-quality pool)

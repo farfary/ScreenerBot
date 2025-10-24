@@ -7,7 +7,6 @@ use super::decoders::{
 };
 use super::types::{PoolDescriptor, ProgramKind};
 use super::utils::{is_sol_mint, PoolMintVaultInfo};
-use crate::arguments::is_debug_pool_analyzer_enabled;
 use crate::events::{record_safe, Event, EventCategory, Severity};
 /// Pool analyzer module
 ///
@@ -16,8 +15,7 @@ use crate::events::{record_safe, Event, EventCategory, Severity};
 /// - Extract pool metadata (base/quote tokens, reserve accounts)
 /// - Validate pool structure and data
 /// - Prepare account lists for fetching
-use crate::global::is_debug_pool_service_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::pools::service; // access global fetcher
 use crate::rpc::RpcClient;
 use solana_sdk::pubkey::Pubkey;
@@ -87,9 +85,7 @@ impl PoolAnalyzer {
 
     /// Start analyzer background task
     pub async fn start_analyzer_task(&self, shutdown: Arc<Notify>) {
-        if is_debug_pool_analyzer_enabled() {
-            log(LogTag::PoolAnalyzer, "INFO", "Starting pool analyzer task");
-        }
+        logger::info(LogTag::PoolAnalyzer, "Starting pool analyzer task");
 
         let pool_directory = self.pool_directory.clone();
         let rpc_client = self.rpc_client.clone();
@@ -102,16 +98,12 @@ impl PoolAnalyzer {
         };
 
         tokio::spawn(async move {
-            if is_debug_pool_analyzer_enabled() {
-                log(LogTag::PoolAnalyzer, "INFO", "Pool analyzer task started");
-            }
+            logger::info(LogTag::PoolAnalyzer, "Pool analyzer task started");
 
             loop {
                 tokio::select! {
                     _ = shutdown.notified() => {
-                        if is_debug_pool_analyzer_enabled() {
-                            log(LogTag::PoolAnalyzer, "INFO", "Pool analyzer task shutting down");
-                        }
+                        logger::info(LogTag::PoolAnalyzer, "Pool analyzer task shutting down");
                         break;
                     }
 
@@ -136,13 +128,10 @@ impl PoolAnalyzer {
                                     };
 
                                     if already_failed {
-                                        if is_debug_pool_analyzer_enabled() {
-                                            log(
-                                                LogTag::PoolAnalyzer,
-                                                "DEBUG",
-                                                &format!("Skipping re-analysis of pool {} for token {} (previously failed this run)", pool_id, token_to_check)
-                                            );
-                                        }
+                                        logger::debug(
+                                            LogTag::PoolAnalyzer,
+                                            &format!("Skipping re-analysis of pool {} for token {} (previously failed this run)", pool_id, token_to_check),
+                                        );
                                         continue;
                                     }
 
@@ -162,56 +151,44 @@ impl PoolAnalyzer {
                                         if let Some(fetcher) = service::get_account_fetcher() {
                                             let reserve_accounts = descriptor.reserve_accounts.clone();
                                             if let Err(e) = fetcher.request_pool_fetch(pool_id, reserve_accounts) {
-                                                log(LogTag::PoolAnalyzer, "WARN", &format!("Failed to request fetch for analyzed pool {}: {}", pool_id, e));
+                                                logger::warning(LogTag::PoolAnalyzer, &format!("Failed to request fetch for analyzed pool {}: {}", pool_id, e));
                                             }
                                         }
 
-                                        if is_debug_pool_analyzer_enabled() {
-                                            log(
-                                                LogTag::PoolAnalyzer,
-                                                "DEBUG",
-                                                &format!(
-                                                    "Analyzed pool {} for token {} ({}) - {}/{}",
-                                                    pool_id,
-                                                    if is_sol_mint(&descriptor.base_mint.to_string()) {
-                                                        &descriptor.quote_mint.to_string()
-                                                    } else {
-                                                        &descriptor.base_mint.to_string()
-                                                    },
-                                                    descriptor.program_kind.display_name(),
-                                                    base_mint,
-                                                    quote_mint
-                                                )
-                                            );
-                                        }
+                                        logger::debug(
+                                            LogTag::PoolAnalyzer,
+                                            &format!(
+                                                "Analyzed pool {} for token {} ({}) - {}/{}",
+                                                pool_id,
+                                                if is_sol_mint(&descriptor.base_mint.to_string()) {
+                                                    &descriptor.quote_mint.to_string()
+                                                } else {
+                                                    &descriptor.base_mint.to_string()
+                                                },
+                                                descriptor.program_kind.display_name(),
+                                                base_mint,
+                                                quote_mint
+                                            ),
+                                        );
                                     } else {
                                         // Record failure in-memory to avoid repeated attempts this run
                                         let mut fp = failed_pairs.write().unwrap();
                                         fp.insert(pair);
 
-                                        if is_debug_pool_analyzer_enabled() {
-                                            log(
-                                                LogTag::PoolAnalyzer,
-                                                "WARN",
-                                                &format!("Failed to analyze pool {} for token {} - will skip retries this run",
-                                                    pool_id,
-                                                    token_to_check)
-                                            );
-                                        }
+                                        logger::warning(
+                                            LogTag::PoolAnalyzer,
+                                            &format!("Failed to analyze pool {} for token {} - will skip retries this run", pool_id, token_to_check),
+                                        );
                                     }
                                 }
 
                                 Some(AnalyzerMessage::Shutdown) => {
-                                    if is_debug_pool_analyzer_enabled() {
-                                        log(LogTag::PoolAnalyzer, "INFO", "Pool analyzer received shutdown signal");
-                                    }
+                                    logger::info(LogTag::PoolAnalyzer, "Pool analyzer received shutdown signal");
                                     break;
                                 }
 
                                 None => {
-                                    if is_debug_pool_analyzer_enabled() {
-                                        log(LogTag::PoolAnalyzer, "INFO", "Pool analyzer channel closed");
-                                    }
+                                    logger::info(LogTag::PoolAnalyzer, "Pool analyzer channel closed");
                                     break;
                                 }
                             }
@@ -219,9 +196,7 @@ impl PoolAnalyzer {
                 }
             }
 
-            if is_debug_pool_analyzer_enabled() {
-                log(LogTag::PoolAnalyzer, "INFO", "Pool analyzer task completed");
-            }
+            logger::info(LogTag::PoolAnalyzer, "Pool analyzer task completed");
         });
     }
 
@@ -240,13 +215,7 @@ impl PoolAnalyzer {
             // This is an Unknown pool from discovery - fetch the account to get the real program ID
             match rpc_client.get_account(&pool_id).await {
                 Ok(account) => {
-                    if is_debug_pool_analyzer_enabled() {
-                        log(
-                            LogTag::PoolAnalyzer,
-                            "DEBUG",
-                            &format!("Pool {} owner: {}", pool_id, account.owner),
-                        );
-                    }
+                    logger::debug(LogTag::PoolAnalyzer, &format!("Pool {} owner: {}", pool_id, account.owner));
                     account.owner
                 }
                 Err(e) => {
@@ -270,16 +239,7 @@ impl PoolAnalyzer {
                     ))
                     .await;
 
-                    if is_debug_pool_analyzer_enabled() {
-                        log(
-                            LogTag::PoolAnalyzer,
-                            "WARN",
-                            &format!(
-                                "Failed to fetch pool account {} for token analysis: {}",
-                                pool_id, e
-                            ),
-                        );
-                    }
+                    logger::warning(LogTag::PoolAnalyzer, &format!("Failed to fetch pool account {} for token analysis: {}", pool_id, e));
                     return None;
                 }
             }
@@ -313,31 +273,11 @@ impl PoolAnalyzer {
             ))
             .await;
 
-            if is_debug_pool_analyzer_enabled() {
-                log(
-                    LogTag::PoolAnalyzer,
-                    "WARN",
-                    &format!(
-                        "Unsupported DEX program for pool {}: {} (consider adding support for this DEX)",
-                        pool_id,
-                        actual_program_id
-                    )
-                );
-            }
+            logger::warning(LogTag::PoolAnalyzer, &format!("Unsupported DEX program for pool {}: {} (consider adding support for this DEX)", pool_id, actual_program_id));
             return None;
         }
 
-        if is_debug_pool_analyzer_enabled() {
-            log(
-                LogTag::PoolAnalyzer,
-                "DEBUG",
-                &format!(
-                    "Classified pool {} as {}",
-                    pool_id,
-                    program_kind.display_name()
-                ),
-            );
-        }
+        logger::debug(LogTag::PoolAnalyzer, &format!("Classified pool {} as {}", pool_id, program_kind.display_name()));
 
         // Extract reserve accounts based on program type
         let reserve_accounts = Self::extract_reserve_accounts(
@@ -349,23 +289,13 @@ impl PoolAnalyzer {
         )
         .await?;
 
-        if is_debug_pool_analyzer_enabled() {
-            log(
-                LogTag::PoolAnalyzer,
-                "DEBUG",
-                &format!(
-                    "Successfully analyzed {} pool {} with {} reserve accounts for token {}",
-                    program_kind.display_name(),
-                    pool_id,
-                    reserve_accounts.len(),
-                    if is_sol_mint(&base_mint.to_string()) {
-                        quote_mint
-                    } else {
-                        base_mint
-                    }
-                ),
-            );
-        }
+        logger::debug(LogTag::PoolAnalyzer, &format!(
+            "Successfully analyzed {} pool {} with {} reserve accounts for token {}",
+            program_kind.display_name(),
+            pool_id,
+            reserve_accounts.len(),
+            if is_sol_mint(&base_mint.to_string()) { quote_mint } else { base_mint }
+        ));
 
         let target_mint = if is_sol_mint(&base_mint.to_string()) {
             quote_mint.to_string()
@@ -453,13 +383,7 @@ impl PoolAnalyzer {
             }
 
             ProgramKind::MeteoraDbc => {
-                if is_debug_pool_analyzer_enabled() {
-                    log(
-                        LogTag::PoolAnalyzer,
-                        "INFO",
-                        &format!("Extracting DBC accounts for pool {}", pool_id),
-                    );
-                }
+                logger::info(LogTag::PoolAnalyzer, &format!("Extracting DBC accounts for pool {}", pool_id));
 
                 let mut accounts = vec![*pool_id];
 
@@ -477,27 +401,9 @@ impl PoolAnalyzer {
                             }
                         }
 
-                        if is_debug_pool_analyzer_enabled() {
-                            log(
-                                LogTag::PoolAnalyzer,
-                                "INFO",
-                                &format!(
-                                    "DBC pool {} extracted {} vault accounts",
-                                    pool_id, vault_count
-                                ),
-                            );
-                        }
+                        logger::info(LogTag::PoolAnalyzer, &format!("DBC pool {} extracted {} vault accounts", pool_id, vault_count));
                     } else {
-                        if is_debug_pool_analyzer_enabled() {
-                            log(
-                                LogTag::PoolAnalyzer,
-                                "WARN",
-                                &format!(
-                                    "Failed to extract vault addresses from DBC pool {}",
-                                    pool_id
-                                ),
-                            );
-                        }
+                        logger::warning(LogTag::PoolAnalyzer, &format!("Failed to extract vault addresses from DBC pool {}", pool_id));
                     }
                 }
 
@@ -525,16 +431,7 @@ impl PoolAnalyzer {
             }
 
             ProgramKind::Unknown => {
-                if is_debug_pool_analyzer_enabled() {
-                    log(
-                        LogTag::PoolAnalyzer,
-                        "WARN",
-                        &format!(
-                            "Cannot extract accounts for unknown program type: {}",
-                            pool_id
-                        ),
-                    );
-                }
+                logger::warning(LogTag::PoolAnalyzer, &format!("Cannot extract accounts for unknown program type: {}", pool_id));
                 None
             }
         }
@@ -551,13 +448,7 @@ impl PoolAnalyzer {
         let pool_account = match rpc_client.get_account(pool_id).await {
             Ok(account) => account,
             Err(e) => {
-                if is_debug_pool_analyzer_enabled() {
-                    log(
-                        LogTag::PoolAnalyzer,
-                        "ERROR",
-                        &format!("Failed to fetch pool account {}: {}", pool_id, e),
-                    );
-                }
+                logger::error(LogTag::PoolAnalyzer, &format!("Failed to fetch pool account {}: {}", pool_id, e));
                 return None;
             }
         };
@@ -588,16 +479,7 @@ impl PoolAnalyzer {
         quote_mint: &Pubkey,
         rpc_client: &RpcClient,
     ) -> Option<Vec<Pubkey>> {
-        if is_debug_pool_analyzer_enabled() {
-            log(
-                LogTag::PoolAnalyzer,
-                "INFO",
-                &format!(
-                    "Extracting Raydium Legacy AMM accounts for pool {}",
-                    pool_id
-                ),
-            );
-        }
+        logger::info(LogTag::PoolAnalyzer, &format!("Extracting Raydium Legacy AMM accounts for pool {}", pool_id));
 
         let mut accounts = vec![*pool_id];
 
@@ -613,27 +495,9 @@ impl PoolAnalyzer {
                     }
                 }
 
-                if is_debug_pool_analyzer_enabled() {
-                    log(
-                        LogTag::PoolAnalyzer,
-                        "INFO",
-                        &format!(
-                            "Raydium Legacy AMM pool {} extracted {} vault accounts",
-                            pool_id, vault_count
-                        ),
-                    );
-                }
+                logger::info(LogTag::PoolAnalyzer, &format!("Raydium Legacy AMM pool {} extracted {} vault accounts", pool_id, vault_count));
             } else {
-                if is_debug_pool_analyzer_enabled() {
-                    log(
-                        LogTag::PoolAnalyzer,
-                        "WARN",
-                        &format!(
-                            "Failed to extract vault addresses from Raydium Legacy AMM pool {}",
-                            pool_id
-                        ),
-                    );
-                }
+                logger::warning(LogTag::PoolAnalyzer, &format!("Failed to extract vault addresses from Raydium Legacy AMM pool {}", pool_id));
             }
         }
 
@@ -655,13 +519,7 @@ impl PoolAnalyzer {
         // - Pool account itself
         // - Token vaults (extracted from pool data)
 
-        if is_debug_pool_analyzer_enabled() {
-            log(
-                LogTag::PoolAnalyzer,
-                "INFO",
-                &format!("Extracting CLMM accounts for pool {}", pool_id),
-            );
-        }
+        logger::info(LogTag::PoolAnalyzer, &format!("Extracting CLMM accounts for pool {}", pool_id));
 
         let mut accounts = vec![*pool_id];
 
@@ -677,16 +535,7 @@ impl PoolAnalyzer {
                     }
                 }
 
-                if is_debug_pool_analyzer_enabled() {
-                    log(
-                        LogTag::PoolAnalyzer,
-                        "INFO",
-                        &format!(
-                            "CLMM pool {} extracted {} vault accounts",
-                            pool_id, vault_count
-                        ),
-                    );
-                }
+                logger::info(LogTag::PoolAnalyzer, &format!("CLMM pool {} extracted {} vault accounts", pool_id, vault_count));
             }
         }
 
@@ -704,13 +553,7 @@ impl PoolAnalyzer {
         quote_mint: &Pubkey,
         rpc_client: &RpcClient,
     ) -> Option<Vec<Pubkey>> {
-        if is_debug_pool_analyzer_enabled() {
-            log(
-                LogTag::PoolAnalyzer,
-                "INFO",
-                &format!("Extracting Orca Whirlpool accounts for pool {}", pool_id),
-            );
-        }
+        logger::info(LogTag::PoolAnalyzer, &format!("Extracting Orca Whirlpool accounts for pool {}", pool_id));
 
         let mut accounts = vec![*pool_id];
 
@@ -726,27 +569,9 @@ impl PoolAnalyzer {
                     }
                 }
 
-                if is_debug_pool_analyzer_enabled() {
-                    log(
-                        LogTag::PoolAnalyzer,
-                        "INFO",
-                        &format!(
-                            "Orca Whirlpool pool {} extracted {} vault accounts",
-                            pool_id, vault_count
-                        ),
-                    );
-                }
+                logger::info(LogTag::PoolAnalyzer, &format!("Orca Whirlpool pool {} extracted {} vault accounts", pool_id, vault_count));
             } else {
-                if is_debug_pool_analyzer_enabled() {
-                    log(
-                        LogTag::PoolAnalyzer,
-                        "WARN",
-                        &format!(
-                            "Failed to extract vault addresses from Orca Whirlpool pool {}",
-                            pool_id
-                        ),
-                    );
-                }
+                logger::warning(LogTag::PoolAnalyzer, &format!("Failed to extract vault addresses from Orca Whirlpool pool {}", pool_id));
             }
         }
 
@@ -764,13 +589,7 @@ impl PoolAnalyzer {
         quote_mint: &Pubkey,
         rpc_client: &RpcClient,
     ) -> Option<Vec<Pubkey>> {
-        if is_debug_pool_analyzer_enabled() {
-            log(
-                LogTag::PoolAnalyzer,
-                "INFO",
-                &format!("Extracting DAMM accounts for pool {}", pool_id),
-            );
-        }
+        logger::info(LogTag::PoolAnalyzer, &format!("Extracting DAMM accounts for pool {}", pool_id));
 
         let mut accounts = vec![*pool_id];
 
@@ -786,16 +605,7 @@ impl PoolAnalyzer {
                     }
                 }
 
-                if is_debug_pool_analyzer_enabled() {
-                    log(
-                        LogTag::PoolAnalyzer,
-                        "INFO",
-                        &format!(
-                            "DAMM pool {} extracted {} vault accounts",
-                            pool_id, vault_count
-                        ),
-                    );
-                }
+                logger::info(LogTag::PoolAnalyzer, &format!("DAMM pool {} extracted {} vault accounts", pool_id, vault_count));
             }
         }
 
@@ -817,13 +627,7 @@ impl PoolAnalyzer {
         let pool_account = match rpc_client.get_account(pool_id).await {
             Ok(account) => account,
             Err(e) => {
-                if is_debug_pool_analyzer_enabled() {
-                    log(
-                        LogTag::PoolAnalyzer,
-                        "ERROR",
-                        &format!("Failed to fetch DLMM pool account {}: {}", pool_id, e),
-                    );
-                }
+                logger::error(LogTag::PoolAnalyzer, &format!("Failed to fetch DLMM pool account {}: {}", pool_id, e));
                 return None;
             }
         };
@@ -854,13 +658,7 @@ impl PoolAnalyzer {
         quote_mint: &Pubkey,
         rpc_client: &RpcClient,
     ) -> Option<Vec<Pubkey>> {
-        if is_debug_pool_analyzer_enabled() {
-            log(
-                LogTag::PoolAnalyzer,
-                "INFO",
-                &format!("Extracting PumpFun AMM accounts for pool {}", pool_id),
-            );
-        }
+        logger::info(LogTag::PoolAnalyzer, &format!("Extracting PumpFun AMM accounts for pool {}", pool_id));
 
         let mut accounts = vec![*pool_id];
 
@@ -876,27 +674,9 @@ impl PoolAnalyzer {
                     }
                 }
 
-                if is_debug_pool_analyzer_enabled() {
-                    log(
-                        LogTag::PoolAnalyzer,
-                        "INFO",
-                        &format!(
-                            "PumpFun AMM pool {} extracted {} vault accounts",
-                            pool_id, vault_count
-                        ),
-                    );
-                }
+                logger::info(LogTag::PoolAnalyzer, &format!("PumpFun AMM pool {} extracted {} vault accounts", pool_id, vault_count));
             } else {
-                if is_debug_pool_analyzer_enabled() {
-                    log(
-                        LogTag::PoolAnalyzer,
-                        "WARN",
-                        &format!(
-                            "Failed to extract vault addresses from PumpFun AMM pool {}",
-                            pool_id
-                        ),
-                    );
-                }
+                logger::warning(LogTag::PoolAnalyzer, &format!("Failed to extract vault addresses from PumpFun AMM pool {}", pool_id));
             }
         }
 
@@ -920,17 +700,7 @@ impl PoolAnalyzer {
 
         // NOTE: Mint accounts removed - decimals now fetched from cache, not mint account data
 
-        if is_debug_pool_analyzer_enabled() {
-            log(
-                LogTag::PoolAnalyzer,
-                "DEBUG",
-                &format!(
-                    "Extracted Moonit accounts: curve={}, total_accounts={}",
-                    pool_id,
-                    accounts.len()
-                ),
-            );
-        }
+        logger::debug(LogTag::PoolAnalyzer, &format!("Extracted Moonit accounts: curve={}, total_accounts={}", pool_id, accounts.len()));
 
         Some(accounts)
     }
@@ -945,13 +715,7 @@ impl PoolAnalyzer {
         let pool_account = match rpc_client.get_account(pool_id).await {
             Ok(account) => account,
             Err(e) => {
-                if is_debug_pool_analyzer_enabled() {
-                    log(
-                        LogTag::PoolAnalyzer,
-                        "ERROR",
-                        &format!("Failed to fetch pool account {}: {}", pool_id, e),
-                    );
-                }
+                logger::error(LogTag::PoolAnalyzer, &format!("Failed to fetch pool account {}: {}", pool_id, e));
                 return None;
             }
         };
@@ -976,18 +740,7 @@ impl PoolAnalyzer {
         accounts.push(*base_mint);
         accounts.push(*quote_mint);
 
-        if is_debug_pool_analyzer_enabled() {
-            log(
-                LogTag::PoolAnalyzer,
-                "DEBUG",
-                &format!(
-                    "Extracted FluxBeam accounts: pool={}, vaults={}, total_accounts={}",
-                    pool_id,
-                    vault_count,
-                    accounts.len()
-                ),
-            );
-        }
+        logger::debug(LogTag::PoolAnalyzer, &format!("Extracted FluxBeam accounts: pool={}, vaults={}, total_accounts={}", pool_id, vault_count, accounts.len()));
 
         Some(accounts)
     }

@@ -1,6 +1,6 @@
 //! Dollar Cost Averaging implementation
 
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::trader::auto::dca_evaluation::{DcaConfigSnapshot, DcaEvaluation};
 use crate::trader::config;
@@ -42,9 +42,8 @@ pub async fn process_dca_opportunities() -> Result<Vec<TradeDecision>, String> {
         let evaluation = match DcaEvaluation::evaluate(&position, dca_config.clone()) {
             Ok(eval) => eval,
             Err(e) => {
-                log(
+                logger::error(
                     LogTag::Trader,
-                    "ERROR",
                     &format!("DCA evaluation failed for {}: {}", position.symbol, e),
                 );
                 continue;
@@ -52,9 +51,8 @@ pub async fn process_dca_opportunities() -> Result<Vec<TradeDecision>, String> {
         };
 
         if evaluation.should_trigger {
-            log(
+            logger::info(
                 LogTag::Trader,
-                "DCA_OPPORTUNITY",
                 &format!(
                     "📉 DCA opportunity: {} | {}",
                     position.symbol,
@@ -73,10 +71,10 @@ pub async fn process_dca_opportunities() -> Result<Vec<TradeDecision>, String> {
                 price_sol: Some(evaluation.calculations.current_price),
                 size_sol: Some(evaluation.calculations.dca_amount_sol),
             });
-        } else if crate::global::is_debug_trader_enabled() {
-            log(
+        } else {
+            // Always log debug details via the centralized logger; the logger will filter by level
+            logger::debug(
                 LogTag::Trader,
-                "DEBUG",
                 &format!(
                     "DCA not triggered for {}: {}",
                     position.symbol,
@@ -87,9 +85,8 @@ pub async fn process_dca_opportunities() -> Result<Vec<TradeDecision>, String> {
     }
 
     if !dca_decisions.is_empty() {
-        log(
+        logger::info(
             LogTag::Trader,
-            "INFO",
             &format!("Found {} DCA opportunities", dca_decisions.len()),
         );
     }

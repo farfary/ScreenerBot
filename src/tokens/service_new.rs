@@ -8,6 +8,7 @@
 ///
 /// This service coordinates the new architecture with proper lifecycle management.
 use crate::global::{TOKENS_DATABASE, TOKENS_SYSTEM_READY};
+use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use crate::tokens::cleanup;
 use crate::tokens::database::TokenDatabase;
@@ -58,9 +59,12 @@ impl Service for TokensServiceNew {
 
         self.db = Some(db_arc);
 
-        println!(
-            "[TOKENS_NEW] Service initialized with database at {}",
-            TOKENS_DATABASE
+        logger::info(
+            LogTag::Tokens,
+            &format!(
+                "Service initialized with database at {}",
+                TOKENS_DATABASE
+            ),
         );
         // Mark tokens system ready after successful initialization
         TOKENS_SYSTEM_READY.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -107,15 +111,18 @@ impl Service for TokensServiceNew {
         let cleanup_handle = cleanup::start_cleanup_loop(db.clone(), shutdown);
         handles.push(cleanup_handle);
 
-        println!(
-            "[TOKENS_NEW] Service started with {} background tasks",
-            handles.len()
+        logger::info(
+            LogTag::Tokens,
+            &format!(
+                "Service started with {} background tasks",
+                handles.len()
+            ),
         );
         Ok(handles)
     }
 
     async fn stop(&mut self) -> Result<(), String> {
-        println!("[TOKENS_NEW] Service stopping...");
+        logger::info(LogTag::Tokens, "Service stopping...");
         // On stop, mark as not ready
         TOKENS_SYSTEM_READY.store(false, std::sync::atomic::Ordering::SeqCst);
         Ok(())

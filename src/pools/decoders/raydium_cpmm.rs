@@ -4,9 +4,8 @@
 /// It extracts reserve data and calculates token prices using the proven logic
 /// from the old pool system.
 use super::{AccountData, PoolDecoder};
-use crate::arguments::is_debug_pool_decoders_enabled;
 use crate::constants::SOL_DECIMALS;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::pools::types::{PriceResult, ProgramKind, RAYDIUM_CPMM_PROGRAM_ID, SOL_MINT};
 use crate::pools::utils::{
     read_bool_at_offset, read_pubkey_at_offset, read_u64_at_offset, read_u8_at_offset,
@@ -29,48 +28,35 @@ impl PoolDecoder for RaydiumCpmmDecoder {
         base_mint: &str,
         quote_mint: &str,
     ) -> Option<PriceResult> {
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "DEBUG",
-                &format!(
-                    "Decoding Raydium CPMM pool for {}/{}",
-                    base_mint, quote_mint
-                ),
-            );
-        }
+        logger::debug(
+            LogTag::PoolDecoder,
+            &format!("Decoding Raydium CPMM pool for {}/{}", base_mint, quote_mint),
+        );
 
         // Find the pool account by checking owner program ID (like CLMM decoder)
         let pool_account = accounts.values().find(|acc| {
             // Look for account with Raydium CPMM program as owner
             let owner_str = acc.owner.to_string();
             let matches = owner_str == RAYDIUM_CPMM_PROGRAM_ID;
-
-            if is_debug_pool_decoders_enabled() {
-                log(
-                    LogTag::PoolDecoder,
-                    "DEBUG",
-                    &format!(
-                        "Checking account owner: {} vs expected: {}, matches: {}",
-                        owner_str, RAYDIUM_CPMM_PROGRAM_ID, matches
-                    ),
-                );
-            }
+            logger::debug(
+                LogTag::PoolDecoder,
+                &format!(
+                    "Checking account owner: {} vs expected: {}, matches: {}",
+                    owner_str, RAYDIUM_CPMM_PROGRAM_ID, matches
+                ),
+            );
 
             matches
         })?;
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "DEBUG",
-                &format!(
-                    "Found CPMM pool account {} with {} bytes",
-                    pool_account.pubkey,
-                    pool_account.data.len()
-                ),
-            );
-        }
+        logger::debug(
+            LogTag::PoolDecoder,
+            &format!(
+                "Found CPMM pool account {} with {} bytes",
+                pool_account.pubkey,
+                pool_account.data.len()
+            ),
+        );
 
         // Parse pool state from account data using the enhanced method
         let pool_info =
@@ -104,16 +90,10 @@ impl RaydiumCpmmDecoder {
     /// Made public for use by the direct swap system
     pub fn decode_raydium_cpmm_pool(data: &[u8], pool_id: &str) -> Option<RaydiumCpmmPoolInfo> {
         if data.len() < 8 + 32 * 10 + 8 * 10 {
-            if is_debug_pool_decoders_enabled() {
-                log(
-                    LogTag::PoolDecoder,
-                    "ERROR",
-                    &format!(
-                        "Invalid Raydium CPMM pool account data length: {}",
-                        data.len()
-                    ),
-                );
-            }
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!("Invalid Raydium CPMM pool account data length: {}", data.len()),
+            );
             return None;
         }
 
@@ -161,16 +141,13 @@ impl RaydiumCpmmDecoder {
         let mint_0_decimals = match get_cached_decimals(&token_0_mint) {
             Some(decimals) => decimals,
             None => {
-                if is_debug_pool_decoders_enabled() {
-                    log(
-                        LogTag::PoolDecoder,
-                        "ERROR",
-                        &format!(
-                            "No decimals found for CPMM token_0: {}, skipping pool calculation",
-                            token_0_mint.chars().take(8).collect::<String>()
-                        ),
-                    );
-                }
+                logger::error(
+                    LogTag::PoolDecoder,
+                    &format!(
+                        "No decimals found for CPMM token_0: {}, skipping pool calculation",
+                        token_0_mint.chars().take(8).collect::<String>()
+                    ),
+                );
                 return None;
             }
         };
@@ -178,60 +155,48 @@ impl RaydiumCpmmDecoder {
         let mint_1_decimals = match get_cached_decimals(&token_1_mint) {
             Some(decimals) => decimals,
             None => {
-                if is_debug_pool_decoders_enabled() {
-                    log(
-                        LogTag::PoolDecoder,
-                        "ERROR",
-                        &format!(
-                            "No decimals found for CPMM token_1: {}, skipping pool calculation",
-                            token_1_mint.chars().take(8).collect::<String>()
-                        ),
-                    );
-                }
+                logger::error(
+                    LogTag::PoolDecoder,
+                    &format!(
+                        "No decimals found for CPMM token_1: {}, skipping pool calculation",
+                        token_1_mint.chars().take(8).collect::<String>()
+                    ),
+                );
                 return None;
             }
         };
 
-        if is_debug_pool_decoders_enabled() {
-            log(
+        logger::info(
+            LogTag::PoolDecoder,
+            &format!(
+                "Decimal Analysis:\n\n                     Token0 {} decimals: {} (cached) vs {} (pool)\n\n                     Token1 {} decimals: {} (cached) vs {} (pool)",
+                token_0_mint.chars().take(8).collect::<String>(),
+                mint_0_decimals,
+                pool_mint_0_decimals,
+                token_1_mint.chars().take(8).collect::<String>(),
+                mint_1_decimals,
+                pool_mint_1_decimals
+            ),
+        );
+
+        // Warning if cached and pool decimals don't match
+        if mint_0_decimals != pool_mint_0_decimals {
+            logger::warning(
                 LogTag::PoolDecoder,
-                "DECIMALS",
                 &format!(
-                    "Decimal Analysis:
-  
-                     Token0 {} decimals: {} (cached) vs {} (pool)
-  
-                     Token1 {} decimals: {} (cached) vs {} (pool)",
-                    token_0_mint.chars().take(8).collect::<String>(),
-                    mint_0_decimals,
-                    pool_mint_0_decimals,
-                    token_1_mint.chars().take(8).collect::<String>(),
-                    mint_1_decimals,
-                    pool_mint_1_decimals
+                    "DECIMAL MISMATCH Token0 {}: cache={}, pool={}",
+                    token_0_mint, mint_0_decimals, pool_mint_0_decimals
                 ),
             );
-
-            // Warning if cached and pool decimals don't match
-            if mint_0_decimals != pool_mint_0_decimals {
-                log(
-                    LogTag::PoolDecoder,
-                    "DECIMAL_MISMATCH",
-                    &format!(
-                        "DECIMAL MISMATCH Token0 {}: cache={}, pool={}",
-                        token_0_mint, mint_0_decimals, pool_mint_0_decimals
-                    ),
-                );
-            }
-            if mint_1_decimals != pool_mint_1_decimals {
-                log(
-                    LogTag::PoolDecoder,
-                    "DECIMAL_MISMATCH",
-                    &format!(
-                        "DECIMAL MISMATCH Token1 {}: cache={}, pool={}",
-                        token_1_mint, mint_1_decimals, pool_mint_1_decimals
-                    ),
-                );
-            }
+        }
+        if mint_1_decimals != pool_mint_1_decimals {
+            logger::warning(
+                LogTag::PoolDecoder,
+                &format!(
+                    "DECIMAL MISMATCH Token1 {}: cache={}, pool={}",
+                    token_1_mint, mint_1_decimals, pool_mint_1_decimals
+                ),
+            );
         }
 
         Some(RaydiumCpmmPoolInfo {
@@ -336,24 +301,19 @@ impl RaydiumCpmmDecoder {
                 pool_info.token_0_decimals,
             )
         } else {
-            if is_debug_pool_decoders_enabled() {
-                log(
-                    LogTag::PoolDecoder,
-                    "ERROR",
-                    &format!(
-                        "Pool does not contain SOL or target tokens {}/{}",
-                        base_mint, quote_mint
-                    ),
-                );
-            }
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!(
+                    "Pool does not contain SOL or target tokens {}/{}",
+                    base_mint, quote_mint
+                ),
+            );
             return None;
         };
 
         // Validate reserves
         if sol_reserve == 0 || token_reserve == 0 {
-            if is_debug_pool_decoders_enabled() {
-                log(LogTag::PoolDecoder, "ERROR", "Pool has zero reserves");
-            }
+            logger::error(LogTag::PoolDecoder, "Pool has zero reserves");
             return None;
         }
 
@@ -365,64 +325,48 @@ impl RaydiumCpmmDecoder {
 
         // Validate price is reasonable
         if price_sol <= 0.0 || price_sol > 1_000_000.0 {
-            if is_debug_pool_decoders_enabled() {
-                log(
-                    LogTag::PoolDecoder,
-                    "ERROR",
-                    &format!("Invalid price calculated: {:.12} SOL", price_sol),
-                );
-            }
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!("Invalid price calculated: {:.12} SOL", price_sol),
+            );
             return None;
         }
 
-        if is_debug_pool_decoders_enabled() {
-            log(
+        logger::info(
+            LogTag::PoolDecoder,
+            &format!(
+                "Raydium CPMM Price Calculation for {}:\n\n                     SOL Reserve: {} ({:.9} adjusted, {} decimals)\n\n                     Token Reserve: {} ({:.9} adjusted, {} decimals)\n\n                     Price: {:.9} SOL",
+                target_mint,
+                sol_reserve,
+                sol_adjusted,
+                sol_decimals,
+                token_reserve,
+                token_adjusted,
+                token_decimals,
+                price_sol
+            ),
+        );
+
+        // Additional validation checks
+        if sol_adjusted <= 0.0 || token_adjusted <= 0.0 {
+            logger::warning(
                 LogTag::PoolDecoder,
-                "SUCCESS",
                 &format!(
-                    "Raydium CPMM Price Calculation for {}:
-  
-                     SOL Reserve: {} ({:.9} adjusted, {} decimals)
-  
-                     Token Reserve: {} ({:.9} adjusted, {} decimals)
-  
-                     Price: {:.9} SOL",
-                    target_mint,
-                    sol_reserve,
-                    sol_adjusted,
-                    sol_decimals,
-                    token_reserve,
-                    token_adjusted,
-                    token_decimals,
-                    price_sol
+                    "WARNING: Zero or negative adjusted values detected! SOL_adj: {:.9}, Token_adj: {:.9}",
+                    sol_adjusted, token_adjusted
                 ),
             );
+        }
 
-            // Additional validation checks
-            if sol_adjusted <= 0.0 || token_adjusted <= 0.0 {
-                log(
-                    LogTag::PoolDecoder,
-                    "WARN",
-                    &format!(
-                        "WARNING: Zero or negative adjusted values detected! 
-                         SOL_adj: {:.9}, Token_adj: {:.9}",
-                        sol_adjusted, token_adjusted
-                    ),
-                );
-            }
-
-            // Check for extremely small or large prices that might indicate decimal issues
-            if price_sol < 0.000000001 || price_sol > 1000.0 {
-                log(
-                    LogTag::PoolDecoder,
-                    "WARN",
-                    &format!(
-                        "WARNING: Unusual price detected: {:.12} SOL. 
-                         Check if decimals are correct (SOL: {}, Token: {})",
-                        price_sol, sol_decimals, token_decimals
-                    ),
-                );
-            }
+        // Check for extremely small or large prices that might indicate decimal issues
+        if price_sol < 0.000000001 || price_sol > 1000.0 {
+            logger::warning(
+                LogTag::PoolDecoder,
+                &format!(
+                    "WARNING: Unusual price detected: {:.12} SOL. Check if decimals are correct (SOL: {}, Token: {})",
+                    price_sol, sol_decimals, token_decimals
+                ),
+            );
         }
 
         Some(PriceResult::new(

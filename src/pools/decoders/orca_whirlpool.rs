@@ -4,9 +4,8 @@
 /// Based on the official Orca Whirlpool program structure from
 /// https://github.com/orca-so/whirlpools/blob/main/programs/whirlpool/src/state/whirlpool.rs
 use super::{AccountData, PoolDecoder};
-use crate::arguments::is_debug_pool_decoders_enabled;
 use crate::constants::SOL_DECIMALS;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::pools::types::{PriceResult, ProgramKind, ORCA_WHIRLPOOL_PROGRAM_ID, SOL_MINT};
 use crate::tokens::get_cached_decimals;
 use solana_sdk::pubkey::Pubkey;
@@ -25,89 +24,67 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
         base_mint: &str,
         quote_mint: &str,
     ) -> Option<PriceResult> {
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "START",
-                &format!(
-                    "Orca Whirlpool decoder: base={} quote={}",
-                    base_mint, quote_mint
-                ),
-            );
-        }
+        logger::info(
+            LogTag::PoolDecoder,
+            &format!("Orca Whirlpool decoder: base={} quote={}", base_mint, quote_mint),
+        );
 
         // Find the pool account
         let pool_account = accounts
             .values()
             .find(|acc| acc.owner.to_string() == ORCA_WHIRLPOOL_PROGRAM_ID)?;
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "INFO",
-                &format!(
-                    "Found Orca Whirlpool pool account {} with {} bytes",
-                    pool_account.pubkey,
-                    pool_account.data.len()
-                ),
-            );
-        }
+        logger::info(
+            LogTag::PoolDecoder,
+            &format!(
+                "Found Orca Whirlpool pool account {} with {} bytes",
+                pool_account.pubkey,
+                pool_account.data.len()
+            ),
+        );
 
         // Parse Orca Whirlpool structure
         let pool_info = Self::parse_whirlpool_data(&pool_account.data)?;
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "INFO",
-                &format!(
-                    "Parsed Orca Whirlpool:\n  token_mint_a: {}\n  token_mint_b: {}\n  token_vault_a: {}\n  token_vault_b: {}\n  sqrt_price: {}\n  liquidity: {}",
-                    pool_info.token_mint_a,
-                    pool_info.token_mint_b,
-                    pool_info.token_vault_a,
-                    pool_info.token_vault_b,
-                    pool_info.sqrt_price,
-                    pool_info.liquidity
-                )
-            );
-        }
+        logger::info(
+            LogTag::PoolDecoder,
+            &format!(
+                "Parsed Orca Whirlpool:\n  token_mint_a: {}\n  token_mint_b: {}\n  token_vault_a: {}\n  token_vault_b: {}\n  sqrt_price: {}\n  liquidity: {}",
+                pool_info.token_mint_a,
+                pool_info.token_mint_b,
+                pool_info.token_vault_a,
+                pool_info.token_vault_b,
+                pool_info.sqrt_price,
+                pool_info.liquidity
+            ),
+        );
 
         // Determine which token is SOL and which is the target
         let (sol_vault, token_vault, sol_reserve, token_reserve, is_token_a_sol) =
             if pool_info.token_mint_a == SOL_MINT {
                 // A is SOL, B is token
-                if is_debug_pool_decoders_enabled() {
-                    log(
-                        LogTag::PoolDecoder,
-                        "DEBUG",
-                        &format!(
-                            "Token A is SOL, Token B is target. Looking for vaults: A={}, B={}",
-                            pool_info.token_vault_a, pool_info.token_vault_b
-                        ),
-                    );
-                    log(
-                        LogTag::PoolDecoder,
-                        "DEBUG",
-                        &format!(
-                            "Available accounts: {:?}",
-                            accounts.keys().collect::<Vec<_>>()
-                        ),
-                    );
-                }
+                logger::debug(
+                    LogTag::PoolDecoder,
+                    &format!(
+                        "Token A is SOL, Token B is target. Looking for vaults: A={}, B={}",
+                        pool_info.token_vault_a, pool_info.token_vault_b
+                    ),
+                );
+                logger::debug(
+                    LogTag::PoolDecoder,
+                    &format!("Available accounts: {:?}", accounts.keys().collect::<Vec<_>>()),
+                );
 
                 let sol_vault_account = match accounts.get(&pool_info.token_vault_a) {
                     Some(account) => account,
                     None => {
-                        if is_debug_pool_decoders_enabled() {
-                            log(
+                            logger::error(
                                 LogTag::PoolDecoder,
-                                "ERROR",
                                 &format!(
                                     "SOL vault account {} not found in fetched accounts",
                                     pool_info.token_vault_a
                                 ),
                             );
-                        }
                         return None;
                     }
                 };
@@ -115,16 +92,13 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
                 let token_vault_account = match accounts.get(&pool_info.token_vault_b) {
                     Some(account) => account,
                     None => {
-                        if is_debug_pool_decoders_enabled() {
-                            log(
+                            logger::error(
                                 LogTag::PoolDecoder,
-                                "ERROR",
                                 &format!(
                                     "Token vault account {} not found in fetched accounts",
                                     pool_info.token_vault_b
                                 ),
                             );
-                        }
                         return None;
                     }
                 };
@@ -141,38 +115,28 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
                 )
             } else if pool_info.token_mint_b == SOL_MINT {
                 // B is SOL, A is token
-                if is_debug_pool_decoders_enabled() {
-                    log(
-                        LogTag::PoolDecoder,
-                        "DEBUG",
-                        &format!(
-                            "Token B is SOL, Token A is target. Looking for vaults: A={}, B={}",
-                            pool_info.token_vault_a, pool_info.token_vault_b
-                        ),
-                    );
-                    log(
-                        LogTag::PoolDecoder,
-                        "DEBUG",
-                        &format!(
-                            "Available accounts: {:?}",
-                            accounts.keys().collect::<Vec<_>>()
-                        ),
-                    );
-                }
+                logger::debug(
+                    LogTag::PoolDecoder,
+                    &format!(
+                        "Token B is SOL, Token A is target. Looking for vaults: A={}, B={}",
+                        pool_info.token_vault_a, pool_info.token_vault_b
+                    ),
+                );
+                logger::debug(
+                    LogTag::PoolDecoder,
+                    &format!("Available accounts: {:?}", accounts.keys().collect::<Vec<_>>()),
+                );
 
                 let sol_vault_account = match accounts.get(&pool_info.token_vault_b) {
                     Some(account) => account,
                     None => {
-                        if is_debug_pool_decoders_enabled() {
-                            log(
-                                LogTag::PoolDecoder,
-                                "ERROR",
-                                &format!(
-                                    "SOL vault account {} not found in fetched accounts",
-                                    pool_info.token_vault_b
-                                ),
-                            );
-                        }
+                        logger::error(
+                            LogTag::PoolDecoder,
+                            &format!(
+                                "SOL vault account {} not found in fetched accounts",
+                                pool_info.token_vault_b
+                            ),
+                        );
                         return None;
                     }
                 };
@@ -180,16 +144,13 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
                 let token_vault_account = match accounts.get(&pool_info.token_vault_a) {
                     Some(account) => account,
                     None => {
-                        if is_debug_pool_decoders_enabled() {
-                            log(
-                                LogTag::PoolDecoder,
-                                "ERROR",
-                                &format!(
-                                    "Token vault account {} not found in fetched accounts",
-                                    pool_info.token_vault_a
-                                ),
-                            );
-                        }
+                        logger::error(
+                            LogTag::PoolDecoder,
+                            &format!(
+                                "Token vault account {} not found in fetched accounts",
+                                pool_info.token_vault_a
+                            ),
+                        );
                         return None;
                     }
                 };
@@ -205,27 +166,18 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
                     false,
                 )
             } else {
-                if is_debug_pool_decoders_enabled() {
-                    log(
-                        LogTag::PoolDecoder,
-                        "WARN",
-                        &format!(
-                            "Orca Whirlpool pool does not contain SOL. Mints: {} and {}",
-                            pool_info.token_mint_a, pool_info.token_mint_b
-                        ),
-                    );
-                }
+                logger::warning(
+                    LogTag::PoolDecoder,
+                    &format!(
+                        "Orca Whirlpool pool does not contain SOL. Mints: {} and {}",
+                        pool_info.token_mint_a, pool_info.token_mint_b
+                    ),
+                );
                 return None;
             };
 
         if sol_reserve == 0 || token_reserve == 0 {
-            if is_debug_pool_decoders_enabled() {
-                log(
-                    LogTag::PoolDecoder,
-                    "WARN",
-                    "Orca Whirlpool pool has zero reserves",
-                );
-            }
+            logger::warning(LogTag::PoolDecoder, "Orca Whirlpool pool has zero reserves");
             return None;
         }
 
@@ -238,16 +190,13 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
         let token_decimals = match get_cached_decimals(token_mint) {
             Some(decimals) => decimals,
             None => {
-                if is_debug_pool_decoders_enabled() {
-                    log(
-                        LogTag::PoolDecoder,
-                        "ERROR",
-                        &format!(
-                            "No decimals found for Orca token: {}, skipping pool calculation",
-                            token_mint
-                        ),
-                    );
-                }
+                logger::error(
+                    LogTag::PoolDecoder,
+                    &format!(
+                        "No decimals found for Orca token: {}, skipping pool calculation",
+                        token_mint
+                    ),
+                );
                 return None;
             }
         };
@@ -277,20 +226,17 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
                 * (10_f64).powi((token_decimals as i32) - (sol_decimals as i32))
         };
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "SUCCESS",
-                &format!(
-                    "Orca Whirlpool price calculated: {:.12} SOL per token\n  SOL vault: {}\n  Token vault: {}\n  sqrt_price: {}\n  Token A is SOL: {}",
-                    price_sol,
-                    sol_vault,
-                    token_vault,
-                    pool_info.sqrt_price,
-                    is_token_a_sol
-                )
-            );
-        }
+        logger::info(
+            LogTag::PoolDecoder,
+            &format!(
+                "Orca Whirlpool price calculated: {:.12} SOL per token\n  SOL vault: {}\n  Token vault: {}\n  sqrt_price: {}\n  Token A is SOL: {}",
+                price_sol,
+                sol_vault,
+                token_vault,
+                pool_info.sqrt_price,
+                is_token_a_sol
+            ),
+        );
 
         Some(PriceResult::new(
             token_mint.to_string(),

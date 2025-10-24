@@ -5,8 +5,7 @@ mod metrics;
 pub use health::ServiceHealth;
 pub use metrics::{MetricsCollector, ServiceMetrics};
 
-use crate::arguments::is_debug_system_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -101,7 +100,7 @@ impl ServiceLogEvent {
 }
 
 fn should_log_service_details(always: bool) -> bool {
-    always || is_debug_system_enabled()
+    always
 }
 
 fn append_details(message: &mut String, details: Option<&str>) {
@@ -127,7 +126,14 @@ pub fn log_service_event(
     let mut message = format!("service={} event={}", service_name, event.label());
     append_details(&mut message, details);
 
-    log(LogTag::System, event.level(), &message);
+    // Map dynamic level string to logger methods
+    match event.level() {
+        "DEBUG" => logger::debug(LogTag::System, &message),
+        "SUCCESS" | "INFO" => logger::info(LogTag::System, &message),
+        "WARN" | "WARNING" => logger::warning(LogTag::System, &message),
+        "ERROR" => logger::error(LogTag::System, &message),
+        _ => logger::info(LogTag::System, &message),
+    }
 }
 
 pub fn log_service_notice(service_name: &str, kind: &str, details: Option<&str>, always: bool) {
@@ -138,14 +144,13 @@ pub fn log_service_notice(service_name: &str, kind: &str, details: Option<&str>,
     let mut message = format!("service_notice service={} kind={}", service_name, kind);
     append_details(&mut message, details);
 
-    log(LogTag::System, "INFO", &message);
+    logger::info(LogTag::System, &message);
 }
 
 pub fn log_service_startup_phase(phase: &str, details: Option<&str>) {
     let mut message = format!("service_startup phase={}", phase);
     append_details(&mut message, details);
-
-    log(LogTag::System, "INFO", &message);
+    logger::info(LogTag::System, &message);
 }
 
 pub struct ServiceManager {
@@ -198,11 +203,7 @@ impl ServiceManager {
             .map(|(name, _)| *name)
             .collect();
 
-        let debug_flag = if is_debug_system_enabled() {
-            "on"
-        } else {
-            "off"
-        };
+        let debug_flag = "on"; // Debug system always logs when logger::debug is called
         let disabled = total_registered.saturating_sub(enabled_services.len());
         let begin_details = format!(
             "registered={} enabled={} disabled={} debug_system={}",
@@ -216,30 +217,14 @@ impl ServiceManager {
         // Resolve dependencies and order by priority
         let ordered = self.resolve_startup_order(&enabled_services)?;
 
-        if is_debug_system_enabled() {
-            if !enabled_services.is_empty() {
-                let enabled_list = enabled_services.join(",");
-                log(
-                    LogTag::System,
-                    "DEBUG",
-                    &format!(
-                        "service_startup phase=enabled_list services=[{}]",
-                        enabled_list
-                    ),
-                );
-            }
+        if !enabled_services.is_empty() {
+            let enabled_list = enabled_services.join(",");
+            logger::debug(LogTag::System, &format!("service_startup phase=enabled_list services=[{}]", enabled_list));
+        }
 
-            if !ordered.is_empty() {
-                let ordered_list = ordered.join(",");
-                log(
-                    LogTag::System,
-                    "DEBUG",
-                    &format!(
-                        "service_startup phase=start_order services=[{}]",
-                        ordered_list
-                    ),
-                );
-            }
+        if !ordered.is_empty() {
+            let ordered_list = ordered.join(",");
+            logger::debug(LogTag::System, &format!("service_startup phase=start_order services=[{}]", ordered_list));
         }
 
         let startup_timer = Instant::now();
@@ -250,11 +235,7 @@ impl ServiceManager {
             // Log gap between services if > 100ms
             let gap = last_service_time.elapsed().as_millis();
             if gap > 100 {
-                log(
-                    LogTag::System,
-                    "PERF",
-                    &format!("Gap before '{}': {}ms", service_name, gap),
-                );
+                logger::info(LogTag::System, &format!("Gap before '{}': {}ms", service_name, gap));
             }
 
             let service_timer = Instant::now();
@@ -286,25 +267,17 @@ impl ServiceManager {
                 // Always log timing for services that take > 100ms
                 let total_service_time = service_timer.elapsed().as_millis();
                 if total_service_time > 100 {
-                    log(
-                        LogTag::System,
-                        "PERF",
-                        &format!(
+                    logger::info(LogTag::System, &format!(
                             "Service '{}' took {}ms (init: {}ms, start: {}ms, handles: {})",
                             service_name,
                             total_service_time,
                             init_elapsed,
                             start_elapsed,
                             handle_count
-                        ),
-                    );
+                        ));
                 }
 
-                let handle_detail = if is_debug_system_enabled() {
-                    Some(format!("handles={}", handle_count))
-                } else {
-                    None
-                };
+                let handle_detail = Some(format!("handles={}", handle_count));
                 log_service_event(
                     service_name,
                     ServiceLogEvent::StartSuccess,
@@ -326,11 +299,7 @@ impl ServiceManager {
         let elapsed = startup_timer.elapsed().as_millis();
         let completion = format!("started={} duration_ms={}", ordered.len(), elapsed);
         log_service_startup_phase("complete", Some(&completion));
-        log(
-            LogTag::System,
-            "SUCCESS",
-            &format!("service_startup status=ready {}", completion),
-        );
+        logger::info(LogTag::System, &format!("service_startup status=ready {}", completion));
         Ok(())
     }
 
@@ -338,13 +307,8 @@ impl ServiceManager {
     pub async fn stop_all(&mut self) -> Result<(), String> {
         let running_services: Vec<&'static str> = self.handles.keys().copied().collect();
         let shutdown_begin = format!(
-            "running={} debug_system={}",
-            running_services.len(),
-            if is_debug_system_enabled() {
-                "on"
-            } else {
-                "off"
-            }
+            "running={} debug_system=on",
+            running_services.len()
         );
         log_service_startup_phase("shutdown_begin", Some(&shutdown_begin));
 
@@ -361,11 +325,7 @@ impl ServiceManager {
                 log_service_event(service_name, ServiceLogEvent::StopStart, None, false);
 
                 if let Err(e) = service.stop().await {
-                    log(
-                        LogTag::System,
-                        "WARN",
-                        &format!("Service stop error for {}: {}", service_name, e),
-                    );
+                    logger::warning(LogTag::System, &format!("Service stop error for {}: {}", service_name, e));
                 }
 
                 // Wait for handles with increased timeout for cleanup tasks
@@ -377,43 +337,14 @@ impl ServiceManager {
                         match tokio::time::timeout(timeout_duration, handle).await {
                             Ok(Ok(_)) => {
                                 if handle_count > 1 {
-                                    log(
-                                        LogTag::System,
-                                        "DEBUG",
-                                        &format!(
-                                            "Service {} task {}/{} stopped cleanly",
-                                            service_name,
-                                            idx + 1,
-                                            handle_count
-                                        ),
-                                    );
+                                    logger::debug(LogTag::System, &format!("Service {} task {}/{} stopped cleanly", service_name, idx + 1, handle_count));
                                 }
                             }
                             Ok(Err(e)) => {
-                                log(
-                                    LogTag::System,
-                                    "WARN",
-                                    &format!(
-                                        "Service {} task {}/{} panicked: {:?}",
-                                        service_name,
-                                        idx + 1,
-                                        handle_count,
-                                        e
-                                    ),
-                                );
+                                logger::warning(LogTag::System, &format!("Service {} task {}/{} panicked: {:?}", service_name, idx + 1, handle_count, e));
                             }
                             Err(_) => {
-                                log(
-                                    LogTag::System,
-                                    "WARN",
-                                    &format!(
-                                        "Service {} task {}/{} shutdown timed out after {}s",
-                                        service_name,
-                                        idx + 1,
-                                        handle_count,
-                                        timeout_duration.as_secs()
-                                    ),
-                                );
+                                logger::warning(LogTag::System, &format!("Service {} task {}/{} shutdown timed out after {}s", service_name, idx + 1, handle_count, timeout_duration.as_secs()));
                             }
                         }
                     }
@@ -423,14 +354,7 @@ impl ServiceManager {
             }
         }
 
-        log(
-            LogTag::System,
-            "SUCCESS",
-            &format!(
-                "service_shutdown status=complete services_stopped={}",
-                running_services.len()
-            ),
-        );
+        logger::info(LogTag::System, &format!("service_shutdown status=complete services_stopped={}", running_services.len()));
         Ok(())
     }
 
@@ -545,15 +469,8 @@ impl ServiceManager {
 
     /// Update cached health and metrics (called periodically by background task)
     pub async fn update_cache(&self) {
-        use crate::arguments::is_debug_webserver_enabled;
 
-        if is_debug_webserver_enabled() {
-            log(
-                LogTag::System,
-                "DEBUG",
-                "ServiceManager: Starting cache update",
-            );
-        }
+        logger::debug(LogTag::System, "ServiceManager: Starting cache update");
 
         // Collect fresh health
         let health = self.get_health().await;
@@ -562,18 +479,9 @@ impl ServiceManager {
         // Collect fresh metrics
         let metrics = self.get_metrics().await;
 
-        if is_debug_webserver_enabled() {
-            let sample_service = metrics.iter().next();
-            if let Some((name, m)) = sample_service {
-                log(
-                    LogTag::System,
-                    "DEBUG",
-                    &format!(
-                        "ServiceManager: Cache updated - sample service '{}' uptime={}s",
-                        name, m.uptime_seconds
-                    ),
-                );
-            }
+        let sample_service = metrics.iter().next();
+        if let Some((name, m)) = sample_service {
+            logger::debug(LogTag::System, &format!("ServiceManager: Cache updated - sample service '{}' uptime={}s", name, m.uptime_seconds));
         }
 
         *self.cached_metrics.write().await = metrics;
@@ -609,11 +517,7 @@ pub async fn init_global_service_manager(manager: ServiceManager) {
 
     let mut global = GLOBAL_SERVICE_MANAGER.write().await;
     *global = Some(manager);
-    log(
-        LogTag::System,
-        "INFO",
-        "✅ Global ServiceManager initialized",
-    );
+    logger::info(LogTag::System, "✅ Global ServiceManager initialized");
 
     // Spawn background task to update cache every 5 seconds
     // (most services are idle, so less frequent updates reduce CPU overhead)
@@ -630,20 +534,10 @@ pub async fn init_global_service_manager(manager: ServiceManager) {
                     {
                         Ok(_) => {
                             // Update completed successfully
-                            if is_debug_system_enabled() {
-                                log(
-                                    LogTag::System,
-                                    "DEBUG",
-                                    "ServiceManager: Cache update completed",
-                                );
-                            }
+                            logger::debug(LogTag::System, "ServiceManager: Cache update completed");
                         }
                         Err(_) => {
-                            log(
-                                LogTag::System,
-                                "WARN",
-                                "ServiceManager: Cache update timed out after 3s - continuing with stale cache"
-                            );
+                            logger::warning(LogTag::System, "ServiceManager: Cache update timed out after 3s - continuing with stale cache");
                         }
                     }
                 }

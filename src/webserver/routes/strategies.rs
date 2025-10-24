@@ -11,8 +11,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::{
-    global::is_debug_webserver_enabled,
-    logger::{log, LogTag},
+    logger::{self, LogTag},
     strategies::{
         self, db,
         db::{
@@ -228,16 +227,13 @@ pub struct StrategyTemplateItem {
 
 /// GET /api/strategies - List all strategies
 async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response {
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "INFO",
+    logger::info(
+        LogTag::Webserver,
             &format!(
                 "GET /api/strategies - type={:?}, enabled={:?}",
                 query.strategy_type, query.enabled
             ),
         );
-    }
 
     // Get strategies based on filters
     let strategies = if let Some(type_str) = query.strategy_type {
@@ -342,13 +338,10 @@ async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response {
 
 /// GET /api/strategies/:id - Get strategy details
 async fn get_strategy_detail(Path(id): Path<String>) -> Response {
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "INFO",
+    logger::info(
+        LogTag::Webserver,
             &format!("GET /api/strategies/{}", id),
         );
-    }
 
     let strategy = match get_strategy(&id) {
         Ok(Some(s)) => s,
@@ -391,13 +384,10 @@ async fn get_strategy_detail(Path(id): Path<String>) -> Response {
 
 /// POST /api/strategies - Create new strategy
 async fn create_strategy(Json(request): Json<StrategyRequest>) -> Response {
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "INFO",
+    logger::info(
+        LogTag::Webserver,
             &format!("POST /api/strategies - name={}", request.name),
         );
-    }
 
     // Parse strategy type
     let strategy_type = match request.strategy_type.to_uppercase().as_str() {
@@ -471,9 +461,8 @@ async fn create_strategy(Json(request): Json<StrategyRequest>) -> Response {
         );
     }
 
-    log(
+    logger::info(
         LogTag::Webserver,
-        "SUCCESS",
         &format!(
             "Strategy created: id={}, name={}",
             strategy.id, strategy.name
@@ -491,13 +480,10 @@ async fn update_strategy_handler(
     Path(id): Path<String>,
     Json(request): Json<StrategyRequest>,
 ) -> Response {
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "INFO",
+    logger::info(
+        LogTag::Webserver,
             &format!("PUT /api/strategies/{}", id),
         );
-    }
 
     // Check if strategy exists
     let existing = match get_strategy(&id) {
@@ -567,16 +553,14 @@ async fn update_strategy_handler(
 
     // Clear evaluation cache after update
     if let Err(e) = strategies::clear_evaluation_cache().await {
-        log(
-            LogTag::Webserver,
-            "WARN",
+        logger::info(
+        LogTag::Webserver,
             &format!("Failed to clear evaluation cache: {}", e),
         );
     }
 
-    log(
+    logger::info(
         LogTag::Webserver,
-        "SUCCESS",
         &format!(
             "Strategy updated: id={}, version={}",
             strategy.id, strategy.version
@@ -592,13 +576,10 @@ async fn update_strategy_handler(
 
 /// DELETE /api/strategies/:id - Delete strategy
 async fn delete_strategy_handler(Path(id): Path<String>) -> Response {
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "INFO",
+    logger::info(
+        LogTag::Webserver,
             &format!("DELETE /api/strategies/{}", id),
         );
-    }
 
     // Check if strategy exists
     match get_strategy(&id) {
@@ -622,16 +603,14 @@ async fn delete_strategy_handler(Path(id): Path<String>) -> Response {
 
     // Clear evaluation cache after deletion
     if let Err(e) = strategies::clear_evaluation_cache().await {
-        log(
-            LogTag::Webserver,
-            "WARN",
+        logger::info(
+        LogTag::Webserver,
             &format!("Failed to clear evaluation cache: {}", e),
         );
     }
 
-    log(
+    logger::info(
         LogTag::Webserver,
-        "SUCCESS",
         &format!("Strategy deleted: id={}", id),
     );
 
@@ -643,13 +622,10 @@ async fn delete_strategy_handler(Path(id): Path<String>) -> Response {
 
 /// GET /api/strategies/:id/performance - Get strategy performance stats
 async fn get_strategy_performance_stats(Path(id): Path<String>) -> Response {
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "INFO",
+    logger::info(
+        LogTag::Webserver,
             &format!("GET /api/strategies/{}/performance", id),
         );
-    }
 
     // Check if strategy exists
     match get_strategy(&id) {
@@ -703,16 +679,13 @@ async fn test_strategy(
     Path(id): Path<String>,
     Json(request): Json<StrategyTestRequest>,
 ) -> Response {
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "INFO",
+    logger::info(
+        LogTag::Webserver,
             &format!(
                 "POST /api/strategies/{}/test - token={}",
                 id, request.token_mint
             ),
         );
-    }
 
     // Get strategy
     let strategy = match get_strategy(&id) {
@@ -805,13 +778,10 @@ async fn test_strategy(
 
 /// GET /api/strategies/conditions/schemas - Get all condition schemas
 async fn get_condition_schemas() -> Response {
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "INFO",
+    logger::info(
+        LogTag::Webserver,
             "GET /api/strategies/conditions/schemas",
         );
-    }
 
     let schemas = match strategies::get_condition_schemas().await {
         Ok(s) => s,
@@ -962,9 +932,8 @@ async fn deploy_strategy_handler(Path(id): Path<String>) -> Response {
 
     // Clear evaluation cache after deployment
     if let Err(e) = strategies::clear_evaluation_cache().await {
-        log(
-            LogTag::Webserver,
-            "WARN",
+        logger::info(
+        LogTag::Webserver,
             &format!("Failed to clear evaluation cache: {}", e),
         );
     }

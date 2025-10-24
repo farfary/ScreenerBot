@@ -4,7 +4,7 @@
 /// Fresh schema (no migrations), split read/write pools, batched writes,
 /// and keyset-optimized queries.
 use crate::events::types::{Event, EventCategory, Severity};
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use chrono::{DateTime, Utc};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
@@ -84,9 +84,8 @@ impl EventsDatabase {
         // Initialize database schema
         db.initialize_schema().await?;
 
-        log(
-            LogTag::System,
-            "READY",
+        logger::info(
+        LogTag::System,
             &format!("Events database initialized at {}", database_path_str),
         );
 
@@ -569,9 +568,8 @@ impl EventsDatabase {
             .map_err(|e| format!("Failed to delete old events: {}", e))?;
 
         if deleted_count > 0 {
-            log(
-                LogTag::System,
-                "CLEANUP",
+            logger::info(
+        LogTag::System,
                 &format!("Cleaned up {} old events", deleted_count),
             );
         }

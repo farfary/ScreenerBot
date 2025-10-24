@@ -60,13 +60,10 @@ async fn get_token_pools_analysis(
                 let pool_pubkey = match Pubkey::from_str(&pair.pair_address) {
                     Ok(pubkey) => pubkey,
                     Err(_) => {
-                        if is_debug_api_enabled() {
-                            log(
-                                LogTag::Api,
-                                "WARN",
+                        logger::info(
+        LogTag::Api,
                                 &format!("Invalid pool address: {}", pair.pair_address),
                             );
-                        }
                         continue;
                     }
                 };
@@ -95,16 +92,13 @@ async fn get_token_pools_analysis(
                 let account_info = match rpc_client.get_account(&pool_pubkey).await {
                     Ok(account) => account,
                     Err(e) => {
-                        if is_debug_api_enabled() {
-                            log(
-                                LogTag::Api,
-                                "ERROR",
+                        logger::info(
+        LogTag::Api,
                                 &format!(
                                     "Failed to fetch pool account {}: {}",
                                     pair.pair_address, e
                                 ),
                             );
-                        }
                         continue;
                     }
                 };
@@ -113,16 +107,13 @@ async fn get_token_pools_analysis(
                 let program_kind = ProgramKind::from_program_id(&account_info.owner.to_string());
 
                 if program_kind == ProgramKind::Unknown {
-                    if is_debug_api_enabled() {
-                        log(
-                            LogTag::Api,
-                            "WARN",
+                    logger::info(
+        LogTag::Api,
                             &format!(
                                 "Unknown program kind for pool {} owned by {}",
                                 pair.pair_address, account_info.owner
                             ),
                         );
-                    }
                     continue;
                 }
 
@@ -186,13 +177,10 @@ async fn get_token_pools_analysis(
             }))
         }
         Err(e) => {
-            if is_debug_api_enabled() {
-                log(
-                    LogTag::Api,
-                    "ERROR",
+            logger::info(
+        LogTag::Api,
                     &format!("Failed to get pools for token {}: {}", &mint[..8], e),
                 );
-            }
             Err(e)
         }
     }
@@ -203,17 +191,15 @@ async fn find_tokens_with_biggest_pools_by_program(
     max_tokens_to_check: usize,
     target_count: usize,
 ) -> Result<Vec<TokenPoolAnalysis>, Box<dyn std::error::Error>> {
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         &format!(
             "🔍 Finding tokens with biggest pools for program: {}",
             target_program_kind.display_name()
         ),
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         &format!(
             "📊 Checking top {} tokens by liquidity...",
             max_tokens_to_check
@@ -236,9 +222,8 @@ async fn find_tokens_with_biggest_pools_by_program(
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         &format!("💾 Found {} tokens in database", sorted_tokens.len()),
     );
 
@@ -255,9 +240,8 @@ async fn find_tokens_with_biggest_pools_by_program(
         checked_count += 1;
 
         if i > 0 && i % 10 == 0 {
-            log(
-                LogTag::System,
-                "INFO",
+            logger::info(
+        LogTag::System,
                 &format!(
                     "🔄 Checked {} tokens, found {} matches...",
                     i,
@@ -275,9 +259,8 @@ async fn find_tokens_with_biggest_pools_by_program(
             Ok(Some(analysis)) => {
                 if analysis.is_target_program_biggest {
                     let target_pool = analysis.target_program_pool.as_ref().unwrap();
-                    log(
-                        LogTag::System,
-                        "INFO",
+                    logger::info(
+        LogTag::System,
                         &format!(
                             "✅ Found match #{}: {} ({}) - ${:.2} liquidity in {} pool",
                             found_tokens.len() + 1,
@@ -295,38 +278,32 @@ async fn find_tokens_with_biggest_pools_by_program(
             }
             Err(e) => {
                 error_count += 1;
-                if is_debug_api_enabled() {
-                    log(
-                        LogTag::Api,
-                        "ERROR",
+                logger::info(
+        LogTag::Api,
                         &format!("Error analyzing token {}: {}", &token.mint[..8], e),
                     );
-                }
             }
         }
     }
 
     let elapsed = start_time.elapsed();
 
-    log(LogTag::System, "INFO", "\n📈 Analysis Complete:");
-    log(
+    logger::info(
+        LogTag::System, "\n📈 Analysis Complete:");
+    logger::info(
         LogTag::System,
-        "INFO",
         &format!("⏱️  Time taken: {:.2}s", elapsed.as_secs_f64()),
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         &format!("🔍 Tokens checked: {}", checked_count),
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         &format!("✅ Matches found: {}", found_tokens.len()),
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         &format!("❌ Errors: {}", error_count),
     );
 
@@ -335,21 +312,21 @@ async fn find_tokens_with_biggest_pools_by_program(
 
 fn print_detailed_results(results: &[TokenPoolAnalysis]) {
     if results.is_empty() {
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System,
             "\n❌ No tokens found where the target program has the biggest pool",
         );
         return;
     }
 
-    log(LogTag::System, "INFO", "\n🎯 DETAILED RESULTS:");
-    log(LogTag::System, "INFO", &"=".repeat(80));
+    logger::info(
+        LogTag::System, "\n🎯 DETAILED RESULTS:");
+    logger::info(
+        LogTag::System, &"=".repeat(80));
 
     for (i, analysis) in results.iter().enumerate() {
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System,
             &format!(
                 "\n🪙 Token #{}: {} ({})",
                 i + 1,
@@ -357,40 +334,38 @@ fn print_detailed_results(results: &[TokenPoolAnalysis]) {
                 analysis.name
             ),
         );
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System,
             &format!("📍 Mint: {}", analysis.mint),
         );
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System,
             &format!("💰 Total Liquidity: ${:.2}", analysis.total_liquidity),
         );
 
         if let Some(target_pool) = &analysis.target_program_pool {
-            log(LogTag::System, "INFO", "🎯 Target Program Pool:");
-            log(
-                LogTag::System,
-                "INFO",
+            logger::info(
+        LogTag::System, "🎯 Target Program Pool:");
+            logger::info(
+        LogTag::System,
                 &format!("   🏊 Pool Address: {}", target_pool.pool_address),
             );
-            log(
-                LogTag::System,
-                "INFO",
+            logger::info(
+        LogTag::System,
                 &format!("   🏢 Program: {}", target_pool.program_kind.display_name()),
             );
-            log(
-                LogTag::System,
-                "INFO",
+            logger::info(
+        LogTag::System,
                 &format!("   💵 Liquidity: ${:.2}", target_pool.liquidity_usd),
             );
             if let Some(url) = &target_pool.pair_url {
-                log(LogTag::System, "INFO", &format!("   🔗 URL: {}", url));
+                logger::info(
+        LogTag::System, &format!("   🔗 URL: {}", url));
             }
         }
 
-        log(LogTag::System, "INFO", "📊 All Pools (top 5):");
+        logger::info(
+        LogTag::System, "📊 All Pools (top 5):");
         for (j, pool) in analysis.pools.iter().take(5).enumerate() {
             let marker = if Some(&pool.pool_address)
                 == analysis
@@ -402,9 +377,8 @@ fn print_detailed_results(results: &[TokenPoolAnalysis]) {
             } else {
                 "  "
             };
-            log(
-                LogTag::System,
-                "INFO",
+            logger::info(
+        LogTag::System,
                 &format!(
                     "   {} {}. {} - ${:.2}",
                     marker,
@@ -416,7 +390,8 @@ fn print_detailed_results(results: &[TokenPoolAnalysis]) {
         }
 
         if i < results.len() - 1 {
-            log(LogTag::System, "INFO", &"-".repeat(60));
+            logger::info(
+        LogTag::System, &"-".repeat(60));
         }
     }
 }
@@ -427,74 +402,70 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 2 {
-        log(
-            LogTag::System,
-            "ERROR",
+        logger::info(
+        LogTag::System,
             &format!(
                 "Usage: {} <program_name> [max_tokens_to_check] [target_count]",
                 args[0]
             ),
         );
-        log(LogTag::System, "INFO", "\nExamples:");
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System, "\nExamples:");
+        logger::info(
+        LogTag::System,
             &format!(
                 "  {} raydium-cpmm      # Find 5 tokens where Raydium CPMM has biggest pool",
                 args[0]
             ),
         );
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System,
             &format!(
                 "  {} orca 200 10       # Check 200 tokens, find 10 where Orca has biggest pool",
                 args[0]
             ),
         );
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System,
             &format!(
                 "  {} pumpfun 50 3      # Check 50 tokens, find 3 where PumpFun has biggest pool",
                 args[0]
             ),
         );
-        log(LogTag::System, "INFO", "\nSupported Program Names:");
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System, "\nSupported Program Names:");
+        logger::info(
+        LogTag::System,
             "  - raydium-cpmm: Raydium CPMM pools",
         );
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System,
             "  - raydium-legacy: Raydium Legacy AMM pools",
         );
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System,
             "  - raydium-clmm: Raydium CLMM pools",
         );
-        log(LogTag::System, "INFO", "  - orca: Orca Whirlpool pools");
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System, "  - orca: Orca Whirlpool pools");
+        logger::info(
+        LogTag::System,
             "  - meteora-damm: Meteora DAMM pools",
         );
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System,
             "  - meteora-dlmm: Meteora DLMM pools",
         );
-        log(LogTag::System, "INFO", "  - pumpfun: PumpFun AMM pools");
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System, "  - pumpfun: PumpFun AMM pools");
+        logger::info(
+        LogTag::System,
             "  - pumpfun-legacy: PumpFun Legacy pools",
         );
-        log(LogTag::System, "INFO", "  - moonit: Moonit AMM pools");
-        log(LogTag::System, "INFO", "  - fluxbeam: FluxBeam AMM pools");
+        logger::info(
+        LogTag::System, "  - moonit: Moonit AMM pools");
+        logger::info(
+        LogTag::System, "  - fluxbeam: FluxBeam AMM pools");
         std::process::exit(1);
     }
 
@@ -511,14 +482,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "moonit" => ProgramKind::Moonit,
         "fluxbeam" | "fluxbeam-amm" | "fluxbeam_amm" => ProgramKind::FluxbeamAmm,
         _ => {
-            log(
-                LogTag::System,
-                "ERROR",
+            logger::info(
+        LogTag::System,
                 &format!("❌ Unknown program name: {}", target_program_name),
             );
-            log(
-                LogTag::System,
-                "ERROR",
+            logger::info(
+        LogTag::System,
                 "Run with no arguments to see supported program names.",
             );
             std::process::exit(1);
@@ -527,32 +496,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let max_tokens_to_check = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(100);
     let target_count = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(5);
 
-    log(LogTag::System, "INFO", "🚀 Starting Pool Analysis Tool");
-    log(
+    logger::info(
+        LogTag::System, "🚀 Starting Pool Analysis Tool");
+    logger::info(
         LogTag::System,
-        "INFO",
         &format!("🎯 Target Program: {}", target_program_kind.display_name()),
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         &format!("🔍 Max tokens to check: {}", max_tokens_to_check),
     );
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         &format!("📊 Target matches: {}", target_count),
     );
-    log(LogTag::System, "INFO", "");
+    logger::info(
+        LogTag::System, "");
 
     // Initialize services
-    log(LogTag::System, "INFO", "⚙️  Initializing services...");
+    logger::info(
+        LogTag::System, "⚙️  Initializing services...");
 
     // Initialize RPC client
     if let Err(e) = screenerbot::rpc::init_rpc_client() {
-        log(
-            LogTag::System,
-            "WARN",
+        logger::info(
+        LogTag::System,
             &format!("RPC config initialization failed: {}", e),
         );
     }
@@ -560,12 +528,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize DexScreener API
     init_dexscreener_api().await?;
 
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "✅ Services initialized successfully",
     );
-    log(LogTag::System, "INFO", "");
+    logger::info(
+        LogTag::System, "");
 
     // Find tokens
     let results = find_tokens_with_biggest_pools_by_program(
@@ -579,38 +547,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     print_detailed_results(&results);
 
     // Print summary
-    log(LogTag::System, "INFO", &format!("\n{}", "=".repeat(80)));
-    log(LogTag::System, "INFO", "🎯 SUMMARY:");
+    logger::info(
+        LogTag::System, &format!("\n{}", "=".repeat(80)));
+    logger::info(
+        LogTag::System, "🎯 SUMMARY:");
     if !results.is_empty() {
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System,
             &format!(
                 "✅ Found {} tokens where '{}' has the biggest pool",
                 results.len(),
                 target_program_kind.display_name()
             ),
         );
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System,
             &format!(
                 "💡 Use these mints for trading strategies focused on {} liquidity",
                 target_program_kind.display_name()
             ),
         );
     } else {
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System,
             &format!(
                 "❌ No tokens found where '{}' has the biggest pool",
                 target_program_kind.display_name()
             ),
         );
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System,
             "💡 Try checking more tokens or a different program type",
         );
     }

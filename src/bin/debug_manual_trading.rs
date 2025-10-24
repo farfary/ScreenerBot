@@ -36,7 +36,7 @@
 use clap::{Parser, Subcommand};
 use screenerbot::{
     arguments,
-    logger::{init_file_logging, log, LogTag},
+    logger::{self as logger, LogTag},
     services::ServiceManager,
 };
 
@@ -227,12 +227,11 @@ async fn main() {
 }
 
 async fn execute(cli: Cli) -> Result<(), String> {
-    // Initialize file logging
-    init_file_logging();
+    // Initialize logger
+    logger::init();
 
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "🧪 Manual Trading Debug Tool - Initializing...",
     );
 
@@ -244,9 +243,8 @@ async fn execute(cli: Cli) -> Result<(), String> {
         wait_for_services_ready().await?;
     }
 
-    log(
+    logger::info(
         LogTag::System,
-        "SUCCESS",
         "✅ System initialized - executing command",
     );
 
@@ -292,9 +290,8 @@ async fn execute(cli: Cli) -> Result<(), String> {
 
 /// Initialize the full bot system (same as run.rs)
 async fn initialize_system() -> Result<(), String> {
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "Initializing configuration and directories...",
     );
 
@@ -306,7 +303,8 @@ async fn initialize_system() -> Result<(), String> {
     screenerbot::config::load_config()
         .map_err(|e| format!("Failed to load config: {}", e))?;
 
-    log(LogTag::System, "INFO", "Configuration loaded successfully");
+    logger::info(
+        LogTag::System, "Configuration loaded successfully");
 
     // 3. Initialize strategy system
     screenerbot::strategies::init_strategy_system(
@@ -315,16 +313,16 @@ async fn initialize_system() -> Result<(), String> {
     .await
     .map_err(|e| format!("Failed to initialize strategy system: {}", e))?;
 
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "Strategy system initialized successfully",
     );
 
     // 4. Create service manager
     let mut service_manager = ServiceManager::new().await?;
 
-    log(LogTag::System, "INFO", "Service manager created");
+    logger::info(
+        LogTag::System, "Service manager created");
 
     // 5. Register all services (same as run.rs)
     register_all_services(&mut service_manager);
@@ -343,7 +341,8 @@ async fn initialize_system() -> Result<(), String> {
     };
 
     // 8. Start all enabled services
-    log(LogTag::System, "INFO", "Starting services...");
+    logger::info(
+        LogTag::System, "Starting services...");
     service_manager.start_all().await?;
 
     // 9. Put it back for other components
@@ -352,9 +351,8 @@ async fn initialize_system() -> Result<(), String> {
         *guard = Some(service_manager);
     }
 
-    log(
+    logger::info(
         LogTag::System,
-        "SUCCESS",
         "✅ All services started successfully",
     );
 
@@ -365,7 +363,8 @@ async fn initialize_system() -> Result<(), String> {
 fn register_all_services(manager: &mut ServiceManager) {
     use screenerbot::services::implementations::*;
 
-    log(LogTag::System, "INFO", "Registering services...");
+    logger::info(
+        LogTag::System, "Registering services...");
 
     // Core infrastructure services
     manager.register(Box::new(EventsService));
@@ -394,18 +393,16 @@ fn register_all_services(manager: &mut ServiceManager) {
     // TraderService auto-trades, which we don't want in manual mode
     // WebserverService is not needed for CLI operations
 
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "Services registered (18 total - excluding Trader and Webserver)",
     );
 }
 
 /// Wait for core services to be ready
 async fn wait_for_services_ready() -> Result<(), String> {
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "Waiting for core services to be ready...",
     );
 
@@ -414,9 +411,8 @@ async fn wait_for_services_ready() -> Result<(), String> {
 
     loop {
         if screenerbot::global::are_core_services_ready() {
-            log(
-                LogTag::System,
-                "SUCCESS",
+            logger::info(
+        LogTag::System,
                 "✅ Core services are ready",
             );
             return Ok(());
@@ -427,9 +423,8 @@ async fn wait_for_services_ready() -> Result<(), String> {
         }
 
         let pending = screenerbot::global::get_pending_services();
-        log(
-            LogTag::System,
-            "INFO",
+        logger::info(
+        LogTag::System,
             &format!("Waiting for services: {:?}", pending),
         );
 
@@ -447,9 +442,8 @@ async fn handle_open_position(
     size_sol: Option<f64>,
     strategy: Option<String>,
 ) -> Result<(), String> {
-    log(
+    logger::info(
         LogTag::Trader,
-        "INFO",
         &format!("📈 Opening position for token: {}", mint),
     );
 
@@ -475,9 +469,8 @@ async fn handle_open_position(
 
 /// Handle close position command
 async fn handle_close_position(mint: &str, reason: &str, force: bool) -> Result<(), String> {
-    log(
+    logger::info(
         LogTag::Trader,
-        "INFO",
         &format!("📉 Closing position for token: {}", mint),
     );
 
@@ -500,9 +493,8 @@ async fn handle_close_position(mint: &str, reason: &str, force: bool) -> Result<
 
 /// Handle DCA buy command
 async fn handle_dca_buy(mint: &str, amount: f64, max_dca: Option<u32>) -> Result<(), String> {
-    log(
+    logger::info(
         LogTag::Trader,
-        "INFO",
         &format!("💰 Executing DCA buy for token: {} ({} SOL)", mint, amount),
     );
 
@@ -525,9 +517,8 @@ async fn handle_dca_buy(mint: &str, amount: f64, max_dca: Option<u32>) -> Result
 
 /// Handle partial exit command
 async fn handle_partial_exit(mint: &str, percentage: f64, reason: &str) -> Result<(), String> {
-    log(
+    logger::info(
         LogTag::Trader,
-        "INFO",
         &format!(
             "📤 Executing partial exit for token: {} ({}%)",
             mint, percentage
@@ -552,7 +543,8 @@ async fn handle_partial_exit(mint: &str, percentage: f64, reason: &str) -> Resul
 
 /// Handle list positions command
 async fn handle_list_positions(detailed: bool, strategy: Option<String>) -> Result<(), String> {
-    log(LogTag::Positions, "INFO", "📋 Listing positions");
+    logger::info(
+        LogTag::Positions, "📋 Listing positions");
 
     // TODO: Implement list positions logic
     // - Get all open positions from DB
@@ -580,9 +572,8 @@ async fn handle_inspect_position(
     show_dca: bool,
     show_exits: bool,
 ) -> Result<(), String> {
-    log(
+    logger::info(
         LogTag::Positions,
-        "INFO",
         &format!("🔍 Inspecting position: {}", mint),
     );
 
@@ -611,9 +602,8 @@ async fn handle_inspect_position(
 
 /// Handle interactive mode command
 async fn handle_interactive_mode() -> Result<(), String> {
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "🎮 Entering interactive mode (not implemented yet)",
     );
 
@@ -631,7 +621,8 @@ async fn handle_interactive_mode() -> Result<(), String> {
 
 /// Handle reconcile command
 async fn handle_reconcile(mint: Option<String>, auto_fix: bool) -> Result<(), String> {
-    log(LogTag::Positions, "INFO", "🔄 Reconciling positions");
+    logger::info(
+        LogTag::Positions, "🔄 Reconciling positions");
 
     // TODO: Implement reconcile logic
     // - If mint specified, reconcile single position
@@ -655,9 +646,8 @@ async fn handle_reconcile(mint: Option<String>, auto_fix: bool) -> Result<(), St
 
 /// Handle test quote command
 async fn handle_test_quote(mint: &str, amount: f64, operation: &str) -> Result<(), String> {
-    log(
+    logger::info(
         LogTag::Swap,
-        "INFO",
         &format!("💱 Testing quote: {} {} SOL for {}", operation, amount, mint),
     );
 
@@ -678,17 +668,15 @@ async fn handle_test_quote(mint: &str, amount: f64, operation: &str) -> Result<(
 
 /// Handle init command (just wait)
 async fn handle_init(wait_seconds: u64) -> Result<(), String> {
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         &format!("⏳ System initialized - waiting {} seconds", wait_seconds),
     );
 
     tokio::time::sleep(tokio::time::Duration::from_secs(wait_seconds)).await;
 
-    log(
+    logger::info(
         LogTag::System,
-        "INFO",
         "✅ Wait complete - system ready for testing",
     );
 

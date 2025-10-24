@@ -3,8 +3,7 @@ pub mod db;
 pub mod engine;
 pub mod types;
 
-use crate::arguments::is_debug_system_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::strategies::db::{get_enabled_strategies, get_strategy, record_evaluation};
 use crate::strategies::engine::{EngineConfig, StrategyEngine};
 use crate::strategies::types::{
@@ -31,11 +30,7 @@ pub async fn init_strategy_system(config: EngineConfig) -> Result<(), String> {
     let mut global_engine = STRATEGY_ENGINE.write().await;
     *global_engine = Some(engine);
 
-    log(
-        LogTag::System,
-        "SUCCESS",
-        "Strategy system initialized successfully",
-    );
+    logger::info(LogTag::System, "Strategy system initialized successfully");
 
     Ok(())
 }
@@ -101,39 +96,19 @@ pub async fn evaluate_entry_strategies(
             Ok(eval_result) => {
                 // Record evaluation
                 if let Err(e) = record_evaluation(&eval_result, token_mint) {
-                    if is_debug_system_enabled() {
-                        log(
-                            LogTag::System,
-                            "WARN",
-                            &format!("Failed to record evaluation: {}", e),
-                        );
-                    }
+                    logger::warning(LogTag::System, &format!("Failed to record evaluation: {}", e));
                 }
 
                 // If strategy signals entry, return it
                 if eval_result.result {
-                    log(
-                        LogTag::System,
-                        "SUCCESS",
-                        &format!(
-                            "Entry strategy triggered: strategy={}, token={}, price={:.9}",
-                            strategy.name, token_mint, current_price
-                        ),
-                    );
+                    logger::info(LogTag::System, &format!("Entry strategy triggered: strategy={}, token={}, price={:.9}",
+                            strategy.name, token_mint, current_price));
                     return Ok(Some(strategy.id.clone()));
                 }
             }
             Err(e) => {
-                if is_debug_system_enabled() {
-                    log(
-                        LogTag::System,
-                        "ERROR",
-                        &format!(
-                            "Entry strategy evaluation error: strategy={}, error={}",
-                            strategy.name, e
-                        ),
-                    );
-                }
+                logger::error(LogTag::System, &format!("Entry strategy evaluation error: strategy={}, error={}",
+                        strategy.name, e));
             }
         }
     }
@@ -194,40 +169,21 @@ pub async fn evaluate_exit_strategies(
             Ok(eval_result) => {
                 // Record evaluation
                 if let Err(e) = record_evaluation(&eval_result, token_mint) {
-                    if is_debug_system_enabled() {
-                        log(
-                            LogTag::System,
-                            "WARN",
-                            &format!("Failed to record evaluation: {}", e),
-                        );
-                    }
+                    logger::warning(LogTag::System, &format!("Failed to record evaluation: {}", e));
                 }
 
                 // If strategy signals exit, return it
                 if eval_result.result {
-                    log(
-                        LogTag::System,
-                        "SUCCESS",
-                        &format!(
-                            "Exit strategy triggered: strategy={}, token={}, price={:.9}, entry_price={:.9}, profit_pct={:.2}%",
+                    logger::info(LogTag::System, &format!("Exit strategy triggered: strategy={}, token={}, price={:.9}, entry_price={:.9}, profit_pct={:.2}%",
                             strategy.name, token_mint, current_price, position_data.entry_price,
-                            position_data.unrealized_profit_pct.unwrap_or(0.0)
-                        ),
+                            position_data.unrealized_profit_pct.unwrap_or(0.0)),
                     );
                     return Ok(Some(strategy.id.clone()));
                 }
             }
             Err(e) => {
-                if is_debug_system_enabled() {
-                    log(
-                        LogTag::System,
-                        "ERROR",
-                        &format!(
-                            "Exit strategy evaluation error: strategy={}, error={}",
-                            strategy.name, e
-                        ),
-                    );
-                }
+                logger::error(LogTag::System, &format!("Exit strategy evaluation error: strategy={}, error={}",
+                        strategy.name, e));
             }
         }
     }

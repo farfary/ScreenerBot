@@ -7,9 +7,8 @@ use super::super::utils::{
 /// Moonit pools are derived as PDAs with seeds ["token", mint_address] and contain
 /// a CurveAccount structure with pricing information.
 use super::{AccountData, PoolDecoder};
-use crate::arguments::is_debug_pool_decoders_enabled;
 use crate::constants::SOL_DECIMALS;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::pools::types::{PriceResult, ProgramKind};
 use crate::tokens::get_cached_decimals;
 use solana_sdk::pubkey::Pubkey;
@@ -29,28 +28,22 @@ impl PoolDecoder for MoonitAmmDecoder {
         base_mint: &str,
         quote_mint: &str,
     ) -> Option<PriceResult> {
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "DEBUG",
-                &format!("Decoding Moonit AMM pool for {}/{}", base_mint, quote_mint),
-            );
-        }
+        logger::debug(
+            LogTag::PoolDecoder,
+            &format!("Decoding Moonit AMM pool for {}/{}", base_mint, quote_mint),
+        );
 
         // Find the curve account (length should be around 200+ bytes for CurveAccount structure)
         let curve_account = match accounts.values().find(|a| a.data.len() >= 150) {
             Some(a) => a,
             None => {
-                if is_debug_pool_decoders_enabled() {
-                    log(
-                        LogTag::PoolDecoder,
-                        "ERROR",
-                        &format!(
-                            "No suitable Moonit curve account found (accounts: {})",
-                            accounts.len()
-                        ),
-                    );
-                }
+                logger::error(
+                    LogTag::PoolDecoder,
+                    &format!(
+                        "No suitable Moonit curve account found (accounts: {})",
+                        accounts.len()
+                    ),
+                );
                 return None;
             }
         };
@@ -67,28 +60,22 @@ impl MoonitAmmDecoder {
     /// Decode Moonit CurveAccount data from account bytes
     fn decode_moonit_curve_account(data: &[u8]) -> Option<MoonitCurveInfo> {
         if data.len() < 80 {
-            if is_debug_pool_decoders_enabled() {
-                log(
-                    LogTag::PoolDecoder,
-                    "ERROR",
-                    &format!("Invalid Moonit curve account data length: {}", data.len()),
-                );
-            }
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!("Invalid Moonit curve account data length: {}", data.len()),
+            );
             return None;
         }
 
         let mut offset = 8; // Skip discriminator
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "DEBUG",
-                &format!(
-                    "Moonit curve data length: {} bytes, decoding structure...",
-                    data.len()
-                ),
-            );
-        }
+        logger::debug(
+            LogTag::PoolDecoder,
+            &format!(
+                "Moonit curve data length: {} bytes, decoding structure...",
+                data.len()
+            ),
+        );
 
         // Decode Moonit CurveAccount structure based on SDK:
         // totalSupply: u64 (8 bytes)
@@ -145,12 +132,10 @@ impl MoonitAmmDecoder {
         // Calculate curve position (tokens sold from bonding curve)
         let curve_position = total_supply.saturating_sub(curve_amount);
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "DEBUG",
-                &format!(
-                    "Extracted Moonit curve structure:\n\
+        logger::debug(
+            LogTag::PoolDecoder,
+            &format!(
+                "Extracted Moonit curve structure:\n\
                     - Mint: {}\n\
                     - Total supply: {}\n\
                     - Curve amount: {}\n\
@@ -160,18 +145,17 @@ impl MoonitAmmDecoder {
                     - Curve type: {}\n\
                     - Marketcap threshold: {}\n\
                     - Coef B: {}",
-                    mint,
-                    total_supply,
-                    curve_amount,
-                    curve_position,
-                    decimals,
-                    collateral_currency,
-                    curve_type,
-                    marketcap_threshold,
-                    coef_b
-                ),
-            );
-        }
+                mint,
+                total_supply,
+                curve_amount,
+                curve_position,
+                decimals,
+                collateral_currency,
+                curve_type,
+                marketcap_threshold,
+                coef_b
+            ),
+        );
 
         Some(MoonitCurveInfo {
             mint,
@@ -199,41 +183,32 @@ impl MoonitAmmDecoder {
         base_mint: &str,
         quote_mint: &str,
     ) -> Option<PriceResult> {
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "DEBUG",
-                &format!("Calculating Moonit price for {}/{}", base_mint, quote_mint),
-            );
-        }
+        logger::debug(
+            LogTag::PoolDecoder,
+            &format!("Calculating Moonit price for {}/{}", base_mint, quote_mint),
+        );
 
         // Ensure we're working with SOL as quote currency
         if !is_sol_mint(quote_mint) {
-            if is_debug_pool_decoders_enabled() {
-                log(
-                    LogTag::PoolDecoder,
-                    "ERROR",
-                    &format!(
-                        "Moonit pools only support SOL as quote currency, got: {}",
-                        quote_mint
-                    ),
-                );
-            }
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!(
+                    "Moonit pools only support SOL as quote currency, got: {}",
+                    quote_mint
+                ),
+            );
             return None;
         }
 
         // Ensure collateral currency is SOL (0)
         if curve_info.collateral_currency != 0 {
-            if is_debug_pool_decoders_enabled() {
-                log(
-                    LogTag::PoolDecoder,
-                    "ERROR",
-                    &format!(
-                        "Moonit curve collateral currency is not SOL: {}",
-                        curve_info.collateral_currency
-                    ),
-                );
-            }
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!(
+                    "Moonit curve collateral currency is not SOL: {}",
+                    curve_info.collateral_currency
+                ),
+            );
             return None;
         }
 
@@ -241,29 +216,20 @@ impl MoonitAmmDecoder {
         let token_decimals = match get_cached_decimals(base_mint) {
             Some(decimals) => decimals,
             None => {
-                if is_debug_pool_decoders_enabled() {
-                    log(
-                        LogTag::PoolDecoder,
-                        "ERROR",
-                        &format!("No decimals found for token: {}", base_mint),
-                    );
-                }
+                logger::error(
+                    LogTag::PoolDecoder,
+                    &format!("No decimals found for token: {}", base_mint),
+                );
                 return None;
             }
         };
 
         // Verify decimals match
         if token_decimals != curve_info.decimals {
-            if is_debug_pool_decoders_enabled() {
-                log(
-                    LogTag::PoolDecoder,
-                    "WARN",
-                    &format!(
-                        "Decimals mismatch: cached={}, curve={}",
-                        token_decimals, curve_info.decimals
-                    ),
-                );
-            }
+            logger::warning(
+                LogTag::PoolDecoder,
+                &format!("Decimals mismatch: cached={}, curve={}", token_decimals, curve_info.decimals),
+            );
         }
 
         // Moonit design: SOL collateral lives directly in the curve account lamports (no separate vault/ATA)
@@ -275,26 +241,17 @@ impl MoonitAmmDecoder {
         let token_reserves =
             (curve_info.curve_amount as f64) / (10_f64).powi(token_decimals as i32);
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "DEBUG",
-                &format!(
-                    "Moonit reserves: SOL={:.6}, Token={:.6}",
-                    sol_reserves, token_reserves
-                ),
-            );
-        }
+        logger::debug(
+            LogTag::PoolDecoder,
+            &format!("Moonit reserves: SOL={:.6}, Token={:.6}", sol_reserves, token_reserves),
+        );
 
         // Avoid division by zero
         if token_reserves <= 0.0 {
-            if is_debug_pool_decoders_enabled() {
-                log(
-                    LogTag::PoolDecoder,
-                    "ERROR",
-                    "Zero or negative token reserves in Moonit curve",
-                );
-            }
+            logger::error(
+                LogTag::PoolDecoder,
+                "Zero or negative token reserves in Moonit curve",
+            );
             return None;
         }
 
@@ -343,24 +300,21 @@ impl MoonitAmmDecoder {
         };
         let price_usd = price_sol * 150.0; // Rough SOL price estimate
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "DEBUG",
-                &format!(
-                    "Calculated Moonit price: {:.9} SOL per token ({:.6} USD) | candidates => basic={:.9} avg_sold={:.9} quad={:.9} heur={:.9} dynamic={:.9} (factor={:.3} sold_frac={:.6})",
-                    price_sol,
-                    price_usd,
-                    price_sol_basic,
-                    price_sol_avg_sold,
-                    price_sol_quadratic,
-                    price_sol_heuristic,
-                    price_sol_dynamic,
-                    dynamic_factor,
-                    sold_fraction
-                )
-            );
-        }
+        logger::debug(
+            LogTag::PoolDecoder,
+            &format!(
+                "Calculated Moonit price: {:.9} SOL per token ({:.6} USD) | candidates => basic={:.9} avg_sold={:.9} quad={:.9} heur={:.9} dynamic={:.9} (factor={:.3} sold_frac={:.6})",
+                price_sol,
+                price_usd,
+                price_sol_basic,
+                price_sol_avg_sold,
+                price_sol_quadratic,
+                price_sol_heuristic,
+                price_sol_dynamic,
+                dynamic_factor,
+                sold_fraction
+            ),
+        );
 
         Some(PriceResult::new(
             base_mint.to_string(),

@@ -44,7 +44,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🔍 METEORA DAMM v2 SPECIFIC DEBUGGER\n====================================");
     println!("Pool address: {}", args.pool);
 
-    log(LogTag::System, "INIT", "Initializing RPC client...");
+    logger::info(
+        LogTag::System, "Initializing RPC client...");
     init_rpc_client().map_err(|e| format!("RPC init failed: {}", e))?;
     let rpc = get_rpc_client();
 

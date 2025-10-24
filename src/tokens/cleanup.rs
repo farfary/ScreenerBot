@@ -6,6 +6,7 @@
 ///
 /// NOTE: Liquidity and security scores are FILTERING criteria, not blacklist criteria.
 /// Blacklist is for tokens that should NEVER be traded due to fundamental risks.
+use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::types::{TokenError, TokenResult};
 use std::sync::Arc;
@@ -89,11 +90,17 @@ pub async fn run_cleanup_scan(db: &TokenDatabase) -> TokenResult<CleanupResult> 
                 match db.add_to_blacklist(&token.mint, &reason, "auto_cleanup") {
                     Ok(_) => {
                         blacklisted += 1;
-                        println!("[CLEANUP] Blacklisted {}: {}", token.mint, reason);
+                        logger::info(
+                            LogTag::Tokens,
+                            &format!("[CLEANUP] Blacklisted {}: {}", token.mint, reason),
+                        );
                     }
                     Err(e) => {
                         errors += 1;
-                        eprintln!("[CLEANUP] Failed to blacklist {}: {}", token.mint, e);
+                        logger::error(
+                            LogTag::Tokens,
+                            &format!("[CLEANUP] Failed to blacklist {}: {}", token.mint, e),
+                        );
                     }
                 }
             }
@@ -102,7 +109,10 @@ pub async fn run_cleanup_scan(db: &TokenDatabase) -> TokenResult<CleanupResult> 
             }
             Err(e) => {
                 errors += 1;
-                eprintln!("[CLEANUP] Error evaluating {}: {}", token.mint, e);
+                logger::error(
+                    LogTag::Tokens,
+                    &format!("[CLEANUP] Error evaluating {}: {}", token.mint, e),
+                );
             }
         }
     }
@@ -129,16 +139,22 @@ pub fn start_cleanup_loop(db: Arc<TokenDatabase>, shutdown: Arc<Notify>) -> Join
             tokio::select! {
                 _ = shutdown.notified() => break,
                 _ = sleep(Duration::from_secs(3600)) => {
-                    println!("[CLEANUP] Starting cleanup scan...");
+                    logger::info(LogTag::Tokens, "[CLEANUP] Starting cleanup scan...");
                     match run_cleanup_scan(&db).await {
                         Ok(result) => {
-                            println!(
-                                "[CLEANUP] Scan complete: {} checked, {} blacklisted, {} errors",
-                                result.checked, result.blacklisted, result.errors
+                            logger::info(
+                                LogTag::Tokens,
+                                &format!(
+                                    "[CLEANUP] Scan complete: {} checked, {} blacklisted, {} errors",
+                                    result.checked, result.blacklisted, result.errors
+                                ),
                             );
                         }
                         Err(e) => {
-                            eprintln!("[CLEANUP] Scan failed: {}", e);
+                            logger::error(
+                                LogTag::Tokens,
+                                &format!("[CLEANUP] Scan failed: {}", e),
+                            );
                         }
                     }
                 }

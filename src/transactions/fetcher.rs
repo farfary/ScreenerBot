@@ -14,7 +14,7 @@ use std::str::FromStr;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::rpc::get_rpc_client;
 use crate::transactions::{types::*, utils::*};
 
@@ -98,9 +98,8 @@ impl TransactionFetcher {
     ) -> Result<Vec<String>, String> {
         let start_time = Instant::now();
 
-        log(
-            LogTag::Transactions,
-            "FETCH",
+        logger::info(
+        LogTag::Transactions,
             &format!(
                 "Fetching {} recent signatures for wallet: {}",
                 limit,
@@ -117,9 +116,8 @@ impl TransactionFetcher {
 
         let duration = start_time.elapsed();
 
-        log(
-            LogTag::Transactions,
-            "FETCH",
+        logger::info(
+        LogTag::Transactions,
             &format!(
                 "Fetched {} signatures in {}ms for wallet: {}",
                 signatures.len(),
@@ -149,9 +147,8 @@ impl TransactionFetcher {
             {
                 Ok(signatures) => {
                     if attempts > 0 {
-                        log(
-                            LogTag::Transactions,
-                            "INFO",
+                        logger::info(
+        LogTag::Transactions,
                             &format!(
                                 "Signature fetch succeeded after {} retries for wallet: {}",
                                 attempts,
@@ -170,9 +167,8 @@ impl TransactionFetcher {
                         ));
                     }
 
-                    log(
-                        LogTag::Transactions,
-                        "WARN",
+                    logger::info(
+        LogTag::Transactions,
                         &format!(
                             "Signature fetch attempt {} failed, retrying in {}ms: {}",
                             attempts, delay, e
@@ -214,9 +210,8 @@ impl TransactionFetcher {
     ) -> Result<Vec<String>, String> {
         let start_time = Instant::now();
 
-        log(
-            LogTag::Transactions,
-            "FETCH",
+        logger::info(
+        LogTag::Transactions,
             &format!(
                 "Fetching {} signatures for wallet: {} (before={})",
                 limit,
@@ -233,9 +228,8 @@ impl TransactionFetcher {
 
         let duration = start_time.elapsed();
 
-        log(
-            LogTag::Transactions,
-            "FETCH",
+        logger::info(
+        LogTag::Transactions,
             &format!(
                 "Fetched {} signatures in {}ms for wallet: {}",
                 signatures.len(),
@@ -266,9 +260,8 @@ impl TransactionFetcher {
 
         if duration.as_millis() > 5000 {
             // Log slow fetches
-            log(
-                LogTag::Transactions,
-                "SLOW",
+            logger::info(
+        LogTag::Transactions,
                 &format!(
                     "Slow transaction fetch: {} took {}ms",
                     signature,
@@ -295,9 +288,8 @@ impl TransactionFetcher {
             match self.fetch_single_transaction_details(signature).await {
                 Ok(details) => {
                     if attempts > 0 {
-                        log(
-                            LogTag::Transactions,
-                            "INFO",
+                        logger::info(
+        LogTag::Transactions,
                             &format!(
                                 "Transaction details fetch succeeded after {} retries: {}",
                                 attempts, signature
@@ -322,9 +314,8 @@ impl TransactionFetcher {
                         // Use longer delays for indexing: 2s, 4s, 8s, 16s, 32s
                         let indexing_delay = 2000 * (2_u64.pow(indexing_delay_attempts as u32 - 1));
                         
-                        log(
-                            LogTag::Transactions,
-                            "WARN",
+                        logger::info(
+        LogTag::Transactions,
                             &format!(
                                 "Transaction details fetch attempt {} failed, retrying in {}ms: {}",
                                 indexing_delay_attempts, indexing_delay, e
@@ -346,9 +337,8 @@ impl TransactionFetcher {
                             ));
                         }
 
-                        log(
-                            LogTag::Transactions,
-                            "WARN",
+                        logger::info(
+        LogTag::Transactions,
                             &format!(
                                 "Transient RPC error on attempt {}, retrying in {}ms: {}",
                                 attempts, delay, e
@@ -374,9 +364,8 @@ impl TransactionFetcher {
                         ));
                     }
 
-                    log(
-                        LogTag::Transactions,
-                        "WARN",
+                    logger::info(
+        LogTag::Transactions,
                         &format!(
                             "Transaction details fetch attempt {} failed, retrying in {}ms: {}",
                             attempts, delay, e
@@ -412,9 +401,8 @@ impl TransactionFetcher {
         let start_time = Instant::now();
         let total_count = signatures.len();
 
-        log(
-            LogTag::Transactions,
-            "BATCH_FETCH",
+        logger::info(
+        LogTag::Transactions,
             &format!("Fetching details for {} transactions", total_count),
         );
 
@@ -449,9 +437,8 @@ impl TransactionFetcher {
 
             let chunk_duration = chunk_start.elapsed();
 
-            log(
-                LogTag::Transactions,
-                "BATCH_CHUNK",
+            logger::info(
+        LogTag::Transactions,
                 &format!(
                     "Processed chunk {}/{} ({} transactions) in {}ms",
                     chunk_idx + 1,
@@ -470,9 +457,8 @@ impl TransactionFetcher {
         let total_duration = start_time.elapsed();
         let success_count = results.values().filter(|r| r.is_ok()).count();
 
-        log(
-            LogTag::Transactions,
-            "BATCH_COMPLETE",
+        logger::info(
+        LogTag::Transactions,
             &format!(
                 "Batch fetch complete: {}/{} successful in {}ms (avg: {}ms/tx)",
                 success_count,
@@ -653,9 +639,8 @@ impl BatchSignatureFetcher {
             }
         }
 
-        log(
-            LogTag::Transactions,
-            "BATCH_COMPLETE",
+        logger::info(
+        LogTag::Transactions,
             &format!(
                 "Fetched {} total signatures for wallet: {}",
                 all_signatures.len(),

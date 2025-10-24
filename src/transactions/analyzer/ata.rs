@@ -14,8 +14,7 @@ use serde_json::Value;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 
-use crate::global::is_debug_transactions_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::transactions::{types::*, utils::*};
 use crate::utils::lamports_to_sol;
 
@@ -140,13 +139,10 @@ pub async fn analyze_ata_operations(
     transaction: &Transaction,
     tx_data: &crate::rpc::TransactionDetails,
 ) -> Result<AtaAnalysis, String> {
-    if is_debug_transactions_enabled() {
-        log(
-            LogTag::Transactions,
-            "ATA_ANALYZE",
+    logger::info(
+        LogTag::Transactions,
             &format!("Analyzing ATA operations for tx: {}", transaction.signature),
         );
-    }
 
     // Step 1: Extract ATA operations from instructions
     let ata_operations = extract_ata_operations(transaction, tx_data).await?;
@@ -249,16 +245,13 @@ async fn extract_from_balance_changes(
                     rent_amount: lamports_to_sol(change_lamports.abs() as u64),
                     success: true,
                 });
-                if is_debug_transactions_enabled() {
-                    log(
-                        LogTag::Transactions,
-                        "ATA_RENT_DETECTED",
+                logger::info(
+        LogTag::Transactions,
                         &format!(
                             "account={} change_lamports={} type=Create",
                             account_key, change_lamports
                         ),
                     );
-                }
                 continue;
             }
 
@@ -272,16 +265,13 @@ async fn extract_from_balance_changes(
                     rent_amount: lamports_to_sol(change_lamports.abs() as u64),
                     success: true,
                 });
-                if is_debug_transactions_enabled() {
-                    log(
-                        LogTag::Transactions,
-                        "ATA_RENT_DETECTED",
+                logger::info(
+        LogTag::Transactions,
                         &format!(
                             "account={} change_lamports={} type=Close",
                             account_key, change_lamports
                         ),
                     );
-                }
                 continue;
             }
         }

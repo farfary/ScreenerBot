@@ -26,7 +26,7 @@ pub use self::types::{
 
 use crate::apis::client::RateLimiter;
 use crate::apis::stats::ApiStatsTracker;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use reqwest::Client;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
@@ -183,9 +183,8 @@ impl GeckoTerminalClient {
         let endpoint = format!("networks/{}/tokens/{}/pools", network_id, mint);
         let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
 
-        log(
-            LogTag::Tokens,
-            "DEBUG",
+        logger::debug(
+            LogTag::Api,
             &format!(
                 "[GECKOTERMINAL] Fetching pools: token={}, network={}",
                 mint, network_id
@@ -231,9 +230,8 @@ impl GeckoTerminalClient {
             self.client.get(&url).query(&query_params)
         };
 
-        log(
-            LogTag::Tokens,
-            "DEBUG",
+        logger::debug(
+            LogTag::Api,
             &format!(
                 "[GECKOTERMINAL] Fetching top pools by token: token={}, network={}, page={:?}, sort={:?}",
                 token_address, network, page, sort
@@ -280,9 +278,8 @@ impl GeckoTerminalClient {
             self.client.get(&url).query(&query_params)
         };
 
-        log(
-            LogTag::Tokens,
-            "DEBUG",
+        logger::debug(
+            LogTag::Api,
             &format!(
                 "[GECKOTERMINAL] Fetching trending pools: network={}, page={:?}, duration={:?}",
                 network_id, page, duration
@@ -330,9 +327,8 @@ impl GeckoTerminalClient {
             self.client.get(&url).query(&query_params)
         };
 
-        log(
-            LogTag::Tokens,
-            "DEBUG",
+        logger::debug(
+            LogTag::Api,
             &format!(
                 "[GECKOTERMINAL] Fetching top pools: network={}, page={:?}, sort={:?}",
                 network_id, page, sort
@@ -380,9 +376,8 @@ impl GeckoTerminalClient {
             self.client.get(&url).query(&query_params)
         };
 
-        log(
-            LogTag::Tokens,
-            "DEBUG",
+        logger::debug(
+            LogTag::Api,
             &format!(
                 "[GECKOTERMINAL] Fetching pool: network={}, address={}",
                 network_id, pool_address
@@ -440,9 +435,8 @@ impl GeckoTerminalClient {
             self.client.get(&url).query(&query_params)
         };
 
-        log(
-            LogTag::Tokens,
-            "DEBUG",
+        logger::debug(
+            LogTag::Api,
             &format!(
                 "[GECKOTERMINAL] Fetching multi pools: network={}, count={}",
                 network_id, address_count
@@ -499,9 +493,8 @@ impl GeckoTerminalClient {
             self.client.get(&url).query(&query_params)
         };
 
-        log(
-            LogTag::Tokens,
-            "DEBUG",
+        logger::debug(
+            LogTag::Api,
             &format!(
                 "[GECKOTERMINAL] Fetching OHLCV: network={}, pool={}, timeframe={}, aggregate={:?}, limit={:?}",
                 network, pool_address, timeframe, aggregate, limit
@@ -534,9 +527,8 @@ impl GeckoTerminalClient {
             self.client.get(&url)
         };
 
-        log(
-            LogTag::Tokens,
-            "DEBUG",
+        logger::debug(
+            LogTag::Api,
             &format!(
                 "[GECKOTERMINAL] Fetching DEXes: network={}, page={:?}",
                 network, page
@@ -576,9 +568,8 @@ impl GeckoTerminalClient {
             self.client.get(&url).query(&query_params)
         };
 
-        log(
-            LogTag::Tokens,
-            "DEBUG",
+        logger::debug(
+            LogTag::Api,
             &format!(
                 "[GECKOTERMINAL] Fetching new pools: network={}, page={:?}",
                 network, page
@@ -619,9 +610,8 @@ impl GeckoTerminalClient {
             self.client.get(&url).query(&query_params)
         };
 
-        log(
-            LogTag::Tokens,
-            "DEBUG",
+        logger::debug(
+            LogTag::Api,
             &format!(
                 "[GECKOTERMINAL] Fetching tokens multi: network={}, addresses_count={}",
                 network,
@@ -641,9 +631,8 @@ impl GeckoTerminalClient {
         let endpoint = format!("networks/{}/tokens/{}/info", network, address);
         let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
 
-        log(
-            LogTag::Tokens,
-            "DEBUG",
+        logger::debug(
+            LogTag::Api,
             &format!(
                 "[GECKOTERMINAL] Fetching token info: network={}, address={}",
                 network, address
@@ -676,9 +665,8 @@ impl GeckoTerminalClient {
             self.client.get(&url).query(&query_params)
         };
 
-        log(
-            LogTag::Tokens,
-            "DEBUG",
+        logger::debug(
+            LogTag::Api,
             &format!(
                 "[GECKOTERMINAL] Fetching recently updated tokens: network={:?}",
                 network
@@ -716,9 +704,8 @@ impl GeckoTerminalClient {
             self.client.get(&url).query(&query_params)
         };
 
-        log(
-            LogTag::Tokens,
-            "DEBUG",
+        logger::debug(
+            LogTag::Api,
             &format!(
                 "[GECKOTERMINAL] Fetching pool trades: network={}, pool={}, min_volume={:?}",
                 network, pool_address, trade_volume_in_usd_greater_than

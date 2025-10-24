@@ -43,9 +43,8 @@ impl Service for TraderService {
     ) -> Result<Vec<JoinHandle<()>>, String> {
         // TODO: Integrate with new trader module when ready
         // For now, return empty handles
-        crate::logger::log(
+        crate::logger::warning(
             crate::logger::LogTag::Trader,
-            "WARN",
             "Trader service stub - new trader module not yet integrated with services",
         );
         Ok(vec![])

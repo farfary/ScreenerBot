@@ -5,8 +5,7 @@
 /// - Determining token pair orientation (TOKEN/SOL vs SOL/TOKEN)
 /// - Pairing vaults correctly based on mint types
 /// - Handling all possible base/quote token combinations
-use crate::global::is_debug_pool_service_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
 
@@ -48,13 +47,7 @@ pub struct PoolMintVaultInfo {
 impl TokenPairInfo {
     /// Create a new TokenPairInfo for invalid pairs (non-SOL)
     pub fn invalid(reason: String) -> Self {
-        if is_debug_pool_service_enabled() {
-            log(
-                LogTag::PoolService,
-                "DEBUG",
-                &format!("Invalid token pair: {}", reason),
-            );
-        }
+        logger::debug(LogTag::PoolService, &format!("Invalid token pair: {}", reason));
 
         Self {
             token_mint: String::new(),
@@ -101,19 +94,16 @@ pub fn analyze_token_pair(pool_info: PoolMintVaultInfo) -> TokenPairInfo {
     let vault1 = &pool_info.vault1;
     let vault2 = &pool_info.vault2;
 
-    if is_debug_pool_service_enabled() {
-        log(
-            LogTag::PoolService,
-            "DEBUG",
-            &format!(
-                "Analyzing token pair: mint1={}, mint2={}, vault1={}, vault2={}",
-                &mint1[..8],
-                &mint2[..8],
-                &vault1[..8],
-                &vault2[..8]
-            ),
-        );
-    }
+    logger::debug(
+        LogTag::PoolService,
+        &format!(
+            "Analyzing token pair: mint1={}, mint2={}, vault1={}, vault2={}",
+            &mint1[..8],
+            &mint2[..8],
+            &vault1[..8],
+            &vault2[..8]
+        ),
+    );
 
     // Check for stablecoin pairs - reject these
     if is_stablecoin_mint(mint1) {
@@ -155,19 +145,16 @@ pub fn analyze_token_pair(pool_info: PoolMintVaultInfo) -> TokenPairInfo {
         ));
     };
 
-    if is_debug_pool_service_enabled() {
-        log(
-            LogTag::PoolService,
-            "SUCCESS",
-            &format!(
-                "Valid SOL pair: token={}, sol_is_first={}, token_vault={}, sol_vault={}",
-                &token_mint[..8],
-                sol_is_first,
-                &token_vault[..8],
-                &sol_vault[..8]
-            ),
-        );
-    }
+    logger::info(
+        LogTag::PoolService,
+        &format!(
+            "Valid SOL pair: token={}, sol_is_first={}, token_vault={}, sol_vault={}",
+            &token_mint[..8],
+            sol_is_first,
+            &token_vault[..8],
+            &sol_vault[..8]
+        ),
+    );
 
     TokenPairInfo {
         token_mint,
@@ -183,23 +170,17 @@ pub fn analyze_token_pair(pool_info: PoolMintVaultInfo) -> TokenPairInfo {
 /// These functions provide centralized, safe data extraction with proper bounds checking
 pub fn extract_pumpfun_mints_and_vaults(data: &[u8]) -> Option<PoolMintVaultInfo> {
     if data.len() < 200 {
-        if is_debug_pool_service_enabled() {
-            log(
-                LogTag::PoolService,
-                "ERROR",
-                &format!("PumpFun pool data too short: {} bytes", data.len()),
-            );
-        }
+        logger::error(
+            LogTag::PoolService,
+            &format!("PumpFun pool data too short: {} bytes", data.len()),
+        );
         return None;
     }
 
-    if is_debug_pool_service_enabled() {
-        log(
-            LogTag::PoolService,
-            "DEBUG",
-            &format!("Extracting PumpFun pool data ({} bytes)", data.len()),
-        );
-    }
+    logger::debug(
+        LogTag::PoolService,
+        &format!("Extracting PumpFun pool data ({} bytes)", data.len()),
+    );
 
     // PumpFun AMM structure (confirmed via structure analysis):
     // discriminator(8) + pool_bump(1) + index(2) + creator(32) + base_mint(32) + quote_mint(32) + lp_mint(32) + vault1(32) + vault2(32) + ...
@@ -216,19 +197,16 @@ pub fn extract_pumpfun_mints_and_vaults(data: &[u8]) -> Option<PoolMintVaultInfo
     let vault1 = read_pubkey_at_offset(data, &mut offset).ok()?;
     let vault2 = read_pubkey_at_offset(data, &mut offset).ok()?;
 
-    if is_debug_pool_service_enabled() {
-        log(
-            LogTag::PoolService,
-            "DEBUG",
-            &format!(
-                "Extracted PumpFun: mint1={}, mint2={}, vault1={}, vault2={}",
-                &mint1[..8],
-                &mint2[..8],
-                &vault1[..8],
-                &vault2[..8]
-            ),
-        );
-    }
+    logger::debug(
+        LogTag::PoolService,
+        &format!(
+            "Extracted PumpFun: mint1={}, mint2={}, vault1={}, vault2={}",
+            &mint1[..8],
+            &mint2[..8],
+            &vault1[..8],
+            &vault2[..8]
+        ),
+    );
 
     Some(PoolMintVaultInfo {
         mint1,

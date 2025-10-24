@@ -19,8 +19,7 @@ use crate::apis::{
 use crate::config::with_config;
 use crate::events::{record_safe, Event, EventCategory, Severity};
 use crate::filtering;
-use crate::global::is_debug_pool_discovery_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::pools::service::{
     get_debug_token_override, get_pool_analyzer, is_single_pool_mode_enabled,
 };
@@ -124,13 +123,10 @@ impl PoolDiscovery {
                     }
                 }
                 Err(e) => {
-                    if is_debug_pool_discovery_enabled() {
-                        log(
-                            LogTag::PoolDiscovery,
-                            "WARN",
-                            &format!("DexScreener batch failed ({}..{}): {}", i, end, e),
-                        );
-                    }
+                    logger::warning(
+                        LogTag::PoolDiscovery,
+                        &format!("DexScreener batch failed ({}..{}): {}", i, end, e),
+                    );
                 }
             }
             i = end;
@@ -148,13 +144,10 @@ impl PoolDiscovery {
                     out.entry(mint.clone()).or_default().append(&mut pools);
                 }
                 Err(e) => {
-                    if is_debug_pool_discovery_enabled() {
-                        log(
-                            LogTag::PoolDiscovery,
-                            "WARN",
-                            &format!("GeckoTerminal fetch_pools failed for {}: {}", mint, e),
-                        );
-                    }
+                    logger::warning(
+                        LogTag::PoolDiscovery,
+                        &format!("GeckoTerminal fetch_pools failed for {}: {}", mint, e),
+                    );
                 }
             }
         }
@@ -195,19 +188,11 @@ impl PoolDiscovery {
         .collect();
 
         if enabled_sources.is_empty() {
-            log(
-                LogTag::PoolDiscovery,
-                "WARN",
-                "⚠️ No pool discovery sources enabled!",
-            );
+            logger::warning(LogTag::PoolDiscovery, "⚠️ No pool discovery sources enabled!");
         } else {
-            log(
+            logger::info(
                 LogTag::PoolDiscovery,
-                "INFO",
-                &format!(
-                    "🔍 Pool discovery sources enabled: {}",
-                    enabled_sources.join(", ")
-                ),
+                &format!("🔍 Pool discovery sources enabled: {}", enabled_sources.join(", ")),
             );
         }
 
@@ -233,10 +218,9 @@ impl PoolDiscovery {
         .filter_map(|&s| s)
         .collect();
 
-        if !disabled_sources.is_empty() && is_debug_pool_discovery_enabled() {
-            log(
+        if !disabled_sources.is_empty() {
+            logger::debug(
                 LogTag::PoolDiscovery,
-                "DEBUG",
                 &format!(
                     "🚫 Pool discovery sources disabled: {}",
                     disabled_sources.join(", ")
@@ -247,13 +231,7 @@ impl PoolDiscovery {
 
     /// Start discovery background task
     pub async fn start_discovery_task(&self, shutdown: Arc<Notify>) {
-        if is_debug_pool_discovery_enabled() {
-            log(
-                LogTag::PoolDiscovery,
-                "INFO",
-                "Starting pool discovery task",
-            );
-        }
+        logger::info(LogTag::PoolDiscovery, "Starting pool discovery task");
 
         // Log the current source configuration
         Self::log_source_config();
@@ -268,9 +246,7 @@ impl PoolDiscovery {
             loop {
                 tokio::select! {
                     _ = shutdown.notified() => {
-                        if is_debug_pool_discovery_enabled() {
-                            log(LogTag::PoolDiscovery, "INFO", "Pool discovery task shutting down");
-                        }
+                        logger::info(LogTag::PoolDiscovery, "Pool discovery task shutting down");
                         break;
                     }
                     _ = interval.tick() => {
@@ -315,13 +291,10 @@ impl PoolDiscovery {
         .await;
 
         if !dex_enabled && !gecko_enabled && !raydium_enabled {
-            if is_debug_pool_discovery_enabled() {
-                log(
-                    LogTag::PoolDiscovery,
-                    "WARN",
-                    "All pool discovery sources disabled - skipping tick",
-                );
-            }
+            logger::warning(
+                LogTag::PoolDiscovery,
+                "All pool discovery sources disabled - skipping tick",
+            );
 
             record_safe(Event::warn(
                 EventCategory::Pool,
@@ -345,10 +318,9 @@ impl PoolDiscovery {
             // Get passed tokens from tokens module (not filtering module)
             let passed_tokens = crate::tokens::get_passed_tokens();
 
-            if passed_tokens.is_empty() && is_debug_pool_discovery_enabled() {
-                log(
+            if passed_tokens.is_empty() {
+                logger::info(
                     LogTag::PoolDiscovery,
-                    "NO_PASSED_TOKENS",
                     "No tokens passed filtering - pool service has nothing to price",
                 );
             }
@@ -373,25 +345,15 @@ impl PoolDiscovery {
         }
 
         let added_count = tokens.len() - initial_count;
-        if added_count > 0 && is_debug_pool_discovery_enabled() {
-            log(
+        if added_count > 0 {
+            logger::info(
                 LogTag::PoolDiscovery,
-                "POSITIONS_ADDED",
-                &format!(
-                    "Added {} open position tokens to monitoring set",
-                    added_count
-                ),
+                &format!("Added {} open position tokens to monitoring set", added_count),
             );
         }
 
         if tokens.is_empty() {
-            if is_debug_pool_discovery_enabled() {
-                log(
-                    LogTag::PoolDiscovery,
-                    "DEBUG",
-                    "No tokens to discover this tick",
-                );
-            }
+            logger::debug(LogTag::PoolDiscovery, "No tokens to discover this tick");
 
             record_safe(Event::info(
                 EventCategory::Pool,
@@ -430,26 +392,20 @@ impl PoolDiscovery {
             position_tokens.extend(other_tokens);
             tokens = position_tokens;
 
-            if is_debug_pool_discovery_enabled() {
-                log(
-                    LogTag::PoolDiscovery,
-                    "TRUNCATED",
-                    &format!(
-                        "Truncated to {} tokens (prioritized {} position tokens)",
-                        tokens.len(),
-                        open_position_mints_set.len()
-                    ),
-                );
-            }
-        }
-
-        if is_debug_pool_discovery_enabled() {
-            log(
+            logger::info(
                 LogTag::PoolDiscovery,
-                "DEBUG",
-                &format!("Discovery tick: {} tokens queued", tokens.len()),
+                &format!(
+                    "Truncated to {} tokens (prioritized {} position tokens)",
+                    tokens.len(),
+                    open_position_mints_set.len()
+                ),
             );
         }
+
+        logger::debug(
+            LogTag::PoolDiscovery,
+            &format!("Discovery tick: {} tokens queued", tokens.len()),
+        );
 
         record_safe(Event::info(
             EventCategory::Pool,
@@ -498,20 +454,13 @@ impl PoolDiscovery {
                     }
                 }
                 let added = descriptors.len().saturating_sub(before);
-                if is_debug_pool_discovery_enabled() {
-                    log(
-                        LogTag::PoolDiscovery,
-                        "DEBUG",
-                        &format!("DexScreener batched pools for {mint}: added {added}"),
-                    );
-                }
+                logger::debug(
+                    LogTag::PoolDiscovery,
+                    &format!("DexScreener batched pools for {mint}: added {added}"),
+                );
             }
-        } else if is_debug_pool_discovery_enabled() {
-            log(
-                LogTag::PoolDiscovery,
-                "DEBUG",
-                "DexScreener discovery disabled",
-            );
+            } else {
+            logger::debug(LogTag::PoolDiscovery, "DexScreener discovery disabled");
         }
 
         // Process GeckoTerminal results only if enabled
@@ -524,40 +473,26 @@ impl PoolDiscovery {
                     }
                 }
                 let added = descriptors.len().saturating_sub(before);
-                if is_debug_pool_discovery_enabled() {
-                    log(
-                        LogTag::PoolDiscovery,
-                        "DEBUG",
-                        &format!("GeckoTerminal batched pools for {mint}: added {added}"),
-                    );
-                }
+                logger::debug(
+                    LogTag::PoolDiscovery,
+                    &format!("GeckoTerminal batched pools for {mint}: added {added}"),
+                );
             }
-        } else if is_debug_pool_discovery_enabled() {
-            log(
-                LogTag::PoolDiscovery,
-                "DEBUG",
-                "GeckoTerminal discovery disabled",
-            );
+        } else {
+            logger::debug(LogTag::PoolDiscovery, "GeckoTerminal discovery disabled");
         }
 
         // Process Raydium results only if enabled
         // Raydium discovery not implemented via direct API client in this module
-        if is_raydium_discovery_enabled() && is_debug_pool_discovery_enabled() {
-            log(
+        if is_raydium_discovery_enabled() {
+            logger::debug(
                 LogTag::PoolDiscovery,
-                "DEBUG",
                 "Raydium discovery is configured but not implemented in this path",
             );
         }
 
         if descriptors.is_empty() {
-            if is_debug_pool_discovery_enabled() {
-                log(
-                    LogTag::PoolDiscovery,
-                    "DEBUG",
-                    "No pools discovered in this tick",
-                );
-            }
+            logger::debug(LogTag::PoolDiscovery, "No pools discovered in this tick");
 
             record_safe(Event::info(
                 EventCategory::Pool,
@@ -634,13 +569,10 @@ impl PoolDiscovery {
             ))
             .await;
 
-            if is_debug_pool_discovery_enabled() {
-                log(
-                    LogTag::PoolDiscovery,
-                    "WARN",
-                    "Analyzer not initialized; cannot stream discovered pools",
-                );
-            }
+            logger::warning(
+                LogTag::PoolDiscovery,
+                "Analyzer not initialized; cannot stream discovered pools",
+            );
         }
     }
 
@@ -675,16 +607,13 @@ impl PoolDiscovery {
             Ok(v) => v,
             Err(e) => {
                 // Respect project rule: no unwrap/panic; log and return input unchanged
-                if is_debug_pool_discovery_enabled() {
-                    log(
-                        LogTag::PoolDiscovery,
-                        "WARN",
-                        &format!(
-                            "Failed to parse SOL_MINT '{}': {} — returning pools unchanged",
-                            SOL_MINT, e
-                        ),
-                    );
-                }
+                logger::warning(
+                    LogTag::PoolDiscovery,
+                    &format!(
+                        "Failed to parse SOL_MINT '{}': {} — returning pools unchanged",
+                        SOL_MINT, e
+                    ),
+                );
                 return pools;
             }
         };
@@ -787,26 +716,17 @@ impl PoolDiscovery {
 
     /// Discover pools for a specific token
     pub async fn discover_pools_for_token(&self, mint: &str) -> Vec<PoolDescriptor> {
-        if is_debug_pool_discovery_enabled() {
-            log(
-                LogTag::PoolDiscovery,
-                "INFO",
-                &format!("Starting pool discovery for token {mint}"),
-            );
-        }
+        logger::info(LogTag::PoolDiscovery, &format!("Starting pool discovery for token {mint}"));
 
         // Early stablecoin filtering - reject stablecoin tokens immediately
         if is_stablecoin_mint(mint) {
-            if is_debug_pool_discovery_enabled() {
-                log(
-                    LogTag::PoolDiscovery,
-                    "WARN",
-                    &format!(
-                        "Token {} is a stablecoin - skipping pool discovery",
-                        &mint[..8]
-                    ),
-                );
-            }
+            logger::warning(
+                LogTag::PoolDiscovery,
+                &format!(
+                    "Token {} is a stablecoin - skipping pool discovery",
+                    &mint[..8]
+                ),
+            );
             return Vec::new();
         }
 
@@ -837,72 +757,51 @@ impl PoolDiscovery {
                         }
                     }
 
-                    if is_debug_pool_discovery_enabled() {
-                        if filtered_count > 0 {
-                            log(
-                                LogTag::PoolDiscovery,
-                                "DEBUG",
-                                &format!(
-                                    "DexScreener: Filtered out {} non-SOL pools for {mint}",
-                                    filtered_count
-                                ),
-                            );
-                        }
-                        log(
+                    if filtered_count > 0 {
+                        logger::debug(
                             LogTag::PoolDiscovery,
-                            "DEBUG",
-                            &format!("DexScreener found {} pools for {mint}", pools.len()),
+                            &format!(
+                                "DexScreener: Filtered out {} non-SOL pools for {mint}",
+                                filtered_count
+                            ),
                         );
                     }
+                    logger::debug(
+                        LogTag::PoolDiscovery,
+                        &format!("DexScreener found {} pools for {mint}", pools.len()),
+                    );
                     discovered_pools.extend(pools);
                 }
                 Err(e) => {
-                    if is_debug_pool_discovery_enabled() {
-                        log(
-                            LogTag::PoolDiscovery,
-                            "WARN",
-                            &format!("DexScreener discovery failed for {mint}: {}", e),
-                        );
-                    }
+                    logger::warning(
+                        LogTag::PoolDiscovery,
+                        &format!("DexScreener discovery failed for {mint}: {}", e),
+                    );
                 }
             }
-        } else if is_debug_pool_discovery_enabled() {
-            log(
-                LogTag::PoolDiscovery,
-                "DEBUG",
-                &format!("DexScreener discovery disabled for {mint}"),
-            );
+        } else {
+            logger::debug(LogTag::PoolDiscovery, &format!("DexScreener discovery disabled for {mint}"));
         }
 
         // Discover from GeckoTerminal API only if enabled
         if is_geckoterminal_discovery_enabled() {
             match self.discover_from_geckoterminal(mint).await {
                 Ok(mut pools) => {
-                    if is_debug_pool_discovery_enabled() {
-                        log(
-                            LogTag::PoolDiscovery,
-                            "DEBUG",
-                            &format!("GeckoTerminal found {} pools for {mint}", pools.len()),
-                        );
-                    }
+                    logger::debug(
+                        LogTag::PoolDiscovery,
+                        &format!("GeckoTerminal found {} pools for {mint}", pools.len()),
+                    );
                     discovered_pools.append(&mut pools);
                 }
                 Err(e) => {
-                    if is_debug_pool_discovery_enabled() {
-                        log(
-                            LogTag::PoolDiscovery,
-                            "WARN",
-                            &format!("GeckoTerminal discovery failed for {mint}: {}", e),
-                        );
-                    }
+                    logger::warning(
+                        LogTag::PoolDiscovery,
+                        &format!("GeckoTerminal discovery failed for {mint}: {}", e),
+                    );
                 }
             }
-        } else if is_debug_pool_discovery_enabled() {
-            log(
-                LogTag::PoolDiscovery,
-                "DEBUG",
-                &format!("GeckoTerminal discovery disabled for {mint}"),
-            );
+        } else {
+            logger::debug(LogTag::PoolDiscovery, &format!("GeckoTerminal discovery disabled for {mint}"));
         }
 
         // Raydium discovery path removed here (not implemented)
@@ -937,10 +836,9 @@ impl PoolDiscovery {
             }
         }
 
-        if is_debug_pool_discovery_enabled() && filtered_count > 0 {
-            log(
+        if filtered_count > 0 {
+            logger::debug(
                 LogTag::PoolDiscovery,
-                "DEBUG",
                 &format!(
                     "GeckoTerminal: Filtered out {} non-SOL pools for {mint}",
                     filtered_count
@@ -1011,13 +909,10 @@ impl PoolDiscovery {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        if is_debug_pool_discovery_enabled() {
-            log(
-                LogTag::PoolDiscovery,
-                "DEBUG",
-                &format!("Deduplicated to {} unique pools", result.len()),
-            );
-        }
+        logger::debug(
+            LogTag::PoolDiscovery,
+            &format!("Deduplicated to {} unique pools", result.len()),
+        );
 
         result
     }
@@ -1059,16 +954,13 @@ pub async fn get_canonical_pool_address(mint: &str) -> Option<String> {
     let mint_pk = match Pubkey::from_str(mint) {
         Ok(pk) => pk,
         Err(e) => {
-            if is_debug_pool_discovery_enabled() {
-                log(
-                    LogTag::PoolDiscovery,
-                    "WARN",
-                    &format!(
-                        "Invalid mint provided to get_canonical_pool_address: {} ({})",
-                        mint, e
-                    ),
-                );
-            }
+            logger::warning(
+                LogTag::PoolDiscovery,
+                &format!(
+                    "Invalid mint provided to get_canonical_pool_address: {} ({})",
+                    mint, e
+                ),
+            );
             return None;
         }
     };
@@ -1114,22 +1006,15 @@ pub async fn get_canonical_pool_address(mint: &str) -> Option<String> {
                 // Update cache and notify waiters
                 if let Some(desc) = result.as_ref() {
                     discovery_cache().insert(mint_pk, (desc.clone(), Instant::now()));
-                    if is_debug_pool_discovery_enabled() {
-                        log(
-                            LogTag::PoolDiscovery,
-                            "INFO",
-                            &format!(
-                                "Cached canonical pool for mint {} -> {} (program: {:?})",
-                                mint, desc.pool_id, desc.program_kind
-                            ),
-                        );
-                    }
-                } else if is_debug_pool_discovery_enabled() {
-                    log(
+                    logger::info(
                         LogTag::PoolDiscovery,
-                        "WARN",
-                        &format!("No pools discovered for mint {}", mint),
+                        &format!(
+                            "Cached canonical pool for mint {} -> {} (program: {:?})",
+                            mint, desc.pool_id, desc.program_kind
+                        ),
                     );
+                } else {
+                    logger::warning(LogTag::PoolDiscovery, &format!("No pools discovered for mint {}", mint));
                 }
 
                 // Prepare return value without moving `result`

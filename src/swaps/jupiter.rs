@@ -5,8 +5,8 @@ use crate::config::with_config;
 use crate::constants::SOL_DECIMALS;
 use crate::constants::SOL_MINT;
 use crate::errors::ScreenerBotError;
-use crate::global::{is_debug_api_enabled, is_debug_swaps_enabled};
-use crate::logger::{log, LogTag};
+// debug flags removed from global; no direct imports needed here
+use crate::logger::{self, LogTag};
 use crate::swaps::types::{
     JupiterQuoteResponse, JupiterSwapResponse, RawTransaction, SwapData, SwapQuote,
 };
@@ -55,28 +55,19 @@ pub async fn jupiter_sign_and_send_transaction(
     priority_fee_lamports: Option<u64>,
     compute_unit_limit: Option<u64>,
 ) -> Result<String, ScreenerBotError> {
-    if is_debug_swaps_enabled() {
-        log(
-            LogTag::Swap,
-            "JUPITER_SIGN_START",
-            &format!(
-                "🟡 Jupiter: Signing transaction (length: {} chars)
+    logger::debug(
+        LogTag::Swap,
+        &format!(
+            "🟡 Jupiter: Signing transaction (length: {} chars)
   Priority Fee: {:?} lamports
   Compute Limit: {:?}",
-                swap_transaction_base64.len(),
-                priority_fee_lamports,
-                compute_unit_limit
-            ),
-        );
-    }
+            swap_transaction_base64.len(),
+            priority_fee_lamports,
+            compute_unit_limit
+        ),
+    );
 
-    if is_debug_swaps_enabled() {
-        log(
-            LogTag::Swap,
-            "JUPITER_SIGNING",
-            "✍️ Jupiter: Signing transaction with wallet keypair...",
-        );
-    }
+    logger::debug(LogTag::Swap, "✍️ Jupiter: Signing transaction with wallet keypair...");
 
     // Get RPC client and sign+send+confirm transaction
     let rpc_client = crate::rpc::get_rpc_client();
@@ -85,13 +76,7 @@ pub async fn jupiter_sign_and_send_transaction(
         .await?;
 
     // Confirmed signature returned
-    if is_debug_swaps_enabled() {
-        log(
-            LogTag::Swap,
-            "JUPITER_CONFIRMED",
-            &format!("✅ Jupiter: Transaction confirmed: {}", &signature[..8]),
-        );
-    }
+    logger::debug(LogTag::Swap, &format!("✅ Jupiter: Transaction confirmed: {}", &signature[..8]));
 
     Ok(signature)
 }
@@ -104,30 +89,27 @@ pub async fn get_jupiter_quote(
     slippage: f64,
     swap_mode: &str,
 ) -> Result<SwapData, ScreenerBotError> {
-    if is_debug_swaps_enabled() {
-        log(
-            LogTag::Swap,
-            "JUPITER_QUOTE_START",
-            &format!(
-                "🟡 Jupiter Quote Request:
+    logger::debug(
+        LogTag::Swap,
+        &format!(
+            "🟡 Jupiter Quote Request:
   Input: {} ({} units)
   Output: {}
   Slippage: {}%",
-                if input_mint == SOL_MINT {
-                    "SOL"
-                } else {
-                    &input_mint[..8]
-                },
-                input_amount,
-                if output_mint == SOL_MINT {
-                    "SOL"
-                } else {
-                    &output_mint[..8]
-                },
-                slippage
-            ),
-        );
-    }
+            if input_mint == SOL_MINT {
+                "SOL"
+            } else {
+                &input_mint[..8]
+            },
+            input_amount,
+            if output_mint == SOL_MINT {
+                "SOL"
+            } else {
+                &output_mint[..8]
+            },
+            slippage
+        ),
+    );
 
     let slippage_bps = ((slippage * 100.0) as u16).max(1).min(5000);
 
@@ -150,68 +132,42 @@ pub async fn get_jupiter_quote(
             .join("&")
     );
 
-    if is_debug_swaps_enabled() {
-        log(
-            LogTag::Swap,
-            "JUPITER_URL",
-            &format!("🌐 Jupiter API URL: {}", url),
-        );
+    logger::debug(LogTag::Swap, &format!("🌐 Jupiter API URL: {}", url));
 
-        log(
-            LogTag::Swap,
-            "JUPITER_FINAL_URL_DEBUG",
-            &format!("🔗 Final Jupiter URL being called: {}", url),
-        );
-    }
+    logger::debug(LogTag::Swap, &format!("🔗 Final Jupiter URL being called: {}", url));
 
-    if is_debug_swaps_enabled() {
-        log(
-            LogTag::Swap,
-            "JUPITER_API",
-            &format!("Jupiter Quote URL: {}", url),
-        );
-    }
+    logger::debug(LogTag::Swap, &format!("Jupiter Quote URL: {}", url));
 
     let quote_timeout_secs = QUOTE_TIMEOUT_SECS;
 
-    if is_debug_swaps_enabled() {
-        log(
-            LogTag::Swap,
-            "JUPITER_QUOTE_DETAILS",
-            &format!(
-                "📊 Jupiter Quote Parameters:
+    logger::debug(
+        LogTag::Swap,
+        &format!(
+            "📊 Jupiter Quote Parameters:
   URL: {}
   Input Amount: {} lamports
   Slippage BPS: {}
   Timeout: {}s",
-                url, input_amount, slippage_bps, quote_timeout_secs
-            ),
-        );
-    }
+            url, input_amount, slippage_bps, quote_timeout_secs
+        ),
+    );
 
     let client = reqwest::Client::new();
 
-    if is_debug_swaps_enabled() {
-        log(
-            LogTag::Swap,
-            "JUPITER_REQUEST_SEND",
-            "📤 Jupiter: Sending quote request...",
-        );
+    logger::debug(LogTag::Swap, "📤 Jupiter: Sending quote request...");
 
-        log(
-            LogTag::Swap,
-            "JUPITER_QUOTE_PARAMS",
-            &format!(
-                "📊 Jupiter Quote Debug:
+    logger::debug(
+        LogTag::Swap,
+        &format!(
+            "📊 Jupiter Quote Debug:
   • Input Mint: {}
   • Output Mint: {}
   • Amount: {} lamports
   • Slippage: {}% ({} BPS)
   • Swap Mode: {}",
-                input_mint, output_mint, input_amount, slippage, slippage_bps, swap_mode
-            ),
-        );
-    }
+            input_mint, output_mint, input_amount, slippage, slippage_bps, swap_mode
+        ),
+    );
 
     let response = timeout(
         Duration::from_secs(quote_timeout_secs),
@@ -219,33 +175,15 @@ pub async fn get_jupiter_quote(
     )
     .await
     .map_err(|_| {
-        if is_debug_swaps_enabled() {
-            log(
-                LogTag::Swap,
-                "JUPITER_TIMEOUT",
-                "⏰ Jupiter quote request timeout",
-            );
-        }
+        logger::debug(LogTag::Swap, "⏰ Jupiter quote request timeout");
         ScreenerBotError::api_error("Jupiter quote request timeout".to_string())
     })?
     .map_err(|e| {
-        if is_debug_swaps_enabled() {
-            log(
-                LogTag::Swap,
-                "JUPITER_NETWORK_ERROR",
-                &format!("❌ Jupiter network error: {}", e),
-            );
-        }
+        logger::debug(LogTag::Swap, &format!("❌ Jupiter network error: {}", e));
         ScreenerBotError::network_error(e.to_string())
     })?;
 
-    if is_debug_swaps_enabled() {
-        log(
-            LogTag::Swap,
-            "JUPITER_RESPONSE_STATUS",
-            &format!("📡 Jupiter API Response - Status: {}", response.status()),
-        );
-    }
+    logger::debug(LogTag::Swap, &format!("📡 Jupiter API Response - Status: {}", response.status()));
 
     if !response.status().is_success() {
         let status = response.status();
@@ -253,18 +191,15 @@ pub async fn get_jupiter_quote(
             Ok(t) => t.chars().take(300).collect::<String>(),
             Err(_) => "<failed to read body>".to_string(),
         };
-        if is_debug_swaps_enabled() {
-            log(
-                LogTag::Swap,
-                "JUPITER_HTTP_ERROR",
-                &format!(
-                    "❌ Jupiter HTTP Error: {} - {} | Body: {}",
-                    status,
-                    status.canonical_reason().unwrap_or("Unknown"),
-                    body_snippet.replace('\n', " ")
-                ),
-            );
-        }
+        logger::debug(
+            LogTag::Swap,
+            &format!(
+                "❌ Jupiter HTTP Error: {} - {} | Body: {}",
+                status,
+                status.canonical_reason().unwrap_or("Unknown"),
+                body_snippet.replace('\n', " ")
+            ),
+        );
         return Err(ScreenerBotError::api_error(format!(
             "Jupiter API error: {}",
             status
@@ -272,61 +207,45 @@ pub async fn get_jupiter_quote(
     }
 
     // Parse response
-    if is_debug_swaps_enabled() {
-        log(
-            LogTag::Swap,
-            "JUPITER_PARSING",
-            "🔄 Jupiter: Parsing JSON response...",
-        );
-    }
+    logger::debug(LogTag::Swap, "🔄 Jupiter: Parsing JSON response...");
 
     let quote_response: JupiterQuoteResponse = response.json().await.map_err(|e| {
-        if is_debug_swaps_enabled() {
-            log(
-                LogTag::Swap,
-                "JUPITER_PARSE_ERROR",
-                &format!("❌ Jupiter Response parsing failed: {}", e),
-            );
-        }
+        logger::debug(LogTag::Swap, &format!("❌ Jupiter Response parsing failed: {}", e));
         ScreenerBotError::invalid_response(format!("Failed to parse Jupiter quote response: {}", e))
     })?;
 
-    if is_debug_swaps_enabled() {
-        log(
-            LogTag::Swap,
-            "JUPITER_QUOTE_SUCCESS",
-            &format!(
-                "🎯 Jupiter Quote Success:\n  In: {} {} \n  Out: {} {} \n  Price Impact: {}%\n  Slippage: {} BPS\n  Time: {:.3}s",
-                quote_response.in_amount,
-                if quote_response.input_mint == SOL_MINT {
-                    "SOL"
-                } else {
-                    &quote_response.input_mint[..8]
-                },
-                quote_response.out_amount,
-                if quote_response.output_mint == SOL_MINT {
-                    "SOL"
-                } else {
-                    &quote_response.output_mint[..8]
-                },
-                quote_response.price_impact_pct,
-                quote_response.slippage_bps,
-                quote_response.time_taken.unwrap_or(0.0)
-            )
-        );
+    logger::debug(
+        LogTag::Swap,
+        &format!(
+            "🎯 Jupiter Quote Success:\n  In: {} {} \n  Out: {} {} \n  Price Impact: {}%\n  Slippage: {} BPS\n  Time: {:.3}s",
+            quote_response.in_amount,
+            if quote_response.input_mint == SOL_MINT {
+                "SOL"
+            } else {
+                &quote_response.input_mint[..8]
+            },
+            quote_response.out_amount,
+            if quote_response.output_mint == SOL_MINT {
+                "SOL"
+            } else {
+                &quote_response.output_mint[..8]
+            },
+            quote_response.price_impact_pct,
+            quote_response.slippage_bps,
+            quote_response.time_taken.unwrap_or(0.0)
+        ),
+    );
 
-        log(
-            LogTag::Swap,
-            "JUPITER_SUCCESS",
-            &format!(
-                "✅ Jupiter Quote: {} -> {} (price impact: {}%, time: {:.3}s)",
-                quote_response.in_amount,
-                quote_response.out_amount,
-                quote_response.price_impact_pct,
-                quote_response.time_taken.unwrap_or(0.0)
-            ),
-        );
-    }
+    logger::debug(
+        LogTag::Swap,
+        &format!(
+            "✅ Jupiter Quote: {} -> {} (price impact: {}%, time: {:.3}s)",
+            quote_response.in_amount,
+            quote_response.out_amount,
+            quote_response.price_impact_pct,
+            quote_response.time_taken.unwrap_or(0.0)
+        ),
+    );
 
     // Convert Jupiter quote to unified SwapData format
     convert_jupiter_quote_to_swap_data(quote_response).await
@@ -339,25 +258,22 @@ pub async fn get_jupiter_swap_transaction(
     dynamic_compute_unit_limit: bool,
     priority_fee_lamports: Option<u64>,
 ) -> Result<JupiterSwapResponse, ScreenerBotError> {
-    if is_debug_swaps_enabled() {
-        log(
-            LogTag::Swap,
-            "JUPITER_BUILD",
-            &format!(
-                "🟡 Jupiter Building Transaction for {} -> {}",
-                if quote.quote.input_mint == SOL_MINT {
-                    "SOL"
-                } else {
-                    &quote.quote.input_mint[..8]
-                },
-                if quote.quote.output_mint == SOL_MINT {
-                    "SOL"
-                } else {
-                    &quote.quote.output_mint[..8]
-                }
-            ),
-        );
-    }
+    logger::debug(
+        LogTag::Swap,
+        &format!(
+            "🟡 Jupiter Building Transaction for {} -> {}",
+            if quote.quote.input_mint == SOL_MINT {
+                "SOL"
+            } else {
+                &quote.quote.input_mint[..8]
+            },
+            if quote.quote.output_mint == SOL_MINT {
+                "SOL"
+            } else {
+                &quote.quote.output_mint[..8]
+            }
+        ),
+    );
 
     // Convert SwapData back to Jupiter quote format for transaction building
     let jupiter_quote = convert_swap_data_to_jupiter_quote(quote)?;
@@ -373,43 +289,28 @@ pub async fn get_jupiter_swap_transaction(
     if let Some(fee) = priority_fee_lamports {
         request_body["prioritizationFeeLamports"] = serde_json::json!(fee);
 
-        if is_debug_swaps_enabled() {
-            log(
-                LogTag::Swap,
-                "JUPITER_PRIORITY_FEE",
-                &format!("💰 Jupiter: Adding priority fee: {} lamports", fee),
-            );
-        }
+        logger::debug(LogTag::Swap, &format!("💰 Jupiter: Adding priority fee: {} lamports", fee));
     }
 
-    if is_debug_swaps_enabled() {
-        log(
-            LogTag::Swap,
-            "JUPITER_BUILD_REQUEST",
-            &format!(
-                "📤 Jupiter Transaction Build Request:\n  • Quote Response: {} chars\n  • User: {}\n  • Dynamic Compute: {}\n  • Priority Fee: {:?} lamports",
-                serde_json::to_string(&request_body["quoteResponse"]).unwrap_or_default().len(),
-                &user_public_key[..8],
-                dynamic_compute_unit_limit,
-                priority_fee_lamports
-            )
-        );
-    }
+    logger::debug(
+        LogTag::Swap,
+        &format!(
+            "📤 Jupiter Transaction Build Request:\n  • Quote Response: {} chars\n  • User: {}\n  • Dynamic Compute: {}\n  • Priority Fee: {:?} lamports",
+            serde_json::to_string(&request_body["quoteResponse"]).unwrap_or_default().len(),
+            &user_public_key[..8],
+            dynamic_compute_unit_limit,
+            priority_fee_lamports
+        ),
+    );
 
     let client = reqwest::Client::new();
     let jupiter_swap_api = with_config(|cfg| cfg.swaps.jupiter.swap_api.clone());
     let api_timeout_secs = API_TIMEOUT_SECS;
 
-    if is_debug_swaps_enabled() {
-        log(
-            LogTag::Swap,
-            "JUPITER_BUILD_SENDING",
-            &format!(
-                "📡 Jupiter: Sending transaction build request to {}",
-                jupiter_swap_api
-            ),
-        );
-    }
+    logger::debug(
+        LogTag::Swap,
+        &format!("📡 Jupiter: Sending transaction build request to {}", jupiter_swap_api),
+    );
 
     let response = timeout(
         Duration::from_secs(api_timeout_secs),
@@ -417,52 +318,25 @@ pub async fn get_jupiter_swap_transaction(
     )
     .await
     .map_err(|_| {
-        if is_debug_swaps_enabled() {
-            log(
-                LogTag::Swap,
-                "JUPITER_BUILD_TIMEOUT",
-                "⏰ Jupiter swap transaction build timeout",
-            );
-        }
+        logger::debug(LogTag::Swap, "⏰ Jupiter swap transaction build timeout");
         ScreenerBotError::api_error("Jupiter swap transaction timeout".to_string())
     })?
     .map_err(|e| {
-        if is_debug_swaps_enabled() {
-            log(
-                LogTag::Swap,
-                "JUPITER_BUILD_NETWORK_ERROR",
-                &format!("❌ Jupiter build network error: {}", e),
-            );
-        }
+        logger::debug(LogTag::Swap, &format!("❌ Jupiter build network error: {}", e));
         ScreenerBotError::network_error(e.to_string())
     })?;
 
     let response_status = response.status();
 
-    if is_debug_swaps_enabled() {
-        log(
-            LogTag::Swap,
-            "JUPITER_BUILD_RESPONSE_STATUS",
-            &format!(
-                "📡 Jupiter Build API Response - Status: {}",
-                response_status
-            ),
-        );
-    }
+    logger::debug(LogTag::Swap, &format!("📡 Jupiter Build API Response - Status: {}", response_status));
 
     if !response_status.is_success() {
         let error_text = response.text().await.unwrap_or_default();
 
-        if is_debug_swaps_enabled() {
-            log(
-                LogTag::Swap,
-                "JUPITER_BUILD_ERROR",
-                &format!(
-                    "❌ Jupiter Build API Error: {} - {}",
-                    response_status, error_text
-                ),
-            );
-        }
+        logger::debug(
+            LogTag::Swap,
+            &format!("❌ Jupiter Build API Error: {} - {}", response_status, error_text),
+        );
 
         return Err(ScreenerBotError::api_error(format!(
             "Jupiter swap API error {}: {}",
@@ -470,26 +344,17 @@ pub async fn get_jupiter_swap_transaction(
         )));
     }
     let swap_response: JupiterSwapResponse = response.json().await.map_err(|e| {
-        if is_debug_swaps_enabled() {
-            log(
-                LogTag::Swap,
-                "JUPITER_BUILD_PARSE_ERROR",
-                &format!("❌ Jupiter Build Response parsing failed: {}", e),
-            );
-        }
+        logger::debug(LogTag::Swap, &format!("❌ Jupiter Build Response parsing failed: {}", e));
         ScreenerBotError::invalid_response(format!("Failed to parse Jupiter swap response: {}", e))
     })?;
 
-    if is_debug_swaps_enabled() {
-        log(
-            LogTag::Swap,
-            "JUPITER_BUILD_SUCCESS",
-            &format!(
-                "✅ Jupiter transaction built successfully (priority fee: {} lamports)",
-                swap_response.prioritization_fee_lamports
-            ),
-        );
-    }
+    logger::debug(
+        LogTag::Swap,
+        &format!(
+            "✅ Jupiter transaction built successfully (priority fee: {} lamports)",
+            swap_response.prioritization_fee_lamports
+        ),
+    );
 
     Ok(swap_response)
 }
@@ -503,9 +368,8 @@ pub async fn execute_jupiter_swap(
 ) -> Result<JupiterSwapResult, ScreenerBotError> {
     let wallet_address = crate::utils::get_wallet_address()?;
 
-    log(
+    logger::info(
         LogTag::Swap,
-        "JUPITER_SWAP",
         &format!(
             "🟡 Executing Jupiter swap for {} - {} -> {}",
             token.symbol,
@@ -545,9 +409,8 @@ pub async fn execute_jupiter_swap(
     )
     .await?;
 
-    log(
+    logger::info(
         LogTag::Swap,
-        "JUPITER_PENDING",
         &format!(
             "🟡 Jupiter transaction submitted! TX: {} - Now adding to monitoring service...",
             transaction_signature
@@ -555,9 +418,8 @@ pub async fn execute_jupiter_swap(
     );
 
     // Simplified approach - no complex transaction monitoring
-    log(
+    logger::info(
         LogTag::Swap,
-        "JUPITER_TRANSACTION_SUCCESS",
         &format!(
             "📝 Jupiter swap transaction completed: {}",
             &transaction_signature[..8]
@@ -615,21 +477,18 @@ async fn convert_jupiter_quote_to_swap_data(
             .unwrap_or(SOL_DECIMALS)
     };
 
-    if is_debug_swaps_enabled() {
-        log(
-            LogTag::Swap,
-            "JUPITER_DECIMALS_DEBUG",
-            &format!(
-                "🔢 Jupiter Decimals Resolution:
+    logger::debug(
+        LogTag::Swap,
+        &format!(
+            "🔢 Jupiter Decimals Resolution:
   Input mint: {} -> {} decimals
   Output mint: {} -> {} decimals",
-                &jupiter_quote.input_mint[..8],
-                input_decimals,
-                &jupiter_quote.output_mint[..8],
-                output_decimals
-            ),
-        );
-    }
+            &jupiter_quote.input_mint[..8],
+            input_decimals,
+            &jupiter_quote.output_mint[..8],
+            output_decimals
+        ),
+    );
 
     let swap_quote = SwapQuote {
         input_mint: jupiter_quote.input_mint,

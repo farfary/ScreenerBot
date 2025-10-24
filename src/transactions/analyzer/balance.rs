@@ -15,8 +15,7 @@ use serde_json::Value;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 
-use crate::global::is_debug_transactions_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::tokens::get_cached_decimals;
 use crate::transactions::{program_ids, types::*, utils::*};
 use crate::utils::{lamports_to_sol, sol_to_lamports};
@@ -85,16 +84,13 @@ pub async fn analyze_balance_changes(
     transaction: &Transaction,
     tx_data: &crate::rpc::TransactionDetails,
 ) -> Result<BalanceAnalysis, String> {
-    if is_debug_transactions_enabled() {
-        log(
-            LogTag::Transactions,
-            "BALANCE_ANALYZE",
+    logger::info(
+        LogTag::Transactions,
             &format!(
                 "Analyzing balance changes for tx: {}",
                 transaction.signature
             ),
         );
-    }
 
     // Extract raw balance changes
     let sol_changes = extract_sol_balance_changes(transaction, tx_data).await?;
@@ -128,9 +124,8 @@ pub async fn extract_balance_changes(
     transaction: &Transaction,
     tx_data: &crate::rpc::TransactionDetails,
 ) -> Result<BalanceAnalysis, String> {
-    log(
+    logger::info(
         LogTag::Transactions,
-        "BALANCE_ANALYZE",
         &format!(
             "Analyzing balance changes for tx: {}",
             transaction.signature
@@ -192,13 +187,10 @@ async fn extract_sol_balance_changes(
     let message = &tx_data.transaction.message;
     let account_keys = account_keys_from_message(message);
 
-    if is_debug_transactions_enabled() {
-        log(
-            LogTag::Transactions,
-            "BALANCE_DEBUG",
+    logger::info(
+        LogTag::Transactions,
             &format!("Extracted {} account keys from message", account_keys.len()),
         );
-    }
 
     // Get balance arrays
     let pre_balances: &Vec<u64> = tx_data
@@ -214,9 +206,8 @@ async fn extract_sol_balance_changes(
         .ok_or("Missing post_balances in transaction meta")?;
 
     if account_keys.len() != pre_balances.len() || account_keys.len() != post_balances.len() {
-        log(
-            LogTag::Transactions,
-            "BALANCE_WARN",
+        logger::info(
+        LogTag::Transactions,
             &format!(
                 "Length mismatch - account_keys: {}, pre_balances: {}, post_balances: {} (will align)",
                 account_keys.len(),
@@ -362,10 +353,8 @@ async fn extract_token_balance_changes(
     }
 
     // Diagnostic: summarize aggregation distribution
-    if is_debug_transactions_enabled() {
-        log(
-            LogTag::Transactions,
-            "BALANCE_DEBUG",
+    logger::info(
+        LogTag::Transactions,
             &format!(
                 "Token changes aggregated across {} owners/accounts (pre={} post={})",
                 token_changes.len(),
@@ -373,7 +362,6 @@ async fn extract_token_balance_changes(
                 post_token_balances.len()
             ),
         );
-    }
 
     Ok(token_changes)
 }

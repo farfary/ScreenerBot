@@ -162,9 +162,8 @@ async fn find_pools_for_token(token: &Token, args: &Args) -> Result<Vec<TestPool
         Ok(pairs) => pairs,
         Err(e) => {
             if args.verbose {
-                log(
-                    LogTag::System,
-                    "API_ERROR",
+                logger::info(
+        LogTag::System,
                     &format!("Failed to get pairs for token {}: {}", &token.mint[..8], e),
                 );
             }
@@ -259,9 +258,8 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
     let start_time = Instant::now();
 
     if args.verbose {
-        log(
-            LogTag::System,
-            "DECODER_TEST",
+        logger::info(
+        LogTag::System,
             &format!(
                 "Testing {} decoder on pool {} ({:?})",
                 pool.program_kind.display_name(),
@@ -364,9 +362,8 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                 }
 
                 if args.verbose {
-                    log(
-                        LogTag::System,
-                        "CPMM_VAULTS",
+                    logger::info(
+        LogTag::System,
                         &format!(
                             "Fetched vault accounts: {} and {} for CPMM pool",
                             &pool_info.token_0_vault[..8],
@@ -386,9 +383,8 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                 let vault_count = vault_accounts.len();
 
                 if args.verbose {
-                    log(
-                        LogTag::System,
-                        "ORCA_VAULT_EXTRACT",
+                    logger::info(
+        LogTag::System,
                         &format!(
                             "Extracted {} vault addresses: {:?}",
                             vault_count, vault_accounts
@@ -398,9 +394,8 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
 
                 for vault_address in &vault_accounts {
                     if args.verbose {
-                        log(
-                            LogTag::System,
-                            "ORCA_VAULT_FETCH",
+                        logger::info(
+        LogTag::System,
                             &format!("Attempting to fetch vault account: {}", vault_address),
                         );
                     }
@@ -422,9 +417,8 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                                 );
 
                                 if args.verbose {
-                                    log(
-                                        LogTag::System,
-                                        "ORCA_VAULT_SUCCESS",
+                                    logger::info(
+        LogTag::System,
                                         &format!(
                                             "Successfully fetched vault account: {} ({} bytes)",
                                             vault_address, data_len
@@ -434,9 +428,8 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                             }
                             Err(e) => {
                                 if args.verbose {
-                                    log(
-                                        LogTag::System,
-                                        "ORCA_VAULT_ERROR",
+                                    logger::info(
+        LogTag::System,
                                         &format!(
                                             "Failed to fetch vault account {}: {}",
                                             vault_address, e
@@ -447,9 +440,8 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                         },
                         Err(e) => {
                             if args.verbose {
-                                log(
-                                    LogTag::System,
-                                    "ORCA_VAULT_PARSE_ERROR",
+                                logger::info(
+        LogTag::System,
                                     &format!(
                                         "Failed to parse vault address {}: {}",
                                         vault_address, e
@@ -461,9 +453,8 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                 }
 
                 if args.verbose {
-                    log(
-                        LogTag::System,
-                        "ORCA_VAULTS",
+                    logger::info(
+        LogTag::System,
                         &format!(
                             "Fetched {} vault accounts for Orca Whirlpool pool",
                             vault_count
@@ -472,9 +463,8 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                 }
             } else {
                 if args.verbose {
-                    log(
-                        LogTag::System,
-                        "ORCA_VAULT_EXTRACT_FAIL",
+                    logger::info(
+        LogTag::System,
                         "Failed to extract vault accounts from Orca pool data",
                     );
                 }
@@ -507,9 +497,8 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                 }
 
                 if args.verbose {
-                    log(
-                        LogTag::System,
-                        "LEGACY_VAULTS",
+                    logger::info(
+        LogTag::System,
                         &format!(
                             "Fetched {} vault accounts for Raydium Legacy AMM pool",
                             vault_count
@@ -545,9 +534,8 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                 }
 
                 if args.verbose {
-                    log(
-                        LogTag::System,
-                        "CLMM_VAULTS",
+                    logger::info(
+        LogTag::System,
                         &format!(
                             "Fetched {} vault accounts for Raydium CLMM pool",
                             vault_count
@@ -583,9 +571,8 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                 }
 
                 if args.verbose {
-                    log(
-                        LogTag::System,
-                        "METEORA_DLMM_VAULTS",
+                    logger::info(
+        LogTag::System,
                         &format!(
                             "Fetched {} vault accounts for Meteora DLMM pool",
                             vault_count
@@ -621,9 +608,8 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                 }
 
                 if args.verbose {
-                    log(
-                        LogTag::System,
-                        "METEORA_DAMM_VAULTS",
+                    logger::info(
+        LogTag::System,
                         &format!(
                             "Fetched {} vault accounts for Meteora DAMM pool",
                             vault_count
@@ -637,9 +623,8 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
             // PumpFun pools typically contain all needed data in the pool account itself
             // Additional vault fetching might be needed based on implementation
             if args.verbose {
-                log(
-                    LogTag::System,
-                    "PUMPFUN_CHECK",
+                logger::info(
+        LogTag::System,
                     "PumpFun pool - checking if additional accounts needed",
                 );
             }
@@ -648,9 +633,8 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
         _ => {
             // For other pool types, the pool account might contain all needed data
             if args.verbose {
-                log(
-                    LogTag::System,
-                    "UNKNOWN_DEX",
+                logger::info(
+        LogTag::System,
                     &format!(
                         "Unknown DEX type: {} - using pool account only",
                         pool.program_kind.display_name()
@@ -688,9 +672,8 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                 );
 
                 if args.verbose {
-                    log(
-                        LogTag::System,
-                        "CALC_SUCCESS",
+                    logger::info(
+        LogTag::System,
                         &format!(
                             "{} calculation successful: {}",
                             pool.program_kind.display_name(),
@@ -713,7 +696,7 @@ async fn test_decoder_on_pool(pool: &TestPool, args: &Args) -> DecoderTestResult
                     pool.program_kind.display_name()
                 );
                 if args.verbose {
-                    log(LogTag::System, "CALC_ERROR", &error);
+                    logger::info(LogTag::System, &error);
                 }
                 (false, Some(error), false, None, None)
             }
@@ -1103,22 +1086,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start_time = Instant::now();
 
     // Initialize services
-    log(LogTag::System, "INIT", "Initializing services...");
+    logger::info(
+        LogTag::System, "Initializing services...");
 
     if let Err(e) = screenerbot::rpc::init_rpc_client() {
-        log(
-            LogTag::System,
-            "WARN",
+        logger::info(
+        LogTag::System,
             &format!("RPC initialization failed: {}", e),
         );
     }
 
     // Always initialize DexScreener API since we need it to discover pools
     init_dexscreener_api().await?;
-    log(LogTag::System, "INIT", "DexScreener API initialized");
+    logger::info(
+        LogTag::System, "DexScreener API initialized");
 
     // Open token database
-    log(LogTag::System, "DB", "Opening token database...");
+    logger::info(LogTag::System, "Opening token database...");
     let db = TokenDatabase::new()?;
     let mut tokens = db.get_all_tokens().await?;
 
@@ -1138,9 +1122,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let tokens = tokens.into_iter().take(args.max_tokens).collect::<Vec<_>>();
 
-    log(
+    logger::info(
         LogTag::System,
-        "DB",
         &format!("Scanning {} tokens for pools", tokens.len()),
     );
 
@@ -1150,9 +1133,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for (i, token) in tokens.iter().enumerate() {
         if i > 0 && i % 50 == 0 {
-            log(
-                LogTag::System,
-                "PROGRESS",
+            logger::info(
+        LogTag::System,
                 &format!("Processed {}/{} tokens", i, tokens.len()),
             );
         }
@@ -1165,9 +1147,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match find_pools_for_token(token, &args).await {
             Ok(pools) => {
                 if args.verbose && !pools.is_empty() {
-                    log(
-                        LogTag::System,
-                        "POOLS_FOUND",
+                    logger::info(
+        LogTag::System,
                         &format!(
                             "Token {} ({}): found {} pools",
                             &token.mint[..8],
@@ -1181,9 +1162,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Err(e) => {
                 error_count += 1;
                 if args.verbose {
-                    log(
-                        LogTag::System,
-                        "ERROR",
+                    logger::info(
+        LogTag::System,
                         &format!("Token {}: {}", &token.mint[..8], e),
                     );
                 }
@@ -1191,9 +1171,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    log(
+    logger::info(
         LogTag::System,
-        "DISCOVERY",
         &format!(
             "Found {} total pools from {} tokens ({} errors)",
             all_test_pools.len(),
@@ -1292,6 +1271,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let elapsed = start_time.elapsed();
     println!("\n⏱️  Total execution time: {:.2}s", elapsed.as_secs_f64());
 
-    log(LogTag::System, "COMPLETE", "Decoder validation completed");
+    logger::info(LogTag::System, "Decoder validation completed");
     Ok(())
 }

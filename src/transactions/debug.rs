@@ -11,7 +11,7 @@ use tabled::{
     Table, Tabled,
 };
 
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::transactions::{
     database::get_transaction_database, processor::TransactionProcessor, types::*, utils::*,
 };
@@ -104,9 +104,8 @@ pub async fn debug_transaction(
     wallet_pubkey: solana_sdk::pubkey::Pubkey,
     verbose: bool,
 ) -> Result<DebugAnalysisResult, String> {
-    log(
+    logger::info(
         LogTag::Transactions,
-        "DEBUG",
         &format!("Starting debug analysis for transaction: {}", signature),
     );
 
@@ -166,9 +165,8 @@ pub async fn debug_transaction(
         print_debug_analysis(&result);
     }
 
-    log(
+    logger::info(
         LogTag::Transactions,
-        "DEBUG",
         &format!(
             "Debug analysis complete for {}: {} steps, {} validations, {}ms total",
             signature,
@@ -186,9 +184,8 @@ pub async fn debug_transactions_batch(
     signatures: Vec<String>,
     wallet_pubkey: solana_sdk::pubkey::Pubkey,
 ) -> Result<Vec<DebugAnalysisResult>, String> {
-    log(
+    logger::info(
         LogTag::Transactions,
-        "DEBUG_BATCH",
         &format!(
             "Starting batch debug analysis for {} transactions",
             signatures.len()
@@ -214,9 +211,8 @@ pub async fn debug_transactions_batch(
                 results.push(debug_result);
             }
             Err(e) => {
-                log(
-                    LogTag::Transactions,
-                    "ERROR",
+                logger::info(
+        LogTag::Transactions,
                     &format!("Failed to debug transaction: {}", e),
                 );
             }
@@ -225,9 +221,8 @@ pub async fn debug_transactions_batch(
 
     let total_duration = start_time.elapsed();
 
-    log(
+    logger::info(
         LogTag::Transactions,
-        "DEBUG_BATCH_COMPLETE",
         &format!(
             "Batch debug complete: {}/{} successful in {}ms (avg: {}ms/tx)",
             success_count,

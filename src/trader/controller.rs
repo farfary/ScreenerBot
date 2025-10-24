@@ -1,7 +1,7 @@
 //! Trader controller for starting/stopping trading
 
 use crate::config::update_config_section;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use std::time::Duration;
 
 /// Trader control error types
@@ -35,7 +35,7 @@ pub async fn start_trader() -> Result<(), TraderControlError> {
         return Err(TraderControlError::AlreadyRunning);
     }
 
-    log(LogTag::Trader, "INFO", "Enabling trader operations...");
+    logger::info(LogTag::Trader, "Enabling trader operations...");
 
     // Update config to enable trader
     update_config_section(
@@ -46,7 +46,7 @@ pub async fn start_trader() -> Result<(), TraderControlError> {
     )
     .map_err(|e| TraderControlError::ConfigUpdate(e.to_string()))?;
 
-    log(LogTag::Trader, "INFO", "Trader operations enabled");
+    logger::info(LogTag::Trader, "Trader operations enabled");
     Ok(())
 }
 
@@ -56,7 +56,7 @@ pub async fn stop_trader_gracefully() -> Result<(), TraderControlError> {
         return Err(TraderControlError::AlreadyStopped);
     }
 
-    log(LogTag::Trader, "INFO", "Disabling trader operations...");
+    logger::info(LogTag::Trader, "Disabling trader operations...");
 
     // Update config to disable trader
     update_config_section(
@@ -70,6 +70,6 @@ pub async fn stop_trader_gracefully() -> Result<(), TraderControlError> {
     // Wait a moment for graceful shutdown
     tokio::time::sleep(Duration::from_secs(2)).await;
 
-    log(LogTag::Trader, "INFO", "Trader operations disabled");
+    logger::info(LogTag::Trader, "Trader operations disabled");
     Ok(())
 }

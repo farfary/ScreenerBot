@@ -12,17 +12,17 @@ pub use decision_cache::{
 pub use retry::retry_trade;
 pub use sell::execute_sell;
 
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::trader::types::{TradeAction, TradeDecision, TradeResult};
 
 /// Initialize the execution system
 pub async fn init_execution_system() -> Result<(), String> {
-    log(LogTag::Trader, "INFO", "Initializing execution system...");
+    logger::info(LogTag::Trader, "Initializing execution system...");
 
     // Initialize decision cache
     decision_cache::init_cache()?;
 
-    log(LogTag::Trader, "INFO", "Execution system initialized");
+    logger::info(LogTag::Trader, "Execution system initialized");
     Ok(())
 }
 

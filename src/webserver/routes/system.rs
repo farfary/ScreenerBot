@@ -6,8 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::Instant;
 
-use crate::arguments::is_debug_webserver_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 // TODO: Re-enable when trader module is fully integrated
 // use crate::trader::CRITICAL_OPERATIONS_IN_PROGRESS;
 use crate::webserver::state::AppState;
@@ -29,16 +28,14 @@ pub struct RebootResponse {
 
 /// POST /api/system/reboot - Restart the entire screenerbot process
 async fn reboot_system() -> Response {
-    if is_debug_webserver_enabled() {
-        log(LogTag::Webserver, "INFO", "System reboot requested via API");
-    }
+    logger::debug(LogTag::Webserver, "System reboot requested via API");
 
     // TODO: Re-enable critical operations check when trader module is integrated
     // Wait for critical operations to complete (max 30 seconds)
     // let timeout = Instant::now() + Duration::from_secs(30);
     // while CRITICAL_OPERATIONS_IN_PROGRESS.load(Ordering::SeqCst) > 0 {
     //     if Instant::now() > timeout {
-    //         log(
+    //         logger::info(
     //             LogTag::Webserver,
     //             "WARN",
     //             "Timeout waiting for critical operations during reboot",
@@ -63,15 +60,9 @@ async fn reboot_system() -> Response {
 
     let args: Vec<String> = env::args().skip(1).collect();
 
-    log(
-        LogTag::Webserver,
-        "INFO",
-        &format!(
-            "Restarting process: {} with args: {:?}",
+    logger::info(LogTag::Webserver, &format!("Restarting process: {} with args: {:?}",
             current_exe.display(),
-            args
-        ),
-    );
+            args));
 
     // Spawn async task to perform restart after response is sent
     tokio::spawn(async move {
@@ -82,46 +73,26 @@ async fn reboot_system() -> Response {
         #[cfg(unix)]
         {
             use std::os::unix::process::CommandExt;
-            log(
-                LogTag::Webserver,
-                "INFO",
-                "Executing Unix exec() for process replacement",
-            );
+            logger::info(LogTag::Webserver, "Executing Unix exec() for process replacement");
 
             let error = Command::new(current_exe).args(&args).exec(); // This replaces the current process
 
             // If exec returns, it failed
-            log(
-                LogTag::Webserver,
-                "ERROR",
-                &format!("Failed to exec new process: {}", error),
-            );
+            logger::error(LogTag::Webserver, &format!("Failed to exec new process: {}", error));
             std::process::exit(1);
         }
 
         #[cfg(windows)]
         {
-            log(
-                LogTag::Webserver,
-                "INFO",
-                "Spawning new process on Windows and exiting current",
-            );
+            logger::info(LogTag::Webserver, "Spawning new process on Windows and exiting current");
 
             match Command::new(current_exe).args(&args).spawn() {
                 Ok(_) => {
-                    log(
-                        LogTag::Webserver,
-                        "INFO",
-                        "New process spawned successfully, exiting current process",
-                    );
+                    logger::info(LogTag::Webserver, "New process spawned successfully, exiting current process");
                     std::process::exit(0);
                 }
                 Err(e) => {
-                    log(
-                        LogTag::Webserver,
-                        "ERROR",
-                        &format!("Failed to spawn new process: {}", e),
-                    );
+                    logger::error(LogTag::Webserver, &format!("Failed to spawn new process: {}", e));
                     std::process::exit(1);
                 }
             }

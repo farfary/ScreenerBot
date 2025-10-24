@@ -8,6 +8,7 @@ use crate::ohlcvs::types::{OhlcvDataPoint, OhlcvError, OhlcvResult, Priority, Ti
 use chrono::Utc;
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
+use crate::logger::{self, LogTag};
 
 pub struct GapManager {
     db: Arc<OhlcvDatabase>,
@@ -173,7 +174,7 @@ impl GapManager {
                     }
                     Err(e) => {
                         stats.failed_gaps += 1;
-                        eprintln!("Failed to fill gap: {}", e);
+                        logger::error(LogTag::Ohlcv, &format!("Failed to fill gap: {}", e));
                     }
                 }
             }

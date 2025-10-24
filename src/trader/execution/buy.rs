@@ -1,15 +1,14 @@
 //! Buy operation execution
 
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::trader::config;
 use crate::trader::types::{TradeDecision, TradeResult};
 
 /// Execute a buy trade
 pub async fn execute_buy(decision: &TradeDecision) -> Result<TradeResult, String> {
-    log(
+    logger::info(
         LogTag::Trader,
-        "INFO",
         &format!(
             "Executing buy for token {} (reason: {:?}, strategy: {:?})",
             decision.mint, decision.reason, decision.strategy_id
@@ -25,9 +24,8 @@ pub async fn execute_buy(decision: &TradeDecision) -> Result<TradeResult, String
     // Call positions open with size so manual size is honored
     match positions::open_position_with_size(&decision.mint, trade_size_sol).await {
         Ok(transaction_signature) => {
-            log(
+            logger::info(
                 LogTag::Trader,
-                "SUCCESS",
                 &format!(
                     "✅ Buy executed: {} | ~{} SOL | TX: {}",
                     decision.mint, trade_size_sol, transaction_signature
@@ -44,7 +42,7 @@ pub async fn execute_buy(decision: &TradeDecision) -> Result<TradeResult, String
         }
         Err(e) => {
             let error = format!("Buy execution failed: {}", e);
-            log(LogTag::Trader, "ERROR", &error);
+            logger::error(LogTag::Trader, &error);
             Ok(TradeResult::failure(decision.clone(), error, 0))
         }
     }
@@ -52,9 +50,8 @@ pub async fn execute_buy(decision: &TradeDecision) -> Result<TradeResult, String
 
 /// Execute a DCA (dollar cost averaging) buy
 pub async fn execute_dca(decision: &TradeDecision) -> Result<TradeResult, String> {
-    log(
+    logger::info(
         LogTag::Trader,
-        "INFO",
         &format!(
             "Executing DCA for position {} token {}",
             decision
@@ -73,9 +70,8 @@ pub async fn execute_dca(decision: &TradeDecision) -> Result<TradeResult, String
     // Call positions::add_to_position to handle DCA entry
     match positions::add_to_position(&decision.mint, dca_amount_sol).await {
         Ok(transaction_signature) => {
-            log(
+            logger::info(
                 LogTag::Trader,
-                "SUCCESS",
                 &format!(
                     "✅ DCA executed: {} | {} SOL | TX: {}",
                     decision.mint, dca_amount_sol, transaction_signature
@@ -92,7 +88,7 @@ pub async fn execute_dca(decision: &TradeDecision) -> Result<TradeResult, String
         }
         Err(e) => {
             let error = format!("DCA execution failed: {}", e);
-            log(LogTag::Trader, "ERROR", &error);
+            logger::error(LogTag::Trader, &error);
             Ok(TradeResult::failure(decision.clone(), error, 0))
         }
     }

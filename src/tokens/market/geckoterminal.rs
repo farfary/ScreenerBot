@@ -8,6 +8,7 @@
 /// - Returns aggregated token data (price, volume, market cap, etc.)
 /// - No pool filtering logic (uses aggregated metrics from API)
 use crate::apis::geckoterminal::{GeckoTerminalPool, GeckoTerminalTokenInfoResponse};
+use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::store::{self, CacheMetrics};
 use crate::tokens::types::{GeckoTerminalData, TokenError, TokenResult};
@@ -61,9 +62,12 @@ pub async fn fetch_geckoterminal_data_batch(
             if age < 60 {
                 store::store_geckoterminal(mint, &db_data);
                 if let Err(err) = store::refresh_token_snapshot(mint).await {
-                    eprintln!(
-                        "[TOKENS][STORE] Failed to refresh token snapshot after DB hit mint={} err={:?}",
-                        mint, err
+                    logger::error(
+                        LogTag::Tokens,
+                        &format!(
+                            "[TOKENS][STORE] Failed to refresh token snapshot after DB hit mint={} err={:?}",
+                            mint, err
+                        ),
                     );
                 }
                 results.insert(mint.clone(), Some(db_data));

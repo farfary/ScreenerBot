@@ -9,8 +9,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use crate::global::is_debug_transactions_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::transactions::types::*;
 
 // =============================================================================
@@ -77,10 +76,9 @@ pub async fn is_signature_known_globally(signature: &str) -> bool {
 pub async fn add_signature_to_known_globally(signature: String) {
     let mut known_sigs = GLOBAL_KNOWN_SIGNATURES.lock().await;
     let inserted = known_sigs.insert(signature.clone());
-    if inserted && is_debug_transactions_enabled() {
-        log(
+    if inserted {
+        logger::debug(
             LogTag::Transactions,
-            "CACHE_TRACK",
             &format!(
                 "Added signature {} to known cache (total={})",
                 &signature,
@@ -106,9 +104,8 @@ pub async fn get_known_signatures_count() -> usize {
 pub async fn clear_global_known_signatures() {
     let mut known_sigs = GLOBAL_KNOWN_SIGNATURES.lock().await;
     known_sigs.clear();
-    log(
+    logger::info(
         LogTag::Transactions,
-        "INFO",
         "Cleared global known signatures cache",
     );
 }
@@ -140,9 +137,8 @@ pub async fn cleanup_expired_pending_transactions() -> usize {
     pending.retain(|signature, timestamp| {
         let age_secs = (now - *timestamp).num_seconds();
         if age_secs > PENDING_MAX_AGE_SECS {
-            log(
-                LogTag::Transactions,
-                "DEBUG",
+            logger::info(
+        LogTag::Transactions,
                 &format!(
                     "Expired pending transaction: {} (age: {}s)",
                     &signature[..8],
@@ -157,9 +153,8 @@ pub async fn cleanup_expired_pending_transactions() -> usize {
     });
 
     if expired_count > 0 {
-        log(
-            LogTag::Transactions,
-            "INFO",
+        logger::info(
+        LogTag::Transactions,
             &format!("Cleaned up {} expired pending transactions", expired_count),
         );
     }
@@ -366,9 +361,8 @@ impl DurationMeasure {
         let ms = duration.as_millis() as u64;
 
         if ms > 1000 {
-            log(
-                LogTag::Transactions,
-                "WARN",
+            logger::info(
+        LogTag::Transactions,
                 &format!("Slow operation '{}': {}ms", self.operation, ms),
             );
         }
@@ -380,9 +374,8 @@ impl DurationMeasure {
     pub fn finish_and_log(self) -> u64 {
         let operation = self.operation.clone();
         let ms = self.finish();
-        log(
-            LogTag::Transactions,
-            "DEBUG",
+        logger::info(
+        LogTag::Transactions,
             &format!("Operation '{}' completed in {}ms", operation, ms),
         );
         ms

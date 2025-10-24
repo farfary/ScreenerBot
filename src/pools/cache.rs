@@ -1,13 +1,11 @@
 use super::db; // Database module for persistence
 use super::types::{price_cache_ttl_seconds, PriceHistory, PriceResult, PRICE_HISTORY_MAX_ENTRIES};
-use crate::arguments::is_debug_pool_cache_enabled;
 /// Price cache and history management
 ///
 /// This module provides thread-safe caching for pool prices and maintains
 /// price history for tokens. It uses efficient concurrent data structures
 /// to minimize lock contention on the hot path.
-use crate::global::is_debug_pool_service_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use dashmap::DashMap;
 use solana_sdk::pubkey::Pubkey;
 use std::sync::Arc;
@@ -25,13 +23,7 @@ static PRICE_HISTORY: once_cell::sync::Lazy<RwLock<dashmap::DashMap<String, Pric
 
 /// Initialize the cache system
 pub async fn initialize_cache() {
-    if is_debug_pool_cache_enabled() {
-        log(
-            LogTag::PoolCache,
-            "DEBUG",
-            "Initializing price cache system",
-        );
-    }
+    logger::debug(LogTag::PoolCache, "Initializing price cache system");
 
     // Load historical data from database into cache
     load_historical_data_into_cache().await;
@@ -39,9 +31,7 @@ pub async fn initialize_cache() {
     // Start cleanup task
     start_cache_cleanup_task().await;
 
-    if is_debug_pool_cache_enabled() {
-        log(LogTag::PoolCache, "DEBUG", "Price cache system initialized");
-    }
+    logger::debug(LogTag::PoolCache, "Price cache system initialized");
 }
 
 /// Get current price for a token
@@ -60,13 +50,10 @@ pub fn update_price(price: PriceResult) {
     let price_for_db = price.clone();
     tokio::spawn(async move {
         if let Err(e) = db::queue_price_for_storage(price_for_db).await {
-            if is_debug_pool_cache_enabled() {
-                log(
-                    LogTag::PoolCache,
-                    "ERROR",
-                    &format!("Failed to queue price for storage: {}", e),
-                );
-            }
+            logger::error(
+                LogTag::PoolCache,
+                &format!("Failed to queue price for storage: {}", e),
+            );
         }
     });
 
@@ -74,10 +61,9 @@ pub fn update_price(price: PriceResult) {
     if let Ok(history_map) = PRICE_HISTORY.read() {
         if let Some(mut history) = history_map.get_mut(&mint) {
             let removed_count = history.cleanup_gapped_data();
-            if removed_count > 0 && is_debug_pool_cache_enabled() {
-                log(
+            if removed_count > 0 {
+                logger::info(
                     LogTag::PoolCache,
-                    "GAP_CLEANUP",
                     &format!(
                         "Removed {} gapped entries from memory for token: {}",
                         removed_count, mint
@@ -87,28 +73,24 @@ pub fn update_price(price: PriceResult) {
 
             history.add_price(price);
 
-            if is_debug_pool_cache_enabled() {
-                log(
-                    LogTag::PoolCache,
-                    "DEBUG",
-                    &format!("Updated price for token: {}", mint),
-                );
-            }
+            logger::debug(
+                LogTag::PoolCache,
+                &format!("Updated price for token: {}", mint),
+            );
 
             // Trigger database gap cleanup if gaps were detected in memory
             if removed_count > 0 {
                 let mint_for_cleanup = mint.clone();
                 tokio::spawn(async move {
                     if let Err(e) = db::cleanup_gapped_data_for_token(&mint_for_cleanup).await {
-                        log(
-                            LogTag::PoolCache,
-                            "ERROR",
-                            &format!(
-                                "Failed to cleanup gapped data in database for {}: {}",
-                                mint_for_cleanup, e
-                            ),
-                        );
-                    }
+                            logger::error(
+                                LogTag::PoolCache,
+                                &format!(
+                                    "Failed to cleanup gapped data in database for {}: {}",
+                                    mint_for_cleanup, e
+                                ),
+                            );
+                        }
                 });
             }
 
@@ -122,13 +104,10 @@ pub fn update_price(price: PriceResult) {
         new_history.add_price(price);
         history_map.insert(mint.clone(), new_history);
 
-        if is_debug_pool_cache_enabled() {
-            log(
-                LogTag::PoolCache,
-                "DEBUG",
-                &format!("Created new price history for token: {}", mint),
-            );
-        }
+        logger::debug(
+            LogTag::PoolCache,
+            &format!("Created new price history for token: {}", mint),
+        );
     }
 }
 
@@ -211,10 +190,9 @@ fn cleanup_stale_entries() {
         is_fresh
     });
 
-    if removed_count > 0 && is_debug_pool_cache_enabled() {
-        log(
+    if removed_count > 0 {
+        logger::debug(
             LogTag::PoolCache,
-            "DEBUG",
             &format!("Cleaned {} stale price entries", removed_count),
         );
     }
@@ -222,32 +200,26 @@ fn cleanup_stale_entries() {
 
 /// Load historical data from database into in-memory cache
 async fn load_historical_data_into_cache() {
-    if is_debug_pool_cache_enabled() {
-        log(
-            LogTag::PoolCache,
-            "DEBUG",
-            "Loading historical data from database into cache",
-        );
-    }
+    logger::debug(
+        LogTag::PoolCache,
+        "Loading historical data from database into cache",
+    );
 
     // Get list of all tokens that have available prices in cache (this will be empty on first run)
     // Instead, we'll load based on tokens that exist in the database
     // For now, we'll load on-demand when prices are requested
 
-    if is_debug_pool_cache_enabled() {
-        log(
-            LogTag::PoolCache,
-            "DEBUG",
-            "Historical data loading setup completed",
-        );
-    }
+    logger::debug(
+        LogTag::PoolCache,
+        "Historical data loading setup completed",
+    );
 }
 
 /// Load historical data for a specific token from database
 pub async fn load_token_history_from_database(mint: &str) -> Result<(), String> {
     match db::load_historical_data_for_token(mint).await {
         Ok(historical_prices) => {
-            if !historical_prices.is_empty() {
+                    if !historical_prices.is_empty() {
                 // Create or update history entry
                 if let Ok(mut history_map) = PRICE_HISTORY.write() {
                     let mut new_history =
@@ -261,28 +233,22 @@ pub async fn load_token_history_from_database(mint: &str) -> Result<(), String> 
 
                     history_map.insert(mint.to_string(), new_history);
 
-                    if is_debug_pool_cache_enabled() {
-                        log(
-                            LogTag::PoolCache,
-                            "DEBUG",
-                            &format!(
-                                "Loaded {} historical prices for token: {}",
-                                prices_count, mint
-                            ),
-                        );
-                    }
+                    logger::debug(
+                        LogTag::PoolCache,
+                        &format!(
+                            "Loaded {} historical prices for token: {}",
+                            prices_count, mint
+                        ),
+                    );
                 }
             }
             Ok(())
         }
         Err(e) => {
-            if is_debug_pool_cache_enabled() {
-                log(
-                    LogTag::PoolCache,
-                    "WARN",
-                    &format!("Failed to load historical data for {}: {}", mint, e),
-                );
-            }
+            logger::warning(
+                LogTag::PoolCache,
+                &format!("Failed to load historical data for {}: {}", mint, e),
+            );
             Err(e)
         }
     }

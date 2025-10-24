@@ -31,16 +31,16 @@ pub const POSITION_MONITOR_INTERVAL_SECS: u64 = 5;
 pub const DEBUG_FORCE_SELL_MODE: bool = false;
 pub const DEBUG_FORCE_BUY_MODE: bool = false;
 
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 
 /// Initialize the trader system
 pub async fn init_trader_system() -> Result<(), String> {
-    log(LogTag::Trader, "INFO", "Initializing trader system...");
+    logger::info(LogTag::Trader, "Initializing trader system...");
 
     // Initialize subsystems
     execution::init_execution_system().await?;
     safety::init_safety_system().await?;
 
-    log(LogTag::Trader, "INFO", "Trader system initialized");
+    logger::info(LogTag::Trader, "Trader system initialized");
     Ok(())
 }

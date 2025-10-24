@@ -4,7 +4,7 @@
 /// It integrates with the centralized Raydium CLMM decoder and provides proper
 /// account derivation and swap calculations based on the Uniswap V3 model.
 use super::ProgramSwap;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::pools::decoders::raydium_clmm::{ClmmPoolInfo, RaydiumClmmDecoder};
 use crate::pools::swap::executor::SwapExecutor;
 use crate::pools::swap::types::{
@@ -39,11 +39,7 @@ impl ProgramSwap for RaydiumClmmSwap {
         request: SwapRequest,
         pool_data: AccountData,
     ) -> Result<SwapResult, SwapError> {
-        log(
-            LogTag::System,
-            "INFO",
-            &format!("🟣 Starting Raydium CLMM {:?} swap", request.direction),
-        );
+        logger::info(LogTag::System, &format!("🟣 Starting Raydium CLMM {:?} swap", request.direction));
 
         // Decode pool state using centralized decoder
         let pool_info = Self::decode_pool_state(&pool_data)?;
@@ -54,9 +50,8 @@ impl ProgramSwap for RaydiumClmmSwap {
         // Calculate swap parameters using CLMM math
         let swap_params = Self::calculate_clmm_swap_params(&request, &pool_info).await?;
 
-        log(
+        logger::info(
             LogTag::System,
-            "INFO",
             &format!(
                 "💡 CLMM Swap: {} → {} (min output: {})",
                 swap_params.input_amount, swap_params.expected_output, swap_params.minimum_output
@@ -108,9 +103,8 @@ impl RaydiumClmmSwap {
         let vault_0_balance = Self::get_token_account_balance(&pool_info.token_vault_0).await?;
         let vault_1_balance = Self::get_token_account_balance(&pool_info.token_vault_1).await?;
 
-        log(
+        logger::info(
             LogTag::System,
-            "INFO",
             &format!(
                 "📊 CLMM Vault balances - Vault0: {}, Vault1: {}, Current tick: {}, Price: {:.12}",
                 vault_0_balance,

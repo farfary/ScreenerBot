@@ -1,6 +1,6 @@
 //! Retry mechanism for failed trades
 
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::trader::execution::{execute_buy, execute_sell};
 use crate::trader::types::{TradeAction, TradeResult};
 use tokio::time::{sleep, Duration};
@@ -17,9 +17,8 @@ pub async fn retry_trade(result: &TradeResult) -> Result<TradeResult, String> {
     let mut retry_count = result.retry_count;
 
     if retry_count >= MAX_RETRIES {
-        log(
+        logger::error(
             LogTag::Trader,
-            "ERROR",
             &format!(
                 "Max retries ({}) reached for trade: mint={}, action={:?}",
                 MAX_RETRIES, result.decision.mint, result.decision.action
@@ -30,9 +29,8 @@ pub async fn retry_trade(result: &TradeResult) -> Result<TradeResult, String> {
 
     retry_count += 1;
 
-    log(
+    logger::info(
         LogTag::Trader,
-        "INFO",
         &format!(
             "Retrying trade (attempt {}/{}): mint={}, action={:?}",
             retry_count, MAX_RETRIES, result.decision.mint, result.decision.action

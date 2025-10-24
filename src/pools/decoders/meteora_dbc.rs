@@ -15,9 +15,8 @@
 /// - sqrt_price (u128)
 /// ... plus metadata. We compute price from live vault balances minus fees.
 use super::{AccountData, PoolDecoder};
-use crate::arguments::is_debug_pool_decoders_enabled;
 use crate::constants::SOL_DECIMALS;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::pools::types::{PriceResult, ProgramKind, METEORA_DBC_PROGRAM_ID, SOL_MINT};
 use crate::pools::utils::{read_pubkey_at, read_token_account_amount};
 use crate::tokens::get_cached_decimals;
@@ -40,13 +39,10 @@ impl PoolDecoder for MeteoraDbcDecoder {
             .values()
             .find(|a| a.owner.to_string() == METEORA_DBC_PROGRAM_ID)?;
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::Pool,
-                "DBC_PARSE",
-                &format!("Pool {} bytes:{}", pool_acc.pubkey, pool_acc.data.len()),
-            );
-        }
+        logger::info(
+            LogTag::Pool,
+            &format!("Pool {} bytes:{}", pool_acc.pubkey, pool_acc.data.len()),
+        );
 
         // Parse key fields from the provided on-chain JSON (stable offsets not guaranteed across versions),
         // but the vault accounts themselves are SPL Token accounts; we can rely on them for balances.
@@ -122,16 +118,13 @@ impl PoolDecoder for MeteoraDbcDecoder {
         let decimals_scale = (10f64).powi((sol_decimals as i32) - (token_decimals as i32));
         let price_per_token = raw_ratio / decimals_scale;
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::Pool,
-                "DBC_PRICE_CALC",
-                &format!(
-                    "sqrt_price_f64: {}, raw_ratio: {}, decimals_scale: {}, price_per_token: {}",
-                    sqrt_price_f64, raw_ratio, decimals_scale, price_per_token
-                ),
-            );
-        }
+        logger::debug(
+            LogTag::Pool,
+            &format!(
+                "sqrt_price_f64: {}, raw_ratio: {}, decimals_scale: {}, price_per_token: {}",
+                sqrt_price_f64, raw_ratio, decimals_scale, price_per_token
+            ),
+        );
 
         if price_per_token <= 0.0 || !price_per_token.is_finite() {
             return None;
@@ -198,36 +191,21 @@ fn extract_sqrt_price_from_pool_data(data: &[u8]) -> Option<u128> {
     // Primary: read from known offset (Anchor discriminator +8 bytes)
     if data.len() >= 296 {
         if let Ok(val) = read_u128_le(&data[280..296]) {
-            if is_debug_pool_decoders_enabled() {
-                log(
-                    LogTag::Pool,
-                    "DBC_SQRT_PRICE",
-                    &format!("Found sqrt_price: {}", val),
-                );
-            }
+            logger::debug(LogTag::Pool, &format!("Found sqrt_price: {}", val));
             return Some(val);
         }
     }
 
     // Fallback: scan entire account for any plausible u128 (very permissive)
-    if is_debug_pool_decoders_enabled() {
-        log(
-            LogTag::Pool,
-            "DBC_SQRT_SEARCH",
-            "Scanning for sqrt_price u128 value (fallback)",
-        );
-    }
+    logger::debug(LogTag::Pool, "Scanning for sqrt_price u128 value (fallback)");
     for offset in (0..data.len().saturating_sub(16)).step_by(8) {
         if let Ok(val) = read_u128_le(&data[offset..offset + 16]) {
             // Basic plausibility: value should be non-zero and < 2^80 (to avoid random big numbers)
             if val > 0 && val < 1u128 << 80 {
-                if is_debug_pool_decoders_enabled() {
-                    log(
-                        LogTag::Pool,
-                        "DBC_SQRT_FOUND",
-                        &format!("Candidate sqrt_price @{}: {}", offset, val),
-                    );
-                }
+                logger::debug(
+                    LogTag::Pool,
+                    &format!("Candidate sqrt_price @{}: {}", offset, val),
+                );
                 return Some(val);
             }
         }

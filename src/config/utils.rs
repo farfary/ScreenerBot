@@ -7,6 +7,7 @@ use super::schemas::Config;
 /// - Thread-safe access helpers
 /// - File watching for automatic reloads
 use once_cell::sync::OnceCell;
+use crate::logger::{self, LogTag};
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::{Keypair, Signer};
 use std::sync::RwLock;
@@ -61,7 +62,10 @@ pub fn load_config_from_path(path: &str) -> Result<(), String> {
             .map_err(|e| format!("Failed to parse config file '{}': {}", path, e))?
     } else {
         // Use defaults if file doesn't exist
-        eprintln!("⚠️  Config file '{}' not found, using default values", path);
+        crate::logger::warning(
+            crate::logger::LogTag::System,
+            &format!("⚠️  Config file '{}' not found, using default values", path),
+        );
         Config::default()
     };
 

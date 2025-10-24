@@ -34,7 +34,7 @@ use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::transactions::types::*;
 
 use self::classify::classify_transaction;
@@ -99,9 +99,8 @@ impl TransactionAnalyzer {
         tx_data: &crate::rpc::TransactionDetails,
     ) -> Result<CompleteAnalysis, String> {
         if self.debug_enabled {
-            log(
-                LogTag::Transactions,
-                "ANALYZE_START",
+            logger::info(
+        LogTag::Transactions,
                 &format!(
                     "Starting complete analysis for tx: {}",
                     transaction.signature
@@ -156,9 +155,8 @@ impl TransactionAnalyzer {
         let analyzed_at = chrono::Utc::now().timestamp();
 
         if self.debug_enabled {
-            log(
-                LogTag::Transactions,
-                "ANALYZE_COMPLETE",
+            logger::info(
+        LogTag::Transactions,
                 &format!(
                     "Analysis complete for {}: confidence={:?}, patterns={}, classification={:?}",
                     transaction.signature,

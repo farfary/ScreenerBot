@@ -9,8 +9,7 @@ use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use crate::global::is_debug_transactions_enabled;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::pools::types::SOL_MINT;
 use crate::tokens::get_decimals;
 use crate::transactions::{
@@ -38,8 +37,8 @@ impl TransactionProcessor {
         Self {
             wallet_pubkey,
             fetcher: TransactionFetcher::new(),
-            analyzer: TransactionAnalyzer::new(is_debug_transactions_enabled()),
-            debug_enabled: is_debug_transactions_enabled(),
+            analyzer: TransactionAnalyzer::new(false),
+            debug_enabled: false,
             cache_only: false,
             force_refresh: false,
         }
@@ -54,8 +53,8 @@ impl TransactionProcessor {
         Self {
             wallet_pubkey,
             fetcher: TransactionFetcher::new(),
-            analyzer: TransactionAnalyzer::new(is_debug_transactions_enabled()),
-            debug_enabled: is_debug_transactions_enabled(),
+            analyzer: TransactionAnalyzer::new(false),
+            debug_enabled: false,
             cache_only,
             force_refresh,
         }
@@ -66,9 +65,8 @@ impl TransactionProcessor {
         let start_time = Instant::now();
 
         if self.debug_enabled {
-            log(
-                LogTag::Transactions,
-                "PROCESS",
+            logger::info(
+        LogTag::Transactions,
                 &format!(
                     "Processing transaction: {} for wallet: {}",
                     signature,
@@ -99,9 +97,8 @@ impl TransactionProcessor {
         transaction.analysis_duration_ms = Some(processing_duration.as_millis() as u64);
 
         if self.debug_enabled {
-            log(
-                LogTag::Transactions,
-                "PROCESS_COMPLETE",
+            logger::info(
+        LogTag::Transactions,
                 &format!(
                     "✅ Processed {}: type={:?}, direction={:?}, duration={}ms",
                     signature,
@@ -127,16 +124,14 @@ impl TransactionProcessor {
         if let Some(database) = crate::transactions::database::get_transaction_database().await {
             if let Err(e) = database.store_processed_transaction(&transaction).await {
                 if self.debug_enabled {
-                    log(
-                        LogTag::Transactions,
-                        "WARN",
+                    logger::info(
+        LogTag::Transactions,
                         &format!("Failed to cache processed transaction: {}", e),
                     );
                 }
             } else if self.debug_enabled {
-                log(
-                    LogTag::Transactions,
-                    "CACHE_PROCESSED",
+                logger::info(
+        LogTag::Transactions,
                     &format!("Cached processed transaction: {}", signature),
                 );
             }
@@ -181,9 +176,8 @@ impl TransactionProcessor {
         if self.cache_only {
             if let Some(cached_details) = database.get_raw_transaction_details(signature).await? {
                 if self.debug_enabled {
-                    log(
-                        LogTag::Transactions,
-                        "CACHE_ONLY_HIT",
+                    logger::info(
+        LogTag::Transactions,
                         &format!(
                             "Using cached raw transaction data (cache-only mode): {}",
                             signature
@@ -202,9 +196,8 @@ impl TransactionProcessor {
         // Step 2: Handle force-refresh mode - skip cache and fetch fresh
         if self.force_refresh {
             if self.debug_enabled {
-                log(
-                    LogTag::Transactions,
-                    "FORCE_REFRESH",
+                logger::info(
+        LogTag::Transactions,
                     &format!("Force fetching fresh transaction data: {}", signature),
                 );
             }
@@ -212,9 +205,8 @@ impl TransactionProcessor {
             // Step 3: Normal mode - try cache first
             if let Some(cached_details) = database.get_raw_transaction_details(signature).await? {
                 if self.debug_enabled {
-                    log(
-                        LogTag::Transactions,
-                        "CACHE_HIT",
+                    logger::info(
+        LogTag::Transactions,
                         &format!("Using cached raw transaction data for: {}", signature),
                     );
                 }
@@ -222,9 +214,8 @@ impl TransactionProcessor {
             }
 
             if self.debug_enabled {
-                log(
-                    LogTag::Transactions,
-                    "CACHE_MISS",
+                logger::info(
+        LogTag::Transactions,
                     &format!("Fetching fresh transaction data for: {}", signature),
                 );
             }
@@ -262,9 +253,8 @@ impl TransactionProcessor {
             // Store raw transaction data in cache
             if let Err(e) = database.store_raw_transaction(&temp_transaction).await {
                 if self.debug_enabled {
-                    log(
-                        LogTag::Transactions,
-                        "WARN",
+                    logger::info(
+        LogTag::Transactions,
                         &format!(
                             "Failed to cache raw transaction data for {}: {}",
                             signature, e
@@ -272,9 +262,8 @@ impl TransactionProcessor {
                     );
                 }
             } else if self.debug_enabled {
-                log(
-                    LogTag::Transactions,
-                    "CACHE_STORE",
+                logger::info(
+        LogTag::Transactions,
                     &format!("Cached raw transaction data for: {}", signature),
                 );
             }
@@ -311,9 +300,8 @@ impl TransactionProcessor {
                     "no instructions field found".to_string()
                 };
 
-            log(
-                LogTag::Transactions,
-                "TX_DEBUG_INSTRUCTIONS",
+            logger::info(
+        LogTag::Transactions,
                 &format!("Transaction {} structure: {}", signature, instructions_info),
             );
 
@@ -334,16 +322,14 @@ impl TransactionProcessor {
                         format!("{} logs: {}", log_messages.len(), log_messages.join(" | "))
                     };
 
-                    log(
-                        LogTag::Transactions,
-                        "TX_DEBUG_LOGS",
+                    logger::info(
+        LogTag::Transactions,
                         &format!("Transaction {} {}", signature, log_preview),
                     );
                 }
 
-                log(
-                    LogTag::Transactions,
-                    "TX_DEBUG_BALANCES",
+                logger::info(
+        LogTag::Transactions,
                     &format!(
                         "Transaction {} balance changes: pre_count={}, post_count={}",
                         signature,
@@ -365,9 +351,8 @@ impl TransactionProcessor {
                     "no accountKeys field found".to_string()
                 };
 
-            log(
-                LogTag::Transactions,
-                "TX_DEBUG_ACCOUNTS",
+            logger::info(
+        LogTag::Transactions,
                 &format!("Transaction {} accounts: {}", signature, account_keys_info),
             );
         }
@@ -820,9 +805,8 @@ impl TransactionProcessor {
                                             as u64;
 
                                         if gross_input_raw > input_raw {
-                                            log(
-                                                LogTag::Transactions,
-                                                "MAP_SWAP_GROSS_INFLOW",
+                                            logger::info(
+        LogTag::Transactions,
                                                 &format!(
                                                     "Found wallet gross outflow: total={:.9} SOL tx_costs={:.9} SOL gross_swap={:.9} SOL (raw={})",
                                                     total_outflow,
@@ -849,9 +833,8 @@ impl TransactionProcessor {
                             direction,
                         ) {
                             if corrected_amount != input_raw {
-                                log(
-                                    LogTag::Transactions,
-                                    "MAP_SWAP_DEX_CORRECTION",
+                                logger::info(
+        LogTag::Transactions,
                                     &format!(
                                         "Applied {router} correction: {} -> {} ({:.2}% diff)",
                                         input_raw,
@@ -926,9 +909,8 @@ impl TransactionProcessor {
                                         if outflow_amount > sol_from_swap {
                                             sol_from_swap = outflow_amount;
                                             if self.debug_enabled {
-                                                log(
-                                                    LogTag::Transactions,
-                                                    "MAP_SWAP_INTERMEDIARY_FLOW",
+                                                logger::info(
+        LogTag::Transactions,
                                                     &format!(
                                                         "Found intermediary SOL outflow: account={} amount={:.9} SOL",
                                                         account,
@@ -956,9 +938,8 @@ impl TransactionProcessor {
                                 (sol_abs + fb.base_fee + fb.priority_fee + tips).max(0.0);
 
                             if self.debug_enabled {
-                                log(
-                                    LogTag::Transactions,
-                                    "MAP_SWAP_FALLBACK_CALC",
+                                logger::info(
+        LogTag::Transactions,
                                     &format!(
                                         "Using fallback calculation: wallet_change={:.9} + fees={:.9} = {:.9} SOL",
                                         sol_abs,
@@ -984,9 +965,8 @@ impl TransactionProcessor {
                             direction,
                         ) {
                             if corrected_amount != output_raw {
-                                log(
-                                    LogTag::Transactions,
-                                    "MAP_SWAP_DEX_CORRECTION",
+                                logger::info(
+        LogTag::Transactions,
                                     &format!(
                                         "Applied {router} correction: {} -> {} ({:.2}% diff)",
                                         output_raw,
@@ -1003,9 +983,8 @@ impl TransactionProcessor {
                         }
 
                         if self.debug_enabled {
-                            log(
-                                LogTag::Transactions,
-                                "MAP_SWAP_TOKEN_TO_SOL_FINAL",
+                            logger::info(
+        LogTag::Transactions,
                                 &format!(
                                     "Final swap calculation: output_ui={:.9} SOL (raw={})",
                                     output_ui, output_raw
@@ -1059,9 +1038,8 @@ impl TransactionProcessor {
                         crate::transactions::analyzer::classify::SwapDirection::SolToToken => {
                             if input_ui > 0.011 {
                                 // Allow small buffer above 0.01
-                                log(
-                                    LogTag::Transactions,
-                                    "SANITY_CHECK_WARN",
+                                logger::info(
+        LogTag::Transactions,
                                     &format!(
                                         "Buy amount {:.9} SOL exceeds expected max of 0.01 SOL for wallet {}",
                                         input_ui,
@@ -1074,9 +1052,8 @@ impl TransactionProcessor {
                             // For sells, allow larger amounts due to profit/loss but warn if extremely large
                             if output_ui > 0.1 {
                                 // 10x the normal buy amount
-                                log(
-                                    LogTag::Transactions,
-                                    "SANITY_CHECK_WARN",
+                                logger::info(
+        LogTag::Transactions,
                                     &format!(
                                         "Sell output {:.9} SOL is unusually large for wallet {} (expected < 0.1 SOL)",
                                         output_ui,
@@ -1207,9 +1184,8 @@ impl TransactionProcessor {
                         crate::transactions::analyzer::classify::SwapDirection::SolToToken
                     ) {
                         let fb = &analysis.pnl.fee_breakdown;
-                        log(
-                            LogTag::Transactions,
-                            "MAP_SWAP_FEES",
+                        logger::info(
+        LogTag::Transactions,
                             &format!(
                                 "fee_components: base={:.9} priority={:.9} tips={:.9} rent={:.9} swap_fees={:.9}",
                                 fb.base_fee,
@@ -1220,9 +1196,8 @@ impl TransactionProcessor {
                             )
                         );
                     }
-                    log(
-                        LogTag::Transactions,
-                        "MAP_SWAP",
+                    logger::info(
+        LogTag::Transactions,
                         &format!(
                             "Mapped swap: dir={:?} router={} in {} (ui={:.9}) -> out {} (ui={:.6})",
                             direction, router_str, input_raw, input_ui, output_raw, output_ui
@@ -1230,9 +1205,8 @@ impl TransactionProcessor {
                     );
                 }
             } else if self.debug_enabled {
-                log(
-                    LogTag::Transactions,
-                    "MAP_SWAP_SKIPPED",
+                logger::info(
+        LogTag::Transactions,
                     &"Skipping swap mapping: missing direction or primary token".to_string(),
                 );
             }

@@ -1,7 +1,7 @@
 use crate::{
     arguments::is_debug_positions_enabled,
     config::with_config,
-    logger::{log, LogTag},
+    logger::{self, LogTag},
     positions::{
         acquire_position_lock, delete_position_by_id, save_position, save_token_snapshot,
         update_position, Position, TokenSnapshot, MINT_TO_POSITION_INDEX, POSITIONS,
@@ -20,13 +20,10 @@ pub async fn add_signature_to_index(signature: &str, mint: &str) {
     let mut index = SIG_TO_MINT_INDEX.write().await;
     index.insert(signature.to_string(), mint.to_string());
 
-    if is_debug_positions_enabled() {
-        log(
+    logger::debug(
             LogTag::Positions,
-            "DEBUG",
             &format!("📋 Added signature {} -> mint {} to index", signature, mint),
         );
-    }
 }
 
 /// Remove signature from mint mapping
@@ -86,16 +83,11 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
     };
 
     if entry_price <= 0.0 || !entry_price.is_finite() {
-        if is_debug_positions_enabled() {
-            log(
-                LogTag::Positions,
-                "DEBUG",
-                &format!(
-                    "❌ Invalid entry price for {}: {}",
-                    position.symbol, entry_price
-                ),
-            );
-        }
+        // Log invalid entry price for diagnostics; logger will filter by level
+        logger::debug(
+            LogTag::Positions,
+            &format!("❌ Invalid entry price for {}: {}", position.symbol, entry_price),
+        );
         // Invalid entry price - return neutral P&L to avoid triggering emergency exits
         return (0.0, 0.0);
     }
@@ -197,13 +189,12 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
             let token_decimals = match token_decimals_opt {
                 Some(decimals) => decimals,
                 None => {
-                    log(
+                    logger::error(
                         LogTag::Positions,
-                        "ERROR",
                         &format!(
                             "Cannot calculate P&L for {} - decimals not available, skipping calculation",
                             position.mint
-                        )
+                        ),
                     );
                     return (0.0, 0.0); // Return zero P&L instead of wrong calculation
                 }
@@ -258,9 +249,8 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
             let token_decimals = match token_decimals_opt {
                 Some(decimals) => decimals,
                 None => {
-                    log(
-                        LogTag::Positions,
-                        "ERROR",
+                    logger::info(
+        LogTag::Positions,
                         &format!(
                             "Cannot calculate P&L for {} - decimals not available, skipping calculation",
                             position.mint
@@ -439,9 +429,8 @@ async fn fetch_and_create_token_snapshot(
         data_freshness_score: freshness_score,
     };
 
-    log(
+    logger::info(
         LogTag::Positions,
-        "SNAPSHOT_CREATED",
         &format!(
             "Created {} snapshot for {} from store (freshness: {}/100, price_sol: {:?})",
             snapshot_type, mint, freshness_score, price_sol
@@ -465,9 +454,8 @@ pub async fn save_position_token_snapshot(
     // Save to database
     match save_token_snapshot(&snapshot).await {
         Ok(snapshot_id) => {
-            log(
+            logger::info(
                 LogTag::Positions,
-                "SNAPSHOT_SAVED",
                 &format!(
                     "Saved {} snapshot for {} with ID {}",
                     snapshot_type, mint, snapshot_id
@@ -476,9 +464,8 @@ pub async fn save_position_token_snapshot(
             Ok(())
         }
         Err(e) => {
-            log(
+            logger::error(
                 LogTag::Positions,
-                "SNAPSHOT_SAVE_ERROR",
                 &format!(
                     "Failed to save {} snapshot for {}: {}",
                     snapshot_type, mint, e
@@ -493,9 +480,8 @@ pub async fn save_position_token_snapshot(
 
 /// Remove a position by its transaction signature (for cleanup of failed positions)
 pub async fn remove_position_by_signature(signature: &str) -> Result<(), String> {
-    log(
+    logger::info(
         LogTag::Positions,
-        "CLEANUP_START",
         &format!(
             "🗑️ Starting cleanup of position with signature {}",
             signature
@@ -517,9 +503,8 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
     let mint_for_lock = match mint_for_lock {
         Some(mint) => mint.clone(),
         None => {
-            log(
+            logger::warning(
                 LogTag::Positions,
-                "CLEANUP_NOT_FOUND",
                 &format!("⚠️ No position found with signature {}", signature),
             );
             return Ok(());
@@ -561,9 +546,8 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
                 }
             }
 
-            log(
+            logger::info(
                 LogTag::Positions,
-                "CLEANUP_REMOVED",
                 &format!(
                     "🗑️ Removed position {} from memory (signature: {})",
                     position.symbol, signature
@@ -572,9 +556,8 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
 
             Some(position)
         } else {
-            log(
+            logger::warning(
                 LogTag::Positions,
-                "CLEANUP_NOT_FOUND",
                 &format!("⚠️ No position found with signature {}", signature),
             );
             None
@@ -586,9 +569,8 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
         if let Some(position_id) = position.id {
             match delete_position_by_id(position_id).await {
                 Ok(_) => {
-                    log(
+                    logger::info(
                         LogTag::Positions,
-                        "CLEANUP_DB_SUCCESS",
                         &format!(
                             "🗑️ Removed position {} (ID: {}) from database",
                             position.symbol, position_id
@@ -596,9 +578,8 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
                     );
                 }
                 Err(e) => {
-                    log(
+                    logger::error(
                         LogTag::Positions,
-                        "CLEANUP_DB_ERROR",
                         &format!(
                             "❌ Failed to remove position {} (ID: {}) from database: {}",
                             position.symbol, position_id, e
@@ -609,9 +590,8 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
             }
         }
 
-        log(
+        logger::info(
             LogTag::Positions,
-            "CLEANUP_COMPLETE",
             &format!(
                 "✅ Successfully cleaned up failed position {} with signature {}",
                 position.symbol, signature
@@ -632,9 +612,8 @@ pub async fn sync_position_to_database(position: &Position) -> Result<(), String
     } else {
         // Insert new position
         let new_id = save_position(position).await?;
-        log(
+        logger::info(
             LogTag::Positions,
-            "DB_SYNC",
             &format!("Position synced to database with new ID {}", new_id),
         );
         Ok(())

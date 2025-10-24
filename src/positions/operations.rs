@@ -13,7 +13,7 @@ use crate::{
     arguments::{is_debug_positions_enabled, is_dry_run_enabled},
     config::with_config,
     constants::SOL_MINT,
-    logger::{log, LogTag},
+    logger::{self, LogTag},
     pools::get_pool_price,
     pools::PriceResult,
     rpc::get_rpc_client,
@@ -81,16 +81,15 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
                 && (!db_pos.exit_transaction_signature.is_some()
                     || !db_pos.transaction_exit_verified);
             if is_still_open {
-                log(
+                logger::warning(
                     LogTag::Positions,
-                    "DB_GUARD_OPEN_BLOCKED",
                     &format!(
                         "🚫 DB guard: mint {} already has open/unverified position (id: {:?}, entry_sig: {:?}, exit_sig: {:?})",
                         &api_token.mint,
                         db_pos.id,
                         db_pos.entry_transaction_signature,
                         db_pos.exit_transaction_signature
-                    )
+                    ),
                 );
                 // Record event for DB guard block
                 crate::events::record_safe(crate::events::Event::new(
@@ -130,9 +129,8 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
     }
 
     if is_dry_run_enabled() {
-        log(
+        logger::info(
             LogTag::Positions,
-            "DRY-RUN",
             &format!(
                 "🚫 DRY-RUN: Would open position for {} at {} SOL",
                 api_token.symbol,
@@ -297,9 +295,8 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
     ))
     .await;
 
-    log(
+    logger::info(
         LogTag::Positions,
-        "SUCCESS",
         &format!(
             "✅ Position opened: {} (ID: {}) | TX: {}",
             api_token.symbol, position_id, transaction_signature
@@ -355,9 +352,8 @@ pub async fn close_position_direct(
     // Partial exits are tracked separately via PENDING_PARTIAL_EXITS and serialized.
     if let Some(existing_position) = super::state::get_position_by_mint(token_mint).await {
         if let Some(pending_sig) = &existing_position.exit_transaction_signature {
-            log(
+            logger::warning(
                 LogTag::Positions,
-                "RACE_PREVENTION",
                 &format!(
                     "🚫 Position {} already has pending exit transaction: {}",
                     api_token.symbol,
@@ -383,9 +379,8 @@ pub async fn close_position_direct(
     }
 
     if is_dry_run_enabled() {
-        log(
+        logger::info(
             LogTag::Positions,
-            "DRY-RUN",
             &format!("🚫 DRY-RUN: Would close position for {}", api_token.symbol),
         );
         return Err("DRY-RUN: Position would be closed".to_string());
@@ -434,9 +429,8 @@ pub async fn close_position_direct(
         return Err("No tokens to sell".to_string());
     }
 
-    log(
+    logger::info(
         LogTag::Positions,
-        "SELL_ALL",
         &format!(
             "🔄 Selling ALL tokens for {}: {} total units across all accounts",
             api_token.symbol, total_token_balance
@@ -444,9 +438,8 @@ pub async fn close_position_direct(
     );
 
     if let Some(note) = &multi_account_note {
-        log(
+        logger::warning(
             LogTag::Positions,
-            "MULTI_ACCOUNT_SELL_ADJUSTMENT",
             &format!(
                 "⚠️ Sell amount adjusted due to account distribution: {}",
                 note
@@ -515,21 +508,19 @@ pub async fn close_position_direct(
     // CRITICAL: Log execution vs requested amounts to detect partial execution
     if let Ok(executed_amount) = swap_result.input_amount.parse::<u64>() {
         if executed_amount < sell_amount {
-            log(
+            logger::warning(
                 LogTag::Positions,
-                "PARTIAL_EXECUTION",
                 &format!(
                     "⚠️ PARTIAL SWAP DETECTED for {}: Requested {} tokens, executed {} tokens, shortfall: {}",
                     api_token.symbol,
                     sell_amount,
                     executed_amount,
                     sell_amount - executed_amount
-                )
+                ),
             );
         } else {
-            log(
+            logger::info(
                 LogTag::Positions,
-                "FULL_EXECUTION",
                 &format!(
                     "✅ Full swap executed for {}: {} tokens",
                     api_token.symbol, executed_amount
@@ -537,9 +528,8 @@ pub async fn close_position_direct(
             );
         }
     } else {
-        log(
+        logger::warning(
             LogTag::Positions,
-            "EXECUTION_PARSE_ERROR",
             &format!(
                 "⚠️ Could not parse executed amount '{}' for {}",
                 swap_result.input_amount, api_token.symbol
@@ -595,9 +585,8 @@ pub async fn close_position_direct(
 
     enqueue_verification(verification_item).await;
 
-    log(
+    logger::info(
         LogTag::Positions,
-        "SUCCESS",
         &format!(
             "✅ Position closing: {} | TX: {} | Reason: {}",
             api_token.symbol, transaction_signature, exit_reason
@@ -652,9 +641,8 @@ pub async fn partial_close_position(
         return Err("Calculated exit amount is zero".to_string());
     }
 
-    log(
+    logger::info(
         LogTag::Positions,
-        "INFO",
         &format!(
             "Partial exit initiated: {} | {}% ({} of {} tokens) | Reason: {}",
             position.symbol, exit_percentage, exit_amount, remaining_amount, exit_reason
@@ -698,9 +686,8 @@ pub async fn partial_close_position(
     }
     let quote = quote_opt.ok_or_else(|| last_err.unwrap_or_else(|| "Failed to get exit quote".to_string()))?;
 
-    log(
+    logger::info(
         LogTag::Positions,
-        "INFO",
         &format!(
             "Partial exit quote: {} tokens → {} SOL",
             exit_amount,
@@ -805,9 +792,8 @@ pub async fn partial_close_position(
 
     enqueue_verification(verification_item).await;
 
-    log(
+    logger::info(
         LogTag::Positions,
-        "SUCCESS",
         &format!(
             "✅ Partial exit submitted: {} | {}% | TX: {} | Reason: {}",
             api_token.symbol, exit_percentage, transaction_signature, exit_reason
@@ -861,9 +847,8 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
         }
     }
 
-    log(
+    logger::info(
         LogTag::Positions,
-        "INFO",
         &format!(
             "DCA entry initiated: {} | {} SOL | DCA #{} ",
             position.symbol,
@@ -892,9 +877,8 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
     .await
     .map_err(|e| format!("Failed to get DCA quote: {}", e))?;
 
-    log(
+    logger::info(
         LogTag::Positions,
-        "INFO",
         &format!(
             "DCA quote: {} SOL → {} tokens",
             dca_amount_sol,
@@ -950,9 +934,8 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
 
     enqueue_verification(verification_item).await;
 
-    log(
+    logger::info(
         LogTag::Positions,
-        "SUCCESS",
         &format!(
             "✅ DCA entry submitted: {} | {} SOL | TX: {} | DCA #{}",
             api_token.symbol,

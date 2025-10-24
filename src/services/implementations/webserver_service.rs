@@ -1,4 +1,4 @@
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::services::{log_service_notice, Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -36,9 +36,8 @@ impl Service for WebserverService {
     ) -> Result<Vec<JoinHandle<()>>, String> {
         let handle = tokio::spawn(monitor.instrument(async move {
             if let Err(e) = crate::webserver::start_server().await {
-                log(
+                logger::error(
                     LogTag::System,
-                    "ERROR",
                     &format!("Webserver failed to start: {}", e),
                 );
             }

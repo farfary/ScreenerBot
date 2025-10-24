@@ -14,7 +14,7 @@ use crate::webserver::state::AppState;
 use crate::webserver::utils::{error_response, success_response};
 use crate::{
     global::{are_core_services_ready, get_pending_services},
-    logger::{log, LogTag},
+    logger::{self, LogTag},
     positions,
     trader,
 };
@@ -266,9 +266,8 @@ async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
         _ => with_config(|cfg| cfg.trader.trade_size_sol),
     };
 
-    log(
+    logger::info(
         LogTag::Webserver,
-        "MANUAL_BUY_REQUEST",
         &format!("mint={} size_sol={} force={}", req.mint, size, req.force.unwrap_or(false)),
     );
 
@@ -348,9 +347,8 @@ async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
         _ => with_config(|cfg| cfg.trader.trade_size_sol * 0.5), // default add = 50% size
     };
 
-    log(
+    logger::info(
         LogTag::Webserver,
-        "MANUAL_ADD_REQUEST",
         &format!("mint={} size_sol={}", req.mint, size),
     );
 
@@ -406,9 +404,8 @@ async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response {
         );
     }
 
-    log(
+    logger::info(
         LogTag::Webserver,
-        "MANUAL_SELL_REQUEST",
         &format!("mint={} percentage={}", req.mint, pct),
     );
 

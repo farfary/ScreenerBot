@@ -599,7 +599,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let expected = ExpectedValues::new();
 
     // Initialize RPC client
-    log(LogTag::System, "INIT", "Initializing RPC client...");
+    logger::info(
+        LogTag::System, "Initializing RPC client...");
     if let Err(e) = screenerbot::rpc::init_rpc_client() {
         println!("❌ ERROR: RPC initialization failed: {}", e);
         std::process::exit(1);

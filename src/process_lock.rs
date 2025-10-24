@@ -13,7 +13,7 @@
 /// let _lock = ProcessLock::acquire()?;
 /// // Lock held until _lock is dropped (end of scope)
 /// ```
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use fslock::LockFile;
 use std::path::PathBuf;
 
@@ -39,9 +39,8 @@ impl ProcessLock {
     pub fn acquire() -> Result<Self, String> {
         let lock_path = PathBuf::from("data/.screenerbot.lock");
 
-        log(
+        logger::info(
             LogTag::System,
-            "INFO",
             &format!("🔒 Acquiring process lock: {:?}", lock_path),
         );
 
@@ -84,9 +83,8 @@ impl ProcessLock {
             ));
         }
 
-        log(
+        logger::info(
             LogTag::System,
-            "SUCCESS",
             &format!("✅ Process lock acquired: {:?}", lock_path),
         );
 
@@ -104,9 +102,8 @@ impl ProcessLock {
 
 impl Drop for ProcessLock {
     fn drop(&mut self) {
-        log(
+        logger::info(
             LogTag::System,
-            "INFO",
             &format!("🔓 Releasing process lock: {:?}", self.lock_path),
         );
         // Lock is automatically released when _lock is dropped

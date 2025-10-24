@@ -6,14 +6,14 @@
 /// - View database statistics
 /// - Test event recording performance
 use screenerbot::events::{self, Event, EventCategory, Severity};
-use screenerbot::logger::{init_file_logging, log, LogTag};
+use screenerbot::logger::{self as logger, LogTag};
 use serde_json::json;
 use std::time::Instant;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
-    init_file_logging();
+    logger::init();
 
     // Initialize events system
     if let Err(e) = events::init().await {

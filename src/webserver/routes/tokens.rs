@@ -14,8 +14,7 @@ use crate::{
     filtering::{
         self, FilteringQuery, FilteringQueryResult, FilteringView, SortDirection, TokenSortKey,
     },
-    global::is_debug_webserver_enabled,
-    logger::{log, LogTag},
+    logger::{self, LogTag},
     pools, positions,
     tokens::cleanup,
     tokens::database::get_global_database,
@@ -500,10 +499,8 @@ pub(crate) async fn get_tokens_list(
 
     match filtering::query_tokens(filtering_query).await {
         Ok(result) => {
-            if is_debug_webserver_enabled() {
-                log(
-                    LogTag::Webserver,
-                    "TOKENS_LIST",
+            logger::info(
+        LogTag::Webserver,
                     &format!(
                         "view={} page={}/{} items={}/{}",
                         request_view,
@@ -513,14 +510,12 @@ pub(crate) async fn get_tokens_list(
                         result.total
                     ),
                 );
-            }
 
             Json(build_token_list_response(result))
         }
         Err(err) => {
-            log(
-                LogTag::Webserver,
-                "WARN",
+            logger::info(
+        LogTag::Webserver,
                 &format!("Failed to load tokens list via filtering service: {}", err),
             );
 
@@ -548,43 +543,34 @@ pub(crate) async fn get_tokens_list(
 async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse> {
     let request_start = std::time::Instant::now();
 
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "TOKEN_DETAIL_START",
+    logger::info(
+        LogTag::Webserver,
             &format!("mint={}", mint),
         );
-    }
 
     // Fetch token from database (with market data)
     let lookup_start = std::time::Instant::now();
     let snapshot = match crate::tokens::get_full_token_async(&mint).await {
         Ok(Some(snap)) => {
-            if is_debug_webserver_enabled() {
-                log(
-                    LogTag::Webserver,
-                    "TOKEN_DETAIL_CACHE",
+            logger::info(
+        LogTag::Webserver,
                     &format!(
                         "mint={} elapsed={}μs",
                         mint,
                         lookup_start.elapsed().as_micros()
                     ),
                 );
-            }
             snap
         }
         Ok(None) | Err(_) => {
-            if is_debug_webserver_enabled() {
-                log(
-                    LogTag::Webserver,
-                    "TOKEN_DETAIL_NOT_FOUND",
+            logger::info(
+        LogTag::Webserver,
                     &format!(
                         "mint={} elapsed={}μs",
                         mint,
                         lookup_start.elapsed().as_micros()
                     ),
                 );
-            }
             return Json(TokenDetailResponse {
                 mint: mint.clone(),
                 symbol: "NOT_FOUND".to_string(),
@@ -744,10 +730,8 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         (None, None, None, None, None, None, None)
     };
 
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "TOKEN_DETAIL_POOL",
+    logger::info(
+        LogTag::Webserver,
             &format!(
                 "mint={} elapsed={}ms has_price={}",
                 mint,
@@ -755,7 +739,6 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
                 price_sol.is_some()
             ),
         );
-    }
 
     // Get security info using async wrapper (prevents blocking async runtime)
     let security_start = std::time::Instant::now();
@@ -777,10 +760,8 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         Vec::<SecurityRisk>::new(),
     );
 
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "TOKEN_DETAIL_SECURITY",
+    logger::info(
+        LogTag::Webserver,
             &format!(
                 "mint={} elapsed={}ms has_score={}",
                 mint,
@@ -788,26 +769,22 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
                 security_score.is_some()
             ),
         );
-    }
 
     // Get status flags (mix of sync and cache checks)
     let ohlcv_start = std::time::Instant::now();
     let has_ohlcv = match crate::ohlcvs::has_data(&mint).await {
         Ok(flag) => flag,
         Err(e) => {
-            log(
-                LogTag::Webserver,
-                "WARN",
+            logger::info(
+        LogTag::Webserver,
                 &format!("Failed to determine OHLCV availability for {}: {}", mint, e),
             );
             false
         }
     };
 
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "TOKEN_DETAIL_OHLCV",
+    logger::info(
+        LogTag::Webserver,
             &format!(
                 "mint={} elapsed={}ms has_data={}",
                 mint,
@@ -815,7 +792,6 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
                 has_ohlcv
             ),
         );
-    }
 
     let has_pool_price = price_sol.is_some();
     let blacklisted = if let Some(db) = get_global_database() {
@@ -824,17 +800,15 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         match tokio::task::spawn_blocking(move || db_clone.is_blacklisted(&mint_clone)).await {
             Ok(Ok(flag)) => flag,
             Ok(Err(err)) => {
-                log(
-                    LogTag::Webserver,
-                    "WARN",
+                logger::info(
+        LogTag::Webserver,
                     &format!("Failed to check blacklist for {}: {}", mint, err),
                 );
                 false
             }
             Err(join_err) => {
-                log(
-                    LogTag::Webserver,
-                    "WARN",
+                logger::info(
+        LogTag::Webserver,
                     &format!("Join error checking blacklist for {}: {}", mint, join_err),
                 );
                 false
@@ -848,10 +822,8 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     let position_start = std::time::Instant::now();
     let has_open_position = positions::is_open_position(&mint).await;
 
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "TOKEN_DETAIL_POSITION",
+    logger::info(
+        LogTag::Webserver,
             &format!(
                 "mint={} elapsed={}ms has_position={}",
                 mint,
@@ -859,7 +831,6 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
                 has_open_position
             ),
         );
-    }
 
     // Add token to OHLCV monitoring with appropriate priority
     // This ensures chart data will be available when users view this token again
@@ -871,9 +842,8 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     };
 
     if let Err(e) = crate::ohlcvs::add_token_monitoring(&mint, priority).await {
-        log(
-            LogTag::Webserver,
-            "WARN",
+        logger::info(
+        LogTag::Webserver,
             &format!("Failed to add {} to OHLCV monitoring: {}", mint, e),
         );
     }
@@ -882,36 +852,29 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     if let Err(e) =
         crate::ohlcvs::record_activity(&mint, crate::ohlcvs::ActivityType::TokenViewed).await
     {
-        log(
-            LogTag::Webserver,
-            "WARN",
+        logger::info(
+        LogTag::Webserver,
             &format!("Failed to record token view for {}: {}", mint, e),
         );
     }
 
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "TOKEN_DETAIL_MONITORING",
+    logger::info(
+        LogTag::Webserver,
             &format!(
                 "mint={} elapsed={}ms",
                 mint,
                 monitoring_start.elapsed().as_millis()
             ),
         );
-    }
 
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "TOKEN_DETAIL_COMPLETE",
+    logger::info(
+        LogTag::Webserver,
             &format!(
                 "mint={} total_elapsed={}ms",
                 mint,
                 request_start.elapsed().as_millis()
             ),
         );
-    }
 
     let created_at_ts = Some(token.first_seen_at.timestamp());
     let token_birth_ts = token.token_birth_at.map(|dt| dt.timestamp());
@@ -1100,25 +1063,21 @@ async fn get_token_ohlcv(
     let timeframe = match crate::ohlcvs::Timeframe::from_str(normalized_tf.as_str()) {
         Some(tf) => tf,
         None => {
-            log(
-                LogTag::Webserver,
-                "TOKEN_OHLCV_INVALID_TIMEFRAME",
+            logger::info(
+        LogTag::Webserver,
                 &format!("mint={} timeframe={} (fallback=1m)", mint, query.timeframe),
             );
             crate::ohlcvs::Timeframe::Minute1
         }
     };
 
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "TOKEN_OHLCV",
+    logger::info(
+        LogTag::Webserver,
             &format!(
                 "mint={} limit={} timeframe={}",
                 mint, query.limit, timeframe
             ),
         );
-    }
 
     // Add token to OHLCV monitoring with appropriate priority
     // This ensures data collection starts when a user views the chart
@@ -1130,9 +1089,8 @@ async fn get_token_ohlcv(
     };
 
     if let Err(e) = crate::ohlcvs::add_token_monitoring(&mint, priority).await {
-        log(
-            LogTag::Webserver,
-            "WARN",
+        logger::info(
+        LogTag::Webserver,
             &format!("Failed to add {} to OHLCV monitoring: {}", mint, e),
         );
     }
@@ -1141,9 +1099,8 @@ async fn get_token_ohlcv(
     if let Err(e) =
         crate::ohlcvs::record_activity(&mint, crate::ohlcvs::ActivityType::ChartViewed).await
     {
-        log(
-            LogTag::Webserver,
-            "WARN",
+        logger::info(
+        LogTag::Webserver,
             &format!("Failed to record chart view for {}: {}", mint, e),
         );
     }
@@ -1173,10 +1130,8 @@ async fn get_token_ohlcv(
 async fn get_tokens_stats() -> Result<Json<TokenStatsResponse>, StatusCode> {
     match filtering::fetch_stats().await {
         Ok(snapshot) => {
-            if is_debug_webserver_enabled() {
-                log(
-                    LogTag::Webserver,
-                    "TOKENS_STATS",
+            logger::info(
+        LogTag::Webserver,
                     &format!(
                         "total={} pool={} open={} blacklist={}",
                         snapshot.total_tokens,
@@ -1185,7 +1140,6 @@ async fn get_tokens_stats() -> Result<Json<TokenStatsResponse>, StatusCode> {
                         snapshot.blacklisted
                     ),
                 );
-            }
 
             Ok(Json(TokenStatsResponse {
                 total_tokens: snapshot.total_tokens,
@@ -1197,9 +1151,8 @@ async fn get_tokens_stats() -> Result<Json<TokenStatsResponse>, StatusCode> {
             }))
         }
         Err(err) => {
-            log(
-                LogTag::Webserver,
-                "WARN",
+            logger::info(
+        LogTag::Webserver,
                 &format!("Failed to load token stats via filtering service: {}", err),
             );
             Err(StatusCode::INTERNAL_SERVER_ERROR)
@@ -1211,13 +1164,10 @@ async fn get_tokens_stats() -> Result<Json<TokenStatsResponse>, StatusCode> {
 async fn filter_tokens(
     Json(filter): Json<FilterRequest>,
 ) -> Result<Json<TokenListResponse>, StatusCode> {
-    if is_debug_webserver_enabled() {
-        log(
-            LogTag::Webserver,
-            "TOKENS_FILTER",
+    logger::info(
+        LogTag::Webserver,
             &format!("view={} search='{}'", filter.view, filter.search),
         );
-    }
 
     let max_page_size = MAX_PAGE_SIZE;
     let filtering_query = filter.into_filtering_query(max_page_size);
@@ -1225,9 +1175,8 @@ async fn filter_tokens(
     match filtering::query_tokens(filtering_query).await {
         Ok(result) => Ok(Json(build_token_list_response(result))),
         Err(err) => {
-            log(
-                LogTag::Webserver,
-                "WARN",
+            logger::info(
+        LogTag::Webserver,
                 &format!("Filtering query failed: {}", err),
             );
             Err(StatusCode::INTERNAL_SERVER_ERROR)

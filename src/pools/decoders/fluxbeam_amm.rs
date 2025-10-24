@@ -5,9 +5,8 @@ use super::super::utils::{is_sol_mint, WRAPPED_SOL_MINT};
 /// FluxBeam is a DEX that pioneers Token2022 standard integration on Solana.
 /// Based on analysis of pool structure at 324 bytes with standard AMM vault ratio pricing.
 use super::{AccountData, PoolDecoder};
-use crate::arguments::is_debug_pool_decoders_enabled;
 use crate::constants::SOL_DECIMALS;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::pools::types::{PriceResult, ProgramKind, FLUXBEAM_AMM_PROGRAM_ID};
 use crate::tokens::get_cached_decimals;
 use solana_sdk::pubkey::Pubkey;
@@ -26,62 +25,40 @@ impl PoolDecoder for FluxbeamAmmDecoder {
         base_mint: &str,
         quote_mint: &str,
     ) -> Option<PriceResult> {
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "INFO",
-                "Starting FluxBeam AMM pool decoding",
-            );
-        }
+        logger::info(LogTag::PoolDecoder, "Starting FluxBeam AMM pool decoding");
 
         // Find the pool account owned by FluxBeam program
         let pool_account = accounts
             .values()
             .find(|acc| acc.owner.to_string() == FLUXBEAM_AMM_PROGRAM_ID)?;
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "INFO",
-                &format!(
-                    "Found FluxBeam pool account {} with {} bytes",
-                    pool_account.pubkey,
-                    pool_account.data.len()
-                ),
-            );
-        }
+        logger::info(
+            LogTag::PoolDecoder,
+            &format!("Found FluxBeam pool account {} with {} bytes", pool_account.pubkey, pool_account.data.len()),
+        );
 
         // FluxBeam pools are expected to be 324 bytes
         if pool_account.data.len() != 324 {
-            if is_debug_pool_decoders_enabled() {
-                log(
-                    LogTag::PoolDecoder,
-                    "ERROR",
-                    &format!(
-                        "FluxBeam pool has unexpected size: {} bytes (expected 324)",
-                        pool_account.data.len()
-                    ),
-                );
-            }
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!("FluxBeam pool has unexpected size: {} bytes (expected 324)", pool_account.data.len()),
+            );
             return None;
         }
 
         // Parse FluxBeam pool structure
         let pool_info = Self::parse_fluxbeam_pool(&pool_account.data)?;
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "INFO",
-                &format!(
-                    "FluxBeam pool parsed: token_a={}, token_b={}, vault_a={}, vault_b={}",
-                    pool_info.token_a_mint,
-                    pool_info.token_b_mint,
-                    pool_info.token_a_vault,
-                    pool_info.token_b_vault
-                ),
-            );
-        }
+        logger::info(
+            LogTag::PoolDecoder,
+            &format!(
+                "FluxBeam pool parsed: token_a={}, token_b={}, vault_a={}, vault_b={}",
+                pool_info.token_a_mint,
+                pool_info.token_b_mint,
+                pool_info.token_a_vault,
+                pool_info.token_b_vault
+            ),
+        );
 
         // Determine which token is SOL and which is the base token
         let (token_mint, sol_vault, token_vault) = if is_sol_mint(&pool_info.token_b_mint) {
@@ -99,31 +76,22 @@ impl PoolDecoder for FluxbeamAmmDecoder {
                 pool_info.token_b_vault.clone(),
             )
         } else {
-            if is_debug_pool_decoders_enabled() {
-                log(
-                    LogTag::PoolDecoder,
-                    "ERROR",
-                    &format!(
-                        "FluxBeam pool has no SOL token: {} / {}",
-                        pool_info.token_a_mint, pool_info.token_b_mint
-                    ),
-                );
-            }
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!("FluxBeam pool has no SOL token: {} / {}", pool_info.token_a_mint, pool_info.token_b_mint),
+            );
             return None;
         };
 
         // Verify this matches either the requested base or quote mint for bidirectional support
         if token_mint != base_mint && token_mint != quote_mint {
-            if is_debug_pool_decoders_enabled() {
-                log(
-                    LogTag::PoolDecoder,
-                    "ERROR",
-                    &format!(
-                        "FluxBeam pool token {} doesn't match requested base {} or quote {}",
-                        token_mint, base_mint, quote_mint
-                    ),
-                );
-            }
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!(
+                    "FluxBeam pool token {} doesn't match requested base {} or quote {}",
+                    token_mint, base_mint, quote_mint
+                ),
+            );
             return None;
         }
 
@@ -134,25 +102,13 @@ impl PoolDecoder for FluxbeamAmmDecoder {
         let sol_balance = Self::decode_token_account_amount(&sol_account.data).ok()?;
         let token_balance = Self::decode_token_account_amount(&token_account.data).ok()?;
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "INFO",
-                &format!(
-                    "FluxBeam vault balances: SOL={}, token={}",
-                    sol_balance, token_balance
-                ),
-            );
-        }
+        logger::info(
+            LogTag::PoolDecoder,
+            &format!("FluxBeam vault balances: SOL={}, token={}", sol_balance, token_balance),
+        );
 
         if token_balance == 0 {
-            if is_debug_pool_decoders_enabled() {
-                log(
-                    LogTag::PoolDecoder,
-                    "ERROR",
-                    "FluxBeam pool has zero token balance",
-                );
-            }
+            logger::error(LogTag::PoolDecoder, "FluxBeam pool has zero token balance");
             return None;
         }
 
@@ -160,31 +116,22 @@ impl PoolDecoder for FluxbeamAmmDecoder {
         let token_decimals = match get_cached_decimals(&token_mint) {
             Some(decimals) => decimals,
             None => {
-                if is_debug_pool_decoders_enabled() {
-                    log(
-                        LogTag::PoolDecoder,
-                        "ERROR",
-                        &format!(
-                            "FluxBeam: Token decimals not found for {}, skipping price calculation",
-                            token_mint
-                        ),
-                    );
-                }
+                        logger::error(
+                            LogTag::PoolDecoder,
+                            &format!(
+                                "FluxBeam: Token decimals not found for {}, skipping price calculation",
+                                token_mint
+                            ),
+                        );
                 return None;
             }
         };
         let sol_decimals = SOL_DECIMALS;
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "INFO",
-                &format!(
-                    "FluxBeam decimals: token={}, sol={}",
-                    token_decimals, sol_decimals
-                ),
-            );
-        }
+        logger::info(
+            LogTag::PoolDecoder,
+            &format!("FluxBeam decimals: token={}, sol={}", token_decimals, sol_decimals),
+        );
 
         // FluxBeam uses standard AMM constant product formula for pricing
         // Calculate price: price = sol_reserve / token_reserve (adjusted for decimals)
@@ -195,28 +142,22 @@ impl PoolDecoder for FluxbeamAmmDecoder {
 
         // Validate price is reasonable
         if price_sol <= 0.0 || price_sol > 1_000_000.0 {
-            if is_debug_pool_decoders_enabled() {
-                log(
-                    LogTag::PoolDecoder,
-                    "ERROR",
-                    &format!("FluxBeam: Invalid price calculated: {:.12} SOL", price_sol),
-                );
-            }
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!("FluxBeam: Invalid price calculated: {:.12} SOL", price_sol),
+            );
             return None;
         }
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "SUCCESS",
-                &format!(
-                    "FluxBeam price calculation: {:.12} SOL per token (sol_reserves={:.6}, token_reserves={:.6})",
-                    price_sol,
-                    sol_adjusted,
-                    token_adjusted
-                )
-            );
-        }
+        logger::info(
+            LogTag::PoolDecoder,
+            &format!(
+                "FluxBeam price calculation: {:.12} SOL per token (sol_reserves={:.6}, token_reserves={:.6})",
+                price_sol,
+                sol_adjusted,
+                token_adjusted
+            ),
+        );
 
         Some(PriceResult {
             mint: token_mint,
@@ -261,16 +202,13 @@ impl FluxbeamAmmDecoder {
     /// - Offset 195: Pool fee account (32 bytes)
     pub fn parse_fluxbeam_pool(data: &[u8]) -> Option<FluxbeamPoolInfo> {
         if data.len() != 324 {
-            if is_debug_pool_decoders_enabled() {
-                log(
-                    LogTag::PoolDecoder,
-                    "ERROR",
-                    &format!(
-                        "FluxBeam pool data wrong size: {} bytes (expected 324)",
-                        data.len()
-                    ),
-                );
-            }
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!(
+                    "FluxBeam pool data wrong size: {} bytes: (expected 324)",
+                    data.len()
+                ),
+            );
             return None;
         }
 
@@ -282,16 +220,13 @@ impl FluxbeamAmmDecoder {
         let token_a_vault = Self::extract_pubkey_at_offset(data, 35)?;
         let token_b_vault = Self::extract_pubkey_at_offset(data, 67)?;
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "INFO",
-                &format!(
-                    "FluxBeam parsed: token_a@131={}, token_b@163={}, vault_a@35={}, vault_b@67={}",
-                    token_a_mint, token_b_mint, token_a_vault, token_b_vault
-                ),
-            );
-        }
+        logger::info(
+            LogTag::PoolDecoder,
+            &format!(
+                "FluxBeam parsed: token_a@131={}, token_b@163={}, vault_a@35={}, vault_b@67={}",
+                token_a_mint, token_b_mint, token_a_vault, token_b_vault
+            ),
+        );
 
         Some(FluxbeamPoolInfo {
             token_a_mint,

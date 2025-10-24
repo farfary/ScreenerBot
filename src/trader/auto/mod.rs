@@ -17,13 +17,13 @@ pub use entry_monitor::monitor_entries;
 pub use exit_monitor::monitor_positions;
 pub use strategy_manager::StrategyManager;
 
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 
 /// Start the auto trading monitors
 pub async fn start_auto_trading(
     shutdown: tokio::sync::watch::Receiver<bool>,
 ) -> Result<(), String> {
-    log(LogTag::Trader, "INFO", "Starting auto trading monitors...");
+    logger::info(LogTag::Trader, "Starting auto trading monitors...");
 
     // Record auto trading start event
     crate::events::record_safe(crate::events::Event::new(
@@ -46,9 +46,8 @@ pub async fn start_auto_trading(
     // Spawn entry monitor
     let entry_task = tokio::spawn(async move {
         if let Err(e) = monitor_entries(entry_shutdown).await {
-            log(
+            logger::error(
                 LogTag::Trader,
-                "ERROR",
                 &format!("Entry monitor error: {}", e),
             );
             
@@ -71,9 +70,8 @@ pub async fn start_auto_trading(
     // Spawn exit monitor
     let exit_task = tokio::spawn(async move {
         if let Err(e) = monitor_positions(exit_shutdown).await {
-            log(
+            logger::error(
                 LogTag::Trader,
-                "ERROR",
                 &format!("Exit monitor error: {}", e),
             );
             
@@ -96,7 +94,7 @@ pub async fn start_auto_trading(
     // Wait for both tasks
     let _ = tokio::try_join!(entry_task, exit_task);
 
-    log(LogTag::Trader, "INFO", "Auto trading monitors stopped");
+    logger::info(LogTag::Trader, "Auto trading monitors stopped");
     
     // Record auto trading stop event
     crate::events::record_safe(crate::events::Event::new(

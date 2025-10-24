@@ -4,7 +4,7 @@ use crate::events::db::EventsDatabase;
 /// This module provides maintenance functions and MCP server integration
 /// for the events system.
 use crate::events::{Event, EventCategory, Severity};
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use chrono::Utc;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
@@ -24,9 +24,8 @@ pub async fn start_maintenance_task() {
             cleanup_interval.tick().await;
 
             if let Err(e) = perform_maintenance().await {
-                log(
-                    LogTag::System,
-                    "WARN",
+                logger::info(
+        LogTag::System,
                     &format!("Events maintenance failed: {}", e),
                 );
             }
@@ -44,9 +43,8 @@ async fn perform_maintenance() -> Result<(), String> {
     // Cleanup old events
     let deleted_count = db.cleanup_old_events().await?;
     if deleted_count > 0 {
-        log(
-            LogTag::System,
-            "MAINT",
+        logger::info(
+        LogTag::System,
             &format!("Cleaned up {} old events", deleted_count),
         );
     }
@@ -60,9 +58,8 @@ async fn perform_maintenance() -> Result<(), String> {
         .map(|s| s / 1024 / 1024)
         .unwrap_or(0);
 
-    log(
+    logger::info(
         LogTag::System,
-        "STATS",
         &format!(
             "Events DB: {} total, {} in 24h, {} MB",
             total_events, events_24h, db_size_mb

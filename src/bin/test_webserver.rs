@@ -3,7 +3,7 @@
 use screenerbot::{
     config::load_config,
     events,
-    logger::{log, LogTag},
+    logger::{self as logger, LogTag},
     webserver,
 };
 use std::time::Duration;
@@ -11,39 +11,35 @@ use tokio::time::sleep;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize logger (no init function, just use it directly)
-    log(LogTag::System, "INFO", "🧪 Starting webserver-only test...");
+    // Initialize logger
+    logger::init();
+    logger::info(LogTag::System, "🧪 Starting webserver-only test...");
 
     // Load configuration (global config is required by various modules)
     load_config().expect("Failed to load config");
 
     // Initialize events system
-    log(LogTag::System, "INFO", "Initializing events system...");
+    logger::info(LogTag::System, "Initializing events system...");
     events::init().await?;
-    log(LogTag::System, "SUCCESS", "✅ Events system initialized");
+    logger::info(LogTag::System, "✅ Events system initialized");
 
     // Start webserver
-    log(LogTag::System, "INFO", "Starting webserver...");
+    logger::info(LogTag::System, "Starting webserver...");
     tokio::spawn(async move {
         if let Err(e) = webserver::start_server().await {
-            log(LogTag::System, "ERROR", &format!("Webserver error: {}", e));
+            logger::error(LogTag::System, &format!("Webserver error: {}", e));
         }
     });
 
     // Wait for webserver to start
     sleep(Duration::from_millis(500)).await;
 
-    log(
+    logger::info(
         LogTag::System,
-        "SUCCESS",
         "✅ Webserver test started on http://127.0.0.1:8080",
     );
-    log(
-        LogTag::System,
-        "INFO",
-        "Open http://127.0.0.1:8080/events to test",
-    );
-    log(LogTag::System, "INFO", "Press Ctrl+C to stop");
+    logger::info(LogTag::System, "Open http://127.0.0.1:8080/events to test");
+    logger::info(LogTag::System, "Press Ctrl+C to stop");
 
     // Simulate some test events every 5 seconds
     tokio::spawn(async {
@@ -65,17 +61,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
 
             if let Err(e) = events::record(event).await {
-                log(
+                logger::error(
                     LogTag::System,
-                    "ERROR",
                     &format!("Failed to record test event: {}", e),
                 );
             } else {
-                log(
-                    LogTag::System,
-                    "DEBUG",
-                    &format!("✅ Recorded test event #{}", counter),
-                );
+                logger::debug(LogTag::System, &format!("✅ Recorded test event #{}", counter));
             }
 
             counter += 1;

@@ -5,18 +5,10 @@ use std::fs;
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 
-// Re-export argument handling from the arguments module for backwards compatibility
+// Re-export essential argument handling from the arguments module for backwards compatibility
+// Note: is_debug_* functions are removed - use logger module which automatically checks arguments
 pub use crate::arguments::{
     get_arg_value, get_cmd_args, get_enabled_debug_modes, has_arg, is_any_debug_enabled,
-    is_debug_api_enabled, is_debug_ata_enabled, is_debug_blacklist_enabled,
-    is_debug_decimals_enabled, is_debug_discovery_enabled, is_debug_entry_enabled,
-    is_debug_filtering_enabled, is_debug_monitor_enabled, is_debug_ohlcv_enabled,
-    is_debug_pool_calculator_enabled, is_debug_pool_cleanup_enabled,
-    is_debug_pool_decoders_enabled, is_debug_pool_discovery_enabled, is_debug_pool_monitor_enabled,
-    is_debug_pool_prices_enabled, is_debug_pool_service_enabled, is_debug_pool_tokens_enabled,
-    is_debug_price_service_enabled, is_debug_profit_enabled, is_debug_rpc_enabled,
-    is_debug_sol_price_enabled, is_debug_swaps_enabled, is_debug_trader_enabled,
-    is_debug_transactions_enabled, is_debug_wallet_enabled, is_debug_webserver_enabled,
     is_dry_run_enabled, print_debug_info, set_cmd_args, CMD_ARGS,
 };
 

@@ -13,7 +13,7 @@ use super::{
 };
 use crate::{
     arguments::is_debug_positions_enabled,
-    logger::{log, LogTag},
+    logger::{self, LogTag},
     rpc::get_rpc_client,
 };
 use serde_json::json;
@@ -28,9 +28,8 @@ const VERIFICATION_BATCH_SIZE: usize = 10;
 
 /// Initialize positions system
 pub async fn initialize_positions_system() -> Result<(), String> {
-    log(
+    logger::info(
         LogTag::Positions,
-        "STARTUP",
         "🚀 Initializing positions system",
     );
 
@@ -111,9 +110,8 @@ pub async fn initialize_positions_system() -> Result<(), String> {
                 mint_to_position_index.insert(position.mint.clone(), index);
             }
 
-            log(
+            logger::info(
                 LogTag::Positions,
-                "STARTUP",
                 &format!(
                     "✅ Loaded {} positions, {} pending verification",
                     global_positions.len(),
@@ -122,9 +120,8 @@ pub async fn initialize_positions_system() -> Result<(), String> {
             );
         }
         Err(e) => {
-            log(
+            logger::warning(
                 LogTag::Positions,
-                "WARNING",
                 &format!("Failed to load positions from database: {}", e),
             );
         }
@@ -141,9 +138,8 @@ pub async fn initialize_positions_system() -> Result<(), String> {
         reconcile_global_position_semaphore(max_open_positions).await;
     }
 
-    log(
+    logger::info(
         LogTag::Positions,
-        "STARTUP",
         "✅ Positions system initialized",
     );
 
@@ -157,9 +153,8 @@ pub async fn start_positions_manager_service(
     shutdown: Arc<Notify>,
     monitor: tokio_metrics::TaskMonitor,
 ) -> Result<tokio::task::JoinHandle<()>, String> {
-    log(
+    logger::info(
         LogTag::Positions,
-        "STARTUP",
         "🚀 Starting positions manager service (instrumented)",
     );
 
@@ -173,9 +168,8 @@ pub async fn start_positions_manager_service(
 
 /// Verification worker loop
 async fn verification_worker(shutdown: Arc<Notify>) {
-    log(
+    logger::info(
         LogTag::Positions,
-        "STARTUP",
         "🔍 Starting verification worker",
     );
 
@@ -188,9 +182,8 @@ async fn verification_worker(shutdown: Arc<Notify>) {
             crate::global::POOL_SERVICE_READY.load(std::sync::atomic::Ordering::SeqCst);
 
         if tx_ready && pool_ready {
-            log(
+            logger::info(
                 LogTag::Positions,
-                "STARTUP",
                 "✅ Dependencies ready (Transactions + Pool). Starting verification loop",
             );
             // Signal that positions system is ready now that dependencies are met
@@ -199,10 +192,9 @@ async fn verification_worker(shutdown: Arc<Notify>) {
         }
 
         // Log only every 15 seconds
-        if last_log.elapsed() >= Duration::from_secs(15) {
-            log(
+            if last_log.elapsed() >= Duration::from_secs(15) {
+            logger::info(
                 LogTag::Positions,
-                "STARTUP",
                 &format!(
                     "⏳ Waiting for dependencies: tx_ready={} pool_ready={}",
                     tx_ready, pool_ready
@@ -213,7 +205,7 @@ async fn verification_worker(shutdown: Arc<Notify>) {
 
         tokio::select! {
             _ = shutdown.notified() => {
-                log(LogTag::Positions, "SHUTDOWN", "🛑 Verification worker exiting during dependency wait");
+                logger::info(LogTag::Positions, "🛑 Verification worker exiting during dependency wait");
                 return;
             }
             _ = tokio::time::sleep(Duration::from_secs(1)) => {}
@@ -243,7 +235,7 @@ async fn verification_worker(shutdown: Arc<Notify>) {
 
         tokio::select! {
             _ = shutdown.notified() => {
-                log(LogTag::Positions, "SHUTDOWN", "🛑 Stopping verification worker");
+                logger::info(LogTag::Positions, "🛑 Stopping verification worker");
                 break;
             }
             _ = sleep(sleep_duration) => {
@@ -292,9 +284,8 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                 }
 
                 if requeued_count > 0 {
-                    log(
+                    logger::info(
                         LogTag::Positions,
-                        "VERIFICATION_GUARD_REQUEUE",
                         &format!(
                             "🛡️ Re-enqueued {} missing verifications (queue before: {})",
                             requeued_count,
@@ -334,9 +325,8 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                 let expired_items = gc_expired_verifications(current_height).await;
 
                 if !expired_items.is_empty() {
-                    log(
+                    logger::info(
                         LogTag::Positions,
-                        "CLEANUP",
                         &format!("🧹 Cleaned up {} expired verifications", expired_items.len())
                     );
 
@@ -357,13 +347,10 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                 let batch = poll_verification_batch(VERIFICATION_BATCH_SIZE).await;
 
                 if !batch.is_empty() {
-                    if is_debug_positions_enabled() {
-                        log(
-                            LogTag::Positions,
-                            "DEBUG",
-                            &format!("🔄 Processing {} verification items", batch.len())
-                        );
-                    }
+                    logger::debug(
+                        LogTag::Positions,
+                        &format!("🔄 Processing {} verification items", batch.len())
+                    );
 
                     for item in batch {
                         // Emit a verification_started event and take timing baselines
@@ -415,25 +402,21 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                             )
                                         ).await;
 
-                                        if is_debug_positions_enabled() {
-                                            log(
-                                                LogTag::Positions,
-                                                "DEBUG",
-                                                &format!(
-                                                    "✅ Applied transition for {} (mint {} kind {:?}): db_updated={}, position_closed={}",
-                                                    item.signature,
-                                                    item.mint,
-                                                    item.kind,
-                                                    effects.db_updated,
-                                                    effects.position_closed
-                                                )
-                                            );
-                                        }
+                                        logger::debug(
+                                            LogTag::Positions,
+                                            &format!(
+                                                "✅ Applied transition for {} (mint {} kind {:?}): db_updated={}, position_closed={}",
+                                                item.signature,
+                                                item.mint,
+                                                item.kind,
+                                                effects.db_updated,
+                                                effects.position_closed
+                                            )
+                                        );
                                     }
                                     Err(e) => {
-                                        log(
+                                        logger::error(
                                             LogTag::Positions,
-                                            "ERROR",
                                             &format!(
                                                 "❌ Failed to apply transition for {} (mint {} kind {:?}): {}",
                                                 item.signature,
@@ -465,12 +448,11 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                     }
                                 }
                             }
-                            VerificationOutcome::RetryTransient(reason) => {
+                                    VerificationOutcome::RetryTransient(reason) => {
                                 // Check if we should give up on this verification
-                                if let Some(give_up_reason) = item.should_give_up() {
-                                    log(
+                                    if let Some(give_up_reason) = item.should_give_up() {
+                                    logger::error(
                                         LogTag::Positions,
-                                        "ERROR",
                                         &format!(
                                             "⏰ Abandoning verification for {} (mint={}, kind={:?}): {:?} - last error: {}",
                                             item.signature,
@@ -506,24 +488,20 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                         VerificationKind::Entry => {
                                             // Remove orphan entry position AND release semaphore permit
                                             if let Some(position_id) = item.position_id {
-                                                log(LogTag::Positions, "WARN", 
-                                                    &format!("Removing orphan entry position {} after verification abandonment (will release semaphore permit)", position_id));
+                                                logger::warning(LogTag::Positions, &format!("Removing orphan entry position {} after verification abandonment (will release semaphore permit)", position_id));
                                                 let transition = super::transitions::PositionTransition::RemoveOrphanEntry { position_id };
                                                 if let Ok(_) = super::apply::apply_transition(transition).await {
                                                     // Permit is released in RemoveOrphanEntry transition handler
-                                                    log(LogTag::Positions, "INFO", 
-                                                        &format!("Successfully removed orphan entry {} and released permit", position_id));
+                                                    logger::info(LogTag::Positions, &format!("Successfully removed orphan entry {} and released permit", position_id));
                                                 } else {
-                                                    log(LogTag::Positions, "ERROR", 
-                                                        &format!("Failed to remove orphan entry {}, manual reconciliation may be needed", position_id));
+                                                    logger::error(LogTag::Positions, &format!("Failed to remove orphan entry {}, manual reconciliation may be needed", position_id));
                                                 }
                                             }
                                         }
                                         VerificationKind::Exit => {
                                             // Force synthetic exit after timeout
                                             if let Some(position_id) = item.position_id {
-                                                log(LogTag::Positions, "WARN", 
-                                                    &format!("Forcing synthetic exit for position {} after verification abandonment - manual wallet check recommended", position_id));
+                                                logger::warning(LogTag::Positions, &format!("Forcing synthetic exit for position {} after verification abandonment - manual wallet check recommended", position_id));
                                                 
                                                 let transition = super::transitions::PositionTransition::ExitPermanentFailureSynthetic {
                                                     position_id,
@@ -538,20 +516,17 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                     continue;
                                 }
                                 
-                                if is_debug_positions_enabled() {
-                                    log(
-                                        LogTag::Positions,
-                                        "DEBUG",
-                                        &format!(
-                                            "🔄 Retrying verification for {} (mint {} kind {:?} attempts {}): {}",
-                                            item.signature,
-                                            item.mint,
-                                            item.kind,
-                                            item.attempts,
-                                            reason
-                                        )
-                                    );
-                                }
+                                logger::debug(
+                                    LogTag::Positions,
+                                    &format!(
+                                        "🔄 Retrying verification for {} (mint {} kind {:?} attempts {}): {}",
+                                        item.signature,
+                                        item.mint,
+                                        item.kind,
+                                        item.attempts,
+                                        reason
+                                    )
+                                );
                                 // Emit verification_finished (retry)
                                 crate::events::record_safe(
                                     crate::events::Event::new(
@@ -575,9 +550,8 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                 requeue_verification(item).await;
                             }
                             VerificationOutcome::PermanentFailure(transition) => {
-                                log(
+                                logger::warning(
                                     LogTag::Positions,
-                                    "WARNING",
                                     &format!(
                                         "🚫 Permanent failure for {} (mint {} kind {:?}), applying cleanup",
                                         item.signature,
@@ -611,7 +585,7 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                         }
                     }
                 } else if is_first_cycle {
-                    log(LogTag::Positions, "VERIFICATION_QUEUE", "📋 No pending verifications");
+                    logger::info(LogTag::Positions, "📋 No pending verifications");
                 }
             }
         }

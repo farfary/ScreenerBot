@@ -55,7 +55,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Pool address: {}", args.pool);
 
     // Init RPC
-    log(LogTag::System, "INIT", "Initializing RPC client...");
+    logger::info(
+        LogTag::System, "Initializing RPC client...");
     if let Err(e) = screenerbot::rpc::init_rpc_client() {
         eprintln!("RPC init failed: {}", e);
         std::process::exit(1);

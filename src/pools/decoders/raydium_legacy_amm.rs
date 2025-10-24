@@ -9,9 +9,8 @@ use super::super::utils::read_pubkey_at;
 /// - Fetch vault token account balances from provided accounts map
 /// - Compute SOL price for target token
 use super::{AccountData, PoolDecoder};
-use crate::arguments::is_debug_pool_decoders_enabled;
 use crate::constants::SOL_DECIMALS;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::pools::types::{PriceResult, ProgramKind, SOL_MINT};
 use crate::tokens::get_cached_decimals;
 use solana_sdk::pubkey::Pubkey;
@@ -33,13 +32,10 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
         let pool_account = accounts.values().max_by_key(|a| a.data.len())?;
         let pool_data = &pool_account.data;
         if pool_data.len() < 600 {
-            if is_debug_pool_decoders_enabled() {
-                log(
-                    LogTag::PoolDecoder,
-                    "ERROR",
-                    &format!("Legacy AMM pool data too small: {}", pool_data.len()),
-                );
-            }
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!("Legacy AMM pool data too small: {}", pool_data.len()),
+            );
             return None;
         }
         let info = LegacyPoolInfo::parse(pool_data)?;
@@ -63,23 +59,17 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
         // If vault fetch failed, try extracting reserves directly from pool data
         let (coin_reserve, pc_reserve) = match (coin_reserve, pc_reserve) {
             (Some(c), Some(p)) => {
-                if is_debug_pool_decoders_enabled() {
-                    log(
-                        LogTag::PoolDecoder,
-                        "INFO",
-                        &format!("Using vault reserves: coin={} pc={}", c, p),
-                    );
-                }
+                logger::info(
+                    LogTag::PoolDecoder,
+                    &format!("Using vault reserves: coin={} pc={}", c, p),
+                );
                 (c, p)
             }
             _ => {
-                if is_debug_pool_decoders_enabled() {
-                    log(
-                        LogTag::PoolDecoder,
-                        "WARN",
-                        "Vault fetch failed, extracting reserves from pool data",
-                    );
-                }
+                logger::warning(
+                    LogTag::PoolDecoder,
+                    "Vault fetch failed, extracting reserves from pool data",
+                );
                 extract_reserves_from_pool_data(pool_data)?
             }
         };
@@ -90,16 +80,13 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
             let decimals = match get_cached_decimals(&info.coin_mint) {
                 Some(decimals) => decimals,
                 None => {
-                    if is_debug_pool_decoders_enabled() {
-                        log(
-                            LogTag::PoolDecoder,
-                            "ERROR",
-                            &format!(
-                                "Legacy AMM: Token decimals not found for {}, skipping price calculation",
-                                info.coin_mint
-                            )
-                        );
-                    }
+                    logger::error(
+                        LogTag::PoolDecoder,
+                        &format!(
+                            "Legacy AMM: Token decimals not found for {}, skipping price calculation",
+                            info.coin_mint
+                        ),
+                    );
                     return None;
                 }
             };
@@ -108,28 +95,19 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
             let decimals = match get_cached_decimals(&info.pc_mint) {
                 Some(decimals) => decimals,
                 None => {
-                    if is_debug_pool_decoders_enabled() {
-                        log(
-                            LogTag::PoolDecoder,
-                            "ERROR",
-                            &format!(
-                                "Legacy AMM: Token decimals not found for {}, skipping price calculation",
-                                info.pc_mint
-                            )
-                        );
-                    }
+                    logger::error(
+                        LogTag::PoolDecoder,
+                        &format!(
+                            "Legacy AMM: Token decimals not found for {}, skipping price calculation",
+                            info.pc_mint
+                        ),
+                    );
                     return None;
                 }
             };
             (coin_reserve, pc_reserve, decimals)
         } else {
-            if is_debug_pool_decoders_enabled() {
-                log(
-                    LogTag::PoolDecoder,
-                    "ERROR",
-                    "Legacy AMM pool missing SOL mint",
-                );
-            }
+            logger::error(LogTag::PoolDecoder, "Legacy AMM pool missing SOL mint");
             return None;
         };
 
@@ -146,21 +124,18 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
             return None;
         }
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "SUCCESS",
-                &format!(
-                    "Legacy AMM price: {:.12} SOL (sol_reserve={} token_reserve={} token_dec={} coin_mint={} pc_mint={})",
-                    price_sol,
-                    sol_adjusted,
-                    token_adjusted,
-                    token_decimals,
-                    info.coin_mint,
-                    info.pc_mint
-                )
-            );
-        }
+        logger::info(
+            LogTag::PoolDecoder,
+            &format!(
+                "Legacy AMM price: {:.12} SOL (sol_reserve={} token_reserve={} token_dec={} coin_mint={} pc_mint={})",
+                price_sol,
+                sol_adjusted,
+                token_adjusted,
+                token_decimals,
+                info.coin_mint,
+                info.pc_mint
+            ),
+        );
 
         Some(PriceResult::new(
             target_mint.to_string(),
@@ -264,16 +239,13 @@ fn adjust_vaults(
                     let mint = Pubkey::new_from_array(mint_bytes).to_string();
                     if mint != info.coin_mint {
                         coin_vault_wrong_mint = true;
-                        if is_debug_pool_decoders_enabled() {
-                            log(
-                                LogTag::PoolDecoder,
-                                "WARN",
-                                &format!(
-                                    "coin_vault {} has wrong mint {} expected {}",
-                                    coin_vault, mint, info.coin_mint
-                                ),
-                            );
-                        }
+                        logger::warning(
+                            LogTag::PoolDecoder,
+                            &format!(
+                                "coin_vault {} has wrong mint {} expected {}",
+                                coin_vault, mint, info.coin_mint
+                            ),
+                        );
                     }
                 }
             }
@@ -287,16 +259,13 @@ fn adjust_vaults(
                     let mint = Pubkey::new_from_array(mint_bytes).to_string();
                     if mint != info.pc_mint {
                         pc_vault_wrong_mint = true;
-                        if is_debug_pool_decoders_enabled() {
-                            log(
-                                LogTag::PoolDecoder,
-                                "WARN",
-                                &format!(
-                                    "pc_vault {} has wrong mint {} expected {}",
-                                    pc_vault, mint, info.pc_mint
-                                ),
-                            );
-                        }
+                        logger::warning(
+                            LogTag::PoolDecoder,
+                            &format!(
+                                "pc_vault {} has wrong mint {} expected {}",
+                                pc_vault, mint, info.pc_mint
+                            ),
+                        );
                     }
                 }
             }
@@ -308,19 +277,16 @@ fn adjust_vaults(
         return None;
     }
 
-    if is_debug_pool_decoders_enabled() {
-        log(
-            LogTag::PoolDecoder,
-            "DEBUG",
-            &format!(
-                "adjust_vaults: need_coin={} need_pc={} wrong_coin_mint={} wrong_pc_mint={}",
-                need_coin || coin_vault_wrong_mint,
-                need_pc || pc_vault_wrong_mint,
-                coin_vault_wrong_mint,
-                pc_vault_wrong_mint
-            ),
-        );
-    }
+    logger::debug(
+        LogTag::PoolDecoder,
+        &format!(
+            "adjust_vaults: need_coin={} need_pc={} wrong_coin_mint={} wrong_pc_mint={}",
+            need_coin || coin_vault_wrong_mint,
+            need_pc || pc_vault_wrong_mint,
+            coin_vault_wrong_mint,
+            pc_vault_wrong_mint
+        ),
+    );
 
     // Build map from mint->vault pubkey where account present
     for (k, acc) in accounts {
@@ -330,23 +296,11 @@ fn adjust_vaults(
                 let mint = Pubkey::new_from_array(mint_bytes).to_string();
                 if mint == info.coin_mint && (need_coin || coin_vault_wrong_mint) {
                     coin_vault = k.clone();
-                    if is_debug_pool_decoders_enabled() {
-                        log(
-                            LogTag::PoolDecoder,
-                            "DEBUG",
-                            &format!("Found coin_vault: {}", coin_vault),
-                        );
-                    }
+                    logger::debug(LogTag::PoolDecoder, &format!("Found coin_vault: {}", coin_vault));
                 }
                 if mint == info.pc_mint && (need_pc || pc_vault_wrong_mint) {
                     pc_vault = k.clone();
-                    if is_debug_pool_decoders_enabled() {
-                        log(
-                            LogTag::PoolDecoder,
-                            "DEBUG",
-                            &format!("Found pc_vault: {}", pc_vault),
-                        );
-                    }
+                    logger::debug(LogTag::PoolDecoder, &format!("Found pc_vault: {}", pc_vault));
                 }
             }
         }
@@ -354,26 +308,17 @@ fn adjust_vaults(
 
     // Ensure we don't use the same vault for both (emergency fallback)
     if coin_vault == pc_vault {
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "ERROR",
-                "Same vault found for both coin and pc - this will cause incorrect pricing",
-            );
-        }
+        logger::error(
+            LogTag::PoolDecoder,
+            "Same vault found for both coin and pc - this will cause incorrect pricing",
+        );
         return None;
     }
 
-    if is_debug_pool_decoders_enabled() {
-        log(
-            LogTag::PoolDecoder,
-            "INFO",
-            &format!(
-                "Adjusted vaults: coin_vault={} pc_vault={}",
-                coin_vault, pc_vault
-            ),
-        );
-    }
+    logger::info(
+        LogTag::PoolDecoder,
+        &format!("Adjusted vaults: coin_vault={} pc_vault={}", coin_vault, pc_vault),
+    );
 
     Some(LegacyPoolInfo {
         coin_mint: info.coin_mint.clone(),
@@ -408,16 +353,13 @@ fn extract_reserves_from_pool_data(data: &[u8]) -> Option<(u64, u64)> {
                     && reserve2 > 10_000_000
                     && reserve2 < 1_000_000_000_000_000
                 {
-                    if is_debug_pool_decoders_enabled() {
-                        log(
-                            LogTag::PoolDecoder,
-                            "INFO",
-                            &format!(
-                                "Found pool data reserves at offsets {} and {}: {} and {}",
-                                offset1, offset2, reserve1, reserve2
-                            ),
-                        );
-                    }
+                    logger::info(
+                        LogTag::PoolDecoder,
+                        &format!(
+                            "Found pool data reserves at offsets {} and {}: {} and {}",
+                            offset1, offset2, reserve1, reserve2
+                        ),
+                    );
                     // Return (coin_reserve, pc_reserve) - token first, SOL second based on size heuristic
                     return if reserve1 < reserve2 {
                         Some((reserve1, reserve2)) // Smaller value likely token, larger SOL

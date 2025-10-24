@@ -7,7 +7,7 @@ use super::programs::ProgramSwap;
 /// It handles validation, parameter calculation, and delegates to appropriate
 /// program-specific implementations.
 use super::types::{constants::*, SwapDirection, SwapError, SwapRequest, SwapResult};
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::pools::decoders::PoolDecoder;
 use crate::pools::types::{ProgramKind, RAYDIUM_CLMM_PROGRAM_ID, RAYDIUM_CPMM_PROGRAM_ID};
 use crate::pools::AccountData;
@@ -28,9 +28,8 @@ impl SwapBuilder {
 
     /// Execute a swap request
     pub async fn execute(request: SwapRequest) -> Result<SwapResult, SwapError> {
-        log(
+        logger::info(
             LogTag::System,
-            "INFO",
             &format!(
                 "🔄 Executing {:?} swap for {} {}",
                 request.direction,
@@ -120,11 +119,7 @@ impl SwapBuilder {
             }
         };
 
-        log(
-            LogTag::System,
-            "INFO",
-            &format!("📊 Detected pool program: {:?}", program_kind),
-        );
+        logger::info(LogTag::System, &format!("📊 Detected pool program: {:?}", program_kind));
 
         Ok((account_data, program_kind))
     }

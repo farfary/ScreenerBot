@@ -1,7 +1,7 @@
 use super::{
     apply::apply_transition, state::update_position_state, transitions::PositionTransition,
 };
-use crate::{arguments::is_debug_positions_enabled, pools::PriceResult};
+use crate::{arguments::is_debug_positions_enabled, pools::PriceResult, logger::{self, LogTag}};
 use tokio::time::Duration;
 
 /// Update position price tracking
@@ -39,21 +39,18 @@ pub async fn update_position_tracking(
                 continue;
             }
             Err(_) => {
-                if is_debug_positions_enabled() {
-                    crate::logger::log(
-                        crate::logger::LogTag::Positions,
-                        "WARN",
-                        &format!(
-                            "⚠️ Failed to acquire position lock for price update after {} attempts (mint={})",
-                            MAX_RETRIES, mint
-                        ),
-                    );
-                }
+                logger::warning(
+                    LogTag::Positions,
+                    &format!(
+                        "⚠️ Failed to acquire position lock for price update after {} attempts (mint={})",
+                        MAX_RETRIES, mint
+                    ),
+                );
                 return false;
             }
         }
     }
-    
+
     let _lock = match _lock {
         Some(lock) => lock,
         None => return false,
@@ -104,19 +101,16 @@ pub async fn update_position_tracking(
         // Apply transition (this won't hit DB for price tracking)
         let _ = apply_transition(transition).await;
 
-        if is_debug_positions_enabled() && (new_highest.is_some() || new_lowest.is_some()) {
-            crate::logger::log(
-                crate::logger::LogTag::Positions,
-                "DEBUG",
-                &format!(
-                    "📊 Price update for {}: current={:.8}, high={}, low={}",
-                    mint,
-                    current_price,
-                    new_highest.map_or("unchanged".to_string(), |h| format!("{:.8}", h)),
-                    new_lowest.map_or("unchanged".to_string(), |l| format!("{:.8}", l))
-                ),
-            );
-        }
+        logger::debug(
+            LogTag::Positions,
+            &format!(
+                "📊 Price update for {}: current={:.8}, high={}, low={}",
+                mint,
+                current_price,
+                new_highest.map_or("unchanged".to_string(), |h| format!("{:.8}", h)),
+                new_lowest.map_or("unchanged".to_string(), |l| format!("{:.8}", l))
+            ),
+        );
 
         true
     } else {

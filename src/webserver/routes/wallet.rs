@@ -12,6 +12,7 @@ use crate::wallet::{
     CachePerformanceMetrics, WalletDashboardData, WalletFlowCacheStats,
 };
 use crate::webserver::state::AppState;
+use crate::logger::{self, LogTag};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WalletCurrentResponse {
@@ -127,10 +128,13 @@ async fn refresh_wallet_dashboard(
             clear_dashboard_api_cache().await;
         }
         Err(err) => {
-            log::warn!(
-                "Failed to refresh dashboard cache for {}h: {}",
-                request.window_hours,
-                err
+            logger::warning(
+                LogTag::Wallet,
+                &format!(
+                    "Failed to refresh dashboard cache for {}h: {}",
+                    request.window_hours,
+                    err
+                ),
             );
         }
     }

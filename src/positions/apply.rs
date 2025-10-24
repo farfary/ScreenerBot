@@ -9,7 +9,7 @@ use super::{
 };
 use crate::{
     arguments::is_debug_positions_enabled,
-    logger::{log, LogTag},
+    logger::{self, LogTag},
 };
 use chrono::Utc;
 
@@ -107,9 +107,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 if let Some(position) = get_position_by_id(position_id).await {
                     // Process loss detection and potential blacklisting
                     if let Err(e) = process_position_loss_detection(&position).await {
-                        log(
+                        logger::error(
                             LogTag::Positions,
-                            "ERROR",
                             &format!(
                                 "Failed to process loss detection for {}: {}",
                                 position.symbol, e
@@ -152,9 +151,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             )
                             .await;
 
-                            log(
+                            logger::info(
                                 LogTag::Positions,
-                                "SUCCESS",
                                 &format!(
                                     "🔓 Released position slot for verified exit (ID: {})",
                                     position_id
@@ -233,16 +231,13 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             effects.position_closed = true;
                             // Release global slot for synthetic exits as well
                             release_global_position_permit();
-                            if is_debug_positions_enabled() {
-                                log(
-                                    LogTag::Positions,
-                                    "DEBUG",
-                                    &format!(
-                                        "🔓 Released position slot for synthetic exit (ID: {})",
-                                        position_id
-                                    ),
-                                );
-                            }
+                            logger::debug(
+                                LogTag::Positions,
+                                &format!(
+                                    "🔓 Released position slot for synthetic exit (ID: {})",
+                                    position_id
+                                ),
+                            );
                         }
                         Err(e) => {
                             return Err(format!("Failed to update database: {}", e));
@@ -268,26 +263,20 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     ))
                     .await;
 
-                    if is_debug_positions_enabled() {
-                        log(
-                            LogTag::Positions,
-                            "DEBUG",
-                            &format!("🗑️ Removed orphan entry position {}", position_id),
-                        );
-                    }
+                    logger::debug(
+                        LogTag::Positions,
+                        &format!("🗑️ Removed orphan entry position {}", position_id),
+                    );
 
                     // Orphan entries also occupied a slot originally; free it now
                     release_global_position_permit();
-                    if is_debug_positions_enabled() {
-                        log(
-                            LogTag::Positions,
-                            "DEBUG",
-                            &format!(
-                                "🔓 Released position slot after orphan removal (ID: {})",
-                                position_id
-                            ),
-                        );
-                    }
+                    logger::debug(
+                        LogTag::Positions,
+                        &format!(
+                            "🔓 Released position slot after orphan removal (ID: {})",
+                            position_id
+                        ),
+                    );
                     // NOTE: position removal already purged signature indexes. Optionally we could
                     // attempt to prune per-mint lock map here if implemented in state.
                 }
@@ -302,9 +291,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             exit_percentage,
             market_price,
         } => {
-            log(
+            logger::info(
                 LogTag::Positions,
-                "INFO",
                 &format!(
                     "Partial exit submitted for position {}: {}% ({} tokens) at price {:.11}",
                     position_id, exit_percentage, exit_amount, market_price
@@ -374,9 +362,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             )
                             .await;
                             
-                            log(
+                            logger::info(
                                 LogTag::Positions,
-                                "SUCCESS",
                                 &format!(
                                     "✅ Partial exit verified for position {}: {} tokens sold, {} remaining",
                                     position_id,
@@ -401,9 +388,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             position_id,
             reason,
         } => {
-            log(
+            logger::error(
                 LogTag::Positions,
-                "ERROR",
                 &format!(
                     "Partial exit failed for position {}: {}",
                     position_id, reason
@@ -419,9 +405,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             dca_amount_sol,
             market_price,
         } => {
-            log(
+            logger::info(
                 LogTag::Positions,
-                "INFO",
                 &format!(
                     "DCA submitted for position {}: {} SOL at price {:.11}",
                     position_id, dca_amount_sol, market_price
@@ -466,9 +451,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                         if total_tokens_normalized > 0.0 && total_tokens_normalized.is_finite() {
                             pos.average_entry_price = pos.total_size_sol / total_tokens_normalized;
                         } else {
-                            log(
+                            logger::error(
                                 LogTag::Positions,
-                                "ERROR",
                                 &format!(
                                     "⚠️ DCA: Invalid token normalization for position {} (remaining={}, decimals={})",
                                     position_id, remaining_tokens, decimals
@@ -477,9 +461,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                         }
                     } else {
                         // Edge case: Invalid state for average price calculation
-                        log(
+                        logger::error(
                             LogTag::Positions,
-                            "ERROR",
                             &format!(
                                 "⚠️ DCA: Invalid position state for average price calculation - position_id={}, remaining_tokens={}, total_size_sol={}",
                                 position_id, remaining_tokens, pos.total_size_sol
@@ -515,9 +498,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             )
                             .await;
                             
-                            log(
+                            logger::info(
                                 LogTag::Positions,
-                                "SUCCESS",
                                 &format!(
                                     "✅ DCA verified for position {}: {} tokens bought, new average entry: {:.11}",
                                     position_id,
@@ -540,9 +522,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             position_id,
             reason,
         } => {
-            log(
+            logger::error(
                 LogTag::Positions,
-                "ERROR",
                 &format!("DCA failed for position {}: {}", position_id, reason),
             );
             // TODO: Implement retry logic if needed

@@ -4,9 +4,8 @@
 /// CLMM uses a sqrt_price_x64 format (Q64.64) and token vaults for pricing.
 /// Based on Uniswap v3 math principles but with Raydium-specific implementation.
 use super::{AccountData, PoolDecoder};
-use crate::arguments::is_debug_pool_decoders_enabled;
 use crate::constants::SOL_DECIMALS;
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::pools::types::{PriceResult, ProgramKind, RAYDIUM_CLMM_PROGRAM_ID, SOL_MINT};
 use crate::tokens::get_cached_decimals;
 use solana_sdk::pubkey::Pubkey;
@@ -25,13 +24,7 @@ impl PoolDecoder for RaydiumClmmDecoder {
         base_mint: &str,
         quote_mint: &str,
     ) -> Option<PriceResult> {
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "INFO",
-                "Starting Raydium CLMM pool decoding",
-            );
-        }
+        logger::info(LogTag::PoolDecoder, "Starting Raydium CLMM pool decoding");
 
         // Find the pool account
         let pool_account = accounts.values().find(|acc| {
@@ -39,35 +32,29 @@ impl PoolDecoder for RaydiumClmmDecoder {
             acc.owner.to_string() == RAYDIUM_CLMM_PROGRAM_ID
         })?;
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "INFO",
-                &format!(
-                    "Found CLMM pool account {} with {} bytes",
-                    pool_account.pubkey,
-                    pool_account.data.len()
-                ),
-            );
-        }
+        logger::info(
+            LogTag::PoolDecoder,
+            &format!(
+                "Found CLMM pool account {} with {} bytes",
+                pool_account.pubkey,
+                pool_account.data.len()
+            ),
+        );
 
         // Parse CLMM pool structure
         let clmm_info = Self::parse_clmm_pool(&pool_account.data)?;
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "INFO",
-                &format!(
-                    "CLMM pool parsed: token_mint_0={}, token_mint_1={}, vault_0={}, vault_1={}, sqrt_price_x64={}",
-                    clmm_info.token_mint_0,
-                    clmm_info.token_mint_1,
-                    clmm_info.token_vault_0,
-                    clmm_info.token_vault_1,
-                    clmm_info.sqrt_price_x64
-                )
-            );
-        }
+        logger::info(
+            LogTag::PoolDecoder,
+            &format!(
+                "CLMM pool parsed: token_mint_0={}, token_mint_1={}, vault_0={}, vault_1={}, sqrt_price_x64={}",
+                clmm_info.token_mint_0,
+                clmm_info.token_mint_1,
+                clmm_info.token_vault_0,
+                clmm_info.token_vault_1,
+                clmm_info.sqrt_price_x64
+            ),
+        );
 
         // Determine which token is SOL and which is the base token
         // Handle both orientations: TOKEN/SOL and SOL/TOKEN
@@ -89,32 +76,26 @@ impl PoolDecoder for RaydiumClmmDecoder {
                 false,
             )
         } else {
-            if is_debug_pool_decoders_enabled() {
-                log(
-                    LogTag::PoolDecoder,
-                    "ERROR",
-                    &format!(
-                        "CLMM pool has no SOL token: {} / {}",
-                        clmm_info.token_mint_0, clmm_info.token_mint_1
-                    ),
-                );
-            }
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!(
+                    "CLMM pool has no SOL token: {} / {}",
+                    clmm_info.token_mint_0, clmm_info.token_mint_1
+                ),
+            );
             return None;
         };
 
         // Verify the token mint matches one of the requested mints (base or quote)
         // This handles both TOKEN/SOL and SOL/TOKEN orientations
         if token_mint != base_mint && token_mint != quote_mint {
-            if is_debug_pool_decoders_enabled() {
-                log(
-                    LogTag::PoolDecoder,
-                    "ERROR",
-                    &format!(
-                        "CLMM pool token {} doesn't match either requested mint: base={}, quote={}",
-                        token_mint, base_mint, quote_mint
-                    ),
-                );
-            }
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!(
+                    "CLMM pool token {} doesn't match either requested mint: base={}, quote={}",
+                    token_mint, base_mint, quote_mint
+                ),
+            );
             return None;
         }
 
@@ -125,58 +106,43 @@ impl PoolDecoder for RaydiumClmmDecoder {
         let sol_balance = Self::decode_token_account_amount(&sol_account.data).ok()?;
         let token_balance = Self::decode_token_account_amount(&token_account.data).ok()?;
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "INFO",
-                &format!(
-                    "CLMM vault balances: SOL={}, token={}, is_token_0={}",
-                    sol_balance, token_balance, is_token_0
-                ),
-            );
-        }
+        logger::info(
+            LogTag::PoolDecoder,
+            &format!(
+                "CLMM vault balances: SOL={}, token={}, is_token_0={}",
+                sol_balance, token_balance, is_token_0
+            ),
+        );
 
         // Note: In CLMM pools, zero vault balances are normal when liquidity is concentrated
         // outside the current price range. We can still calculate price using sqrt_price_x64.
         if token_balance == 0 && sol_balance == 0 {
-            if is_debug_pool_decoders_enabled() {
-                log(
-                    LogTag::PoolDecoder,
-                    "INFO",
-                    "CLMM pool has zero vault balances, using sqrt_price for calculation",
-                );
-            }
+            logger::info(
+                LogTag::PoolDecoder,
+                "CLMM pool has zero vault balances, using sqrt_price for calculation",
+            );
         }
 
         // Get token decimals - CRITICAL: must be available, no fallback to defaults
         let token_decimals = match get_cached_decimals(&token_mint) {
             Some(decimals) => decimals,
             None => {
-                if is_debug_pool_decoders_enabled() {
-                    log(
-                        LogTag::PoolDecoder,
-                        "ERROR",
-                        &format!(
-                            "CLMM: Token decimals not found for {}, skipping price calculation",
-                            token_mint
-                        ),
-                    );
-                }
+                logger::error(
+                    LogTag::PoolDecoder,
+                    &format!(
+                        "CLMM: Token decimals not found for {}, skipping price calculation",
+                        token_mint
+                    ),
+                );
                 return None;
             }
         };
         let sol_decimals = SOL_DECIMALS;
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "INFO",
-                &format!(
-                    "CLMM decimals: token={}, sol={}",
-                    token_decimals, sol_decimals
-                ),
-            );
-        }
+        logger::info(
+            LogTag::PoolDecoder,
+            &format!("CLMM decimals: token={}, sol={}", token_decimals, sol_decimals),
+        );
 
         // Calculate price using sqrt_price_x64
         // sqrt_price_x64 is in Q64.64 format, so we divide by 2^64 to get the actual sqrt_price
@@ -185,16 +151,13 @@ impl PoolDecoder for RaydiumClmmDecoder {
         let sqrt_price = (clmm_info.sqrt_price_x64 as f64) / (2_f64).powi(64);
         let raw_price = sqrt_price * sqrt_price; // price = sqrt_price^2
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "INFO",
-                &format!(
-                    "CLMM sqrt_price_x64={}, sqrt_price={}, raw_price={}",
-                    clmm_info.sqrt_price_x64, sqrt_price, raw_price
-                ),
-            );
-        }
+        logger::info(
+            LogTag::PoolDecoder,
+            &format!(
+                "CLMM sqrt_price_x64={}, sqrt_price={}, raw_price={}",
+                clmm_info.sqrt_price_x64, sqrt_price, raw_price
+            ),
+        );
 
         // Apply decimal adjustments and determine final price
         // raw_price represents token_1/token_0 ratio
@@ -212,18 +175,15 @@ impl PoolDecoder for RaydiumClmmDecoder {
         let sol_reserves = (sol_balance as f64) / (10_f64).powi(sol_decimals as i32);
         let token_reserves = (token_balance as f64) / (10_f64).powi(token_decimals as i32);
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "INFO",
-                &format!(
-                    "CLMM price calculation: {:.12} SOL per token (sol_reserves={:.6}, token_reserves={:.6})",
-                    price_sol,
-                    sol_reserves,
-                    token_reserves
-                )
-            );
-        }
+        logger::info(
+            LogTag::PoolDecoder,
+            &format!(
+                "CLMM price calculation: {:.12} SOL per token (sol_reserves={:.6}, token_reserves={:.6})",
+                price_sol,
+                sol_reserves,
+                token_reserves
+            ),
+        );
 
         Some(PriceResult {
             mint: token_mint,
@@ -267,16 +227,13 @@ impl RaydiumClmmDecoder {
     fn parse_clmm_pool(data: &[u8]) -> Option<ClmmPoolInfo> {
         // Minimum size check - CLMM pools are quite large (1000+ bytes)
         if data.len() < 1200 {
-            if is_debug_pool_decoders_enabled() {
-                log(
-                    LogTag::PoolDecoder,
-                    "ERROR",
-                    &format!(
-                        "CLMM pool data too short: {} bytes (expected >= 1200)",
-                        data.len()
-                    ),
-                );
-            }
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!(
+                    "CLMM pool data too short: {} bytes (expected >= 1200)",
+                    data.len()
+                ),
+            );
             return None;
         }
 
@@ -447,21 +404,18 @@ impl RaydiumClmmDecoder {
         let padding1 = [0u64; 24];
         let padding2 = [0u64; 32];
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "INFO",
-                &format!(
-                    "CLMM complete pool parsed: bump={}, token_mint_0={}, token_mint_1={}, sqrt_price_x64={}, liquidity={}, tick_current={}",
-                    bump,
-                    token_mint_0,
-                    token_mint_1,
-                    sqrt_price_x64,
-                    liquidity,
-                    tick_current
-                )
-            );
-        }
+        logger::debug(
+            LogTag::PoolDecoder,
+            &format!(
+                "CLMM complete pool parsed: bump={}, token_mint_0={}, token_mint_1={}, sqrt_price_x64={}, liquidity={}, tick_current={}",
+                bump,
+                token_mint_0,
+                token_mint_1,
+                sqrt_price_x64,
+                liquidity,
+                tick_current
+            ),
+        );
 
         Some(ClmmPoolInfo {
             bump,
@@ -737,17 +691,14 @@ impl RaydiumClmmDecoder {
             .values()
             .find(|acc| acc.owner.to_string() == RAYDIUM_CLMM_PROGRAM_ID)?;
 
-        if is_debug_pool_decoders_enabled() {
-            log(
-                LogTag::PoolDecoder,
-                "INFO",
-                &format!(
-                    "Extracting complete CLMM pool data from account {} with {} bytes",
-                    pool_account.pubkey,
-                    pool_account.data.len()
-                ),
-            );
-        }
+        logger::debug(
+            LogTag::PoolDecoder,
+            &format!(
+                "Extracting complete CLMM pool data from account {} with {} bytes",
+                pool_account.pubkey,
+                pool_account.data.len()
+            ),
+        );
 
         // Parse complete CLMM pool structure
         Self::parse_clmm_pool(&pool_account.data)

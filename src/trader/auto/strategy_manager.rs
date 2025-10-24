@@ -1,6 +1,6 @@
 //! Strategy management and application for trading decisions
 
-use crate::logger::{log, LogTag};
+use crate::logger::{self, LogTag};
 use crate::pools::PriceResult;
 use crate::positions::Position;
 use crate::strategies;
@@ -17,9 +17,8 @@ impl StrategyManager {
         token_mint: &str,
         price_info: &PriceResult,
     ) -> Result<Option<TradeDecision>, String> {
-        log(
-            LogTag::Trader,
-            "DEBUG",
+        logger::info(
+        LogTag::Trader,
             &format!(
                 "Checking entry strategies for token {} (price={:.9} SOL, liquidity={:.2} SOL)",
                 token_mint, price_info.price_sol, price_info.sol_reserves
@@ -50,9 +49,8 @@ impl StrategyManager {
 
         match evaluation_result {
             Ok(Ok(Some(strategy_id))) => {
-                log(
-                    LogTag::Trader,
-                    "SUCCESS",
+                logger::info(
+        LogTag::Trader,
                     &format!(
                         "✅ Entry strategy signal: token={}, strategy={}, price={:.9} SOL",
                         token_mint, strategy_id, price_info.price_sol
@@ -73,17 +71,15 @@ impl StrategyManager {
             }
             Ok(Ok(None)) => Ok(None),
             Ok(Err(e)) => {
-                log(
-                    LogTag::Trader,
-                    "ERROR",
+                logger::info(
+        LogTag::Trader,
                     &format!("Strategy evaluation error for {}: {}", token_mint, e),
                 );
                 Ok(None) // Don't fail trading on strategy errors
             }
             Err(_timeout) => {
-                log(
-                    LogTag::Trader,
-                    "ERROR",
+                logger::info(
+        LogTag::Trader,
                     &format!(
                         "⚠️ STRATEGY_TIMEOUT: Entry evaluation for {} exceeded {}s - Consider increasing timeout or optimizing strategies. This timeout is distinct from 'no signal' case.",
                         token_mint,
@@ -115,9 +111,8 @@ impl StrategyManager {
         position: &Position,
         current_price: f64,
     ) -> Result<Option<TradeDecision>, String> {
-        log(
-            LogTag::Trader,
-            "DEBUG",
+        logger::info(
+        LogTag::Trader,
             &format!(
                 "Checking exit strategies for position {:?} token {} (current_price={:.9} SOL)",
                 position.id, position.mint, current_price
@@ -164,9 +159,8 @@ impl StrategyManager {
 
         match evaluation_result {
             Ok(Ok(Some(strategy_id))) => {
-                log(
-                    LogTag::Trader,
-                    "SUCCESS",
+                logger::info(
+        LogTag::Trader,
                     &format!(
                         "✅ Exit strategy signal: position={:?}, strategy={}, price={:.9} SOL",
                         position.id, strategy_id, current_price
@@ -187,17 +181,15 @@ impl StrategyManager {
             }
             Ok(Ok(None)) => Ok(None),
             Ok(Err(e)) => {
-                log(
-                    LogTag::Trader,
-                    "ERROR",
+                logger::info(
+        LogTag::Trader,
                     &format!("Strategy evaluation error for position {:?}: {}", position.id, e),
                 );
                 Ok(None) // Don't fail trading on strategy errors
             }
             Err(_timeout) => {
-                log(
-                    LogTag::Trader,
-                    "ERROR",
+                logger::info(
+        LogTag::Trader,
                     &format!(
                         "⚠️ STRATEGY_TIMEOUT: Exit evaluation for position {:?} (mint={}) exceeded {}s - Consider increasing timeout or optimizing strategies. This timeout is distinct from 'no signal' case.",
                         position.id,

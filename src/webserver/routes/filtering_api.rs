@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use crate::{
     filtering,
-    logger::{log, LogTag},
+    logger::{self, LogTag},
     webserver::state::AppState,
     webserver::utils::{error_response, success_response},
 };
@@ -55,9 +55,8 @@ async fn get_stats() -> Response {
             timestamp: Utc::now().to_rfc3339(),
         }),
         Err(err) => {
-            log(
-                LogTag::Filtering,
-                "STATS_FETCH_FAILED",
+            logger::info(
+        LogTag::Filtering,
                 &format!("Failed to fetch filtering stats: {}", err),
             );
 
@@ -77,9 +76,8 @@ async fn get_stats() -> Response {
 async fn trigger_refresh() -> Response {
     match filtering::refresh().await {
         Ok(()) => {
-            log(
-                LogTag::Filtering,
-                "REFRESH_TRIGGERED",
+            logger::info(
+        LogTag::Filtering,
                 "Filtering snapshot rebuilt via API request",
             );
 
@@ -89,9 +87,8 @@ async fn trigger_refresh() -> Response {
             })
         }
         Err(err) => {
-            log(
-                LogTag::Filtering,
-                "REFRESH_FAILED",
+            logger::info(
+        LogTag::Filtering,
                 &format!("Filtering refresh failed: {}", err),
             );
 

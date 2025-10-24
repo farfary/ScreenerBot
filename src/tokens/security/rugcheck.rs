@@ -3,6 +3,7 @@
 /// Flow: API -> Parse -> Database -> Store cache
 /// Updates: Every 30 minutes (security data is relatively stable)
 use crate::apis::rugcheck::RugcheckInfo;
+use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::store::{self, CacheMetrics};
 use crate::tokens::types::{RugcheckData, TokenError, TokenResult};
@@ -113,10 +114,13 @@ pub async fn fetch_rugcheck_data(
             // 30 minutes
             store::store_rugcheck(mint, &db_data);
             if let Err(err) = store::refresh_token_snapshot(mint).await {
-                eprintln!(
-                    "[TOKENS][STORE] Failed to refresh token snapshot after Rugcheck DB hit mint={} err={:?}",
-                    mint,
-                    err
+                logger::error(
+                    LogTag::Tokens,
+                    &format!(
+                        "[TOKENS][STORE] Failed to refresh token snapshot after Rugcheck DB hit mint={} err={:?}",
+                        mint,
+                        err
+                    ),
                 );
             }
             return Ok(Some(db_data));
@@ -150,9 +154,12 @@ pub async fn fetch_rugcheck_data(
     // Cache it in store and refresh token snapshot
     store::store_rugcheck(mint, &data);
     if let Err(err) = store::refresh_token_snapshot(mint).await {
-        eprintln!(
-            "[TOKENS][STORE] Failed to refresh token snapshot after Rugcheck API mint={} err={:?}",
-            mint, err
+        logger::error(
+            LogTag::Tokens,
+            &format!(
+                "[TOKENS][STORE] Failed to refresh token snapshot after Rugcheck API mint={} err={:?}",
+                mint, err
+            ),
         );
     }
 

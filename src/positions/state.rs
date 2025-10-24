@@ -1,7 +1,7 @@
 use super::types::Position;
 use crate::{
     arguments::is_debug_positions_enabled,
-    logger::{log, LogTag},
+    logger::{self, LogTag},
 };
 use chrono::{DateTime, Utc};
 use std::{
@@ -68,13 +68,10 @@ pub struct PositionLockGuard {
 
 impl Drop for PositionLockGuard {
     fn drop(&mut self) {
-        if is_debug_positions_enabled() {
-            log(
-                LogTag::Positions,
-                "DEBUG",
-                &format!("🔓 Released position lock for mint: {}", &self.mint),
-            );
-        }
+        logger::debug(
+            LogTag::Positions,
+            &format!("🔓 Released position lock for mint: {}", &self.mint),
+        );
     }
 }
 
@@ -126,13 +123,10 @@ pub async fn acquire_position_lock(mint: &str) -> PositionLockGuard {
 
     let owned_guard = lock.clone().lock_owned().await;
 
-    if is_debug_positions_enabled() {
-        log(
-            LogTag::Positions,
-            "DEBUG",
-            &format!("🔒 Acquired position lock for mint: {}", &mint_key),
+        logger::debug(
+        LogTag::Positions,
+        &format!("🔒 Acquired position lock for mint: {}", &mint_key),
         );
-    }
 
     PositionLockGuard {
         mint: mint_key,
@@ -147,16 +141,13 @@ pub async fn acquire_global_position_permit(
     let semaphore = get_global_position_semaphore();
     match semaphore.try_acquire() {
         Ok(permit) => {
-            if is_debug_positions_enabled() {
-                log(
-                    LogTag::Positions,
-                    "DEBUG",
-                    &format!(
-                        "🟢 Acquired global position permit (available: {})",
-                        semaphore.available_permits()
-                    ),
-                );
-            }
+            logger::debug(
+                LogTag::Positions,
+                &format!(
+                    "🟢 Acquired global position permit (available: {})",
+                    semaphore.available_permits()
+                ),
+            );
             Ok(permit)
         }
         Err(_) => {
@@ -174,16 +165,13 @@ pub async fn acquire_global_position_permit(
 pub fn release_global_position_permit() {
     let semaphore = get_global_position_semaphore();
     semaphore.add_permits(1);
-    if is_debug_positions_enabled() {
-        log(
-            LogTag::Positions,
-            "DEBUG",
-            &format!(
-                "🔴 Released global position permit (available: {})",
-                semaphore.available_permits()
-            ),
+        logger::debug(
+        LogTag::Positions,
+        &format!(
+            "🔴 Released global position permit (available: {})",
+            semaphore.available_permits()
+        ),
         );
-    }
 }
 
 /// Add position to state
@@ -213,10 +201,9 @@ pub async fn add_position(position: Position) -> usize {
     // Clear any pending-open flag for this mint now that the position exists
     {
         let mut pending = PENDING_OPEN_SWAPS.write().await;
-        if pending.remove(&position.mint).is_some() && is_debug_positions_enabled() {
-            log(
+            if pending.remove(&position.mint).is_some() && is_debug_positions_enabled() {
+            logger::debug(
                 LogTag::Positions,
-                "DEBUG",
                 &format!(
                     "🧹 Cleared pending-open after position add for mint: {}",
                     &position.mint
@@ -268,9 +255,8 @@ pub async fn remove_position(mint: &str) -> Option<Position> {
         {
             let mut pending = PENDING_OPEN_SWAPS.write().await;
             if pending.remove(&removed.mint).is_some() && is_debug_positions_enabled() {
-                log(
+                logger::debug(
                     LogTag::Positions,
-                    "DEBUG",
                     &format!(
                         "🧹 Cleared pending-open on removal for mint: {}",
                         &removed.mint
@@ -366,27 +352,21 @@ pub async fn is_open_position(mint: &str) -> bool {
             }
             for m in to_remove.drain(..) {
                 pending_write.remove(&m);
-                if is_debug_positions_enabled() {
-                    log(
-                        LogTag::Positions,
-                        "DEBUG",
-                        &format!("⏳ Pending-open expired for mint: {}", m),
-                    );
-                }
+                logger::debug(
+                    LogTag::Positions,
+                    &format!("⏳ Pending-open expired for mint: {}", m),
+                );
             }
         }
 
         if is_pending {
-            if is_debug_positions_enabled() {
-                log(
-                    LogTag::Positions,
-                    "DEBUG",
-                    &format!(
-                        "🚫 is_open_position pending-open lock active for mint: {}",
-                        mint
-                    ),
-                );
-            }
+            logger::debug(
+                LogTag::Positions,
+                &format!(
+                    "🚫 is_open_position pending-open lock active for mint: {}",
+                    mint
+                ),
+            );
             return true;
         }
     }
@@ -433,25 +413,21 @@ pub async fn set_pending_open(mint: &str, ttl_secs: i64) {
     let expires_at = Utc::now() + chrono::Duration::seconds(ttl_secs);
     let mut pending = PENDING_OPEN_SWAPS.write().await;
     pending.insert(mint.to_string(), expires_at);
-    if is_debug_positions_enabled() {
-        log(
-            LogTag::Positions,
-            "DEBUG",
-            &format!(
-                "⏳ Set pending-open for mint: {} (ttl {}s, until {})",
-                mint, ttl_secs, expires_at
-            ),
+        logger::debug(
+        LogTag::Positions,
+        &format!(
+            "⏳ Set pending-open for mint: {} (ttl {}s, until {})",
+            mint, ttl_secs, expires_at
+        ),
         );
-    }
 }
 
 /// Clear a mint's pending open swap state, if present
 pub async fn clear_pending_open(mint: &str) {
     let mut pending = PENDING_OPEN_SWAPS.write().await;
     if pending.remove(mint).is_some() && is_debug_positions_enabled() {
-        log(
+        logger::debug(
             LogTag::Positions,
-            "DEBUG",
             &format!("🧹 Cleared pending-open for mint: {}", mint),
         );
     }
@@ -463,8 +439,7 @@ pub async fn clear_pending_open(mint: &str) {
 /// permit per open position (up to capacity). If there are more open positions than
 /// MAX_OPEN_POSITIONS we log a warning and consume all available permits.
 pub async fn reconcile_global_position_semaphore(max_open: usize) {
-    use crate::arguments::is_debug_positions_enabled;
-    use crate::logger::{log, LogTag};
+        use crate::logger::{self, LogTag};
 
     let semaphore = get_global_position_semaphore();
     let open_positions = get_open_positions().await; // clones but infrequent (startup)
@@ -475,9 +450,8 @@ pub async fn reconcile_global_position_semaphore(max_open: usize) {
     // Check for leaked permits (consumed > open positions)
     if consumed_before > open_count {
         let leaked = consumed_before - open_count;
-        log(
+        logger::warning(
             LogTag::Positions,
-            "WARNING",
             &format!(
                 "⚠️ Semaphore audit: {} leaked permits detected ({} consumed, {} open positions). Releasing leaked permits...",
                 leaked, consumed_before, open_count
@@ -489,9 +463,8 @@ pub async fn reconcile_global_position_semaphore(max_open: usize) {
             release_global_position_permit();
         }
         
-        log(
+        logger::info(
             LogTag::Positions,
-            "INFO",
             &format!("✅ Released {} leaked permits. Available: {} -> {}", 
                      leaked, available_before, semaphore.available_permits())
         );
@@ -501,13 +474,10 @@ pub async fn reconcile_global_position_semaphore(max_open: usize) {
 
     // No open positions - nothing to reconcile
     if open_count == 0 {
-        if is_debug_positions_enabled() {
-            log(
-                LogTag::Positions,
-                "DEBUG",
-                "Semaphore reconcile: no open positions, all permits available",
-            );
-        }
+        logger::debug(
+            LogTag::Positions,
+            "Semaphore reconcile: no open positions, all permits available",
+        );
         return;
     }
 
@@ -527,9 +497,8 @@ pub async fn reconcile_global_position_semaphore(max_open: usize) {
 
     let available_after = semaphore.available_permits();
     if consumed < open_count {
-        log(
+        logger::warning(
             LogTag::Positions,
-            "WARNING",
             &format!(
                 "⚠️ Semaphore reconcile: {} open positions exceed capacity (consumed {} of {}, available after {})",
                 open_count,
@@ -539,9 +508,8 @@ pub async fn reconcile_global_position_semaphore(max_open: usize) {
             )
         );
     } else {
-        log(
+        logger::info(
             LogTag::Positions,
-            "INFO",
             &format!(
                 "✅ Semaphore reconcile: consumed {} permits for {} open positions (avail {} -> {})",
                 consumed, open_count, available_before, available_after
