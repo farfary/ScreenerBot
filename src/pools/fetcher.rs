@@ -413,14 +413,67 @@ impl AccountFetcher {
             return Ok(Vec::new());
         }
 
+        // Get configuration for blacklist
+        let (threshold, ttl_hours) = crate::config::with_config(|cfg| {
+            (
+                cfg.pools.account_not_found_threshold,
+                cfg.pools.blacklist_ttl_hours,
+            )
+        });
+
+        // Filter out blacklisted accounts before RPC call
+        let mut non_blacklisted = Vec::new();
+        let mut blacklisted_count = 0;
+
+        for account in accounts {
+            let account_str = account.to_string();
+            match crate::pools::db::is_account_blacklisted(&account_str).await {
+                Ok(is_blacklisted) => {
+                    if is_blacklisted {
+                        blacklisted_count += 1;
+                        logger::debug(
+                            LogTag::PoolFetcher,
+                            &format!("Skipping blacklisted account: {}", account),
+                        );
+                    } else {
+                        non_blacklisted.push(*account);
+                    }
+                }
+                Err(e) => {
+                    logger::warning(
+                        LogTag::PoolFetcher,
+                        &format!("Failed to check blacklist for {}: {}", account, e),
+                    );
+                    // On error, include account (fail-open)
+                    non_blacklisted.push(*account);
+                }
+            }
+        }
+
+        if blacklisted_count > 0 {
+            logger::debug(
+                LogTag::PoolFetcher,
+                &format!(
+                    "Filtered {} blacklisted accounts ({} remaining)",
+                    blacklisted_count,
+                    non_blacklisted.len()
+                ),
+            );
+        }
+
+        // If all accounts were blacklisted, return early
+        if non_blacklisted.is_empty() {
+            return Ok(Vec::new());
+        }
+
         logger::debug(
             LogTag::PoolFetcher,
-            &format!("Fetching batch of {} accounts", accounts.len()),
+            &format!("Fetching batch of {} accounts", non_blacklisted.len()),
         );
 
         // Fetch accounts using RPC client
         let rpc_start = Instant::now();
-        let account_results = match rpc_client.get_multiple_accounts(accounts).await {
+        let account_results = match rpc_client.get_multiple_accounts(&non_blacklisted).await {
             Ok(results) => {
                 let rpc_duration = rpc_start.elapsed();
 
@@ -430,7 +483,7 @@ impl AccountFetcher {
                     None,
                     None,
                     serde_json::json!({
-                        "account_count": accounts.len(),
+                        "account_count": non_blacklisted.len(),
                         "duration_ms": rpc_duration.as_millis(),
                         "success": true
                     }),
@@ -448,10 +501,10 @@ impl AccountFetcher {
                     None,
                     None,
                     serde_json::json!({
-                        "account_count": accounts.len(),
+                        "account_count": non_blacklisted.len(),
                         "error": e.to_string(),
                         "duration_ms": rpc_duration.as_millis(),
-                        "accounts": accounts.iter().map(|p| p.to_string()).collect::<Vec<_>>()
+                        "accounts": non_blacklisted.iter().map(|p| p.to_string()).collect::<Vec<_>>()
                     }),
                 ))
                 .await;
@@ -465,14 +518,31 @@ impl AccountFetcher {
 
         for (i, account_opt) in account_results.iter().enumerate() {
             if let Some(account) = account_opt {
-                let account_data = AccountData::from_account(accounts[i], account.clone(), 0);
+                let account_data =
+                    AccountData::from_account(non_blacklisted[i], account.clone(), 0);
                 account_data_list.push(account_data);
             } else {
-                missing_accounts.push(accounts[i].to_string());
+                let account_str = non_blacklisted[i].to_string();
+                missing_accounts.push(account_str.clone());
                 logger::warning(
                     LogTag::PoolFetcher,
-                    &format!("Account not found: {}", accounts[i]),
+                    &format!("Account not found: {}", non_blacklisted[i]),
                 );
+
+                // Record failure in database for blacklisting
+                if let Err(e) = crate::pools::db::record_account_failure(
+                    &account_str,
+                    "account_not_found",
+                    threshold,
+                    ttl_hours,
+                )
+                .await
+                {
+                    logger::error(
+                        LogTag::PoolFetcher,
+                        &format!("Failed to record account failure for {}: {}", account_str, e),
+                    );
+                }
             }
         }
 

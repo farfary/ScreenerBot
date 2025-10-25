@@ -17,7 +17,9 @@ mod cache;
 mod calculator;
 mod db;
 mod discovery;
-mod fetcher;
+
+// Re-export fetcher types for debug bins
+pub mod fetcher;
 
 pub mod decoders;
 pub mod service;

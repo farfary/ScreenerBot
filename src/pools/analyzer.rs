@@ -458,7 +458,12 @@ impl PoolAnalyzer {
             }
 
             ProgramKind::PumpFunLegacy => {
-                Self::extract_pump_fun_accounts(pool_id, base_mint, quote_mint, rpc_client).await
+                // PumpFun Legacy (bonding curves) don't have vaults - just need the pool account
+                logger::debug(
+                    LogTag::PoolAnalyzer,
+                    &format!("Extracting PumpFun Legacy (bonding curve) accounts for pool {}", pool_id),
+                );
+                Some(vec![*pool_id])
             }
 
             ProgramKind::Moonit => {
