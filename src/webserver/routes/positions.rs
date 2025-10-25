@@ -12,8 +12,6 @@ use std::sync::Arc;
 use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::tokens;
-// Security database deprecated; security info is on Token when available
-// Use crate::tokens::store accessors for token data
 use crate::transactions::{
     get_transaction, TokenTransfer, Transaction, TransactionDirection, TransactionStatus,
     TransactionType,

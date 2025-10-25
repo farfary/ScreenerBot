@@ -823,8 +823,6 @@ impl PoolDiscovery {
             );
         }
 
-        // Raydium discovery path removed here (not implemented)
-
         // Deduplicate pools by pool address
         let deduplicated_pools = self.deduplicate_pools(discovered_pools);
 
@@ -867,8 +865,6 @@ impl PoolDiscovery {
 
         Ok(pools)
     }
-
-    // Raydium path removed
 
     /// Convert GeckoTerminal pool to PoolDescriptor
     fn convert_geckoterminal_pool_to_descriptor(

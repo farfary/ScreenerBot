@@ -2144,8 +2144,6 @@ pub async fn initialize_wallet_database() -> Result<(), String> {
     Ok(())
 }
 
-// Helper functions removed to avoid lifetime issues - using direct database access instead
-
 // =============================================================================
 // WALLET MONITORING SERVICE
 // =============================================================================

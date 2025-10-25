@@ -323,7 +323,7 @@ impl std::fmt::Display for RateLimitError {
 }
 
 // =============================================================================
-// CONVERSION FUNCTIONS FROM OLD ERRORS
+// BACKWARD COMPATIBILITY: Error conversions from standard library types
 // =============================================================================
 
 impl From<reqwest::Error> for ScreenerBotError {
@@ -344,7 +344,7 @@ impl From<serde_json::Error> for ScreenerBotError {
 }
 
 // =============================================================================
-// HELPER FUNCTIONS FOR MIGRATION
+// STRUCTURED ERROR BUILDERS: Migration helpers for backward compatibility
 // =============================================================================
 
 impl ScreenerBotError {

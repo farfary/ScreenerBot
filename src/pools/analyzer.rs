@@ -798,8 +798,6 @@ impl PoolAnalyzer {
             }
         }
 
-        // NOTE: Mint accounts removed - decimals now fetched from cache, not mint accounts
-
         Some(accounts)
     }
 

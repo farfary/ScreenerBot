@@ -1,5 +1,4 @@
 // New simplified run implementation using ServiceManager
-// The old implementation is preserved in run_old.rs
 
 use crate::{
     arguments::{

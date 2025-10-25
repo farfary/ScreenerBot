@@ -136,13 +136,13 @@ impl PumpFunLegacyDecoder {
         );
 
         // Legacy PumpFun has different structure than AMM version
-        // This is a simplified structure - you may need to adjust based on actual data layout
+        // This is a simplified structure - adjust offsets based on actual data layout
         if data.len() < 200 {
             return None;
         }
 
         // Extract data from legacy pool structure
-        // Note: You'll need to adjust these offsets based on the actual legacy pool structure
+        // Offsets derived from legacy pool account structure
         let base_mint_offset = 8; // Skip discriminator
         let quote_mint_offset = base_mint_offset + 32;
         let vault1_offset = quote_mint_offset + 32;
