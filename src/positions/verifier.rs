@@ -696,6 +696,23 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                     effective_exit_price: swap_info.calculated_price_sol,
                                     fee_lamports: sol_to_lamports(swap_info.fee_sol),
                                     exit_time,
+                                    exit_signature: item.signature.clone(),
+                                    exit_percentage: match (
+                                        item.expected_exit_amount,
+                                        item.requested_exit_percentage,
+                                    ) {
+                                        (Some(expected), Some(requested)) if expected > 0 => {
+                                            let ratio = exit_amount as f64 / expected as f64;
+                                            (requested * ratio).max(0.0).min(100.0)
+                                        }
+                                        (Some(expected), _) if expected > 0 => {
+                                            ((exit_amount as f64 / expected as f64) * 100.0)
+                                                .max(0.0)
+                                                .min(100.0)
+                                        }
+                                        (Some(_), _) => 0.0,
+                                        (None, _) => 100.0,
+                                    },
                                 },
                             );
                         }

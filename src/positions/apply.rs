@@ -1,5 +1,6 @@
 use super::db::{
-    force_database_sync, save_entry_record, update_position, update_position_price_fields,
+    force_database_sync, save_entry_record, save_exit_record, update_position,
+    update_position_price_fields,
 };
 use super::{
     loss_detection::process_position_loss_detection,
@@ -339,6 +340,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             effective_exit_price,
             fee_lamports,
             exit_time,
+            exit_signature,
+            exit_percentage,
         } => {
             let updated =
                 update_position_state(&find_mint_by_position_id(position_id).await?, |pos| {
@@ -377,6 +380,37 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                         Ok(_) => {
                             effects.db_updated = true;
                             let _ = force_database_sync().await;
+
+                            if let Err(err) = save_exit_record(
+                                position_id,
+                                exit_time,
+                                exit_amount,
+                                effective_exit_price,
+                                sol_received,
+                                &exit_signature,
+                                true,
+                                exit_percentage,
+                                Some(fee_lamports),
+                            )
+                            .await
+                            {
+                                logger::error(
+                                    LogTag::Positions,
+                                    &format!(
+                                        "Failed to persist partial exit record for position {}: {}",
+                                        position_id, err
+                                    ),
+                                );
+                            }
+
+                            if let Err(err) =
+                                super::state::clear_pending_partial_exit(&exit_signature).await
+                            {
+                                return Err(format!(
+                                    "Failed to clear pending partial exit {} for position {}: {}",
+                                    exit_signature, position_id, err
+                                ));
+                            }
 
                             crate::events::record_position_event(
                                 &position_id.to_string(),
@@ -428,6 +462,20 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     position_id, reason
                 ),
             );
+            if let Some(position) = get_position_by_id(position_id).await {
+                if let Some(exit_sig) = position.exit_transaction_signature.clone() {
+                    if let Err(err) = super::state::clear_pending_partial_exit(&exit_sig).await {
+                        logger::error(
+                            LogTag::Positions,
+                            &format!(
+                                "Failed to clear pending partial exit {} during failure handling for position {}: {}",
+                                exit_sig, position_id, err
+                            ),
+                        );
+                    }
+                }
+                super::state::clear_partial_exit_pending(&position.mint).await;
+            }
             // TODO: Implement retry logic if needed
         }
 
@@ -517,16 +565,6 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             effects.db_updated = true;
                             let _ = force_database_sync().await;
 
-                            if let Err(err) = clear_pending_dca_swap(&dca_signature).await {
-                                logger::error(
-                                    LogTag::Positions,
-                                    &format!(
-                                        "Failed to clear pending DCA {} for position {}: {}",
-                                        dca_signature, position_id, err
-                                    ),
-                                );
-                            }
-
                             if let Err(err) = save_entry_record(
                                 position_id,
                                 dca_time,
@@ -546,6 +584,13 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                         position_id, err
                                     ),
                                 );
+                            }
+
+                            if let Err(err) = clear_pending_dca_swap(&dca_signature).await {
+                                return Err(format!(
+                                    "Failed to clear pending DCA {} for position {}: {}",
+                                    dca_signature, position_id, err
+                                ));
                             }
 
                             crate::events::record_position_event(
@@ -592,13 +637,10 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             );
 
             if let Err(err) = clear_pending_dca_swap(&dca_signature).await {
-                logger::error(
-                    LogTag::Positions,
-                    &format!(
-                        "Failed to clear pending DCA {} after failure: {}",
-                        dca_signature, err
-                    ),
-                );
+                return Err(format!(
+                    "Failed to clear pending DCA {} after failure: {}",
+                    dca_signature, err
+                ));
             }
             // TODO: Implement retry logic if needed
         }

@@ -156,6 +156,40 @@ pub async fn initialize_positions_system() -> Result<(), String> {
         }
     }
 
+    match super::state::rehydrate_pending_partial_exits().await {
+        Ok(pending) => {
+            if !pending.is_empty() {
+                let mut restored = 0;
+                for entry in pending {
+                    let item = VerificationItem::new_partial_exit(
+                        entry.signature.clone(),
+                        entry.mint.clone(),
+                        Some(entry.position_id),
+                        entry.expected_exit_amount,
+                        entry.requested_exit_percentage,
+                        entry.expiry_height,
+                    );
+                    enqueue_verification(item).await;
+                    restored += 1;
+                }
+
+                logger::info(
+                    LogTag::Positions,
+                    &format!(
+                        "🔁 Restored {} pending partial exit verifications from metadata",
+                        restored
+                    ),
+                );
+            }
+        }
+        Err(err) => {
+            logger::error(
+                LogTag::Positions,
+                &format!("Failed to rehydrate pending partial exits: {}", err),
+            );
+        }
+    }
+
     // Initialize global position semaphore and reconcile with existing open positions
     {
         let max_open_positions = crate::config::with_config(|cfg| cfg.trader.max_open_positions);
@@ -302,13 +336,26 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                             if let Some(exit_sig) = &position.exit_transaction_signature {
                                 // Check if already in queue
                                 if !signatures_in_queue.contains(exit_sig) {
-                                    let item = VerificationItem::new(
-                                        exit_sig.clone(),
-                                        position.mint.clone(),
-                                        position.id,
-                                        VerificationKind::Exit,
-                                        None,
-                                    );
+                                    let item = if let Some(pending) =
+                                        super::state::get_pending_partial_exit(exit_sig).await
+                                    {
+                                        VerificationItem::new_partial_exit(
+                                            exit_sig.clone(),
+                                            position.mint.clone(),
+                                            position.id,
+                                            pending.expected_exit_amount,
+                                            pending.requested_exit_percentage,
+                                            pending.expiry_height,
+                                        )
+                                    } else {
+                                        VerificationItem::new(
+                                            exit_sig.clone(),
+                                            position.mint.clone(),
+                                            position.id,
+                                            VerificationKind::Exit,
+                                            None,
+                                        )
+                                    };
                                     enqueue_verification(item).await;
                                     requeued_count += 1;
                                 }

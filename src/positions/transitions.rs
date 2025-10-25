@@ -47,6 +47,8 @@ pub enum PositionTransition {
         effective_exit_price: f64, // Actual price
         fee_lamports: u64,         // Transaction fee
         exit_time: DateTime<Utc>,
+        exit_signature: String,
+        exit_percentage: f64,
     },
     PartialExitFailed {
         position_id: i64,

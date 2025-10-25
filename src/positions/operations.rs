@@ -4,8 +4,9 @@ use super::{
     queue::{enqueue_verification, VerificationItem, VerificationKind},
     state::{
         acquire_global_position_permit, acquire_position_lock, add_position,
-        add_signature_to_index, clear_pending_dca_swap, register_pending_dca_swap,
-        release_global_position_permit, PendingDcaSwap, LAST_OPEN_TIME,
+        add_signature_to_index, clear_pending_dca_swap, clear_pending_partial_exit,
+        register_pending_dca_swap, register_pending_partial_exit, release_global_position_permit,
+        PendingDcaSwap, PendingPartialExit, LAST_OPEN_TIME,
     },
     transitions::PositionTransition,
 };
@@ -780,6 +781,34 @@ pub async fn partial_close_position(
         .transaction_signature
         .ok_or("No transaction signature")?;
 
+    let expiry_height =
+        get_rpc_client().get_block_height().await.unwrap_or(0) + SOLANA_BLOCKHASH_VALIDITY_SLOTS;
+
+    let pending_partial = PendingPartialExit {
+        signature: transaction_signature.clone(),
+        mint: token_mint.to_string(),
+        position_id,
+        expected_exit_amount: exit_amount,
+        requested_exit_percentage: exit_percentage,
+        expiry_height: Some(expiry_height),
+        created_at: Utc::now(),
+    };
+
+    if let Err(e) = register_pending_partial_exit(pending_partial.clone()).await {
+        super::state::clear_partial_exit_pending(token_mint).await;
+        logger::error(
+            LogTag::Positions,
+            &format!(
+                "Failed to persist pending partial exit metadata for position {} (mint {}): {}",
+                position_id, token_mint, e
+            ),
+        );
+        return Err(format!(
+            "Failed to persist pending partial exit metadata: {}",
+            e
+        ));
+    }
+
     // Update position state (mark as partial exit pending)
     super::state::update_position_state(token_mint, |pos| {
         pos.exit_transaction_signature = Some(transaction_signature.clone());
@@ -805,19 +834,27 @@ pub async fn partial_close_position(
     };
 
     // Apply transition
-    super::apply::apply_transition(transition)
-        .await
-        .map_err(|e| format!("Failed to apply partial exit transition: {}", e))?;
+    if let Err(e) = super::apply::apply_transition(transition).await {
+        if let Err(err) = clear_pending_partial_exit(&pending_partial.signature).await {
+            logger::error(
+                LogTag::Positions,
+                &format!(
+                    "Failed to rollback pending partial exit {} after transition error: {}",
+                    pending_partial.signature, err
+                ),
+            );
+        }
+        super::state::clear_partial_exit_pending(token_mint).await;
+        return Err(format!("Failed to apply partial exit transition: {}", e));
+    }
 
     // Enqueue for verification with partial exit flag
-    let expiry_height =
-        get_rpc_client().get_block_height().await.unwrap_or(0) + SOLANA_BLOCKHASH_VALIDITY_SLOTS;
-
     let verification_item = VerificationItem::new_partial_exit(
         transaction_signature.clone(),
         token_mint.to_string(),
         Some(position_id),
         exit_amount,
+        exit_percentage,
         Some(expiry_height),
     );
 
@@ -972,15 +1009,19 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
 
     // Apply transition
     if let Err(e) = super::apply::apply_transition(transition).await {
-        if let Err(err) = clear_pending_dca_swap(&pending_dca.signature).await {
-            logger::error(
-                LogTag::Positions,
-                &format!(
-                    "Failed to rollback pending DCA {} after transition error: {}",
-                    pending_dca.signature, err
-                ),
-            );
-        }
+        clear_pending_dca_swap(&pending_dca.signature)
+            .await
+            .map_err(|err| {
+                logger::error(
+                    LogTag::Positions,
+                    &format!(
+                        "Failed to rollback pending DCA {} after transition error: {}",
+                        pending_dca.signature, err
+                    ),
+                );
+                err
+            })
+            .ok();
         return Err(format!("Failed to apply DCA transition: {}", e));
     }
 

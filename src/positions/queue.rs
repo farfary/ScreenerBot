@@ -36,6 +36,7 @@ pub struct VerificationItem {
     // Partial exit support
     pub is_partial_exit: bool,
     pub expected_exit_amount: Option<u64>,
+    pub requested_exit_percentage: Option<f64>,
     // DCA support
     pub is_dca: bool,
 }
@@ -60,6 +61,7 @@ impl VerificationItem {
             expiry_height,
             is_partial_exit: false,
             expected_exit_amount: None,
+            requested_exit_percentage: None,
             is_dca: false,
         }
     }
@@ -70,6 +72,7 @@ impl VerificationItem {
         mint: String,
         position_id: Option<i64>,
         expected_exit_amount: u64,
+        exit_percentage: f64,
         expiry_height: Option<u64>,
     ) -> Self {
         Self {
@@ -84,6 +87,7 @@ impl VerificationItem {
             expiry_height,
             is_partial_exit: true,
             expected_exit_amount: Some(expected_exit_amount),
+            requested_exit_percentage: Some(exit_percentage),
             is_dca: false,
         }
     }
@@ -176,6 +180,7 @@ impl VerificationItem {
             expiry_height: self.expiry_height,
             is_partial_exit: self.is_partial_exit,
             expected_exit_amount: self.expected_exit_amount,
+            requested_exit_percentage: self.requested_exit_percentage,
             is_dca: self.is_dca,
         }
     }
