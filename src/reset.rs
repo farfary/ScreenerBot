@@ -103,18 +103,12 @@ pub fn execute_reset(config: ResetConfig) -> Result<(), String> {
         LogTag::System,
         "═══════════════════════════════════════════════════════════════",
     );
-    logger::info(
-        LogTag::System,
-        &format!("✅ Reset operation complete!"),
-    );
+    logger::info(LogTag::System, &format!("✅ Reset operation complete!"));
     logger::info(
         LogTag::System,
         &format!("   Files removed: {}", removed_count),
     );
-    logger::info(
-        LogTag::System,
-        &format!("   Errors: {}", error_count),
-    );
+    logger::info(LogTag::System, &format!("   Errors: {}", error_count));
     logger::info(
         LogTag::System,
         &format!("   Space freed: {:.2} MB", total_size as f64 / 1_048_576.0),
@@ -125,10 +119,7 @@ pub fn execute_reset(config: ResetConfig) -> Result<(), String> {
     );
 
     if error_count > 0 {
-        return Err(format!(
-            "Reset completed with {} errors",
-            error_count
-        ));
+        return Err(format!("Reset completed with {} errors", error_count));
     }
 
     Ok(())
@@ -178,11 +169,9 @@ fn confirm_reset() -> Result<bool, String> {
 /// Remove a file or directory
 fn remove_file_or_dir(path: &Path) -> Result<(), String> {
     if path.is_dir() {
-        fs::remove_dir_all(path)
-            .map_err(|e| format!("Failed to remove directory: {}", e))?;
+        fs::remove_dir_all(path).map_err(|e| format!("Failed to remove directory: {}", e))?;
     } else {
-        fs::remove_file(path)
-            .map_err(|e| format!("Failed to remove file: {}", e))?;
+        fs::remove_file(path).map_err(|e| format!("Failed to remove file: {}", e))?;
     }
     Ok(())
 }
@@ -238,10 +227,7 @@ pub fn clear_pending_verifications() -> Result<(), String> {
             if count > 0 {
                 logger::info(
                     LogTag::System,
-                    &format!(
-                        "✅ Cleared pending partial exits metadata ({} rows)",
-                        count
-                    ),
+                    &format!("✅ Cleared pending partial exits metadata ({} rows)", count),
                 );
             }
         }
@@ -253,10 +239,7 @@ pub fn clear_pending_verifications() -> Result<(), String> {
         }
     }
 
-    logger::info(
-        LogTag::System,
-        "✅ Pending verification metadata cleared",
-    );
+    logger::info(LogTag::System, "✅ Pending verification metadata cleared");
 
     Ok(())
 }

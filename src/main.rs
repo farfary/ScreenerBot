@@ -8,9 +8,10 @@ use screenerbot::{
 
 /// Main entry point for ScreenerBot
 ///
-/// This function handles argument routing to different bot states:
-/// - --run: Main bot execution
-/// - --help: Display help information
+/// Routes execution based on command-line arguments:
+/// - `--help`: Display help information and exit
+/// - `--reset [--force]`: Reset database state and exit
+/// - `--run [--dry-run]`: Start the trading bot
 #[tokio::main]
 async fn main() {
     // Initialize logger system first (required for all operations)
@@ -75,10 +76,11 @@ async fn main() {
         // Call the run function from run.rs
         screenerbot::run::run_bot().await
     } else {
-        let error_msg = "No valid mode specified";
-        logger::error(LogTag::System, error_msg);
-        logger::error(LogTag::System, &format!("Error: {}", error_msg));
-        logger::info(LogTag::System, "Use --help to see all available options");
+        logger::error(LogTag::System, "No valid execution mode specified");
+        logger::info(
+            LogTag::System,
+            "Use --run to start the bot, or --help to see all options",
+        );
         print_help();
         std::process::exit(1);
     };
@@ -89,18 +91,16 @@ async fn main() {
             logger::info(LogTag::System, "✅ ScreenerBot completed successfully");
         }
         Err(e) => {
-            logger::error(LogTag::System, &format!("ScreenerBot failed: {}", e));
-            logger::error(LogTag::System, &format!("Error: {}", e));
+            logger::error(LogTag::System, &format!("❌ ScreenerBot failed: {}", e));
             std::process::exit(1);
         }
     }
 }
 
-/// Validates command line arguments for consistency and conflicts
+/// Validates command line arguments for --run mode
 fn validate_arguments() -> Result<(), String> {
-    // Validate that --run is specified
     if !is_run_enabled() {
-        return Err("No execution mode specified. Use --run".to_string());
+        return Err("--run flag is required".to_string());
     }
 
     Ok(())

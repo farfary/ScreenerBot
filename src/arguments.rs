@@ -1,13 +1,30 @@
 /// Centralized argument handling system for ScreenerBot
 ///
-/// This module consolidates all command-line argument parsing and debug flag checking
-/// functionality that was previously scattered across global.rs and binary files.
+/// This module provides a unified interface for command-line argument parsing.
 ///
-/// Features:
-/// - Centralized CMD_ARGS storage with thread-safe access
-/// - Debug flag checking functions for all modules
-/// - Unified argument parsing utilities
-/// - Support for both binary-specific and main application arguments
+/// ## Argument Types
+///
+/// **Execution Modes** (mutually exclusive - choose one):
+/// - `--run`: Start the trading bot
+/// - `--reset`: Reset database state
+/// - `--help`: Show help information
+///
+/// **Modifiers** (combine with modes):
+/// - `--force`: Skip confirmation prompts (works with: --reset)
+/// - `--dry-run`: Simulate without executing trades (works with: --run)
+/// - `--cache-only`: Use cached data only (works with debug tools)
+/// - `--force-refresh`: Force refresh from RPC (works with debug tools)
+///
+/// **Profiling Flags** (performance analysis):
+/// - `--profile-cpu`: Enable CPU profiling with flamegraph
+/// - `--profile-tokio-console`: Enable tokio-console for async profiling
+/// - `--profile-tracing`: Enable detailed tracing
+/// - `--profile-duration <seconds>`: Set profiling duration (default: 60)
+///
+/// **Debug Flags** (controlled by logger system):
+/// - `--debug-<module>`: Enable debug logging for specific module
+/// - `--verbose-<module>`: Enable verbose logging for specific module
+///
 use crate::logger::{self, LogTag};
 use once_cell::sync::Lazy;
 use std::env;
@@ -55,7 +72,49 @@ pub fn get_arg_value(flag: &str) -> Option<String> {
 }
 
 // =============================================================================
-// CPU PROFILING FLAGS
+// EXECUTION MODES
+// =============================================================================
+
+/// Run mode - enables actual bot execution (required to start services)
+pub fn is_run_enabled() -> bool {
+    has_arg("--run")
+}
+
+/// Reset mode - clears pending verifications and database files
+pub fn is_reset_enabled() -> bool {
+    has_arg("--reset")
+}
+
+// =============================================================================
+// MODIFIER FLAGS
+// =============================================================================
+
+/// Dry-run mode - simulates trading without executing actual transactions
+/// Works with: --run
+pub fn is_dry_run_enabled() -> bool {
+    has_arg("--dry-run")
+}
+
+/// Force mode - skip confirmation prompts
+/// Works with: --reset
+pub fn is_force_enabled() -> bool {
+    has_arg("--force")
+}
+
+/// Cache-only mode - read from local DB only, never call RPC
+/// Works with: debug tools and binaries
+pub fn is_cache_only_enabled() -> bool {
+    has_arg("--cache-only")
+}
+
+/// Force-refresh mode - refresh from RPC even if cached
+/// Works with: debug tools and binaries
+pub fn is_force_refresh_enabled() -> bool {
+    has_arg("--force-refresh")
+}
+
+// =============================================================================
+// PROFILING FLAGS
 // =============================================================================
 
 /// Enable tokio-console for async task profiling
@@ -83,77 +142,6 @@ pub fn get_profile_duration() -> u64 {
 }
 
 // =============================================================================
-// Transactions cache flags
-// =============================================================================
-
-/// When enabled, tools should only read raw tx from local DB and never call RPC
-pub fn is_cache_only_enabled() -> bool {
-    has_arg("--cache-only")
-}
-
-/// When enabled, force-refresh raw tx from RPC even if present in DB
-pub fn is_force_refresh_enabled() -> bool {
-    has_arg("--force-refresh")
-}
-
-// =============================================================================
-// CORE FLAGS
-// =============================================================================
-
-/// Dry-run mode - simulates trading without executing actual transactions
-pub fn is_dry_run_enabled() -> bool {
-    has_arg("--dry-run")
-}
-
-/// Get configured max exit retries (defaults to 3). Clamped 1-10.
-pub fn get_max_exit_retries() -> u32 {
-    let args = get_cmd_args();
-    for i in 0..args.len() {
-        if args[i] == "--max-exit-retries" && i + 1 < args.len() {
-            if let Ok(v) = args[i + 1].parse::<u32>() {
-                return v.clamp(1, 10);
-            }
-        }
-    }
-    3
-}
-
-/// Run mode - enables actual bot execution (required to start services)
-pub fn is_run_enabled() -> bool {
-    has_arg("--run")
-}
-
-/// Clear all mode - clears all data and resets the system
-pub fn is_clear_all_enabled() -> bool {
-    has_arg("--clear-all")
-}
-
-/// Positions sell all mode - sells all open positions
-pub fn is_positions_sell_all_enabled() -> bool {
-    has_arg("--positions-sell-all")
-}
-
-/// Add to blacklist mode - adds a mint to blacklist
-pub fn is_add_to_blacklist_enabled() -> bool {
-    has_arg("--add-to-blacklist")
-}
-
-/// Get mint address for blacklist operations
-pub fn get_blacklist_mint() -> Option<String> {
-    get_arg_value("--add-to-blacklist")
-}
-
-/// Reset mode - clears pending verifications and optionally deletes database files
-pub fn is_reset_enabled() -> bool {
-    has_arg("--reset")
-}
-
-/// Force mode - skip confirmation prompts
-pub fn is_force_enabled() -> bool {
-    has_arg("--force")
-}
-
-// =============================================================================
 // HELP SYSTEM
 // =============================================================================
 
@@ -162,56 +150,44 @@ pub fn print_help() {
     println!("ScreenerBot - Advanced Solana DeFi Trading Bot");
     println!();
     println!("USAGE:");
-    println!("    screenerbot [FLAGS]");
+    println!("    screenerbot <MODE> [MODIFIERS] [DEBUG_FLAGS]");
     println!();
-    println!("CORE FLAGS:");
-    println!("    --run                     Enable bot execution (required to start trading)");
-    println!("    --clear-all               Clear all data and reset the system");
+    println!("EXECUTION MODES (choose one):");
+    println!("    --run                     Start the trading bot");
     println!("    --reset                   Reset pending verifications and delete database files");
-    println!("    --force                   Skip confirmation prompts (use with --reset)");
-    println!("    --positions-sell-all      Sell all open positions");
-    println!("    --add-to-blacklist <mint> Add a token mint address to blacklist");
     println!("    --help, -h                Show this help message");
-    println!("    --dry-run                 Simulate trading without executing transactions");
     println!();
-    println!("DEBUG FLAGS:");
-    println!("    --debug-api               API calls debug mode");
-    println!("    --debug-blacklist         Blacklist operations debug mode");
-    println!("    --debug-decimals          Decimals module debug mode");
-    println!("    --debug-discovery         Discovery module debug mode");
-    println!("    --debug-entry             Entry module debug mode");
-    println!("    --debug-filtering         Filtering module debug mode");
-    println!("    --debug-monitor           Monitor module debug mode");
-    println!("    --debug-ohlcv             OHLCV analysis debug mode");
-    println!("    --debug-pool-calculator   Pool calculator debug mode");
-    println!("    --debug-pool-discovery    Pool discovery debug mode");
-    println!("    --debug-pool-analyzer     Pool analyzer debug mode");
-    println!("    --debug-pool-cache        Pool cache debug mode");
-    println!("    --debug-pool-fetcher      Pool fetcher debug mode");
-    println!("    --debug-pool-decoders     Pool decoders debug mode");
-    println!("    --debug-pool-prices       Pool prices debug mode");
-    println!("    --debug-positions         Positions module debug mode");
-    println!("    --debug-profit            Profit calculation debug mode");
-    println!("    --debug-rpc               RPC operations debug mode");
-    println!("    --debug-swaps             Swap operations debug mode");
-    println!("    --debug-system            System operations debug mode");
-    println!("    --debug-security          Security operations debug mode");
-    println!("    --debug-trader            Trader module debug mode");
-    println!("    --debug-transactions      Transactions module debug mode");
-    println!("    --debug-webserver         Webserver operations debug mode");
-    println!("    --debug-websocket         WebSocket connection debug mode");
-    println!("    --debug-wallet            Wallet operations debug mode");
+    println!("MODIFIERS (combine with modes above):");
+    println!("    --dry-run                 Simulate trading without executing transactions (with --run)");
+    println!("    --force                   Skip confirmation prompts (with --reset)");
+    println!("    --cache-only              Use cached data only, no RPC calls (debug tools)");
+    println!("    --force-refresh           Force refresh from RPC even if cached (debug tools)");
+    println!();
+    println!("PROFILING FLAGS (performance analysis):");
+    println!("    --profile-cpu             Enable CPU profiling with flamegraph generation");
+    println!("    --profile-tokio-console   Enable tokio-console for async task profiling");
+    println!("    --profile-tracing         Enable detailed tracing for performance analysis");
+    println!("    --profile-duration <n>    Set profiling duration in seconds (default: 60)");
+    println!();
+    println!("DEBUG FLAGS (enable detailed logging per module):");
+    println!("    --debug-<module>          Enable debug logging for specific module");
+    println!("    --verbose-<module>        Enable verbose logging for specific module");
+    println!();
+    println!("    Available modules:");
+    println!("      api, blacklist, decimals, discovery, entry, filtering, monitor, ohlcv,");
+    println!("      pool-calculator, pool-discovery, pool-analyzer, pool-cache, pool-fetcher,");
+    println!("      pool-decoders, pool-prices, positions, profit, rpc, swaps, system,");
+    println!("      security, trader, transactions, webserver, websocket, wallet");
     println!();
     println!("EXAMPLES:");
-    println!("    screenerbot --run                           # Start bot normally");
-    println!("    screenerbot --run --dry-run                 # Start bot in simulation mode");
-    println!("    screenerbot --run --debug-trader --dry-run  # Debug trader with simulation");
-    println!("    screenerbot --reset                         # Reset with confirmation");
-    println!("    screenerbot --reset --force                 # Reset without confirmation");
-    println!("    screenerbot --clear-all                     # Clear all data and reset");
-    println!("    screenerbot --positions-sell-all            # Sell all open positions");
-    println!("    screenerbot --add-to-blacklist <mint>       # Add mint to blacklist");
-    println!("    screenerbot --help                          # Show this help");
+    println!("    screenerbot --run                              # Start bot in live trading mode");
+    println!("    screenerbot --run --dry-run                    # Start bot in simulation mode");
+    println!(
+        "    screenerbot --run --dry-run --debug-trader     # Simulate with trader debug logs"
+    );
+    println!("    screenerbot --reset                            # Reset with confirmation prompt");
+    println!("    screenerbot --reset --force                    # Reset without confirmation");
+    println!("    screenerbot --help                             # Show this help message");
     println!();
     println!("For more information, visit: https://github.com/farfary/ScreenerBot");
 }
@@ -229,19 +205,43 @@ pub fn get_enabled_debug_modes() -> Vec<String> {
     // Check for debug flags
     for arg in &args {
         if let Some(module) = arg.strip_prefix("--debug-") {
-            modes.push(module.to_string());
+            modes.push(format!("debug-{}", module));
+        } else if let Some(module) = arg.strip_prefix("--verbose-") {
+            modes.push(format!("verbose-{}", module));
         }
     }
 
-    // Include other modes
+    // Include execution mode
+    if is_run_enabled() {
+        modes.push("run".to_string());
+    }
+    if is_reset_enabled() {
+        modes.push("reset".to_string());
+    }
+
+    // Include active modifiers
     if is_dry_run_enabled() {
         modes.push("dry-run".to_string());
     }
-    if is_clear_all_enabled() {
-        modes.push("clear-all".to_string());
+    if is_force_enabled() {
+        modes.push("force".to_string());
     }
-    if is_positions_sell_all_enabled() {
-        modes.push("positions-sell-all".to_string());
+    if is_cache_only_enabled() {
+        modes.push("cache-only".to_string());
+    }
+    if is_force_refresh_enabled() {
+        modes.push("force-refresh".to_string());
+    }
+
+    // Include profiling flags
+    if is_profile_cpu_enabled() {
+        modes.push("profile-cpu".to_string());
+    }
+    if is_profile_tokio_console_enabled() {
+        modes.push("profile-tokio-console".to_string());
+    }
+    if is_profile_tracing_enabled() {
+        modes.push("profile-tracing".to_string());
     }
 
     modes
