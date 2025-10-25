@@ -18,12 +18,12 @@ const LOG_SHOW_TIME: bool = true;
 
 /// Log format widths for alignment
 const TAG_WIDTH: usize = 10;
-const LOG_TYPE_WIDTH: usize = 30;
+const LOG_TYPE_WIDTH: usize = 10;
 const BRACKET_SPACE_WIDTH: usize = 3;
 const TOTAL_PREFIX_WIDTH: usize = TAG_WIDTH + LOG_TYPE_WIDTH + BRACKET_SPACE_WIDTH * 2;
 
 /// Maximum line length before wrapping
-const MAX_LINE_LENGTH: usize = 145;
+const MAX_LINE_LENGTH: usize = 155;
 
 /// Format and output a log message
 pub fn format_and_log(tag: LogTag, log_type: &str, message: &str) {
