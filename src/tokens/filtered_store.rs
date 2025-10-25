@@ -80,6 +80,24 @@ pub fn get_blacklisted_tokens() -> Vec<String> {
     guard.blacklisted.clone()
 }
 
+/// Mark a token as blacklisted in the in-memory snapshot
+///
+/// Updates the filtered lists so downstream consumers observe the change
+/// immediately, even before the next filtering refresh persists new state.
+pub fn mark_token_blacklisted(mint: &str) {
+    let mut guard = FILTERED_LISTS.write().expect("filtered lists poisoned");
+    let needle = mint.to_string();
+
+    if !guard.blacklisted.iter().any(|entry| entry == &needle) {
+        guard.blacklisted.push(needle.clone());
+    }
+
+    guard.passed.retain(|entry| entry != &needle);
+    guard.with_pool_price.retain(|entry| entry != &needle);
+
+    guard.updated_at = Utc::now();
+}
+
 /// Get tokens with pool price
 ///
 /// Returns list of token mints that have pricing data from pools.

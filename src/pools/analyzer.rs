@@ -461,7 +461,10 @@ impl PoolAnalyzer {
                 // PumpFun Legacy (bonding curves) don't have vaults - just need the pool account
                 logger::debug(
                     LogTag::PoolAnalyzer,
-                    &format!("Extracting PumpFun Legacy (bonding curve) accounts for pool {}", pool_id),
+                    &format!(
+                        "Extracting PumpFun Legacy (bonding curve) accounts for pool {}",
+                        pool_id
+                    ),
                 );
                 Some(vec![*pool_id])
             }

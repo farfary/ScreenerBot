@@ -6,10 +6,9 @@
 /// - Discriminator: 17 b7 f8 37 60 d8 ac 60
 /// - Layout: reserves stored directly (no vault accounts)
 /// - Token mint: provided by caller (from discovery phase)
-/// 
+///
 /// Note: Migrated bonding curves (150 bytes) still contain all reserve data
 /// at the same offsets, just with truncated trailing data.
-
 use super::{AccountData, PoolDecoder};
 use crate::constants::{PUMP_FUN_LEGACY_PROGRAM_ID, SOL_DECIMALS, SOL_MINT};
 use crate::logger::{self, LogTag};
@@ -81,7 +80,7 @@ impl PoolDecoder for PumpFunLegacyDecoder {
             let is_valid_size = pool_data.data.len() == BONDING_CURVE_SIZE_FULL
                 || pool_data.data.len() == BONDING_CURVE_SIZE_MIGRATED
                 || pool_data.data.len() >= BONDING_CURVE_MIN_SIZE;
-            
+
             if !is_valid_size {
                 logger::debug(
                     LogTag::PoolDecoder,
@@ -193,10 +192,7 @@ impl PumpFunLegacyDecoder {
 
         logger::debug(
             LogTag::PoolDecoder,
-            &format!(
-                "Token {} decimals: {}",
-                token_mint, token_decimals
-            ),
+            &format!("Token {} decimals: {}", token_mint, token_decimals),
         );
 
         // Calculate price: SOL per token

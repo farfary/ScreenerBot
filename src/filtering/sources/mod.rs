@@ -32,6 +32,7 @@ pub enum FilterRejectionReason {
     NoDecimalsInDatabase,
     TokenTooNew,
     CooldownFiltered,
+    TokenBlacklisted,
     DexScreenerDataMissing,
     GeckoTerminalDataMissing,
     RugcheckDataMissing,
@@ -129,6 +130,7 @@ impl FilterRejectionReason {
             FilterRejectionReason::NoDecimalsInDatabase => "no_decimals",
             FilterRejectionReason::TokenTooNew => "token_too_new",
             FilterRejectionReason::CooldownFiltered => "cooldown_filtered",
+            FilterRejectionReason::TokenBlacklisted => "blacklisted",
             FilterRejectionReason::DexScreenerDataMissing => "dex_data_missing",
             FilterRejectionReason::GeckoTerminalDataMissing => "gecko_data_missing",
             FilterRejectionReason::RugcheckDataMissing => "rug_data_missing",
@@ -239,6 +241,7 @@ impl FilterRejectionReason {
             FilterRejectionReason::NoDecimalsInDatabase
             | FilterRejectionReason::TokenTooNew
             | FilterRejectionReason::CooldownFiltered
+            | FilterRejectionReason::TokenBlacklisted
             | FilterRejectionReason::DexScreenerDataMissing
             | FilterRejectionReason::GeckoTerminalDataMissing
             | FilterRejectionReason::RugcheckDataMissing => FilterSource::Core,

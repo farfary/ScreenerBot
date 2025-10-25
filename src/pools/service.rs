@@ -352,7 +352,7 @@ pub fn get_debug_token_override() -> Option<Vec<String>> {
     unsafe { DEBUG_TOKEN_OVERRIDE.clone() }
 }
 
-/// Start helper background tasks (health monitor, database cleanup, gap cleanup, blacklist cleanup)
+/// Start helper background tasks (health monitor, database cleanup, gap cleanup)
 ///
 /// These are utility tasks that don't need to be separate services.
 /// Called by PoolsService after all pool sub-services are started.
@@ -380,22 +380,15 @@ pub async fn start_helper_tasks(
 
     // Start gap detection and cleanup task
     let shutdown_gap_cleanup = shutdown.clone();
-    let monitor_3 = monitor.clone();
-    handles.push(tokio::spawn(monitor_3.instrument(async move {
-        run_gap_cleanup_task(shutdown_gap_cleanup).await;
-    })));
-
-    // Start account blacklist cleanup task
-    let shutdown_blacklist_cleanup = shutdown.clone();
     handles.push(tokio::spawn(monitor.instrument(async move {
-        run_blacklist_cleanup_task(shutdown_blacklist_cleanup).await;
+        run_gap_cleanup_task(shutdown_gap_cleanup).await;
     })));
 
     // Set readiness flag
     crate::global::POOL_SERVICE_READY.store(true, std::sync::atomic::Ordering::SeqCst);
     logger::info(
         LogTag::PoolService,
-        "Pool helper tasks started (4 handles returned)",
+        "Pool helper tasks started (3 handles returned)",
     );
 
     handles
@@ -559,46 +552,6 @@ async fn run_gap_cleanup_task(shutdown: Arc<Notify>) {
                     }
                     Err(e) => {
                         logger::error(LogTag::PoolService, &format!("Gap cleanup failed: {}", e));
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// Account blacklist cleanup task - runs daily to remove expired blacklist entries
-async fn run_blacklist_cleanup_task(shutdown: Arc<Notify>) {
-    logger::info(LogTag::PoolService, "Starting account blacklist cleanup task");
-
-    // Run cleanup every 24 hours
-    let mut interval = tokio::time::interval(Duration::from_secs(24 * 60 * 60));
-
-    loop {
-        tokio::select! {
-            _ = shutdown.notified() => {
-                logger::info(LogTag::PoolService, "Account blacklist cleanup task shutting down");
-                break;
-            }
-            _ = interval.tick() => {
-                match db::cleanup_expired_blacklist().await {
-                    Ok(removed) => {
-                        if removed > 0 {
-                            logger::info(
-                                LogTag::PoolService,
-                                &format!("Blacklist cleanup completed: removed {} expired entries", removed),
-                            );
-                        } else {
-                            logger::debug(
-                                LogTag::PoolService,
-                                "Blacklist cleanup completed: no expired entries found",
-                            );
-                        }
-                    }
-                    Err(e) => {
-                        logger::error(
-                            LogTag::PoolService,
-                            &format!("Blacklist cleanup failed: {}", e),
-                        );
                     }
                 }
             }

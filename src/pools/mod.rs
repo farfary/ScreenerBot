@@ -13,6 +13,7 @@ use tokio::sync::Notify;
 
 mod analyzer;
 mod api;
+pub mod blacklist;
 mod cache;
 mod calculator;
 mod db;

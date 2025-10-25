@@ -55,27 +55,5 @@ config_struct! {
             category: "Fetcher",
         })]
         account_batch_size: usize = 50,
-        #[metadata(field_metadata! {
-            label: "Account Not Found Threshold",
-            hint: "Failures before blacklisting account (3-5 recommended)",
-            min: 1,
-            max: 10,
-            step: 1,
-            unit: "failures",
-            impact: "medium",
-            category: "Fetcher",
-        })]
-        account_not_found_threshold: u32 = 3,
-        #[metadata(field_metadata! {
-            label: "Blacklist TTL Hours",
-            hint: "Hours before blacklist expires (0 = permanent)",
-            min: 0,
-            max: 720,
-            step: 24,
-            unit: "hours",
-            impact: "low",
-            category: "Fetcher",
-        })]
-        blacklist_ttl_hours: u32 = 168, // 7 days
     }
 }

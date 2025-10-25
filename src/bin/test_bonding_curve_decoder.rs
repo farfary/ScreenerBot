@@ -1,8 +1,8 @@
 /// Test PumpFun Legacy bonding curve decoder with real pool
 use screenerbot::constants::{PUMP_FUN_LEGACY_PROGRAM_ID, SOL_MINT};
-use screenerbot::pools::fetcher::AccountData;
-use screenerbot::pools::decoders::PoolDecoder;
 use screenerbot::pools::decoders::pumpfun_legacy::PumpFunLegacyDecoder;
+use screenerbot::pools::decoders::PoolDecoder;
+use screenerbot::pools::fetcher::AccountData;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::commitment_config::CommitmentConfig;
 use solana_sdk::pubkey::Pubkey;
@@ -120,7 +120,10 @@ async fn main() {
             println!("  Token Reserves: {:.6}", price.token_reserves);
             println!();
             println!("═══════════════════════════════════════════════════════════════════════════");
-            println!("Price in scientific notation: {:.6e} SOL/token", price.price_sol);
+            println!(
+                "Price in scientific notation: {:.6e} SOL/token",
+                price.price_sol
+            );
             println!("═══════════════════════════════════════════════════════════════════════════");
         }
         None => {
