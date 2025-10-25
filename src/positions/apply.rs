@@ -327,10 +327,6 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     position_id, exit_percentage, exit_amount, market_price
                 ),
             );
-            // Mark pending partial exit in in-memory registry
-            if let Ok(mint) = find_mint_by_position_id(position_id).await {
-                super::state::mark_partial_exit_pending(&mint).await;
-            }
         }
 
         PositionTransition::PartialExitVerified {
