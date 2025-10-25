@@ -28,7 +28,7 @@ const FORCE_PREMIUM_RPC_ONLY: bool = true;
 /// Maximum calls per second for main RPC (premium RPC has no limits)
 const MAX_RPC_CALLS_PER_SECOND: u64 = 20;
 
-use crate::constants::LAMPORTS_PER_SOL;
+use crate::constants::{LAMPORTS_PER_SOL, SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID};
 use crate::errors::blockchain::CommitmentLevel;
 use crate::errors::{parse_solana_error, BlockchainError, ScreenerBotError};
 use crate::errors::{ConfigurationError, DataError, NetworkError, RpcProviderError};
@@ -334,8 +334,7 @@ pub async fn get_ata_rent_lamports() -> Result<u64, ScreenerBotError> {
 
 /// Return the SPL Token program id (legacy Tokenkeg)
 pub fn spl_token_program_id() -> &'static str {
-    // SPL Token Program (legacy)
-    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+    SPL_TOKEN_PROGRAM_ID
 }
 
 /// Derive a websocket URL from the configured HTTP RPC URL
@@ -2890,7 +2889,7 @@ impl RpcClient {
             "params": [
                 wallet_address,
                 {
-                    "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                    "programId": SPL_TOKEN_PROGRAM_ID
                 },
                 {
                     "encoding": "jsonParsed"
@@ -2905,7 +2904,7 @@ impl RpcClient {
             "params": [
                 wallet_address,
                 {
-                    "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                    "programId": TOKEN_2022_PROGRAM_ID
                 },
                 {
                     "encoding": "jsonParsed"
@@ -3092,7 +3091,7 @@ impl RpcClient {
                                 if let Some(owner) = value.get("owner") {
                                     if let Some(owner_str) = owner.as_str() {
                                         let is_token_2022 = owner_str
-                                            == "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+                                            == TOKEN_2022_PROGRAM_ID;
 
                                         // Record successful call
                                         self.record_success(Some(&current_url));
@@ -3230,7 +3229,7 @@ impl RpcClient {
 
                                         // Token Extensions Program ID (Token-2022)
                                         let is_token_2022 = owner_str
-                                            == "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+                                            == TOKEN_2022_PROGRAM_ID;
 
                                         logger::info(
                                             LogTag::Rpc,

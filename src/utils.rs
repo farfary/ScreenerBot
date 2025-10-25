@@ -1,3 +1,4 @@
+use crate::constants::TOKEN_2022_PROGRAM_ID;
 use crate::errors::blockchain::{parse_structured_solana_error, BlockchainError};
 use crate::errors::parse_solana_error;
 use crate::errors::ScreenerBotError;
@@ -1191,13 +1192,12 @@ fn build_token_2022_close_instruction(
 ) -> Result<Instruction, ScreenerBotError> {
     // Token-2022 uses the same close account instruction format as SPL Token
     // but with different program ID
-    let token_2022_program_id = Pubkey::from_str("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb")
-        .map_err(|e| {
-            ScreenerBotError::Blockchain(crate::errors::BlockchainError::InvalidAccountData {
-                signature: "unknown".to_string(),
-                account: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb".to_string(),
-                expected_owner: "Program ID".to_string(),
-                actual_owner: None,
+    let token_2022_program_id = Pubkey::from_str(TOKEN_2022_PROGRAM_ID).map_err(|e| {
+        ScreenerBotError::Blockchain(crate::errors::BlockchainError::InvalidAccountData {
+            signature: "unknown".to_string(),
+            account: TOKEN_2022_PROGRAM_ID.to_string(),
+            expected_owner: "Program ID".to_string(),
+            actual_owner: None,
             })
         })?;
 

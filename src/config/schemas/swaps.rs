@@ -119,6 +119,17 @@ config_struct! {
             category: "Router",
         })]
         enabled: bool = false,
+        #[metadata(field_metadata! {
+            label: "Default Slippage (BPS)",
+            hint: "Default slippage for direct pool swaps in basis points (100 = 1%)",
+            min: 10,
+            max: 2500,
+            step: 10,
+            unit: "bps",
+            impact: "high",
+            category: "Risk",
+        })]
+        default_slippage_bps: u16 = 100,
     }
 }
 

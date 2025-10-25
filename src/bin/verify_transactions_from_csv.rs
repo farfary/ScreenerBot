@@ -17,12 +17,12 @@ use solana_sdk::pubkey::Pubkey;
 
 use screenerbot::{
     arguments::set_cmd_args,
+    constants::SOL_MINT,
     events,
     transactions::{
         database::init_transaction_database,
         processor::TransactionProcessor,
         types::{SwapPnLInfo, TokenSwapInfo, Transaction},
-        utils::WSOL_MINT,
     },
 };
 
@@ -587,8 +587,8 @@ fn compare_row_with_transaction(
 }
 
 fn verify_swap_orientation(row: &CsvSwapRow, swap: &TokenSwapInfo) -> Result<(), String> {
-    let token1_sol = row.token1 == WSOL_MINT;
-    let token2_sol = row.token2 == WSOL_MINT;
+    let token1_sol = row.token1 == SOL_MINT;
+    let token2_sol = row.token2 == SOL_MINT;
 
     let expected_swap_type = if token1_sol && !token2_sol {
         "sol_to_token"
@@ -609,7 +609,7 @@ fn verify_swap_orientation(row: &CsvSwapRow, swap: &TokenSwapInfo) -> Result<(),
 
     match expected_swap_type {
         "sol_to_token" => {
-            if swap.input_mint != WSOL_MINT {
+            if swap.input_mint != SOL_MINT {
                 return Err(format!(
                     "Input mint mismatch for buy: expected WSOL, got {}",
                     swap.input_mint
@@ -629,7 +629,7 @@ fn verify_swap_orientation(row: &CsvSwapRow, swap: &TokenSwapInfo) -> Result<(),
                     &row.token1, &swap.input_mint
                 ));
             }
-            if swap.output_mint != WSOL_MINT {
+            if swap.output_mint != SOL_MINT {
                 return Err(format!(
                     "Output mint mismatch for sell: expected WSOL, got {}",
                     &swap.output_mint
@@ -686,9 +686,9 @@ fn verify_swap_amounts(
         let rent_lamports: i128 = ((pnl.ata_rents * 1_000_000_000.0).round() as i128).abs();
         if rent_lamports > 0 {
             // If selling token->SOL, CSV may include recovered rent in SOL out
-            let is_token_to_sol = swap.swap_type == "token_to_sol" && row.token2 == WSOL_MINT;
+            let is_token_to_sol = swap.swap_type == "token_to_sol" && row.token2 == SOL_MINT;
             // If buying SOL->token, CSV may include rent paid in SOL in
-            let is_sol_to_token = swap.swap_type == "sol_to_token" && row.token1 == WSOL_MINT;
+            let is_sol_to_token = swap.swap_type == "sol_to_token" && row.token1 == SOL_MINT;
 
             // Only attempt normalization when current diff would be flagged and adding rent could help
             let output_allowed = tolerance_for_decimals(decimals2) as i128;
@@ -794,7 +794,7 @@ fn verify_router_detection(row: &CsvSwapRow, swap: &TokenSwapInfo) -> Result<(),
 }
 
 fn decimals_or_default(token: &str, decimals: Option<u32>) -> Result<u32, String> {
-    if token == WSOL_MINT {
+    if token == SOL_MINT {
         return Ok(9);
     }
 
@@ -953,8 +953,8 @@ fn compute_sol_leg_diff(outcome: &ComparisonOutcome) -> Result<(i128, i128, f64)
     let csv = &outcome.csv_row;
 
     // Determine which CSV side is SOL
-    let token1_is_sol = csv.token1 == WSOL_MINT;
-    let token2_is_sol = csv.token2 == WSOL_MINT;
+    let token1_is_sol = csv.token1 == SOL_MINT;
+    let token2_is_sol = csv.token2 == SOL_MINT;
 
     if !token1_is_sol && !token2_is_sol {
         return Err("CSV row does not include a SOL leg".to_string());
@@ -1054,7 +1054,7 @@ fn write_results_csv_record_from_error(
     row: &CsvSwapRow,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Determine SOL expected from CSV
-    let token1_is_sol = row.token1 == WSOL_MINT;
+    let token1_is_sol = row.token1 == SOL_MINT;
     let expected_sol_lamports: i128 = if token1_is_sol {
         parse_amount(&row.amount1, 9).unwrap_or(0) as i128
     } else {

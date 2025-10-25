@@ -1,6 +1,6 @@
 use super::super::utils::is_sol_mint;
 use super::{AccountData, PoolDecoder};
-use crate::constants::{WRAPPED_SOL_MINT, SOL_DECIMALS, FLUXBEAM_AMM_PROGRAM_ID};
+use crate::constants::{FLUXBEAM_AMM_PROGRAM_ID, SOL_DECIMALS, SOL_MINT};
 use crate::logger::{self, LogTag};
 use crate::pools::types::{PriceResult, ProgramKind};
 use crate::tokens::get_cached_decimals;

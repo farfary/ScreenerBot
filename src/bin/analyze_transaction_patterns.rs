@@ -21,15 +21,14 @@ use solana_sdk::pubkey::Pubkey;
 
 use screenerbot::{
     arguments::set_cmd_args,
+    constants::{SOL_MINT, SYSTEM_PROGRAM_ID},
     events,
-    pools::swap::types::constants::WSOL_MINT,
     transactions::{
         database::init_transaction_database, processor::TransactionProcessor, types::Transaction,
     },
 };
 
-// Constants
-const SOL_MINT: &str = "11111111111111111111111111111111"; // Native SOL
+// Note: SOL_MINT and SYSTEM_PROGRAM_ID now imported from constants
 
 #[derive(Parser, Debug)]
 #[command(
@@ -489,8 +488,6 @@ fn print_analysis_summary(analysis: &TransactionAnalysis, args: &Args) {
 
             let mint_display = if change.mint == SOL_MINT {
                 "SOL".to_string()
-            } else if change.mint == WSOL_MINT {
-                "WSOL".to_string()
             } else {
                 format!(
                     "{}...{}",
@@ -519,8 +516,6 @@ fn print_analysis_summary(analysis: &TransactionAnalysis, args: &Args) {
         for pattern in &analysis.transfer_patterns {
             let mint_display = if pattern.mint == SOL_MINT {
                 "SOL".to_string()
-            } else if pattern.mint == WSOL_MINT {
-                "WSOL".to_string()
             } else {
                 format!(
                     "{}...{}",

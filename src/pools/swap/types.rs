@@ -104,14 +104,3 @@ impl From<solana_sdk::program_error::ProgramError> for SwapError {
         SwapError::TransactionError(format!("Program error: {:?}", error))
     }
 }
-
-/// Common constants
-pub mod constants {
-    use crate::constants::SOL_MINT;
-
-    pub const WSOL_MINT: &str = SOL_MINT;
-    pub const DEFAULT_SLIPPAGE_BPS: u16 = 100;
-    pub const MIN_SOL_BALANCE: f64 = 0.01;
-
-    pub use crate::constants::{TOKEN_2022_PROGRAM_ID, SPL_TOKEN_PROGRAM_ID};
-}

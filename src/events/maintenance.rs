@@ -3,6 +3,7 @@ use crate::events::db::EventsDatabase;
 ///
 /// This module provides maintenance functions and MCP server integration
 /// for the events system.
+use crate::constants::SOL_MINT;
 use crate::events::{Event, EventCategory, Severity};
 use crate::logger::{self, LogTag};
 use chrono::Utc;
@@ -133,7 +134,7 @@ pub async fn record_swap_event(
     } else {
         Severity::Error
     };
-    let mint = if input_mint != "So11111111111111111111111111111111111111112" {
+    let mint = if input_mint != SOL_MINT {
         Some(input_mint.to_string())
     } else {
         Some(output_mint.to_string())

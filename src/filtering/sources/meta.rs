@@ -38,7 +38,7 @@ fn is_too_new(token: &Token, config: &FilteringConfig) -> bool {
 }
 
 fn has_cached_decimals(mint: &str) -> bool {
-    if mint == tokens::SOL_MINT || mint == tokens::WSOL_MINT {
+    if mint == tokens::SOL_MINT {
         return true;
     }
 

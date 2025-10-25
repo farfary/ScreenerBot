@@ -79,5 +79,5 @@ pub use store::{
 pub use decimals::{
     cache as cache_decimals, clear_all_cache as clear_all_decimals_cache,
     clear_cache as clear_decimals_cache, get as get_decimals, get_cached as get_cached_decimals,
-    get_token_decimals_from_chain, SOL_DECIMALS, SOL_MINT, WSOL_MINT,
+    get_token_decimals_from_chain, SOL_DECIMALS, SOL_MINT,
 };

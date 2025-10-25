@@ -4,13 +4,14 @@
 /// It integrates with the centralized Raydium CLMM decoder and provides proper
 /// account derivation and swap calculations based on the Uniswap V3 model.
 use super::ProgramSwap;
-use crate::constants::RAYDIUM_CLMM_PROGRAM_ID;
+use crate::constants::{
+    MEMO_PROGRAM_ID, RAYDIUM_CLMM_PROGRAM_ID, SOL_MINT, SPL_TOKEN_PROGRAM_ID,
+    TOKEN_2022_PROGRAM_ID,
+};
 use crate::logger::{self, LogTag};
 use crate::pools::decoders::raydium_clmm::{ClmmPoolInfo, RaydiumClmmDecoder};
 use crate::pools::swap::executor::SwapExecutor;
-use crate::pools::swap::types::{
-    constants::*, SwapDirection, SwapError, SwapParams, SwapRequest, SwapResult,
-};
+use crate::pools::swap::types::{SwapDirection, SwapError, SwapParams, SwapRequest, SwapResult};
 use crate::pools::AccountData;
 use crate::rpc::get_rpc_client;
 use crate::utils::sol_to_lamports;
@@ -27,7 +28,6 @@ use spl_token;
 use spl_token_2022;
 use std::collections::HashMap;
 use std::str::FromStr;
-use crate::constants::TOKEN_2022_PROGRAM_ID;
 
 /// Raydium CLMM swap implementation
 pub struct RaydiumClmmSwap;
@@ -117,17 +117,17 @@ impl RaydiumClmmSwap {
 
         // Determine which token is SOL and get current price
         let (sol_mint, token_mint, sol_decimals, token_decimals, is_token_0_sol) =
-            if pool_info.token_mint_0 == WSOL_MINT {
+            if pool_info.token_mint_0 == SOL_MINT {
                 (
-                    WSOL_MINT,
+                    SOL_MINT,
                     &pool_info.token_mint_1,
                     9,
                     pool_info.mint_decimals_1,
                     true,
                 )
-            } else if pool_info.token_mint_1 == WSOL_MINT {
+            } else if pool_info.token_mint_1 == SOL_MINT {
                 (
-                    WSOL_MINT,
+                    SOL_MINT,
                     &pool_info.token_mint_0,
                     9,
                     pool_info.mint_decimals_0,
@@ -221,13 +221,13 @@ impl RaydiumClmmSwap {
         let wallet_pubkey = wallet.pubkey();
 
         // Determine token mint and programs - need to properly detect Token-2022
-        let (token_mint, token_program_id, is_token_0_sol) = if pool_info.token_mint_0 == WSOL_MINT
+        let (token_mint, token_program_id, is_token_0_sol) = if pool_info.token_mint_0 == SOL_MINT
         {
             let token_mint = &pool_info.token_mint_1;
             // Check if this is a Token-2022 token by attempting to get account info
             let token_program_id = Self::get_token_program_for_mint(token_mint).await?;
             (token_mint, token_program_id, false)
-        } else if pool_info.token_mint_1 == WSOL_MINT {
+        } else if pool_info.token_mint_1 == SOL_MINT {
             let token_mint = &pool_info.token_mint_0;
             let token_program_id = Self::get_token_program_for_mint(token_mint).await?;
             (token_mint, token_program_id, true)
@@ -240,7 +240,7 @@ impl RaydiumClmmSwap {
         // Get associated token accounts with correct program
         let wsol_ata = spl_associated_token_account::get_associated_token_address(
             &wallet_pubkey,
-            &Pubkey::from_str(WSOL_MINT).unwrap(),
+            &Pubkey::from_str(SOL_MINT).unwrap(),
         );
 
         let token_ata = if token_program_id == Pubkey::from_str(TOKEN_2022_PROGRAM_ID).unwrap() {
@@ -264,7 +264,7 @@ impl RaydiumClmmSwap {
                 spl_associated_token_account::instruction::create_associated_token_account(
                     &wallet_pubkey,
                     &wallet_pubkey,
-                    &Pubkey::from_str(WSOL_MINT).unwrap(),
+                    &Pubkey::from_str(SOL_MINT).unwrap(),
                     &spl_token::id(),
                 );
             instructions.push(create_wsol_ix);
@@ -350,7 +350,7 @@ impl RaydiumClmmSwap {
             .map_err(|e| SwapError::TransactionError(format!("Invalid observation_key: {}", e)))?;
 
         // Get mint addresses
-        let wsol_mint = Pubkey::from_str(WSOL_MINT).unwrap();
+        let wsol_mint = Pubkey::from_str(SOL_MINT).unwrap();
         let token_mint = if is_token_0_sol {
             Pubkey::from_str(&pool_info.token_mint_1).unwrap()
         } else {
@@ -416,7 +416,7 @@ impl RaydiumClmmSwap {
             AccountMeta::new_readonly(spl_token::id(), false), // token_program
             AccountMeta::new_readonly(spl_token_2022::id(), false), // token_program_2022
             AccountMeta::new_readonly(
-                Pubkey::from_str("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr").unwrap(),
+                Pubkey::from_str(MEMO_PROGRAM_ID).unwrap(),
                 false,
             ), // memo_program
             AccountMeta::new_readonly(input_mint, false),      // input_vault_mint

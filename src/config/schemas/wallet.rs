@@ -136,5 +136,17 @@ config_struct! {
             category: "Wallet",
         })]
         api_response_cache_ttl_secs: u64 = 30,
+
+        #[metadata(field_metadata! {
+            label: "Minimum SOL Balance",
+            hint: "Minimum SOL balance required for swaps (safety threshold)",
+            min: 0.001,
+            max: 1.0,
+            step: 0.001,
+            unit: "SOL",
+            impact: "high",
+            category: "Safety",
+        })]
+        min_balance_sol: f64 = 0.01,
     }
 }

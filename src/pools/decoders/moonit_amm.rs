@@ -4,9 +4,8 @@
 /// Moonit pools are derived as PDAs with seeds ["token", mint_address] and contain
 /// a CurveAccount structure with pricing information.
 use super::super::utils::{is_sol_mint, read_pubkey_struct_at_offset, read_token_account_amount};
-use crate::constants::WRAPPED_SOL_MINT;
 use super::{AccountData, PoolDecoder};
-use crate::constants::SOL_DECIMALS;
+use crate::constants::{SOL_DECIMALS, SOL_MINT};
 use crate::logger::{self, LogTag};
 use crate::pools::types::{PriceResult, ProgramKind};
 use crate::tokens::get_cached_decimals;

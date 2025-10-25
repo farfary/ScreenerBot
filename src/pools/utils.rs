@@ -5,8 +5,8 @@
 /// - Determining token pair orientation (TOKEN/SOL vs SOL/TOKEN)
 /// - Pairing vaults correctly based on mint types
 /// - Handling all possible base/quote token combinations
+use crate::constants::{SOL_MINT, SYSTEM_PROGRAM_ID, USDC_MINT, USDT_MINT};
 use crate::logger::{self, LogTag};
-use crate::constants::{WRAPPED_SOL_MINT, NATIVE_SOL_MINT, USDC_MINT, USDT_MINT};
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
 
@@ -46,7 +46,7 @@ impl TokenPairInfo {
 
         Self {
             token_mint: String::new(),
-            sol_mint: WRAPPED_SOL_MINT.to_string(),
+            sol_mint: SOL_MINT.to_string(),
             token_vault: String::new(),
             sol_vault: String::new(),
             sol_is_first: false,
@@ -55,9 +55,9 @@ impl TokenPairInfo {
     }
 }
 
-/// Check if a mint address represents SOL (wrapped or native)
+/// Check if a mint address represents SOL (wrapped SOL or system program)
 pub fn is_sol_mint(mint: &str) -> bool {
-    mint == WRAPPED_SOL_MINT || mint == NATIVE_SOL_MINT
+    mint == SOL_MINT || mint == SYSTEM_PROGRAM_ID
 }
 
 /// Check if a mint address is a stablecoin that we should skip
@@ -68,7 +68,7 @@ pub fn is_stablecoin_mint(mint: &str) -> bool {
 /// Normalize SOL mint to wrapped SOL format
 pub fn normalize_sol_mint(mint: &str) -> String {
     if is_sol_mint(mint) {
-        WRAPPED_SOL_MINT.to_string()
+        SOL_MINT.to_string()
     } else {
         mint.to_string()
     }

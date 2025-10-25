@@ -7,9 +7,7 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use crate::logger::{self, LogTag};
 
-pub use crate::constants::{SOL_DECIMALS, SOL_MINT, WRAPPED_SOL_MINT};
-
-pub const WSOL_MINT: &str = SOL_MINT;
+pub use crate::constants::{SOL_DECIMALS, SOL_MINT};
 
 use tokio::sync::Mutex as AsyncMutex;
 

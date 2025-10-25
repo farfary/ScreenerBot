@@ -3,13 +3,13 @@
 /// This module implements direct swaps for Raydium Constant Product Market Maker pools.
 /// It integrates with the centralized Raydium CPMM decoder and provides both buy and sell operations.
 use super::ProgramSwap;
-use crate::constants::RAYDIUM_CPMM_PROGRAM_ID;
+use crate::constants::{
+    RAYDIUM_CPMM_PROGRAM_ID, SOL_MINT, SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID,
+};
 use crate::logger::{self, LogTag};
 use crate::pools::decoders::raydium_cpmm::{RaydiumCpmmDecoder, RaydiumCpmmPoolInfo};
 use crate::pools::swap::executor::SwapExecutor;
-use crate::pools::swap::types::{
-    constants::*, SwapDirection, SwapError, SwapParams, SwapRequest, SwapResult,
-};
+use crate::pools::swap::types::{SwapDirection, SwapError, SwapParams, SwapRequest, SwapResult};
 use crate::pools::AccountData;
 use crate::rpc::get_rpc_client;
 use crate::utils::sol_to_lamports;
@@ -106,7 +106,7 @@ impl RaydiumCpmmSwap {
         );
 
         // Determine which vault is SOL and which is the token
-        let (sol_reserve, token_reserve, token_decimals) = if pool_info.token_0_mint == WSOL_MINT {
+        let (sol_reserve, token_reserve, token_decimals) = if pool_info.token_0_mint == SOL_MINT {
             (vault_0_balance, vault_1_balance, pool_info.token_1_decimals)
         } else {
             (vault_1_balance, vault_0_balance, pool_info.token_0_decimals)
@@ -178,7 +178,7 @@ impl RaydiumCpmmSwap {
         let wallet_pubkey = wallet.pubkey();
 
         // Determine token mint (non-SOL token) and its program
-        let (token_mint, token_program) = if pool_info.token_0_mint == WSOL_MINT {
+        let (token_mint, token_program) = if pool_info.token_0_mint == SOL_MINT {
             (&pool_info.token_1_mint, &pool_info.token_1_program)
         } else {
             (&pool_info.token_0_mint, &pool_info.token_0_program)
@@ -187,7 +187,7 @@ impl RaydiumCpmmSwap {
         // Get associated token accounts
         let wsol_ata = spl_associated_token_account::get_associated_token_address(
             &wallet_pubkey,
-            &Pubkey::from_str(WSOL_MINT).unwrap(),
+            &Pubkey::from_str(SOL_MINT).unwrap(),
         );
 
         let token_ata = if token_program == TOKEN_2022_PROGRAM_ID {
@@ -211,7 +211,7 @@ impl RaydiumCpmmSwap {
                 spl_associated_token_account::instruction::create_associated_token_account(
                     &wallet_pubkey,
                     &wallet_pubkey,
-                    &Pubkey::from_str(WSOL_MINT).unwrap(),
+                    &Pubkey::from_str(SOL_MINT).unwrap(),
                     &spl_token::id(),
                 ),
             );

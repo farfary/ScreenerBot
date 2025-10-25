@@ -171,7 +171,7 @@ pub async fn fetch_dexscreener_data_batch(
         })?;
 
     // Process pools - DexScreener batch returns ONE best pool per token
-    const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
+    use crate::constants::SOL_MINT;
 
     for pool in pools {
         let mint = &pool.base_token_address;

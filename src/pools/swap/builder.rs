@@ -6,7 +6,8 @@ use super::programs::ProgramSwap;
 /// This module provides a builder pattern interface for creating swap operations.
 /// It handles validation, parameter calculation, and delegates to appropriate
 /// program-specific implementations.
-use super::types::{constants::*, SwapDirection, SwapError, SwapRequest, SwapResult};
+use super::types::{SwapDirection, SwapError, SwapRequest, SwapResult};
+use crate::config::with_config;
 use crate::constants::{RAYDIUM_CLMM_PROGRAM_ID, RAYDIUM_CPMM_PROGRAM_ID};
 use crate::logger::{self, LogTag};
 use crate::pools::decoders::PoolDecoder;
@@ -146,7 +147,7 @@ impl SwapRequestBuilder {
             token_mint: None,
             amount: None,
             direction: None,
-            slippage_bps: DEFAULT_SLIPPAGE_BPS,
+            slippage_bps: with_config(|cfg| cfg.swaps.raydium.default_slippage_bps),
             dry_run: false,
         }
     }
