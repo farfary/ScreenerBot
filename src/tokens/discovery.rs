@@ -683,11 +683,14 @@ async fn fetch_rugcheck_recent_tokens(
 
     Ok(tokens
         .into_iter()
-        .map(|token| DiscoveryRecord {
-            mint: token.mint,
-            symbol: Some(token.metadata.symbol),
-            name: Some(token.metadata.name),
-            decimals: None,
+        .filter_map(|token| {
+            // Only include tokens with metadata
+            token.metadata.map(|meta| DiscoveryRecord {
+                mint: token.mint.clone(),
+                symbol: Some(meta.symbol),
+                name: Some(meta.name),
+                decimals: None,
+            })
         })
         .collect())
 }

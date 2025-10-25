@@ -297,7 +297,7 @@ pub struct RugcheckTokenMetadata {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RugcheckRecentToken {
     pub mint: String,
-    pub metadata: RugcheckTokenMetadata,
+    pub metadata: Option<RugcheckTokenMetadata>,
     pub user_visits: u64,
     pub visits: u64,
     pub score: i32,

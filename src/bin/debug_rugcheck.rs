@@ -311,24 +311,33 @@ async fn test_recent_tokens(client: &RugcheckClient) {
     match client.fetch_recent_tokens().await {
         Ok(tokens) => {
             println!("✓ Successfully fetched {} recent tokens", tokens.len());
+            
+            // Count tokens with and without metadata
+            let with_metadata = tokens.iter().filter(|t| t.metadata.is_some()).count();
+            let without_metadata = tokens.len() - with_metadata;
+            println!("  - With metadata: {}", with_metadata);
+            println!("  - Without metadata: {}", without_metadata);
+            
             println!("\n[TOP 10 MOST VIEWED TOKENS]");
-            for (i, token) in tokens.iter().take(10).enumerate() {
-                println!(
-                    "  {}. {} - {} (score: {})",
-                    i + 1,
-                    token.metadata.symbol,
-                    token.metadata.name,
-                    token.score
-                );
-                println!("     Mint: {}", token.mint);
-                println!(
-                    "     Visits: {} (user: {})",
-                    token.visits, token.user_visits
-                );
-                println!("     Mutable: {}", token.metadata.mutable);
+            for (i, token) in tokens.iter().filter(|t| t.metadata.is_some()).take(10).enumerate() {
+                if let Some(ref meta) = token.metadata {
+                    println!(
+                        "  {}. {} - {} (score: {})",
+                        i + 1,
+                        meta.symbol,
+                        meta.name,
+                        token.score
+                    );
+                    println!("     Mint: {}", token.mint);
+                    println!(
+                        "     Visits: {} (user: {})",
+                        token.visits, token.user_visits
+                    );
+                    println!("     Mutable: {}", meta.mutable);
+                }
             }
-            if tokens.len() > 10 {
-                println!("  ... and {} more tokens", tokens.len() - 10);
+            if with_metadata > 10 {
+                println!("  ... and {} more tokens with metadata", with_metadata - 10);
             }
         }
         Err(e) => {
