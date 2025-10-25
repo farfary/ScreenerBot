@@ -43,8 +43,17 @@ const MAX_TOKENS_PER_REQUEST: usize = 30;
 /// Request timeout in seconds - DexScreener is fast, 10s is sufficient
 pub const TIMEOUT_SECS: u64 = 10;
 
-/// Rate limit per minute - DexScreener has generous limits, 300/min is conservative
-pub const RATE_LIMIT_PER_MINUTE: usize = 300;
+/// Rate limits per endpoint (requests per minute)
+pub const RATE_LIMIT_TOKEN_POOLS_PER_MINUTE: usize = 300;
+pub const RATE_LIMIT_TOKEN_BATCH_PER_MINUTE: usize = 300;
+pub const RATE_LIMIT_PAIR_LOOKUP_PER_MINUTE: usize = 300;
+pub const RATE_LIMIT_SEARCH_PER_MINUTE: usize = 300;
+pub const RATE_LIMIT_LATEST_PROFILES_PER_MINUTE: usize = 60;
+pub const RATE_LIMIT_LATEST_BOOSTS_PER_MINUTE: usize = 60;
+pub const RATE_LIMIT_TOP_BOOSTS_PER_MINUTE: usize = 60;
+pub const RATE_LIMIT_TOKEN_ORDERS_PER_MINUTE: usize = 60;
+pub const RATE_LIMIT_TOKEN_INFO_PER_MINUTE: usize = 60;
+pub const RATE_LIMIT_SUPPORTED_CHAINS_PER_MINUTE: usize = 60;
 
 // ============================================================================
 // CLIENT IMPLEMENTATION
@@ -53,24 +62,42 @@ pub const RATE_LIMIT_PER_MINUTE: usize = 300;
 /// Complete DexScreener API client
 pub struct DexScreenerClient {
     client: Client,
-    rate_limiter: RateLimiter,
     stats: Arc<ApiStatsTracker>,
     timeout: Duration,
     enabled: bool,
+    limiter_token_pools: RateLimiter,
+    limiter_token_batch: RateLimiter,
+    limiter_pair_lookup: RateLimiter,
+    limiter_search: RateLimiter,
+    limiter_latest_profiles: RateLimiter,
+    limiter_latest_boosts: RateLimiter,
+    limiter_top_boosts: RateLimiter,
+    limiter_token_orders: RateLimiter,
+    limiter_token_info: RateLimiter,
+    limiter_supported_chains: RateLimiter,
 }
 
 impl DexScreenerClient {
-    pub fn new(enabled: bool, rate_limit: usize, timeout_seconds: u64) -> Result<Self, String> {
+    pub fn new(enabled: bool, timeout_seconds: u64) -> Result<Self, String> {
         if timeout_seconds == 0 {
             return Err("Timeout must be greater than zero".to_string());
         }
 
         Ok(Self {
             client: Client::new(),
-            rate_limiter: RateLimiter::new(rate_limit),
             stats: Arc::new(ApiStatsTracker::new()),
             timeout: Duration::from_secs(timeout_seconds),
             enabled,
+            limiter_token_pools: RateLimiter::new(RATE_LIMIT_TOKEN_POOLS_PER_MINUTE),
+            limiter_token_batch: RateLimiter::new(RATE_LIMIT_TOKEN_BATCH_PER_MINUTE),
+            limiter_pair_lookup: RateLimiter::new(RATE_LIMIT_PAIR_LOOKUP_PER_MINUTE),
+            limiter_search: RateLimiter::new(RATE_LIMIT_SEARCH_PER_MINUTE),
+            limiter_latest_profiles: RateLimiter::new(RATE_LIMIT_LATEST_PROFILES_PER_MINUTE),
+            limiter_latest_boosts: RateLimiter::new(RATE_LIMIT_LATEST_BOOSTS_PER_MINUTE),
+            limiter_top_boosts: RateLimiter::new(RATE_LIMIT_TOP_BOOSTS_PER_MINUTE),
+            limiter_token_orders: RateLimiter::new(RATE_LIMIT_TOKEN_ORDERS_PER_MINUTE),
+            limiter_token_info: RateLimiter::new(RATE_LIMIT_TOKEN_INFO_PER_MINUTE),
+            limiter_supported_chains: RateLimiter::new(RATE_LIMIT_SUPPORTED_CHAINS_PER_MINUTE),
         })
     }
 
@@ -94,11 +121,11 @@ impl DexScreenerClient {
         &self,
         endpoint: &str,
         builder: reqwest::RequestBuilder,
+        limiter: &RateLimiter,
     ) -> Result<(reqwest::Response, f64), String> {
         self.ensure_enabled(endpoint)?;
 
-        let guard = self
-            .rate_limiter
+        let guard = limiter
             .acquire()
             .await
             .map_err(|e| format!("Rate limiter error: {}", e))?;
@@ -124,11 +151,12 @@ impl DexScreenerClient {
         &self,
         endpoint: &str,
         builder: reqwest::RequestBuilder,
+        limiter: &RateLimiter,
     ) -> Result<T, String>
     where
         T: DeserializeOwned,
     {
-        let (mut response, elapsed) = self.execute_request(endpoint, builder).await?;
+        let (mut response, elapsed) = self.execute_request(endpoint, builder, limiter).await?;
         let status = response.status();
 
         if !status.is_success() {
@@ -184,8 +212,9 @@ impl DexScreenerClient {
             ),
         );
 
-        let pairs: Vec<DexScreenerPairRaw> =
-            self.get_json(&endpoint, self.client.get(&url)).await?;
+        let pairs: Vec<DexScreenerPairRaw> = self
+            .get_json(&endpoint, self.client.get(&url), &self.limiter_token_pools)
+            .await?;
 
         Ok(pairs.into_iter().map(|p| p.to_pool()).collect())
     }
@@ -232,8 +261,9 @@ impl DexScreenerClient {
                 chain
             ),
         );
-        let pairs: Vec<DexScreenerPairRaw> =
-            self.get_json(&endpoint, self.client.get(&url)).await?;
+        let pairs: Vec<DexScreenerPairRaw> = self
+            .get_json(&endpoint, self.client.get(&url), &self.limiter_token_batch)
+            .await?;
 
         Ok(pairs.into_iter().map(|p| p.to_pool()).collect())
     }
@@ -258,7 +288,9 @@ impl DexScreenerClient {
                 pair_address, chain_id
             ),
         );
-        let data: PairResponse = self.get_json(&endpoint, self.client.get(&url)).await?;
+        let data: PairResponse = self
+            .get_json(&endpoint, self.client.get(&url), &self.limiter_pair_lookup)
+            .await?;
 
         Ok(data.pair.map(|p| p.to_pool()))
     }
@@ -284,7 +316,9 @@ impl DexScreenerClient {
         );
         let builder = self.client.get(&url).query(&[("q", query)]);
 
-        let data: PairsResponse = self.get_json(endpoint, builder).await?;
+        let data: PairsResponse = self
+            .get_json(endpoint, builder, &self.limiter_search)
+            .await?;
 
         Ok(data.pairs.into_iter().map(|p| p.to_pool()).collect())
     }
@@ -297,7 +331,11 @@ impl DexScreenerClient {
         logger::debug(LogTag::Api, "[DEXSCREENER] Fetching latest token profiles");
 
         let (mut response, elapsed) = self
-            .execute_request(endpoint, self.client.get(&url))
+            .execute_request(
+                endpoint,
+                self.client.get(&url),
+                &self.limiter_latest_profiles,
+            )
             .await?;
 
         let status = response.status();
@@ -358,7 +396,8 @@ impl DexScreenerClient {
 
         logger::debug(LogTag::Api, "[DEXSCREENER] Fetching top boosted tokens");
 
-        self.get_json(endpoint, builder).await
+        self.get_json(endpoint, builder, &self.limiter_top_boosts)
+            .await
     }
 
     /// Get latest boosted tokens (newest promotions)
@@ -372,7 +411,8 @@ impl DexScreenerClient {
 
         logger::debug(LogTag::Api, "[DEXSCREENER] Fetching latest boosted tokens");
 
-        self.get_json(endpoint, self.client.get(&url)).await
+        self.get_json(endpoint, self.client.get(&url), &self.limiter_latest_boosts)
+            .await
     }
 
     /// Get top tokens by volume in a specific time window
@@ -414,7 +454,9 @@ impl DexScreenerClient {
             ),
         );
 
-        let (mut response, elapsed) = self.execute_request(endpoint, builder).await?;
+        let (mut response, elapsed) = self
+            .execute_request(endpoint, builder, &self.limiter_latest_profiles)
+            .await?;
 
         let status = response.status();
         if !status.is_success() {
@@ -456,7 +498,7 @@ impl DexScreenerClient {
             &format!("[DEXSCREENER] Fetching token info: {}", address),
         );
         let (mut response, elapsed) = self
-            .execute_request(&endpoint, self.client.get(&url))
+            .execute_request(&endpoint, self.client.get(&url), &self.limiter_token_info)
             .await?;
 
         let status = response.status();
@@ -512,7 +554,8 @@ impl DexScreenerClient {
             ),
         );
 
-        self.get_json(&endpoint, self.client.get(&url)).await
+        self.get_json(&endpoint, self.client.get(&url), &self.limiter_token_orders)
+            .await
     }
 
     /// Get supported chains
@@ -522,7 +565,12 @@ impl DexScreenerClient {
 
         logger::debug(LogTag::Api, "[DEXSCREENER] Fetching supported chains");
 
-        self.get_json(endpoint, self.client.get(&url)).await
+        self.get_json(
+            endpoint,
+            self.client.get(&url),
+            &self.limiter_supported_chains,
+        )
+        .await
     }
 
     /// Legacy method for backward compatibility - redirects to fetch_token_pools

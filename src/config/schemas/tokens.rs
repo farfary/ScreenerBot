@@ -103,6 +103,14 @@ config_struct! {
 }
 
 config_struct! {
+    /// DexScreener source configuration (rate limit fixed in code)
+    pub struct DexscreenerSourceConfig {
+        enabled: bool = true,
+        timeout_seconds: u64 = 10,
+    }
+}
+
+config_struct! {
     /// Enable/disable toggle for a specific source
     pub struct SourceToggleConfig {
         enabled: bool = true,
@@ -118,9 +126,8 @@ config_struct! {
             impact: "high",
             category: "Sources",
         })]
-        dexscreener: SourceApiConfig = SourceApiConfig {
+        dexscreener: DexscreenerSourceConfig = DexscreenerSourceConfig {
             enabled: true,
-            rate_limit_per_minute: 60,
             timeout_seconds: 10,
         },
 

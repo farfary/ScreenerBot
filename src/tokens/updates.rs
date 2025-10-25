@@ -1,4 +1,4 @@
-use crate::apis::dexscreener::RATE_LIMIT_PER_MINUTE as DEX_DEFAULT_PER_MINUTE;
+use crate::apis::dexscreener::RATE_LIMIT_TOKEN_POOLS_PER_MINUTE as DEX_DEFAULT_PER_MINUTE;
 use crate::apis::geckoterminal::RATE_LIMIT_PER_MINUTE as GECKO_DEFAULT_PER_MINUTE;
 use crate::apis::rugcheck::RATE_LIMIT_PER_MINUTE as RUG_DEFAULT_PER_MINUTE;
 use crate::config::with_config;
@@ -48,13 +48,9 @@ pub struct RateLimitCoordinator {
 impl RateLimitCoordinator {
     pub fn new() -> Self {
         // Read limits from config; fall back to API defaults if unset (0)
-        let (dex_limit, gecko_limit, rug_limit) = with_config(|cfg| {
+        let dex_limit = DEX_DEFAULT_PER_MINUTE;
+        let (gecko_limit, rug_limit) = with_config(|cfg| {
             let s = &cfg.tokens.sources;
-            let dex = if s.dexscreener.rate_limit_per_minute == 0 {
-                DEX_DEFAULT_PER_MINUTE
-            } else {
-                s.dexscreener.rate_limit_per_minute as usize
-            };
             let gecko = if s.geckoterminal.rate_limit_per_minute == 0 {
                 GECKO_DEFAULT_PER_MINUTE
             } else {
@@ -65,7 +61,7 @@ impl RateLimitCoordinator {
             } else {
                 s.rugcheck.rate_limit_per_minute as usize
             };
-            (dex, gecko, rug)
+            (gecko, rug)
         });
 
         Self {

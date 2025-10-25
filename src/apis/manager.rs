@@ -7,9 +7,7 @@ use crate::logger::{self, LogTag};
 
 use super::coingecko::CoinGeckoClient;
 use super::defillama::DefiLlamaClient;
-use super::dexscreener::{
-    DexScreenerClient, RATE_LIMIT_PER_MINUTE as DEX_RATE_LIMIT, TIMEOUT_SECS as DEX_TIMEOUT,
-};
+use super::dexscreener::{DexScreenerClient, TIMEOUT_SECS as DEX_TIMEOUT};
 use super::geckoterminal::{
     GeckoTerminalClient, RATE_LIMIT_PER_MINUTE as GECKO_RATE_LIMIT, TIMEOUT_SECS as GECKO_TIMEOUT,
 };
@@ -46,11 +44,6 @@ impl ApiManager {
         let rug_enabled =
             sources_cfg.rugcheck.enabled && discovery_enabled && discovery_cfg.rugcheck.enabled;
 
-        let dex_rate_limit = if dexscreener_cfg.rate_limit_per_minute == 0 {
-            DEX_RATE_LIMIT
-        } else {
-            dexscreener_cfg.rate_limit_per_minute as usize
-        };
         let dex_timeout = if dexscreener_cfg.timeout_seconds == 0 {
             DEX_TIMEOUT
         } else {
@@ -79,8 +72,8 @@ impl ApiManager {
         logger::info(LogTag::Api, "Initializing global API manager");
 
         Self {
-            dexscreener: DexScreenerClient::new(dexscreener_enabled, dex_rate_limit, dex_timeout)
-                .unwrap_or_else(|e| {
+            dexscreener: DexScreenerClient::new(dexscreener_enabled, dex_timeout).unwrap_or_else(
+                |e| {
                     logger::warning(
                         LogTag::Api,
                         &format!(
@@ -88,9 +81,10 @@ impl ApiManager {
                             e
                         ),
                     );
-                    DexScreenerClient::new(false, DEX_RATE_LIMIT, DEX_TIMEOUT)
+                    DexScreenerClient::new(false, DEX_TIMEOUT)
                         .expect("Failed to create disabled DexScreener client")
-                }),
+                },
+            ),
             geckoterminal: GeckoTerminalClient::new(
                 geckoterminal_enabled,
                 gecko_rate_limit,
