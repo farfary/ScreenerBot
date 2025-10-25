@@ -62,6 +62,16 @@ config_struct! {
         critical_seconds: u64 = 5,
 
         #[metadata(field_metadata! {
+            label: "Pool Interval (s)",
+            hint: "How often to update tokens sourced from Pool Service",
+            impact: "high",
+            category: "Updates",
+            min: 1.0,
+            step: 1.0,
+        })]
+        pool_seconds: u64 = 7,
+
+        #[metadata(field_metadata! {
             label: "High Interval (s)",
             hint: "How often to update filtered/watched tokens (high)",
             impact: "medium",

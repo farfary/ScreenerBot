@@ -3,6 +3,7 @@ use crate::apis::geckoterminal::RATE_LIMIT_PER_MINUTE as GECKO_DEFAULT_PER_MINUT
 use crate::apis::rugcheck::RATE_LIMIT_PER_MINUTE as RUG_DEFAULT_PER_MINUTE;
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
+use crate::pools;
 /// Updates orchestrator - Priority-based background updates
 ///
 /// Coordinates fetching from all sources (DexScreener, GeckoTerminal, Rugcheck)
@@ -17,12 +18,13 @@ use crate::logger::{self, LogTag};
 /// and only for tokens that don't have security data yet.
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::market::{dexscreener, geckoterminal};
+use crate::tokens::priorities::Priority;
 use crate::tokens::security::rugcheck;
 use crate::tokens::types::{TokenError, TokenResult};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::{Notify, Semaphore};
+use std::time::{Duration, Instant};
+use tokio::sync::{Mutex, Notify, Semaphore};
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
@@ -134,6 +136,192 @@ impl RateLimitCoordinator {
 impl Default for RateLimitCoordinator {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// ============================================================================
+// POOL PRIORITY COORDINATOR
+// ============================================================================
+
+struct PoolPriorityState {
+    last_seen: Instant,
+    previous_priority: i32,
+}
+
+struct PoolPriorityManager {
+    state: Mutex<HashMap<String, PoolPriorityState>>,
+    demote_after: Duration,
+}
+
+impl PoolPriorityManager {
+    fn new(demote_after: Duration) -> Self {
+        Self {
+            state: Mutex::new(HashMap::new()),
+            demote_after,
+        }
+    }
+
+    async fn sync(&self, db: &TokenDatabase) {
+        let now = Instant::now();
+        let pool_tokens = pools::get_available_tokens();
+        let pool_set: HashSet<String> = pool_tokens.iter().cloned().collect();
+
+        let priorities = match db.get_priorities_for_tokens(&pool_tokens) {
+            Ok(map) => map,
+            Err(e) => {
+                logger::error(
+                    LogTag::Tokens,
+                    &format!("Failed to load priorities for pool tokens: {}", e),
+                );
+                return;
+            }
+        };
+
+        let mut promotions: Vec<String> = Vec::new();
+        let mut demotion_candidates: Vec<(String, i32)> = Vec::new();
+
+        {
+            let mut state = self.state.lock().await;
+
+            for mint in pool_tokens.iter() {
+                let current_priority = priorities
+                    .get(mint)
+                    .copied()
+                    .unwrap_or(Priority::Medium.to_value());
+
+                if current_priority == Priority::Critical.to_value() {
+                    state.remove(mint);
+                    continue;
+                }
+
+                let entry = state
+                    .entry(mint.clone())
+                    .or_insert_with(|| PoolPriorityState {
+                        last_seen: now,
+                        previous_priority: current_priority,
+                    });
+
+                if current_priority != Priority::Pool.to_value() {
+                    entry.previous_priority = current_priority;
+                    promotions.push(mint.clone());
+                }
+
+                entry.last_seen = now;
+            }
+
+            let demote_after = self.demote_after;
+            state.retain(|mint, info| {
+                if pool_set.contains(mint) {
+                    true
+                } else if now.duration_since(info.last_seen) >= demote_after {
+                    demotion_candidates.push((mint.clone(), info.previous_priority));
+                    false
+                } else {
+                    true
+                }
+            });
+        }
+
+        if !promotions.is_empty() {
+            let mut promoted = Vec::new();
+            for mint in promotions {
+                if let Err(e) = db.update_priority(&mint, Priority::Pool.to_value()) {
+                    logger::error(
+                        LogTag::Tokens,
+                        &format!("Failed to promote {} to pool priority: {}", mint, e),
+                    );
+                } else {
+                    let previous_priority = priorities
+                        .get(&mint)
+                        .copied()
+                        .unwrap_or(Priority::Medium.to_value());
+                    promoted.push((mint, previous_priority));
+                }
+            }
+
+            if !promoted.is_empty() {
+                let count = promoted.len();
+                let sample_entries: Vec<String> = promoted
+                    .iter()
+                    .take(3)
+                    .map(|(mint, prev)| format!("{} (from={})", mint, prev))
+                    .collect();
+                let extra = count.saturating_sub(sample_entries.len());
+                let mut message = format!("Promoted {} tokens to pool priority", count);
+                if !sample_entries.is_empty() {
+                    message.push_str(&format!("; details: {}", sample_entries.join(", ")));
+                }
+                if extra > 0 {
+                    message.push_str(&format!(" (+{} more)", extra));
+                }
+                logger::info(LogTag::Tokens, &message);
+            }
+        }
+
+        if demotion_candidates.is_empty() {
+            return;
+        }
+
+        let demotion_mints: Vec<String> = demotion_candidates
+            .iter()
+            .map(|(mint, _)| mint.clone())
+            .collect();
+
+        let current_priorities = match db.get_priorities_for_tokens(&demotion_mints) {
+            Ok(map) => map,
+            Err(e) => {
+                logger::error(
+                    LogTag::Tokens,
+                    &format!("Failed to load priorities for demotion candidates: {}", e),
+                );
+                return;
+            }
+        };
+
+        let mut demoted = Vec::new();
+
+        for (mint, previous_priority) in demotion_candidates {
+            let current_priority = current_priorities
+                .get(&mint)
+                .copied()
+                .unwrap_or(Priority::Medium.to_value());
+
+            if current_priority != Priority::Pool.to_value() {
+                continue;
+            }
+
+            let mut target_priority = previous_priority;
+            if target_priority == Priority::Pool.to_value() {
+                target_priority = Priority::Medium.to_value();
+            }
+
+            if let Err(e) = db.update_priority(&mint, target_priority) {
+                logger::error(
+                    LogTag::Tokens,
+                    &format!("Failed to demote {} from pool priority: {}", mint, e),
+                );
+            } else {
+                demoted.push((mint, target_priority));
+            }
+        }
+
+        if !demoted.is_empty() {
+            let count = demoted.len();
+            let sample_entries: Vec<String> = demoted
+                .iter()
+                .take(3)
+                .map(|(mint, target)| format!("{} (to={})", mint, target))
+                .collect();
+            let extra = count.saturating_sub(sample_entries.len());
+            let mut message = format!("Demoted {} tokens from pool priority after timeout", count);
+            if !sample_entries.is_empty() {
+                message.push_str(&format!("; details: {}", sample_entries.join(", ")));
+            }
+            if extra > 0 {
+                message.push_str(&format!(" (+{} more)", extra));
+            }
+            logger::info(LogTag::Tokens, &message);
+        }
     }
 }
 
@@ -451,6 +639,39 @@ pub fn start_update_loop(
         }
     }));
 
+    // Pool priority sync loop (every 5s)
+    let pool_priority_manager = Arc::new(PoolPriorityManager::new(Duration::from_secs(60)));
+    let manager_sync = pool_priority_manager.clone();
+    let db_pool_state = db.clone();
+    let shutdown_pool_sync = shutdown.clone();
+    handles.push(tokio::spawn(async move {
+        manager_sync.sync(db_pool_state.as_ref()).await;
+        loop {
+            tokio::select! {
+                _ = shutdown_pool_sync.notified() => break,
+                _ = sleep(Duration::from_secs(5)) => {
+                    manager_sync.sync(db_pool_state.as_ref()).await;
+                }
+            }
+        }
+    }));
+
+    // Pool priority update loop (configurable)
+    let db_pool_update = db.clone();
+    let coord_pool = coordinator.clone();
+    let shutdown_pool_update = shutdown.clone();
+    handles.push(tokio::spawn(async move {
+        update_pool_priority_tokens(&db_pool_update, &coord_pool).await;
+        loop {
+            tokio::select! {
+                _ = shutdown_pool_update.notified() => break,
+                _ = sleep(Duration::from_secs(with_config(|cfg| cfg.tokens.update_intervals.pool_seconds))) => {
+                    update_pool_priority_tokens(&db_pool_update, &coord_pool).await;
+                }
+            }
+        }
+    }));
+
     // Critical priority loop (configurable)
     let db_critical = db.clone();
     let coord_critical = coordinator.clone();
@@ -624,6 +845,66 @@ async fn update_critical_tokens(db: &TokenDatabase, coordinator: &RateLimitCoord
                 logger::error(
                     LogTag::Tokens,
                     &format!("Batch error for critical tokens: {}", e),
+                );
+            }
+        }
+    }
+}
+
+/// Update pool-priority tokens (Pool Service tracked)
+async fn update_pool_priority_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
+    let tokens = match db.get_tokens_by_priority(Priority::Pool.to_value(), 200) {
+        Ok(tokens) => tokens,
+        Err(e) => {
+            logger::error(
+                LogTag::Tokens,
+                &format!("Failed to get pool priority tokens: {}", e),
+            );
+            return;
+        }
+    };
+
+    if tokens.is_empty() {
+        return;
+    }
+
+    let batch = &tokens[..tokens.len().min(90)];
+    logger::info(
+        LogTag::Tokens,
+        &format!("Updating {} pool priority tokens", batch.len()),
+    );
+
+    for chunk in batch.chunks(30) {
+        match update_tokens_batch(chunk, db, coordinator).await {
+            Ok(results) => {
+                for result in results {
+                    if result.is_total_failure() {
+                        let message = result.failures.join(" | ");
+                        if let Err(err) =
+                            db.record_market_error(result.mint.as_str(), message.as_str())
+                        {
+                            logger::error(
+                                LogTag::Tokens,
+                                &format!("Failed to record error for {}: {}", result.mint, err),
+                            );
+                        }
+                    } else if result.is_partial_failure() {
+                        logger::warning(
+                            LogTag::Tokens,
+                            &format!(
+                                "Partial failure for {}: {} succeeded, {} failed",
+                                result.mint,
+                                result.successes.len(),
+                                result.failures.len()
+                            ),
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                logger::error(
+                    LogTag::Tokens,
+                    &format!("Batch error for pool priority tokens: {}", e),
                 );
             }
         }

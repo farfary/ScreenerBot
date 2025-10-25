@@ -2,7 +2,8 @@
 /// All SQL operations in one place with proper error handling
 use chrono::{DateTime, Utc};
 use once_cell::sync::OnceCell;
-use rusqlite::{params, Connection};
+use rusqlite::{params, params_from_iter, Connection};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use crate::tokens::types::{
@@ -836,6 +837,54 @@ impl TokenDatabase {
         .map_err(|e| TokenError::Database(format!("Failed to update priority: {}", e)))?;
 
         Ok(())
+    }
+
+    /// Get priority mapping for specific tokens
+    pub fn get_priorities_for_tokens(&self, mints: &[String]) -> TokenResult<HashMap<String, i32>> {
+        if mints.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let mut placeholders = String::new();
+        for (idx, _) in mints.iter().enumerate() {
+            if idx > 0 {
+                placeholders.push(',');
+            }
+            placeholders.push('?');
+        }
+
+        let query = format!(
+            "SELECT mint, priority FROM update_tracking WHERE mint IN ({})",
+            placeholders
+        );
+
+        let mint_refs: Vec<&str> = mints.iter().map(|mint| mint.as_str()).collect();
+
+        let mut stmt = conn
+            .prepare(&query)
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+
+        let rows = stmt
+            .query_map(params_from_iter(mint_refs.into_iter()), |row| {
+                let mint: String = row.get(0)?;
+                let priority: i32 = row.get(1)?;
+                Ok((mint, priority))
+            })
+            .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+
+        let mut result = HashMap::new();
+        for row in rows {
+            let (mint, priority) =
+                row.map_err(|e| TokenError::Database(format!("Row parse failed: {}", e)))?;
+            result.insert(mint, priority);
+        }
+
+        Ok(result)
     }
 
     /// Get tokens that have never received market data
